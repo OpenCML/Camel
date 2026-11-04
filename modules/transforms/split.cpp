@@ -262,14 +262,35 @@ bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_nod
 /// being the values and then their tangents (`jvpSignature`). The `with` arguments stand after both
 /// halves (`dataInputsOf` hands back the ordinary ones first), so the list to halve is the ordinary
 /// one, not the whole data list.
-std::vector<gc_node_ref_t> tangentArgumentsOf(const rt::GCGraph &graph, gc_node_ref_t ref) {
+///
+/// One place of that second half is not a tangent anybody takes. A parameter with no tangent space
+/// takes a `()` slot in the lifted signature (`Tangent<int> = ()`), the slot holds the empty tuple,
+/// and the half that *reads* tangents declares **no port** for it: `buildSplitGraph` gives the
+/// backward half one port per tangent that has a space and skips the rest. So the slot's argument is
+/// dropped here, by the callee's own signature -- the same list, read from the same place
+/// (`parameterOfPort`), so a call site and the graph it calls number their ports alike.
+///
+/// Handing it on was one argument too many, and the run time says so by name (measured 2026-11-04):
+/// `Runtime indirect call norm-arity mismatch: caller graph 'split_of_jvp_of_g_backward' node 6 has
+/// 2 args, target graph 'split_of_jvp_of_widen_backward' has 1 norm ports`, on a callee
+/// `widen(n: int, x: float)` whose lifted list is `(int, float, (), float)`.
+std::vector<gc_node_ref_t> tangentArgumentsOf(
+    const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
     const std::vector<gc_node_ref_t> all = dataInputsOf(&graph, ref);
     const size_t withCount               = graph.withInputsOf(ref).size();
     const size_t ordinary                = all.size() > withCount ? all.size() - withCount : 0;
     const size_t half                    = ordinary / 2;
+    const rt::GCGraph *callee            = calleeGraphOf(graph, program, ref);
+    const FunctionType *calleeType       = callee != nullptr ? callee->funcType() : nullptr;
     std::vector<gc_node_ref_t> tangents;
     tangents.reserve(half);
     for (size_t i = half; i < ordinary; ++i) {
+        if (calleeType != nullptr && i < calleeType->normTypesCount()) {
+            const Type *tangentType = calleeType->normTypeAt(i);
+            if (tangentType == nullptr || !camel::core::tangentSpaceOf(tangentType).hasSpace()) {
+                continue; // the `()` slot of a parameter with no tangent space
+            }
+        }
         tangents.push_back(all[i]);
     }
     return tangents;
@@ -323,6 +344,14 @@ struct Half {
     /// `addWithPorts`). Kept beside `portIndex` rather than in it, because that map is the ordinary
     /// parameters' -- the pair positions `valuePortsOf` and `parameterOfPort` number.
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
+    /// A value the source graph **captured** from where it was written -> this half's port for it
+    /// (`addCapturePorts`). A capture is not a `with` parameter and arrives by neither of the two
+    /// roads the other maps name: it is read through a closure node of the source, and the half
+    /// receives it out of the function value's closure tuple, which the operator copies over
+    /// (`split_operator.cpp`, `splitKernel`: `f`'s tuple goes to the forward half unchanged).
+    /// Author, 2026-11-04 02:50, on a closure port: forward it into the member's own port, and the
+    /// call site fills it as it always did.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> capturePortOf;
     std::vector<gc_node_ref_t> copyOf;
     std::vector<char> seen;
     /// Which component of every parameter this half takes: false the value, true the tangent.
@@ -378,7 +407,7 @@ struct Half {
         const std::vector<gc_node_ref_t> all = dataInputsOf(source, ref);
         if (tangent) {
             const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
-            return call != rt::kInvalidNodeRef ? tangentArgumentsOf(*source, call) : all;
+            return call != rt::kInvalidNodeRef ? tangentArgumentsOf(*source, program, call) : all;
         }
         if (!answersAPairAt(*source, program, ref)) {
             return all;
@@ -584,6 +613,14 @@ struct Half {
             }
             const auto at = portIndex.find(ref);
             if (at == portIndex.end()) {
+                // A value the body captured from where it was written: the half declared a port
+                // for it out of the source's closure (`addCapturePorts`), and the read is that
+                // port. The value comes in with the function value, not as an argument.
+                const auto captured = capturePortOf.find(ref);
+                if (captured != capturePortOf.end()) {
+                    copyOf[ref] = captured->second;
+                    return true;
+                }
                 return refuseAt(
                     refusal, source, ref, "a port",
                     "the port is not a parameter of the graph, so neither half takes it");
@@ -771,6 +808,22 @@ struct Half {
                     refusal, source, ref, "an access node",
                     "the node reads no input, so the half has nothing to project");
             }
+            // A member of a **struct** is read by name (`qq.a`, `GCAccsKind::StructKey`) and a member
+            // of a tuple by place (`qq.0`, `GCAccsKind::TupleIndex`). The draft writes both forms
+            // (`addAccsNode(type, key)` and `addAccsNode(type, index)`), and the copy says whichever
+            // one the source said: a keyed read copied as a place would name another member, and on a
+            // `Struct` it would index the value as if it were a `Tuple` -- `idx < t->size()`, "Tuple
+            // index out of bounds" in `nodevm.cpp` (measured 2026-11-04 on
+            // `split(jvp((qq: Point) => qq.a * 4.0 + qq.b))(p)`, while the copy dropped the key).
+            //
+            // The name needs no place in either half's port list. A struct is a port like any other --
+            // `Tangent<Point>` is the struct of the members' tangents (design principles 9.9), so the
+            // two halves take one `Point` each and read the same member of it by the same name
+            // (`jvp.cpp#LiftState` projects a keyed access the same way, with `addAccsNode(type,
+            // key)`). What the cut was missing was the name in the copy and not the shape of the
+            // ports: `split_struct_field_read` reads `forward y= 11.0` and `lin dp= 4.0`, the two
+            // `jvp` alone already answered, and `split_struct_port` -- the same program without the
+            // field read -- reads a struct through both halves.
             if (const gc_node_ref_t call = pairTangentReadOf(*source, program, ref);
                 call != rt::kInvalidNodeRef) {
                 if (!tangent) {
@@ -802,7 +855,9 @@ struct Half {
                 return true;
             }
             const gc_node_ref_t made =
-                draft.addAccsNode(node->dataType(), body->value, 0);
+                body->accsKind == rt::GCAccsKind::StructKey
+                    ? draft.addAccsNode(node->dataType(), body->key())
+                    : draft.addAccsNode(node->dataType(), body->value);
             draft.setNormInputs(made, inputs);
             copyOf[ref] = made;
             return true;
@@ -977,6 +1032,16 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
     const auto isWithPort                          = [&withPorts](gc_node_ref_t ref) {
         return std::find(withPorts.begin(), withPorts.end(), ref) != withPorts.end();
     };
+    // The values the body captured where it was written, which are a third kind of port: not a
+    // parameter (no place in the pair) and not a `with` port (no argument at the call). A capture
+    // the tangent side reads crosses the cut like the other two -- 后一半要读的东西都是残差 -- and
+    // the forward half holds the port it enters by (`addCapturePorts`), so it is carried as a
+    // residual and read out of `lin`'s closure. Without this arm the walk reached a port with no
+    // producer, went nowhere, and the cut refused at it: "the port is not a parameter of the graph".
+    const std::span<const gc_node_ref_t> captures = lifted.closureNodes();
+    const auto isCaptured                         = [&captures](gc_node_ref_t ref) {
+        return std::find(captures.begin(), captures.end(), ref) != captures.end();
+    };
     // A value the tangent side reads and the result side already computed crosses the cut: it is a
     // residual, and the walk stops at it (what is inside the forward half is not this function's
     // business). A node the result side never reaches is part of the tangent chain: the walk goes
@@ -1009,9 +1074,10 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 continue;
             }
             visited[ref] = 1;
-            if (!behindCut && isWithPort(ref)) {
-                // A `with` port has no producer on either side of the cut, so nothing is computed
-                // for it and the walk has nowhere further to go: the value is the call's, and the
+            if (!behindCut && (isWithPort(ref) || isCaptured(ref))) {
+                // A `with` port or a capture has no producer on either side of the cut, so nothing
+                // is computed for it and the walk has nowhere further to go: the value is the
+                // caller's -- an argument for one, the closure tuple for the other -- and the
                 // forward half is the half that holds the port which receives it.
                 if (std::find(found.begin(), found.end(), ref) == found.end()) {
                     found.push_back(ref);
@@ -1044,7 +1110,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // -- through the call's own value arguments, which the second half reads and which
                 // therefore are residuals -- but with the same rule the result side uses, which is why
                 // a call there is descended by its value arguments alone.
-                for (gc_node_ref_t argument : tangentArgumentsOf(lifted, call)) {
+                for (gc_node_ref_t argument : tangentArgumentsOf(lifted, program, call)) {
                     if (argument < nodeCount && visited[argument] == 0 &&
                         std::find(later.begin(), later.end(), argument) == later.end()) {
                         later.push_back(argument);
@@ -1094,7 +1160,8 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 }
                 continue;
             }
-            if (!behindCut && beforeCut[ref] != 0 && ref != tangentHalf) {
+            if (!behindCut && beforeCut[ref] != 0 && ref != tangentHalf &&
+                portIndex[ref] == Residual::kNotAParameter) {
                 // A call of a callee that answers the pair (value, tangent) reads both sides of the
                 // cut and is not itself carried (see the note where the list is filtered below): what
                 // the tangent half recomputes the pair from is the values its caller passes, so the
@@ -1102,6 +1169,19 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 // is decided by the callee's content** (`answersAPair`, the same criterion the cut
                 // itself is built on) -- not by a record of what the callee was lifted from, which
                 // would answer differently for a hand-written graph of the same content.
+                //
+                // A **port** is not one of these, even when the result side reaches it: no half can
+                // carry a port as a computed value, and the tangent port in particular is reached by
+                // the result side for a reason that has nothing to do with the tangent half -- a call
+                // of a pair-answering callee is handed the tangents as ordinary arguments, so the
+                // value half walks into the seed of every parameter its callee is called with. Kept
+                // here, the seed would go into the closure as "parameter k's value" and the backward
+                // half would read the seed's slot where it should read its own port: for
+                // `f(x) = 2.0 * x`, `g(x) = f(x) * x`, `g`'s lin came out `mul_tangent(y, x, lin_f(x),
+                // x)` -- the value in the tangent's place, a constant function of its argument, 36.0
+                // for every `dx`, and `grad(g)` answered 0.0 without a word (measured 2026-11-04).
+                // The port branch below is the one that states what a port contributes: the value port
+                // of its own parameter, which is the only thing the forward half can hand over.
                 const GraphId calleeId = lifted.calleeIdOf(ref);
                 const rt::GCGraph *calleeGraph =
                     program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
@@ -2861,6 +2941,62 @@ bool addWithPorts(Half &half, const rt::GCGraph *function) {
     return true;
 }
 
+/// The values the source **captured** where it was written, as closure ports of one half. A capture
+/// is a port of the source graph (`GCGraph::closureNodes`) that is neither a parameter nor a `with`
+/// parameter: the lifted body reads it, and a half that declared no port for it would refuse that
+/// read with "the port is not a parameter of the graph" -- which is what the tensor-`with` shape did
+/// until this function existed (measured 2026-11-04: `vjp((ww) => dot<ww>(x))(w)`, where `x` is a
+/// capture of the lambda and `w` is `dot`'s `with` parameter; the cut of `jvp_of_dot` was fine and
+/// the cut of the lambda was refused).
+///
+/// The half declares them in the source's order and takes the source's closure type, which is the
+/// layout the operator hands over: `splitKernel` creates the forward function value with `f`'s own
+/// tuple and copies every slot into it, so the ports this declares read the caller's values and the
+/// call site fills them the way it always filled a closure. That is the author's shape for a closure
+/// port (2026-11-04 02:50: 转发成成员自己的端口、调用点照常填), and it is the same thing the `with`
+/// list does one road up -- the difference is only where the value travels: a `with` value is an
+/// argument of the call, a capture is a member of the function value.
+///
+/// Only the forward half declares them, for the reason `addWithPorts` gives: what the backward half
+/// reads is a residual, and a capture is one (`residualsOf`), so it arrives in `lin`'s closure.
+/// Declaring every capture, and not only the ones some walk reached, is what keeps this side's
+/// closure type the source's: a half that declared a subset would index a tuple it does not hold.
+bool addCapturePorts(Half &half, const rt::GCGraph *function) {
+    if (function == nullptr) {
+        return true;
+    }
+    const std::span<const gc_node_ref_t> captures = function->closureNodes();
+    if (captures.empty()) {
+        return true;
+    }
+    // The type the source states for its closure, when it states one. A capture's type is on the
+    // port node either way, and a graph whose closure layout is only in the function value that
+    // carries it (`GCGraph::closureType()` is null on it -- a lambda written where it is used is
+    // one) states nothing here: the operator supplies that tuple type when it hands the half out
+    // (`splitKernel`, `function->tupleType()`), so declaring the ports is the whole of what a half
+    // with no stated layout has to do. A stated layout that does not hold the captures is not
+    // copied: a type that names fewer members than the ports is worse than no type at all.
+    const auto *closureType = function->closureType();
+    if (closureType != nullptr && closureType->size() != captures.size()) {
+        return false;
+    }
+    for (gc_node_ref_t original : captures) {
+        const rt::GCNode *node = function->node(original);
+        Type *captureType      = node != nullptr ? node->dataType() : nullptr;
+        if (captureType == nullptr) {
+            return false;
+        }
+        const gc_node_ref_t port =
+            half.draft.addPortNode(captureType, half.draft.allocateRuntimeSlot(captureType));
+        half.draft.appendClosureNode(port);
+        half.capturePortOf[original] = port;
+    }
+    if (closureType != nullptr) {
+        half.draft.setClosureType(const_cast<camel::core::type::TupleType *>(closureType));
+    }
+    return true;
+}
+
 SplitGraph buildSplitGraph(
     const camel::core::context::context_ptr_t &context, const rt::Program *program,
     rt::GCGraph *function, std::ostream &os) {
@@ -3167,7 +3303,20 @@ SplitGraph buildSplitGraph(
     // is not part of any graph and nothing in the core knows about it (author, 2026-11-03 17:55, the
     // same shape `jvp` uses for its own recursion).
     std::unordered_map<const rt::GCGraph *, CutMember> calleeCuts;
+    // **The programs whose graphs this build stands on.** A nested build's two halves are graphs its
+    // own program owns, so adopting that program brings them; the graphs a nested build *adopted* are
+    // owned by the program they were made in, which is this list (`SplitGraph::nestedPrograms`). One
+    // list for both levels, in the order they were taken and without repeats: `Program::adoptMissing`
+    // binds what the program it reads owns and skips what is already bound, so the order says which
+    // program answers for an id and the repeat would only bump a version.
     std::vector<const rt::Program *> nestedPrograms;
+    const auto remember = [&nestedPrograms](const rt::Program *standsOn) {
+        if (standsOn != nullptr &&
+            std::find(nestedPrograms.begin(), nestedPrograms.end(), standsOn) ==
+                nestedPrograms.end()) {
+            nestedPrograms.push_back(standsOn);
+        }
+    };
     {
         CutMember self;
         self.forwardId = forwardId;
@@ -3204,8 +3353,39 @@ SplitGraph buildSplitGraph(
                    << "half of `" << callee->name() << "` declares no exit type)\n";
                 return SplitGraph{};
             }
+            // **A cut of a cut.** The forward half of `callee` that this build calls is not the whole
+            // answer when that half is itself answered by a call of *its* callee's forward half: the
+            // nested build made that second cut and adopted its two graphs into its own program, and
+            // this build adopts that program in turn -- but `Program::adoptMissing` copies only the
+            // graphs the program it reads **owns**, and an adopted graph is not one it owns. So
+            // adopting the nested program alone would leave this one holding the halves of `callee`
+            // and not the halves of `callee`'s callee, and the call the value half writes to the
+            // deeper forward half would name a graph the program does not hold -- `runtimeTarget !=
+            // nullptr`, "a direct call names a function whose graph is not in the program's graph
+            // table" in `nodevm.cpp` (measured 2026-11-04 on `split(jvp(f))` where `f` calls `g` and
+            // `g` calls `h`: the cut of `jvp_of_f` answers a call of `split_of_jvp_of_g_forward`,
+            // which answers one of `split_of_jvp_of_h_forward`).
+            //
+            // So the list is **transitive**: the programs this build stands on are the ones the
+            // nested builds stand on, one level down and however much further, because the field is
+            // collected the same way one level out. Nothing else travels: every program in it is one
+            // a cut this build calls was built in, so the graphs are the calls' own halves and not
+            // some other function's. What it costs is the depth: every nested build has its own
+            // callee table, so a chain of n pair-answering calls builds 2^(n-1) pairs of graphs where
+            // n would do (measured: 8 pairs, graph ids 340..355, for `f -> g -> h -> k`, where `k` is
+            // cut four times). Every one of them is adopted here, which is a pointer in a table and
+            // not a copy, and no value is recomputed. Two levels read
+            // `test/cases/transforms/split/split_two_nested_cuts.cml`, three and four were probed at
+            // depth (the readings are in
+            // `docs/handover/questions/2026-11-04-who-adopts-the-graphs-of-a-nested-cut.cn.md`).
             calleeCuts.emplace(callee, member);
-            nestedPrograms.push_back(nested.program);
+            // The callee's cut and the cuts *it* stands on: both have to be adopted below, because
+            // `Program::adoptMissing` binds the graphs a program owns and not the ones it adopted, so
+            // the grandchild of a cut is not carried by its child's program (see `SplitGraph::standing`).
+            remember(nested.program);
+            for (const rt::Program *onward : nested.standing) {
+                remember(onward);
+            }
             pending.push_back(callee);
         }
     }
@@ -3219,6 +3399,11 @@ SplitGraph buildSplitGraph(
         if (!addWithPorts(forward, function)) {
             os << "REINTERP split function=" << function->name()
                << " skip=forward (a `with` parameter of the source has no type)\n";
+            return SplitGraph{};
+        }
+        if (!addCapturePorts(forward, function)) {
+            os << "REINTERP split function=" << function->name()
+               << " skip=forward (the closure of the source does not name its captured values)\n";
             return SplitGraph{};
         }
         // The lifted list is two halves -- the values, then their tangents -- so the forward half
@@ -3304,6 +3489,15 @@ SplitGraph buildSplitGraph(
                 }
             }
             if (value == rt::kInvalidNodeRef) {
+                // A capture the backward half reads and the result side does not: same road, one
+                // port further on -- the forward half's closure port for it (`addCapturePorts`) is
+                // the value that crosses, read out of the function value the operator handed over.
+                const auto captured = forward.capturePortOf.find(residual.node);
+                if (captured != forward.capturePortOf.end()) {
+                    value = captured->second;
+                }
+            }
+            if (value == rt::kInvalidNodeRef) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=residual (the forward half does not compute a value the cut carries)\n";
                 return built;
@@ -3361,13 +3555,15 @@ SplitGraph buildSplitGraph(
     }
     // The programs of the cuts this one stands on: the graphs of those two halves join this build's
     // program, so the calls this half wrote resolve at run time. Adopted, not rebuilt -- the ids the
-    // calls name are the graphs those builds made, and no value is recomputed.
+    // calls name are the graphs those builds made, and no value is recomputed. The list is this
+    // build's own `standing`, so a cut above this one adopts the whole chain in one step.
     for (const rt::Program *nested : nestedPrograms) {
         group.adopt(*nested);
     }
     group.encode();
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
     const rt::GCGraph *backwardMade = group.encoded(backwardId);
+    built.standing                  = nestedPrograms;
     built.residuals                 = graphResiduals.size();
     os << "REINTERP split function=" << function->name() << " forward=" << rt::toValue(forwardId)
        << " backward=" << rt::toValue(backwardId)
@@ -3384,6 +3580,11 @@ SplitGraph buildSplitGraph(
     built.program  = group.program();
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
+    // What this cut stands on, past the graphs `program` already holds: a caller one level out
+    // cannot adopt them (`Program::adoptMissing` copies owned graphs only), so it reads this list.
+    // Transitive by construction -- the nested builds' own lists are in it -- so a caller that adopts
+    // every program named here holds every half a call of this cut can reach.
+    built.nestedPrograms = nestedPrograms;
     return built;
 }
 

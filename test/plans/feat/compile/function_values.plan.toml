@@ -366,3 +366,38 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 8000
+
+[[tests]]
+name = "function_values.a_value_that_is_not_a_function"
+desc = "A call of a value whose type is not a function -- `let t = (1.0, 2.0)` then `t(1.0)` -- is a diagnostic at the call, not an invariant violation. Before, `visitLinkNode`'s assertion (`dataType->code() == TypeCode::Function`, 'Target node of LINK must be a function or operator node') stopped the process with exit 134 for a program the compiler was given: measured on 34b659107 with a tuple, a number, a one-element tuple, a tuple a function answered and `vjp(f)(3.0)(1.0)`, five shapes, all `Camel Invariant Violation`. The target of a LINK being a function or an operator is the builder's contract, and refusing the call is what keeps it. The report names the value's type, which is the fact the writer needs: a call runs the function a value holds, and this type holds none."
+kind = "negative"
+case = "../../../cases/compile/function_values/called_value_is_not_a_function.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_code = "0x0300001C"
+expect_diagnostic_line = 17
+expect_diagnostic_column = 14
+expect_output_contains = ["Invalid call to 't' with argument types <> (float)", "has type '(float, float)', and that is not a function", "there is nothing here to call"]
+expect_output_not_contains = ["Camel Invariant Violation", "Guarantee", "Target node of LINK must be a function or operator node", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "function_values.two_arguments_to_a_one_port_member"
+desc = "The reported program: `let back = transpose(read_outer)` then `back(1.0, 1.0)`, and the same call written inline as `transpose(read_outer)(1.0, 1.0)`. `read_outer` reads `k` from outside its loop, so the transposed member promises one port today -- the type it answers is `(float) => (float,)` -- and two arguments do not fit it: both writings are refused, at the two calls, as `ArgumentsMismatch`. Neither is an abort. What a member that also takes the values its body reads needs is a two-parameter type, and then the call is the one `jvp(sq)(2.0, 1.0)` already builds: one `CALL` node, the value on a `WITH` edge, the arguments on `NORM` edges."
+kind = "negative"
+case = "../../../cases/compile/function_values/two_arguments_to_a_one_port_member.cml"
+args = ["${case}"]
+expect_exit = 1
+verify_script = """
+assert(input.diagnostics.length === 2, JSON.stringify(input.diagnostics))
+assert(input.diagnostics[0].name === 'SemanticDiag::ArgumentsMismatch', input.diagnostics[0].name)
+assert(input.diagnostics[0].line === 28 && input.diagnostics[0].column === 17, JSON.stringify(input.diagnostics[0]))
+assert(input.diagnostics[1].name === 'SemanticDiag::ArgumentsMismatch', input.diagnostics[1].name)
+assert(input.diagnostics[1].line === 29 && input.diagnostics[1].column === 34, JSON.stringify(input.diagnostics[1]))
+"""
+expect_output_contains = ["Function of type '(float) => (float,)' cannot be called with argument types: <> (float, float)"]
+expect_output_not_contains = ["Camel Invariant Violation", "Guarantee", "never printed"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

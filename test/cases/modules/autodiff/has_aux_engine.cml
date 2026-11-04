@@ -1,0 +1,61 @@
+/**
+ * `has_aux` at the engine, form one of four: `grad(f, has_aux: true)` and
+ * `with_grad(f, has_aux: true)` on a function whose result is the pair `(value, aux)`.
+ *
+ * The point is 3 and the pair is `(w * w, w + 10.0)`, so the three quantities the transform
+ * answers are three different numbers: value 9.0, auxiliary 13.0, gradient 6.0. That is the
+ * whole reason for these literals. JAX's own `has_aux` example (`f(x) = (x*x, 3x)` at 2, the
+ * one test/cases/modules/autodiff/jax_has_aux.cml pins) has value 4.0 and gradient 4.0 at the
+ * same point, so an implementation that hands the value back where the gradient belongs, or
+ * the gradient where the auxiliary value belongs, answers the same line there. Here each
+ * confusion is a different number: 9.0 for the value read as the gradient, 6.0 for the gradient
+ * read as the auxiliary value, and 7.0 for a gradient that let the auxiliary value's own slope
+ * (`w + 10.0` has slope 1.0) flow into it.
+ *
+ * The orders are JAX's, both of them (stdlib/signatures/autodiff.cml): `grad` gives
+ * `(gradient, aux)` and `with_grad` gives `((value, aux), gradient)`. The two
+ * `_is_not_the_gradient` lines say in the program itself what a reader of the numbers would
+ * otherwise have to check by hand.
+ *
+ * `frozen` is the case where the two halves disagree about who carries the dependence: its
+ * value is the constant `1.0` and its auxiliary value is `w * w`, so the gradient is 0.0 while
+ * the auxiliary value is 9.0. A backward pass seeded at the pair instead of at the pair's first
+ * element answers 6.0 there -- the auxiliary value differentiated -- and a pass that took the
+ * derivative of the auxiliary value as the answer answers 6.0 as well. So the zero is what says
+ * that `aux` is carried and not differentiated, and it is the only number in either function
+ * that can say it: with a value that depends on `w`, a gradient that also counted `aux`'s slope
+ * differs from the right one only by an amount a reader has to know to look for.
+ */
+import { grad, with_grad } from autodiff
+
+with <w: float>
+func loss(): (float, float) {
+    return (w * w, w + 10.0)
+}
+
+with <w: float>
+func frozen(): (float, float) {
+    return (1.0, w * w)
+}
+
+func main(): int sync {
+    let pair = grad(loss, has_aux: true)<3.0>()
+    let gradient = pair.0
+    let aux = pair.1
+    let stepped = with_grad(loss, has_aux: true)<3.0>()
+    let inner = stepped.0
+    let value = inner.0
+    let aux2 = inner.1
+    let gradient2 = stepped.1
+    println('has_aux_engine')
+    println('grad={} aux={}'->format<gradient, aux>)
+    println('value={} aux={} grad={}'->format<value, aux2, gradient2>)
+    println('value_is_not_the_gradient={}'->format<value != gradient>)
+    println('aux_is_not_the_gradient={}'->format<aux != gradient>)
+    let held = grad(frozen, has_aux: true)<3.0>()
+    let held_step = with_grad(frozen, has_aux: true)<3.0>()
+    let held_inner = held_step.0
+    println('held grad={} aux={}'->format<held.0, held.1>)
+    println('held value={} aux={} grad={}'->format<held_inner.0, held_inner.1, held_step.1>)
+    return 0
+}

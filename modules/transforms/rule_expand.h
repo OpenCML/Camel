@@ -10,6 +10,7 @@
 #include "camel/runtime/graph_txn.h"
 
 #include <functional>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <vector>
@@ -24,6 +25,35 @@ inline constexpr size_t kWholeAnswer = static_cast<size_t>(-1);
 /// choice between two laws of one key is made on.
 std::vector<camel::core::type::Type *>
 rulePortsOf(const camel::compile::gir::GenericRuleInstance &instance);
+
+
+/// The ports of the closure a law's right side answers with: the **tangents** it takes, in the order
+/// its right side writes them, or empty when the right side is not a function of the tangents.
+///
+/// This is not the same question `rulePortsOf` answers. That one is the *left* side -- the operator's
+/// own operands -- and it is what a law is chosen on (one law per left side; `chooseRuleAmong`). What
+/// a law will *read* when the walk hands it a cotangent is written nowhere on the left side: it is
+/// the parameter of the closure the right side answers with (`(ct: T[..]) => mean_axis_cotangent(ct,
+/// at)`), which `findRuleRightSide` already reads in order to expand that closure. A family that must
+/// judge a cotangent against the port it is entering asks here.
+std::vector<camel::core::type::Type *>
+ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance);
+
+/// The extents a type's shape states, or nothing when the type leaves one of them open.
+///
+/// A shape is a fact about an array type: `float[2, 3]` states two extents, `float[]` states one
+/// dimension and leaves its length open, and `float[..]` states neither the rank nor a length. The
+/// reading of a stated extent is the one `jvp.cpp#zeroConstantFor` makes of the same fact --
+/// `ExtentForm::evaluate({})` answers the number a written extent holds and nothing for a `?` or for
+/// an extent over a name nothing binds -- so the transforms agree about which types have a shape that
+/// can be written while the graph is built.
+///
+/// There is one definition of this reading because there is one answer to give: `transpose` builds a
+/// shape carrier out of it (`shapeCarrierOf`) and `expandRuleRightSide` hands the same numbers to a
+/// law that asks for an operand's shape
+/// (`mul_tensor_t`'s `shape(x)`, `stdlib/rulesets/transpose.cml`). Two copies of it would be two
+/// answers the day one of them learned about a type form the other did not.
+std::optional<std::vector<int64_t>> statedShapeOf(const camel::core::type::Type *type);
 
 /// Whether `narrow` asks for a type every position `wide` also takes, and asks for a narrower one
 /// somewhere: `T[]` beside `T[..]`, where an open rank takes a rank-one array and a rank-one array

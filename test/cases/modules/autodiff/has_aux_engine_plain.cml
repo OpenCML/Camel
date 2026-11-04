@@ -1,0 +1,42 @@
+/**
+ * `has_aux` form two of four: the engine's transform with no `has_aux` -- the control group.
+ *
+ * `f(w) = w * w` at 3 gives the value 9.0 and the gradient 6.0, and `grad`/`with_grad` answer
+ * `6.0` and `(9.0, 6.0)`. Nothing about the pair form may move these: a `has_aux` implementation
+ * that decided the shape of its result from something other than the call's own argument list
+ * would answer a pair here, and the two are compared in the program rather than by eye.
+ *
+ * The same program is read a second time through the library's leg, `vjp` and the seed 1
+ * (stdlib/vjp.cml): `vjp(f)(3.0)` is `(9.0, pullback)`, `pullback(1.0)` is `(6.0)`, and both
+ * numbers are compared with the engine's, member for member, as floats and not by printing
+ * them side by side for a reader to compare. The library differentiates the ordinary
+ * parameters and the engine the first `with` parameter (design principles 9.9), so the same
+ * arithmetic is written twice: `square` binds the weight as `with` and `square_plain` takes it
+ * as a parameter. That is the two legs' only difference, and it is the one the call makes.
+ */
+import { grad, with_grad } from autodiff
+import { vjp } from vjp
+
+with <w: float>
+func square(): float {
+    return w * w
+}
+
+func square_plain(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    let g = grad(square)<3.0>()
+    let vg = with_grad(square)<3.0>()
+    let engine_value = vg.0
+    let engine_grad = vg.1
+    let (y, pullback) = vjp(square_plain)(3.0)
+    let cotangents = pullback(1.0)
+    let library_grad = cotangents.0
+    println('has_aux_off_engine')
+    println('grad={} value={} with_grad_grad={}'->format<g, engine_value, engine_grad>)
+    println('library value={} grad={}'->format<y, library_grad>)
+    println('same_value={} same_grad={}'->format<engine_value == y, g == library_grad>)
+    return 0
+}

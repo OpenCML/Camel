@@ -1,34 +1,33 @@
-// The library's answer for the same gradient: refused by name, and the other half of the anchor.
+// The library's answer for the gradient of `^` at a **constant** exponent: still a refusal, and the
+// sentence that refuses it changed when the missing laws were written.
 //
-// `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md` (D1) asks that
-// every operator the engine can differentiate gain a cotangent rule in
-// `stdlib/rulesets/transpose.cml`. `^` on two floats is the first member of that difference set:
-// its forward rule `jvp_pow` is written (`stdlib/rulesets/jvp.cml`, and the forward half runs here
-// -- the reading says `rules=jvp_pow`), the reverse rule `pow_t` is not, so `vjp` -- which is
-// `transpose(split(jvp(f)))` -- stops where the transposition needs it:
+// This case used to pin `skip=rule uri=math:pow_d reason=unbound`: the forward rule `jvp_pow` was
+// there, and `pow_tangent` -- the helper it answers with -- called `pow`, whose operator
+// (`math:pow_d`) had no transpose law. Both laws are written now (`rulesets.jvp#jvp_pow_d` and
+// `rulesets.transpose#pow_d_t`, plus the `log` law the second one needs), and the walk gets one step
+// further and stops at the next thing, which is not a rule at all:
 //
-//     REINTERP jvp function=p graph=250 … rules=jvp_pow
-//     REINTERP split function=jvp_of_p forward=266 backward=267 type=(float) => (float, (float) => float pure) pure residuals=3
-//     TRANSPOSE function=rulesets.jvp::pow_tangent<float> skip=rule uri=math:pow_d reason=unbound
-//     TRANSPOSE function=split_of_jvp_of_p_backward skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>
+//     TRANSPOSE function=rulesets.jvp::pow_tangent<float> skip=condition
+//     TRANSPOSE function=split_of_jvp_of_p_backward skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float> why=the cotangent reaches a call whose callee has no transpose
 //
-//     transforms: transpose has no transpose for this function: this call's callee has no transpose
-//     of its own, so the call cannot be turned around
+// `skip=condition` is the guard the tangent `pow_tangent` answers is written behind --
+// `if dw == T(0) then T(0) else pow(x, w) * math_log(x) * dw` -- and what that guard reads is `dw`,
+// the exponent's tangent's **value**: the walk is handed the cotangent and not the tangents, so the
+// branch is one it cannot turn around. The guard is what keeps `(-3.0) ^ 2.0`'s tangent at `-6.0`
+// instead of `NaN` (`jvp_of_a_power.cml` pins it), and `modules/transforms/transpose.cpp` says so at
+// the only place it can, which is the sentence this line quotes.
 //
-// The refused key is `math:pow_d` -- the scalar spelling `^` puts in the graph -- and `unbound` is
-// the rule table's own word for "this family has no rule for that operator". The transposition
-// stops at `pow_tangent`, the library function the forward rule answers with, which is the other
-// half of the same fact: a cotangent rule is written for the primal, not for its tangent function.
+// So the wall this case now names is *the guard*, not a missing law: the law's own numbers are pinned
+// by `pow_gradient_through_the_library.cml`, which differentiates `pow(x, 3.0)` -- the same arithmetic
+// under the spelling whose forward rule has no guard -- and answers 12.0, the engine's number for
+// `w ^ 3.0` (`pow_cube_gradient_through_the_engine.cml`). Removing this refusal means giving a
+// transposed rule the value of a tangent, which is a change in `split`/`transpose` and not in a
+// ruleset; it is written up in `docs/handover/questions/` beside this lane.
 //
-// The engine's answer for the same function is the neighbouring
-// `pow_gradient_through_the_engine.cml`. The two readings cannot share one program: this refusal
-// happens where the graph is built, so the program never runs and the engine's number would never
-// be printed. The day a `pow_t` is written this case fails and names the sentence that replaced
-// this one.
-//
-// The forward half of `^` -- what `jvp_pow` answers, the constant exponent's zero tangent,
-// `log(-3.0)` kept out of the arithmetic -- is already pinned by `jvp_of_a_power.cml`, and nothing
-// here repeats it.
+// The node index in the last line is positional: it counts the nodes of the cut's backward graph,
+// and it moved from 6 to 5 when that graph lost the duplicate residual it used to carry
+// (`modules/transforms/split.cpp#residualsOf`, 2026-11-04). What the line is read for is the callee
+// and the sentence.
 //
 //     camel test/cases/compile/transforms/pow_gradient_refused_by_the_library.cml
 import { vjp } from vjp

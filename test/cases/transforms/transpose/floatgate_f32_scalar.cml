@@ -1,0 +1,41 @@
+/**
+ * An `f32` scalar's transposition, read at two cotangents and at two points.
+ *
+ * `f(x) = x*x + x*5`, so `f'(x) = 2x + 5` and the pullback of the cotangent `ct` is `ct * (2x + 5)`:
+ *
+ *     x = 3,  ct = 1 -> 11
+ *     x = 3,  ct = 2 -> 22
+ *     x = -2, ct = 1 -> 1
+ *
+ * The body reads `x` **twice** (`x*x` and `x*5`), so the walk has two cotangents landing on one value
+ * and adds them: at `f32` that addition is `:op/add_f` and both operands are four-byte `f32` slots.
+ * The `float` twin is printed beside it so the two widths are one program and one reading: `f32` is
+ * not a `float` and nothing here is read as one.
+ *
+ * What this case holds is the **type** and not a difference in the numbers: 11, 22 and 1 are exact in
+ * both widths, so a walk that summed them with the `float` addition would print the same three
+ * numbers (tried: with that one reading put back, this case stays green and the branch case -- whose
+ * arm cotangents reach a join -- goes red). The reading that does tell the widths apart is
+ * `TRANSPOSE ... type=(f32) => (f32,)` on stderr, which the plan pins.
+ */
+import { vjp } from vjp
+
+func sf(x: f32): f32 {
+    return x * x + x * 5.0
+}
+
+func sd(x: float): float {
+    return x * x + x * 5.0
+}
+
+func main(): int sync {
+    let (vf, pf) = vjp(sf)(3.0)
+    'scalar f32   value={} dfdx={}'->format<vf, pf(1.0).0>->println
+    'scalar f32   x=3 ct=2 -> {}'->format<pf(2.0).0>->println
+    let (vfneg, pfneg) = vjp(sf)(-2.0)
+    'scalar f32   x=-2 ct=1 -> {}'->format<pfneg(1.0).0>->println
+    let (vd, pd) = vjp(sd)(3.0)
+    'scalar float value={} dfdx={}'->format<vd, pd(1.0).0>->println
+    'scalar float x=-2 ct=1 -> {}'->format<vjp(sd)(-2.0).1(1.0).0>->println
+    return 0
+}

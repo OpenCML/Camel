@@ -156,6 +156,33 @@ verify_script = '''
 '''
 
 [[tests]]
+name = "autodiff.reshape_adjoint.is_shaped_like_its_input"
+desc = "The adjoint of a reshape is shaped like that reshape's input, not like its result (design principles 9.9). Two reshapes in a row, `[6] -> [3, 2] -> [2, 3]`, so the two adjoints differ: the outer one is a `float[3, 2]` (like `s`) and the inner one a `float[]` (like `w`). Before 2026-11-04 the rule built both with `addTensorOper`, which takes a node's type from its inputs -- and its inputs are `dy` and the shape of the input, so both were declared `float[2, 3]`, one shape too far. The numbers never moved (the accumulator reduces to the operand's shape), so the recorded type is the only reading that shows which value the node belongs to: this entry reads it out of `std::jgir`'s `outputType`."
+case = "../../../cases/modules/autodiff/reshape_adjoint_shape.cml"
+args = ["${case}","std::macro","std::jgir"]
+verify_script = '''
+({ input, assert }) => {
+ const doc = JSON.parse(input.normalized.stdout)
+ const g = doc.graphs.find(g => g.name === 'grad(loss)')
+ assert(g, 'the gradient graph is missing')
+ const adj = g.nodes.filter(n => n.label === 'tensor:reshape' && !n.source).map(n => n.outputType).sort()
+ assert(adj.length === 2, 'expected the two reshape adjoints, found ' + adj.length)
+ assert(adj[0] === 'float[3, 2]' && adj[1] === 'float[]', 'the adjoints are not shaped like their inputs: ' + adj.join(' '))
+ const fwd = doc.graphs.find(g => g.name === 'loss')
+ assert(fwd.nodes.filter(n => n.label === 'tensor:reshape').every(n => n.outputType !== 'float[]'), 'the forward reshapes moved')
+}
+'''
+
+[[tests]]
+name = "autodiff.reshape_adjoint.numbers_are_the_forward_jacobian"
+desc = "The same case read as numbers: `sum(d * d)` with `d = reshape(w, [2, 3])` has the gradient `2w`, so `[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]`. This is the half a declared type cannot show, and it is the same before and after the node began declaring its input's shape -- which is what makes the shape a correction of the record and not of the numbers."
+case = "../../../cases/modules/autodiff/reshape_adjoint_shape.cml"
+args = ["${case}","std::macro","${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["stdout_normalized"]
+expect_stdout_contains = ["reshape_adjoint_shape [2.0, 4.0, 6.0, 8.0, 10.0, 12.0]"]
+
+[[tests]]
 name = "autodiff.random_input.opt.results"
 case = "../../../cases/modules/autodiff/collapse_random.cml"
 args = ["${case}","std::macro","std::opt","${backend}"]

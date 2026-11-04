@@ -57,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 224
+**Semantic — errors** (`SemanticDiag`) — 225
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -283,6 +283,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `RuleLeftIsNotAnOperator` | The rule '{0}' has a left side that is not one operator; it is written as '{1}', and a ruleset indexes its rules by the head of the left side. |
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
+| `ExtentOfNeedsStatedShape` | `extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
@@ -302,7 +303,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 39
+**Run time and passes — errors** (`RuntimeDiag`) — 40
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -315,6 +316,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `PassInternalError` | Pass '{0}' failed with an internal error: {1}. |
 | `PassBoundaryResources` | Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}. |
 | `PassBoundaryNodes` | Pass '{0}' returned a program whose {1} has no {2}. |
+| `ExitTypeMismatch` | The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}. |
 | `PassBoundaryPorts` | Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}. |
 | `MacroEvaluationFailed` | '{0}' could not be evaluated by std::macro: {1}. |
 | `EntryArgumentMissing` | No value was given for the {0} {1} of 'main'. |

@@ -1,0 +1,78 @@
+# `f32` transposition, read where the walk's types are decided
+#
+# `lane-f32trans` opened the gate: `transpose` no longer requires a function that returns a `float`,
+# it requires a result whose *tangent space* is a width the walk can add
+# (`transpose.cpp#transposeSignature`, `#hasResultCotangent`). That is what lets the five cases here
+# reach a law at all. The readings they pin are the other half of that change: the places inside
+# `modules/transforms/transpose.cpp` that were written as `Type::Float64()` because, behind a gate
+# that only admitted `float`, a `float` was the true answer.
+#
+# Each case names the line it holds, and each number below was derived by hand from the derivative
+# before the program was run -- a reading read off the implementation would pin whatever the
+# implementation does. The four directions are the ones the construction checklist `lane-typedrift`
+# wrote asked for: an `f32` scalar's transposition, an `f32` closure member's port type, a loop
+# state's cotangent port in a non-`float` width, and an array the answer carries as a zero (the `pick`
+# shape). That page is on `lane-typedrift` and not in this tree, so it is named here and not cited.
+#
+# `type=` on stderr is the member's own signature (`transposeSignature`'s answer, printed by the
+# walk), so those entries pin a *type* and not only a number: a cotangent port typed `float` for an
+# `f32` function cannot print `(f32) => (f32,)`.
+
+[[tests]]
+name = "floatgate.f32_scalar_transpose"
+desc = "An `f32` scalar's pullback at two points and two cotangents: `f(x) = x*x + x*5`, `f'(x) = 2x + 5`, so 11 and 22 at x = 3 with ct = 1 and 2, and 1 at x = -2. The body reads `x` twice, so two cotangents land on one value and are added -- at `f32` with `:op/add_f`, which is the registry's addition for that space (`transpose.cpp#addUriFor`). The `float` twin prints the same two numbers: one program, two widths, no conversion."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/floatgate_f32_scalar.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["scalar f32   value=24.0 dfdx=11.0", "scalar f32   x=3 ct=2 -> 22.0", "scalar f32   x=-2 ct=1 -> 1.0", "scalar float value=24.0 dfdx=11.0", "scalar float x=-2 ct=1 -> 1.0"]
+expect_stderr_contains = ["type=(f32) => (f32,)"]
+timeout_ms = 20000
+
+[[tests]]
+name = "floatgate.f32_closure_member_ports"
+desc = "The transposed linear half of `f(x, y) = x*x*y` at x = 3, y = 2 in `f32`: value 18, d/dx = 2xy = 12, d/dy = x*x = 9. The backward half's ports are the residuals it carries in its **closure**, so this is where a capture port's type is decided (`transpose.cpp#buildTransposeMember`, the closure port loop): an `f32` residual in a `float` port is a residual read at the wrong width."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/floatgate_f32_closure.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["closure f32 value=18.0 dx=12.0 dy=9.0"]
+expect_stderr_contains = ["type=(f32) => (f32, f32)"]
+timeout_ms = 20000
+
+[[tests]]
+name = "floatgate.f32_loop_state_cotangent_port"
+desc = "A loop carrying an `f32` state, transposed: `f(x) = loop a = x for i in 0..3 do a*3` reads 27 at x = 1 and `transpose(f)(1.0)` reads 27. The transposed body declares one cotangent port per state in the **state's own** space and seeds it with that space's zero (`transpose.cpp#buildTransposeMember`, the state cotangent ports and the sharp zero), and the answer's one slot is typed from the loop's own type rather than asked of the source graph by a ref that belongs to the new one. A port, a seed and a slot written as `float` are eight-byte homes for a four-byte cotangent. `type=(f32) => (f32,)` is the signature the member promises."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/floatgate_f32_loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["loop f32 value=27.0", "loop f32 transpose d=27.0"]
+expect_stderr_contains = ["type=(f32) => (f32,)"]
+timeout_ms = 20000
+
+[[tests]]
+name = "floatgate.f32_array_zero_carrier"
+desc = "The zero carrier, where the zero is an **array**: `pick(xs, ys) = ys[0]*ys[1]` never reads `xs`, so `xs`'s cotangent is the zero of an array space while `ys`'s is `[y1, y0, 0, 0]`. With `xs = [9, 9, 9, 9]`, `ys = [3, 2, 5, 7]` and cotangent 1: value 6, `d/dxs = [0, 0, 0, 0]`, `d/dys = [2, 3, 0, 0]`. The zero is built by the space's `zerosLikeUri` (`transpose.cpp#buildTransposeMember`, the parameter's zero) and typed by `space.space`: an array space has no constant zero, and the operator that writes it is not a `float` constant."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/floatgate_f32_pick_array.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["pick f32 value=6.0", "pick f32 dxs = 0.0 0.0 0.0 0.0", "pick f32 dys = 2.0 3.0 0.0 0.0"]
+timeout_ms = 20000
+
+[[tests]]
+name = "floatgate.f32_branch_join"
+desc = "A branch whose arms answer `f32`: `f(x) = if x > 0 then x*x else 3*x` at x = 2 reads 4 and dfdx 4, at x = -2 reads -6 and dfdx 3. The two arms are built in their own regions and a `join` carries whichever arm ran, so the join's type is the cotangent's type and the answer tuple's member is read from the value the join stands for (`transpose.cpp#buildTransposeMember`, the join and the one-slot answer): a join created as `float` -- or a member type read from a ref that belongs to the new graph instead of the source graph -- type the arm's `f32` cotangent as a `float`."
+kind = "behavior"
+case = "../../../cases/transforms/transpose/floatgate_f32_branch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["branch f32 value=4.0 dfdx=4.0", "branch f32 value=-6.0 dfdx=3.0"]
+expect_stderr_contains = ["type=(f32) => (f32,)"]
+timeout_ms = 20000

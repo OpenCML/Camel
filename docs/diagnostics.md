@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-309 diagnostics: 288 errors, 21 warnings. 15 carry a machine-applicable edit, 294 say why they carry none.
+311 diagnostics: 290 errors, 21 warnings. 15 carry a machine-applicable edit, 296 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -269,6 +269,7 @@ prints one entry.
 | `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
+| `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -323,6 +324,7 @@ prints one entry.
 | `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
+| `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -8861,6 +8863,57 @@ func main(): int sync {
 }
 ```
 
+### ExtentOfNeedsStatedShape
+
+`0x0300020B` · Error · `SemanticDiag::ExtentOfNeedsStatedShape`
+
+**Fix**
+
+None: choice: the extents the type should write, or the value whose shape stands in for them, are the writer's
+
+**Message**
+
+```text
+`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.
+```
+
+**Help**
+
+```text
+Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.
+```
+
+**Example** (`test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml`, run as `camel test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml ${backend}`)
+
+```camel
+// `extent_of::<A>()` answers the extents a type writes down, and `float[]` writes none.
+//
+// The function is the language's one spelling of "the shape a type states": its answer is a fact of
+// its **type argument** and of nothing else, which is what a transposition needs -- the adjoint of a
+// linear map is a function of the cotangent and of the shape of the map's domain, and a parameter
+// whose cotangent is what the transposed function takes has no value to read
+// (`transpose(pick)` on `x: float[3]`).
+//
+// That the answer is a fact of the type is also why a type that writes no shape has no answer:
+// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[..]` states
+// neither the rank nor a length, so neither tells the function what to answer. Nothing here is a
+// value that was not computed or a shape nobody wrote down: the call asks a question the type does
+// not answer, and it is refused where it is instantiated, which is where the type is in hand.
+//
+// The repair the sentence names is to write the extents in the type (`float[2, 3]` answers
+// `[2, 3]`) or to ask a value for its shape (`shape(xs)`), which is a question about a value the
+// program has. This case is the refusal; the answer is what `transpose(pick)` on `x: float[3]`
+// reads, and the transposition walk asks the same rule (`statedExtentsOf`) rather than a second
+// reading of the extents.
+import rulesets.transpose
+
+func main(): int sync {
+    let extents: int[] = extent_of::<float[]>()
+    println(extents)
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -10906,7 +10959,60 @@ The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state
 A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[..])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.
 ```
 
-*No example: no test small enough to show raises it.*
+**Example** (`test/cases/modules/autodiff/transpose_needs_parameter_shape.cml`, run as `camel test/cases/modules/autodiff/transpose_needs_parameter_shape.cml ${backend}`)
+
+```camel
+import rulesets.transpose
+import { transpose } from transforms
+import { mean_axis, sum } from tensor
+
+func loss_mean(x: float[..]): float {
+    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+}
+
+func main(): int sync {
+    let back = transpose(loss_mean)(1.0)
+    'transpose should have been refused, and it answered {}'->format<back.0>->println
+    return 0
+}
+```
+
+### ExitTypeMismatch
+
+`0x040001AE` · Error · `RuntimeDiag::ExitTypeMismatch`
+
+**Fix**
+
+None: choice: hand on a value of the declared type, or declare the type the value has.
+
+**Message**
+
+```text
+The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}.
+```
+
+**Help**
+
+```text
+A return is a position with an expected type: what a function hands on is of the type the function declares, and nothing is converted on the way (design principles 5.1) -- an int is not read as a float, and a float[] is not read as a float. The graph is the function, so the declaration is the type to match: hand on a value of the declared type, or declare the type the value has. A return a rewrite rule replaced takes the type of the rule's right side, so a rule whose right side is of another type than its left is the place to look. The message names the value by its node and, when it has one, by its source name: a node a rewrite built carries no source position of its own, and that is why this report can stand without a line of its own.
+```
+
+**Example** (`test/cases/runtime/exit_type/float_declared_array_returned.cml`, run as `camel test/cases/runtime/exit_type/float_declared_array_returned.cml std::nvm`)
+
+```camel
+import { rewrite } from rewrite
+
+rule retype(x: float) { x * 1.0 => [1.0, 2.0] }
+
+func target(n: float): float { n * 1.0 }
+
+func main(): int sync {
+    let rules = [retype]
+    let g     = target->rewrite<rules> !! target
+    print(g(7.0))
+    return 0
+}
+```
 
 ### PassesNeverRun
 

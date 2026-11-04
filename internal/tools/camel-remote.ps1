@@ -50,15 +50,27 @@
 # --- -NoBuild is guarded ----------------------------------------------------
 # A build writes out/<tag>/build-info.json -- from scripts/collect-out.js, through
 # scripts/common.js: writeBuildInfo -- recording the HEAD it was built at, whether that tree was
-# dirty, and a SHA-256 over the content of every path the build reads: src, include, modules, tools,
-# stdlib, third_party, cmake, CMakeLists.txt, conanfile.txt. `-NoBuild` compares that stamp with the
-# checkout it is about to verify, on the host, before the plan starts:
+# dirty, a SHA-256 over the content of every path the build reads (src, include, modules, tools,
+# stdlib, third_party, cmake, CMakeLists.txt, conanfile.txt), and the build options it compiled with
+# (scripts/common.js: buildOptions: the `-D` values a build would pass, the two environment
+# overrides cmake/Options.cmake honours, the platform and the compiler selection). `-NoBuild`
+# compares that stamp with the checkout it is about to verify, on the host, before the plan starts:
 #
-#   * same content      -> nothing is printed and the plan runs (a correct run gains no noise);
+#   * same content, same options -> nothing is printed and the plan runs (a correct run gains no
+#                          noise);
 #   * different content -> exit 4, with both revisions (HEAD + dirty state), both fingerprints and
 #                          the source files that moved;
-#   * no stamp          -> exit 4: an install collected before the guard (or never built) cannot be
-#                          proven to match; build once without -NoBuild;
+#   * different options -> exit 4, with both fingerprint hashes and every option that moved
+#                          (`ENABLE_FASTVM_JIT: built OFF, a rebuild would use ON`): the sources are
+#                          the same bytes, but a no-JIT install and a JIT install are two different
+#                          binaries and reusing one for the other answers a question the tree never
+#                          asked;
+#   * another configuration -> exit 4 for the debug tag only, which is the one tag the configuration
+#                          follows from (out/debug is the Debug build); out/latest holds Release and
+#                          RelWithDebInfo, so no `--config` is passed there and `-Tier debug
+#                          -NoBuild` keeps verifying out/debug without building;
+#   * no stamp, or a stamp from before the option record -> exit 4: it cannot be proven to match,
+#                          so it is refused rather than trusted; build once without -NoBuild;
 #   * -AllowStale       -> the mismatch is still printed, followed by "continuing anyway"; the run
 #                          proceeds (explicit, loud, and never implied).
 #
@@ -317,7 +329,13 @@ if ($null -ne $loadStart) {
 # The install the plan will actually use: `--tier debug` makes the plan runner read out/debug;
 # every other run reads out/latest. The -NoBuild guard checks that directory (H149).
 $verifyTag = if ($Tier -eq 'debug') { 'debug' } else { 'latest' }
-$guardArgs = if ($AllowStale) { '--allow-stale' } else { '' }
+# `--config` is passed only where the tag decides the configuration. out/debug holds the Debug build
+# by construction (scripts/collect-out.js writes that tag from `npm run debug`), so naming it lets
+# the guard refuse a Release install sitting in out/debug too. out/latest holds Release *and*
+# RelWithDebInfo, and `-Tier debug -NoBuild` (which verifies out/debug without building) passes
+# `-Config Release` by default, so naming a configuration there would refuse a correct install.
+$guardConfig = if ($verifyTag -eq 'debug') { '--config Debug' } else { '' }
+$guardArgs = if ($AllowStale) { "--allow-stale $guardConfig" } else { $guardConfig }
 
 $Path = (Resolve-Path $Path).Path
 if (-not (Test-Path (Join-Path $Path 'package.json'))) {
@@ -930,8 +948,17 @@ cd "`$R" || exit 2
 echo '__CAMEL_REMOTE_SYNCED__'
 if [ '$NoBuild' = 'True' ]; then
     if [ -f scripts/build-info.js ]; then
-        node scripts/build-info.js check --tag '$verifyTag' $guardArgs
+        # Captured rather than piped so the marker the guard prints past -AllowStale can be handed
+        # to the plan run: a reading that replayed a refused install has to carry that fact on its
+        # own lines (test/tools/provenance.mjs: staleAllowedMark), and the only copy of it is this
+        # output.
+        guard_out=`$(node scripts/build-info.js check --tag '$verifyTag' $guardArgs 2>&1)
         guard=`$?
+        printf '%s\n' "`$guard_out"
+        stale=`$(printf '%s\n' "`$guard_out" | grep -o '\[STALE-ALLOWED[^]]*\]' | head -1)
+        if [ -n "`$stale" ]; then
+            export CAMEL_GATE_STALE_ALLOWED="`$stale"
+        fi
         if [ `$guard -ne 0 ]; then
             echo '__CAMEL_REMOTE_STALE_BINARY__'
             exit `$guard
@@ -1107,9 +1134,9 @@ exit `$code
                 return
             }
             if ($line -match '__CAMEL_REMOTE_STALE_BINARY__') {
-                Set-BuildPhase 'fail' "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources"
+                Set-BuildPhase 'fail' "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources, options or configuration"
                 $run.phase = 'fail'
-                $run.lastLine = "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources"
+                $run.lastLine = "[camel-remote] -NoBuild refused: out/$verifyTag was built from different sources, options or configuration"
                 Publish-Run
                 return
             }

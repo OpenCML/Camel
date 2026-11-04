@@ -1805,6 +1805,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ExtentOfNeedsStatedShape,
+            {
+                "ExtentOfNeedsStatedShape",
+                "`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.",
+                "Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

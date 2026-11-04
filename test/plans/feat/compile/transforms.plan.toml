@@ -143,8 +143,11 @@ timeout_ms = 20000
 # Measured 2026-11-04 on host 88zjwei (1 m load 20.8-21.0, a loaded host): `value= 3.0` and
 # `grad= [1.0, 1.0]` on `std::nvm` and on `std::fvm`, and the reading
 # `REINTERP split function=jvp_of_g ... residuals=2 loop=1 tape=5 invariants=0 after=1`
-# `transpose_loop_escape.two_values_of_two_kinds` and `second_state_of_the_same_loop` are still
-# refusals (a parameter that holds no cotangent, and a two-state loop the cut does not take).
+# Of the two `transpose_loop_escape` cases that were red beside it, `second_state_of_the_same_loop`
+# answers now (7 and 14, on the route its own pins name -- see that case); `two_values_of_two_kinds`
+# is marked known_fail, because the number it asks for is a function of a value the transposed
+# signature does not carry
+# (`docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`).
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -229,20 +232,23 @@ timeout_ms = 20000
 
 # The negative side of the same rule table, and the point of it: a primitive the ruleset has no rule
 # for is not answered with 0 or 1 and is not only printed at -- it is a diagnostic that names the
-# primitive and stands *where the primitive is written*. `pow` is `math:pow_d`, which no forward rule
-# is bound for, so `jvp(f)` cannot build; the error is at `f`'s `pow` (`file:line:col`) and the
+# primitive and stands *where the primitive is written*. `sin` is `math:sin_d`, which no forward rule
+# is bound for, so `jvp(f)` cannot build; the error is at `f`'s `sin` (`file:line:col`) and the
 # process stops without running `main`, while the call site is kept beside it as a related position.
+#
+# `pow` (`math:pow_d`) carried this shape until the ruleset gained a forward rule for it
+# (`jvp_pow_d`, pinned by `jvp_of_a_pow_call`); the shape is the same one, one operator along.
 [[tests]]
 name = "rulesets_probe_missing.at_the_primitive"
-desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:pow_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:10:12`, the `pow` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:pow_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint (`[raised here`) that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked."
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:sin_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:14:12`, the `sin` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:sin_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked. `pow` was the operator this entry named until `math:pow_d` gained a forward rule; `sin` is one no family binds, so nothing in the reading changed but the name."
 kind = "behavior"
 case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=rule uri=math:pow_d", "rulesets_probe_missing.cml:10:12: [Error]:", "jvp has no forward rule for `math:pow_d`", "no forward rule bound at all", "[raised here"]
-expect_stdout_not_contains = ["5.0"]
+expect_output_contains = ["skip=rule uri=math:sin_d", "rulesets_probe_missing.cml:14:12: [Error]:", "jvp has no forward rule for `math:sin_d`", "no forward rule bound at all", "raised here"]
+expect_stdout_not_contains = ["0.9092974268256817"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # The library carries the rulesets it composes.
@@ -480,6 +486,98 @@ expect_output_contains = ["h value= 8.0", "h vjp value= 8.0", "h pullback(1.0)= 
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 
+# The zero a parameter that is never read answers, when the parameter is an **array**: the two
+# readings above are about a number, whose zero is the constant `0.0`, and an array's is an array of
+# zeros whose shape is the parameter's. That shape is what the two halves of the answer wear, and
+# both of them were wrong in the same place (`buildTransposeMember`'s answer section,
+# modules/transforms/transpose.cpp):
+#
+#   * the member built the zero with the operator name `:tangent/zeros_arr` written in the source.
+#     The array code is shared by two kinds whose zeros are different operators -- a numeric array's
+#     is `tensor:zeros_like` (`modules/tensor/ops/gradient_ops.cpp#registerTensorTangentSpace`) and an
+#     array of values the core holds one slot each is `:tangent/zeros_arr`
+#     (`src/builtin/operators/derivative.cpp#registerBuiltinDerivatives`) -- so a `float[..]` value
+#     reached a kernel that answers only the second kind and threw
+#     "autodiff: a zero tangent array needs an array with a tangent".
+#   * and it handed that operator `ports[port]`, a node of the **source** graph. A parameter a
+#     cotangent is answered for is not a port of the member at all (the caller has no value to pass
+#     for it), so the ref was an index into another numbering: it landed on the cotangent port, whose
+#     type is the result's -- the `float` in the message.
+#
+# The zero is now the space's own operator when the member holds a value, and the zero the *type*
+# states when it does not (the same rule as `jvp`'s `zeroConstantFor`), so `float[3]` answers
+# `[0.0, 0.0, 0.0]`. A type that states no extent (`float[..]`) is the reading the case records as
+# `[]` and names its successor in its own comment.
+#
+# Both array halves were exit 1 before the fix; the scalar half was already `(0.0)`.
+[[tests]]
+name = "vjp_const_function_answers_zero.nvm"
+desc = "The derivative of a constant function of an array: `vjp(const_fixed)([2.0, 3.0, 4.0])`'s pullback answers `([0.0, 0.0, 0.0])` at a cotangent of 1 and of 2, and the open-rank parameter, whose type states no extent, answers `([])` -- the zero the type states. A constant function of a number is the control and answers `(0.0)`. On paper `f(x) = 1.0` for every x, so f' = 0. Before the fix the two array halves threw `autodiff: a zero tangent array needs an array with a tangent` (exit 1)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["fixed value= 1.0", "fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open value= 1.0", "open pullback(1.0)= ([])", "scalar value= 1.0", "scalar pullback(1.0)= (0.0)", "scalar pullback(2.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_const_function_answers_zero.fvm"
+desc = "The same case on the bytecode VM: the zero array is a value the transposed graph carries -- a static constant for the stated shape -- so the schedule that runs it answers the same three arrays."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_const_function_answers_zero.jit"
+desc = "The same case with the JIT: the transposed graph is built once and called twice per function, and the second call answers the same zero rather than the first call's cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_const_function_answers_zero.prl"
+desc = "The same case on the parallel scheduler: the answer is a constant of the transposed graph and no task computes it, so the schedule that spreads the graph over its lanes answers the same arrays."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_const_function_answers_zero.cml"
+args = ["${case}", "std::prl"]
+expect_exit = 0
+expect_output_contains = ["fixed pullback(1.0)= ([0.0, 0.0, 0.0])", "fixed pullback(2.0)= ([0.0, 0.0, 0.0])", "open pullback(1.0)= ([])", "scalar pullback(1.0)= (0.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+# What the `[]` above **does** when it meets a real array -- the reading that decides whether the
+# answer with no stated extent is a loud refusal or a quiet wrong number. Measured 2026-11-04 on the
+# same tree: it is 1 dimension of length 0 (`shape(dx)= [0]`, not a rank-zero array, which would act as
+# the scalar `0.0`), and both `dx * x` and `dx + x` are refused by name at the line that asked --
+# `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` The one place that answers a
+# number is `sum(dx)= 0.0`, the sum of zero elements, and it is printed before the refusal on purpose:
+# it is addition's identity and not a claim about the three elements of `x`.
+#
+# Pinned as a reading, not as an exit code: the exit is 1 because the program asks for something the
+# shapes do not allow, which is the point. The day the answer gets a width (a value port or a split
+# residual -- `docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
+# road 丙) this entry is red on `dx= []` and says so, and the control next door
+# (`vjp_const_function_answers_zero`, `float[3]`) is what the new reading has to match.
+[[tests]]
+name = "vjp_const_function_open_rank_zero_is_refused_by_a_real_array.nvm"
+desc = "The zero of a `float[..]` parameter is an array of no elements: `shape(dx)= [0]`, `sum(dx)= 0.0` (the sum of zero elements), and `sum(dx * x)` -- the same zero meeting `[1.0, 2.0, 3.0]` -- is refused with `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].` at the line that asked. So an answer whose width the type did not state makes the consumer say so; it does not quietly become 0 or broadcast."
+kind = "negative"
+case = "../../../cases/compile/transforms/vjp_const_function_open_rank_zero_is_refused_by_a_real_array.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 1
+expect_stdout_contains = ["dx= []", "shape(dx)= [0]", "sum(dx)= 0.0", "Array shape mismatch in 'multiply': cannot broadcast [0] with [3]."]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
 # A refusal is one cause, and the cause is a value: the header declares it
 # (`enum class TransposeRefusalCause`), `transposeRefusalWord` spells it into the reading log,
 # `refusalSentence` renders the sentence a reader is handed from it, and a refusal site records it
@@ -551,6 +649,35 @@ expect_exit = 0
 expect_output_contains = ["the library imports rulesets.transpose", "transpose has no transpose for this function", "skip=rule uri=:op/add_d reason=no-such-family", "stdlib/vjp.cml:", "prints 4 of 4 readings"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 30000
+
+# The two derivative tables are written independently -- `src/core/derivative.cpp` (keyed by the
+# operator's URI) and `stdlib/rulesets/*.cml` (keyed by the rule's left-hand head and operand count)
+# -- and nothing in the build compares them. That is how `pick_at`, `sum_stated`, `take_stated` and
+# `mean_axis_stated` each came to have a law the engine's reverse pass could not read: a hole no
+# compiler error can see, because each side is complete in itself.
+#
+# `scripts/vjp-parity.mjs` is the comparison, and `scripts/vjp-parity-exemptions.tsv` is the list of
+# differences the repo has decided to keep, one row per key with an owner and a reason (a wildcard is
+# refused, so every row answers "why is this one allowed"). A difference that is not in the list is a
+# debt and the gate exits 1. It is not a strict-equality check -- a law may belong to the library
+# alone (machinery, or a value with no tangent) and a rule to the engine alone (an operator the
+# library's forward half files no `jvp_*` for) -- so the list is the contract, not the count.
+#
+# `test/tools/check-vjp-parity.mjs` is the three readings that say the gate works: the real tree has
+# `0 new`; a law added to a copy of the rulesets with no engine rule behind it is **reported** by
+# name; and the same law with the row it would need is **not** reported. The copy links the real
+# `src/` and `modules/`, so the engine side of the comparison is the tree's own.
+[[tests]]
+name = "vjp_api.the_two_tables_are_compared"
+desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new`; a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/check-vjp-parity.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["the real tree has no difference the list does not hold", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
 
 # The comparison the author named: one `f` with two parameters, and the library's gradient beside
 # the derivative worked out on paper. `f(x, y) = x*x*y` at `(3, 2)` has `df/dx = 2*x*y = 12` and
@@ -795,6 +922,28 @@ expect_output_contains = ["TRANSPOSE function=read_twice carried=1 node=11 origi
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# Marked known_fail on 2026-11-04, against the author's ruling of 2026-11-03 00:30 (a case that cannot
+# pass today belongs in the plan with a mark, an owner and a reason, not outside it). The number this
+# case asks for is 29 at x = 1, and 29 is `15 + 7 * 2x`: a function of `x`, not of the cotangent alone.
+# A transposition is handed the cotangent and no operand -- the member's type here is
+# `(float) => (float,)` -- so no member can read 29 off `back(1.0)` without inventing `x = 1`; this
+# case's own paper passes two arguments (`transpose(read_outer)(1, 1)`, case comment line 13) while its
+# `main` passes one. Both routes were measured on 2026-11-04 and both refuse by name, so this is not a
+# missing rule:
+#  - `transpose(read_outer)` stops at `TRANSPOSE function=read_outer skip=cotangent-needs-a-value
+#    uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry`:
+#    `k = x * x`'s law reads the other operand's value, `x` is a parameter a cotangent is answered for
+#    (so it is no port of the member), and a `float` has no shape carrier to answer it from.
+#  - `split(jvp(read_outer))` stops at `REINTERP split function=jvp_of_read_outer skip=forward
+#    construct=a tangent port why=the value half reads the tangent of parameter 0, which the forward
+#    half does not take`: the value chain of a lifted graph is a projection of a ruleset pair node, and
+#    that node takes the tangents as inputs.
+# What the case is about is already printed beside the refusal -- `TRANSPOSE function=read_outer
+# carried=2 node=12 origin=0 captures=2 answer=per-target` and both `ESCAPE` lines, `kindOfTarget` 1 and
+# 11 -- so the channel the case was written for is there and the last number is not. The mark goes away
+# in the commit that answers
+# `docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`,
+# and the four pins above stay as the answer's, not as the refusal's.
 [[tests]]
 name = "transpose_loop_escape.two_values_of_two_kinds"
 desc = "`read_outer(x) = let k = x*x; loop s = x for i in 0..3 do 2.0*s + k + x` reads two values from outside the body, of two different kinds: `x` is the function's parameter port and `k` is a product computed before the loop. Each gets an accumulator of its own -- `carried=2` beside the one carried cotangent, one loop with three states -- and the line says `answer=per-target`, because these are two values and not two reads of one: `x`'s slot is the state's cotangent plus its sum (8 + 7 = 15) while `k`'s sum (7) goes to `k` alone and its product carries it to `x` as 7 * 2x = 14. The answer is 29 at x = 1, and 22 or 15 would be a sum taken across values that are not the same value. Both `ESCAPE` lines still print, with `kindOfTarget` 1 (a port) and 11 (an operand) -- the two kinds this cut has to tell apart."
@@ -807,6 +956,11 @@ expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=read_outer carried=2 node=12 origin=0 captures=2 answer=per-target", "ESCAPE target=0 from=11 kindOfFrom=11 kindOfTarget=1 typeOfTarget=float norm=[4,0,] with=[11,13,]", "ESCAPE target=1 from=10 kindOfFrom=11 kindOfTarget=11 typeOfTarget=float norm=[4,0,] with=[11,13,]", "29.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_owner = "lane-valports"
+known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/questions/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`"
+known_fail_msg = "skip=cotangent-needs-a-value uri=:op/mul_d position=0"
+known_fail_note = "Waits on docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=cotangent-needs-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -849,7 +1003,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "transpose_loop_escape.second_state_of_the_same_loop"
-desc = "The same two-state loop read one slot over: `carried_p(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`, whose paper value is `7x` -- the same rounds reach `s = 10x, p = 7x`, and this case takes `p`. The previous case gets 10 by reading `.0`, this one gets 7 by reading `.1`, and the two differ by exactly which slot the cotangent was seeded into: 0 for `s` and 1 for `p` here, against 1 and 0 there, plus the same 6 through the escape `q = 2x` (the three rounds' worth of `p`'s cotangent). A channel that always filled the first slot would answer the previous case's decomposition here too.
+desc = "The same two-state loop read one slot over: `carried_p(x) = let q = 2x; (loop s = x, p = x for i in 0..3 do (s + p, p + q)).1`, whose paper value is `7x` -- the same rounds reach `s = 10x, p = 7x`, and this case takes `p`. The previous case gets 10 by reading `.0`, this one gets 7 by reading `.1`, and the two differ by exactly which slot the cotangent was seeded into: 0 for `s` and 1 for `p` here, against 1 and 0 there, plus the same 6 through the escape `q = 2x` (the three rounds' worth of `p`'s cotangent). A channel that always filled the first slot would answer the previous case's decomposition here too. The route is the previous case's -- `transpose` on the program itself -- and `back(2.0)` answering 14 is the second half of the claim: no forward line of this program prints it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_loop_state_second.cml"
 args = ["${case}", "${backend}"]
@@ -882,7 +1036,13 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "6.0"]
+expect_output_contains = ["TRANSPOSE function=both graph=", "3.0", "(3.0)", "(6.0)"]
+# The answer is a tuple, and the tuple is what the plan pins: `3.0` alone is printed by the forward
+# line as well, so it cannot tell the answer from the value the program computed on the way there --
+# a transposition whose answer collapsed to a zero still prints `3.0` (measured 2026-11-04, the
+# reading the page on a closure member's cotangent reported). A zero answer is named as forbidden
+# rather than left to the reader of a substring.
+expect_output_not_contains = ["(0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -965,8 +1125,12 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
-expect_output_contains = ["type=int space=none", "1.0", "3.0"]
-expect_output_not_contains = ["skip="]
+expect_output_contains = ["type=int space=none", "5.0", "(1.0)", "(3.0)"]
+# Both answers, in the tuple shape the transposition answers with: `1.0` and `3.0` are the two
+# cotangents asked for, and the case reads them as answers rather than as any occurrence of the
+# number. A transpose that stopped delivering the parameter's cotangent answers `(0.0)` twice and
+# nothing in the program prints `1.0` or `3.0`; the tuple form is what makes that impossible.
+expect_output_not_contains = ["skip=", "(0.0)"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 [[tests]]
@@ -981,6 +1145,107 @@ expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=g graph=", "TRANSPOSE function=f graph=", "rhs=add_t", "4.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# ---------------------------------------------------------------------------------------------------
+# Where a callee can stand: five cases, one per position, written so that each of the walks a CALL can
+# send a transposition down has a program.
+#
+# `modules/transforms/transpose.cpp#buildTransposeMember` asks two questions of a CALL node about its
+# callee: does the node itself name a graph (`GCGraph::calleeIdOf`, which answers only for FUNC nodes --
+# a call written by name); does a `with` input name one (a static function, or a Port this graph
+# receives). It used to ask a third -- does the **first ordinary input** name one -- and no program had
+# ever been written for that question, because every producer in this compiler puts a call's callee in a
+# `with` input (the builder at `src/compile/gir/builder_calls.cpp`, the transforms at
+# `split`/`vmap`/`jvp`/`pullback`, and `transpose` itself everywhere but that branch), and
+# `src/runtime/graph.cpp` refuses to run a CALL node that has no callee input at all. Measured
+# 2026-11-04: sweeping all 3494 `.cml` files with the walk instrumented hit that question only in the
+# programs below. It was removed in the same commit, so the two cases that reached it now get the
+# refusal they owe (`reason=function-closure`), and the third case below -- the same misreading from the
+# `with` side, where a FUNC node stands for a call's *value* -- is still marked.
+[[tests]]
+name = "transpose.function_parameter_is_handed_through"
+desc = "A function value in an ordinary argument position -- `f(x) = apply(twice, x)` with `apply(fn, x) = fn(x) + fn(x)` -- is differentiated correctly: 4 at x = 3 (`4x`) and 4 at cotangent 1. This is the shape people mean by `a function as an argument`, and it is answered because the callee inside `apply` is a **Port**, a value the graph receives: the walk turns it around without seeing the graph behind it (`transpose(v)` at run time), so nothing has to know which function was passed. The transposed signature keeps the function parameter -- `type=((y: float) => float, float) => (float,)` -- and the answer has no slot for it, because a function value has no cotangent space. It is the control for the two refusal cases below: the same function value reaches the walk as an *argument* here and is never read as a callee, because the callee arrives in a `with` input as a Port and the walk asks that first."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_takes_a_function_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=apply", "type=((y: float) => float, float) => (float,)", "rhs=mul_t", "12.0", "(4.0)"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The control the operand cases are read against: the same program with the first argument written as
+# a **bare function name** instead of a call. A name in an argument position is a DATA node holding a
+# static function, and `calleeIdOf` does not answer for a DATA node -- so there was nothing to misread,
+# even while the third question was still asked, and the refusal was the right one all along. The pair
+# is what made the defect visible: one word of the program changes (a name, or a call), and the reading
+# changed from the right refusal to a wrong callee.
+[[tests]]
+name = "transpose.call_of_a_body_closure.bare_name_is_refused_by_name"
+desc = "`f(x) = let h = (a: (y: float) => float, b: float) => a(b) * x; h(twice, 2.0)`: the callee is a closure the body assembled, and the call is refused with the cause that names it -- `TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:0 with=2:4 reason=function-closure`. The paper answer is 4 (the program computes `4x`), and it is not owed to this transform: a transposed callee would have to take the captured `x` as a parameter of its own, which is the piece `transpose_no_tangent_closure.cml` measures. What this case holds is that a function value written in the first argument position **as a name** stops the walk at the callee's own value, and the node numbers are not pinned because they are positional: the shape is the claim."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_call_of_a_body_closure_with_a_bare_name.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=function-closure", "transpose has no transpose for this function"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The case that named the defect: the call's first ordinary input is itself a call written by name, and the
+# callee is a value the body assembled. While the third question existed this reached `argumentAt == 1`, the
+# walk transposed `g` -- the callee of the first *argument* -- and wrote the transposed CALL with its callee in
+# an ordinary input and no `with` input, which `src/runtime/graph.cpp` refuses to run: `PassInternalError ...
+# has CALL node 2 without callee input`. With the question gone the reading is the one the name-written case
+# above gets, and this case is now a positive pin of it. `expect_output_not_contains` keeps the internals from
+# coming back: the day a walk reads an operand as a callee again, it is this line that turns red.
+[[tests]]
+name = "transpose.call_of_a_body_closure.call_argument_is_not_read_as_the_callee"
+desc = "`f(x) = let h = (y: float, z: float) => y * z * x; h(g(x), 1.0)` with `g(x) = 2x`: the paper answer is 12 at cotangent 1 (`2x^2`, differentiated), and the reading is a refusal that names its cause -- `TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:10 with=2:4 reason=function-closure`, exit 1, with the program's forward line `18.0` still printed. The GIR of `f` is the smallest program that shows why no operand is asked for a callee: the CALL node takes its callee as a `with` input (`N0A`, a FILL closure, `function-closure`) and its first ordinary input is the FUNC node `N0B` (`g`, a call written by name). Before 2026-11-04 the walk's third question answered `g` for that, transposed `g`, and built a CALL node whose callee stood in an ordinary input -- a graph the runtime will not run (`Runtime graph 'transpose_of_f' has CALL node 2 without callee input`, a `PassInternalError`, which is a compiler defect reported as one). Two readings are pinned here: the refusal is the named one, and the internal error does not come back."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_call_first_argument_is_a_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=function-closure", "transpose has no transpose for this function"]
+expect_output_not_contains = ["without callee input"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose.call_of_a_body_closure.function_value_argument_is_not_read_as_the_callee"
+desc = "The same walk, with the argument that used to name it carrying a **function value**: `f(x) = let h = (a: (y: float) => float, b: float) => a(b) * x; h(mk(x), 2.0)` with `mk(x) = (y) => x*y`. The paper answer is 12 at cotangent 1 (`2x^2`). Before 2026-11-04 the walk read `mk` out of the FUNC node standing in the first argument position, stopped at `TRANSPOSE function=mk skip=signature`, and refused the caller with `callee=mk` -- a graph that is not this call's callee, refused for the wrong reason (its missing transposed signature, not the closure the callee really is). With the third question gone the reading is the one the closure asks for: `skip=call-no-transpose ... callee=none value=3:10 with=2:4 reason=function-closure`, exit 1, forward line `18.0`. This is the reading that matches `a function value written in the call's first argument position` most literally, and it says what that phrase means: the value in the argument position is an **operand**, and the callee is the closure in the `with` input."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_call_first_argument_is_a_function_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=function-closure", "transpose has no transpose for this function"]
+expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose.callee_is_a_returned_function.is_not_the_callees_own_graph"
+desc = "`f(x) = mk(x)(2.0)` with `mk(x) = (y) => x*y`: the value the call is made through is `mk(x)`'s **result**, and the walk names `mk` -- the graph of the call that produced the value -- as the callee. So it transposes `mk` (`TRANSPOSE function=mk skip=signature`, a function whose answer is a function has no transposed signature) and refuses the caller with `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`, exit 1. The paper answer is 2 at cotangent 1 and the program is not wrong; what is wrong is the name: a FUNC node is a call written by name, so `calleeIdOf` answers for it -- with its own callee, not with the graph its *value* holds. The GIR makes the gap visible: the CALL's `with` input is `N07` (`label=\"mk\"`, `type=\"FUNC\"`), i.e. the call `mk(x)`, and its one ordinary input is the `2.0`. **Refused for the right reason, by the wrong name**: the verdict (exit 1, no number) is what the shape owes, the sentence is not -- the reading it owes is `callee=none`, since the callee's graph is not named anywhere in this graph. It is the *other* half of the reading the two cases above were fixed on: there the callee was read out of an ordinary input, here out of a `with` input holding a call's value, and only the first question was removed."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_callee_is_a_returned_function.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none"]
+expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk "]
+known_fail = ["nvm"]
+known_fail_owner = "lane-fnarg"
+known_fail_reason = "the callee is still read out of the `with` input with `calleeIdOf`, so the sentence names `mk` where the value names no graph: `transpose.cpp#staticFunctionGraphOf` is the entry that answers the value's own graph and refuses `not-a-data-node` here"
+known_fail_msg = "callee=mk"
+known_fail_note = "Marked 2026-11-04 (lane-fnarg): measured with `nvm`, exit 1, `TRANSPOSE function=mk skip=signature` and `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`. This mark survives the fix that removed the operand question, and deliberately: that fix took the callee out of the *ordinary* inputs, and this program's callee stands in a `with` input that holds a call's value. `calleeIdOf` answers for any FUNC node -- including one whose value is this call's callee -- so the name is still `mk`. The verdict (refused, exit 1) is the one the shape owes; the sentence is not. The mark goes away when the `with` question is asked with an entry that answers `what graph does this *value* name` (`staticFunctionGraphOf`, which refuses `not-a-data-node` here) instead of `calleeIdOf` -- the same shape of edit, one input list over."
+
 # A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
 # `dx*w + x*dw`, so the transposed half of a lifted graph calls it with the operands in front of
 # the tangents. `Transpose<F>` has a shape for that -- every parameter is a value the graph reads and
@@ -1363,6 +1628,24 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_output_contains = ["(2.0, 0.0)"]
 
+# The neighbour above answers a zero for an unread *number*; an unread *array* is stopped one gate
+# before that answer is the walk's to give, and the case pins which gate stops it rather than the
+# refusal it was written to expect. It is a refusal entry, not a known failure: the sentence is the
+# reading, and a tree that starts answering a number here has to say so by turning this entry red
+# instead of leaving a stale green behind.
+[[tests]]
+name = "transpose_unread_array_parameter_stops_earlier"
+desc = "`g(x: float[], n: float) = n * 2.0` never reads `x`, and the transpose of it does not reach `skip=unread-parameter` at all: the walk answers from the type, one gate earlier. This entry pinned the refusal that stood there (`autodiff: a zero tangent array needs an array with a tangent`, exit 1) and now pins the reading that replaced it -- `([], 2.0)`, exit 0 -- because `transpose` asks the parameter's tangent space for the zero and, when the member holds no value for that parameter, writes the zero the type states: the same rule, in the same words, as `jvp`'s `zeroConstantFor`. A type that leaves a dimension open states no size for it, and a zero of it has 0 elements there, so an unread `float[]` answers `[]` where an unread `float` answers `0.0`; the difference between the two entries is the type, not the reading. The refusal it used to pin was a different defect (`:tangent/zeros_arr` named in the walk's own source, handed a node of the source graph). Whether an empty array is the right zero for a length nobody stated is the open question this entry leaves to `docs/handover/questions/2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_unread_array_parameter_stops_earlier.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["([], 2.0)", "TRANSPOSE function=g graph=", "type=(float) => (float[], float)"]
+expect_output_not_contains = ["skip=unread-parameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The same wall from the other side, and the one the zero carrier answers. `transpose` answers one
 # cotangent per parameter and passes nothing else (design principles 9.9: every parameter is a linear
 # input), while this body reads its array parameter to build a zero array of that array's shape. What
@@ -1427,9 +1710,6 @@ backends = ["nvm"]
 backends_agree = ["exit_code"]
 expect_exit = 0
 expect_output_contains = ["cut ct1= (6.0)", "cut ct3= (18.0)", "hand ct1= (6.0)", "hand ct3= (18.0)"]
-known_fail = ["nvm"]
-known_fail_msg = "skip=cotangent-needs-a-value uri=:op/mul_d position=0"
-known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them, so this is the criterion's own reading and not a separate defect. Measured 2026-11-04 on the integration branch: the cut's half still answers 6 and 18, and the hand-closed lambda's transposed graph `__g_322__` stops at `TRANSPOSE function=__g_322__ skip=cotangent-needs-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- the `x = 3` the lambda closed over is what `mul_d`'s right side reads for the *other* operand's cotangent, and a transposition is handed the cotangent and no operand. The `(hand ct1= (6.0))` answer is reachable only if that member has a slot; the mark goes away with the ruling, in the same commit that flips the numbers."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1458,24 +1738,36 @@ timeout_ms = 8000
 
 [[tests]]
 name = "transforms.with_grad_composition_meets_the_split_wall"
-desc = "A library-level `with_grad` written as the composition design principles 9.9 asks for (author's ruling of 2026-11-03 09:50) -- the weight moved to an ordinary parameter by a lambda, `vjp` differentiating it there -- and the wall it meets. The wall has moved one step: the exit's shape is no longer the obstacle (the lift hydrates an application's pair into a two-member tuple fill, route B of the ruling of 2026-11-03 15:15, so the lifted graph went from nodes=9 exit=6 to nodes=11 exit=10), and what refuses now is the cut's forward walk on the captures the lifted lambda reads through closure ports: `skip=forward`, `the port is not a parameter of the graph, so neither half takes it`. The case pins that message rather than the numbers the composition would produce; those are `(0.125, -0.75)`, the engine reading `library_grad_is_the_composition.cml` holds to, and the case turns positive the day `split` treats a closure port the backward half reads as a residual, the way it already treats a `with` port (`ce2691f54`)."
+desc = "A library-level `with_grad` written as the composition design principles 9.9 asks for (author's ruling of 2026-11-03 09:50) -- the weight moved to an ordinary parameter by a lambda, `vjp` differentiating it there -- carrying the number it was held to since it was written: `(0.125, -0.75)` for x = 1.5, t = 2.0, w = 0.5, b = 0.75 (err = 0.5*1.5 + 0.75 - 2 = -0.5, loss = 0.5*err*err = 0.125, d(loss)/dw = err * x = -0.75). The case was negative for three walls in a row and the case file keeps all three sentences, because which refusal stood says what was missing where: the exit's shape (`skip=exit`, the lift answered with the call's pair instead of a fill of its own), the cut's forward walk on a captured value (`skip=forward`, `the port is not a parameter of the graph, so neither half takes it`), and the cut's backward walk on the same port together with a `with` argument carrying no tangent -- `jvp` wrote a call's arguments interleaved `(value, tangent)` while the lifted signature is the values and then their tangents, and the weight's tangent was a zero constant the lift wrote. `lane-withtan` answered the third (`modules/transforms/jvp.cpp`: the lifted call's arguments are filled from the callee's own lifted signature, and a `with` argument keeps its direction), `lane-withport` the second (`split` declares one closure port per capture), and the first had been answered before this entry was written. What this entry pins is therefore a number on the library's leg, not a message."
 kind = "behavior"
 case = "../../../cases/compile/transforms/with_grad_composition_meets_the_split_wall.cml"
 args = ["${case}", "std::nvm"]
-expect_exit = 1
-expect_output_contains = ["skip=forward", "split does not build this function", "the port is not a parameter of the graph, so neither half takes it"]
-expect_stdout_not_contains = ["value=0.12500000000000000"]
+expect_exit = 0
+expect_stdout = "value=0.12500000000000000 w=-0.75000000000000000\n"
+expect_output_not_contains = ["Warning", "[Error]", "skip=backward", "skip=forward", "skip=exit"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "transforms.with_grad_from_the_library"
+desc = "The criterion with an object: `stdlib/vjp.cml#with_grad` against the engine's `with_grad`, on the four groups of `grad_first_with_parameter.cml` (`gx/vg`, `pg/pvg`, `wg/wvg`, `sk/sx`), one line per group. Before this entry the criterion '库层 `with_grad` 在 `grad_first_with_parameter` 上与引擎同答' (author, 2026-11-03 17:55) named nothing that could be called: `stdlib/vjp.cml` exported `vjp` and a one-parameter `grad`, and `stdlib/signatures/autodiff.cml#with_grad` is a reference declaration that does not compile. The library now exports a `with_grad`, and it refuses on all four groups, so this entry holds both halves of the measurement: the engine's four answers, which are the numbers the composition owes, and four `RuntimeError` refusals with the sentence that says why. It is deliberately not a number on either side: the composition every `with_grad` has (`vjp` of a lambda that moves the weight to an ordinary parameter) cannot see the tangent of a value the body hands back to a call's `with` list -- forward mode answers that tangent as the zero of its type, `jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)` reading `value=6.0 tangent=0.0` where the derivative it owes is 2.0 -- so a composition written straight through answers `0.0` where `weighted` owes `3.0`, and a zero gradient is not distinguishable from a refusal. The day forward mode carries that tangent, the four `library=` fields carry tuples, this entry goes red on the pin below, and the case and `stdlib/vjp.cml#with_grad` turn over together. `with_grad_composition_meets_the_split_wall` stays as it is: it pins the cut's own wall, which is a different one and still stands."
+kind = "behavior"
+case = "../../../cases/compile/transforms/with_grad_from_the_library.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "gx/vg  engine=(9.0, 3.0) library=RuntimeError\npg/pvg engine=(11.0, { a: 4.0, b: 1.0 }) library=RuntimeError\nwg/wvg engine=(32.0, [4.0, 5.0, 6.0]) library=RuntimeError\nsk/sx  engine=6.0 4.0 library=RuntimeError\nwhy=vjp is transpose(split(jvp(f))), and forward mode answers the tangent of a value handed to a call's `with` list as the zero of its type, so a `with_grad` built on this composition would answer the zero of the gradient's type for every weight that reaches the body through that list. Read the gradient of a first `with` parameter with `grad(f)<w>(..)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.\n"
+expect_output_not_contains = ["Warning", "[Error]", "library=(0.0", "library=(9.0, 0.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 
 # The anchor of the D1 difference set in
-# `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats is
-# answered by the engine and refused by the library, whose `stdlib/rulesets/transpose.cml` has no `pow_t`.
-# Two entries because the library's refusal happens where the graph is built -- a program holding both
-# would never print the engine's number.
+# `docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`: `^` on two floats.
+# Three entries: the engine's number, the library's number for the same arithmetic under the spelling
+# whose forward rule carries no guard, and the refusal `^`'s own pullback still gives -- the third is
+# the guard on `pow_tangent`, not a missing law.
 [[tests]]
 name = "pow_gradient_through_the_engine"
-desc = "`d(w^2)/dw` of a function whose differentiated `with` parameter is squared: the engine's `grad` answers it (6.0 at `w = 3`), which is one half of the anchor the deletion audit counts. The other half is the neighbouring entry: through `vjp` the same function is refused by name, because the library's reverse rule `pow_t` does not exist. The forward tangent of `^` is not repeated here; `jvp_of_a_power.cml` pins it."
+desc = "`d(w^2)/dw` of a function whose differentiated `with` parameter is squared: the engine's `grad` answers it (6.0 at `w = 3`), which is one half of the anchor the deletion audit counts. The other half is `pow_gradient_through_the_library`: through `vjp` the same arithmetic -- `pow(x, 3.0)`, `math:pow_d` -- answers 12.0, which is this case's number for the exponent moved to `3.0` (`pow_cube_gradient_through_the_engine`). The forward tangent of `^` is not repeated here; `jvp_of_a_power.cml` pins it."
 kind = "behavior"
 case = "../../../cases/compile/transforms/pow_gradient_through_the_engine.cml"
 args = ["${case}", "${backend}"]
@@ -1483,6 +1775,45 @@ backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["pow engine value=9.0 dL/dw=6.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pow_cube_gradient_through_the_engine"
+desc = "The engine's `d(w^3)/dw` at `w = 2`: `12.0`, and it exists so that the library's answer for the same arithmetic can be read beside it. `pow_gradient_through_the_library` differentiates `pow(x, 3.0)` through `vjp` and answers 12.0; the engine has no rule for `math:pow_d` at all (measured: `autodiff: no derivative rule for operator 'math:pow_d' of type 'float'`), so the two spellings of one kernel can only be compared as numbers, and these are the numbers. The exponent is `3.0` and not `2.0` so the value and the slope are told apart (8.0 and 12.0, neither one the other's square)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_cube_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow engine value=8.0 dL/dw=12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pow_gradient_through_the_library"
+desc = "`pow(x, w)` differentiated through `vjp`, three readings: `8.0` and `12.0` for `pow(2.0, 3.0)` in the base (the engine's number for `w ^ 3.0` at `w = 2`), `5.656854249492381` and `7.0710678118654755` for `pow(2.0, 2.5)` (a non-integer exponent: `2.5 * 2^1.5`, which no 'multiply by an integer' law can answer), and `5.545177444479562` for `d/dn 2^n` at `n = 3` (`8 * ln 2`), the exponent's branch of the same law. Before `jvp_pow_d` and `pow_d_t` were written this entry's case stopped in the forward half: `skip=rule uri=math:pow_d reason=the operator has no forward rule bound at all`. The second law needs the `log` law beside it (`log_d_t`), which is why the family gained that one too."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["pow library value=8.0 d/dx=12.0", "pow fractional value=5.656854249492381 d/dx=7.0710678118654755", "pow exponent value=8.0 d/dn=5.545177444479562"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "jvp_of_a_pow_call"
+desc = "The forward rule of `math:pow_d`: `pow` (`stdlib/math.cml#pow`) is the same arithmetic as `^` under a declared function's spelling, so it is a different operator with a key of its own, and it had no forward rule -- a lifted program that called it stopped with `skip=rule uri=math:pow_d reason=no forward rule bound at all`, which is what `rulesets_probe_missing` pinned before this law existed. Three readings: `8.0`/`12.0` for `pow(2.0, 3.0)`, `5.656854249492381`/`7.0710678118654755` for `pow(2.0, 2.5)`, and `8.0`/`5.545177444479562` for the exponent lifted on its own (`d/dn 2^n` at `n = 3`). The last one is the branch `^`'s helper guards on a tangent's value and therefore cannot be transposed; here it is written out, so it reads as a number."
+kind = "behavior"
+case = "../../../cases/compile/transforms/jvp_of_a_pow_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["jvp pow value=8.0 d=12.0", "jvp pow fractional value=5.656854249492381 d=7.0710678118654755", "jvp pow exponent value=8.0 d=5.545177444479562", "rules=jvp_pow_d"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1495,7 +1826,37 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around"]
-expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
+expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float>"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# `stop_gradient` through both halves: the engine answers it with a rule that contributes nothing and
+# the library had no rule at all, which is the second gap of this lane. Two entries, engine and
+# library, because the number is the same number and the point is that the transform does not change
+# what a cut is.
+[[tests]]
+name = "stop_gradient_gradient_through_the_engine"
+desc = "`d(stop_gradient(x))/dx` at `x = 4` through the engine's own rules: the value passes through (`4.0`) and the gradient is the zero of its type (`0.0`). The engine's kernel is the identity slot (`modules/autodiff/operators.cpp#stopGradientKernel`) and the rule registered for the operator is `camel::core::noGradient`, which contributes nothing; the pullback then materializes the missing contribution as the zero of the value's own type (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). Pinned as one reading, `value` and `gradient` together, because a cut that also changed the value would be a different operator."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stop_gradient_gradient_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stop_gradient engine value=4.0 dL/dx=0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "stop_gradient_gradient_through_the_library"
+desc = "The same cut through `vjp`, which is `transpose(split(jvp(f)))`: both halves need a law, and neither existed -- `vjp` stopped in the *forward* half with `skip=rule uri=autodiff:stop_gradient reason=the operator has no forward rule bound at all`, which is the reading this entry was red with before `jvp_stop_gradient` and `stop_gradient_t` were written. The answer is the engine's to the number, `4.0` and `0.0`: the tangent of the result is the zero of its own type and the cotangent of the argument is the same zero, and the zero is the law's answer rather than a value standing in for one -- no operand is read, and the type is the operator's own signature's. `residuals=0` in the split's reading says the same thing from the other side: there is nothing to carry, because the tangent depends on no input."
+kind = "behavior"
+case = "../../../cases/compile/transforms/stop_gradient_gradient_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["stop_gradient library value=4.0 dL/dx=0.0", "residuals=0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1517,7 +1878,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "relu_gradient_through_the_library"
-desc = "The same gradient through the library's `vjp`: `jvp_relu` (`stdlib/rulesets/jvp.cml`) and `relu_t` (`stdlib/rulesets/transpose.cml`) answer it, and the forward rule writes the mask as a forward-half value (`where(x > 0, 1, 0) * dx`) so the linear half is one `mul_tensor`, and the backward walk turns the sum around with `sum_stated_t` and then reaches the product. Where it stops there is measured, not hoped for: the mask is a value the backward half computes from the close-over `x`, the walk asks the product's law for the mask's **own** cotangent, and that position's answer reads the tangent's value -- the one value a transposition never has -- so `skip=cotangent-needs-a-value uri=tensor:multiply position=0`. That is the open question `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`, decided in `modules/transforms/transpose.cpp#buildTransposeMember` and not by a rule; `test/cases/compile/transforms/relu_gradient_through_the_library.cml` records both readings inside it. Pinned on three streams: the number (identical to the engine's, element for element), the rule names the walk reports (`rules=jvp_relu,jvp_sum`), and the absence of the refusal this case had before the rules existed -- `skip=rule uri=tensor:relu reason=the operator has no forward rule bound at all`, replaced by the rule names."
+desc = "The same gradient through the library's `vjp`: `jvp_relu` (`stdlib/rulesets/jvp.cml`) and `relu_t` (`stdlib/rulesets/transpose.cml`) answer it, and the forward rule writes the mask as a forward-half value (`where(x > 0, 1, 0) * dx`) so the linear half is one `mul_tensor`, and the backward walk turns the sum around with `sum_stated_t` and then reaches the product. Where it stops now is measured, not hoped for: the mask is a value the backward half computes from the close-over `x`, and the closure-member rules answer that (`modules/transforms/transpose.cpp#buildTransposeMember`, author 2026-11-03 19:55): a closed-over member takes no cotangent, so the walk no longer asks the product's law for the mask's own cotangent, and stops at the position whose cotangent the answer does need -- the tangent's -- where the law reads that same operand for `sum_to`'s shape and finds no value: `skip=cotangent-needs-a-value uri=tensor:multiply`. The remaining step is the rule layer's (`stdlib/rulesets/transpose.cml#mul_tensor_t`, the 2026-11-03 17:35 item the index family already has), not this member; `test/cases/compile/transforms/relu_gradient_through_the_library.cml` records both readings inside it. Pinned on three streams: the number (identical to the engine's, element for element), the rule names the walk reports (`rules=jvp_relu,jvp_sum`), and the absence of the refusal this case had before the rules existed -- `skip=rule uri=tensor:relu reason=the operator has no forward rule bound at all`, replaced by the rule names."
 kind = "behavior"
 case = "../../../cases/compile/transforms/relu_gradient_through_the_library.cml"
 args = ["${case}", "${backend}"]
@@ -1528,8 +1889,10 @@ expect_output_contains = ["relu library value=3.0 dL/dx=[0.0, 0.0, 1.0, 0.0]"]
 expect_stderr_contains = ["rules=jvp_relu"]
 expect_output_not_contains = ["skip=rule uri=tensor:relu", "skip=call-no-transpose"]
 known_fail = ["nvm"]
-known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
-known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: `REINTERP split function=jvp_of_total ... residuals=3` and `TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the walk turns `sum` around with `sum_stated_t` and stops one step further on, at the mask `where(x > 0, 1, 0)` computed from the close-over `x`: the product's law reads that operand's value for the other position's cotangent. The number `[0.0, 0.0, 1.0, 0.0]` is reached by no rule and no rewrite; only the slot decision changes it, and the mark goes away in the commit that decision lands in."
+known_fail_owner = "lane-fwdclosure"
+known_fail_reason = "the case stops at `skip=cotangent-needs-a-value uri=tensor:multiply`, and the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1613,8 +1976,10 @@ expect_output_not_contains = ["skip=rule uri=tensor:exp"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
-known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
-known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: the transposed backward half stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the value the law needs for the other operand is a forward-half value the backward half closed over, and a transposition is handed the cotangent and no operand. The mark goes away in the commit that answers the page; the expected numbers are that answer's, not a different law's."
+known_fail_owner = "lane-fwdclosure"
+known_fail_reason = "the case stops at `skip=cotangent-needs-a-value uri=tensor:multiply`, and the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 
 # `sigmoid` on the D1 difference set: its slope needs a forward value the program text never computes.
 [[tests]]
@@ -1645,8 +2010,10 @@ expect_output_not_contains = ["skip=rule uri=tensor:sigmoid"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
-known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
-known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: the transposed backward half stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the value the law needs for the other operand is a forward-half value the backward half closed over, and a transposition is handed the cotangent and no operand. The mark goes away in the commit that answers the page; the expected numbers are that answer's, not a different law's."
+known_fail_owner = "lane-fwdclosure"
+known_fail_reason = "the case stops at `skip=cotangent-needs-a-value uri=tensor:multiply`, and the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 # `tanh` on the D1 difference set: the slope is one minus the output squared, and the tangent recomputes
 # an x-only value (the shape `exp` proved the cut carries).
 [[tests]]
@@ -1677,8 +2044,10 @@ expect_output_not_contains = ["skip=rule uri=tensor:tanh"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
-known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply position=0"
-known_fail_note = "Waits on the author's ruling on docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md (does a closure member's cotangent have a slot?). A ruling of `乙` -- the member gets a slot -- flips about 16 cases, this one among them. Measured 2026-11-04 on the integration branch: the transposed backward half stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry` -- the value the law needs for the other operand is a forward-half value the backward half closed over, and a transposition is handed the cotangent and no operand. The mark goes away in the commit that answers the page; the expected numbers are that answer's, not a different law's."
+known_fail_owner = "lane-fwdclosure"
+known_fail_reason = "the case stops at `skip=cotangent-needs-a-value uri=tensor:multiply`, and the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, not on this transform. Measured 2026-11-04 at 34b659107 with the closure-member rules landed (modules/transforms/transpose.cpp#buildTransposeMember: a closure member takes no cotangent -- author, 2026-11-03 19:55 -- and a value computed only from closure members is not asked for one): the walk no longer asks the product law for the closed-over operand's cotangent, and stops one step further on, where the law reads the operand **whose cotangent it is answering** for sum_to's shape -- sum_to(ct * w, x) reads x, sum_to(ct * x, w) reads w. That operand is a tangent, so what the law wants is the shape of a tangent, and float[..] does not state it: shapeCarrierOf answers only for a stated shape (float[2]), which is the author's 2026-11-03 16:15 rule. So forward and the closure are not what is missing any more -- the law reads a linear operand, the 2026-11-03 17:35 item the index family got (element_at(dxs, extent_pair(i, len(xs)))) and the multiply family has not (stdlib/rulesets/transpose.cml#mul_tensor_t). The number comes back when that law hands the extents as a known argument, the way sum_stated_t and take_stated_t do; the expected numbers are unchanged. Measured 2026-11-04: the other way of satisfying 17:35 -- naming the operand the side is *not* answering for, `sum_to(ct * w, w)` -- is not it. On a broadcasting product (`x=[1,2,3]`, `w=[2]`, product shape (3,)) that spelling answers `d/dx numel=1 d/dx=[6.0]` and `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, where the answer is `d/dx=[2.0, 2.0, 2.0]` (numel 3) and `d/dw=[6.0]` (numel 1), and it answers those wrong shapes for `float[..]` and for `float[3]`/`float[1]` alike, because `sum_to`'s second argument is the *target shape* and only the operand whose cotangent is being built carries it. A wrong number is worse than this named refusal, so `stdlib/rulesets/transpose.cml#mul_tensor_t` stays as it is."
 # `log_softmax` on the D1 difference set: the jacobian is `I - 1 pᵀ`, and the two readings differ by a
 # broadcast, so the whole array is the criterion.
 [[tests]]
@@ -1694,6 +2063,46 @@ expect_output_contains = ["log_softmax engine d=[0.7299082804888587, 0.265814586
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# A read with a stated length, `tensor:pick_at`, is the operator the linear half of a read is written
+# with (`stdlib/rulesets/jvp.cml#jvp_idx_arr` answers with `pick_at(dxs, extent_pair(i, len(xs)))`).
+# It carried a reverse law (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one, so a
+# program that wrote the read itself was refused where the lift looks the rule up:
+#
+#     REINTERP jvp function=read skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all
+#
+# `jvp_pick_at` is one line -- a read moves no element, so its tangent is the read of the tangent --
+# and it needs no stated twin, because the list that carries the position (`at[0]`) already carries
+# the length (`at[1]`). The engine's own `grad` refused the same read for a second and separate
+# reason -- no `setVjp` under that name in the reverse pass's table -- and that row landed with
+# `lane-pickatvjp` (2026-11-04). The two entries below are therefore the two legs of one read, and
+# they answer the same number: the library's `jvp`/`vjp` and the engine's `grad`.
+[[tests]]
+name = "pick_at_forward_rule_answers_both_directions"
+desc = "The library's two legs over `read(x) = pick_at(x, [1, 3])` on `x = [1.0, 2.0, 3.0]` and the direction `dx = [0.5, 0.25, -1.0]`, every number hand-computed before the run: the read is the second element, so the forward tangent is `dx[1] = 0.25` and the reverse leg's cotangent of 1.0 lands at position 1 alone, `dL/dx = [0.0, 1.0, 0.0]`. The third line is what ties the two laws together instead of comparing them by eye -- the forward tangent is the gradient applied to the direction, `sum(dL/dx * dx) = 0.0*0.5 + 1.0*0.25 + 0.0*(-1.0) = 0.25` -- so a `pick_at_t` that scattered the cotangent to another position, or a `jvp_pick_at` that read one, prints a line that does not close. Before the law the program stopped at the lift with `skip=rule uri=tensor:pick_at reason=the operator has no forward rule bound at all`; the stderr side pins the rule that answers now (`rules=jvp_pick_at`) and that no `skip=` line remains."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pick_at_forward_rule.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["forward value=2.0 tangent=0.25", "reverse value=2.0 dL/dx=[0.0, 1.0, 0.0]", "agreement 0.25"]
+expect_stderr_contains = ["rules=jvp_pick_at"]
+expect_output_not_contains = ["skip="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "pick_at_gradient_answered_by_the_engine"
+desc = "The same read through the engine's `grad`, and the number it answers: `engine dL/dw=[0.0, 1.0, 0.0]`, the array the library's `vjp` answers for the same program (`pick_at_forward_rule_answers_both_directions`). The read is `w[1]` of the three-element `w`, so the gradient is the unit vector at position 1 and zero elsewhere. Until 2026-11-04 this entry was the negative reading of the same program: the engine refused the node with `no derivative rule for operator 'tensor:pick_at' of type 'float'`, because the reverse pass reads `DerivativeRegistry` (`modules/autodiff/pullback.cpp`) and the second spelling of the read (`modules/tensor/ops/layout_ops.cpp`, the OpDef named `pick_at`) had no `setVjp` in that file's list. That row landed with `lane-pickatvjp` -- `setVjp(defs, 'pick_at', &pickAtVjp)` at the end of `layoutOps` -- and the rule it names is the read's own adjoint: zeros in the tensor's shape with the cotangent added at `at[0]`, the construction the core files for `:op/idx_arr`, so the two halves of the account are one number. Pinned as the positive reading, so a registration that changed its mind fails here and names itself."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["engine dL/dw=[0.0, 1.0, 0.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 [[tests]]
 name = "log_softmax_gradient_stops_at_split"
 desc = "The same function through the library's `vjp`: the forward half is built with the new rule named (`rules=jvp_log_softmax,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, with no `TRANSPOSE` line at all. This is the wall's third boundary: `softmax` refuses a context argument on a forward recomputation, while here the refused call (`sum<0, true>`) recomputes nothing -- its value is a backward-half number and only its `<>` arguments are constants. Pinned as readings, so the day the cut inlines the argument this entry goes red and names what replaced it; the default and its cost are in `docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`."
@@ -1705,5 +2114,587 @@ expect_exit = 1
 expect_stdout_contains = ["split does not build this function"]
 expect_stderr_contains = ["skip=backward construct=a node whose input was not copied", "rules=jvp_log_softmax,jvp_sum"]
 expect_output_not_contains = ["TRANSPOSE function="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# ---- `mean` at a negative axis: the engine's numbers, and the library's law reading the axis ----
+#
+# One lane, two spellings. `mean<-1, true>(x)` says "the last axis" without counting the rank, and
+# on a 2x3 value it names axis 1, the lane `mean<1, true>(x)` names. The two entries below are one
+# pair: the first pins the numbers the engine answers and that both spellings answer the same ones;
+# the second pins that the library's own path answers the same numbers through its own machinery.
+#
+# The pair is the reading that "the library answers what the engine answers" is measured on for this
+# operator. The library's half is the stated one: `jvp_mean_axis` hands its adjoint the axis, the flag
+# and the extents in one list (`mean_axis_stated`), and `mean_axis_stated_t`'s `mean_axis_cotangent`
+# reads that list's extents (`at[2:]`) and never `at[0]`, so a negative axis needs no normalization
+# written into the law -- the axis is normalized where the reduction's entry point already normalizes
+# it (`modules/tensor/kernels/reduce.cpp#normalizeAxis`, at `k::reduceAxis`), and the lane length is
+# the extent the list carries. The count half reads the operand (the ruling of 2026-11-03 16:15),
+# which is why the positive spelling of the lane already passed
+# (`mean_axis1_keepdims_gradient_reads_the_row_length`).
+[[tests]]
+name = "mean_axis_negative_axis.engine"
+desc = "The engine's gradient of `sum(mean<axis, true>(x))` on `x = [[1, 2, 3], [4, 5, 6]]` is `1 / 3` at every element -- a mean divides by the length of the lane it reduced (three) and the surrounding `sum` hands every position the cotangent 1. Both axis spellings are printed and asserted to be the same value: `mean<-1, true>` (the last axis, without counting the rank) and `mean<1, true>` (the same lane named by position) must not be able to answer different numbers. The wrong laws separate at the FIRST element: the other extent (2) answers `0.5` and `numel(x)` (6) answers `0.16666666666666666`, so the array is the assertion rather than its sum. The neighbouring `mean_axis_negative_axis.through_the_library` entry asserts the same numbers on the library's own path, element for element."
+kind = "behavior"
+case = "../../../cases/compile/transforms/mean_axis_negative_axis_through_the_engine.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_negative negative=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]", "mean_axis_negative positive=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]", "mean_axis_negative same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "mean_axis_negative_axis.through_the_library"
+desc = "The same gradient through the library's `vjp` answers the engine's numbers instead of stopping on the axis. `jvp_mean_axis` (`stdlib/rulesets/jvp.cml`) used to read the axis as written, `T(1.0 / float(shape(xs)[axis]))`, so the scale it divided by indexed the two-long extent array of a 2x3 value at `-1` and the run ended inside the transposed body with `Index -1 is out of range for an array of length 2` -- this entry used to pin that refusal. The law states the axis, the flag and the extents instead (`mean_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))`) and the whole list reaches the adjoint: `mean_axis_stated_t`'s `mean_axis_cotangent` divides by `extent_product(at[2:])` and reads nothing at `at[0]`, so the axis is carried as written and the lane length is extent 1 -- the same number the engine's own `axis < 0 ? axis + rank : axis` normalization (`modules/tensor/kernels/reduce.cpp#normalizeAxis`) gives the reduction. Both halves are asserted here: the value `7.0` (`sum(mean<-1, true>(x))` on `x = [[1, 2, 3], [4, 5, 6]]`, the means 2 and 5 added) and the pullback `1 / 3` at every element, the same array the `.engine` entry asserts. The path is still the one the cut and the walk built (`rules=jvp_mean_axis,jvp_sum`, `residuals=4`, `rhs=sum_stated_t,mean_axis_stated_t`), so the entry also says that the number is the library's own and not a shortcut. An axis outside the rank is refused before this law runs -- the operator's own normalisation answers `reduce: 'tensor:mean_axis': the axis -3 is outside the rank 2` for `-3` on a rank-2 value -- and nothing takes a remainder, so nothing wraps."
+kind = "behavior"
+case = "../../../cases/compile/transforms/mean_axis_negative_axis_through_the_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_negative library value=7.00000000000000000 d=[[0.3333333333333333, 0.3333333333333333, 0.3333333333333333], [0.3333333333333333, 0.3333333333333333, 0.3333333333333333]]"]
+expect_stderr_contains = ["rules=jvp_mean_axis,jvp_sum", "residuals=4", "rhs=sum_stated_t,mean_axis_stated_t"]
+
+[[tests]]
+name = "neg_gradient_both_legs"
+desc = "`sum(-x)` on `[-2.0, 0.5, 3.0]` through both legs: the engine's `negVjp` answers `[-1.0, -1.0, -1.0]` and the library's `neg_tensor_t` must answer the same three lanes, so `same=true`. `neg`'s slope is `-1` and reads nothing off the operand, which is why its law is the pure cotangent form `-ct` and why this is the first member of the tranche: a law written `ct` (the sign dropped) answers `[1.0, 1.0, 1.0]` and the three lanes tell the two apart without a tolerance. Walk `rhs=sum_t,neg_tensor_t`: the law is walked, because `jvp_neg_tensor`'s right side is `-dx`, the operator on a linear value."
+kind = "behavior"
+case = "../../../cases/compile/transforms/neg_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["neg engine=[-1.0, -1.0, -1.0]", "neg: engine=[-1.0, -1.0, -1.0] library=[-1.0, -1.0, -1.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "abs_gradient_both_legs"
+desc = "`sum(abs(x))` on `[-2.0, 0.0, 3.0, -0.5]` through both legs: the engine's `absVjp` answers `[-1.0, 1.0, 1.0, -1.0]` and the library's `abs_t` must answer the same four lanes, so `same=true`. The input holds both signs AND the zero, which is the point: `abs` has no derivative at `0`, so a law has to say which side it takes there, and the engine asks `tensor:ge` (`x >= 0`), which puts the zero on the positive side. A law written `x > 0` answers `[-1.0, -1.0, 1.0, -1.0]` -- one lane different, and it is the lane where the maths cannot say which is right. Walk `rhs=sum_t,mul_tensor_t`: `abs_t` is not walked on this program, because `jvp_abs` puts the sign in the linear half as two masks; the law is what a walk that meets `abs` on a linear value reads, and this entry pins the number the two routes have to share."
+kind = "behavior"
+case = "../../../cases/compile/transforms/abs_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["abs engine=[-1.0, 1.0, 1.0, -1.0]", "abs: engine=[-1.0, 1.0, 1.0, -1.0] library=[-1.0, 1.0, 1.0, -1.0] same=true"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-multensor"
+known_fail_reason = "the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30), so the cotangent of each operand is not derivable from the other's"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "sqrt_gradient_both_legs"
+desc = "`sum(sqrt(x))` on `[4.0, 2.25, 0.25]` through both legs: `[0.25, 0.3333333333333333, 1.0]` from `sqrtVjp` and from the library's `sqrt_t`, so `same=true`. The slope needs `sqrt(x)`, which is a function of the operand alone, so the law recomputes it -- the channel `exp_t` measured -- and the operand is the only value the cut carries. The law is written in the engine's order, `(ct * 0.5) / sqrt(x)`, and not as the algebraically equal `ct / (2.0 * sqrt(x))`, because the legs are compared bit for bit and the two orders round differently for some inputs. The third asserted line is the domain boundary on `[0.0, -1.0]`: `[inf, nan]` on both legs, because neither refuses an input the derivative is not finite at and a law must not either. Walk `rhs=sum_t,divide_t,mul_tensor_t,sqrt_t` -- `sqrt_t` is walked here, because the forward rule recomputes `sqrt(x)` and the cut carries the recomputation into the backward half."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sqrt_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["sqrt engine=[0.25, 0.3333333333333333, 1.0]", "sqrt: engine=[0.25, 0.3333333333333333, 1.0] library=[0.25, 0.3333333333333333, 1.0] same=true", "sqrt boundary engine=[inf, nan] library=[inf, nan]"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-valports"
+known_fail_reason = "the transposed walk's parameter check refuses one step before the multiply law -- `a parameter holds no cotangent: nothing uses its value` (`modules/transforms/transpose_operator.cpp#explainRejection`) -- and whether that is this program's honest wall is `docs/handover/questions/2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction.cn.md`"
+known_fail_msg = "a parameter holds no cotangent: nothing uses its value"
+known_fail_note = "Measured 2026-11-04 05:35 at `fab17edef`: this case stops one step **earlier** than the multiply law -- at the transposed walk's parameter check, `transpose has no transpose for this function: a parameter holds no cotangent: nothing uses its value` -- and that is the sentence the mark pins. The multiply wall behind it (what the other four of the seven stop on) is: Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "log_gradient_both_legs"
+desc = "`sum(log(x))` on `[1.0, 2.0, 4.0]` through both legs: `[1.0, 0.5, 0.25]` from `logVjp` and from the library's `log_t`, so `same=true`. The slope is the reciprocal of the operand, so nothing is recomputed and nothing is carried beyond `x` itself: this is the member of the tranche that says the set is not \"every law needs a carried value\". `ct` (the identity) answers `[1.0, 1.0, 1.0]` and `ct * x` answers `[1.0, 2.0, 4.0]`, so the three lanes separate all three laws. The third asserted line is the domain boundary on `[0.0, -1.0]`: `[inf, -1.0]` on both legs -- `-1.0` and not `nan`, because the cotangent is `ct / x` and never reads the output `log(x)`, so a negative operand gets a finite cotangent for a function that has no value there. Walk `rhs=sum_t,divide_t`: `log_t` is not walked on this program (the forward rule's linear half is the division itself), and the number still matches because both halves write the same quotient."
+kind = "behavior"
+case = "../../../cases/compile/transforms/log_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["log engine=[1.0, 0.5, 0.25]", "log: engine=[1.0, 0.5, 0.25] library=[1.0, 0.5, 0.25] same=true", "log boundary engine=[inf, -1.0] library=[inf, -1.0]"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-valports"
+known_fail_reason = "the transposed walk's parameter check refuses one step before the multiply law -- `a parameter holds no cotangent: nothing uses its value` (`modules/transforms/transpose_operator.cpp#explainRejection`) -- and whether that is this program's honest wall is `docs/handover/questions/2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction.cn.md`"
+known_fail_msg = "a parameter holds no cotangent: nothing uses its value"
+known_fail_note = "Measured 2026-11-04 05:35 at `fab17edef`: this case stops one step **earlier** than the multiply law -- at the transposed walk's parameter check, `transpose has no transpose for this function: a parameter holds no cotangent: nothing uses its value` -- and that is the sentence the mark pins. The multiply wall behind it (what the other four of the seven stop on) is: Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rsqrt_gradient_both_legs"
+desc = "`sum(rsqrt(x))` on `[4.0, 1.0, 0.25]` through both legs: `[-0.0625, -0.5, -4.0]` from `rsqrtVjp` and from the library's `rsqrt_t`, so `same=true`. The slope is `-0.5 * y^3` with `y = rsqrt(x)`, so the law recomputes `y` and writes the engine's grouping -- `cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube` -- because `(ct * y) * (y * y) * -0.5` is the same real number and a different last bit for some inputs. A law that drops the sign answers `[0.0625, 0.5, 4.0]` and one that drops the cube answers `[-0.25, -0.5, -1.0]`, so the three lanes separate all three. The third asserted line is the domain boundary on `[0.0, -1.0]`: `[-inf, nan]` on both legs. Walk `rhs=sum_t,mul_tensor_t,rsqrt_t` -- `rsqrt_t` is walked, because the forward rule recomputes `rsqrt(x)` and the cut carries it."
+kind = "behavior"
+case = "../../../cases/compile/transforms/rsqrt_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["rsqrt engine=[-0.0625, -0.5, -4.0]", "rsqrt: engine=[-0.0625, -0.5, -4.0] library=[-0.0625, -0.5, -4.0] same=true", "rsqrt boundary engine=[-inf, nan] library=[-inf, nan]"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-multensor"
+known_fail_reason = "the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "maximum_gradient_both_legs"
+desc = "`sum(maximum(x, w))` on `x = [-2.0, 0.0, 3.0, -0.5]`, `w = [1.0, 0.0, 1.0, 2.0]` through both legs, **differentiating both operands**: `[0.0, 1.0, 1.0, 0.0]` for `x` and `[1.0, 0.0, 0.0, 1.0]` for `w`, from `extremumVjp` and from the library's `maximum_t`, so `same=true` on both halves. Each operand's engine leg is its own `with` parameter and the library leg reads both halves of one `pullback`: a reading that only read `dx` could not tell a swapped law from a right one, and `dw` is exactly the lane a `where` with its arms exchanged would get wrong. The input carries a tie (`x = 0.0`, `w = 0.0`) because a tie belongs to the left operand and both halves must say so -- the engine asks `tensor:ge`, so the law writes `>=` and not `>`. The law reduces each answer to its own operand's shape with `sum_to`, which is the identity for these equal shapes and the reduction half for the `(T[..], T)` shape the operator is also called with. Measured readings: `maximum engine dx=[0.0, 1.0, 1.0, 0.0] dw=[1.0, 0.0, 0.0, 1.0]`, and the transpose walk reports `rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t` -- the law itself is not walked on this program, because the forward rule puts the two masks and the two products in the linear half and the operator never appears there."
+kind = "behavior"
+case = "../../../cases/compile/transforms/maximum_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["maximum engine dx=[0.0, 1.0, 1.0, 0.0] dw=[1.0, 0.0, 0.0, 1.0]", "maximum: engine=[0.0, 1.0, 1.0, 0.0] library=[0.0, 1.0, 1.0, 0.0] same=true", "maximum dw: engine=[1.0, 0.0, 0.0, 1.0] library=[1.0, 0.0, 0.0, 1.0] same=true"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-multensor"
+known_fail_reason = "the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "minimum_gradient_both_legs"
+desc = "The mirror of the `maximum` entry on the same input, both operands again: `sum(minimum(x, w))` answers `[1.0, 1.0, 0.0, 1.0]` for `x` and `[0.0, 0.0, 1.0, 0.0]` for `w`, from `extremumVjp` and from the library's `minimum_t`, so `same=true` on both halves. It is a separate case because the law is a different comparison (`<=`) and not a negation of the other's: the tie lane is again the left operand's, and a law that used `>=` would answer `[0.0, 1.0, 1.0, 0.0]` for `x` and `[1.0, 0.0, 0.0, 1.0]` for `w` -- exactly the `maximum` reading on the same input, which is the wrong law a reader is most likely to arrive at by copying. Measured: `minimum engine dx=[1.0, 1.0, 0.0, 1.0] dw=[0.0, 0.0, 1.0, 0.0]`, walk `rhs=sum_t,add_tensor_t,mul_tensor_t,subtract_t`."
+kind = "behavior"
+case = "../../../cases/compile/transforms/minimum_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["minimum engine dx=[1.0, 1.0, 0.0, 1.0] dw=[0.0, 0.0, 1.0, 0.0]", "minimum: engine=[1.0, 1.0, 0.0, 1.0] library=[1.0, 1.0, 0.0, 1.0] same=true", "minimum dw: engine=[0.0, 0.0, 1.0, 0.0] library=[0.0, 0.0, 1.0, 0.0] same=true"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-multensor"
+known_fail_reason = "the library's leg stops where the multiply law is missing: `stdlib/rulesets/transpose.cml#mul_tensor_t` has no safe writing (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "divide_gradient_both_legs"
+desc = "`sum(x / w)` on `x = [6.0, -3.0, 1.0]`, `w = [2.0, 4.0, 8.0]` through both legs, **differentiating both operands**: `[0.5, 0.25, 0.125]` for `x` and `[-1.5, 0.1875, -0.015625]` for `w`, from `divideVjp` and from the library's `divide_t`, so `same=true` on both halves. This is the member of the tranche where measuring both matters most: the second cotangent `dw = -(ct / w) * (x / w)` is where the two ways of writing the quotient rule part company, and the law writes the engine's grouping (and `jvp_divide` is written so that its transpose produces exactly it) rather than the algebraically equal `-(ct * x) / (w * w)`, which rounds differently. The three lanes are all distinct, and `ct` alone answers `[1.0, 1.0, 1.0]` while `ct * w` answers `[2.0, 4.0, 8.0]`, so they separate the likely wrong laws. Measured: `divide engine dx=[0.5, 0.25, 0.125] dw=[-1.5, 0.1875, -0.015625]`, walk `rhs=sum_t,subtract_t,divide_t,mul_tensor_t` (the law is walked here: the linear half holds `dx / w` and `((x / w) * dw) / w`)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/divide_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["divide engine dx=[0.5, 0.25, 0.125] dw=[-1.5, 0.1875, -0.015625]", "divide: engine=[0.5, 0.25, 0.125] library=[0.5, 0.25, 0.125] same=true", "divide dw: engine=[-1.5, 0.1875, -0.015625] library=[-1.5, 0.1875, -0.015625] same=true"]
+known_fail = ["nvm"]
+known_fail_owner = "lane-valports"
+known_fail_reason = "the transposed walk's parameter check refuses one step before the multiply law -- `a parameter holds no cotangent: nothing uses its value` (`modules/transforms/transpose_operator.cpp#explainRejection`) -- and whether that is this program's honest wall is `docs/handover/questions/2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction.cn.md`"
+known_fail_msg = "a parameter holds no cotangent: nothing uses its value"
+known_fail_note = "Measured 2026-11-04 05:35 at `fab17edef`: this case stops one step **earlier** than the multiply law -- at the transposed walk's parameter check, `transpose has no transpose for this function: a parameter holds no cotangent: nothing uses its value` -- and that is the sentence the mark pins. The multiply wall behind it (what the other four of the seven stop on) is: Waits on the rule layer, and the rule layer has no safe writing for it -- measured, not assumed. `mul_tensor_t`'s adjoint has to hand `sum_to` the shape it reduces to, and `sum_to(t, like)`'s second argument is the **target shape** (`stdlib/tensor.cml#sum_to`), so it can only be the operand whose cotangent is being answered: `sum_to(ct * w, x)` reads `x`, `sum_to(ct * x, w)` reads `w`. Handing it the *other* operand is what a broadcast program would need and is what answers a wrong number there (measured: `d/dx` answered `[6.0]` where it is `[2.0, 2.0, 2.0]`, `d/dw` answered `[1.0, 2.0, 3.0]` where it is `[6.0]` -- the engine's leg right, the library's wrong), and whether the two operands' shapes are equal is not visible on the open-rank type `float[..]`, so no writing is both right on the equal-shape case and safe under broadcast. Two things unblock it: a `sum_to` whose target shape arrives as a twin (the way `sum_stated` and `take_stated` carry theirs), or the operand's shape stated in its type. Until then this entry is the wall rather than a bug in the case: the expected numbers are unchanged, and the mark pins today's refusal by fragment so a different failure still turns the run red."
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+# ---- the second tranche: eight more operators, both halves ----
+#
+# Each entry below is one operator and one reading: the engine's `grad` beside the library's `vjp`,
+# on the same input, with `same=` the comparison of the two arrays element for element. The
+# operators were picked for what a law can state with the operators the tree already has; the ones
+# the same difference list holds and a law cannot reach (`concat`, `idx_take`, `layer_norm`,
+# `max_axis`, `min_axis`, `mean`, `min_axis`, `permute`, `reshape`, `softmax`, `sum_axis`,
+# `unsqueeze`) are refused below, where each is named with what is missing.
+
+[[tests]]
+name = "erf_gradient_both_legs"
+desc = "`erf`'s law, both legs. The slope is `2/sqrt(pi) * exp(-x*x)`, and the law chains the two products in the order whose transpose is the engine's own grouping -- `erfGrad` writes `pg * kScale * exp(-px*px)`, so the forward rule writes `(dx * exp(...)) * kScale` and the transposed product is `(ct * kScale) * exp(...)` bit for bit. The reading is three lanes with three different slopes."
+kind = "behavior"
+case = "../../../cases/compile/transforms/erf_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["erf: engine=[0.8787825789354448, 0.4151074974205947, 0.6429310691952074, 0.020666985354092053] library=[0.8787825789354448, 0.4151074974205947, 0.6429310691952074, 0.020666985354092053] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "erfc_gradient_both_legs"
+desc = "`erfc`'s law, both legs. The engine writes it as `erf_grad(x, neg(dy))`, so the answer is the `erf` slope with the sign in the constant rather than around the product -- `(-a) * b` and `-(a*b)` differ in no bit -- and the input goes through zero, where the sign of every lane separates this law from `erf`'s."
+kind = "behavior"
+case = "../../../cases/compile/transforms/erfc_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["erfc: engine=[-0.8787825789354448, -1.1283791670955126, -0.23652112244729076, -0.020666985354092053] library=[-0.8787825789354448, -1.1283791670955126, -0.23652112244729076, -0.020666985354092053] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "gelu_gradient_both_legs"
+desc = "`gelu`'s law, both legs. The slope is the one the tanh form has -- `0.5*(1+t) + 0.5*x*(1-t*t)*kScale*(1+3*kCubic*x*x)` with `t = tanh(kScale*(x + kCubic*x^3))` -- written in the engine's token order and multiplied into the cotangent once, at the end, which is what `geluGradArm`'s f64 arm does. The Phi form of the same slope over `erf` is the same number on paper and a different one in the last place, so this case measures which one the library answers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/gelu_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["gelu: engine=[0.9989382561374143, -0.1277107931514331, 1.0860992566236183, 0.30464590484893955] library=[0.9989382561374143, -0.1277107931514331, 1.0860992566236183, 0.30464590484893955] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_gradient_both_legs"
+desc = "`transpose`'s law, both legs: the operator is its own inverse, so both rules are one line. The sum is taken against a weight with four different powers of ten, because `sum(transpose(x))` equals `sum(x)` and would pass under a law that did nothing at all -- with the weight, the answer is `transpose(w)` and every lane separates a reflect from an identity."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["transpose: engine=[[1.0, 100.0], [10.0, 1000.0]] library=[[1.0, 100.0], [10.0, 1000.0]] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "where_gradient_both_legs"
+desc = "`where`'s law, both legs, and both branches measured: `d/da = where(c, ct, 0.0)` and `d/db = where(c, 0.0, ct)`, which are the engine's own two nodes (`whereVjp`) over the same condition -- the reading is not merely equal to the engine's, it is the same graph. The condition is computed by the program (`a > 0.0`), so it crosses the cut as a residual, which is the shape a mask has in a training step. The forward half cannot write `where(c, dx, 0.0)` (a three-operand `where` in the linear half), so it answers `where(c, da, db)` and the transpose law is what takes it apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/where_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["where: engine=[0.0, 1.0, 1.0, 1.0] library=[0.0, 1.0, 1.0, 1.0] same=true", "where db: engine=[1.0, 0.0, 0.0, 0.0] library=[1.0, 0.0, 0.0, 0.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "max_gradient_both_legs"
+desc = "`max`'s law, both legs. The input carries a **tie** at the maximum, so the two laws a reader writes first are separable without any arithmetic: a single-position argmax answers one `1.0`, a shared cotangent answers two `0.5`s, and the extremum's own law answers `1.0` at both tied positions -- which is what the engine's `strict_eq` selection does (`extremumAllVjp`). The mask is a value of `xs` alone, so the cut carries it and the linear half is a `where` and a `sum_stated`, both of which already had laws."
+kind = "behavior"
+case = "../../../cases/compile/transforms/max_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["max: value=3.0 engine=[0.0, 1.0, 1.0, 0.0] library=[0.0, 1.0, 1.0, 0.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "min_gradient_both_legs"
+desc = "`min`'s law, both legs: `max`'s mirror with the comparison turned round, on an input whose minimum is not the value a copied `max` law would select (so a law that lost its comparison answers zeros everywhere instead of ones). The minimum is tied too, and both tied positions take the whole cotangent."
+kind = "behavior"
+case = "../../../cases/compile/transforms/min_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["min: value=-1.0 engine=[0.0, 1.0, 0.0, 1.0] library=[0.0, 1.0, 0.0, 1.0] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "linear_gradient_both_legs"
+desc = "`linear`'s law, both legs, both operands measured. `linear(x, w) = x @ w` with `w` laid out `[in, out]`, so `d/dx = ct @ wᵀ` and `d/dw = xᵀ @ ct` -- the pair the engine reaches through `tensor:matmul_grad_lhs` / `_rhs` (`linearVjp`) and the pair `matmul_t`'s law already answers for `matmul` (`matmul_transpose_law.cml`), one operator further out. A law that swapped the two answers would give a matrix of the right shape and the wrong numbers in one reading only. The law states two operands, which is the form a call writes without a bias; a three-operand call needs its own law because a law's parameters are the node's ports."
+kind = "behavior"
+case = "../../../cases/compile/transforms/linear_gradient_both_legs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["linear: value=9.75 engine=[[0.75, 1.125], [0.75, 1.125]] library=[[0.75, 1.125], [0.75, 1.125]] same=true", "linear dw: engine=[[4.0, 4.0], [6.0, 6.0]] library=[[4.0, 4.0], [6.0, 6.0]] same=true"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+[[tests]]
+name = "extent_of_needs_a_type_that_states_its_shape"
+desc = "`extent_of::<A>()` answers the extents a type writes down; `float[]` writes none, so the call is refused where it is instantiated. The sentence names the type and the repair, and no count is pinned: what has to stay true is that a type which states no shape is refused in words. `transpose(pick)` on `x: float[3]` reads the same rule (`statedExtentsOf`) for the shape it spreads a cotangent over, so this entry and `transpose_refuses_a_parameter_value_it_cannot_be_handed` are the two sides of one rule."
+kind = "negative"
+case = "../../../cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
+expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and an extent it writes is not a number"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_answers_the_type"
+desc = "`extent_of::<float[2, 3]>()` answers `[2, 3]`: the extents are a fact of the type argument and of nothing else, and the value is settled where the call is built -- an OPER node records the instantiated type of the call but not the type argument it was written with, so before this the program reached a kernel with nothing to read and failed with `RuntimeDiag::PassInternalError` ('Pass ''calling `extent_of`'' failed with an internal error'), which is a compiler''s own sentence about a program that is right. The graph holds the `int[]` now (`src/compile/gir/builder_operators.cpp`, the `:op/extent_of` settlement), so the run reads a constant. The second line reads one element to pin the order."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_the_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[2, 3]", "3"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_of_a_sum_over_a_parameter"
+desc = "The transpose of `f(xs: float[3]) = sum(xs)`: the one number`''`s cotangent is that number at every position of the operand''s shape, and the shape is in the **type**, so the law is handed it -- `rulesets/transpose.cml#sum_from_type_t` names one port more than `tensor:sum` has, the walk offers the operands'' own types with the extents `extent_of`''s rule reads appended, and `back(1.0)` answers `([1.0, 1.0, 1.0])`. Measured 2026-11-04 on the base tree (`c4391db57`) this program stopped at `TRANSPOSE function=total skip=rule uri=tensor:sum reason=unbound`: the index had a law, and the law was written for a call the program did not make. The extents the law reads are not a value of the program -- no array stands in for the operand (author, 2026-11-03 17:55)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_of_a_sum_over_a_parameter.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["([1.0, 1.0, 1.0])"]
+expect_output_contains = ["rhs=sum_from_type_t"]
+expect_output_not_contains = ["skip=rule uri=tensor:sum reason=unbound", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+timeout_ms = 20000
+
+[[tests]]
+name = "library_grad_of_a_with_weight"
+desc = "A weight the program holds as an ordinary parameter of a lambda, handed to a function that reads it through a `with` parameter -- the shape the engine measures in `grad_first_with_parameter`, taken through the library's composition here. `vjp` differentiates the ordinary parameters only, so the weight is moved onto one by `f = (ww) => weighted<ww>(2.0)`; the lift of `f` then meets a *call* of `weighted` whose `with` argument is the lambda's parameter, and that parameter is a value the lifted body carries a direction for. Before 2026-11-04 the lifted call handed the callee its `with` value and the zero the lifted signature leaves a `with` parameter's tangent to be, so `weighted`'s lifted chain was constant in the weight, its `lin` was the zero map, and the composition answered value 9.0 with grad 0.0 where the engine answers 3.0 -- a wrong number, which is why this is pinned rather than described. Every line is hand-computed: `weighted<3.0>(2.0) = 3*2 + 3 = 9.0` with `d/dy = x = 3.0`; the same call with the number on an ordinary parameter too is `weighted<3.0>(5.0) = 18.0`, whose cotangents are `6.0` for the weight (`t + 1`) and `3.0` for `t` (the weight), so a dropped weight direction shows as one wrong member and not as a wrong line. The third line is the same argument list read for order: a lifted call's arguments are `(..values, ..their tangents)`, the lift used to interleave them (`v1, d1, v2, d2`) into a callee that reads `(v1, v2, d1, d2)`, and `mulxy(3.0, 2.0) = 6.0` with `d/dx = y = 2.0` and `d/dy = x = 3.0` is where two parameters tell the two orders apart."
+kind = "behavior"
+case = "../../../cases/compile/transforms/library_grad_of_a_with_weight.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["weighted engine=3.0 value=9.0 grad=3.0", "both value=18.0 pullback=(6.0, 3.0)", "twoparam value=6.0 pullback=(2.0, 3.0)"]
+expect_output_not_contains = ["Warning", "[Error]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# `exp` with its shape in the type: the fixed-shape half of the open-rank gap the four library cases
+# below still record. The walk answers a tangent's shape through `shapeCarrierOf`, which answers a
+# stated type and nothing else (author, 2026-11-03 16:15), so `float[2]` answers where `float[]` refuses.
+[[tests]]
+name = "exp_gradient_of_a_stated_shape"
+desc = "`sum(exp(x))` with `x: float[2]` instead of `float[]`, through **both** legs in one program: the engine's own pullback (`grad`) and the library's rules (`vjp` -> `split(jvp)` -> `transpose`). Hand: `exp([1.0, 2.0]) = [2.718281828459045, 7.38905609893065]`, `value = 10.107337927389695`, and `sum`'s adjoint is one per lane. Both lines are pinned, so a change to either leg shows up as a difference between two lines of one program. This is the fixed-shape half of the pair: the open-rank `exp_gradient_through_the_library` still refuses, because `mul_tensor_t` reads the tangent's own shape for `sum_to` and `float[..]` states no extents -- keeping both is what keeps the refusal visible while the answering path is covered."
+kind = "behavior"
+case = "../../../cases/compile/transforms/exp_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["exp stated engine d=[2.718281828459045, 7.38905609893065]", "exp stated library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The clock for the one spelling of the product law that answers a wrong shape: a broadcasting
+# product's adjoint reduces to each operand's own shape, so reading the *other* operand for `sum_to`
+# is right only while the two shapes are equal.
+[[tests]]
+name = "broadcast_product_gradient_of_a_stated_shape"
+desc = "`sum(x * w)` with `x: float[3]`, `w: float[1]` -- a broadcasting product, both shapes in the types -- through both legs. Hand: product `[2.0, 4.0, 6.0]`, `value = 12.0`; the cotangent arriving is `[1.0, 1.0, 1.0]`, so `d/dx = broadcast(w) = [2.0, 2.0, 2.0]` (numel 3, `x`'s shape) and `d/dw = sum(ct * x) = [6.0]` (numel 1, `w`'s shape). The numbers are the two legs' common answer, element for element. **This case is a clock**: writing `mul_tensor_t` to read the operand each side is not answering for (`sum_to(ct * w, w)`) removes a refusal and answers `d/dx numel=1 d/dx=[6.0]`, `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]` here -- measured 2026-11-04 -- and nothing under `test/plans/` covered a broadcasting product before this case."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["engine d/dx numel=3 d/dx=[2.0, 2.0, 2.0]", "engine d/dw numel=1 d/dw=[6.0]", "library value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same program with open types: the refusal, and the case that catches bending the law instead.
+[[tests]]
+name = "broadcast_product_gradient_of_an_open_rank"
+desc = "The same broadcasting product with `float[..]` for both operands. The desired reading is the stated twin's answer exactly -- `value=12.0`, `d/dx numel=3 d/dx=[2.0, 2.0, 2.0]`, `d/dw numel=1 d/dw=[6.0]` -- and it is not reachable today: `mul_tensor_t`'s `sum_to` reads the operand whose cotangent is being built for its shape, that operand is a tangent, and `float[..]` states no extents (`shapeCarrierOf` answers a stated type only, author 2026-11-03 16:15), so the walk stops at `skip=cotangent-needs-a-value uri=tensor:multiply position=0`. The mark pins that refusal and the desired numbers at once. **Why it must stay marked rather than removed**: the tempting fix -- make each side read the operand it is not answering for -- clears the refusal and answers `d/dx numel=1 d/dx=[6.0]`, `d/dw numel=3 d/dw=[1.0, 2.0, 3.0]`, because `sum_to`'s second argument is the *target shape* and 'the two shapes are equal' is invisible on an open rank. A named refusal is better than a wrong number, and this case turns green only when the library can answer a broadcast adjoint."
+kind = "behavior"
+case = "../../../cases/compile/transforms/broadcast_product_gradient_of_an_open_rank.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["open value=12.0 d/dx numel=3 d/dx=[2.0, 2.0, 2.0] d/dw numel=1 d/dw=[6.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+known_fail = ["nvm"]
+known_fail_owner = "lane-multensor"
+known_fail_reason = "the open-rank broadcast product stops at `skip=cotangent-needs-a-value uri=tensor:multiply`: `stdlib/rulesets/transpose.cml#mul_tensor_t` cannot be written safely (author's ruling of 2026-11-03 00:30)"
+known_fail_msg = "skip=cotangent-needs-a-value uri=tensor:multiply"
+known_fail_note = "The open-rank half of the product law's gap, kept as the clock for the one wrong spelling. Desired: value=12.0, d/dx numel=3 d/dx=[2.0, 2.0, 2.0], d/dw numel=1 d/dw=[6.0] (hand: product [2,4,6], ct [1,1,1], d/dx = broadcast(w), d/dw = sum(ct*x)). Today: the walk asks stdlib/rulesets/transpose.cml#mul_tensor_t for the tangent's cotangent, the law's sum_to reads that operand for its shape, that operand is a tangent, and float[..] states no extents -- shapeCarrierOf answers a stated type only (author 2026-11-03 16:15) -- so it stops at skip=cotangent-needs-a-value uri=tensor:multiply position=0. Two dead ends for closing it, both measured: extent_of answers nothing for float[..] (extent_of_needs_a_type_that_states_its_shape guards that side), and sum_to's second argument wants a value, so read-only-the-length needs a sum_to_stated(t, at: int[]) twin that git grep finds in no branch and that would live in modules/tensor. And the shortcut must not be taken: naming the operand each side is NOT answering for (sum_to(ct * w, w)) clears the refusal and answers d/dx numel=1 d/dx=[6.0] and d/dw numel=3 d/dw=[1.0, 2.0, 3.0], measured 2026-11-04, because sum_to's second argument is the target shape and the two shapes being equal is invisible on an open rank. A named refusal is better than a wrong number."
+# The other three D1 activations with their shapes in the type: the same pair of legs in one program,
+# on inputs chosen so a wrong law separates without a tolerance.
+[[tests]]
+name = "relu_gradient_of_a_stated_shape"
+desc = "`sum(relu(x))` with `x: float[4] = [-1.5, 0.0, 2.5, 0.25]`, through both legs in one program -- the engine's (`grad`, whose mask is `y > 0`) and the library's (`vjp` -> `split(jvp)` -> `transpose`, whose mask is `x > 0`). Hand: `mask = [0.0, 0.0, 1.0, 1.0]` and `value = 0 + 0 + 2.5 + 0.25 = 2.75`. The input holds a negative, the boundary itself and two positives, so an answer that took either side at zero (`[0.0, 1.0, 1.0, 1.0]`) or that answered `ct` everywhere (`[1.0, 1.0, 1.0, 1.0]`) is separated element by element. The fixed-shape half of the pair: `relu_gradient_through_the_library` (`float[]`) still refuses, because the product law reads the tangent's own shape and `float[..]` states no extents."
+kind = "behavior"
+case = "../../../cases/compile/transforms/relu_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["relu stated engine d=[0.0, 0.0, 1.0, 1.0]", "relu stated library value=2.75 d=[0.0, 0.0, 1.0, 1.0]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "sigmoid_gradient_of_a_stated_shape"
+desc = "`sum(sigmoid(x))` with `x: float[2] = [0.0, 2.0]`, through both legs in one program. Hand: `s(0) = 0.5`, `s(2) = 1/(1+e^-2) = 0.8807970779778823`, `value = 1.3807970779778822`, and the slope is `s(x)(1-s(x))`, so `d = [0.25, 0.10499358540350662]`. The points are chosen to separate the wrong laws: near zero every candidate looks alike, here the two components are unequal and both well away from zero, so `ct` (`[1.0, 1.0]`) and `ct * s(x)` with the `1 - s(x)` factor dropped (`[0.5, 0.8807970779778823]`) are both separated without a tolerance. The fixed-shape half of the pair: `sigmoid_gradient_through_the_library` (`float[]`) still refuses."
+kind = "behavior"
+case = "../../../cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["sigmoid stated engine d=[0.25, 0.10499358540350662]", "sigmoid stated library value=1.3807970779778822 d=[0.25, 0.10499358540350662]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "tanh_gradient_of_a_stated_shape"
+desc = "`sum(tanh(x))` with `x: float[2] = [1.5, -2.0]`, through both legs in one program. Hand: `tanh(1.5) = 0.9051482536448664`, `tanh(-2.0) = -0.9640275800758169`, `value = -0.05887932643095051`, and the slope is `1 - tanh^2(x)`, so `d = [0.18070663892364858, 0.07065082485316443]`. Both components differ and both sit away from zero, so `ct` (`[1.0, 1.0]`) and `1 - tanh(x)` are separated without a tolerance. The fixed-shape half of the pair: `tanh_gradient_through_the_library` (`float[]`) still refuses, because the product law reads the tangent's own shape for `sum_to` and `float[..]` states no extents (`shapeCarrierOf` answers a stated type only, author 2026-11-03 16:15)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["tanh stated engine d=[0.18070663892364858, 0.07065082485316443]", "tanh stated library value=-0.05887932643095051 d=[0.18070663892364858, 0.07065082485316443]"]
+expect_output_not_contains = ["skip=cotangent-needs-a-value", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+
+# The tangent of a loop's *iterated element*, and what the forward half does when it has nowhere to
+# put it. `jvp_loop_array_state` pins the shape this transform supports -- a `for` loop over a
+# sequence nobody differentiates, whose element therefore has no tangent worth carrying. A loop over
+# a value that *does* carry a tangent is the other case, and it answered the zero of the tangent
+# space for a derivative that is not zero:
+#
+#   f(xs) = loop s = 0.0 for e in xs do s + e
+#   jvp(f)([1.0, 2.0], [1.0, 1.0])   ->   value= 3.0   tangent= 0.0     (used to print both)
+#
+# `f` is the sum, so the tangent is `1 + 1 = 2.0`; the value was right and the tangent was the
+# zero's. Nothing in this shape can carry it -- the loop iterates the values it was given, and
+# pairing the iterable would hand it a pair where it asks for an array -- so the lift refuses at the
+# loop and names the construct, the same way it refuses a primitive the ruleset has no rule for. A
+# refusal, not a saved wrong number: the backward half of the same program already refuses this
+# shape ("the shape this program used has no transpose (the transform named it `range`)").
+#
+# `expect_stdout_not_contains` is the red half of the entry: before this change the program printed
+# `tangent= 0.0` and exited 0.
+[[tests]]
+name = "jvp_loop_iterable_tangent"
+desc = "A `for` loop whose iterable is a value with a tangent: `jvp(f)` of `f(xs) = loop s = 0.0 for e in xs do s + e` at `xs = [1.0, 2.0]`, `dxs = [1.0, 1.0]`. The element `e` has the tangent of the array's element, and the lift copies the iterable as it stands, so it has nowhere to put it. The fault names the construct -- this program exits non-zero with `jvp does not reinterpret a loop over a value that has a tangent` -- and prints neither the value nor the zero tangent it used to answer (measured 2026-11-04: `value= 3.0`, `tangent= 0.0`, where the sum of the tangents is 2.0)."
+kind = "negative"
+case = "../../../cases/compile/transforms/jvp_loop_iterable_tangent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["jvp does not reinterpret a loop over a value that has a tangent", "the element the loop hands its body has the tangent of the array's element"]
+expect_stdout_not_contains = ["tangent= 0.0", "value= 3.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+
+
+
+
+# The same defect read from the top: `grad` is `transpose(split(jvp(f)))`, so a linear half that is
+# a constant function of its direction gives a pullback with no cotangent to send and an answer the
+# program never had to compute -- `grad(g)` printed 0.0 in silence. The four numbers are the two
+# levels (`g = 2x²`, `g2 = 2x³`: 12 at 3, 20 at 5, 54 at 3) and the flat spelling of the same
+# function `g` as the guard (`h(x) = 2.0 * x * x`, 12), which never went through the cut's residual
+# list and must not move. The two-level reading also pins the second half of the fix: a cut adopts
+# its callee's program and not the cuts that program adopted, so `g2` used to stop the run at `a
+# direct call names a function whose graph is not in the program's graph table`
+# (modules/transforms/split.h#SplitGraph::standing).
+[[tests]]
+name = "grad_across_a_call"
+desc = "`grad` through a call, at one level and at two: `f(x) = 2.0 * x`, `g(x) = f(x) * x` (2x², so 12 at 3 and 20 at 5), `g2(x) = g(x) * x` (2x³, so 54 at 3), and `h(x) = 2.0 * x * x` -- the flat spelling of g -- as the guard that the path which was already right still reads 12. Before the fix the first two answered 0.0 without a word and the third stopped the run at a callee graph that the outermost program did not hold."
+kind = "behavior"
+case = "../../../cases/compile/transforms/grad_across_a_call.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["grad_g_3= 12.0", "grad_g_5= 20.0", "grad_g2_3= 54.0", "grad_h_3= 12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same wall read from the `vjp` side, and kept as the *positive* entry it was always meant to
+# become. `cross_call_gradient_is_not_zero` landed on 2026-11-04 07:34 as a `known_fail` that pinned
+# the wrong line this tree printed (`known_fail_msg = "g'(3) = 0.0"`, the zero a linear half that
+# ignores its own parameter answers), and the commit that fixed the cut (`ee5eebe07`) rewrote that
+# row into `grad_across_a_call` above. The number moved and the case file stayed on disk with nothing
+# reading it -- which is exactly what `gate.case_ledger` reports: a case no code reaches cannot fail,
+# so a change that broke it would be invisible. It is not deleted. The record is the point, and the
+# rule this pair keeps is "a wall that falls turns its assertion into a number": the mark goes in the
+# same commit that pins the number, and `flat` -- the same arithmetic written flat -- must still
+# answer 12.0, because a fix that moved that number would be a fix that broke the path which was
+# already right.
+#
+# The two entries read one defect through two doors: `grad_across_a_call` asks `grad(g)` (which is
+# `transpose(split(jvp(f)))`, the whole chain), this one asks `vjp(g)` and prints the value and the
+# pullback separately (`g(3) = 18.0  g'(3) = 12.0`). Neither can drift alone.
+[[tests]]
+name = "cross_call_gradient_is_not_zero"
+desc = "The gradient across a call, read through `vjp` and pinned as the number it must answer: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`, while the same arithmetic written flat (`flat`) answers 12.0 in the same run and must keep answering it. What is guarded is that the cross-call gradient is not zero: the case landed as a `known_fail` pinning `g'(3) = 0.0` (the cut listed the lifted graph's tangent parameter as a residual, `modules/transforms/split.cpp#residualsOf`), `grad_across_a_call` replaced its row when the fix landed, and it is kept here as the positive regression beside it -- the same defect through the `vjp` door. Measured 2026-11-04 on the cut tree: `g(3) = 18.0  g'(3) = 12.0` and `flat(3) = 18.0  flat'(3) = 12.0`, exit 0."
+kind = "behavior"
+case = "../../../cases/compile/transforms/cross_call_gradient_is_not_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["g(3) = 18.0", "g'(3) = 12.0", "flat(3) = 18.0", "flat'(3) = 12.0"]
+# The half that says the entry is not green by accident: the wrong number the case was created to
+# pin must not come back, in either spelling.
+expect_output_not_contains = ["g'(3) = 0.0", "flat'(3) = 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+
+[[tests]]
+name = "extent_of_refuses_an_open_rank_type"
+desc = "`float[..]` states neither the rank nor a length, so `extent_of::<float[..]>()` is refused where it is instantiated -- it must never answer `[]`, because an empty list is the rank-zero shape `sum_to` reduces to one element, and that is a wrong number no diagnostic would name. The sentence names the type, the reason and the two repairs (write the extents, or take the shape from a value). The sibling `float[]` (`float[?]`: one dimension, no length) is refused by the same rule and is pinned by `extent_of_needs_a_type_that_states_its_shape`."
+kind = "negative"
+case = "../../../cases/compile/transforms/extent_of_refuses_an_open_rank_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
+expect_output_contains = ["the type it is instantiated at is 'float[..]', and an extent it writes is not a number", "take the shape from a value the program has"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_answers_a_parameter_type"
+desc = "The rank is stated and the value is not the question: `func shape_of(t: float[4]) = extent_of::<float[4]>()` answers `[4]` without reading `t`. `std::gir` of the case shows the answer as a `DATA` node of the graph with no edge leaving the `t` port (no operand of `extent_of` exists to read), and `std::opt` leaves the same graph. This is the shape of the demand the transposition makes: a parameter whose cotangent is what the transposed function takes has no value to read."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_a_parameter_type.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["[4]"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_is_not_shape"
+desc = "`extent_of` is not a second name for `shape`: `shape(xs)` asks a value and `extent_of::<A>()` asks a type. This case pins both halves in one program -- on `float[2, 3]` the type states what the value has, so `shape(t) == extent_of::<float[2, 3]>()` is `true`; on `float[..]` only the value states it, so `shape(t)` still answers `[2]` while `extent_of::<float[..]>()` is the refusal its sibling entry pins. Neither function may drift into being the other: the first line would stop being `true`, or the second would stop answering."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_is_not_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["true", "[2]"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

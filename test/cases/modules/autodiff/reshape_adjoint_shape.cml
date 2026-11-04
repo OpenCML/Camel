@@ -1,0 +1,39 @@
+/**
+ * The adjoint of a reshape is shaped like the *input* of that reshape, not like its result
+ * (design principles 9.9: a gradient has the element type and the shape of the value it is the
+ * gradient of).
+ *
+ * Two reshapes in a row, `[6] -> [3, 2] -> [2, 3]`, so the two adjoints cannot both be right by
+ * accident: the last one is shaped like `d` (a `[2, 3]`) and the first like `w` (`[]`). Its numbers
+ * are the same either way -- `sum(d * d)` is `2w` elementwise, and the accumulator reduces to the
+ * operand's shape whichever type the node declares -- so the *shape* is the reading, and
+ * `autodiff_inspection.plan.toml` reads it out of `std::jgir`'s `outputType`:
+ *
+ *     before 2026-11-04: grad(loss) tensor:reshape g3n16 float[2, 3], g3n18 float[2, 3]
+ *     after             : grad(loss) tensor:reshape g3n16 float[3, 2], g3n18 float[]
+ *
+ * The rule built the node with `addTensorOper`, which derives a node's type from its inputs -- and
+ * its inputs are the upstream gradient (shaped like the output) and the `tensor:shape` of the
+ * input. `addTensorOperFor` declares it with the tangent type of the primal instead, which is the
+ * one thing the rule means. The printed line is unchanged by that, and it is printed here so the
+ * numbers are pinned beside the shape: `[2.0, 4.0, 6.0, 8.0, 10.0, 12.0]` is `2w`.
+ *
+ * Run as `camel reshape_adjoint_shape.cml std::macro std::nvm` or `... std::macro std::jgir`.
+ */
+
+import { reshape, sum } from tensor
+import { grad } from autodiff
+
+with <w: float[]>
+func loss(): float {
+    let s = reshape<[3, 2]>(w)
+    let d = reshape<[2, 3]>(s)
+    return float(sum(d * d))
+}
+
+func main(): int sync {
+    let w  = [1.0, 2.0, 3.0, 4.0, 5.0, 6.0]
+    let gw = grad(loss)<w>()
+    'reshape_adjoint_shape {}'->format<gw>->println
+    return 0
+}

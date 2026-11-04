@@ -4,11 +4,16 @@
 #include "rule_expand.h"
 
 #include "camel/core/rtdata/func.h"
+#include "camel/core/mm.h"
+#include "camel/core/rtdata/array.h"
 #include "camel/core/type/base.h"
+#include "camel/core/type/composite/array.h"
 #include "camel/parse/ast/rule_head.h"
 
 #include <algorithm>
+#include <cstring>
 #include <functional>
+#include <optional>
 #include <span>
 #include <string>
 #include <string_view>
@@ -55,6 +60,32 @@ bool narrowerPortsThan(
         }
     }
     return strict;
+}
+
+std::optional<std::vector<int64_t>> statedShapeOf(const camel::core::type::Type *type) {
+    if (type == nullptr || type->code() != camel::core::type::TypeCode::Array) {
+        return std::nullopt;
+    }
+    const auto *array = static_cast<const camel::core::type::ArrayType *>(type);
+    if (array == nullptr || array->elemType() == nullptr ||
+        !camel::core::type::isFloatingScalar(array->elemType()->code())) {
+        return std::nullopt;
+    }
+    const std::span<const camel::core::type::ExtentForm> stated = array->extents();
+    if (stated.empty()) {
+        // `T[..]`: the rank is the value's, so the type states no shape at all.
+        return std::nullopt;
+    }
+    std::vector<int64_t> extents;
+    extents.reserve(stated.size());
+    for (const camel::core::type::ExtentForm &extent : stated) {
+        const std::optional<int64_t> size = extent.evaluate({});
+        if (!size.has_value() || *size < 0) {
+            return std::nullopt;
+        }
+        extents.push_back(*size);
+    }
+    return extents;
 }
 
 namespace {
@@ -351,7 +382,66 @@ std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<boo
     return read;
 }
 
+/// The operator a law names when it wants an operand's **shape** and not its value.
+///
+/// `tensor:shape` is the library's own name for the extents of an array (`stdlib/tensor.cml#shape`),
+/// and it is the name a law has always had for this: `jvp_sum` states a sum's extents by writing
+/// `sum_stated(dxs, shape(xs))`. What changes here is where the numbers come from when the caller
+/// carries no value for `xs` -- a transposition has none for the operand it differentiates -- so the
+/// rule layer answers the call from the type instead (`expandRuleRightSide`).
+constexpr std::string_view kShapeUri = "tensor:shape";
+
+/// The extents as the value a law reads them as: a rank-one array of the numbers, of the type the
+/// law's own `tensor:shape` node answers with (`int[]`).
+///
+/// This is the whole of the pathway the author asked for on 2026-11-03 (17:35 and 17:55): a shape
+/// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
+/// built -- instead of being read off the value of an operand the caller does not have. It is not a
+/// zero standing in for a value (that is what `transpose.cpp#shapeCarrierOf` was, and a law that
+/// multiplied by it answered zeros); it is the extents themselves, and the only thing that reads
+/// them is the shape (5.4: a shape is a fact about a type, and this is that fact written down).
+gc_node_ref_t statedExtentsValue(
+    camel::runtime::GraphDraft &draft, camel::core::type::Type *extentsType,
+    const std::vector<int64_t> &extents) {
+    if (extentsType == nullptr || extentsType->code() != camel::core::type::TypeCode::Array) {
+        return rt::kInvalidNodeRef;
+    }
+    auto *arrayType = static_cast<camel::core::type::ArrayType *>(extentsType);
+    const int64_t length = static_cast<int64_t>(extents.size());
+    ::Array *value       = ::Array::create(
+        camel::core::mm::autoSpace(), arrayType, std::span<const int64_t>(&length, 1),
+        /*zeroInit=*/true);
+    if (value == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    // The storage follows the element type (`type::arrayStorageFor`): an `int[]` holds one `int64_t`
+    // per element, and a shape that did not fit the array it was written into would be a shape the
+    // graph reads half of. Refused rather than written short.
+    if (value->byteSize() != static_cast<size_t>(length) * sizeof(int64_t)) {
+        return rt::kInvalidNodeRef;
+    }
+    std::memcpy(value->rawData(), extents.data(), static_cast<size_t>(length) * sizeof(int64_t));
+    return draft.materializeStaticValue(
+        camel::core::rtdata::toSlot<::Array *>(value), extentsType, rt::kGCNodeFlagConstant);
+}
+
 } // namespace
+
+std::vector<camel::core::type::Type *>
+ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
+    std::vector<camel::core::type::Type *> ports;
+    RuleRightSide side;
+    std::string why;
+    if (!findRuleRightSide(instance, side, why) || side.body == nullptr) {
+        return ports;
+    }
+    for (const gc_node_ref_t port : side.body->normPorts()) {
+        const rt::GCNode *node = side.body->node(port);
+        ports.push_back(node != nullptr ? const_cast<camel::core::type::Type *>(node->dataType())
+                                        : nullptr);
+    }
+    return ports;
+}
 
 /// The rule's right side expanded at the match site: the body of the closure it answers with is
 /// copied into this graph, its captures bound to the operands and its parameters to the tangents,
@@ -448,6 +538,74 @@ gc_node_ref_t expandRuleRightSide(
     // caller may have no value for the other (a transposed loop body's own state).
     const auto read            = portsReadByBody(*body, keep);
     const auto rhsPorts        = instance.rhs->normPorts();
+    // The law's own ports, in the order its left side writes them: the operand types the instance
+    // was made at, which is where a stated shape lives (`statedShapeOf`).
+    const std::vector<camel::core::type::Type *> ports = rulePortsOf(instance);
+    // The body nodes this expansion answers with a stated shape instead of a call, and the captures
+    // whose only reader is one of those calls. Filled below, read by the copy.
+    std::unordered_map<gc_node_ref_t, std::vector<int64_t>> statedShapes;
+    std::unordered_map<gc_node_ref_t, bool> answeredAsShape;
+    // Whether the answer can have `capture`'s **shape** where it cannot have its value.
+    //
+    // The question is the author's 2026-11-03 17:35/17:55 ruling -- a shape reaches a transpose as a
+    // known operand, never read off an operand's value -- and the answer is yes exactly when two
+    // facts hold:
+    //
+    //   * the law's port for that capture states its extents (`float[2, 3]` does, `float[..]` and a
+    //     number do not). The instance is made at the node's own operand types
+    //     (`expandRuleByName`, `transpose.cpp#ruleCotangent`), so the port is the operand's type;
+    //   * every place the answer reads that capture is a `tensor:shape` call. A body that read it
+    //     anywhere else needs the value, and the value is the caller's to carry: substituting there
+    //     would answer arithmetic with a shape, which is the silent zero this exists to remove.
+    //
+    // Both readings are refusals of the substitution, not of the expansion: a law that reads the
+    // value and a caller that has none still meets the sentence it always met.
+    const auto answerTheShapeOf = [&](gc_node_ref_t capture, size_t argument) -> bool {
+        if (argument >= ports.size()) {
+            return false;
+        }
+        const std::optional<std::vector<int64_t>> extents = statedShapeOf(ports[argument]);
+        if (!extents.has_value()) {
+            return false;
+        }
+        std::vector<gc_node_ref_t> readers;
+        for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+            if (body->node(ref) == nullptr || (!keep.empty() && !keep[ref])) {
+                continue;
+            }
+            for (gc_node_ref_t input : body->normInputsOf(ref)) {
+                if (input == capture) {
+                    readers.push_back(ref);
+                    break;
+                }
+            }
+        }
+        if (readers.empty()) {
+            return false;
+        }
+        for (const gc_node_ref_t ref : readers) {
+            const rt::GCNode *node = body->node(ref);
+            if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+                return false;
+            }
+            const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref);
+            const auto inputs = body->normInputsOf(ref);
+            if (oper == nullptr || oper->uri() != kShapeUri || inputs.size() != 1 ||
+                inputs.front() != capture) {
+                return false;
+            }
+        }
+        for (const gc_node_ref_t ref : readers) {
+            statedShapes.emplace(ref, *extents);
+        }
+        answeredAsShape.emplace(capture, true);
+        if (!keep.empty()) {
+            // Not part of the answer any more: the call that read it answers with the shape, so the
+            // value is neither asked for nor copied.
+            keep[capture] = false;
+        }
+        return true;
+    };
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> bound;
     for (size_t i = 0; i < capturePorts.size(); ++i) {
         const auto at = std::find(rhsPorts.begin(), rhsPorts.end(), right.captures[i]);
@@ -463,6 +621,14 @@ gc_node_ref_t expandRuleRightSide(
             continue;
         }
         const size_t argument = static_cast<size_t>(at - rhsPorts.begin());
+        // Asked before the value, not after it: a caller that has no value for this operand may still
+        // have a *shape* for it, and a caller that has a value may be holding a stand-in for it
+        // (`transpose.cpp#shapeCarrierOf`, a zero array built to be read for its shape). Answering
+        // the shape from the type is the same answer in both cases, and it is the one the author
+        // asked for: the extents the port states, written into the graph where the call stood.
+        if (answerTheShapeOf(capturePorts[i], argument)) {
+            continue;
+        }
         const gc_node_ref_t value = valueOf == nullptr ? rt::kInvalidNodeRef : valueOf(argument);
         if (value == rt::kInvalidNodeRef) {
             why = "the rule's right side reads a value the caller does not carry";
@@ -497,6 +663,23 @@ gc_node_ref_t expandRuleRightSide(
             continue;
         }
         if (!keep.empty() && !keep[ref]) {
+            continue;
+        }
+        if (const auto stated = statedShapes.find(ref); stated != statedShapes.end()) {
+            // The shape the caller could not carry, written down where the call stood: a constant of
+            // this graph, built from the extents the law's own port states. Everything the answer
+            // does with it is a shape (the call the law wrote is `tensor:shape`), and nothing reads
+            // it as an operand's value.
+            copied[ref] = statedExtentsValue(draft, node->dataType(), stated->second);
+            if (copied[ref] == rt::kInvalidNodeRef) {
+                why = "the rule's right side asks for a shape this graph cannot write down";
+                return rt::kInvalidNodeRef;
+            }
+            continue;
+        }
+        if (answeredAsShape.count(ref) != 0) {
+            // A capture answered as a shape: it was removed from `keep` where the position was
+            // picked, and a whole-answer expansion reaches it without that pass.
             continue;
         }
         if (node->kind == rt::GCNodeKind::Port) {

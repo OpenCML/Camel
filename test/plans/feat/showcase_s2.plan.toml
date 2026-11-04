@@ -91,28 +91,40 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 # The same step through `vjp` -- `transpose(split(jvp(f)))` -- which is the path S2's training step
-# is written on. The capture no longer stops it: the lift now builds the whole body (its reading
-# names `jvp_matmul,jvp_subtract,jvp_mul_tensor,jvp_sum`), and what stops the pair of halves is
-# `split`, which reads every port of the lifted graph as one of its parameters and says of a capture
-# that it is not: `construct=a port uri=- why=the port is not a parameter of the graph, so neither
-# half takes it`. That is the next wall, and it belongs to `split` rather than to the lift.
+# is written on. Two walls stood in front of it, and both are down. The capture no longer stops the
+# lift (it builds the whole body, and its reading names
+# `jvp_matmul,jvp_subtract,jvp_mul_tensor,jvp_sum,jvp_mul`), and `split` no longer refuses the pair
+# of halves: the port it used to stop on read
+# `construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`,
+# and the cut reads the captured value's port now. The reverse of the product was the last piece
+# missing (`stdlib/rulesets/transpose.cml#matmul_t`, landed by `lane-withport`).
 #
-# The assertions are on the *reading*, not on the exit code. A negative entry that only demanded a
-# non-zero exit would go quietly green the day that wall falls -- the program would start printing
-# its numbers and still "expect 1" would be the only thing anyone had written down. So the message
-# `split` answers is pinned word for word, on the stream it is written to (`expect_stderr_contains`
-# for the `REINTERP` line, `expect_stdout_contains` for the fault), and the day either stops being
-# printed this entry fails and says which one.
+# This entry was a *negative* one until 2026-11-04, and it was written that way on purpose: it
+# pinned the two readings `split` printed and demanded exit 1, because an entry that only demanded a
+# non-zero exit would go quietly green the day the wall fell -- the program would start printing its
+# numbers and "expect 1" would be the only thing anyone had written down. The day came, so the
+# assertion is the number now, which is what the case's own comment promised it would become
+# (`test/cases/compile/transforms/first_step_tensor_vjp.cml`).
+#
+# The line is `loss=10.34375` and `dL/dw=([[3.75, 13.5], [5.5, 19.5]])`: the hand calculation of
+# this page, the forward transform's four seeds in `first_step.tensor_forward_jvp` above, and
+# PyTorch's reading of the same literals (float64, cpu, 2026-11-03). Note the parentheses -- the
+# pullback answers a one-tuple of cotangents, so `format` prints `((...))` and not `(...)`; the shape
+# is part of what is pinned, not formatting noise. Every element is exact in binary floating point,
+# so this is compared exactly and not to a tolerance.
+#
+# Measured 2026-11-04 on the cut tree (`integ3/exclude`, tree `/home/zjwei/camel-work/reds`, 1 m
+# load 14-17), exit 0:
 [[tests]]
-name = "first_step.tensor_vjp_stops_at_split"
-desc = "The tensor step through the library's `vjp`: the capture no longer refuses the lift, and the reverse half is refused by `split` -- a port of the lifted graph that is not one of its parameters, which is what a captured value is. Pinned as the two readings `split` prints (`skip=forward construct=a port uri=-`, and the fault naming the port), so the entry fails the day the wall falls rather than passing silently"
-kind = "negative"
+name = "first_step.tensor_vjp_answers_the_step"
+desc = "The tensor step through the library's `vjp`: `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w = [[0.5, 0.25], [0.125, 1.0]]`, `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`. It answers `loss=10.34375` and `dL/dw=[[3.75, 13.5], [5.5, 19.5]]` -- the hand calculation and PyTorch's reading -- where until 2026-11-04 it stopped at `transforms: split does not build this function` (`the port is not a parameter of the graph, so neither half takes it`) with exit 1. The entry pins the number and the shape the `format` prints (a one-tuple of cotangents), and asserts that neither refusal sentence is printed any more, so the wall cannot come back unseen."
+kind = "behavior"
 case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["transforms: split does not build this function", "the port is not a parameter of the graph, so neither half takes it"]
-expect_stderr_contains = ["REINTERP split function=jvp_of_", "skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it"]
+expect_exit = 0
+expect_stdout_contains = ["first_step tensor vjp loss=10.34375 dL/dw=([[3.75, 13.5], [5.5, 19.5]])"]
+expect_output_not_contains = ["split does not build this function", "neither half takes it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 

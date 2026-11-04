@@ -68,19 +68,30 @@ without deleting; `feat/tools/clean` pins the tiers, the dry run and the tracked
 | `revision`, `dirty`, `dirtyCount`, `dirtyPaths` | `git rev-parse HEAD`, whether the tree had uncommitted changes, and up to 40 of those paths. `null` when git is unavailable: the stamp then says so, and the content fingerprint still guards the run. |
 | `builtAt`, `config`, `tag` | When, which configuration, and which install directory (`latest`, `debug`, or a release mirror tag). |
 | `fingerprint` | SHA-256 over the content of every path a build reads — `src/`, `include/`, `modules/`, `tools/`, `stdlib/`, `third_party/`, `cmake/`, `CMakeLists.txt`, `conanfile.txt` — with the file count and a per-file hash map (used to name the files that moved). |
-| `schema`, `fingerprint.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. |
+| `buildOptions` | The configuration those sources were compiled with: the effective value of every `cmake/options.json` entry, the `CAMEL_TARGET_ARCH` / `CAMEL_SKIP_PYTHON` overrides `cmake/Options.cmake` honours, the platform, the compiler selection, and a hash over all of it. Two builds of the same sources with different options are two different installs, and the source fingerprint alone cannot tell them apart (`.camel-opts.json` is git-ignored). `scripts/common.js: buildOptions` says what is in and, on purpose, what is out. |
+| `schema`, `fingerprint.version`, `buildOptions.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. A stamp from before the option record (schema 2) is untrustworthy: it cannot prove which options produced the install. |
 
 The build writes it, no runner does, so a local build, a host build and a release tarball all carry
 it; the PyPI rollup copies `out/<tag>/` whole and ships the file.
 
 `node scripts/build-info.js check --tag latest` prints nothing when the stamp matches the current
 tree, and exits 4 when it does not, naming both revisions (HEAD plus dirty state), both
-fingerprints, and the source files that changed. `show` prints the stamp. `camel-remote.ps1` runs
-`check` before a `-NoBuild` plan: an install is reused only while its fingerprint still matches, and
-`-AllowStale` is the explicit override. Changes under `docs/`, `test/`, `scripts/`, `agents/`,
-`editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the fingerprint (a test
-case is read at plan time); changes under the paths above do — including `stdlib/`, which
-`collect-out` copies verbatim into `out/<tag>/stdlib`.
+fingerprints, the source files that changed and every build option that moved. `show` prints the
+stamp. `camel-remote.ps1` runs `check` before a `-NoBuild` plan, passing `--config Debug` for the
+debug tag (out/debug holds the Debug build by construction, so an install collected as another
+configuration is refused there too; out/latest holds Release *and* RelWithDebInfo and gets no
+`--config`, which keeps `-Tier debug -NoBuild` — verifying out/debug without building — working):
+an install is reused only while its fingerprint *and* its option set still match, and `-AllowStale`
+is the explicit override. Changes under `docs/`, `test/`,
+`scripts/`, `agents/`, `editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the
+fingerprint (a test case is read at plan time); changes under the paths above do — including
+`stdlib/`, which `collect-out` copies verbatim into `out/<tag>/stdlib`.
+
+`camel-remote.ps1 -NoBuild` refuses **before the plan starts**, so a refusal is not a red plan and not
+a build: the helper exits **4** and nothing ran. `-AllowStale` is the one override — it prints the
+same refusal, says it is continuing anyway, and exits with the plan's own code. The helper's other
+codes are 3 (the host is short of disk) and 2 (the worktree, the push or the transfer failed);
+anything else is the build's or the plan's own exit code, returned unchanged.
 
 ## Test Harness
 

@@ -1,0 +1,55 @@
+// `rsqrt`'s gradient through the engine and through the library, in one program -- and where the
+// derivative is not finite.
+//
+// `rsqrt(x) = x ^ (-1/2)`, so `d(rsqrt(x)) = -0.5 * x ^ (-3/2) * dx`, and in terms of the operator's
+// own output `y = rsqrt(x)` that is `-0.5 * y^3 * dx`. The law needs `y`, `y` is a function of the
+// operand alone, so the law recomputes `rsqrt(x)` and the operand is the one value the cut carries
+// (the channel `exp_t` measured, and `sqrt_t` uses for the same reason).
+//
+// The law is written with the engine's grouping, not with an algebraically equal one: `rsqrtVjp`
+// (`modules/tensor/ops/elementwise_ops.cpp`) builds `cube = y * (y * y)`, then `scaled = ct * -0.5`,
+// then `scaled * cube`, so the law writes `(ct * -0.5) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))`.
+// `(ct * y) * (y * y) * -0.5` is the same real number and a different last bit for some inputs, and
+// the two legs are compared bit for bit.
+//
+// **The domain boundary is a reading.** `rsqrt` is not differentiable at `0` and is not real below
+// it, and neither leg refuses either input: `y` at `0` is `+inf`, so the cotangent is `-inf` there,
+// and `nan` below it (measured `rsqrt boundary engine=[-inf, nan] library=[-inf, nan]`). The
+// boundary line prints both legs on `[0.0, -1.0]`.
+//
+// `[4.0, 1.0, 0.25]` gives `[-0.0625, -0.5, -4.0]` -- three distinct lanes, all negative:
+//
+//   * `rsqrt_t` written as `ct * 0.5 * y^3` (the sign dropped) -> [0.0625, 0.5, 4.0];
+//   * `rsqrt_t` written as `ct * -0.5 * y` (the cube dropped)   -> [-0.25, -0.5, -1.0];
+//   * the correct `(ct * -0.5) * y^3`                          -> [-0.0625, -0.5, -4.0].
+//
+//     camel test/cases/compile/transforms/rsqrt_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, rsqrt, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[..]>
+func total(): float {
+    return sum(rsqrt(x))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[]): float {
+    return sum(rsqrt(x))
+}
+
+func main(): int sync {
+    let engine = grad(total)<[4.0, 1.0, 0.25] as float[]>()
+    `rsqrt engine={}`->format<engine>->println
+    let (_, pullback) = vjp(total_plain)([4.0, 1.0, 0.25] as float[])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `rsqrt: engine={} library={} same={}`->format<engine, library, same>->println
+    // The boundary: `rsqrt` is `+inf` at 0 and `nan` below it, and neither leg refuses.
+    let edge = grad(total)<[0.0, -1.0] as float[]>()
+    let (_, edge_pullback) = vjp(total_plain)([0.0, -1.0] as float[])
+    let edge_library = edge_pullback(1.0).0
+    `rsqrt boundary engine={} library={}`->format<edge, edge_library>->println
+    return 0
+}

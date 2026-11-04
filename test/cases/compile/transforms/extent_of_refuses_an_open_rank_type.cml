@@ -1,0 +1,27 @@
+// `float[..]` states neither the rank nor a length, so `extent_of` must refuse it -- never answer
+// `[]`. An empty list is a rank-zero shape, which `sum_to` reads as "this is one element": an
+// answer of `[]` would be a wrong number that no diagnostic names.
+//
+// Measured 2026-11-04 on `lane-extentof` (host `88zjwei`):
+//
+//   error[SemanticDiag::ExtentOfNeedsStatedShape]: `extent_of::<A>()` answers the extents the type
+//   `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[..]',
+//   and an extent it writes is not a number.
+//     --> 4:34
+//     4 |     return extent_of::<float[..]>()
+//       |                                  ^^
+//   help: Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`
+//   ...  or take the shape from a value the program has (`shape(xs)`).
+//   exit=1
+//
+// The refusal is at the call, where the type is in hand: `[4]` (a rank whose length is stated) is
+// answered by `extent_of::<float[4]>()` in `extent_of_answers_a_parameter_type.cml`.
+
+func open_rank(t: float[..]): int[] {
+    return extent_of::<float[..]>()
+}
+
+func main(): int sync {
+    println(open_rank([1.0, 2.0]))
+    return 0
+}

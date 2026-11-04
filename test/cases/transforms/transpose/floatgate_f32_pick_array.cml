@@ -1,0 +1,37 @@
+/**
+ * The **zero carrier**: a parameter the body never reads answers the zero of its own cotangent space,
+ * and here that space is an array.
+ *
+ * `pick(xs, ys) = ys[0] * ys[1]` -- `xs` is a parameter with a tangent space that the body never
+ * reads, so nothing lands on it and the answer still owns a member for it: the array of zeros `xs`
+ * would have received. At `xs = [9, 9, 9, 9]` and `ys = [3, 2, 5, 7]` with cotangent 1:
+ *
+ *     value =  3 * 2                     = 6
+ *     d/dxs =  [0, 0, 0, 0]              (the zero carrier: `xs` is not read)
+ *     d/dys =  [y1, y0, 0, 0] = [2, 3, 0, 0]
+ *
+ * The zero is the space's own: `Tangent<f32[4]>` is `f32[4]`, and the operator that writes it is the
+ * space's `zerosLikeUri` (`:tangent/zeros_arr` for an array whose elements the core holds one slot
+ * each, `tensor:zeros_like` for a tensor -- two kinds that share the array code and zero
+ * differently). A walk that writes a `float` zero into that slot, or spells one of the two operator
+ * names for both kinds, answers a value the slot does not hold.
+ *
+ * The four numbers are printed one by one rather than summed: a sum of four zeros is zero whether
+ * the zeros are `f32` zeros or four bytes of something else, so a sum could not tell the two apart.
+ */
+import { vjp } from vjp
+
+func pick(xs: f32[4], ys: f32[4]): f32 {
+    return ys[0] * ys[1]
+}
+
+func main(): int sync {
+    let xs: f32[4] = [9.0, 9.0, 9.0, 9.0]
+    let ys: f32[4] = [3.0, 2.0, 5.0, 7.0]
+    let (value, pullback) = vjp(pick)(xs, ys)
+    let (dxs, dys) = pullback(1.0)
+    'pick f32 value={}'->format<value>->println
+    'pick f32 dxs = {} {} {} {}'->format<dxs[0], dxs[1], dxs[2], dxs[3]>->println
+    'pick f32 dys = {} {} {} {}'->format<dys[0], dys[1], dys[2], dys[3]>->println
+    return 0
+}

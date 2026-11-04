@@ -54,3 +54,20 @@ export function provenanceLine({ sha, dirty, binaryBuilt, tree, tier, jobs }) {
     const width = Number.isFinite(jobs) ? jobs : 'unknown'
     return `tip ${tip} | binary built ${built} | tree ${place} | tier ${layer} | jobs ${width}`
 }
+
+/**
+ * The mark a run carries when it was allowed past the `-NoBuild` guard.
+ *
+ * `-AllowStale` hands the plan an install the guard refused, so the numbers below it belong to
+ * another artifact -- and without a mark they read exactly like a run of this tree. `camel-remote.ps1`
+ * takes the `[STALE-ALLOWED ...]` line `scripts/build-info.js check` prints (both hashes: what
+ * answered, and what this tree would have built) and exports it; the runner appends it to the plan
+ * line, the provenance line and the `[SUMMARY]`. Empty on every other run, so a correct run's shape
+ * does not change.
+ */
+export const STALE_ALLOWED_ENV = 'CAMEL_GATE_STALE_ALLOWED'
+
+export function staleAllowedMark(env = process.env) {
+    const raw = (env[STALE_ALLOWED_ENV] || '').trim()
+    return raw === '' ? '' : ` ${raw}`
+}

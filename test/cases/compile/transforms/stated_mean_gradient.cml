@@ -1,0 +1,43 @@
+// The gradient of a whole-tensor mean through the engine and through the library.
+//
+// `jvp_mean` states the extents (`stdlib/rulesets/jvp.cml`), and `mean_stated_t` gives a
+// `numel(t)`-th of the cotangent to every element of them (`stdlib/rulesets/transpose.cml`). The
+// engine's rule is `meanVjp` (`modules/tensor/ops/reduction_ops.cpp`), which divides the cotangent
+// by the element count and broadcasts it; the library's spreads first and divides second, which is
+// the same division of the same values by the same count, element by element.
+//
+// The differentiated value is `mean(x) * 2.0` so that the cotangent reaching the mean is `2.0` and
+// not the `1.0` every sum ends in -- a reading that only ever sees `1.0` cannot tell a division
+// from a multiplication:
+//
+//     x     = [[1.0, 2.0, 3.0],
+//              [4.0, 5.0, 6.0]]                  (six elements)
+//     mean  = 21.0 / 6 = 3.5
+//     value = mean * 2.0 = 7.0
+//     dL/dx = 2.0 / 6 = 0.3333333333333333 at every one of the six positions
+//
+//     camel test/cases/compile/transforms/stated_mean_gradient.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, mean, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[..]>
+func total(): float {
+    return mean(w) * 2.0
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[..]): float {
+    return mean(x) * 2.0
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let engine = grad(total)<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]>()
+    let (value, pullback) = vjp(total_plain)(x)
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `mean: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

@@ -1,0 +1,47 @@
+// The callee is the **value a call answered**, applied in place: `f(x) = mk(x)(2.0)` with
+// `mk(x) = (y) => x * y`.
+//
+// On paper `f(x) = 2x`, so `f(3) = 6` and the derivative at 3 is `2`.
+//
+// The GIR of `f` puts the callee where the builder puts every callee -- the call's `with` input -- and
+// that input is a FUNC node, `mk(x)`, whose value is the closure `mk` assembled:
+//
+//     N07 [label="mk", type="FUNC", value_type="(y: float) => float"]
+//     N09 [label="CALL", type="CALL", value_type="float"]
+//     N07 -> N09 [label="0|0", type="WITH"]      // the callee value: the result of `mk(x)`
+//     N08 -> N09 [label="0|0", type="NORM"]      // the 2.0 this call was given
+//
+// A FUNC node is a call written by name, so `GCGraph::calleeIdOf` answers for it -- with the graph of
+// the call's **callee**, not with the graph of the call's value. The walk therefore transposes `mk`,
+// whose answer is a function and which has no transposed signature:
+//
+//     TRANSPOSE function=mk skip=signature
+//     TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk
+//
+// The program is refused (exit 1), so nothing wrong is answered -- **right verdict, wrong name**: the
+// callee of this call is a closure that `mk`'s body assembled and returned, and the value it holds names
+// no graph at the call site. The reading this case owes is `callee=none` with the cause the walk has for
+// a value it cannot name; the plan entry marks the case until the reading is that one, and the mark says
+// in so many words that the classification is already right and only the sentence is not.
+//
+// This is the *other* half of the reading that was fixed on 2026-11-04. There the callee was read out of
+// an ordinary input -- `h(g(x), 1.0)` was read as a call of `g` -- and that question was deleted
+// (`transpose_call_first_argument_is_a_call.cml`). Here the misreading sits in the `with` list, one input
+// list over, and it is untouched: `calleeIdOf` still answers for the FUNC node that holds a call's value.
+import rulesets.transpose
+import { transpose } from transforms
+
+func mk(x: float): (y: float) => float {
+    return (y: float) => x * y
+}
+
+func f(x: float): float {
+    return mk(x)(2.0)
+}
+
+func main(): int sync {
+    println(f(3.0))
+    // The paper answer: (2.0,).
+    println(transpose(f)(1.0))
+    return 0
+}

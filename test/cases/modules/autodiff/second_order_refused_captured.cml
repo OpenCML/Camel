@@ -1,0 +1,35 @@
+// The second derivative through a *captured* function value, and why it is refused rather than
+// answered: this pins the refusal, not a wrong number.
+//
+//   f(x) = x*x*x,  f'(x) = 3x^2,  f''(2) = 12
+//
+// `dcube` is a named function whose body applies `grad` to a static function, so what it computes
+// is known where it stands. The program then binds it to a value and calls it from a lambda: inside
+// that lambda's graph the callee is a captured value -- a port -- and a derivative is planned once
+// per graph, with the captures as trailing parameters
+// (`pullback.cpp#Engine::planForClosure`). A function-typed parameter has no body of its own, so
+// the call cannot be differentiated there: no pass can inline a callee it does not have.
+//
+// The same program with the inner transform written in the lambda's body, rather than reached as a
+// value, answers 12 (`second_order_nest.cml`), and so does the named form (`second_order.cml`).
+// That is the writing this refusal asks for: name the function, or write the transform inside the
+// body being differentiated.
+
+import { grad } from autodiff
+
+with <x: float>
+func cube(): float {
+    return x * x * x
+}
+
+with <x: float>
+func dcube(): float {
+    return grad(cube)<x>()
+}
+
+func main(): int sync {
+    let slope = dcube
+    let twice = <x: float>() => slope<x>()
+    println(grad(twice)<2.0>())
+    return 0
+}

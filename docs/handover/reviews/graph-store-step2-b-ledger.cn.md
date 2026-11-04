@@ -1383,3 +1383,45 @@ diff 里能看见这一行）。`check.mjs` 与 `runtime.graph_draft_ledger.plan
 
 **这一处要还的账**：`GraphDraft` 删掉那天，这 2 处和其他 304 处一起消失；它没有把终点推远，
 只是让"会出错"这件事在 Camel 与 C++ 两侧只有一个答案。
+
+## 62. `files` 的名单涨 1 个（38 → 39）：`modules/transforms/rule_expand.cpp`，**它早就直连，缺的只是类型名**
+
+**读数**（`node test/cases/runtime/graph_draft_ledger/check.mjs`，`integ3/exclude` 的 `cac34ef2b`）：
+
+```
+[LEDGER] files 39 member(s), constructions 1 member(s), decode 4 member(s), compared with the list member by member
+[LEDGER] RED entered files: modules/transforms/rule_expand.cpp
+         (first at modules/transforms/rule_expand.cpp:404: camel::runtime::GraphDraft &draft, camel::core::type::Type *extentsType,)
+[LEDGER] RED the list is test\cases\runtime\graph_draft_ledger\baseline.json: 1 entered, 0 left
+```
+
+**是谁带进来的**：`c6bbd67f5`（`lane-shapes`，由 `c3d5c8192` 合入）。它加了
+`statedExtentsValue(GraphDraft &draft, Type *extentsType, extents)` —— 第 404 行是那个形参，
+第 424 行 `draft.materializeStaticValue(...)` 是它拿草稿办的事；调用点在展开右式的那一趟里
+（`copied[ref] = statedExtentsValue(draft, node->dataType(), stated->second)`）。
+
+**判性质：不是新直连，是列表少记了一个成员。** 同一份文件在 `c6bbd67f5^` 上已经持着草稿：
+
+```bash
+git show c6bbd67f5^:modules/transforms/rule_expand.cpp | grep -n 'transaction.edit()\|materializeStaticValue'
+#   643: auto &draft = transaction.edit();
+#   756: copied[ref] = draft.materializeStaticValue(
+```
+
+`expandRuleRightSide` 收的是 `GraphTransaction &`，用 `auto &draft = transaction.edit()` 取草稿，
+并调它的 `materializeStaticValue` 造常量节点。**"这个文件是不是还连着草稿"这个问题，在
+`c6bbd67f5` 之前的答案就是 yes**；`files` 按**整词 `GraphDraft`** 数（§0 第 2 条口径），而 `auto &`
+不写类型名，所以这一格一直是空的。改的一行是**拼写**，不是**住户**。
+
+**为什么不是"改代码把它挪出去"**：b2.1b 那次（`edges.cpp` 写三个 `GraphDraft *`、改 `auto *` 才归位）
+改得动，是因为那里的类型名**不是主语**——测试要的是"会话递出来的那一个"。这里相反：
+`statedExtentsValue` 是匿名命名空间里的自由函数，形参类型必须写出来，而真正连着草稿的是
+`draft.materializeStaticValue` 那句调用，**它删不掉**（删了就没有"在草稿里写一个常量节点"这条路）。
+把函数改成模板、或把这段内联回已有 `auto &draft` 的作用域，只会让名字离开 `git grep -w` 的视野：
+**数掉下去、东西没动**，正是 §0 那句"规则不是摆设"要防的反面。
+
+**因此按规矩登记并说明为什么**：`--record` 拒绝写涨了的成员，`--force` 才写，diff 里看得见这一行
+（`baseline.json` 的 `files` 从 38 条变成 39 条，多的就是这一条）；`check.mjs` 与
+`runtime.graph_draft_ledger.plan.toml` 一个字没动，判据仍是"逐个成员比对"，没有容差。
+**这笔上涨记在 `rule_expand.cpp` 头上**：它是草稿的又一个住户，`b6` 那天它和名单上另外 38 个
+一起消失，不是又一个必须留下的边界。

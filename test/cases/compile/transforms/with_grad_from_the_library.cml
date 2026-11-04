@@ -1,0 +1,105 @@
+/**
+ * The library's `with_grad` against the engine's, on the four groups of
+ * `test/cases/modules/autodiff/grad_first_with_parameter.cml`. This is the entry the criterion
+ * "库层 `with_grad` 在 `grad_first_with_parameter` 上与引擎同答" (author's ruling of 2026-11-03
+ * 17:55) is measured by, and it is written so that the criterion has an object either way: the
+ * engine's answer and the library's answer stand on one line per group, so the day the two agree
+ * the pin below changes and nothing else has to be re-derived.
+ *
+ * Today they do not agree, and the library does not answer a number at all.
+ * `stdlib/vjp.cml#with_grad` refuses, because the composition every `with_grad` has -- `vjp` of a
+ * lambda that moves the weight to an ordinary parameter -- cannot see the tangent of a value the
+ * body hands back to a call's `with` list: forward mode answers that tangent as the zero of its
+ * type. Measured on this tree, on the smallest shape there is (`x_times_y` is `x * y`, so `d/dx` at
+ * `y = 2` is 2.0):
+ *
+ *     jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)   value=6.0 tangent=0.0
+ *     jvp((y: float) => x_times_y<3.0>(y))(2.0, 1.0)     value=6.0 tangent=3.0
+ *
+ * A `with_grad` built on the composition answers 0.0 where it owes 3.0 on the first group of this
+ * case, and 0.0 is not distinguishable from a gradient that happens to be zero. So the library
+ * refuses by name, and this case pins both halves: the engine's four answers, which are the numbers
+ * the composition owes, and four refusals with the sentence that says why.
+ *
+ * The four groups are the case's own, group for group: `weighted` is `x*y + x` with `x` the first
+ * `with` parameter, `point_loss` has a struct there, `dot` a tensor, and `scaled` has two `with`
+ * parameters where the second stays constant. `grad_first_with_parameter.cml` explains why each one
+ * is here and which wrong law each of its numbers separates.
+ *
+ * The refusals are read through `attempt`, the way `consistency/attempt/refuse_grad.cml` reads a
+ * transform's refusal: a fault inside an `attempt`ed call becomes an error value, and its kind and
+ * its message are what the assertion holds. No `library=` field carries a number, and that is what
+ * the entry is for: a tuple on any of the four lines would be a gradient the library could not have
+ * computed.
+ */
+import { grad as engine_grad, with_grad as engine_with_grad } from autodiff
+import { with_grad } from vjp
+import { reshape, sum } from tensor
+
+// d/dx (x*y + x) = y + 1.
+with <x: float>
+func weighted(y: float): float {
+    return x * y + x
+}
+
+type Point = { a: float, b: float }
+
+// The gradient is a Point: (y, 1).
+with <p: Point>
+func point_loss(y: float): float {
+    return p.a * y + p.b
+}
+
+// The gradient is a tensor of the weight's shape: x.
+with <w: f64[..]>
+func dot(x: f64[..]): float {
+    return float(sum(w * x))
+}
+
+// `k` is the first `with` parameter and is differentiated; `x` is a second one and stays constant.
+with <k: float, x: float>
+func scaled(): float {
+    return k * x * 2.0
+}
+
+func main(): int sync {
+    let p = { a: 2.0, b: 3.0 }
+    let w = reshape<[3]>([1.0, 2.0, 3.0])
+    let x = reshape<[3]>([4.0, 5.0, 6.0])
+
+    let e1 = attempt(() => with_grad(weighted)<3.0>(2.0))()
+    let e2 = attempt(() => with_grad(point_loss)<p>(4.0))()
+    let e3 = attempt(() => with_grad(dot)<w>(x))()
+    let e4 = attempt(() => with_grad(scaled)<2.0, 3.0>())()
+
+    let k1 = match e1 {
+        case error e => e.kind
+        case _ => 'a value, not a refusal'
+    }
+    let k2 = match e2 {
+        case error e => e.kind
+        case _ => 'a value, not a refusal'
+    }
+    let k3 = match e3 {
+        case error e => e.kind
+        case _ => 'a value, not a refusal'
+    }
+    let k4 = match e4 {
+        case error e => e.kind
+        case _ => 'a value, not a refusal'
+    }
+    let why = match e1 {
+        case error e => e.message
+        case _ => 'a value, not a refusal'
+    }
+    // `sx` is the same function with the *second* `with` parameter moved to the front of a lambda,
+    // so the pair `sk`/`sx` separates "first" from "second" by two numbers (6.0 against 4.0).
+    let sx = engine_grad(<xx: float> (k: float): float => scaled<k, xx>())<3.0>(2.0)
+
+    'gx/vg  engine={} library={}'->format<engine_with_grad(weighted)<3.0>(2.0), k1>->println
+    'pg/pvg engine={} library={}'->format<engine_with_grad(point_loss)<p>(4.0), k2>->println
+    'wg/wvg engine={} library={}'->format<engine_with_grad(dot)<w>(x), k3>->println
+    'sk/sx  engine={} {} library={}'->format<engine_grad(scaled)<2.0, 3.0>(), sx, k4>->println
+    'why={}'->format<why>->println
+    return 0
+}

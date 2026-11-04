@@ -1,0 +1,38 @@
+// `lin` is linear in the direction it is handed, and -- the part this case was written for -- it
+// reads the direction *it* is handed. `g(x) = f(x) * x` with `f(x) = 2.0 * x` is `2x²`, so
+// `g'(x) = 4x` and the linear half is `dx -> 4x·dx`: 12, 6 and 24 at x = 3 for dx = 1, 0.5 and 2.
+//
+// Measured 2026-11-04, before the fix this case pins: all three answered **36.0**. The cut carried
+// the *tangent* port of g's parameter as a residual tagged "parameter 0's value", because the value
+// half also receives that port as an ordinary argument of the call to the lifted callee -- so every
+// read of the tangent port in the backward half resolved to the closure slot holding x, and `lin`
+// came out `mul_tangent(y, x, lin_f(x), x)`: a constant function of its argument. `grad(g)` then
+// answered 0.0 without a word (modules/transforms/split.cpp#residualsOf).
+//
+// Three points are what a constant cannot pass, and the equals below are the linearity statement
+// the two calls make: 12 = 4·3·1, 6 = 4·3·0.5, 24 = 4·3·2, and the tangent `jvp` computes itself
+// agrees with the first (12). `residuals=3` is the graph's count under the closure ABI: x's value,
+// the callee's `lin`, and the value f(x) the backward half's rule reads.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func f(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    return f(x) * x
+}
+
+func main(): int sync {
+    let lifted = jvp(g)
+    let (value, tangent) = lifted(3.0, 1.0)
+    println("value=", value, " tangent=", tangent)
+    let fwd = split(jvp(g))
+    let (_y, lin) = fwd(3.0)
+    println("dx1=", lin(1.0))
+    println("dx05=", lin(0.5))
+    println("dx2=", lin(2.0))
+    println("twice_dx1=", lin(2.0) == lin(1.0) + lin(1.0))
+    return 0
+}

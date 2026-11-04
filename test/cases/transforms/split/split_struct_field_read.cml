@@ -1,0 +1,32 @@
+// A struct parameter whose member the body **names**: `g(qq: Point) = qq.a * 4.0 + qq.b` at
+// qq = (2.0, 3.0). `jvp` alone answers 11.0 and 4.0 -- the lift was never the question -- and the cut
+// is where the graph used to be lost: a struct's member is read by name (`GCAccsKind::StructKey`) and
+// the halves copied a member read by place, so the copy indexed a `Struct` as a `Tuple` at run time
+// and the VM stopped at `idx < t->size()` ("Tuple index out of bounds", nodevm.cpp).
+//
+// The copy now says which of the two forms the source said -- `addAccsNode(type, key)` for a name and
+// `addAccsNode(type, value)` for a place -- so the two halves read the same member of the same struct
+// by the same name, and the cut answers what the lift answered: 11.0 and, in the direction
+// (1, 0), 4.0. A struct is a port like any other on the way through the cut: `Tangent<Point>` is the
+// struct of the members' tangents, so the two halves take one `Point` each. `split_struct_port` is the
+// same program without the field read; this one is the same program with it, and both are cut.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+type Point = { a: float, b: float }
+
+func g(qq: Point): float {
+    return qq.a * 4.0 + qq.b
+}
+
+func main(): int sync {
+    let p = { a: 2.0, b: 3.0 }
+    let lifted = jvp(g)
+    let (v, t) = lifted(p, { a: 1.0, b: 0.0 })
+    println("lift value=", v, " tangent=", t)
+    let fwd = split(lifted)
+    let (value, lin) = fwd(p)
+    println("forward y=", value)
+    println("lin dp=", lin({ a: 1.0, b: 0.0 }))
+    return 0
+}

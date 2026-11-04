@@ -1,0 +1,33 @@
+// The tangent of a loop's iterated element, named.
+//
+// `for e in xs` hands the body one element per round. When `xs` is a sequence nobody differentiates
+// (`[1.0, 10.0]`) the element has no tangent worth carrying and the lift writes the zero of its
+// space -- `jvp_loop_array_state` pins that shape and it stays. When `xs` *is* a value of the
+// differentiated parameter the element's tangent is the array's element, and this transform has no
+// place to put it: the loop iterates the values it was given, and pairing the iterable would hand
+// the loop a pair where it asks for an array.
+//
+// What that used to answer, measured 2026-11-04 on `std::nvm`, tree at `origin/develop`:
+//
+//   f(xs) = loop s = 0.0 for e in xs do s + e
+//   jvp(f)([1.0, 2.0], [1.0, 1.0])   ->   value= 3.0   tangent= 0.0
+//
+// The value is right and the tangent is not: `f` is the sum, so the tangent at `dxs = [1, 1]` is
+// `1 + 1 = 2.0`. The zero was the zero of the tangent space, answered for a derivative that is not
+// zero, with no diagnostic. The backward half of the same program already refuses this shape
+// (`transpose(f)` says "the shape this program used has no transpose (the transform named it
+// `range`)"); the forward half now agrees with it and names what it could not reinterpret, so this
+// program exits non-zero and prints no value it could not differentiate.
+import rulesets.jvp
+import { jvp } from transforms
+
+func f(xs: float[]): float {
+    return loop s = 0.0 for e in xs do s + e
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)([1.0, 2.0], [1.0, 1.0])
+    println("value=", value)
+    println("tangent=", tangent)
+    return 0
+}

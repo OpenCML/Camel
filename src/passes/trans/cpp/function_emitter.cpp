@@ -1843,6 +1843,20 @@ void FunctionEmitter::lowerCast(Frame &frame, gc_node_ref_t ref, Block &out) {
         frame.values[ref] = value;
         return;
     } else if (
+        targetArray != nullptr && sourceArray == nullptr && targetArray->anyRank() &&
+        targetArray->extents().empty()) {
+        // A value of the element type entering a slot of `T[..]` becomes the rank-zero array that
+        // holds it. It is the one conversion where a value's type goes from `T` to `T[..]`, and the
+        // compiler inserts it where a call hands a scalar to a port of an open rank
+        // (`Builder::coerceTo` -> `ArrayType::castSlotFrom`, which calls `Array::createRankZero`);
+        // only an open rank with no prefix takes such a value (`ArrayType::assignableFrom`), so no
+        // other target reaches this branch. Nothing about the value changes (design principles 5.4:
+        // a rank-zero array *is* the element -- the same printing, the same comparison), so the
+        // generated program writes the one constructor that makes such a value
+        // (`rt::Array<T>::element`, camel/standalone/array.h) and `shape` of it is the empty run,
+        // as the interpreter's `shape` of a rank-zero value is.
+        text = std::format("{}::element({})", to, value.text);
+    } else if (
         target != nullptr && target->isNullable() &&
         (isVoid(fromType) || value.text == "rt::Unit{}")) {
         text = std::format("{}{{}}", to); // null

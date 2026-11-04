@@ -19,7 +19,7 @@ Source: `docs/stdlib-reference.md`, generated from the declarations in `stdlib/*
 `node scripts/stdlib-reference.mjs --write`.
 
 <!-- camel-for-ai region: stdlib-signatures (generated from docs/stdlib-reference.md; node scripts/camel-for-ai.mjs --write) -->
-**`Built-in functions`** — no import — 65 name(s)
+**`Built-in functions`** — no import — 66 name(s)
 
 ```text
 std::mem::blocks: () => { allocs: int, frees: int, live: int, bytes: int }
@@ -115,6 +115,7 @@ join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: A) => int when is_array::<A>()
 len: (x: Bytes) => int
+extent_of: () => int[] when is_array::<A>()
 range: (start: int, end: int, step: int) => int[]
 last: (xs: T[]) => T
 slice: <axis: int, start: int, end: int, step: int = 1> (x: T[]) => T[]
@@ -209,14 +210,15 @@ vmap: (f: F) => Vmap<F> when is_function::<F>()
 remat: (f: F) => F when is_function::<F>()
 ```
 
-**`vjp`** — import { ... } from vjp — 2 name(s)
+**`vjp`** — import { ... } from vjp — 3 name(s)
 
 ```text
 vjp: (f: F) => Vjp<F> when is_function::<F>()
 grad: (f: (x: float) => float) => (x: float) => float
+with_grad: (f: F) => <..WithOf<F>> (..ParamsOf<F>) => never when is_function::<F>()
 ```
 
-**`tensor`** — import { ... } from tensor — 75 name(s)
+**`tensor`** — import { ... } from tensor — 79 name(s)
 
 ```text
 zeros: (shape: int[]) => T[..] when is_numeric::<T>()
@@ -251,16 +253,23 @@ dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
 pick_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
 sum: (t: T[..]) => T
 sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
+sum_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 mean: (t: T[..]) => T
 mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
+mean_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 max: (t: T[..]) => T
 min: (t: T[..]) => T
 argmax: (t: T[..]) => int
 argmin: (t: T[..]) => int
 max: (t: T[..], axis: int, keepdims?: bool) => T[..]
+max_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 min: (t: T[..], axis: int, keepdims?: bool) => T[..]
+min_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
 argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
+argmax_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
 argmin: (t: float[..], axis: int, keepdims?: bool) => int64[..]
+argmin_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
+mean_axis_stated: (t: T[..], at: int[]) => T[..]
 softmax: (t: f32[..], axis?: int) => f32[..]
 softmax: (t: float[..], axis?: int) => float[..]
 log_softmax: (t: f32[..], axis?: int) => f32[..]
@@ -281,7 +290,10 @@ to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
 save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
 take_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
-mean_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+sum_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
+mean_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
+max_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
+min_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
 num_threads: () => int
 set_num_threads: (n: int) => void
 set_num_threads: (n: i32) => void
@@ -289,13 +301,7 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
-sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
 sum_to: (t: T[..], like: S) => S when is_float::<T>()
-mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
-argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
 ```
 
 **`types`** — import { ... } from types — 16 name(s)

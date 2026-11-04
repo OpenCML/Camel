@@ -215,7 +215,11 @@ void validateRuntimeGraphCalls(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 /// The edge invariants (graph_edges.cpp): no cycle of inputs, and the types agree along the
 /// edges. Run with validateRuntimeGraphCalls, because the types of a call's callee are read.
-/// Throws std::runtime_error naming the graph, the nodes and what disagrees.
+/// Throws std::runtime_error naming the graph, the nodes and what disagrees -- except for the one
+/// violation that is the program's own error rather than a graph written by mistake: a graph whose
+/// exit hands on a value of another type than its signature declares throws
+/// `camel::runtime::GraphExitTypeMismatch` instead (include/camel/runtime/graph_exit_type.h), which
+/// the pass boundary reports as `RuntimeDiag::ExitTypeMismatch` rather than `PassInternalError`.
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 

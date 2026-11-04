@@ -101,6 +101,15 @@ enum class TransposeRefusalCause {
     CallValueComputedByTheBody,
     UnreadParameter,
     NeedsAValueOutsideTheClosure,
+    /// Two cotangents land on one value and that value's cotangent **space registers no addition**
+    /// (`TangentSpace::addUri` is empty, or the type has no space in `DerivativeRegistry` at all), so
+    /// the sum the walk has to write is not a thing the type has. It is not `UnreadParameter` -- the
+    /// parameter *is* read, twice -- and it is not a width: the walk asked the space, exactly as it
+    /// does for an `f32`, and the space answered that summing is not one of its operations. Answering
+    /// `:op/add_d` in that place reads the value as a `float`, which is what this cause replaced.
+    /// No case in the tree reaches it (every space the language registers for a differentiable value
+    /// declares an addition); it exists so the state has a name instead of a `float` sum.
+    NoCotangentArithmetic,
 };
 
 /// The word the reading log spells `cause` as, or `nullptr` for `None`. The log's spelling and the

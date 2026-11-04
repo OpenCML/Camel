@@ -1,0 +1,42 @@
+// `transpose`'s gradient through the engine and through the library, in one program.
+//
+// The last two axes swapped is its own inverse, so both halves are the operator itself:
+// `d(transpose(x)) = transpose(dx)` and `transpose(ct)` on the way back. There is no shape to state
+// and no extent to read -- the law moves axes and nothing else -- which is why this is the one
+// member of the tranche whose two rules are one line each.
+//
+// The reading is a **weighted** sum and not a plain one, because `sum(transpose(x))` answers the
+// same number as `sum(x)` and would pass under a law that did nothing at all: the weight
+// `[[1, 10], [100, 1000]]` carries four different powers of ten, so the cotangent of `x` is
+// `transpose(w) = [[1, 100], [10, 1000]]` and every one of the four lanes separates a reflect from
+// an identity.
+//
+//     camel test/cases/compile/transforms/transpose_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, sum, transpose } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+/// The weight is written into the body rather than called, because a call the lift cannot transform
+/// stops it before the operator under measurement is reached -- measured: with `weight()` as a
+/// function, the engine leg printed its answer and the library leg stopped at `jvp has no forward
+/// transform for this function`.
+with <x: float[2, 2]>
+func total(): float {
+    return sum(transpose(x) * ([[1.0, 10.0], [100.0, 1000.0]] as float[2, 2]))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[2, 2]): float {
+    return sum(transpose(x) * ([[1.0, 10.0], [100.0, 1000.0]] as float[2, 2]))
+}
+
+func main(): int sync {
+    let engine = grad(total)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>()
+    `transpose engine={}`->format<engine>->println
+    let (_, pullback) = vjp(total_plain)([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `transpose: engine={} library={} same={}`->format<engine, library, same>->println
+    return 0
+}

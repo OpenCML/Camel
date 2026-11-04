@@ -1,0 +1,34 @@
+// An array parameter the body never reads does NOT reach `skip=unread-parameter`: the walk answers it
+// from the type, one gate before that skip. This case pinned the *refusal* that used to stand there
+// (`autodiff: a zero tangent array needs an array with a tangent`, exit 1) and it now pins the reading
+// that replaced it, because the tree answers: `([], 2.0)`, exit 0.
+//
+// Read the two readings in order, because the second is not a bug fix of the first but a rule adopted
+// from somewhere else:
+//
+//   1. until 2026-11-04 the walk named `:tangent/zeros_arr` in its own source and handed it a node of
+//      the *source* graph; for an array parameter nothing is passed for, that ref landed on the
+//      cotangent port, whose type is the result's, so the kernel threw the sentence above.
+//   2. `transpose` now asks the parameter's tangent space for the zero and, when the member holds no
+//      value for that parameter, writes the zero the **type** states -- the same rule, in the same
+//      words, as `jvp`'s `zeroConstantFor` (`modules/transforms/jvp.cpp`). A type that leaves a
+//      dimension open states no size for it, and the zero it states has 0 elements there: `[]`. Every
+//      element of it is zero because it has none.
+//
+// So the answer is `[]` for an unread `float[]` and `(2.0, 0.0)` for an unread `float` (the neighbour
+// `transpose_unread_parameter_answers_zero`), and the difference between the two is the type, not the
+// reading. Whether an empty array is the right zero for a length nobody stated is item 2 of
+// `docs/handover/questions/2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`;
+// this case pins what the tree does, which is what a case is for, and the page says what is undecided.
+import { transpose } from transforms
+import rulesets.transpose
+
+func g(x: float[], n: float): float {
+    return n * 2.0
+}
+
+func main(): int sync {
+    let back = transpose(g)
+    println(back(1.0))
+    return 0
+}

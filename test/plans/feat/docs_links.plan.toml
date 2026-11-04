@@ -159,7 +159,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "docs.links.citations_skip_local_caches"
-desc = "A virtual environment, a tool cache and a dependency tree beside the checkout are not scanned and the checkout still is: a tree with one page, one source file and one directory per name that must be skipped -- each cache file citing a file that does not exist -- is verified whole, so the case is red when a name leaves the skip set (a reported citation) and also when the walk stops reading real files (a count that is not the three the miniature checkout holds). It is the reading that failed before: 45,407 files and 1.87 GB of cache plus two backtracing vendored headers turned a four-second walk into a run that had not finished after three quarters of an hour."
+desc = "A virtual environment, a tool cache and a dependency tree beside the checkout are not scanned and the checkout still is: a tree with one page, one source file and one directory per name that must be skipped -- each cache file citing a file that does not exist -- is verified whole. The three readings it pins: green it prints `1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)` and exits 0; with the set emptied it reports 30 unverified citations and exits 1; with `.venv` alone dropped it reports 2 and names `.venv/lib/ghost.ts`. So the case is red when a name leaves the skip set, and also when the walk stops reading real files (a count that is not the three the miniature checkout holds). It is the reading that failed before: 45,407 files and 1.87 GB of cache plus two backtracing vendored headers turned a four-second walk into a run that had not finished after three quarters of an hour."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/check-doc-links.mjs"
@@ -263,5 +263,54 @@ case = "../../../scripts/conflict-markers.mjs"
 args = ["${case}", "--self-test"]
 expect_exit = 0
 expect_stdout_contains = ["catches 4 line(s)", "the old one-liner catches 1", "misses three of the four forms"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+# A law's cotangent port and the body written against it. Nothing compared the two sentences until
+# this case: on 2026-11-04 `lane-rank0` measured 8 of 8 runs dying in `numelKernel`, because a law
+# handed `numel` a value the port had promised as something else, and neither the index nor the
+# transform had an opinion about the pair. `scripts/law-cotangent-ports.mjs` reads the laws of
+# `stdlib/rulesets` as text -- no build, no compiler -- and states, for each port, which requirement
+# the body's uses put on it and where that requirement is written down (`stdlib/tensor.cml#numel`
+# for an array, the module's own `spread_over` for an element). The three readings below are the
+# three the change was accepted on: the tree's own laws, and the two directions of one disagreement.
+#
+# The axis the crash itself was on -- the type the transform hands a law at build time -- is not
+# reachable from a source-only check and is recorded, with its measurement, in
+# `docs/handover/questions/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`.
+
+[[tests]]
+name = "docs.every_laws_port_agrees_with_its_body"
+desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length, and -- the one pair that is not a disagreement -- an element port handed to a parameter declared as that same element's open rank with no prefix, which design principles 5.4 makes one value and the language boxes at the argument position. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no law's port disagrees with its body or its left side", "law(s) in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.a_port_and_its_body_disagreeing_are_caught_both_ways"
+desc = "The reverse reading, so the rule cannot be a blanket: on probe modules this script writes under the system temp directory, an element port whose body hands it to a parameter of three elements is reported with the declaration that makes it a requirement (`element_port_fixed_extent.cml#three_lanes`, `ct: T[3]` -- a fixed extent reads more than one element, and the rank-zero box is one wide), an array port handed to `spread_over` is reported as the other direction, the rank-zero equivalence (`T` handed to `ct: T[..]`, design principles 5.4) and the two laws of the library written the same way are not reported at all, and the one shape this check cannot open -- a helper whose body reads a length and assumes more than one element -- is printed as measured rather than caught."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array", "cotangent port is 'T[..]' but the body hands it to 'spread_over', which takes an element", "a port 'T' handed to a parameter 'T[3]' is reported", "the rank-zero pair 'T' -> 'T[..]' is not reported", "the helper that reads a length and assumes more than one element is NOT reported -- the assumption is inside the helper", "both disagreements are caught, the rank-zero equivalence and the clean pair are not, so the reading is a rule and not a blanket"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.an_element_port_may_enter_the_same_elements_open_rank"
+desc = "The allowance read on the library itself: `stdlib/rulesets/transpose.cml#mean_axis_stated_t` states its cotangent as `T` and hands it to `mean_axis_cotangent(ct: T[..])`, which `--explain` reads as the rank-zero equivalence of design principles 5.4 rather than as a disagreement -- one value read either way, the box made where it enters the array position (`ArrayType::castSlotFrom`, the exporter's `rt::Array<T>::element`). The row is pinned so the day the allowance widens or the law's port changes spelling, the table says so; the ruling is `docs/handover/questions/2026-11-04-narrow-the-declaration-or-teach-the-consumer.cn.md`."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}", "--explain"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_stated_t", "stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[..]`", "the rank-zero array of 5.4, one value read either way"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000

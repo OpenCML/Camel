@@ -1,0 +1,35 @@
+// The gradient of a broadcasting product, through the library's own rules.
+//
+// Same program as `broadcast_product_gradient_through_the_engine.cml`, and the same number is the
+// point: `mul_tensor_t` (`stdlib/rulesets/transpose.cml`) has to answer `w`'s cotangent at `w`'s own
+// shape, and `w`'s shape is `float[2, 2, 3]` while the product's is the same -- so the adjoint here
+// is the broadcast read backwards, `sum_to(ct * h, w)`.
+//
+// Where the law's second operand comes from is the whole subject: not `w` (a transposition is handed
+// the cotangent and never the value it differentiates), but the extents `w`'s type states, handed to
+// the law as an operand of its own -- `shape(w)` answered by the rule layer out of the law's own port
+// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`), and read by `sum_to_stated`
+// (`stdlib/tensor.cml#sum_to`'s twin for a target shape that arrives as a list rather than as a value).
+//
+//     total = sum(w * h),  h = [1.0, 2.0, 3.0],  w = 1.0 everywhere
+//     value  = 24
+//     dL/dw  = [[[1, 2, 3], [1, 2, 3]], [[1, 2, 3], [1, 2, 3]]]
+//
+//     camel test/cases/compile/transforms/broadcast_product_gradient_through_the_library.cml
+import rulesets.jvp
+import rulesets.transpose
+import { numel, sum } from tensor
+import { vjp } from vjp
+
+func total(w: float[2, 2, 3]): float {
+    return sum(w * ([1.0, 2.0, 3.0] as float[3]))
+}
+
+func main(): int sync {
+    let start = [[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]], [[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]] as float[2, 2, 3]
+    let (value, pullback) = vjp(total)(start)
+    let d = pullback(1.0).0
+    `broadcast library value={:.1f} numel={} d000={:.1f} d001={:.1f} d002={:.1f} d11_2={:.1f}`
+        ->format<value, numel(d), d[0][0][0], d[0][0][1], d[0][0][2], d[1][1][2]>->println
+    return 0
+}

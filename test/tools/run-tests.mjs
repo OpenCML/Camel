@@ -21,7 +21,7 @@ import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.m
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
-import { formatIsoTime, provenanceLine } from './provenance.mjs'
+import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -72,7 +72,8 @@ const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
-    'known_fail', 'known_fail_note', 'known_fail_msg', 'failure_note',
+    'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
+    'failure_note',
     'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
@@ -159,6 +160,87 @@ function checkFieldType(planPath, entry, field, where, type) {
     throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
 }
 
+// The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
+// mark, who is responsible for making the case green, and why it cannot pass today. The mark alone
+// says "we accept this red"; it says nothing about who ends it or where the case is stuck, and until
+// this check existed the other two lived in the prose of a note that a review had to remember to
+// read. A ruling kept by memory is kept until the next writer, so the owner and the reason are
+// fields, and a plan that leaves either one out fails when the plan is loaded -- with the plan, the
+// case and the missing one named. There is deliberately no default for either: a default turns the
+// gate into decoration.
+//
+// A field that only the gate reads is not read at all in practice, so `known_fail_owner` is also
+// printed on the `[XFAIL]` line of every run (`printResult`). That is the difference between a
+// promise in a file and a promise in front of the person reading the gate.
+const OWNER_PLACEHOLDERS = new Set([
+    '-', '--', '?', 'n/a', 'na', 'nil', 'none', 'null', 'nobody', 'anyone', 'somebody',
+    'tbd', 'todo', 'unknown', 'unassigned', '待定', '待修', '暂无', '未知', '无人',
+])
+// A reason that is one of these says the case is red without saying what stands in the way; the
+// next reader cannot act on it and cannot tell it from a stale one.
+const REASON_PLACEHOLDERS = new Set([
+    '-', '--', '?', 'n/a', 'na', 'nil', 'none', 'null',
+    'tbd', 'todo', 'fixme', 'known issue', 'not supported yet', 'see above',
+    '待定', '待修', '待补', '待查', '暂无', '暂不支持', '未实现',
+])
+// What "stuck" looks like on paper, in the three shapes this tree already writes it in: the
+// refusal or the law quoted from the compiler (`` `skip=rule uri=tensor:sum reason=unbound` ``),
+// the file and optionally the symbol in it (`test/tools/run-tests.mjs#loadPlanTests`), or the page
+// that decides the question. A reason that names none of them is a mood, not a wall.
+const WALL_SPELLINGS = [
+    /`[^`]+`/,
+    /[A-Za-z0-9_./-]+\.(?:cml|cpp|cc|h|hpp|py|mjs|js|toml|md)(?:#[A-Za-z0-9_:]+)?/,
+    /[A-Za-z0-9_./-]+#[A-Za-z0-9_:]+/,
+]
+
+function knownFailIsMarked(mark) {
+    return mark === true || (Array.isArray(mark) && mark.length > 0)
+}
+
+/**
+ * A marked case must say who owns it and where it is stuck. The mark, the owner and the reason may
+ * all be inherited from `[defaults]`: a plan whose default marks one back end and names the owner
+ * does not have to repeat itself on each entry that changes only which back end fails.
+ */
+function checkKnownFailMark(planPath, entry, inherited, where) {
+    const mark = entry.known_fail !== undefined ? entry.known_fail : inherited && inherited.known_fail
+    if (!knownFailIsMarked(mark)) return
+    const owner = entry.known_fail_owner !== undefined ? entry.known_fail_owner : inherited && inherited.known_fail_owner
+    const reason = entry.known_fail_reason !== undefined ? entry.known_fail_reason : inherited && inherited.known_fail_reason
+    if (typeof owner !== 'string' || owner.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_owner: the mark says this ` +
+                `case is red, and only an owner says who ends that -- name the lane or the person`,
+        )
+    }
+    if (OWNER_PLACEHOLDERS.has(owner.trim().toLowerCase())) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_owner is ${JSON.stringify(owner)}, which names ` +
+                `nobody: name the lane or the person who makes this case green`,
+        )
+    }
+    if (typeof reason !== 'string' || reason.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_reason: one sentence saying ` +
+                `where the case is stuck -- the refusal in backticks, the file#Symbol that refuses, or ` +
+                `the page that decides it`,
+        )
+    }
+    const stated = reason.trim()
+    if (REASON_PLACEHOLDERS.has(stated.toLowerCase()) || /^(tbd|todo|fixme|待修|待定|待补|暂不支持)\b/i.test(stated)) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_reason is ${JSON.stringify(reason)}, which says ` +
+                `nothing about the wall: name what refuses, not that the case is red`,
+        )
+    }
+    if (!WALL_SPELLINGS.some((pattern) => pattern.test(stated))) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_reason names no wall: quote the refusal in ` +
+                `backticks, name the file#Symbol that refuses, or name the page that decides it`,
+        )
+    }
+}
+
 /**
  * Refuse a plan the runner does not fully understand before any of its tests run. Every key of
  * the plan, of `[defaults]`, of a `[[tests]]` entry and of a `[[sweeps]]` entry is checked, so a
@@ -203,6 +285,10 @@ function validatePlanSchema(doc, planPath) {
     ]
     for (const [where, entry] of entries) {
         if (!entry) continue
+        // A marked case has to carry its owner and its wall, and this is the only place that can
+        // refuse it: the runner reads a plan once, here, and a promise checked later than this is
+        // a promise kept by whoever remembered to look.
+        checkKnownFailMark(planPath, entry, where === '[defaults]' ? null : doc.defaults, where)
         checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
         // A pattern, or a list of them, every one of which has to find a line. The shape is typed
@@ -1065,7 +1151,7 @@ function printPlanHeader(plan) {
     const showPath = relativePath.split('.')[0].replace(/\//g, '.')
     const planLabel = plan.desc || plan.id || '.'
     console.log('')
-    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}`)
+    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}${staleAllowedMark()}`)
 }
 
 function printStatusLine(status, name, metric = '') {
@@ -1214,7 +1300,7 @@ function readProvenance(options) {
 }
 
 function printProvenance(options) {
-    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}`)
+    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}${staleAllowedMark()}`)
 }
 
 function printRunSummary(summary) {
@@ -1229,7 +1315,7 @@ function printRunSummary(summary) {
     console.log('')
     console.log(
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-            `${skipped}${known}${timedOut}${crashed}`,
+            `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`,
     )
 }
 
@@ -2302,7 +2388,17 @@ function expandBackends(test) {
                     `backends list, so no back end of that name runs here: write known_fail = true`,
             )
         }
-        return [{ ...test, __knownFail: true }]
+        // The single-run shape pins its fragment the same way the back-end shape below does: this
+        // one returned the entry before reading the field, so an entry with `known_fail = true`,
+        // no `known_fail_msg` and no `backends` was reported as `known failure changed its mind:
+        // expected "undefined"` -- a correct known failure turned into a hard failure by a pin
+        // nobody wrote. `docs/test-plans.md` says the field is legal to omit, and this is the line
+        // that makes that true for both shapes.
+        return [{
+            ...test,
+            __knownFail: true,
+            __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
+        }]
     }
     if (marked === true) {
         throw new Error(
@@ -3234,6 +3330,13 @@ async function executePlans(plans, options, sharedVars, logDir) {
             else if (outcome.result.signal) summary.crashed++
         }
         printStatusLine(outcome.status, test.name, outcome.metric)
+        // Who ends this red, printed beside the red. An owner that exists only in the plan file is a
+        // promise the person reading the gate never sees, and the field would then be read by
+        // nothing but the load-time check -- which is the shape this project already called worse
+        // than no mark at all.
+        if (test.__knownFail && typeof test.known_fail_owner === 'string') {
+            printDetailLines([`known_fail_owner: ${test.known_fail_owner}`])
+        }
         if (outcome.failures.length > 0) {
             const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
             if (note) {
