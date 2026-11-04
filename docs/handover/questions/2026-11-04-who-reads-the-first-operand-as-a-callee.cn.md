@@ -1,12 +1,12 @@
 # 被调值站在“第一个操作数”位置：该删掉那条读法，还是教调用转置把它写对？
 
-**状态**：待裁；我方默认见第 3 节（**甲：删掉 `calleeIdOf(inputs.front())` 那一问，把它变成 `function-closure` 的具名拒绝**，由正在重写 CALL 转置那一段的车道落地）。
+**状态**：**已按默认甲落地**（2026-11-04，本条车道，派工授权）；遗留一问见第 6 节（`with` 列表里那半仍在：调用的**值**被当成被调方，`callee=mk` 没动）。
 
 写这页的直接原因：`lane-floatgate` 在 `modules/transforms/transpose.cpp#buildTransposeMember` 的 `argumentAt == 1` 分支旁写下“这条分支的存在本身就说明这个形状是可能的；五个 f32 用例都没这么写，所以读数不变”。**本页把“这个形状”写成了程序、量了它今天怎么走**，结论是：**它可达，但只能被“误读”可达**——走到那条分支的程序，被读成被调用的那张图**不是这次调用的被调方**；而那条分支自己写出来的 CALL 节点，运行期一律拒收。
 
 ## 1. 四条读法，各自的最小程序与读数
 
-树 `D:\Projects\Camel-wt\fnarg` @ `34b659107`（宿主 `/home/zjwei/camel-work/fnarg`，二进制 2026-11-03T18:06:52-05:00；`nvm`）。手算与实测并列。
+树 `D:\Projects\Camel-wt\fnarg` @ `34b659107`（宿主 `/home/zjwei/camel-work/fnarg`，二进制 2026-11-03T18:06:52-05:00；`nvm`）。手算与实测并列。**本节是改动前的读数**，(d) 与 (b) 两行的改后读数在第 6 节。
 
 | # | 读法 | 最小程序 | 手算 | 实测 | 归类 |
 |---|---|---|---|---|---|
@@ -40,7 +40,7 @@
 
 ## 2. 那条分支自己写出来的图，运行期不认
 
-`argumentAt == 1` 时它把被调值塞进 `callArgs` 的第一个位置（`draft.addFuncNode`），而 `setWithInputs` 只在 `argumentAt == 0` 时发生。于是 `transpose_of_f` 里多出一个**没有 `with` 输入**的 CALL 节点，`nvm` 直接抛 `std::runtime_error`，外壳报成 `PassInternalError`（`help` 已经写明“这是编译器的缺陷，不是程序的”）。
+（改前）`argumentAt == 1` 时它把被调值塞进 `callArgs` 的第一个位置（`draft.addFuncNode`），而 `setWithInputs` 只在 `argumentAt == 0` 时发生。于是 `transpose_of_f` 里多出一个**没有 `with` 输入**的 CALL 节点，`nvm` 直接抛 `std::runtime_error`，外壳报成 `PassInternalError`（`help` 已经写明“这是编译器的缺陷，不是程序的”）。
 
 它不会给出错数：运行期在跑之前就拒了，所以按今晚的次序 `对 > 明确拒绝 > 错数 > 崩`，这一格是**崩**（进程没死，但是编译器内部错误）。
 
@@ -58,20 +58,32 @@
 
 **甲。** 三条理由都是读数：**（i）** 全仓没有生产者把被调值放在普通操作数位置，运行期也不接受这种 CALL 节点——“这个形状是可能的”这句话在今天的代码里**没有对应物**；**（ii）** 那条分支写出来的图一跑就 `PassInternalError`，它今天能“成功”的唯一方式是把别人的被调方当成自己的；**（iii）** 同一个形状改一个词（名字 → 调用）读数就从“对的拒绝”变成“错的名字/内部错误”，说明误读面在“节点会不会自己答出一个图”，与形状无关。
 
-甲要动的面只有一处（`buildTransposeMember` 的 CALL 分支），但那一处正被另一条车道重写，所以**本车道不动它**：只钉住读数（第 5 节），并把根因写在这里。若那条车道顺手删掉第三问，本页三条负向用例把 `known_fail` 去掉就转正；若选乙，请同时写清“`argumentAt` 是实参偏移，不是被调值位置”，并给本页 (d) 的线性 `g` 变体加一条数（今天它是 `PassInternalError`，乙会把它变成错数）。
+甲要动的面只有一处（`buildTransposeMember` 的 CALL 分支）。它**已按甲落地**，见第 6 节；若将来有人想走乙，请同时写清“`argumentAt` 是实参偏移，不是被调值位置”，并给本页 (d) 的线性 `g` 变体加一条数（乙会让它跑出数，而那个数按第 4 节的推算是 2，正确值 12）。
 
 ## 5. 钉住的用例（`test/plans/feat/compile/transforms.plan.toml`）
 
-| 用例 | 守什么 | 今天 |
+| 用例 | 守什么 | 今天的读数 |
 |---|---|---|
 | `transpose_takes_a_function_parameter.cml` | 函数值在**普通实参位置**、被调值是 PORT 时答对（4，不是 0） | exit 0，`(4.0)` |
 | `transpose_call_of_a_body_closure_with_a_bare_name.cml` | 同一形状写成**函数名**时，拒绝的名字对（`callee=none reason=function-closure`） | exit 1，正确拒绝 |
-| `transpose_call_first_argument_is_a_call.cml` | **`argumentAt == 1` 的入口**：第一个实参是按名调用，被调值是闭包 | exit 1，`PassInternalError`（`known_fail`，msg `without callee input`） |
-| `transpose_call_first_argument_is_a_function_value.cml` | 同上，实参携带**函数值**（最字面的一种读法） | exit 1，`callee=mk`（`known_fail`） |
-| `transpose_callee_is_a_returned_function.cml` | 被调值是**调用的返回值**时，`with` 里那个 FUNC 节点被当成被调方 | exit 1，`callee=mk`（`known_fail`） |
+| `transpose_call_first_argument_is_a_call.cml` | **原来 `argumentAt == 1` 的入口**：第一个实参是按名调用，被调值是闭包；现在钉“具名拒绝 + 内部错误不再回来” | exit 1，`callee=none … reason=function-closure` |
+| `transpose_call_first_argument_is_a_function_value.cml` | 同上，实参携带**函数值**（最字面的一种读法） | exit 1，同上 |
+| `transpose_callee_is_a_returned_function.cml` | 被调值是**调用的返回值**时，`with` 里那个 FUNC 节点被当成被调方 | exit 1，`callee=mk`（**仍带标记**，见第 6 节） |
 
-**闸门（同一棵树，`-Tier fast -Jobs 4`，宿主机 1 m load 16–22，读数因此只与同负载的基线比）**：`feat/compile` 基线 `34b659107` 是 `total 2243 / pass 2230 / fail 2 / known failures 11`，加了这五条之后是 `total 2248 / pass 2232 / **fail 2** / known failures 14`——**红数不增**，多出来的 3 条是本文第 5 节表格里带标记的三条。`feat/transforms/split` 改前改后都是 **19/19**。新增的 5 个 `.cml` 会让 `feat/parse` 的 AST 金标（`test/plans/feat/parse/golden/ast_hashes.txt`）少 5 行，**合入时按 §5 第 6 步在宿主重录**，本车道不在本地重录（本机不构建，旧二进制录出来的哈希不可信）。
+## 6. 落地（2026-11-04，本条车道）与遗留的一问
 
-## 要作者答的一句
+改动只有一处、三行：`buildTransposeMember` 里
+`calleeId = function->calleeIdOf(inputs.empty() ? ref : inputs.front()); argumentAt = … ? 1 : 0;`
+那一问删掉，注释改成“操作数不是被调值来的地方”，其余（端口分类、`wantsCotangent`、`ruleCotangent`、形状通路、`transposeSignature`、`argumentAt == 1` 那条现在**不可达**的写 CALL 分支）**一个字没动**——那一段归重写 CALL 转置的车道，删死代码由它决定。
 
-**「`argumentAt == 1` 那条分支今天只被误读可达：它把调用的第一个实参当成被调方，写出的 CALL 又没有 `with` 被调值，`nvm` 一律以 `PassInternalError` 拒收；同一个形状把实参写成函数名就得到正确的 `reason=function-closure`。我是删掉第三问（甲，落到具名拒绝），还是保留它、教它把被调值写进 `with`（乙，但误读会让它跑出数）？我默认『甲』，并请指定由重写 CALL 转置那一段的车道落地——本车道只钉住读数，不动那处代码。」**
+改后读数（同一棵树、`nvm`）：
+
+| 程序 | 改前 | 改后 |
+|---|---|---|
+| `h(g(x), 1.0)`（本文 (d)） | `PassInternalError … has CALL node 2 without callee input` | `skip=call-no-transpose node=5 callee=none value=3:10 with=2:4 reason=function-closure`，exit 1 |
+| `h(mk(x), 2.0)`（本文 (d) 的函数值变体） | `TRANSPOSE function=mk skip=signature` + `callee=mk` | 与上一行**逐字相同**，exit 1 |
+| `h(twice, 2.0)`（对照组） | 正确拒绝 | **不变** |
+| `apply(twice, x)`（本文 (a)） | `(4.0)` | **不变** |
+| `mk(x)(2.0)`（本文 (b)） | `callee=mk` | **不变** |
+
+**遗留一问（就是第 1 节 (b) 那半，需要裁一句话）**：`with` 列表里那一问用的是 `calleeIdOf`，它对**任何 FUNC 节点**作答——包括“这个节点的值是这次调用的被调方”的那种。于是 `mk(x)(2.0)` 仍被读成对 `mk` 的调用：**判决对（拒绝、exit 1、不给数），句子错（名字指到 `mk` 头上，理由说成“这个被调方没有转置签名”，而真正的原因是那个值没在图里命名任何图）**。要把它也修掉，就是把那一问的取值函数换成“这个**值**命名哪张图”（`staticFunctionGraphOf`，对这个节点回 `not-a-data-node`），与本次改动是同一形状、只差一个输入列表。**我方默认：等重写 CALL 转置那条车道一起做**，因为同一处代码它已经在改，本车道再动第二次就是两处各自正确、合起来错一次的风险；用例 `transpose_callee_is_a_returned_function.cml` 与它的 `known_fail`（msg `callee=mk`）就是那条车道的红灯，标记里写明“归类对、名字错”。

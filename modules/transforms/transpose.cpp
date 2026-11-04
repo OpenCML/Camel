@@ -3183,28 +3183,33 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                 // the values the call already has -- and then the cotangent.
                 const bool isCall = node->kind == rt::GCNodeKind::Call;
                 const auto inputs = function->normInputsOf(ref);
-                // Where the callee arrives from. A function value written in place is the call's
-                // first normal input; a value kept in a `let` is a DATA node naming its graph and
-                // the call takes it as a `with` input, with only the arguments as norm inputs; a
-                // FUNC node is the call itself. All three name a graph, so all three transpose the
-                // same way.
+                // Where the callee arrives from. A value kept in a `let` is a DATA node naming its
+                // graph and the call takes it as a `with` input, with only the arguments as norm
+                // inputs; a FUNC node is the call itself. Both name a graph, so both transpose the
+                // same way. The call's **operands** are not a place a callee arrives from: they are
+                // what the call is applied to, and a call among them is that argument's business.
                 GraphId calleeId  = function->calleeIdOf(ref);
                 size_t argumentAt = 0;
                 // What the one entry that names a *value* answered, when it was asked. Empty means
                 // `calleeIdOf` answered and no value had to be named.
                 std::string_view namedReason;
                 if (!rt::isValid(calleeId)) {
-                    // A value the call takes as a `with` input comes **first**: a function held in a
+                    // A value the call takes as a `with` input comes first: a function held in a
                     // `let` (a DATA node naming its graph) and a value this graph closed over (the
                     // linear half a cut hands out) both arrive that way, and a call that has one has
-                    // its arguments as its norm inputs. Only when there is no such value is the first
-                    // normal input the callee -- a function value written in place.
+                    // its arguments as its norm inputs.
                     //
-                    // Asked the other way round, a FUNC node's first *argument* is read as its callee
-                    // as soon as that argument is a call itself: measured 2026-11-04 on `split`'s
-                    // backward half, whose call of `lin` takes the tangent cell `mul_tangent(..)` as its
-                    // one argument, and was read as a call of `mul_tangent` with five parameters and
-                    // four arguments (`skip=call-no-transpose ... params=4`).
+                    // The **operands** are not asked for the callee at all, and one reading of that
+                    // question is why: a FUNC node's first *argument* is read as its callee as soon as
+                    // that argument is a call itself. Measured 2026-11-04 on `split`'s backward half,
+                    // whose call of `lin` takes the tangent cell `mul_tangent(..)` as its one argument,
+                    // and was read as a call of `mul_tangent` with five parameters and four arguments
+                    // (`skip=call-no-transpose ... params=4`); measured again on `h(g(x), 1.0)`, where
+                    // `h` is a closure the body assembled and the walk transposed `g` -- the callee of
+                    // the first *argument* -- then wrote the transposed CALL with no `with` input, which
+                    // `GCGraph` refuses to run (`Runtime graph 'transpose_of_f' has CALL node 2 without
+                    // callee input`). A callee that names no graph is refused below, by name, which is
+                    // the reading a reader can act on.
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
                         // A **Port** is a value this graph *receives* -- a `with` parameter, or a
@@ -3228,10 +3233,11 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                         }
                     }
                 }
-                if (!rt::isValid(calleeId) && isCall) {
-                    calleeId   = function->calleeIdOf(inputs.empty() ? ref : inputs.front());
-                    argumentAt = rt::isValid(calleeId) ? 1 : 0;
-                }
+                // The operands are not asked: a value written where a *function* is expected is still
+                // an operand of this call, and reading one as the callee is the defect the comment
+                // above records. With nothing left to ask, a call whose callee names no graph falls
+                // to the `callee == nullptr` reading below, which names *why* it has no graph -- the
+                // reading a reader can act on, instead of a diagram the runtime refuses to run.
                 if (!rt::isValid(calleeId) && !isCall) {
                     calleeId   = function->calleeIdOf(ref);
                     argumentAt = 0;

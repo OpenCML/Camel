@@ -14,13 +14,15 @@
 //
 //     TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:0 with=2:4 reason=function-closure
 //
-// That is the reading the sibling case owes and does not get today, and the pair is what makes the
-// defect visible as a defect: the same shape, refused correctly when the argument is a name and
-// misread when it is a call, because a call is the one argument that *does* name a graph
-// (`argumentAt = 1`), and the walk reads that graph as this call's callee.
+// That is the reading the sibling case now gets too -- it did not when this case was written, and the
+// pair is what made the defect visible: the same shape, refused correctly when the argument is a name
+// and misread when it is a call, because a call is the one argument that *does* name a graph, and the
+// walk read that graph as this call's callee. The fix was to stop asking the operands (2026-11-04), so
+// both programs read the same line, and the difference between them is now only the node the argument
+// stands for -- a DATA holding a function, or a FUNC holding a call.
 //
 // The node numbers are not pinned in the plan: they are positional, and the shape is what this case is
-// about. Measured today on `nvm`: exit 1, the line above, and the diagnostic
+// about. Measured on `nvm`: exit 1, the line above, and the diagnostic
 // `transpose has no transpose for this function`.
 import rulesets.transpose
 import { transpose } from transforms

@@ -3,7 +3,7 @@
 //
 // On paper `f(x) = g(x) * 1.0 * x = 2x^2`, so `f(3) = 18` and the derivative at 3 is `4x = 12`.
 //
-// THIS CASE REACHES A BRANCH NO OTHER CASE DOES, AND THAT IS THE DEFECT IT PINS. The GIR of `f` holds
+// THIS CASE REACHED A BRANCH NO OTHER CASE DOES, AND THAT WAS A DEFECT. The GIR of `f` holds
 //
 //     N0A [label="(y: float, z: float) => float pure", type="FILL", value_type="(y: float, z: float) => float pure"]
 //     N0B [label="g", type="FUNC", value_type="float"]
@@ -13,27 +13,31 @@
 //     N0B -> N0D [label="0|0", type="NORM"]      // the first argument: a call written by name
 //     N0C -> N0D [label="0|1", type="NORM"]      // the second argument
 //
-// The walk asks three questions of a CALL node in this order (`GCGraph::calleeIdOf` answers only for
-// FUNC nodes, i.e. for a call written by name): does the node itself name a graph (no, it is a CALL);
-// does a `with` input name one (no: the closure is a FILL, `staticFunctionGraphOf` refuses it with
-// `not-a-data-node`, and it is not a Port, so it is not a value this graph receives); then -- and this
-// is the step this case exists for -- **does the first normal input name one**. It does: `N0B` is a
-// FUNC node, so the walk reads `g` as this call's callee, sets `argumentAt = 1`, finds `g`'s one
-// parameter against the two ordinary inputs, and accepts.
+// The walk used to ask three questions of a CALL node in this order (`GCGraph::calleeIdOf` answers only
+// for FUNC nodes, i.e. for a call written by name): does the node itself name a graph (no, it is a CALL);
+// does a `with` input name one (no: the closure is a FILL and not a Port, so it is not a value this graph
+// receives, and the FILL names no graph); then -- and this was the step -- **does the first normal input
+// name one**. It did: `N0B` is a FUNC node, so the walk read `g` as this call's callee, set
+// `argumentAt = 1`, found `g`'s one parameter against the two ordinary inputs, and accepted.
 //
-// So the callee it transposes is `g`, which is not the callee of this call at all -- it is the callee
-// of the *first argument*. The branch it lands in (`modules/transforms/transpose.cpp#buildTransposeMember`,
-// `argumentAt == 1`) then writes the transposed call with that callee in the call's first ordinary
-// input and no `with` input, which `src/runtime/graph.cpp` refuses to run:
+// So the callee it transposed was `g`, which is not the callee of this call at all -- it is the callee of
+// the *first argument*. The branch it landed in (`modules/transforms/transpose.cpp#buildTransposeMember`,
+// `argumentAt == 1`) wrote the transposed call with that callee in the call's first ordinary input and no
+// `with` input, which `src/runtime/graph.cpp` refuses to run:
 //
 //     error[RuntimeDiag::PassInternalError]: Pass 'std::default' failed with an internal error:
 //     Runtime graph 'transpose_of_f' has CALL node 2 without callee input.
 //
-// That is a compiler defect, not the program's fault: this program's derivative exists (12), and the
-// shape it has -- a callee the body assembled -- is the one the transform already refuses by name
-// (`reason=function-closure`, `transpose_no_tangent_closure.cml`) when the first argument is a bare
-// number or a bare function name. The refusal this case owes is the same one; the mark in the plan
-// says so, and the day the walk stops reading an ordinary operand as a callee this case turns green.
+// That was a compiler defect, not the program's fault, and it is fixed: the walk no longer asks a call's
+// operands whether they name a callee, so this program reads the refusal it owes -- the same one the
+// closure gets when the first argument is a bare name --
+//
+//     TRANSPOSE function=f skip=call-no-transpose node=5 callee=none value=3:10 with=2:4 reason=function-closure
+//
+// and stops at exit 1 with the forward line `18.0` printed. The paper answer is still 12 (this program's
+// derivative exists); it is owed to a transform that can take the captured `x` as a parameter of its own,
+// which is the piece `transpose_no_tangent_closure.cml` measures. What this case holds is the reading: no
+// operand is a callee, and a compiler internal error is not an answer.
 import rulesets.transpose
 import { transpose } from transforms
 

@@ -18,14 +18,16 @@
 //     TRANSPOSE function=mk skip=signature
 //     TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk
 //
-// The program is refused (exit 1), so nothing wrong is answered -- but the name in the reading is the
-// wrong one: the callee of this call is a closure that `mk`'s body assembled and returned, and the
-// value it holds names no graph at the call site. The refusal this case owes is the one the transform
-// spells for exactly that value, `reason=function-closure` (`transpose_no_tangent_closure.cml`), and
-// the plan entry marks the case until the reading is that one.
+// The program is refused (exit 1), so nothing wrong is answered -- **right verdict, wrong name**: the
+// callee of this call is a closure that `mk`'s body assembled and returned, and the value it holds names
+// no graph at the call site. The reading this case owes is `callee=none` with the cause the walk has for
+// a value it cannot name; the plan entry marks the case until the reading is that one, and the mark says
+// in so many words that the classification is already right and only the sentence is not.
 //
-// The same misreading in the other position -- a FUNC node read out of the *arguments* rather than out
-// of the `with` input -- is `transpose_call_first_argument_is_a_call.cml`.
+// This is the *other* half of the reading that was fixed on 2026-11-04. There the callee was read out of
+// an ordinary input -- `h(g(x), 1.0)` was read as a call of `g` -- and that question was deleted
+// (`transpose_call_first_argument_is_a_call.cml`). Here the misreading sits in the `with` list, one input
+// list over, and it is untouched: `calleeIdOf` still answers for the FUNC node that holds a call's value.
 import rulesets.transpose
 import { transpose } from transforms
 
