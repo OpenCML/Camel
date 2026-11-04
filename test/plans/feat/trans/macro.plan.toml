@@ -416,11 +416,18 @@ timeout_ms = 10000
 # that moved a program's output would be a change to every one of those assertions.
 [[tests]]
 name = "export_loop.reading"
-desc = "`std::macro` over export_loop.cml says where it is per round on stderr -- graph, calls, rewrites applied, branches, loops -- while its stdout stays the program's own output."
+desc = "`std::macro` over export_loop.cml says where it is per round on stderr -- graph, calls, rewrites applied, branches, loops -- while its stdout stays the program's own output. The two rows the program prints are pinned with the word, not instead of it: a reading that only looked for `exported` would keep passing while the numbers changed underneath it."
 case = "../../../cases/modules/onnx/export_loop.cml"
 args = ["${case}", "std::macro", "report=true"]
+# `ONNX_OUT` points at a file this entry owns, and that is a correction rather than plumbing. The entry
+# used to set no output path, so `get_env('ONNX_OUT') ?? ''` answered the empty string and the write
+# failed; the case answered that failure with `let _ =` and printed `exported` anyway, so this reading
+# was green over a program that never wrote a model. `lane-errwrite` made the case report its refusal
+# instead of discarding it, which turned this pin red for the first time -- the honest answer was not to
+# weaken the pin but to let the write succeed where the reading runs.
+envs = ["ONNX_OUT=${test_tmp}/export_loop.reading.onnx"]
 expect_exit = 0
-expect_stdout_contains = ["exported"]
+expect_stdout_contains = ["[[0.0625, 0.125], [0.1875, 0.25]]", "exported"]
 # The two rows this reads are named, not numbered: `graph=` is a counter's answer, so the assertion
 # is "the root graph is the one with the call in it, and `iterate` is the one with the branch" -- the
 # names the reading already prints. A number here went stale the moment any graph was added ahead of
