@@ -43,28 +43,9 @@
 把类型的 extents 物化成 `tensor:zeros` 递过去（`modules/transforms/transpose.cpp#shapeFromTypeOf`），
 那仍然是零载体，与 17:55「不要零载体」相抵。
 
-三条路：
-
-**A. 不动（本页不改代码的那条）**
-- `sum_to` 继续读值；兜底用类型 extents 物化的 `zeros`。
-- 代价：零载体还在，裁定那句"不读值"在一处不成立；好处：没有一个今天能答的程序变红。
-
-**B. 加 `sum_to_shape(t, shape: int[])`**
-- `modules/tensor` 一个算子 + `stdlib/tensor.cml` 一条声明 + `mul_tensor_t` 改写成
-  `sum_to_shape(ct * w, extent_of::<X>())`。
-- 代价：动别人的车道（`modules/tensor`）、新算子只为一个律服务、开秩的乘积转置会从"今天能答"变成"拒绝"。
-
-**C. 另立 `mul_tensor_from_type_t::<T, X, W, A>(x: X, w: W, at: A)`，只多一个端口**
-- 与 `sum_from_type_t` 同构：头多写一个端口，走查把操作数类型的 extents 递进来（`offeredOperands` 已经
-  是这样做的），右半边写 `sum_to_shape(ct * w, at)`。索引分得开：`mul_tensor(x, w)` 两个操作数、
-  `mul_tensor(x, w, at)` 三个，一条律一个算子。
-- **但这条不是 B 的替代，是 B 的用法**：右半边仍要一个"把值按**形状**求和"的算子，而 `sum_to(t, like)`
-  的第二参数是值。`full(at, 1.0) * (ct * w)` 不是归约、是广播，答案会多出元素。所以 C 只在 B 的算子
-  存在时才成立——这一条是本页量出来的（`stdlib/tensor.cml#sum_to` 的声明），不是推的。
-
-因此真正的选择只有 A 与 B。**默认：A**——不动 `mul_tensor_t`，把"乘积的转置遇到没有值的操作数时仍要
-一个零载体"记成一条待裁定的债（本页就是那条债），理由是 B 会让今天答得出来的程序变红，而"变红"比
-"零载体"更难收回；等 `modules/tensor` 有别的理由要动 `sum_to` 时一起做。
+**这一处的债单独成一页**：`docs/handover/questions/2026-11-04-does-a-product-transpose-still-need-a-zero-carrier.cn.md`
+——`sum_to` 的第二参数是值不是形状（所以"多一个端口"不是 `sum_to_shape` 的替代，三条路收敛成两条）、
+两条路的代价、以及"今天没有程序走得到这处"的探针读数。**本页不改代码，默认 A：这一轮不动。**
 
 ## 谁在用 `extent_of`
 
