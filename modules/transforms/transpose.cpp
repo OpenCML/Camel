@@ -26,6 +26,7 @@
 #include <algorithm>
 #include <cstring>
 #include <functional>
+#include <limits>
 #include <span>
 #include <string>
 #include <string_view>
@@ -95,8 +96,10 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "kind";
     case TransposeRefusalCause::ParameterShape:
         return "parameter-shape";
-    case TransposeRefusalCause::CotangentNeedsAValue:
-        return "cotangent-needs-a-value";
+    case TransposeRefusalCause::LawReadsAValue:
+        return "law-reads-a-value";
+    case TransposeRefusalCause::CotangentOnAPair:
+        return "cotangent-on-a-pair";
     case TransposeRefusalCause::State:
         return "state";
     case TransposeRefusalCause::Range:
@@ -898,6 +901,66 @@ gc_node_ref_t shapeFromTypeOf(camel::runtime::GraphDraft &draft, Type *type) {
     return zeros;
 }
 
+/// The parameter whose **declaration** leaves `value`'s shape open, or nothing.
+///
+/// `value` is an operand of a step whose cotangent a law is answering for, or the capture a law's
+/// right side read and was not handed. The walk goes back through the operators that produced it to a
+/// port of the function; a port is a parameter through `portParameter`, and only a parameter whose
+/// declared type is an array that states no extents is the repair -- a parameter that states its
+/// extents has done its part, and a type that states none but belongs to a value the body computed
+/// (an operator whose result type is open) is not a thing a declaration of this function can fix.
+///
+/// One reading, two callers: the law-choice path refuses a reduction law whose extents no operand
+/// states, and the rule-expansion path refuses a law that could not be handed an operand. Both are
+/// the same class -- the declaration states no shape -- so both must name the same parameter, and a
+/// second walk-back would be a day when they disagree about which declaration to edit.
+std::optional<size_t> unstatedParameterBehind(
+    const camel::runtime::GCGraph *function, gc_node_ref_t value,
+    const std::vector<size_t> &portParameter, size_t paramCount, size_t nodeCount) {
+    const camel::runtime::GCNode *const valueNode = function != nullptr ? function->node(value) : nullptr;
+    const Type *const valueType = valueNode != nullptr ? valueNode->dataType() : nullptr;
+    if (valueType == nullptr || valueType->code() != camel::core::type::TypeCode::Array ||
+        camel::core::type::statedExtentsOf(valueType).has_value()) {
+        return std::nullopt;
+    }
+    const auto ports = function->normPorts();
+    std::vector<gc_node_ref_t> pending{value};
+    std::vector<bool> seen(nodeCount, false);
+    while (!pending.empty()) {
+        const gc_node_ref_t at = pending.back();
+        pending.pop_back();
+        if (at >= nodeCount || seen[at]) {
+            continue;
+        }
+        seen[at] = true;
+        const camel::runtime::GCNode *const node = function->node(at);
+        if (node == nullptr) {
+            continue;
+        }
+        if (node->kind == rt::GCNodeKind::Port) {
+            for (size_t p = 0; p < ports.size(); ++p) {
+                if (ports[p] != at) {
+                    continue;
+                }
+                const size_t param = p < portParameter.size() ? portParameter[p] : paramCount;
+                if (param < paramCount) {
+                    const Type *const declared = function->funcType()->normTypeAt(param);
+                    if (declared != nullptr &&
+                        declared->code() == camel::core::type::TypeCode::Array &&
+                        !camel::core::type::statedExtentsOf(declared).has_value()) {
+                        return param;
+                    }
+                }
+            }
+            continue;
+        }
+        for (const gc_node_ref_t in : function->normInputsOf(at)) {
+            pending.push_back(in);
+        }
+    }
+    return std::nullopt;
+}
+
 /// The zero a cotangent space starts from, asked of that space: the constant the registry holds
 /// (`TangentSpace::zero`, written in the space's own width -- an `f32` zero is four bytes and a
 /// `float` zero is eight, and one read as the other is a reinterpretation of bits), or the space's
@@ -1046,6 +1109,34 @@ bool buildTransposeMember(
         state.refusal = TransposeRefusal{cause, param};
         state.refusal.graph = function->name();
         os << "TRANSPOSE function=" << function->name() << " skip=" << transposeRefusalWord(cause);
+    };
+    // The spelling a `ParameterShape` sentence hands a reader: the parameter's place, the name its
+    // signature gives it, and the declared type whose extents are missing. Written in one place and
+    // asked for by both entrances to that cause -- the law-choice path (`unstatedArrayBehind` below)
+    // and the rule-expansion path that met the same fact through `vjp`/`split` -- so the two cannot
+    // name different parameters or spell the same declaration two ways.
+    const auto noteUnstatedParameter = [&](size_t param) -> void {
+        Type *const paramType = function->funcType()->normTypeAt(param);
+        const std::string type =
+            paramType != nullptr ? paramType->toString() : std::string();
+        std::string name;
+        const FunctionType *const signatureType = function->funcType();
+        if (signatureType->hasArgNames()) {
+            // One-based place in the written signature, past the `with` types: the same arithmetic
+            // the refusal record uses, so the name is the parameter's and not its neighbour's.
+            const size_t named = signatureType->withTypesCount() + param;
+            if (named < signatureType->argNamesCount()) {
+                name = std::string(signatureType->argNameAt(named));
+            }
+        }
+        if (!state.shapeWanted) {
+            state.shapeWanted = true;
+            state.shapeParam  = param;
+            state.shapeType   = type;
+            state.shapeName   = name;
+        }
+        state.refusal.paramName = name;
+        state.refusal.paramType = type;
     };
     // What this member needs is discovered by asking: the body decides which parameters it reads by
     // asking for their values, and nothing in the type says which. The ask is itself a build, so it
@@ -1724,7 +1815,8 @@ bool buildTransposeMember(
         // closure, and the cotangent of `exp(x)` is an answer no parameter holds. Asking the product's
         // law for it asks for `dx`'s value, the one value a transposition never has -- which is where
         // `exp`/`sigmoid`/`tanh`/`relu` and both array-product readings stopped
-        // (`skip=cotangent-needs-a-value uri=tensor:multiply position=0`). Reading the reach only
+        // (`skip=parameter-shape uri=tensor:multiply`: the operand is a tangent whose shape the
+        // declaration leaves open). Reading the reach only
         // under a participating set was the reason the closure-borne operand looked answerable.
         //
         // `grad_of_a_division` is the shape that needs it: `div_tangent`'s body divides a linear
@@ -1844,7 +1936,8 @@ bool buildTransposeMember(
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType, std::string &why,
-                                       bool &noInstance, bool &portMismatch) -> gc_node_ref_t {
+                                       bool &noInstance, bool &portMismatch,
+                                       std::optional<size_t> &unboundSlot) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 if (slot == inputs.size()) {
                     // The slot past the operands is the extents: the law asked for them
@@ -1975,9 +2068,19 @@ bool buildTransposeMember(
                    << " handed=" << state.refusal.handedType << '\n';
                 return rt::kInvalidNodeRef;
             }
-            return camel::transforms::expandRuleByName(
+            // Which operand the answer read and this walk could not bind. `why` says the same
+            // sentence for every such operand, so this is the fact that tells the two repairs apart:
+            // a declaration whose extents are missing (write them) and a value nothing hands over
+            // (a port, not a declaration). Recorded on the way out so the refusal sites below can
+            // name the class instead of reading `why` back.
+            size_t unbound = std::numeric_limits<size_t>::max();
+            const gc_node_ref_t expanded = camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {handed},
-                position, at, why, &noInstance);
+                position, at, why, &noInstance, &unbound);
+            if (expanded == rt::kInvalidNodeRef && unbound != std::numeric_limits<size_t>::max()) {
+                unboundSlot = unbound;
+            }
+            return expanded;
         };
         const auto noteRule = [&usedRules](const std::string &name) {
             if (std::find(usedRules.begin(), usedRules.end(), name) == usedRules.end()) {
@@ -2885,9 +2988,11 @@ bool buildTransposeMember(
                     std::string why;
                     bool noInstance = false;
                     bool portMismatch = false;
+                    std::optional<size_t> unboundSlot;
                     const gc_node_ref_t answer =
                         ruleCotangent(chosenRule, inputs, i, local[ref],
-                                      armCotangentType, why, noInstance, portMismatch);
+                                      armCotangentType, why, noInstance, portMismatch,
+                                      unboundSlot);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
                         if (portMismatch) {
@@ -2904,8 +3009,26 @@ bool buildTransposeMember(
                         // Naming the first as the second is how the builder's "no matching function"
                         // sentence reached a reader as though the transform had nothing to say
                         // (measured 2026-11-03 on `matmul_t`).
+                        std::optional<size_t> unstated;
+                        if (!noInstance && unboundSlot.has_value() && *unboundSlot < inputs.size()) {
+                            // The operand the law read, walked back to a parameter of this function.
+                            // When one is behind it, the value was a **shape** the declaration does
+                            // not write down, so the refusal is the shape's and not a lost value's:
+                            // the same cause, the same sentence and the same repair as the law-choice
+                            // path, which is the whole point of one class having one word.
+                            unstated = unstatedParameterBehind(
+                                function, inputs[*unboundSlot], portParameter, paramCount, nodeCount);
+                        }
+                        if (unstated.has_value()) {
+                            refuse(TransposeRefusalCause::ParameterShape, *unstated);
+                            noteUnstatedParameter(*unstated);
+                            os << " uri=" << body->uri() << " node=" << ref
+                               << " position=" << i << " param=" << *unstated
+                               << " param-type=" << state.refusal.paramType << '\n';
+                            return {};
+                        }
                         if (!noInstance) {
-                            refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                            refuse(TransposeRefusalCause::LawReadsAValue);
                             os << " uri=" << body->uri() << " position=" << i
                                << " reason=" << why << '\n';
                             return {};
@@ -3555,89 +3678,28 @@ bool buildTransposeMember(
                     // is not asked for anything here.
                     if (extentsOf == nullptr) {
                         const auto unstatedArrayBehind = [&]() -> std::optional<size_t> {
-                            const auto ports = function->normPorts();
+                            // One walk-back, shared with the rule-expansion path below: the same
+                            // question ("which declaration leaves this operand's shape open?") has
+                            // one answer, or the two entrances name different parameters.
                             for (const gc_node_ref_t input : inputs) {
-                                const camel::runtime::GCNode *const inputNode = function->node(input);
-                                const Type *const inputType =
-                                    inputNode != nullptr ? inputNode->dataType() : nullptr;
-                                if (inputType == nullptr ||
-                                    inputType->code() != camel::core::type::TypeCode::Array ||
-                                    camel::core::type::statedExtentsOf(inputType).has_value()) {
-                                    continue;
-                                }
-                                std::vector<gc_node_ref_t> pending{input};
-                                std::vector<bool> seen(nodeCount, false);
-                                while (!pending.empty()) {
-                                    const gc_node_ref_t at = pending.back();
-                                    pending.pop_back();
-                                    if (at >= nodeCount || seen[at]) {
-                                        continue;
-                                    }
-                                    seen[at] = true;
-                                    const camel::runtime::GCNode *const node = function->node(at);
-                                    if (node == nullptr) {
-                                        continue;
-                                    }
-                                    if (node->kind == rt::GCNodeKind::Port) {
-                                        for (size_t p = 0; p < ports.size(); ++p) {
-                                            if (ports[p] != at) {
-                                                continue;
-                                            }
-                                            const size_t param =
-                                                p < portParameter.size() ? portParameter[p]
-                                                                         : paramCount;
-                                            if (param < paramCount) {
-                                                // Only a declaration that leaves the shape open is
-                                                // the repair: a parameter that states its extents has
-                                                // done its part, and the type that failed to state
-                                                // one belongs to a value the walk computed (an
-                                                // operator whose result type is open), which no
-                                                // declaration of this function can fix.
-                                                const Type *const declared =
-                                                    function->funcType()->normTypeAt(param);
-                                                if (declared != nullptr &&
-                                                    declared->code() ==
-                                                        camel::core::type::TypeCode::Array &&
-                                                    !camel::core::type::statedExtentsOf(declared)
-                                                         .has_value()) {
-                                                    return param;
-                                                }
-                                            }
-                                        }
-                                        continue;
-                                    }
-                                    for (const gc_node_ref_t in : function->normInputsOf(at)) {
-                                        pending.push_back(in);
-                                    }
+                                if (const auto unstated = unstatedParameterBehind(
+                                        function, input, portParameter, paramCount, nodeCount);
+                                    unstated.has_value()) {
+                                    return unstated;
                                 }
                             }
                             return std::nullopt;
                         };
                         if (const auto unstated = unstatedArrayBehind(); unstated.has_value()) {
-                            Type *const paramType = function->funcType()->normTypeAt(*unstated);
-                            if (!state.shapeWanted) {
-                                state.shapeWanted = true;
-                                state.shapeParam  = *unstated;
-                                state.shapeType =
-                                    paramType != nullptr ? paramType->toString() : std::string();
-                                const FunctionType *const signatureType = function->funcType();
-                                if (signatureType->hasArgNames()) {
-                                    const size_t named = signatureType->withTypesCount() + *unstated;
-                                    if (named < signatureType->argNamesCount()) {
-                                        state.shapeName =
-                                            std::string(signatureType->argNameAt(named));
-                                    }
-                                }
-                            }
                             refuse(TransposeRefusalCause::ParameterShape, *unstated);
                             // The sentence a reader is handed names the declaration to edit, so the
-                            // name and the type travel with the refusal rather than only the number.
-                            state.refusal.paramName =
-                                state.shapeName;
-                            state.refusal.paramType = state.shapeType;
+                            // name and the type travel with the refusal rather than only the number;
+                            // one writer fills both, and the rule-expansion entrance below asks it.
+                            noteUnstatedParameter(*unstated);
                             os << " uri=" << uri << " node=" << ref << " param=" << *unstated
                                << " param-type="
-                               << (paramType != nullptr ? paramType->toString() : std::string("?"))
+                               << (state.refusal.paramType.empty() ? std::string("?")
+                                                                   : state.refusal.paramType)
                                << '\n';
                             return false;
                         }
@@ -3737,9 +3799,10 @@ bool buildTransposeMember(
                     std::string why;
                     bool noInstance = false;
                     bool portMismatch = false;
+                    std::optional<size_t> unboundSlot;
                     const gc_node_ref_t answer = ruleCotangent(
                         chosenRule, inputs, i, ct, stepCotangentType, why,
-                        noInstance, portMismatch);
+                        noInstance, portMismatch, unboundSlot);
                     if (answer == rt::kInvalidNodeRef) {
                         if (portMismatch) {
                             // Recorded and printed where the two types met (`ruleCotangent`): the
@@ -3751,8 +3814,24 @@ bool buildTransposeMember(
                         // would not instantiate at these operand types, or the walk could not reach a
                         // value the answer reads. The rank is printed for the first because it is the
                         // fact a reader edits, and the law's name because it is the function to edit.
+                        std::optional<size_t> unstated;
+                        if (!noInstance && unboundSlot.has_value() && *unboundSlot < inputs.size()) {
+                            // Same question as the arm walk, same answer: the operand the law read is
+                            // a shape the declaration does not write down, so the refusal is the
+                            // declaration's and says so with the one word that class has.
+                            unstated = unstatedParameterBehind(
+                                function, inputs[*unboundSlot], portParameter, paramCount, nodeCount);
+                        }
+                        if (unstated.has_value()) {
+                            refuse(TransposeRefusalCause::ParameterShape, *unstated);
+                            noteUnstatedParameter(*unstated);
+                            os << " uri=" << uri << " node=" << ref << " position=" << i
+                               << " param=" << *unstated
+                               << " param-type=" << state.refusal.paramType << '\n';
+                            return false;
+                        }
                         if (!noInstance) {
-                            refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                            refuse(TransposeRefusalCause::LawReadsAValue);
                             os << " uri=" << uri << " position=" << i << " reason=" << why
                                << '\n';
                             return false;
@@ -4633,7 +4712,10 @@ bool buildTransposeMember(
                         pairCotangent = slots->second[1];
                     }
                     if (pairCotangent == rt::kInvalidNodeRef) {
-                        refuse(TransposeRefusalCause::CotangentNeedsAValue);
+                        // Its own cause: nothing here read a value it could not reach. The walk
+                        // never reached a *cotangent*, because the pair was read as a whole, and a
+                        // sentence about a lost value would send a reader looking for one.
+                        refuse(TransposeRefusalCause::CotangentOnAPair);
                         os << " node=" << ref << " callee=" << callee->name()
                            << " pair=1 why=no-cotangent-on-the-tangent-component\n";
                         return false;

@@ -160,9 +160,23 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         // A build that refused before any site ran records no cause. Saying so is better than a
         // sentence about a shape nothing named.
         return "the transform gave no reason";
-    case TransposeRefusalCause::CotangentNeedsAValue:
-        return position.empty() ? "a parameter holds no cotangent: nothing uses its value"
-                                : position + " holds no cotangent: nothing uses its value";
+    case TransposeRefusalCause::LawReadsAValue:
+        // The value class, and the sentence says which value: the rule needs one beside the
+        // cotangent, and what it needs is not a shape a declaration could add -- the tangent's own
+        // value (a transposition answers the tangent, it is not handed one) or a number whose shape
+        // is already complete. The repair is a port, which is the neighbouring question page's
+        // subject; saying "write the extents" here would name an edit that changes nothing.
+        return position.empty()
+                   ? std::string("the rule's right side reads a value the transposed function is not "
+                                 "handed, and no declaration of a shape supplies it")
+                   : "the rule's right side reads a value " + position +
+                         " is not handed, and no declaration of a shape supplies it";
+    case TransposeRefusalCause::CotangentOnAPair:
+        // A cotangent, not a value: this step read the call's answer as the (value, tangent) pair,
+        // so no cotangent ever arrived on the tangent component and reading one slot's cotangent as
+        // another's is the mistake the refusal exists to prevent.
+        return "this step read the call's answer as a (value, tangent) pair, so no cotangent arrived "
+               "on the tangent component and the call cannot be turned around";
     case TransposeRefusalCause::UnreadParameter:
         return position.empty() ? "a parameter is never read by the body, so it answers no cotangent"
                                 : position + " is never read by the body, so it answers no cotangent";

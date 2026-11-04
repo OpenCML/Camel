@@ -177,6 +177,12 @@ RuleChoice chooseRuleAmong(
 /// right side may not branch on a tangent's value, and a coefficient that has no real value there
 /// (`log(-3.0)`) must never be evaluated, because `NaN * 0.0` is `NaN`. `omitted` receives the
 /// operators (and calls) that this reading kept out of the answer, so the expansion can be counted.
+///
+/// `unboundOperand`, when given, receives the slot of the one operand the answer reads and the caller
+/// has no value for -- the fourth way in below, and the one a caller acts on by *which* operand it
+/// was: an operand whose declaration states no extents is a shape to write down, and one whose type is
+/// complete is a value to carry some other way. Left untouched unless that reading happens, so a
+/// caller clears it first and reads it only on a `kInvalidNodeRef` answer.
 camel::runtime::gc_node_ref_t expandRuleRightSide(
     camel::runtime::GraphDraftGroup &group, camel::runtime::GraphTransaction &transaction,
     const camel::compile::gir::GenericRuleInstance &instance,
@@ -184,7 +190,8 @@ camel::runtime::gc_node_ref_t expandRuleRightSide(
     const std::vector<camel::runtime::gc_node_ref_t> &tangents, std::string &why,
     size_t position = kWholeAnswer,
     const std::unordered_set<camel::runtime::gc_node_ref_t> *structurallyZero = nullptr,
-    std::vector<std::string> *omitted = nullptr);
+    std::vector<std::string> *omitted = nullptr,
+    size_t *unboundOperand = nullptr);
 
 /// The same expansion, reached from the rule's *name*: the transform that has a rule's name and its
 /// operands -- and no instance, because it never runs a rule itself -- asks here.
@@ -205,12 +212,15 @@ camel::runtime::gc_node_ref_t expandRuleRightSide(
 /// transform that must name the refusal needs to say which class of refusal it met rather than read
 /// `why`, whose sentences belong to the instantiation. `why` still says what the instantiation
 /// complained about.
+///
+/// `unboundOperand` is `expandRuleRightSide`'s, handed through: the slot of the operand the answer
+/// read and the walk could not bind, which is the fourth of the four.
 camel::runtime::gc_node_ref_t expandRuleByName(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
     const std::function<camel::runtime::gc_node_ref_t(size_t)> &valueOf,
     const std::vector<camel::runtime::gc_node_ref_t> &tangents, size_t position,
     const std::vector<camel::core::type::Type *> &operandTypes, std::string &why,
-    bool *noInstanceAtOperands = nullptr);
+    bool *noInstanceAtOperands = nullptr, size_t *unboundOperand = nullptr);
 
 } // namespace camel::transforms

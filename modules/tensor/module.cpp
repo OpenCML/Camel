@@ -71,6 +71,12 @@ class TensorExecutor : public Executor {
 /// `sum_stated` and `take_stated` stay declared: neither can answer an element. A stated sum is
 /// one number whatever the extents are (`T`), and a stated take always answers at least the rows
 /// it read (`T[..]`, rank one or more), so their declared results are the results.
+///
+/// `mul_stated` and `matmul_stated` are declared for the same reason and one step further: their
+/// results' extents are a *function of the values* the two lists carry (a product's shape is the
+/// broadcast of the two, a matrix product's is neither), so the only type a declaration can write is
+/// `T[..]` and that is the honest one. The declared result is what a program sees; the walk reads the
+/// lists and never the result's extents.
 constexpr std::string_view kDeclaredOperators[] = {
     "dim",
     "pick_at",
@@ -79,9 +85,11 @@ constexpr std::string_view kDeclaredOperators[] = {
     "gemm_library_threads",
     "gemm_threads",
     "num_threads",
+    "matmul_stated",
     "max_axis_stated",
     "mean_stated",
     "min_axis_stated",
+    "mul_stated",
     "numel",
     "save_npy",
     "set_num_threads",

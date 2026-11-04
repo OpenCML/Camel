@@ -312,6 +312,24 @@ branchArmNodes(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
     return arms;
 }
 
+/// Where the block's chain goes when the node in front of a statement is a branch. A `BRCH` is not a
+/// link of that chain: it jumps into the arm it selects, and the node that runs once the branch is
+/// over, whichever arm was taken, is the `JOIN`. A statement chained from the `BRCH` itself waits on
+/// a node it is not in an arm of, and no back end runs it -- the four schedulers lay a branch out as
+/// `BRCH`, one range per arm, `JOIN`, and nothing outside the arms is ever entered from the `BRCH`
+/// (`docs/technical/17_graph_rewrite_api_contracts.md`, 4.1 rule 2). The front end writes the same
+/// link: the statement after a branch waits on the `JOIN`. The `JOIN` is returned even when it is
+/// gone -- the caller decides whether the place is still in its block. It takes the transaction its
+/// callers already hold rather than a draft: the object is the caller's, not one this function made.
+gc_node_ref_t branchPlaceInChain(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t node) {
+    const auto &draft = transaction.graph();
+    const camel::runtime::DraftNodeHeader *header = draft.header(node);
+    if (header == nullptr || header->kind != GCNodeKind::Brch) {
+        return node;
+    }
+    return reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(node).data())->join;
+}
+
 /**
  * Replaces a branch whose arm is statically known by that arm's code: the other arms are removed,
  * the JOIN's users read the taken arm's result, and the taken arm runs after what the BRCH ran
@@ -361,6 +379,7 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
     bool joinable = true;
     for (gc_node_ref_t head : heads) {
         gc_node_ref_t tail = head;
+        std::unordered_set<gc_node_ref_t> walked{head};
         for (;;) {
             gc_node_ref_t next = kInvalidNodeRef;
             for (gc_node_ref_t user : draft.syncUsersOf(tail)) {
@@ -374,6 +393,30 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
                 next = user;
             }
             if (!joinable || next == kInvalidNodeRef) {
+                if (!joinable) {
+                    break;
+                }
+                // The fragment's last statement is a branch: what follows the branch in the chain is
+                // its JOIN, not the BRCH (branchPlaceInChain). Walking on from the JOIN keeps the
+                // fragment's tail a node of the block; ending it at the BRCH would chain the next
+                // fragment from the BRCH itself, and a statement that waits on a BRCH is a statement
+                // no back end runs unless it is in one of the branch's arms (17, 4.1 rule 2).
+                const gc_node_ref_t after = branchPlaceInChain(transaction, tail);
+                if (after == tail) {
+                    break;
+                }
+                if (after == kInvalidNodeRef || !inBlock(after) || !walked.insert(after).second) {
+                    // The branch's place is not in this block, or the walk has been here already:
+                    // the fragments cannot be joined without writing a place this block does not
+                    // hold.
+                    joinable = false;
+                    break;
+                }
+                tail = after;
+                continue;
+            }
+            if (!walked.insert(next).second) {
+                joinable = false; // the chain closes on itself
                 break;
             }
             tail = next;
@@ -519,20 +562,45 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     const auto inArm = [&](gc_node_ref_t n) {
         return std::ranges::find(armNodes, n) != armNodes.end();
     };
+    // The control region of the arm, as against the regions nested in it. A node of a nested
+    // control region -- the condition or body of a loop written in the arm, the arm of a branch
+    // written in it that is still there -- runs when that region runs, not whenever the branch
+    // runs: the loop's condition runs inside the loop, and an inner arm only when that inner branch
+    // takes it. The place the branch stood in is taken by a node the whole block reaches, so only a
+    // node that runs with the arm may stand there; handing it to a node of a nested region makes the
+    // statements after the branch wait on a value that region computes, and the commit refuses that
+    // graph (17, 4.1: a node reads only nodes that run whenever it does).
+    //
+    // `Inline`, `Block` and `Dead` are not control regions (control_regions.h): they only say where
+    // code came from, and their nodes run with the region around them, which is why the test below
+    // looks through them rather than comparing region ids. An inlined body's tail is such a node.
+    const auto controlRegionOf = [&](uint32_t region) {
+        while (region != 0 && region < draft.regionCount()) {
+            const camel::runtime::GCRegionKind kind = draft.region(region).kind;
+            if (kind != camel::runtime::GCRegionKind::Inline &&
+                kind != camel::runtime::GCRegionKind::Block &&
+                kind != camel::runtime::GCRegionKind::Dead) {
+                break;
+            }
+            region = draft.region(region).parent;
+        }
+        return region;
+    };
+    const uint32_t armRegion  = draft.armRegionOf(brch, *arm);
+    const uint32_t armControl = controlRegionOf(armRegion);
+    const auto inArmRegion    = [&](gc_node_ref_t n) {
+        return armControl != 0 && draft.alive(n) &&
+               controlRegionOf(draft.nodeRegion(n)) == armControl;
+    };
     // The statements of the taken arm are the statements of this block once the branch is gone, and a
     // block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
     // arrive as one, so the fragments the arm brings are joined before the branch's place is handed
     // over: only one of them would take the place, and the statements of the others would be reached
     // by nothing and would stop running (2).
     gc_node_ref_t armBlockNode = kInvalidNodeRef;
-    for (uint32_t r = 1; armBlockNode == kInvalidNodeRef && r < draft.regionCount(); ++r) {
-        const auto &region = draft.region(r);
-        if (region.kind != camel::runtime::GCRegionKind::Arm || region.owner != brch ||
-            region.index != *arm) {
-            continue;
-        }
+    if (armRegion != 0) {
         for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
-            if (draft.alive(n) && inArm(n) && draft.nodeRegion(n) == r) {
+            if (draft.alive(n) && draft.nodeRegion(n) == armRegion) {
                 armBlockNode = n;
                 break;
             }
@@ -548,6 +616,13 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     };
     const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
+        // A wait is never written from a BRCH: the node that follows a branch is its JOIN
+        // (branchPlaceInChain), and a node chained from the BRCH would wait on a node it is not in an
+        // arm of -- 17, 4.1 rule 2, the invariant no back end can run such a graph under.
+        pred = branchPlaceInChain(transaction, pred);
+        if (pred == kInvalidNodeRef || !draft.alive(pred)) {
+            return;
+        }
         markStatement(user);
         markStatement(pred);
         const gc_node_ref_t only[1] = {pred};
@@ -563,11 +638,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     gc_node_ref_t armTail = kInvalidNodeRef;
     for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
-        if (inArm(pred)) {
+        if (inArmRegion(pred)) {
             armTail = pred;
         }
     }
-    if (armTail == kInvalidNodeRef && inArm(result) && carriesOrdering(draft, result, true)) {
+    if (armTail == kInvalidNodeRef && inArmRegion(result) && carriesOrdering(draft, result, true)) {
         // An arm written as data flow only -- its statements never chained, because what the arm
         // returns is what they compute -- has no tail of its own. What runs last in it is the value
         // it returns, when that value is code that runs and not a constant: `if i % 100 == 0 then
@@ -580,7 +655,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!carriesOrdering(draft, n, true)) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
                 continue;
             }
             bool followed = false;
@@ -1577,4 +1652,3 @@ const camel::runtime::Program *simplifyGraph(
         maxRounds);
     return finish(program);
 }
-

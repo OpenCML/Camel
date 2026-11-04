@@ -177,7 +177,7 @@ timeout_ms = 60000
 # **Two entries per shape, and they answer two different questions.** The two below declare the vector
 # `float[]` -- rank one, no length -- and they are the ones the ledger calls `fail`: the shape the law
 # reads off that operand is written down nowhere in the program, so the step stops at
-# `skip=cotangent-needs-a-value uri=tensor:matmul position=0` (`position=1` for the column). They turn
+# `skip=parameter-shape uri=tensor:matmul position=0` (`position=1` for the column). They turn
 # green on the author's 2026-11-04 12:40 ruling -- the shape travels as a **known argument of the linear
 # call**, landed by the twin operators `mul_stated` / `matmul_stated` -- and nothing in this file may be
 # made green by writing `float[2]` instead: a program that can write no length is the only reason those
@@ -189,7 +189,7 @@ timeout_ms = 60000
 # ones when they look redundant: they are the program the ruled design is for.
 [[tests]]
 name = "matmul_t.vector_lhs_law"
-desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector's own cotangent is the one the law used to refuse. Red today, on purpose: the vector is declared `float[]`, so the shape the law reads has no place in the program, and the step stops at `skip=cotangent-needs-a-value uri=tensor:matmul position=0` -- it goes green when `mul_stated`/`matmul_stated` carry the shape as a known argument (author, 2026-11-04 12:40)"
+desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector's own cotangent is the one the law used to refuse. Red today, on purpose: the vector is declared `float[]`, so the shape the law reads has no place in the program, and the step stops at `skip=parameter-shape uri=tensor:matmul position=0` -- it goes green when `mul_stated`/`matmul_stated` carry the shape as a known argument (author, 2026-11-04 12:40)"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_lhs.cml"
 args = ["${case}", "${backend}"]
@@ -201,7 +201,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "matmul_t.vector_rhs_law"
-desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, the half `sum_to` had to build. Red today, on purpose: `u` is declared `float[]`, so the shape has no place in the program and the step stops at `skip=cotangent-needs-a-value uri=tensor:matmul position=1` -- it goes green when `mul_stated`/`matmul_stated` carry the shape as a known argument (author, 2026-11-04 12:40)"
+desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, the half `sum_to` had to build. Red today, on purpose: `u` is declared `float[]`, so the shape has no place in the program and the step stops at `skip=parameter-shape uri=tensor:matmul position=1` -- it goes green when `mul_stated`/`matmul_stated` carry the shape as a known argument (author, 2026-11-04 12:40)"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_rhs.cml"
 args = ["${case}", "${backend}"]
@@ -261,13 +261,13 @@ timeout_ms = 60000
 # what replaced this.
 [[tests]]
 name = "matmul_t.rank_three_is_refused_by_name"
-desc = "The product's transpose law serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul rule=matmul_t node=7 position=0 ranks=(3, 2)`, with the sentence `the law `matmul_t` has no cotangent for `tensor:matmul` at operands of rank (3, 2)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently"
+desc = "The product's linear call is `matmul_stated`, so the law that answers it is `matmul_stated_t`; it serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4`, with the sentence `the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently. The ranks list has one entry per operand -- the two tensors and the two stated lists -- and the `reason=` string is left unpinned because it names the helper's argument list rather than the law's"
 kind = "negative"
 case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_t` has no cotangent for `tensor:matmul` at operands of rank (3, 2)"]
-expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul rule=matmul_t node=7 position=0 ranks=(3, 2) operands=2", "reason=No matching function found for argument types: <> (float[...], float[3, 2, 2], float[2, 2])"]
+expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]
+expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

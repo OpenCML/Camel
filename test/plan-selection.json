@@ -49,6 +49,11 @@
     ],
     "rules": [
         {
+            "comment": "The reduced programs of the archiving result adb67e081 (test/cases/opt/adb67e081): the reductions of the finder's report, kept unedited. Two plans run them, and both are named here: `feat/opt/adb67e081` holds the programs whose defect is still open (work owed, so its `fail` count is the debt) and `feat/compile/fold_arms` holds `rc05_seed104`, the one this lane fixed. The rules come first in this list, before the general ones: the directory rule for test/cases below mirrors the segments below test/cases and would look for `test/plans/feat/opt/adb67e081`, which is a plan file, so nothing would reach it.",
+            "paths": ["test/cases/opt/adb67e081/"],
+            "plans": ["feat/opt/adb67e081.plan.toml", "feat/compile/fold_arms.plan.toml"]
+        },
+        {
             "comment": "The corpus sweep tool: its case is the tool itself, so a change there selects the plan that runs it (a slow plan, so an ordinary change filters it out under --tier fast).",
             "paths": ["test/tools/cml-sweep.mjs"],
             "plans": ["feat/trans/cml_sweep.plan.toml"]
@@ -524,6 +529,11 @@
             "comment": "The judgement programs are the corpus of open design questions: the cpp harness reads one of them through test/tools/cppexec/expect.txt, and the translation plan runs that harness. The README and the findings index are documentation of the manual progen tool and are on the self-test's rule-less allowlist.",
             "paths": ["test/cases/opt/progen/judgement/"],
             "plans": ["feat/trans/cpp.plan.toml"]
+        },
+        {
+            "comment": "The reduced seed 8 program of the branch-arm refusal (`std::opt` on the progen batch, `JOIN 113 reads GATE 217` before the reduction): it lives in the progen corpus, whose directory rule above selects nothing, so the fast plan that runs it is named here. Without this rule the plan would be one `--changed` can never reach, which is the hole the same case path is meant to close.",
+            "paths": ["test/cases/opt/progen/seed8_join_reads_gate.cml"],
+            "plans": ["feat/opt/progen8_arm.plan.toml"]
         },
         {
             "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",

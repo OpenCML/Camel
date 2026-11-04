@@ -146,6 +146,37 @@ export func sum_stated::<T>(t: T[...], at: int[]): T when is_numeric::<T>()
 /// @example take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])    // [[3.0, 4.0]]
 export func take_stated::<T>(t: T[...], at: int[]): T[...] when is_numeric::<T>()
 
+/// The product of two tensors, with **both** operands' extents stated: `x * w`, where `ax` is
+/// `shape(x)` and `aw` is `shape(w)`.
+///
+/// The value is the product and spends nothing on the extents: the broadcast, the element type and the
+/// one rounding are `multiply`'s own. `rulesets.transpose`'s `mul_stated_t` reads the two lists
+/// instead of the operand whose cotangent it is answering -- that operand is a tangent on the reverse
+/// side, and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+/// computes them is `rulesets.jvp`'s `jvp_mul_tensor`, where both operands are values.
+///
+/// Two lists and not one, unlike the stated reductions above: a product broadcasts, so the operands'
+/// shapes differ (`[2, 2, 3] * [3]`), and each cotangent comes back to its **own** operand's shape. An
+/// operand that is one number states no extents, and its list is empty.
+/// @pure
+/// @fails fault `RuntimeError` when either list disagrees with its operand's shape
+/// @example mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])    // [3.0, 8.0]
+export func mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] when is_numeric::<T>()
+
+/// The matrix product, with **both** operands' extents stated: `a @ b`, where `sa` is `shape(a)` and
+/// `sb` is `shape(b)`.
+///
+/// The value is the product (`matmul`'s own kernel, so the accumulation and the inner-extent check are
+/// the definition's own) and the two lists are read by `rulesets.transpose`'s `matmul_stated_t`, which
+/// reduces each cotangent to its own operand's shape without reading that operand. Two lists because
+/// the answer's shape is neither operand's: a `[3, 4] @ [4, 2]` product reduces the left cotangent to
+/// `[3, 4]` and the right one to `[4, 2]`.
+/// @pure
+/// @fails fault `RuntimeError` when either list disagrees with its operand's shape
+/// @example matmul_stated([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1], [1, 2], [2, 1])    // [[11.0]]
+export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[...]
+    when is_numeric::<T>()
+
 // The lane mean with its extents stated -- `mean_axis_stated(t, at)`, `at` being `[axis, keepdims,
 // d0, ..., d(rank-1)]` -- is not declared here. Its result's extents are the operand's with the axis
 // removed, or kept as an extent of one, so they follow from the *values* in `at`, and the only type
