@@ -2878,3 +2878,7 @@ ICPC 的 LLM 实验统一改用 v0.2.43（`ae874ce04`，pin 在 camel-lanes 的 
 2. **给 `let` 赋值的诊断泄露了内部实现**：`let x = 1; x = 2` 报 `ImmutablePassedToVarParam: 'x' is immutable and cannot be passed to a var parameter of '<__assn__>'`。用户写的是赋值，诊断却说成"传给一个 var 参数"，还露出了内部名 `<__assn__>`。改成一条说赋值的诊断，例如"`x` 是 `let` 绑定，不能赋值；需要改就写 `var x`"，并且不出现内部名。
 3. **`std::opt` 仍会崩溃或报内部错误**：CC 记录的 6 个最小程序（Camel-Archive `CC2027/eval/results/adb67e081/e9_reduced/`），在 v0.2.43 上还剩 4 个：`rc00_seed27`（`std::opt std::nvm`，SIGSEGV）、`rc03_seed30`（`std::opt`，分支臂不变式）、`rc04_seed72`（`std::opt::inline`，输入成环）、`rc05_seed104`（`std::opt::fold`，GATE 读臂内节点）。把这 4 个拷进 `test/cases/opt/` 作正例，期望与不经优化遍运行时的输出一致，逐个修。
 另外确认：`var` 读写顺序（经 `std::cml` 往返也对）、`var` 传给 `T?` 参数，这两项在 v0.2.43 上已经修好。
+
+## 文档（2026-11-04 14:00）：§4.4 那句"stored lambda"要收窄
+
+语言参考 §4.4 写着："For a call through a function value (an argument, a return value or a stored lambda), the call site can recognise side effects only by its type (`var` parameters)"。实际行为是：在同一个函数里 `let f = () => sync { c += 1 }` 绑定、调用处能看到函数体的 lambda，编译器会把 `f()` 记为一次对捕获的 `c` 的写；后面读了 `c`，这次写就执行（ICPC 在 v0.2.43 上量到 `c=1`）。行为符合"对捕获变量的写也被跟踪"这条规则，是那句话写宽了。改成：只有**调用处看不到函数体**的函数值（作为参数传入、作为返回值得到、存进容器或结构后再取出）才只能按类型识别副作用。另外补一条正例和一条反例：后面读 `c` 时执行；不读时报 `IgnoredSideEffect`、不执行。
