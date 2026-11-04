@@ -111,6 +111,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "needs-a-value-outside-the-closure";
     case TransposeRefusalCause::NoCotangentArithmetic:
         return "no-cotangent-arithmetic";
+    case TransposeRefusalCause::CotangentPortMismatch:
+        return "cotangent-port-mismatch";
     }
     return nullptr;
 }
@@ -1695,7 +1697,7 @@ bool buildTransposeMember(
         const auto ruleCotangent = [&](const std::string &ruleName,
                                        std::span<const gc_node_ref_t> inputs, size_t position,
                                        gc_node_ref_t ct, Type *ctType, std::string &why,
-                                       bool &noInstance) -> gc_node_ref_t {
+                                       bool &noInstance, bool &portMismatch) -> gc_node_ref_t {
             const auto valueOf = [&](size_t slot) -> gc_node_ref_t {
                 if (slot == inputs.size()) {
                     // The slot past the operands is the extents: the law asked for them
@@ -1777,6 +1779,47 @@ bool buildTransposeMember(
                     handed = draft.addCastNode(port);
                     draft.setNormInputs(handed, std::span<const gc_node_ref_t>(source));
                 }
+            }
+            // **The port's declared type against the type of the value really handed** (author,
+            // 2026-11-04 04:20). A law is filed under its operator's head and its operand count and
+            // the index reads no operand types, so nothing ties the port the law writes for its
+            // cotangent to the shape this step has: `mul_tangent`'s law says `(ct: T[..])` and a
+            // `float` step hands it the number it was transposed at. The two agree here when the cast
+            // above made them one type -- the rank-zero cotangent read as the open-rank array it is
+            // -- and the language converts between them nowhere else. So a difference is refused
+            // where both types are in hand, and it is refused as the language's rule about what a
+            // cotangent is rather than as a limit of this walk: handing the value over would have the
+            // law's body read it as another shape, which is how a wrong number or a bad read enters.
+            // Nothing is built on the refusal path, and the sentence names both spellings.
+            //
+            // What the comparison covers is a difference of the **same kind**: two arrays whose
+            // element types differ (`float[3]` and `f32[3]`), or two numbers of different codes (the
+            // measured `f32` step handed to a `float` law, 2026-11-04). A difference across kinds is
+            // not this walk's to refuse: a number handed to an array port is the rank-zero case the
+            // cast above answers (design principles 5.4), an array handed to a number port is what
+            // the law's own instancing answers from the operands' types, and a `Ref` is a type that
+            // is not decided yet, which `Type::assignableFrom` cannot compare at all. Measured
+            // 2026-11-04: with the cross-kind cases included, `mean_axis`'s law refused two cases
+            // that answer correct numbers (`mean_axis1_keepdims_gradient_reads_the_row_length`), and
+            // refusing a right number to catch a wrong one is the trade this transform does not make.
+            const bool portIsArray   = port != nullptr && port->code() == camel::core::type::TypeCode::Array;
+            const bool handedIsArray = ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array;
+            const bool undecided     = (port != nullptr && port->code() == camel::core::type::TypeCode::Ref) ||
+                                   (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Ref);
+            if (port != nullptr && ctType != nullptr && handed == ct && !undecided &&
+                portIsArray == handedIsArray && !port->assignableFrom(ctType)) {
+                portMismatch = true;
+                // `refuse` writes the record whole (`TransposeRefusal{cause, param}`), so the two
+                // spellings go in after it and not before: a field written first is a field the
+                // record drops, and the sentence below read two empty strings.
+                refuse(TransposeRefusalCause::CotangentPortMismatch, position);
+                state.refusal.uri        = ruleName;
+                state.refusal.portType   = port->toString();
+                state.refusal.handedType = ctType->toString();
+                os << " rule=" << ruleName << " position=" << position
+                   << " port=" << state.refusal.portType
+                   << " handed=" << state.refusal.handedType << '\n';
+                return rt::kInvalidNodeRef;
             }
             return camel::transforms::expandRuleByName(
                 *state.context, group, group.transaction(member), ruleName, valueOf, {handed},
@@ -2687,11 +2730,18 @@ bool buildTransposeMember(
                     }
                     std::string why;
                     bool noInstance = false;
+                    bool portMismatch = false;
                     const gc_node_ref_t answer =
                         ruleCotangent(chosenRule, inputs, i, local[ref],
-                                      armCotangentType, why, noInstance);
+                                      armCotangentType, why, noInstance, portMismatch);
                     if (answer == rt::kInvalidNodeRef) {
                         armsOk = false;
+                        if (portMismatch) {
+                            // The walk recorded and printed the refusal where the two types met
+                            // (`ruleCotangent`); a cause written here would overwrite it with one
+                            // about a value it did reach.
+                            return {};
+                        }
                         // Two facts, and the expansion names which one it met: `noInstance` means the
                         // law was named and would not instantiate at these operand types -- for a
                         // body written once per rank, the ranks outside the set it serves -- and a
@@ -3374,10 +3424,17 @@ bool buildTransposeMember(
                     }
                     std::string why;
                     bool noInstance = false;
+                    bool portMismatch = false;
                     const gc_node_ref_t answer = ruleCotangent(
                         chosenRule, inputs, i, ct, stepCotangentType, why,
-                        noInstance);
+                        noInstance, portMismatch);
                     if (answer == rt::kInvalidNodeRef) {
+                        if (portMismatch) {
+                            // Recorded and printed where the two types met (`ruleCotangent`): the
+                            // value was in hand and the law's port would not read it, which is not
+                            // either of the two facts below.
+                            return false;
+                        }
                         // The same two facts as the arm walk above, told apart the same way: the law
                         // would not instantiate at these operand types, or the walk could not reach a
                         // value the answer reads. The rank is printed for the first because it is the
@@ -3970,21 +4027,23 @@ bool buildTransposeMember(
                     // the reading a reader can act on.
                     const auto captured = function->withInputsOf(ref);
                     if (!captured.empty()) {
-                        // A **Port** is a value this graph *receives* -- a `with` parameter, or a
-                        // closure port, which is how a cut hands its linear half to the half that
-                        // calls it. That value's transpose is `transpose(v)` at run time, so the call
-                        // can be turned around without seeing the graph behind it. A value the body
-                        // *made* (a `let`-bound closure, a FILL) is a different matter: its graph is
-                        // only inside the value and nothing here can name it.
+                        // **Which graph does this *value* name** -- not "what does the node answer as
+                        // a callee" (`staticFunctionGraphOf`). A FUNC node is a call written by name,
+                        // and its value is that call's *answer*: for `mk(x)(2.0)` the `with` input is
+                        // the FUNC node `mk(x)`, and asking `calleeIdOf` answered `mk` -- this call's
+                        // callee read as its argument's callee (measured 2026-11-04, `TRANSPOSE
+                        // function=mk skip=signature` and `callee=mk`). The value names a graph when
+                        // it *is* one: a DATA node holding a function, and nothing else. Everything
+                        // else is handled by its content below -- a Port is a value this graph
+                        // receives, and its transpose is `transpose(v)`; a call's answer is a value
+                        // too, and its transpose is the same `transpose(v)` (author, 2026-11-04
+                        // 04:20: 调用一个函数值，转置成调用 `transpose(v)`).
+                        const auto named = function->staticFunctionGraphOf(captured.front());
+                        GraphId fromValue = named.graph;
+                        namedReason       = named.reason;
                         const camel::runtime::GCNode *capturedNode = function->node(captured.front());
                         const bool received = capturedNode != nullptr &&
                                               capturedNode->kind == rt::GCNodeKind::Port;
-                        GraphId fromValue = function->calleeIdOf(captured.front());
-                        if (!rt::isValid(fromValue)) {
-                            const auto named = function->staticFunctionGraphOf(captured.front());
-                            fromValue         = named.graph;
-                            namedReason       = named.reason;
-                        }
                         if (rt::isValid(fromValue) || received) {
                             calleeId   = fromValue;
                             argumentAt = 0;
@@ -4023,20 +4082,26 @@ bool buildTransposeMember(
                     const gc_node_ref_t carrier =
                         capturedValues.empty() ? (inputs.empty() ? rt::kInvalidNodeRef : inputs.front())
                                                : capturedValues.front();
-                    // The value has to be one **this graph closed over** -- a closure port -- and not
-                    // one the body built for itself (`let h = (y) => y*x` puts a closure carrying `x`
-                    // into a data node). Both are values of function type and both have a transpose
-                    // by the law, but only the first is the one a cut hands out: its graph is the one
-                    // the closure was filled from, so `transpose` can read it and the member it builds
-                    // takes that same closure. A closure the body built carries its own captures, and
-                    // transposing it asks the same question this transform already refuses for a `with`
-                    // parameter -- whose graph stands behind a value, not behind the call. It stays a
-                    // refusal, by the operator's name for it (`function-closure`).
-                    const bool closedOver =
-                        !capturedValues.empty() && function->node(carrier) != nullptr &&
-                        function->node(carrier)->kind == rt::GCNodeKind::Port;
+                    // The value has to be one this graph can *carry* into the member: a **Port**, which is a
+                    // value the graph receives (a `with` parameter, or a closure port -- how a cut hands
+                    // its linear half to the half that calls it). Its transpose is `transpose(v)`, the
+                    // operator written once in the transposed graph, and the member takes the same
+                    // closure, so nothing has to be recomputed.
+                    //
+                    // A value the body **computes** is not one of these, and no reading of the call
+                    // changes that (author, 2026-11-04 04:20: 调用一个函数值，转置成调用 `transpose(v)`,
+                    // 按内容处理 -- and that is what this branch does for the value it can carry; the
+                    // case measured is `f(x) = mk(x)(2.0)`). `transpose(v)` needs `v`, and the transposed
+                    // function is handed **only the cotangent** (2026-11-03 16:15, the declaration in
+                    // `stdlib/types.cml#Transpose`): a member that recomputed `mk(x)` would need `x`, a
+                    // parameter that carries no port of its own -- and a member that took `v` as a value
+                    // port is what the same ruling refuses. So the call is refused where the value stands, by the reason
+                    // `staticFunctionGraphOf` gave in front of it: the callee's graph is not named in this
+                    // graph (`not-a-data-node`), and the reading says so instead of naming `mk`.
+                    const bool carried = !capturedValues.empty() && function->node(carrier) != nullptr &&
+                                         function->node(carrier)->kind == rt::GCNodeKind::Port;
                     const camel::runtime::GCNode *carrierNode =
-                        closedOver && carrier < nodeCount ? function->node(carrier) : nullptr;
+                        carried && carrier < nodeCount ? function->node(carrier) : nullptr;
                     const auto *linearType =
                         carrierNode != nullptr
                             ? tt::as_ptr<FunctionType>(const_cast<Type *>(carrierNode->dataType()))
@@ -4123,7 +4188,7 @@ bool buildTransposeMember(
                     if (!namedReason.empty()) {
                         os << " reason=" << namedReason;
                     }
-                    if (closedOver && transposedType == nullptr) {
+                    if (carried && transposedType == nullptr) {
                         // The value is a function and the law says nothing about its transpose: the
                         // reason is the law's own, read from the same predicate the operator's type
                         // resolver reads.

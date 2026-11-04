@@ -1230,21 +1230,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "transpose.callee_is_a_returned_function.is_not_the_callees_own_graph"
-desc = "`f(x) = mk(x)(2.0)` with `mk(x) = (y) => x*y`: the value the call is made through is `mk(x)`'s **result**, and the walk names `mk` -- the graph of the call that produced the value -- as the callee. So it transposes `mk` (`TRANSPOSE function=mk skip=signature`, a function whose answer is a function has no transposed signature) and refuses the caller with `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`, exit 1. The paper answer is 2 at cotangent 1 and the program is not wrong; what is wrong is the name: a FUNC node is a call written by name, so `calleeIdOf` answers for it -- with its own callee, not with the graph its *value* holds. The GIR makes the gap visible: the CALL's `with` input is `N07` (`label=\"mk\"`, `type=\"FUNC\"`), i.e. the call `mk(x)`, and its one ordinary input is the `2.0`. **Refused for the right reason, by the wrong name**: the verdict (exit 1, no number) is what the shape owes, the sentence is not -- the reading it owes is `callee=none`, since the callee's graph is not named anywhere in this graph. It is the *other* half of the reading the two cases above were fixed on: there the callee was read out of an ordinary input, here out of a `with` input holding a call's value, and only the first question was removed."
+name = "transpose.callee_is_a_returned_function.names_no_graph"
+desc = "`f(x) = mk(x)(2.0)` with `mk(x) = (y) => x*y`: the value the call is made through is `mk(x)`'s **result**, and the question asked of the call's `with` input is now `what graph does this *value* name` (`GCGraph::staticFunctionGraphOf`, which answers nothing for a call's answer) instead of `what does this node answer as a callee` (`calleeIdOf`, which answered `mk` -- the graph of the call that produced the value, not the graph this call applies). So the reading is `TRANSPOSE function=f skip=call-no-transpose node=3 callee=none ... reason=not-a-data-node`, exit 1, and `TRANSPOSE function=mk skip=signature` is gone. The verdict is a refusal and the reason is the value's content: a call of a function value is transposed by `transpose(v)` (2026-11-04 04:20), and `v` is a value the body computes, so it is not in the transposed graph, which is handed only the cotangent (2026-11-03 16:15) -- recomputing `mk(x)` there needs `x`, a parameter with no port, and taking `v` as a port is what that ruling refuses. The answer owed (2 at cotangent 1) is owed by the library's cut, which carries such a value as a residual."
 kind = "negative"
 case = "../../../cases/compile/transforms/transpose_callee_is_a_returned_function.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=call-no-transpose node=", "callee=none"]
-expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk "]
-known_fail = ["nvm"]
-known_fail_owner = "lane-fnarg"
-known_fail_reason = "the callee is still read out of the `with` input with `calleeIdOf`, so the sentence names `mk` where the value names no graph: `transpose.cpp#staticFunctionGraphOf` is the entry that answers the value's own graph and refuses `not-a-data-node` here"
-known_fail_msg = "callee=mk"
-known_fail_note = "Marked 2026-11-04 (lane-fnarg): measured with `nvm`, exit 1, `TRANSPOSE function=mk skip=signature` and `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`. This mark survives the fix that removed the operand question, and deliberately: that fix took the callee out of the *ordinary* inputs, and this program's callee stands in a `with` input that holds a call's value. `calleeIdOf` answers for any FUNC node -- including one whose value is this call's callee -- so the name is still `mk`. The verdict (refused, exit 1) is the one the shape owes; the sentence is not. The mark goes away when the `with` question is asked with an entry that answers `what graph does this *value* name` (`staticFunctionGraphOf`, which refuses `not-a-data-node` here) instead of `calleeIdOf` -- the same shape of edit, one input list over."
+expect_output_contains = ["skip=call-no-transpose node=", "callee=none", "reason=not-a-data-node"]
+expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk ", "skip=signature"]
 
 # A rule's tangent function is a plain function of several floats: `mul_tangent(x, w, dx, dw)` is
 # `dx*w + x*dw`, so the transposed half of a lifted graph calls it with the operands in front of
@@ -2586,14 +2581,14 @@ timeout_ms = 20000
 # `tangent= 0.0` and exited 0.
 [[tests]]
 name = "jvp_loop_iterable_tangent"
-desc = "A `for` loop whose iterable is a value with a tangent: `jvp(f)` of `f(xs) = loop s = 0.0 for e in xs do s + e` at `xs = [1.0, 2.0]`, `dxs = [1.0, 1.0]`. The element `e` has the tangent of the array's element, and the lift copies the iterable as it stands, so it has nowhere to put it. The fault names the construct -- this program exits non-zero with `jvp does not reinterpret a loop over a value that has a tangent` -- and prints neither the value nor the zero tangent it used to answer (measured 2026-11-04: `value= 3.0`, `tangent= 0.0`, where the sum of the tangents is 2.0)."
+desc = "A `for` loop whose iterable is a value with a tangent: `jvp(f)` of `f(xs) = loop s = 0.0 for e in xs do s + e` at `xs = [1.0, 2.0]`, `dxs = [1.0, 1.0]`. The element `e` has the tangent of the array's element, and the lift copies the iterable as it stands, so it has nowhere to put it. The fault names the construct -- this program exits non-zero with `jvp cannot differentiate through a loop over a value that has a tangent` -- and prints neither the value nor the zero tangent it used to answer (measured 2026-11-04: `value= 3.0`, `tangent= 0.0`, where the sum of the tangents is 2.0)."
 kind = "negative"
 case = "../../../cases/compile/transforms/jvp_loop_iterable_tangent.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["jvp does not reinterpret a loop over a value that has a tangent", "the element the loop hands its body has the tangent of the array's element"]
+expect_output_contains = ["jvp cannot differentiate through a loop over a value that has a tangent", "the element the loop hands its body has the tangent of the array's element"]
 expect_stdout_not_contains = ["tangent= 0.0", "value= 3.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

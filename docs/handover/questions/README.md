@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：50 页
+## 现在在等作者：52 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -30,6 +30,7 @@
 | [`2026-11-04-does-the-engine-need-a-pick-at-rule`](2026-11-04-does-the-engine-need-a-pick-at-rule.cn.md) | 问题：引擎的反向表要不要给 `pick_at` 补一条规则？ |
 | [`2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings`](2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings.cn.md) | 问题：`rulesets.jvp` 要不要给四个"stated"拼写补前向律？ |
 | [`2026-11-04-does-the-transpose-walk-still-refuse-by-arity`](2026-11-04-does-the-transpose-walk-still-refuse-by-arity.cn.md) | 问题：转置走图还按操作数个数拒一个算子吗？ |
+| [`2026-11-04-does-the-with-gate-gate-scalars-or-all-promotion`](2026-11-04-does-the-with-gate-gate-scalars-or-all-promotion.cn.md) | 删掉“只提升标量 `with`”那道门，删的是标量限制，还是提升本身？ |
 | [`2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape`](2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape.cn.md) | `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？ |
 | [`2026-11-04-how-is-a-two-port-transposed-value-called`](2026-11-04-how-is-a-two-port-transposed-value-called.cn.md) | 两端口（值 + 余切）的转置值，怎么被调用？ |
 | [`2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal`](2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md) | 开秩数组的零，是空数组还是明确拒绝 |
@@ -43,6 +44,7 @@
 | [`2026-11-04-the-two-tuple-cases-have-no-closure-member`](2026-11-04-the-two-tuple-cases-have-no-closure-member.cn.md) | 那两条元组用例里没有闭包成员：19:55 那条裁决的前提，今天量不出来 |
 | [`2026-11-04-two-f32-combination-cases-meet-their-own-call-text`](2026-11-04-two-f32-combination-cases-meet-their-own-call-text.cn.md) | 两条 f32 组合用例撞上的是自己的调用写法（还有一处数字） |
 | [`2026-11-04-what-answers-a-length-from-a-type-alone`](2026-11-04-what-answers-a-length-from-a-type-alone.cn.md) | `extent_of` 到底答「形状」还是答「某一维的长度」？ |
+| [`2026-11-04-what-comes-after-reading-a-body-built-callee-by-its-content`](2026-11-04-what-comes-after-reading-a-body-built-callee-by-its-content.cn.md) | 调用的被调值是体自己算出来的函数值：按内容读完之后，答案从哪儿来？ |
 | [`2026-11-04-what-does-a-call-of-a-value-that-is-not-a-function-say`](2026-11-04-what-does-a-call-of-a-value-that-is-not-a-function-say.cn.md) | 调用一个类型不是函数的值，诊断该怎么写？ |
 | [`2026-11-04-what-does-the-second-derivative-need`](2026-11-04-what-does-the-second-derivative-need.cn.md) | 二阶自动微分卡在哪一层：一个"图叫得出名字"的函数值？ |
 | [`2026-11-04-what-shape-a-zero-with-no-stated-extent-has`](2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md) | 类型没写宽度时，那个零的宽度是多少？ |

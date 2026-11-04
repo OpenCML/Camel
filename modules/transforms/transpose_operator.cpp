@@ -188,6 +188,14 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
              refusal.paramType});
     case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
+    case TransposeRefusalCause::CotangentPortMismatch:
+        // The two spellings, verbatim, because the repair is an edit to one of them: the law's port
+        // and the value the step really has. Nothing here says "not supported yet" -- a cotangent of
+        // one type handed to a port of another is a value the law would read as a different shape,
+        // and the language converts between the two nowhere.
+        return "the rule for '" + refusal.uri + "' takes its cotangent as `" +
+               refusal.portType + "` and this step hands it a `" + refusal.handedType +
+               "`, and the language converts between those types nowhere";
     case TransposeRefusalCause::CallNoTranspose:
         // One of the two causes a call site can meet, and the one this file said for both of them
         // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee

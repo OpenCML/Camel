@@ -1476,21 +1476,19 @@ gives the cotangent of its parameter. The data flow runs backwards -- each primi
 by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 
-The transposed function takes the values the call site still passes first and the cotangent of
-the result last, because a pullback may need the value it is transposing at: a branch's condition
-is a value, and the cotangent of an arm only means something for the arm that ran.
+The transposed function takes one value, the cotangent of `f`'s result, and answers one cotangent
+per parameter. Both lists are `f`'s own: every parameter of `f` is a linear input, and the
+cotangent it is answered for is the one the caller hands in.
 
-Which values those are is a property of `f`'s body, not of its type: a parameter that takes a
-cotangent is not passed (the cotangent carries it), a parameter with no tangent space (an `int`,
-a `bool`, a string) stands there as a value, and a value the body reads from outside stands there
-too. So for a one-`float` function the call is `transpose(f)(1.0)`.
+A value the transposed body needs beside the cotangent is not passed to it: it is a residual the
+function that is transposed was closed over, and the body reads it as a closure port. That is the
+same rule for a value the body computed, a value it read from outside, and a `with` value it read
+(`lin`'s residual tuple): a parameter with no tangent space is a value, and it is the one place
+the transposed graph takes a port that is not a cotangent, because the call site still fills it.
 
-**`stdlib/types.cml#Transpose` is the contract, not an approximation** (author, 2026-11-03,
-`origin/fsh-dev` `6eceaa89d`): the build makes the declared type. The declaration cannot write
-that shape exactly today because the type-bundle splice loses multiplicity and lacks "the value
-parameters the call site still passes" -- a missing capability of the splice, to be fixed, not a
-wording to be kept. `modules/transforms/transpose.cpp#transposeSignature` is the build that has to
-come to agree with it.
+**`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
+that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 
 - Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 

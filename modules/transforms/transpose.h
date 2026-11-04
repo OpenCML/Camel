@@ -110,6 +110,17 @@ enum class TransposeRefusalCause {
     /// No case in the tree reaches it (every space the language registers for a differentiable value
     /// declares an addition); it exists so the state has a name instead of a `float` sum.
     NoCotangentArithmetic,
+    /// The rule's cotangent port declares one type and the walk hands it another, with no conversion
+    /// between them (author, 2026-11-04 04:20: compare the port's declared type with the type of the
+    /// value really handed, and refuse a disagreement by the language's own rules). A law is filed
+    /// under its operator's head and its operand count, so nothing about the index ties the law's
+    /// cotangent port to the shape the step has: `mul_tangent`'s law writes `(ct: T[..])`, and at a
+    /// `float` step the cotangent the member is handed is the number itself.
+    /// The expansion reads the port's type to instance the law's right side and hands the value
+    /// through it, so a difference is not a missing capability of the transform -- it is a value the
+    /// law would read as another shape, which is how a wrong number or a bad read gets in. Refused
+    /// before anything is built, with both spellings in hand (`portType`, `handedType`).
+    CotangentPortMismatch,
 };
 
 /// The word the reading log spells `cause` as, or `nullptr` for `None`. The log's spelling and the
@@ -159,6 +170,13 @@ struct TransposeRefusal {
     /// for the causes that are about a parameter's type rather than about a step (`ParameterShape`):
     /// the repair is an edit to this spelling, so a reader is handed it verbatim.
     std::string paramType;
+    /// The type the rule's cotangent port declares (`CotangentPortMismatch`), spelled as the law
+    /// writes it: the port is the line a reader edits, so it is handed over verbatim.
+    std::string portType;
+    /// The type of the value the walk really hands that port, spelled the same way. The other half of
+    /// the same fact, and the one the program wrote: a reader compares the two and knows which side
+    /// moved. Empty for every cause but `CotangentPortMismatch`.
+    std::string handedType;
 };
 
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the
