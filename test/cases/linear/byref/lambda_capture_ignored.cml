@@ -1,0 +1,23 @@
+/**
+ * The same lambda with nothing written after the call that reads `c`: the write is not executed.
+ *
+ * The body writes `c` and then prints it, so a body that ran would print `1`; the program prints
+ * only the `0` of `main`, which is how this case proves the write did not happen instead of only
+ * asserting that a warning was reported. The compiler reports the call as one that is never
+ * executed (`SemanticDiag::EffectNotExecuted`). Plan linear.captured_writes, tests
+ * lambda_capture_ignored.*.
+ */
+func ignored(): int {
+    var c = 0
+    let f = (): void => sync {
+        c += 1
+        println(c)
+    }
+    f()
+    return 0
+}
+
+func main(): int sync {
+    println(ignored())
+    return 0
+}
