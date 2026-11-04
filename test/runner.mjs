@@ -11,6 +11,11 @@ const TEST_ROOT = path.dirname(__filename)
 const REPO_ROOT = path.dirname(TEST_ROOT)
 const PLANS_ROOT = path.join(TEST_ROOT, 'plans')
 const RUNNER = path.join(TEST_ROOT, 'tools', 'run-tests.mjs')
+// The layer report `--tier-report` starts: what a layer's entry count is made of (declared entries
+// against the copies a `[[sweeps]]` entry derives). It lives beside the plan inventory in `scripts`
+// because it reads the tree the way that check does, and it is started through this file so that
+// `node scripts/test.js --tier-report` and `npm run test` name one entry point.
+const TIER_REPORT = path.join(REPO_ROOT, 'scripts', 'tier-report.mjs')
 const SELECTION_PATH = path.join(TEST_ROOT, 'plan-selection.json')
 // `--changed` answers what this checkout changed relative to the base branch. `origin/develop`
 // is the branch work lands on; CAMEL_TEST_BASE overrides it (a release branch, a fork's base).
@@ -147,6 +152,12 @@ function parseArgs(argv) {
     const targets = []
     let changed = false
     let list = false
+    // `--tier-report` asks what a layer's entry count is made of -- the entries the plan files
+    // declare and the entries a `[[sweeps]]` entry derives from them -- instead of running
+    // anything. It is a query about the plan tree, so its own script (`scripts/tier-report.mjs`)
+    // is started with the layer and nothing else; a target, a job count or a build would name a run
+    // that this flag says is not happening.
+    let tierReport = false
     // `--changed-files <path>`: the changed paths, listed by a caller that could read the base
     // branch. `internal/tools/camel-remote.ps1` moves a tree to a host that holds the lane's
     // commits but not the base branch, so `git diff origin/develop` there answers "cannot read"
@@ -162,6 +173,8 @@ function parseArgs(argv) {
             // Print the plans a selection resolves to instead of running them. `--changed --list`
             // is the answer to "what would this change run?" without paying for the run.
             list = true
+        } else if (arg === '--tier-report') {
+            tierReport = true
         } else if (
             arg === '--all' ||
             arg === '--smoke' ||
@@ -212,8 +225,21 @@ function parseArgs(argv) {
                     : DEFAULT_TARGETS,
         changed,
         list,
+        tierReport,
+        // Whether a target was actually named on the command line. `targets` cannot answer it: it
+        // defaults to the fast layer, and `--tier-report` must refuse a target, not the default.
+        namedTarget: targets.length > 0,
         changedFilesList,
     }
+}
+
+/** The layer `--tier <name>` names in the forwarded arguments, or null when the run did not name one. */
+function tierRequested(runnerArgs) {
+    for (let i = 0; i < runnerArgs.length; i++) {
+        if (runnerArgs[i] === '--tier' && i + 1 < runnerArgs.length) return runnerArgs[i + 1]
+        if (runnerArgs[i].startsWith('--tier=')) return runnerArgs[i].slice('--tier='.length)
+    }
+    return null
 }
 
 /** Whether the forwarded arguments ask for `--tier debug` (as `--tier debug` or `--tier=debug`). */
@@ -691,6 +717,31 @@ export function main(argv = process.argv.slice(2)) {
         // flag and does nothing with it.
         console.error('[ERROR] --changed-files is only read together with --changed')
         process.exit(2)
+    }
+    if (options.tierReport) {
+        // A query about the plan tree, not a run: `scripts/tier-report.mjs` reads the plans through
+        // this runner's own loader and starts no test, so it needs no build, no install and no
+        // target. A target or `--changed` beside it would name a run this flag says is not
+        // happening, and silently ignoring one is how a flag stops meaning what it says.
+        if (options.changed || options.namedTarget || options.list) {
+            console.error(
+                '[ERROR] --tier-report names a layer and nothing else: it reads the plan tree and ' +
+                    'runs no plan, so a target, --all/--suite or --changed has no run to narrow',
+            )
+            process.exit(2)
+        }
+        const tier = tierRequested(options.runnerArgs)
+        const quiet = options.runnerArgs.includes('--quiet') ? ['--quiet'] : []
+        const proc = spawnSync(process.execPath, [TIER_REPORT, ...(tier ? ['--tier', tier] : []), ...quiet], {
+            cwd: REPO_ROOT,
+            stdio: 'inherit',
+            env: process.env
+        })
+        if (proc.error) {
+            console.error(proc.error.message)
+            process.exit(1)
+        }
+        process.exit(typeof proc.status === 'number' ? proc.status : 1)
     }
     const selection = options.changed && options.targets.length === 0
         ? selectChangedTargets({ changedFilesList: options.changedFilesList })

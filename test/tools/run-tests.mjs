@@ -998,7 +998,11 @@ function expandArgToken(token, scope) {
     })]
 }
 
-function expandArgs(args, scope) {
+// Exported because the layer report (`scripts/tier-report.mjs`) has to know what a copy actually
+// launches: two entries whose argument lists read the same can still resolve to different
+// commands (`${backend}` is a pass list from `test/vars.toml`), and a report that compared the
+// written words would call 3293 distinct runs 2233. One expansion, one answer.
+export function expandArgs(args, scope) {
     const expanded = []
     for (const token of args || []) {
         expanded.push(...expandArgToken(token, scope))
@@ -1011,7 +1015,7 @@ function expandArgs(args, scope) {
  * path a program prints can name this test's scratch directory. Unknown names are errors, as in
  * `args`.
  */
-function expandTextTokens(text, scope) {
+export function expandTextTokens(text, scope) {
     return String(text).replace(/\$\{([A-Za-z0-9_.-]+)\}/g, (_, name) => {
         if (!(name in scope)) throw new Error(`unknown variable ${name}`)
         const value = scope[name]
