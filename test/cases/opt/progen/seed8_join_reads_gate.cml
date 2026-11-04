@@ -1,0 +1,20 @@
+import { get_env } from env
+
+type P = { x: int, y: int }
+
+func u42(a43: bool?, a44: bool): bool {
+    return false;
+}
+
+func q48(a49: int, a50: bool): bool sync {
+    return a50;
+}
+
+func main(): int sync {
+    let n60 = (get_env('PROGEN_S2') ?? '');
+    let n61 = q48(0, (-1.5) >= (-1.5));
+    let n75 = (if n61 then (loop s69 = 0.5, c70 = (1.0-2.0) for q71 in [''] while (if false then false else n61) do (1.0, 1.0)).0 else {
+        return 4.75;
+    }, u42(if n61 then false else null, false));
+    return 0;
+}
