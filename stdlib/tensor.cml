@@ -160,20 +160,21 @@ export func take_stated::<T>(t: T[...], indices: int[], extents: int[]): T[...] 
 // whatever the extents are, and a stated take always answers at least the rows it read, so `T` and
 // `T[...]` are the results they have.
 
-/// The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents stated in
-/// one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `sum_axis(t, axis, keepdims)`.
+/// The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
+/// stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum_axis(t, axis, keepdims)`.
 ///
 /// The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
-/// accumulation in `f64`, the element type and the one rounding are the definition's own -- and the
-/// extents after the two scalars are checked against the tensor's shape. `rulesets.transpose`'s
-/// `sum_axis_stated_t` reads the list and nothing of the operand: the adjoint of a lane sum spreads
-/// each lane's cotangent back over the lane, which is a shape of the primal. A negative axis counts
-/// from the last one, as it does in the axis form: the reduction normalizes it on entry and this
-/// spelling hands it over unchanged.
+/// accumulation in `f64`, the element type and the one rounding are the definition's own -- and
+/// `extents` is checked against the tensor's shape. `rulesets.transpose`'s `sum_axis_stated_t` reads
+/// the three stated values and nothing of the operand: the adjoint of a lane sum spreads each lane's
+/// cotangent back over the lane, which is a shape of the primal. A negative axis counts from the last
+/// one, as it does in the axis form: the reduction normalizes it on entry and this spelling hands it
+/// over unchanged.
 /// @pure
-/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank
-/// @example sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 0, 2, 2])    // [4.0, 6.0]
-export func sum_axis_stated::<T>(t: T[...], at: int[]): T[...] when is_numeric::<T>()
+/// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is
+/// outside the rank
+/// @example sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false, [2, 2])    // [4.0, 6.0]
+export func sum_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]): T[...] when is_numeric::<T>()
 
 /// The mean of every element, with the operand's extents stated: `mean(t)`, and `at` is `shape(t)`.
 ///

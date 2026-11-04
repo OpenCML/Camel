@@ -566,10 +566,11 @@ func lane_spread::<T>(ct: T[...], extents: int[], axis: int, keepdims: bool): T[
     else full(extents, 1.0) * reshape<lane_shape(extents, axis)>(ct)
 }
 
-/// The cotangent of `sum_axis_stated(t, at)`: each lane's `ct` spread back over the lane it summed,
-/// where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
-export rule sum_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    sum_axis_stated(t, at) => (ct: T[...]) => lane_spread(ct, at[2:len(at)], at[0], at[1] != 0)
+/// The cotangent of `sum_axis_stated(t, axis, keepdims, extents)`: each lane's `ct` spread back over
+/// the lane it summed. The three stated values are the law's own parameters, so nothing here counts
+/// positions in a list: `extents` is the shape, `axis` the lane and `keepdims` whether `ct` kept it.
+export rule sum_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, extents: E) when is_float::<T>() {
+    sum_axis_stated(t, axis, keepdims, extents) => (ct: T[...]) => lane_spread(ct, extents, axis, keepdims)
 }
 
 /// The cotangent of `mean_stated(t, at)`: the one number it answers is the mean of every element, so

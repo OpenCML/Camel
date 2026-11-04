@@ -375,25 +375,21 @@ std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     return tensorOf(dtype, reduceShape(stated, (*at)[0], (*at)[1] != 0));
 }
 
-/// `sum_axis_stated(t, at)`: the lane sum, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]`.
+/// `sum_axis_stated(t, axis, keepdims, extents)`: the lane sum, with the three facts its adjoint
+/// reads stated as parameters of their own types.
 ///
 /// The value is `sum_axis(t, axis, keepdims)` -- `k::reduceAxis` is the kernel the axis form runs,
-/// so the accumulation, the element type and the one rounding are the definition's own -- and the
-/// extents after the two scalars are checked against the operand's shape
-/// (`support.h#checkStatedExtents`). It exists beside `mean_axis_stated` for the same reason:
-/// the adjoint of a lane reduction spreads each lane's cotangent back over the lane, and the
-/// transpose side has no operand to read that shape from.
+/// so the accumulation, the element type and the one rounding are the definition's own -- and
+/// `extents` is checked against the operand's shape (`support.h#checkStatedExtents`). It exists
+/// beside `mean_axis_stated` for the same reason: the adjoint of a lane reduction spreads each
+/// lane's cotangent back over the lane, and the transpose side has no operand to read that shape
+/// from.
 slot_t sumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *t               = tensorArg(norm, 0);
-    const std::vector<int64_t> at = intListArg(norm, 1, "sum_axis_stated");
-    if (at.size() < 3) {
-        reportShapeError(
-            "sum_axis_stated",
-            "expects an integer list: the axis, the keepdims flag and the tensor's extents");
-    }
-    const int64_t axis  = at[0];
-    const bool keepDims = at[1] != 0;
-    checkStatedExtents(t, at, 2, "sum_axis_stated");
+    const Array *t                     = tensorArg(norm, 0);
+    const int64_t axis                 = intArg(norm, 1);
+    const bool keepDims                = boolArg(norm, 2);
+    const std::vector<int64_t> extents = intListArg(norm, 3, "sum_axis_stated");
+    checkStatedExtents(t, extents, 0, "sum_axis_stated");
     return runKernel("sum_axis_stated", [&] {
         return wrap(
             norm.resultType(),
@@ -878,7 +874,10 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(OpDef{
         .name      = "sum_axis_stated",
         .exports   = {"sum_axis_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .params    = {{"t", ParamKind::Tensor},
+                      {"axis", ParamKind::Int},
+                      {"keepdims", ParamKind::Bool},
+                      {"extents", ParamKind::IntArray}},
         .resultDoc = "T[...]",
         .infer     = sumAxisStatedInfer,
         .kernel    = &sumAxisStatedKernel,
