@@ -160,10 +160,39 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
         }
     }
     if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        // A rule whose call is already its own answer (`extent_of::<float[2, 3]>`) is a function
+        // that gives that answer, not a call of the operator: the answer is a fact of the type
+        // arguments written with this name, and no graph and no run reads them back
+        // (`FuncTypeResolver::valueFromTypeArgs`). Settled here, where they are still in hand.
+        const auto &ops = std::get<oper_group_ptr_t>(target);
+        if (const auto typed = explicitOperatorTypes_.find(node);
+            typed != explicitOperatorTypes_.end()) {
+            for (const auto &[uri, rule] : ops->resolvers()) {
+                (void)uri;
+                if (rule == nullptr) {
+                    continue;
+                }
+                const std::optional<slot_t> answer = rule->valueFromTypeArgs(typed->second);
+                if (!answer.has_value()) {
+                    continue;
+                }
+                const std::optional<FunctionType *> callType = rule->resolveForCall(
+                    typed->second, nullptr, type_vec_t{}, type_vec_t{}, static_args_t{});
+                if (!callType.has_value() || *callType == nullptr ||
+                    (*callType)->exitType() == nullptr) {
+                    break;
+                }
+                explicitOperatorTypes_.erase(node);
+                if (compile_graph_ptr_t graph =
+                        answerValueGraphOf((*callType)->exitType(), *answer, origin)) {
+                    return createFuncDataNode(graph, true, false);
+                }
+                break;
+            }
+        }
         // A library operator with one signature that does not depend on its arguments
         // (`trim: (s: string) => string`) is one function, like a user function of that
         // name: its value is a function that calls it.
-        const auto &ops = std::get<oper_group_ptr_t>(target);
         if (ops->resolvers().size() == 1) {
             const auto &[uri, resolver] = ops->resolvers().front();
             if (FunctionType *fixed = resolver->fixedSignature()) {

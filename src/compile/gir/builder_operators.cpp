@@ -791,6 +791,38 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     return graph;
 }
 
+compile_graph_ptr_t Builder::answerValueGraphOf(
+    Type *answerType, slot_t answer, const GCT::node_ptr_t &origin) {
+    if (answerType == nullptr) {
+        return nullptr;
+    }
+    // Its own type object (a graph completes its function type in place): no parameters, and the
+    // answer's type as the result -- the call it stands for takes no argument either.
+    FunctionTypeFactory factory;
+    factory.setExitType(answerType);
+    FunctionType *type = factory.build();
+    compile_graph_ptr_t graph = enterScope(type);
+    registerGraphOrigin(context_, graph, origin, "gir.answer.graph");
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // The body is the value: a settled answer is a constant of the program, and no port of
+        // this function is read (`FuncTypeResolver::valueFromTypeArgs`).
+        auto &draft          = graph->transaction().edit();
+        node_handle_t value = draft.ref(
+            draft.materializeStaticValue(answer, answerType, runtime::kGCNodeFlagConstant));
+        registerNodeOrigin(context_, value, origin, "gir.answer.graph");
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), answerType);
+        bodyStates_[graph.get()] = BodyState::Built;
+        registerBuiltBody(graph);
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return graph;
+}
+
 node_handle_t
 Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) {
     // The argument is what the call would pass: a variable is read here, once, and the value
@@ -939,6 +971,24 @@ node_handle_t Builder::overloadValueFor(
         }
         if (chosen) {
             explicitOperatorTypes_.erase(node);
+            // A call that is already its own answer (`extent_of::<float[2, 3]>`) is a function of
+            // no parameters that gives it, not a call of the operator: the answer is a fact of the
+            // type arguments written with this name, and nothing in the graph or at run time reads
+            // them back (`FuncTypeResolver::valueFromTypeArgs`). Settled here as the two other
+            // places that take such a name as a value settle it.
+            for (const auto &[ruleUri, rule] : ops->resolvers()) {
+                if (ruleUri != chosen->uri() || rule == nullptr) {
+                    continue;
+                }
+                if (const auto answer = rule->valueFromTypeArgs(explicitTypes);
+                    answer.has_value() && chosen->funcType() != nullptr) {
+                    if (compile_graph_ptr_t graph = answerValueGraphOf(
+                            chosen->funcType()->exitType(), *answer, origin)) {
+                        return createFuncDataNode(graph, true, false);
+                    }
+                }
+                break;
+            }
             if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
                 return createFuncDataNode(graph, true, false);
             }
@@ -3874,35 +3924,42 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 LEAVE("LINK");
                 return transformed;
             }
-            if (targetOperator->uri() == ":op/extent_of" && explicitTypes.size() == 1) {
-                // `extent_of::<A>()` answers the extents `A` states, and they are a fact of the
-                // **call** and not of the run: the node keeps the instantiated type of the call but
-                // not the type argument it was written with (`src/builtin/operators/struct.cpp`
-                // #__op_extent_of__), so the value is settled here -- where the argument is still
-                // readable -- and the graph holds the list itself, as a constant.
+            if (!explicitTypes.empty()) {
+                // A call whose answer is a fact of the type arguments it names and which reads no
+                // operand (`extent_of::<float[2, 3]>()` is `[2, 3]`) is settled here, and by the
+                // rule itself rather than by its name: `FuncTypeResolver::valueFromTypeArgs` says
+                // a rule's answer exists and what it is. The node keeps the instantiated type of
+                // the call but not the type argument it was written with
+                // (`src/builtin/operators/struct.cpp#__op_extent_of__`), so nothing at run time
+                // could answer it -- the graph holds the list itself, as a constant.
                 //
-                // Nothing is invented: a type argument that states no extents was refused by the
-                // resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so the
-                // answer exists exactly where the type says it does.
-                if (const auto extents = camel::core::type::statedExtentsOf(explicitTypes[0]);
-                    extents.has_value()) {
-                    auto *const intArrayType =
-                        camel::core::type::ArrayType::create(camel::core::type::Type::Int64());
-                    ::Array *stated = ::Array::create(
-                        camel::core::mm::autoSpace(), intArrayType, extents->size());
-                    if (stated != nullptr) {
-                        for (size_t at = 0; at < extents->size(); ++at) {
-                            stated->set<camel::core::rtdata::Int64>(
-                                at, static_cast<camel::core::rtdata::Int64>((*extents)[at]));
-                        }
-                        auto &draft          = currGraph_->transaction().edit();
-                        node_handle_t settled = draft.ref(draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<::Array *>(stated), intArrayType,
-                            runtime::kGCNodeFlagConstant));
-                        registerNodeOrigin(context_, settled, gct->at(0), "gir.link.oper");
-                        LEAVE("LINK");
-                        return settled;
+                // Nothing is invented: a type argument the rule cannot answer for was refused by
+                // the resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so
+                // the answer exists exactly where the rule says it does.
+                for (const auto &[ruleUri, rule] : ops->resolvers()) {
+                    if (ruleUri != targetOperator->uri() || rule == nullptr) {
+                        continue;
                     }
+                    const std::optional<slot_t> answer = rule->valueFromTypeArgs(explicitTypes);
+                    Type *answerType = targetOperator->funcType() != nullptr
+                                           ? targetOperator->funcType()->exitType()
+                                           : nullptr;
+                    if (!answer.has_value() || answerType == nullptr) {
+                        break;
+                    }
+                    if (isGCTraced(answerType->code()) && *answer != NullSlot) {
+                        typeFoldedRoots_.emplace_back(
+                            camel::core::mm::autoSpace(),
+                            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*answer),
+                            answerType,
+                            "gir.build.settled");
+                    }
+                    auto &draft = currGraph_->transaction().edit();
+                    node_handle_t settled = draft.ref(draft.materializeStaticValue(
+                        *answer, answerType, runtime::kGCNodeFlagConstant));
+                    registerNodeOrigin(context_, settled, gct->at(0), "gir.link.oper");
+                    LEAVE("LINK");
+                    return settled;
                 }
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);

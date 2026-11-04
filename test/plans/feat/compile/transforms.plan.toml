@@ -2423,7 +2423,7 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
-expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and an extent it writes is not a number"]
+expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and position 0 is open: it has no number written in it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -2670,7 +2670,7 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
-expect_output_contains = ["the type it is instantiated at is 'float[...]', and an extent it writes is not a number", "take the shape from a value the program has"]
+expect_output_contains = ["the type it is instantiated at is 'float[...]', and position 0 is open: `..` states no dimension there, so no position has a length to read", "take the shape from a value the program has"]
 expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -2699,6 +2699,51 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["true", "[2]"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The two special cases of `extent_of`, one entry each: what a known operand changes about the
+# answer (nothing: the type is the source, and the value is not read), and what an open position
+# costs (a refusal that names it).
+
+[[tests]]
+name = "extent_of_answers_a_known_operand"
+desc = "A known operand does not change the question: `extent_of::<A>()` answers the type's extents whether a value of that type is in the function's hands or not, and it never reads the value. Four spellings answer `[2, 3]` -- a call with nothing of the type at hand (`from_type`), a call in a function whose parameter `xs` is a known operand (`shape_of`), the name handed on as a value to a function that has no type argument of its own (`takes_it(extent_of::<float[2, 3]>)`), and the same name where a position states a function type (`typed_binding`) -- and the fifth line is the control: `shape(xs)` reads the operand and answers the same list, so the two sources agree here and the entry would say so the day they stop. Two of those spellings were red: measured 2026-11-04 on `ca464bca2` the third and the fourth each stopped the run with `RuntimeDiag::PassInternalError` ('Pass ''calling `extent_of`'' failed with an internal error'), which is the compiler complaining about a program that is right, because the answer existed in the type argument written at that position and only the run had nothing left to read. They are settled where the name is used as a value now (`Builder::functionValueOf`, `Builder::overloadValueFor`), and the answer is a function of no parameters that gives the list."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 3]\n[2, 3]\n[2, 3]\n[2, 3]\n[2, 3]\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_answers_a_known_operand.graph"
+desc = "The other half of the same reading, and the one that can fail while the numbers stay right: the graph holds the answer itself. `std::gir` of the case above shows a `DATA` node labelled `[2, 3]` of type `int[]` and **no** `:op/extent_of` node at all -- no operand of the answer exists to read, so nothing of `xs` reaches it. A reader that took the shape from the value (as `shape(xs)` does) would print the same four lines and put an OPER node in the graph, so this entry, not the numbers, is what says the answer is the type's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\""]
+expect_output_not_contains = [":op/extent_of"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_names_the_open_position"
+desc = "A type whose shape is not written down is refused, and the sentence names the **position** that is open, because that position is where the repair is written: `float[...]` states no rank at all, so position 0 is the open one and `..` gives no position after it a length; `float[2, ?]` states two positions and leaves the second without a number; `float[]` (= `float[?]`) has one position and no length for it. Measured 2026-11-04 on `ca464bca2` the sentence was 'an extent it writes is not a number' -- a reader who wrote `float[2, ?]` had to find the second extent themselves -- and all three refusals are reported together, each at its own call. The refusal must stay a refusal: `[]` would be the rank-zero shape, which `sum_to` reads as one element, a wrong number no diagnostic would name."
+kind = "negative"
+case = "../../../cases/compile/transforms/extent_of_names_the_open_position.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
+expect_output_contains = ["the type it is instantiated at is 'float[...]', and position 0 is open: `..` states no dimension there, so no position has a length to read", "the type it is instantiated at is 'float[2, ?]', and position 1 is open: it has no number written in it", "the type it is instantiated at is 'float[]', and position 0 is open: it has no number written in it", "take the shape from a value the program has"]
 expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
