@@ -147,6 +147,12 @@ function parseArgs(argv) {
     const targets = []
     let changed = false
     let list = false
+    // `--changed-files <path>`: the changed paths, listed by a caller that could read the base
+    // branch. `internal/tools/camel-remote.ps1` moves a tree to a host that holds the lane's
+    // commits but not the base branch, so `git diff origin/develop` there answers "cannot read"
+    // rather than "nothing changed"; the list is computed where the base exists and handed over.
+    // Same selection either way, so a run here and a run through the gate answer one question.
+    let changedFilesList = null
 
     for (let i = 0; i < argv.length; ++i) {
         const arg = argv[i]
@@ -176,6 +182,10 @@ function parseArgs(argv) {
             targets.push(resolveTarget(arg.slice(2)))
         } else if (arg === '--suite' && i + 1 < argv.length) {
             targets.push(resolveTarget(argv[++i]))
+        } else if (arg === '--changed-files' && i + 1 < argv.length) {
+            changedFilesList = path.resolve(argv[++i])
+        } else if (arg.startsWith('--changed-files=')) {
+            changedFilesList = path.resolve(arg.slice('--changed-files='.length))
         } else if (arg.startsWith('-')) {
             runnerArgs.push(arg)
             // `--tier fast` and `--jobs 8` carry their value; without this the value would be
@@ -202,6 +212,7 @@ function parseArgs(argv) {
                     : DEFAULT_TARGETS,
         changed,
         list,
+        changedFilesList,
     }
 }
 
@@ -214,11 +225,63 @@ function debugTierRequested(runnerArgs) {
     return false
 }
 
-/** Files changed against the base branch, committed or not; null when git cannot answer. */
-export function changedFiles() {
+/**
+ * Why the last `changedFiles()` answered null, as the sentence the caller must print. The fast
+ * selection used to answer this question with one word -- "cannot read" -- and then widen to the
+ * whole fast layer, so the three different ways to fail (a base that does not resolve, a base with
+ * no merge-base, a diff that failed) all read the same and none of them was visible. A refusal that
+ * does not name the step that failed is the next silent form of the same defect.
+ */
+let changeReadFailure = null
+
+/**
+ * Files changed against the base branch, committed or not, plus the untracked ones; null when git
+ * cannot answer. `listPath` reads the same list from a file instead, for a run whose base branch
+ * lives on another machine (`--changed-files`); a list that cannot be read is null too, because the
+ * caller must not read "cannot ask" as "nothing changed".
+ */
+export function changedFiles(listPath = null) {
+    changeReadFailure = null
+    if (listPath) {
+        let text
+        try {
+            text = fs.readFileSync(listPath, 'utf8')
+        } catch (error) {
+            changeReadFailure = `cannot read the changed-file list ${listPath} (${error.code || error.message})`
+            return null
+        }
+        return [...new Set(text.split(/\r?\n/).map((line) => line.trim().replace(/\\/g, '/')).filter(Boolean))]
+    }
+    const base = changedBase()
     const run = (args) => spawnSync('git', args, { cwd: REPO_ROOT, encoding: 'utf8', windowsHide: true })
-    const diff = run(['diff', '--name-only', changedBase()])
-    if (diff.error || diff.status !== 0) return null
+    // A ref that does not resolve and a diff that failed are different refusals: the message says
+    // which, because "cannot read the baseline" alone sent readers to the network for a typo.
+    const resolve = run(['rev-parse', '--verify', '--quiet', `${base}^{commit}`])
+    if (resolve.error) {
+        changeReadFailure = `cannot read ${base}: git cannot run (${resolve.error.message})`
+        return null
+    }
+    if (resolve.status !== 0) {
+        changeReadFailure = `cannot read ${base}: it does not resolve to a commit here`
+        return null
+    }
+    // `git diff A` answers across unrelated histories -- and then reports every file that differs,
+    // which selects the whole tree and reads exactly like a large change. A shallow clone or a base
+    // from another root would take that path, so a base with no merge-base is refused, not diffed.
+    const common = run(['merge-base', base, 'HEAD'])
+    if (common.error) {
+        changeReadFailure = `cannot read ${base}: git cannot run (${common.error.message})`
+        return null
+    }
+    if (common.status !== 0 || !`${common.stdout || ''}`.trim()) {
+        changeReadFailure = `cannot read ${base}: it shares no merge-base with HEAD (unrelated history, or a shallow clone), so "the change against it" is undefined`
+        return null
+    }
+    const diff = run(['diff', '--name-only', base])
+    if (diff.error || diff.status !== 0) {
+        changeReadFailure = `cannot read ${base}: git diff against it failed${diff.error ? ` (${diff.error.message})` : ''}`
+        return null
+    }
     const untracked = run(['ls-files', '--others', '--exclude-standard'])
     const text = `${diff.stdout || ''}\n${untracked.status === 0 ? untracked.stdout || '' : ''}`
     const files = text
@@ -299,6 +362,11 @@ export function loadDirectoryRules() {
     return directoryRulesCache
 }
 
+/**
+ * The plan directory or plan file that mirrors the changed path, and the directory rule's own
+ * prefix that reached it. Both travel: `--changed` prints the rule beside the file, so a selection
+ * can be read as the rule match it is and not only as a count of plans.
+ */
 function planForDirectory(file) {
     for (const rule of loadDirectoryRules()) {
         const prefix = rule.paths.find((entry) => file === entry || file.startsWith(entry))
@@ -308,9 +376,13 @@ function planForDirectory(file) {
         const segments = dir === '.' || dir === '' ? [] : dir.split('/').filter(Boolean)
         for (let length = segments.length; length >= 1; length--) {
             const candidate = path.join(PLANS_ROOT, ...rule.plans, ...segments.slice(0, length))
-            if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) return candidate
+            if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
+                return { target: candidate, prefix }
+            }
             const planFile = `${candidate}.plan.toml`
-            if (fs.existsSync(planFile) && fs.statSync(planFile).isFile()) return planFile
+            if (fs.existsSync(planFile) && fs.statSync(planFile).isFile()) {
+                return { target: planFile, prefix }
+            }
         }
         return null
     }
@@ -392,23 +464,30 @@ export function plansForChanges(files) {
     const layered = new Set()
     const targets = new Set()
     const unmatched = []
+    // One line per changed file: the rule that reached it and the plan(s) that rule selected. A
+    // count of plans is what a correct selection and a wrong one both print; the rule match is the
+    // part that can disagree with the intent, so `--changed` prints it beside the count.
+    const reasons = []
     let matched = false
     for (const file of files) {
         let added = false
+        const hits = []
         // Directory first: the plan that mirrors the changed path is the narrow selection. The
         // file rules do not replace it, they add the plans that live outside that mirrored tree
         // (a `modules/tiles/` change needs `gpu/**`, which no directory rule can reach).
         const byDirectory = planForDirectory(file)
         if (byDirectory) {
             matched = true
-            targets.add(byDirectory)
+            targets.add(byDirectory.target)
             added = true
+            hits.push(`directory rule ${byDirectory.prefix} -> ${relativeToRepo(byDirectory.target)}`)
         }
         const rule = rules.find((candidate) =>
             candidate.paths.some((prefix) => file === prefix || file.startsWith(prefix))
         )
         let excluded = false
         if (rule) {
+            const rulePath = rule.paths.find((prefix) => file === prefix || file.startsWith(prefix))
             for (const plan of rule.plans) {
                 // An `ownCases` plan is added only for a case it actually names. A slow plan
                 // reached through a directory that also holds fast cases would otherwise run in
@@ -420,6 +499,7 @@ export function plansForChanges(files) {
                 names.add(plan.name)
                 if (plan.layer) layered.add(plan.name)
                 added = true
+                hits.push(`rule ${rulePath} -> ${plan.name}${plan.layer ? ' (follows --tier)' : ''}`)
             }
             excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
             if (rule.self && !excluded) {
@@ -428,6 +508,7 @@ export function plansForChanges(files) {
                     if (fs.existsSync(target)) {
                         targets.add(target)
                         added = true
+                        hits.push(`self rule -> ${relativeToRepo(target)}`)
                     }
                 } else {
                     // A golden or fixture selects the plans of the directory that owns it. It is
@@ -437,6 +518,7 @@ export function plansForChanges(files) {
                     if (target) {
                         targets.add(target)
                         added = true
+                        hits.push(`self rule -> ${relativeToRepo(target)} (the directory that owns it)`)
                     }
                 }
             }
@@ -445,10 +527,11 @@ export function plansForChanges(files) {
         // A file the self rule deliberately excludes (a perf/GC/progen plan) is not a hole: the
     // policy is that an ordinary change does not run it. Everything else is named.
         if (!added && !excluded) unmatched.push(file)
+        if (added) reasons.push(`${file}: ${hits.join('; ')}`)
     }
     if (layered.size > 0) matched = true
     return matched
-        ? { names: [...names], targets: [...targets], layered: [...layered], unmatched }
+        ? { names: [...names], targets: [...targets], layered: [...layered], unmatched, reasons }
         : null
 }
 
@@ -474,21 +557,107 @@ export function resolvedSelection(plans) {
     return [...resolved.values()]
 }
 
-function selectChangedTargets() {
+function countPlanFiles(directory) {
+    if (!fs.existsSync(directory)) return 0
+    let count = 0
+    for (const name of fs.readdirSync(directory)) {
+        const entry = path.join(directory, name)
+        if (fs.statSync(entry).isDirectory()) count += countPlanFiles(entry)
+        else if (name.endsWith('.plan.toml')) count += 1
+    }
+    return count
+}
+
+/**
+ * The plan files of the fast layer, counted the way a run of it would read them. Every refusal names
+ * this number, because the cost of the silent widening was never what it ran: it was that "3 plans"
+ * and "the whole layer" printed the same reading, so the widening had no symptom. Naming the size is
+ * what makes the refusal a reading of what the widening would have cost.
+ */
+function fastLayerInventory() {
+    const smoke = countPlanFiles(path.join(PLANS_ROOT, 'smoke'))
+    const feat = countPlanFiles(path.join(PLANS_ROOT, 'feat'))
+    return `${smoke + feat} plan file(s) (smoke ${smoke}, feat ${feat})`
+}
+
+/**
+ * Refuse a selection that could not be made. The exit code is 2, the same one the milestone stage
+ * gives the same question (an unknown layer is never reported as a number), and the two readings a
+ * gate cannot tell apart are both printed: what failed, and what the old fallback would have run
+ * instead. "Cannot read" alone is the second-worst check; the worst is the one that then runs a
+ * layer, which is why the refusal names the layer it declines and how to ask for it deliberately.
+ */
+function refuseChanged(reason) {
+    console.error(`[ERROR] --changed: ${reason}`)
+    console.error(
+        `[ERROR] --changed: the plans this change touches are unknown, so none is selected and this ` +
+        `run fails. The whole fast layer -- ${fastLayerInventory()} -- is what the fallback here used ` +
+        `to run, and it reads exactly like a correct selection in every reading a gate takes. ` +
+        `Name the layer deliberately with --all (or name a plan) if that is the question.`
+    )
+    process.exit(2)
+}
+
+/**
+ * The selection rules, read once and refused like the base: a rules file that cannot be parsed, or
+ * that names no rule at all, is not "no rule matched this change" -- it is a selection nobody made,
+ * and every change would widen to the whole fast layer behind it.
+ */
+function loadRulesForSelection() {
+    try {
+        const rules = loadSelectionRules()
+        const directories = loadDirectoryRules()
+        if (rules.length === 0 && directories.length === 0) {
+            refuseChanged(
+                `the selection rules ${relativeToRepo(SELECTION_PATH)} name no rule and no directory ` +
+                `rule, so no change can select a plan`
+            )
+        }
+    } catch (error) {
+        refuseChanged(`cannot read the selection rules ${relativeToRepo(SELECTION_PATH)} (${error.message})`)
+    }
+}
+
+function selectChangedTargets(options = {}) {
     const base = changedBase()
-    const files = changedFiles()
+    const listPath = options.changedFilesList || null
+    const against = listPath ? `the list ${listPath} (against ${base})` : base
+    const files = changedFiles(listPath)
     if (files === null) {
-        console.log(`[INFO] --changed: cannot read ${base}; running the whole fast layer`)
-        return { targets: [], layered: [] }
+        // A base that cannot be read and a list that cannot be read are the same defect: the
+        // selection is unknown, and an unknown selection must not become a layer.
+        refuseChanged(changeReadFailure || `cannot read ${against}`)
     }
     if (files.length === 0) {
-        console.log(`[INFO] --changed: no change against ${base}; running the whole fast layer`)
-        return { targets: [], layered: [] }
+        // A change with no file in it selects no plan. The listing was read, so this zero is
+        // measured: it is printed as the zero it is instead of widening to the layer. The run then
+        // starts nothing, which test/tools/run-tests.mjs reports as a no-op and not as a green.
+        console.log(
+            `[INFO] --changed: 0 changed file(s) against ${against}; 0 plan(s) selected, ` +
+            `and the whole fast layer -- ${fastLayerInventory()} -- is not run`
+        )
+        return { targets: [], layered: [], widened: false }
     }
-    const plans = plansForChanges(files)
-    if (!plans || (plans.names.length === 0 && plans.targets.length === 0 && plans.layered.length === 0)) {
-        console.log(`[INFO] --changed: no rule matches ${files.length} changed file(s); running the whole fast layer`)
-        return { targets: [], layered: [] }
+    loadRulesForSelection()
+    let plans
+    try {
+        plans = plansForChanges(files)
+    } catch (error) {
+        // A rule that names a plan the tree does not hold is a rule nobody can run: it is refused
+        // here, naming the plan, instead of becoming a stack trace out of `resolvedSelection`.
+        refuseChanged(`${error.message}`)
+    }
+    if (!plans) {
+        // No rule matched. That is the documented policy for a change that only touches a class the
+        // project keeps out of `--changed` (perf, GC stress, progen), so the widening stays -- but it
+        // is printed as the widening it is, with the files that caused it and what it costs.
+        const shown = files.slice(0, 8).join(', ')
+        const rest = files.length > 8 ? ` and ${files.length - 8} more` : ''
+        console.warn(
+            `[WARN] --changed: no rule matches the ${files.length} changed file(s); widening to the ` +
+            `whole fast layer (${fastLayerInventory()}): ${shown}${rest}`
+        )
+        return { targets: [], layered: [], widened: true }
     }
     // A file that matches no rule contributes nothing when another file in the same change does
 // match: the aggregate fallback never runs, and the class would otherwise be dropped silently.
@@ -498,18 +667,34 @@ function selectChangedTargets() {
         const rest = plans.unmatched.length > 8 ? ` and ${plans.unmatched.length - 8} more` : ''
         console.warn(`[WARN] --changed: ${plans.unmatched.length} changed file(s) match no rule: ${shown}${rest}`)
     }
-    const targets = resolvedSelection(plans)
-    const layered = [...new Set(plans.layered.map(resolveSelectionTarget).map((target) => path.resolve(target)))]
+    let targets
+    let layered
+    try {
+        targets = resolvedSelection(plans)
+        layered = [...new Set(plans.layered.map(resolveSelectionTarget).map((target) => path.resolve(target)))]
+    } catch (error) {
+        refuseChanged(`${error.message}`)
+    }
     const tierNote = layered.length > 0 ? `, ${layered.length} follow --tier` : ''
-    console.log(`[INFO] --changed: ${files.length} changed file(s) select ${targets.length} plan(s)${tierNote}`)
-    return { targets, layered }
+    console.log(`[INFO] --changed: ${files.length} changed file(s) against ${against} select ${targets.length} plan(s)${tierNote}`)
+    for (const reason of (plans.reasons || []).slice(0, 12)) console.log(`[INFO] --changed:   ${reason}`)
+    if ((plans.reasons || []).length > 12) {
+        console.log(`[INFO] --changed:   and ${plans.reasons.length - 12} more changed file(s) with a rule`)
+    }
+    return { targets, layered, widened: false }
 }
 
 export function main(argv = process.argv.slice(2)) {
     const options = parseArgs(argv)
+    if (options.changedFilesList && !options.changed) {
+        // The list only ever answers `--changed`; accepting it silently would be a run that reads a
+        // flag and does nothing with it.
+        console.error('[ERROR] --changed-files is only read together with --changed')
+        process.exit(2)
+    }
     const selection = options.changed && options.targets.length === 0
-        ? selectChangedTargets()
-        : { targets: options.targets, layered: [] }
+        ? selectChangedTargets({ changedFilesList: options.changedFilesList })
+        : { targets: options.targets, layered: [], widened: false }
     if (options.list) {
         // `--changed --list`: the selection without the run. It is how a change's plan list is
         // checked (and recorded in a report) without paying for the plans.
@@ -524,7 +709,12 @@ export function main(argv = process.argv.slice(2)) {
         }
         for (const target of selection.targets) console.log(target)
         if (selection.targets.length === 0 && selection.layered.length === 0) {
-            console.log('(the whole fast layer: smoke + feat)')
+            // The layer is printed only when this selection really is the layer. A zero that is a
+            // zero -- no changed file, no plan -- printed the same sentence as a widening, and that
+            // is the reading that made the widening invisible in the first place.
+            console.log(selection.widened
+                ? '(the whole fast layer: smoke + feat)'
+                : '(no plan: nothing was selected)')
         }
         return
     }

@@ -83,8 +83,8 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-NoBuild` | Skip the build and run against the install already on the host. Refuses (exit 4) when that install was built from different sources. |
 | `-AllowStale` | Let `-NoBuild` proceed past that refusal. The mismatch is still printed, and the switch is never implied. |
 | `-Check <name>[,...]` | Run the repository's own static checkers on the host after the build and after the plan; `all` runs every one. An unknown name is exit 2 before anything runs. |
-| `-Changed` | Run the plans the change touches (`--changed`) instead of a written list. |
-| `-ChangedBase <rev>` | The base for `-Changed`. Default `origin/develop`. |
+| `-Changed` | Run the plans the change touches (`--changed`) instead of a written list. The change is listed here, where the base branch is readable, and handed to the host as `--changed-files`; a base that cannot be read is exit 2 before the push, and it never widens to the whole fast layer. |
+| `-ChangedBase <rev>` | The base for `-Changed`. Default `origin/develop`. Unreadable here is exit 2, naming the revision. |
 | `-UpdateGolden` | Rewrite the named plans' goldens instead of checking them. |
 | `-Clean` | Delete this worktree's host checkout, build directory included, and stop. |
 | `-StackTrace` | Diagnostic build with assertion stack traces. Its readings do not decide green or red. |

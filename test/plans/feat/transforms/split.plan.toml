@@ -157,7 +157,34 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=6 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+# The arm-call reading names its node by position, so the position is `<>` and the rest of the line
+# stays exact -- and the rest is what names it: the region, the callee, the argument count, and how
+# many of those arguments are tangents. Both arms hold a call of the same rule kernel, and the pair
+# is read as a relation: one reading per arm, two different nodes, one callee. The program asks for
+# `vjp(f)` twice (at 2.0 and at -2.0), so each arm's reading is printed twice; that is the count
+# pinned here, and it is a fact of `main`, not of the transform. A reading that stopped at a node in
+# the other arm, or that named one call twice, breaks it without moving a number.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const stderr = input.normalized.stderr
+for (const reading of ['TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=<> callee=autodiff::mul_tangent<float> args=4 tangent-args=2', 'TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=2 node=<> callee=autodiff::mul_tangent<float> args=4 tangent-args=2']) {
+  const hits = stderr.split('\n').filter((l) => new RegExp('^' + esc(reading) + '$').test(l))
+  assert(hits.length === 2, `two calls of vjp(f), so two lines like '${reading}', found ${hits.length}`)
+}
+const arms = stderr.split('\n').filter((l) => l.startsWith('TRANSPOSE function=split_of_jvp_of_f_backward arm-call '))
+const byRegion = new Map()
+for (const arm of arms) {
+  const at = field(arm, 'region')
+  const id = field(arm, 'node')
+  assert(byRegion.get(at) === undefined || byRegion.get(at) === id, `one node per arm: region ${at} named ${byRegion.get(at)} and ${id}`)
+  byRegion.set(at, id)
+}
+assert(byRegion.size === 2 && byRegion.get(1) !== byRegion.get(2), `two arms, two call nodes: ${[...byRegion]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

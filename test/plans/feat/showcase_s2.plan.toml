@@ -244,11 +244,11 @@ timeout_ms = 60000
 # whose answer is a number, have no cotangent overload, so the law is *chosen* and its own body has nothing
 # for these operands. The walk refuses that by name, with the law, the operator and the ranks:
 #
-#     skip=rule-ranks uri=tensor:matmul rule=matmul_t node=7 position=0 ranks=(3, 2) operands=2
-#     reason=No matching function found for argument types: <> (float[...], float[3, 2, 2], float[2, 2]).
+#     skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0
+#     ranks=(3, 2, 1, 1) operands=4
 #
-#     the law `matmul_t` has no cotangent for `tensor:matmul` at operands of rank (3, 2),
-#     and it serves the ranks its cotangents are written for (node 7)
+#     the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank
+#     (3, 2, 1, 1), and it serves the ranks its cotangents are written for (node <>)
 #
 # `rule-ranks` is its own word, not `rule-shape`: that one means the law's *pattern* rejected the operand
 # types and nothing was built, which is where this reading stood while the law named its ranks in the
@@ -268,6 +268,27 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]
-expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4"]
+expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t"]
+# The node's number is where the compiler put it, so it is `<>` here and every other field of the
+# line stays exact: the function, the skip's own word, the operator URI, the law, the operand
+# position, the ranks and the operand count. The `reason=` string is left free, as the entry's own
+# note says (it names the helper's argument list rather than the law), so the pinned text stops at
+# `operands=4` and the line has to carry a `reason=` after it.
+# Two streams name that node: the reading does it by number and the sentence prints the same number
+# in `(node N)`. The assertion is the relation between them -- whatever number the reading names,
+# the sentence has to name the same one -- so a walk that stopped at one node while the sentence
+# reported another breaks it, and the two numbers are still tied together instead of waved through.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const head = 'TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0 ranks=(3, 2, 1, 1) operands=4'
+const hits = input.normalized.stderr.split('\n').filter((l) => new RegExp('^' + esc(head) + ' reason=').test(l))
+assert(hits.length === 1, `expected exactly one line like '${head} reason=...', found ${hits.length}`)
+const named = /\(node ([0-9]+)\)/.exec(input.normalized.stdout)
+assert(named, 'the sentence that says which law declined names the node it stopped at')
+assert(Number(named[1]) === field(hits[0], 'node'), `the reading names node ${field(hits[0], 'node')}` + ` and the sentence names node ${named[1]}: one node, one number`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
