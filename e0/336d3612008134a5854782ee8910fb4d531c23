@@ -1,0 +1,10 @@
+1) 种子是原作者那一个：`python test/tools/progen/progen.py show --seed 23`（generator v7）今天仍重画得出来，还原构建下逐字复现记录里的环、节点号一致；不是我反推的。
+2) 用例 `test/cases/opt/inline_cycle/seed23_fold_inline.cml`（165 行，头注记 seed/版本/env/参考输出）；计划 `test/plans/feat/opt/inline_cycle.plan.toml`（tier=fast，3 条，独立文件，不并 `progen8_arm`）；`test/plan-selection.json` 加文件规则：`--changed --list` 已选中它，`feat/opt` 目录也选中它。
+3) 还原 `a1723fbb9` 的那 61 行（`git show ... | git apply -R`，tip e0336d3612，dirty 1）：`[SUMMARY] total: 3, pass: 1, fail: 2`；`reference` 仍 PASS，所以红不是程序坏了。
+4) 那一次红报的是：两条都 `camel exited 1: ... Runtime graph 'main' breaks its edge invariants: graph 'main' node 16 (11): lies on a cycle of inputs: 16(11) <- 39(11) <- 340(13) <- 334(13) <- 328(13) <- 16` —— 指向位置链，不是「崩了」「不一样」。
+5) 恢复后（工作区 blob `7f745bb8` = `origin/develop` 的同名 blob）：`[SUMMARY] total: 3, pass: 3, fail: 0`（tip e0336d3612, clean）。
+6) 结构条目不是「没崩即绿」：它读 725 个节点、85 条 chain 边，只许 `BRCH` 分叉（实测分叉 1 个，正是 BRCH），且没有语句写在它读到的东西之前；若缺陷以「错位但不成环」回来，它按名字报出那两个节点。
+7) 门禁：`feat/opt -Tier fast` `[SUMMARY] total: 1184, pass: 1184, fail: 0`（基线 1181/1181/0，多的 3 条就是这一笔），killed 0；`inline_cycle.plan.toml -Tier all` 3/3/0；两次 provenance 都是 e0336d3612 (clean)。
+8) `check-doc-links.mjs --citations`：865/865 符号、2387 条路径、6278 个文件，exit 0；`--questions-index`：3 页待决表、无已答页残留，exit 0。
+9) 顺带实测：`adb67e081.rc04_seed72_inline` 与 `rc03_seed30_std_opt` 今天都已是绿（那两个 plan 的正文仍写 work owed，已过时），这一笔没动它们。
+10) 提交 `2040d78ed` + `e0336d361`（lane-seed23），未 push；报告在本 note。
