@@ -1,0 +1,39 @@
+// A lifted body cannot call a **function value**: which graph the callee stands for is a question
+// only the run time answers, and a lifted call reaches a lifted callee (it hands it `(value,
+// tangent)` pairs). Until 2026-11-05 the lift copied the call as it stood and paired its arguments
+// anyway, and the answer was a process that died where the number should have been -- `std::nvm`,
+// `std::fvm` and `std::jit` all ended in `SIGSEGV` inside `NodeVMSchedPass::call`. It is refused by
+// name now, at the construct (`skip=callee`, "a call through a function value"), which is what design
+// principles 9.9 asks: a rule that is missing is refused, never answered with a wrong value or a
+// crash.
+//
+// The engine refuses the same shape from the other side -- `modules/autodiff/pullback.cpp` answers
+// `cannot differentiate through this call of a function value: which function it calls is not
+// evident` -- so a library transform written as a composition cannot put its subject inside a body
+// yet, and `stdlib/vjp.cml#with_grad` says so.
+import { jvp } from transforms
+
+func plain(y: float): float {
+    return y * y
+}
+
+// The derivative of `use` in `z` is `f'(z)`; the shape is refused before the number is asked for.
+func use(f: (y: float) => float, z: float): float {
+    return f(z)
+}
+
+func main(): int sync {
+    let e = attempt(() => jvp(use)(plain, 2.0, (), 1.0))()
+    let kind = match e {
+        case error err => err.kind
+        case _ => 'a value, not a refusal'
+    }
+    let why = match e {
+        case error err => err.message
+        case _ => 'a value, not a refusal'
+    }
+    'kind={}'->format<kind>->println
+    'names_the_construct={}'->format<
+        contains<'a call through a function value'>(why)>->println
+    return 0
+}
