@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * Test-only: build the graph shape `:op/keep` is written for, and read what a pass list's rewrite
- * left in the value.
+ * Test-only: build the graph shape that needs a node kept alive (`:op/keep`), and read what a pass
+ * list's rewrite left in the value.
  *
  * A pass may not write an effect the program did not have: the pass boundary check refuses one with
  * `RuntimeDiag::PassBoundaryResources` ("changed the ambient resources the program touches: before
