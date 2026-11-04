@@ -13,9 +13,10 @@
 - 于是**三级链断在第二层**。工作树 `D:\Projects\Camel-wt\adopt`，base `34b659107`（= 实时
   `origin/develop`），闸门机 88，fast 层，`-Jobs 4`，host 1m load 19.7（不安静，读数只做存在性判断）：
   - `split(jvp(g3))`，三层 cut（`f=2x`、`g=f*x`、`g2=g*x`、`g3=g2*x`）→ **SIGABRT**，
-    `../src/passes/sched/nodevm/nodevm.cpp(639)`：`Guarantee: runtimeTarget != nullptr`、
+    `src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass::call`：`Guarantee: runtimeTarget != nullptr`、
     `Reading: a direct call names a function whose graph is not in the program's graph table`；
-  - `split(jvp(g2))`，两层 → 同一条 SIGABRT（`REINTERP split function=jvp_of_g2 ... residuals=4`）；
+  - 少一层的 `split(jvp(g2))`（`g2`/`g`/`f` 三刀；那条车道叫它"两级嵌套"）→ 同一条 SIGABRT
+    （`REINTERP split function=jvp_of_g2 ... residuals=4`）；
   - **不经 cut 的都不崩**：`jvp(g3)` 绿（`value=32.0 tangent=64.0`），`grad(g2)`、`grad(g3)` 绿，
     `grad(remat(k))`（k 里有一次普通调用）绿；`grad` 里经过**函数值**的路今天在 `autodiff` 自己那里就被
     拒绝（`cannot differentiate through this call of a function value: which function it calls is not
