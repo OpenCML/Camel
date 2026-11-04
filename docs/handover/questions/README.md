@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：61 页
+## 现在在等作者：62 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -41,6 +41,7 @@
 | [`2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape`](2026-11-04-how-does-a-tie-mask-travel-with-an-extremums-shape.cn.md) | `max_axis` / `min_axis` 的孪生算子：并列极值的选择怎么随形状走？ |
 | [`2026-11-04-how-is-a-two-port-transposed-value-called`](2026-11-04-how-is-a-two-port-transposed-value-called.cn.md) | 两端口（值 + 余切）的转置值，怎么被调用？ |
 | [`2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal`](2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md) | 开秩数组的零，是空数组还是明确拒绝 |
+| [`2026-11-04-narrow-the-declaration-or-teach-the-consumer`](2026-11-04-narrow-the-declaration-or-teach-the-consumer.cn.md) | 声明的类型与运行时的装箱不一致时，改窄声明还是教会消费者：`mean_axis_stated_t` 与六个轴归约的两个实例 |
 | [`2026-11-04-should-a-multiplys-adjoint-need-its-operands-shape`](2026-11-04-should-a-multiplys-adjoint-need-its-operands-shape.cn.md) | 乘法的伴随要不要读操作数自己的形状？ |
 | [`2026-11-04-should-an-owner-name-be-checked-against-a-roster`](2026-11-04-should-an-owner-name-be-checked-against-a-roster.cn.md) | 负责人这个名字，要不要对一张名册？ |
 | [`2026-11-04-should-the-compiler-version-invalidate-an-install`](2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md) | 编译器的**版本**要不要进构建指纹？ |
