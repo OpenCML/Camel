@@ -261,13 +261,13 @@ timeout_ms = 60000
 # what replaced this.
 [[tests]]
 name = "matmul_t.rank_three_is_refused_by_name"
-desc = "The product's transpose law serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul rule=matmul_t node=7 position=0 ranks=(3, 2)`, with the sentence `the law `matmul_t` has no cotangent for `tensor:matmul` at operands of rank (3, 2)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently"
+desc = "The product's linear call is `matmul_stated`, so the law that answers it is `matmul_stated_t`; it serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4`, with the sentence `the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently. The ranks list has one entry per operand -- the two tensors and the two stated lists -- and the `reason=` string is left unpinned because it names the helper's argument list rather than the law's"
 kind = "negative"
 case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_t` has no cotangent for `tensor:matmul` at operands of rank (3, 2)"]
-expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul rule=matmul_t node=7 position=0 ranks=(3, 2) operands=2", "reason=No matching function found for argument types: <> (float[...], float[3, 2, 2], float[2, 2])"]
+expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]
+expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000

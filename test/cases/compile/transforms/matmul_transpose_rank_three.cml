@@ -1,28 +1,27 @@
 // The shapes the product's transpose law does not serve, pinned as the reading.
 //
-// `matmul_t` (stdlib/rulesets/transpose.cml) serves the two-matrix product and the two shapes a
-// vector makes with a matrix. What is left out is a product with a batch axis -- rank three and
-// above -- and the vector-vector product whose answer is a number. The ranks are told apart by the
-// cotangent helpers (`ct_of_a` / `ct_of_b`, one overload per shape), so the law is *chosen* and its
-// own body is what has nothing for these operands. The walk refuses that by name, and the two
-// readings say which law, which operator and which ranks:
+// The product's linear call is `matmul_stated` and not `matmul` (`stdlib/rulesets/jvp.cml#jvp_matmul`
+// states both operands' extents, so the cotangents can be reduced to them without reading a tangent),
+// and its transpose law is `matmul_stated_t` (`stdlib/rulesets/transpose.cml`). That law serves the
+// same shapes `matmul_t` does -- the two-matrix product and the two shapes a vector makes with a
+// matrix -- through the stated helpers (`ct_of_a_stated` / `ct_of_b_stated`, one overload per shape).
+// What is left out is a product with a batch axis, rank three and above, and the vector-vector product
+// whose answer is a number. The ranks are told apart by the helpers, so the law is *chosen* and its own
+// body is what has nothing for these operands. The walk refuses that by name, and the two readings say
+// which law, which operator and which ranks:
 //
 //     TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks
-//     uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
-//     reason=No matching function found for argument types: <> (float[...], float[3, 2, 2], float[2, 2]).
+//     uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4
 //
-//     transforms: transpose has no transpose for this function: the law `matmul_t` has no cotangent
-//     for `tensor:matmul` at operands of rank (3, 2), and no instance of its body applies:
-//     <what the call's candidate search wrote> (node 6).
+//     transforms: transpose has no transpose for this function: the law `matmul_stated_t` has no
+//     cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1) ...
 //
-// `rule-ranks` and not `rule-shape`: that word means the law's *pattern* rejected the operand types
-// and nothing was built, which is what this reading was while the law named its ranks in the pattern
-// (commit `5a2fed990`). Here the pattern took them -- a rule is instantiated with three type
-// parameters, the cotangent's element type and the two operand types, so its head is type variables
-// and the shapes live in the helpers -- and the law's body is what declines. The two want different
-// edits: a wider pattern, or the missing shape's law. Until 2026-11-03 the second arrived as
-// `skip=cotangent-needs-a-value` carrying the builder's own "No matching function" sentence, which
-// names a helper instead of the law and says nothing about a rank.
+// The ranks list is one entry per operand (four: the two tensors and the two stated lists), which is
+// why it is longer here than the two entries a bare `matmul` node gave.
+//
+// `rule-ranks` and not `rule-shape`: the law's *pattern* took the operand types -- its head is type
+// variables for the four ports and the shapes live in the helpers -- and the law's body is what
+// declines. The two want different edits: a wider pattern, or the missing shape's law.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_rank_three.cml
 import { matmul, sum } from tensor

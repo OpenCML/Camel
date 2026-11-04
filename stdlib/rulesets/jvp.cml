@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -182,6 +182,16 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 
 /// `d(a · b) = da · b + a · db`, both operands' tangents in one right side.
 ///
+/// Each term is `matmul_stated` and not `matmul`, for the reason `jvp_sum` states `shape(xs)` for its
+/// adjoint and `jvp_mul_tensor` below does the same for the element-wise product: the reverse law has
+/// to reduce each cotangent to its own operand's shape, and the operand whose cotangent is being
+/// answered is a tangent on that side -- `float[...]`, no extents in its type (design principles 5.4).
+/// Here `a` and `b` are values, so the two lists are values of the primal, and
+/// `stdlib/rulesets/transpose.cml#matmul_stated_t` reads them and nothing of the position it answers.
+/// Both terms state the **primal** operands' shapes and not the tangents': a tangent has its value's
+/// shape, and a `shape(da)` node would be a value derived from a tangent, which the cut cannot place
+/// on either side of itself (`split does not build this function`, measured 2026-11-04).
+///
 /// The right side is written **inline** and not as a call to a helper, and that is a condition of the
 /// law being transposable at all: the pullback walks the driven graph and turns each node around, and
 /// a `Call` is a node it can only turn around when the callee is a function it can transpose
@@ -208,7 +218,8 @@ export rule jvp_stop_gradient::<T>(x: T) when is_float::<T>() {
 /// Making a call transposable in general is the change that would let this rule -- and any other --
 /// be written with a helper again; until then, inline is the only shape whose every node has a law.
 export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
-    matmul(a, b) => (da: T[...], db: T[...]) => matmul(da, b) + matmul(a, db)
+    matmul(a, b) => (da: T[...], db: T[...]) =>
+        matmul_stated(da, b, shape(a), shape(b)) + matmul_stated(a, db, shape(a), shape(b))
 }
 
 // ---- the forward rules of the reductions and the layout ----
@@ -427,10 +438,24 @@ func mul_tensor::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x * w
 }
 
-/// `d(x * w) = dx * w + x * dw`: the product rule, written with the operator on the tangents and on
-/// the values, so the element-by-element multiplication and its order are the kernel's own.
+/// `d(x * w) = dx * w + x * dw`, each term's two shapes stated: the product rule, written with the
+/// operator on the tangents and on the values, so the element-by-element multiplication and its order
+/// are the kernel's own.
+///
+/// The tangent call is `mul_stated` and not `*`, for the reason `jvp_sum` states `shape(xs)` for its
+/// adjoint: a product's reverse law has to reduce each cotangent to the shape of the operand it
+/// answers, and on the reverse side that operand is a **tangent** -- `float[...]`, which states no
+/// extents (design principles 5.4). Here both operands are values, so `shape(...)` of each is a value
+/// of the primal the cut carries, and `stdlib/rulesets/transpose.cml#mul_stated_t` reads the two lists
+/// and nothing of the position it answers.
+///
+/// Both terms state the **primal** operands' shapes, `shape(x)` and `shape(w)`, and not the tangent's:
+/// a tangent has its value's shape, and a `shape(dx)` node would be a value derived from a tangent --
+/// which the cut cannot put on either side of itself (`split does not build this function`, measured
+/// 2026-11-04). `shape(x)` is the same list and it is a value of the half that has one.
 export rule jvp_mul_tensor::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    mul_tensor(x, w) => (dx: T[...], dw: T[...]) => dx * w + x * dw
+    mul_tensor(x, w) => (dx: T[...], dw: T[...]) =>
+        mul_stated(dx, w, shape(x), shape(w)) + mul_stated(x, dw, shape(x), shape(w))
 }
 
 /// `d(softmax(x)) = y * (dx - sum(y * dx))` with `y = softmax(x)` over the same axis.

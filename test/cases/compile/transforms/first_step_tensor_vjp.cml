@@ -21,6 +21,14 @@
 // binary floating point. The plan row that pins it is
 // `test/plans/feat/showcase_s2.plan.toml#first_step.tensor_vjp_answers_the_step` (it was named
 // `..._stops_at_split` while it pinned the refusal).
+//
+// Since 2026-11-04 the product's **linear call** is `matmul_stated`: `rulesets.jvp`'s `jvp_matmul`
+// hands `shape(a)` and `shape(b)` over as two more operands, because the reverse half has no value of
+// a tangent and a tangent's type states no extents (design principles 5.4). So the law that answers
+// this step is `matmul_stated_t`, and the route is the one `sum_stated` has: the shape travels as a
+// known operand instead of being read off the operand it belongs to. The numbers did not move -- same
+// product, same reduction, same order. `matmul_t` stays filed for a hand-written `matmul` call, whose
+// operands are not tangents.
 import { matmul, sum } from tensor
 import { vjp } from vjp
 
