@@ -5,6 +5,19 @@
 # one place that moves a tree to the host and starts work on it; nothing else in the repository
 # reaches the host for a build or a plan.
 #
+# --- this file is the gate's only entry -------------------------------------
+# 闸门入口只认 `internal/tools/camel-remote.ps1`；`<worktree root>/camel-remote.ps1` 是历史遗留副本，不要用
+#
+# Copies of this script were once kept at each worktree's root, from before the machine-specific
+# values moved into camel-gate.local.json and before the -NoBuild guard could name the build
+# configuration. Such a copy is wider than this file on three counts, and it says none of them: its
+# guard has no `--config` to pass, so `-Tier debug -NoBuild` verifies and accepts an install built
+# Release (the options fingerprint it compares is a Release one); the plan's stderr is not brought
+# back, so a plan that wrote only its reason to stderr reaches the caller as a bare non-zero exit;
+# and the host, the bare repository, the panel's state file and the libstdc++ directory are baked
+# into it, so a run from another machine or another host reaches the one it names. A lane that runs
+# the copy therefore believes it ran the gate while it read a different, laxer reading.
+#
 # What a run does, in order:
 #   * pushes the worktree's branch to the host's bare staging repository, writes the uncommitted
 #     changes with `git diff HEAD --binary`, and tars the untracked files;
