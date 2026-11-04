@@ -24,6 +24,13 @@
   executable's mtime, not the build log's: four rewrites in one night came from a correct number
   attributed to the wrong artifact (a stale `refs/remotes`, `build.ninja` for `build-Release.ninja`, a
   lane's readings filed as `develop`'s, a `-NoBuild` exit code read as a failure).
+- **Probe artefacts live in `D:\Temp\`, never in the worktree.** An untracked probe directory
+  makes `[provenance]` print `(dirty: N files)` on every run, and that flag carries a duty: it is
+  how a reader tells whether a reading came off a clean tree. A flag that is always on has stopped
+  being a flag -- a permanently dirty tree reports the same line as a tree someone has just edited,
+  so the one run that matters reads like all the others. Measured 2026-11-04: a lane kept two probe
+  directories under `benchmarks/` and `test/plans/`, and every reading it took that night said
+  `(dirty: 2 files)` while the tracked files were untouched.
 - **Before treating a red as a new defect, ask whether somebody already fixed it on another branch.**
   Twice in one night the answer was yes: `grad_array_sum` was about to get a probe written for it
   while the fix sat on `origin/lane-lit2` (`19f0b05e8`, `0aed45eb6`), and a `GUARD` question was
