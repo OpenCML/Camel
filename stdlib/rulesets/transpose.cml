@@ -204,7 +204,8 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// `where`, a registered operator, and not with a function of this rule's making: a helper named on a
 /// rule's right side becomes a call in the graph the backward walk has to transpose, and a call with
 /// no transpose of its own stops the walk (`skip=call-no-transpose`, measured on
-/// `rulesets.jvp::pow_tangent` 2026-11-03). A rule's right side is the answer, so a three-operand
+/// `rulesets.jvp::pow_tangent` 2026-11-03; `jvp_pow` writes its law out in place for that reason). A
+/// rule's right side is the answer, so a three-operand
 /// `where` is allowed here; the forward rule cannot write it that way, and `jvp_relu` records the
 /// measurement (`skip=arity uri=tensor:where operands=3`).
 ///

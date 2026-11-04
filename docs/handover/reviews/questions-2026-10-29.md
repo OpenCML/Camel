@@ -2656,3 +2656,198 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 **零载体能顶替到什么程度**：不要零载体。用一个零数组去顶替参数的值，只在律"恰好只读形状"时才对，这是一条看不见的约定，读元素时就会静默出错数。按 11:10/17:35 改完规则以后，转置规则不再读线性操作数：`vjp` 路径的形状由原值作为已知实参交进去，裸 `transpose` 的形状由 `extent_of` 从类型取。零载体也就不需要了。`transpose(pick)` 在 `x: float[3]` 上答 `([0.0, 1.0, 0.0])`，靠的是 `extent_of`，不是零载体。`e07ce4481` 里的零载体，在规则改完后删掉。
 
 五页挪到 `reviews/` 留档。
+
+## 催办（2026-11-03 18:35）：停止改写归档页的引用，回到第 1–3 项
+
+过去两小时 57 笔提交里，有 262 个文件改在 `docs/handover/`，主要是把 10 月、11 月的审查页、报告页里的行号引用逐个改成符号引用。动代码的只有 6 笔，第 1–3 项一笔都没有。
+- **归档页是当时的记录，不改写**。`reviews/` 和 `reports/` 里的旧页记的是那一刻的读数和引用，行号过时是正常的，读的人知道那是历史。"按符号引用、不写行号"这条规则只管**今后新写的**页面和仍在维护的设计文档。已经改的不用回滚，剩下的不要再做。
+- 闸门入口进了 `internal/tools/`（`d96cbfc68`、`46a0db2ee`），账本改成名单（`31e76298e`、`adbc7a2d2`），这些照 12:30 和 13:30 做了，对。但它们是第 6 项，不该排在第 1–3 项前面。
+- **现在的顺序**：① 规则层把转置需要的原值信息作为已知实参交出（17:35），然后删掉按位置取值的那一段；② 嵌套调用（17:55）：被调函数的 `lin` 作为外层残差，转置时调用 `transpose(lin_g)`；③ `extent_of`。做完 ① 和 ②，库层 `with_grad` 应当能和引擎同答。
+
+## 裁定（2026-11-03 18:55）：安装自带 C++ 运行时——A，加上 C 那一句
+
+照 15:35 的方向：二进制自己找得到运行时，任何调用方都不需要导出。A 就是这个做法：`$ORIGIN` 运行路径，`collect-out` 把工具链的 `libstdc++` 拷进 `libs/`，系统目录里的不拷。这和 Python 打包里 `auditwheel` 修 wheel 时做的是同一件事，24 MB 换的是"任何地方都能直接跑"。
+- C 也做：加载时 `libstdc++` 版本不够，打一句明确的话再退出，不让加载器抛一串 `GLIBCXX_* not found`。
+- 发布 wheel 时照 A 带上运行时，并在发布说明里写明体积变化。负责人对安装体积有要求的话，再来改。
+- 排期属于第 6 项（测试设施），不插到第 1–3 项前面。
+
+页挪到 `reviews/` 留档。第 1–3 项这一小时仍然没有代码。
+
+## 第 1 项拆成小步（2026-11-03 19:35，决策者）
+
+第 1 项三个多小时没人接，这里把它拆到第一步只改两条规则、一条用例，接手的人照做即可。
+
+**第一步：只改下标这一对规则**。
+- `stdlib/rulesets/jvp.cml`：加一个线性函数 `pick_at::<T>(dxs: T[], i: int, n: int): T { return dxs[i] }`。它对 `dxs` 线性，`i`、`n` 是已知实参，前向里 `n` 不参与计算，只为让转置拿得到长度。`jvp_idx_arr` 的右边改成 `(dxs: T[]) => pick_at(dxs, i, len(xs))`。`len(xs)` 由原值在前一半算出，照 15:15 成为残差。
+- `stdlib/rulesets/transpose.cml`：加 `pick_at_t::<T>(dxs: T[], i: int, n: int) { pick_at(dxs, i, n) => (ct: T) => scatter_into(zeros::<T>([n]), i, ct) }`。这条规则只读已知的 `i`、`n`。
+- 判据：`grad_array_no_int` 等 10 条照旧绿；`rounds_are_undone_in_reverse` 答 `(1.0, 1.0)`；同时数一下 `transpose.cpp` 里按位置取值那一段还被命中几次，应当只剩别的规则的命中。
+
+**第二步**：照第一步的样子，把剩下命中按位置取值的规则逐条改掉（`take_t`、`mean_axis_t`、`sum_t` 里读线性操作数形状的地方），每条一笔提交，判据都是"命中数减少、用例不变"。
+
+**第三步**：命中数归零后，删掉 `transpose.cpp` 里按位置取值的那段、`wantedValues`/`TRANSPOSE-NEEDS`，以及 `split.cpp` 里那段约定注释。
+
+裸 `transpose` 上的 `idx_arr_t`（`index_into(x, i)` 中 `x` 是参数本身）不走这条路，它的长度由第 3 项的 `extent_of` 从类型取，放到第 3 项一起做。
+
+## 进展与裁定（2026-11-03 19:55）：第 1、2 项主体落地；闭包成员不收余切
+
+**进展**：
+- `d1aa176ee`：线性调用自己带上长度（`element_at(dxs, extent_pair(i, len(xs)))`），转置规则不再读线性操作数。`TRANSPOSE-NEEDS`、`wantedValues` 全树 0 处。第 1、2 项的主体落地了。
+- `db741501d`：被调函数的 `lin` 作为残差，后一半间接调用它，转置时调 `transpose(lin_g)`；递归函数用一次变换内的表。17:55 那条落地了。
+- `4adc436cb`：由循环算出的残差在循环之后取。
+
+**还差的**：
+- `split.cpp:1224` 和 `transpose.cpp:993` 两处注释还在讲"第 `at` 格是第 `at` 个参数"，删掉。
+- 页里第 4 节列的 7 条从"答对"变成了"拒绝"（`cotangent-needs-a-value`，含手写闭合 lambda 和 `relu`）。原因是转置规则要读一个**已知值**（`mul_d` 的另一个操作数），这个值在被转置的函数里是**闭包端口**，`forward` 还不会处理闭包端口。照 02:50：`forward` 遇到闭包端口，就转发成成员自己的闭包端口；成员的闭包 = 被转置函数的闭包，调用点照常填。这一处补上，7 条应当回到原来的数，手写闭合 lambda 与 `split` 造的后一半同答。
+
+**闭包成员的余切要不要一个槽——乙，不收**。闭包成员是已知值（捕获的常量），不是线性输入，没有余切可收。甲不取：它让 `Transpose<F>` 的答案元组按"参数 + 闭包成员"排，可闭包不属于类型（11:30、13:10、17:10），答案的形状就不再只由 `F` 决定。
+- 页里说"改成不收以后，两条元组用例静默变成 0"。这说明有一个**依赖线性输入的值被放进了闭包成员**，比如 `(x, 2x)` 这个元组里的某一项。依赖切向量的值永远不能成为残差或闭包成员，这是 `split`/`transpose` 某一处的缺陷。在那两条用例上把闭包成员逐个打出来，找到是谁把它放进去的，在那里修。
+- 修好后两条用例照旧答 `(3.0)` 和 `(1.0)/(3.0)`，同时 `wantsCotangent` 对闭包端口答 `false`。
+- 页里那个"阈值"不用写：这条规则不随用例数改变。
+
+页挪到 `reviews/` 留档。
+
+## 裁定（2026-11-04 04:20）：48 页一次答完
+
+先说这一批：435 笔快进合入，全量快层 8762 条里 3 条红（基线上就红的 `matmul_t`）；S2 的张量模型走库层 `vjp` 已经能答数；跨调用的梯度有了正例。撤回 `integ3/backlog-b` 和那条封口判据的理由写得清楚：`benchmarks/mlp/model.cml` 上 `time:now` 被放进一个不一定走到的分支臂。重新落地前，先在 `closeChainOver` 那一侧修图构造，不在测试里让步，这个处理对。
+
+下面按主题裁。每页的出处是 `docs/handover/questions/2026-11-04-<页名>.cn.md`。没单独点名的部分照默认做。
+
+### 一、照默认做（与既有裁定一致）
+`does-pick-at-need-a-forward-rule`、`does-the-engine-need-a-pick-at-rule`、`does-the-transpose-walk-still-refuse-by-arity`、`how-does-a-tie-mask-travel-with-an-extremums-shape`（掩码是已知操作数，走 `lin` 的闭包，不加端口）、`narrow-the-declaration-or-teach-the-consumer`、`should-an-owner-name-be-checked-against-a-roster`、`should-the-compiler-version-invalidate-an-install`、`the-two-tuple-cases-have-no-closure-member`（"闭包成员不收余切"单独一步落）、`what-answers-a-length-from-a-type-alone`（`extent_of` 已在树上，结案）、`what-does-a-call-of-a-value-that-is-not-a-function-say`、`where-the-seal-says-the-exit-type-is-wrong`（确认它就是 `commit` 时那条出口类型校验，不是第二份）、`widening-the-float-guard-turns-ten-hardcoded-types-into-defects`、`a-struct-field-read-refused-or-copied-by-key`（已落，结案）、`axis-reductions-state-their-extents`（`array.cml` 的六个函数同一轮一起改）、`does-a-call-stand-on-its-callees-lin-or-on-its-body`（等 `residualsOf` 那条车道落了再回来，按 17:55 改成调用 `lin`）、`does-a-build-gated-case-count-as-a-name-pin`（诊断名覆盖率只能当信息，不当通过条件）、`a-member-read-is-not-a-parameter-read`（甲：参数成员的读取把余切累加到参数上；先修那个元组的段错误，崩溃比拒绝还坏一档）。
+
+### 二、零载体与形状：一律照 R3/R11
+- `does-a-product-transpose-still-need-a-zero-carrier`、`which-shape-reads-can-become-extent-of`：现在就删掉 `shapeFromTypeOf` 里的零载体回落。写死形状的类型用 `extent_of`；开秩的裸 `transpose` 照 16:15 按语言规则拒绝。
+- `who-states-the-extents-a-product-law-reads`：照默认，由 `jvp` 规则把长度作为已知实参交出，需要一个收长度的 `sum_to` 形式。
+- `who-states-the-length-when-the-shape-is-open`：`sum_to(t, zeros::<T>(at))` 用已知长度造一个形状模板，不顶替任何参数的值，规则上可以接受；更干净的是做一个直接收 `at` 的算子，排在后面。
+- `should-a-multiplys-adjoint-need-its-operands-shape`：不取"开秩上拒绝"。`exp`、`erf`、`gelu` 的 `jvp` 规则把形状作为已知实参交给乘法（与 `sum_stated` 同一个做法）；只有裸 `transpose` 在开秩上才拒绝。
+- `is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal`、`what-shape-a-zero-with-no-stated-extent-has`：`[]` 是长度不对的零，不取。`vjp` 路径上，零余切照原值的形状造，原值是残差，在闭包里；裸 `transpose` 在开秩参数上拒绝。
+
+### 三、秩 0：只有一个转换点
+`a-rank-zero-cotangent-is-read-as-a-pointer`、`who-gives-a-shapeless-cotangent-its-rank`、`who-states-the-extents-of-a-stated-reduction`：原则 5.4 说秩 0 就是元素本身。规则的端口照实写 `T[..]`，不把每条 `*_stated` 规则都约定成写 `ct: T`，那样同一件事就成了 N 处约定。标量进入 `T[..]` 位置时，由编译器在**可赋值转换那一处**统一做表示上的转换，和 `T` 进 `T?` 时自动包一层是同一种机制，不在 `ruleCotangent` 或各条规则里各补一次。`numel`/`shape` 对秩 0 答 `1`/`[]`。用例里为绕开问题写的 `keepdims` 改回来。
+
+### 四、不加端口、不加出处：照 R2/R4
+- `how-is-a-two-port-transposed-value-called`、`does-a-transposed-member-get-a-port-for-a-parameter-value`：不加值端口。要用 `x` 的，走 `vjp`，`x` 是 `lin` 闭包里的残差；裸 `transpose(read_outer)` 照 16:15 拒绝。`Transpose<F>` 的声明照 22:30 写成 `(ct) => …`，声明和构建一致。
+- `when-the-lift-promotes-a-with-value-and-the-cut-cannot-take-the-port`：`with` 值不进抬升后的值列表，照 15:15 作为残差进闭包，"只提升标量 `with`"那道门和"does not reinterpret … yet"的诊断一起删掉。
+- `who-reads-the-first-operand-as-a-callee`：删掉那段读法是对的。剩下的 `mk(x)(2.0)` 按内容处理：调用一个函数值，转置成调用 `transpose(v)`，现在就做，不用等。
+- `can-a-pass-build-the-graph-a-transform-hands-out`：引擎里"这是 `transforms:split` 的结果"那句拒绝是按出处判断的。引擎要删，不去教引擎，让库层 `grad` 覆盖这些形状。
+- `where-a-laws-port-disagrees-with-the-value-it-is-handed`：除了静态检查，在挑规则的那个共用函数里也比对端口类型和交来的值的类型，对不上就按语言规则拒绝，不留下会导致段错误的误读。lint 照留。
+
+### 五、`with` 值与库层 `grad`
+- `does-a-with-value-get-a-tangent`：不取甲。`with` 值在变换层是常量（09:50、15:15）；对第一个 `with` 参数求导，由 `grad` 用 lambda 把它挪到普通参数上（原则 9.9），`Jvp<F>` 不变。页里顺带发现的两个缺陷各自修：一是无人读的数组参数的零用错了算子，应该用 `zeros_like`，不是 `zeros_arr`；二是 `jvp` 的实参顺序和它自己的签名不一致。
+- `should-the-library-with-grad-be-an-export-that-refuses`：删掉那个永远拒绝的导出。永远拒绝的公开函数就是"暂不支持"。在负责人裁定类型层拆包之前，`with_grad` 只有引擎那一份。
+- `should-the-library-grad-be-declared-per-arity`：不按元数分写，等负责人对类型层拆包的裁定（已列给他）。
+- `should-the-library-grow-a-has-aux-form`：库层 `grad`/`with_grad` 写成组合时一并带上 `has_aux`，否则引擎删不掉。`vjp` 的 `has_aux` 随后再定。
+- `does-the-library-need-forward-rules-for-the-stated-spellings`：取甲，四个都是线性的，每条规则一行。公开的写法不能只有一条腿能答。
+
+### 六、规则与判据
+- `a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep`：零切向量是**结构上**已知的（常量没有切向），不是按值判断的。`pow_tangent` 去掉 `dw == 0` 这个按值的守卫，改由规则展开时省略切向结构上为零的那一项。这样指数是常量时，`(-3) ^ 2` 照样答 -6，没有 `log` 项；指数也参与求导时，`^` 的转置能建，因为规则里不再有对切向量取值的分支。`^` 和 `pow` 因此答同样的数。
+- `does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it`：没有用例读到的律不算补上。`abs_t`/`log_t`/`maximum_t`/`minimum_t` 各写一条能分辨对错的用例，比如二阶 `vjp`，或手写一个用到它的线性函数；写之前列为"未验证"。
+- `two-f32-combination-cases-meet-their-own-call-text`：取 A，删掉旧条目。旧条目钉的是错的调用写法，分辨不了对错。下一面墙"对 pullback 的调用求导"，按内容转置成调用 `transpose(v)`。
+- `a-parameter-holds-no-cotangent-on-a-two-operand-reduction`：照默认留着已知失败标记，但先查那条"参数没有被用到"的判据：参数原值现在在闭包里，判据是不是把闭包里的值当成了"没用到"。
+- `a-draft-node-asked-of-the-source-graph`：直接做 C，改成收 `Type*`，删掉悄悄回落成 `float` 的那一支。
+- `a-case-with-no-plan-entry-and-a-main`：不留在"不算通过、也不算失败"的状态。查它为什么退出 1：是拒绝，就钉诊断码；是坏了，就删。
+- `when-a-lookup-that-finds-nothing-should-refuse`：照默认的三分法。"对数组循环的元素切向"如果是合法程序，就是缺口，排进去做；拒绝的话写成语言规则，不写"以后再算"。
+- `what-does-the-second-derivative-need`：照默认。函数值要不要有导数类型，是以后的语义问题，现在不开。
+
+### 七、图的归属
+`does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain`、`who-adopts-the-graphs-of-a-nested-cut`：只要一种机制。由程序传递地收养嵌套切出来的图，按 id 去重；每个切口各自带链（`SplitGraph::standing`）的做法删掉。`calleeCuts` 照 17:55 改成每次变换调用只建一张表，不要随嵌套层数翻倍。
+
+48 页挪到 `reviews/` 留档。要负责人定的只有一件，就是早先列过的"类型层拆包"，本批没有新增。
+
+## 负责人定（2026-11-04 04:30）：类型层的包能拆
+
+负责人同意：类型层像值层一样，能把一个类型包拆成"第一个成员"和"其余"。规则写进原则 §5（中英文），紧接在"参数包是同一条规则"之后。
+
+**施工（下一批第 3 项后半）**：
+1. 类型层的拆包写法：在类型位置上把 `WithOf<F>` 拆成 `W` 和 `..Rest`。具体语法由施工方提一页（`match type` 的元组模式，或类型位置上的模式），与值层 `<w, ..rest>` 读起来一致。空包在实例化处按语言规则报错。
+2. 用它在 `stdlib/types.cml` 里写出 `Gradient<F>`、`ValueAndGradient<F>` 和两个 `…AndAux<F>`，`stdlib/signatures/autodiff.cml` 的签名照这几个声明。
+3. 库层 `grad`/`with_grad`/`has_aux` 写成组合（原则 9.9：用 lambda 把第一个 `with` 参数挪到普通参数位，对它做 `vjp`），与引擎在全部 autodiff 用例上逐元素同答。
+4. 之后删除 C++ 的 `GradResolver`/`gradientSignature`，以及 `pullback.cpp` 和 `buildGradientGraph`（第 7 项）。
+
+## 裁定（2026-11-04 05:20）：三页，加类型层拆包那页的两个前提
+
+**更正 03-19:55**：那天我把 7 条 `cotangent-needs-a-value` 归成"`forward` 还不会处理闭包端口"，归因错了。`forward` 的闭包端口转发在 `236d06f37` 就有；两条元组用例变零，是因为 `reachesAParticipant` 只走普通输入、不走 `Fill` 的 `with` 输入（已修）。`the-refusal-was-not-a-closure-member` 照**甲**记：两处成因，撤回我那句。协调者把第 1 项改成"先逐条跑这 7 条、报今天的实际症状，再决定改哪里"，并要求既不假设我说的原因对、也不假设它错，这个做法对。
+
+**参与微分的参数自己的值由谁交给转置**（`where-does-the-value-of-a-linear-operand-come-from`）：探针显示，5 条里律要的都是**线性输入自己的值**。答案是没有人交，也不应该有人交。线性函数里，任何一条律都不需要线性操作数的值。律之所以来要，是因为转置去问了一个**已知操作数**位置的余切：`mul(t, dx)` 里求 `t` 那一位的余切，就得读 `dx`。所以：
+- **规则**：转置只在操作数能走到参与微分的参数的位置上向律要余切。已知操作数（闭包端口、常量、残差，以及走不到线性输入的值）的位置一律不问。这是 R3 和"闭包成员不收余切"推到所有已知值上。`reachesAParticipant` 就是这个判据，所有 `ruleCotangent` 调用都先经过它。
+- 照这条改完，那几条用例里"律要线性输入的值"的请求应当消失。如果某个函数真的需要线性输入的值（例如 `dx * dx`），它对这个参数就不是线性的，`transpose` 按语言规则拒绝："这个函数对第 k 个参数不是线性的"。
+- 丙（给被答余切的参数加值端口）不取：违反 R2/R11。`transposeSignature` 里那张给参与参数加值参数的捕获表，和 `needs` 那条再也不会被填的记录，一起删掉。
+
+**程序交出去的图是否包括它收养的**（`does-a-program-own-what-it-adopted`）：传递，照 04:20 第七节。`9262df328`、`ce52f00d0` 已经这么做了，三层切口不再中止，答数对，结案。
+
+**类型层拆包那页的两个前提**（那页还在车道上，没有推到远端，我按协调者转述的两行答）：
+1. **`match type` 的被匹配项能不能是包**：不需要它是包。被匹配项写成把包展开成的元组类型 `(..WithOf<F>)`，它本来就是一个普通类型，不引入"包作被匹配项"这个新概念。
+2. **`(W, ..Rest)` 合不合法**：合法。`match type` 的元组模式允许最后一个成员写成 `..Rest`，绑定一个类型包，读起来与值层 `<w, ..rest>` 一致。空元组匹配不上 `(W, ..Rest)`，就按语言规则在实例化处报错（原则 §5）。
+- 写法因此是 `type Gradient<F> = match type (..WithOf<F>) { (W, ..Rest) => <W, ..Rest> (..ParamsOf<F>) => Tangent<W> }`。其余三行照那页默认。可以派第 3 项后半了。
+
+三页挪到 `reviews/` 留档。
+
+## 负责人定（2026-11-04 05:45）：包写 `...`，`..` 留给区间、组合与流
+
+负责人同意：参数包、展开、包的拆解一律写 `...`，且总写在前面；`..` 保留给区间 `a..b`、函数组合 `f..g` 和流类型 `T..`。负责人考虑过把流类型也改成 `T...`、按"双目、单目"来分，最后不取，因为后缀 `T...` 在主流语言里就是"变长参数"，而且同一个记号放前放后意思不同，正是要消掉的那种混淆。区间和组合照旧由操作数类型区分。规则已写进原则 §5（中英文），原则里原有的包写法已一并改成 `...`。
+
+**施工（机械迁移，排在下一批第 3 项后半之前做，因为 `Gradient<F>` 要用新写法）**：
+1. 词法加 `...` 记号；包、展开、拆解的语法只认 `...`，`..` 在这些位置报语法错误，并且只给新写法。不留旧写法的兼容。
+2. 全树替换：`stdlib/`（`types.cml` 的 `(..ParamsOf<F>)`、`vjp.cml` 的 `(..xs)` 等）、`test/cases/`、`docs/language/`、`docs/design/`、示例和 `stdlib-reference` 生成物；`docs/handover/` 下的归档页不改。
+3. 类型层拆包那页的写法跟着改成 `match type (...WithOf<F>) { (W, ...Rest) => … }`。
+4. 读数：全量快层红数不增；`..` 作区间、组合、流类型的用例全部照旧。
+
+## 回复发布侧（2026-11-04 06:35）：0.2.43 切片前的红（`reviews/2026-11-04-reds-before-the-0.2.43-cut.cn.md`）
+
+- **四条要修的**照单修：`gpu_scope` 一条，`matmul_t` 向量左、右两条加三阶拒绝一条。后三条同出一处，一起修，修完回 sha。赶不上这一版，就作为已知红带出去，下一版补。
+- **`docs.snippets_compile` 的时间边界**：照"本机最慢读数的四倍"定上限，或者把用例拆开，两种都行，提交信息写清读数。
+- **按平台登记的那一批要分开处理，不能一律记成平台限定的已知失败**：
+  - **数值那几条**（`gelu_grad`/`erf_grad`/`erfc_grad` 的位、`sim_declaration_import` 的十进制文本、`modules.rules` 四条精度断言）：原则 7.1 写明，超越函数不承诺跨设备逐位相同，只承诺写明的 ulp 上界；默认模式允许合成乘加（7.2 `contract`）。所以这些用例本身断言错了：它们按位比对了语言没有承诺逐位相同的结果。改成在**所有平台**上按声明的 ulp 上界断言，不登记成已知失败；登记会让这几个平台上以后真出的错一起被藏住。只有 `#strict` 下的四则运算和开方承诺逐位相同，这类用例在任何平台上出现位差都是缺陷，不能登记。
+  - **工具那几条**（`trans.cpp` 三条在 macOS 上跑不起来，`load_class` 两条、`debugger.dap_fusion_group` 在 macOS/win 上退出 1）：是工具在受支持平台上的缺陷。这一版可以登记带出去，但每条要写清缺的是什么，并排进下一批修，不当成永久的平台差异。
+
+## 裁定（2026-11-04 06:55）：裸 `transpose` 递零给 `abs_t` 这类律——这类律本来就不该有
+
+**进展**：`4e4697456` 照 04:20 落了：结构上为零的切向，在规则展开处省略对应的项，`pow_tangent` 的按值守卫删掉；`(-3.0) ^ 2` 在求 `log(-3.0)` 之前就答零，不再出 `NaN`。
+
+**页里问的那条边界，答案在更前面**：`abs`、`log`、`maximum`、`minimum` 都**不是线性的**，`transpose` 只对线性函数有定义（13:10、05:20："函数对某个参数不是线性的，按语言规则拒绝"）。`abs_t`、`log_t`、`maximum_t`、`minimum_t` 这四条"转置律"，实际上是这几个非线性算子的回传规则（VJP），也就是"每个算子另写一份反向规则"的第二份真相。负责人 10-28 定的结构是：非线性算子只写 `jvp` 规则，反向由 `split` 切出线性部分，再转置**线性**算子得到。页里自己的读数也证明了这一点：`vjp` 路线答对，用到的是 `mul_tensor_t`/`divide_t`/`add_tensor_t`，四条律一个都没出现。
+- **删掉这四条律**。`rulesets/transpose.cml` 里只留线性算子的律，其余逐条查一遍，凡是"读线性操作数自己的值"的律，都按同样的理由判断去留。
+- **裸 `transpose` 遇到非线性算子作用在线性输入上**，比如 `transpose(f_log)`，在构建时按语言规则拒绝："`tensor:log` 对它的操作数不是线性的；`transpose` 只用于线性函数，求梯度用 `vjp`"。今天那几个静默错数（`[inf, inf, inf]`、`abs` 的符号错）随之消失，变成明确的拒绝。
+- `maximum_t`/`minimum_t` 实例化不成立的问题，随着删律一并消失。
+- 48 页裁定第六条第二款（"没有用例读到的律不算补上"）对这四条不再适用，它们不该存在。`4e4697456` 给这四条律写的用例，改成"裸 `transpose` 拒绝非线性算子"的反例，加上 `vjp` 路线的逐元素正例。
+
+页挪到 `reviews/` 留档。
+
+## 裁定（2026-11-04 07:15）：两页
+
+**删掉"只提升标量 `with`"那道门，删的是什么**：页里的读数说明了一件我 04:20 没算到的事：今天库层 `grad` 能对 `with` 权重答对数（`library_grad_of_a_with_weight` 的 `grad=3.0`、`grad_first_with_parameter` 四组），靠的正是 `jvp` 把 `with` 值提升进值列表、给它切向。所以照乙一刀删掉提升，会把对的数变成错的数，不能这么做。但甲（凡有切空间的 `with` 值都提升）也不是终态。09:50 和 15:15 定的是：变换对 `with` 值当常量处理，对第一个 `with` 参数求导由 `grad` 用 lambda 把它挪到普通参数上（原则 9.9）。顺序这样排：
+- 甲留着，作为过渡，并在 `withIsPromoted` 旁写明"第 3 项后半落地后删"，不写成规则。
+- 第 3 项后半（类型层拆包、库层 `grad`/`with_grad` 写成组合）落地时，`grad` 改走 lambda，同一次合入里删掉 `with` 值的提升。上面那几组用例必须照旧答对，这就是判据。
+- 在那之前，`Jvp<F>` 的声明不因为提升而改变。如果提升已经让 `jvp(f)` 的类型和 `Jvp<F>` 对不上，那一处要先对齐。
+
+**被调值是体算出来的函数值**：照甲，保留拒绝。理由用线性规则说：裸 `transpose(f)` 里所有参数都是线性的，`mk(x)` 由线性输入 `x` 造出一个函数再调用它，`f` 对 `x` 就不是线性的。所以拒绝的句子写成"这个函数对第 k 个参数不是线性的（它用这个参数造出了被调函数）"，不写成"答案没有来处"。页末说的"给 `Transpose<F>` 加一个值端口"不取（R2/R11）。被调值如果来自已知值（闭包），照 17:55，转置成调用 `transpose(v)`。
+
+`27a5523b5`、`9b4e38004` 照 04:20 落了：转置成员按声明的形状建；按内容判断函数值；端口不匹配算编译器的错。两页挪到 `reviews/` 留档。
+
+## 每日审查（2026-11-04）
+
+范围：过去 24 小时 `origin/develop` 上 623 笔非合并提交，代码部分约 300 笔，分三组审：变换与求导，图与执行，核心、工具与测试。下面各条都已对照 HEAD 核实。已在返工里的不重复列：P0-2 的语句标记两套并存、闭包成员不收余切。
+
+### 高（第 1 项收尾之后、第 3 项后半之前做）
+- **B1 返工：`GCNode::tangentArgs` 是核心节点上的出处记录**（`include/camel/runtime/graph.h:393`，由 `rule_expand.cpp` 写、`split.cpp` 拷、`transpose.cpp` 读）。它记"这次调用是规则展开出来的，哪几个实参是切向"，转置据此决定行为，而且只有 16 位，超出就拒绝。这是第四次往核心里放出处信息。哪个实参是切向，能从内容推出来：05:20 那条规则，即实参能不能走到参与微分的参数（`reachesAParticipant`）。删掉这个字段和 `isTangentArgument`，转置一律按可达性判断。
+- **B2 返工：零载体还活着**。`transpose.cpp:848` 的 `shapeCarrierOf`、`:887` 的 `shapeFromTypeOf`（`:930`、`:1927` 在用），`transpose.cml:183` 的 `sum_to_stated = sum_to(t, zeros::<T>(at))`，与 `extent_of` 的新路并存。04:20 定的是"现在就删"。只留一条路：律拿到 `int[]` 形状，按形状构造。`sum_to` 加一个收形状的版本，替掉"用零数组当形状"。`:816-833` 那几段悬空的文档注释一起整理。
+- **B3 返工：转置在 C++ 里给律"加端口"**（`transpose.cpp:3195-3240`）：律按原样配不上时，取"第一个类型写明形状的操作数"的形状，当作多出来的一个 `int[]` 端口再试一次。这是一条藏在 C++ 里、按位置猜的规则。律的端口只来自它的声明。形状由 `jvp` 规则作为已知实参交给线性调用（17:35），或者由律自己写 `extent_of::<X>()`。删掉这段加宽后重试。
+- **B4 返工：两个脚本用 JS 重述编译器的规则**。`scripts/law-cotangent-ports.mjs`（1028 行）用正则从规则文本里推"体对端口要求什么类型"；`scripts/vjp-parity.mjs` 在 JS 里重写了 `ruleKeyOf`，配一张 134 行的例外表 `vjp-parity-exemptions.tsv`。二者都是第二份真相，加一张例外台账。"端口类型与体的要求对不上"改成编译器在规则登记、实例化时检查，报真实类型（10:10 和 04:20 第四类说的挑律检查就在这里）。引擎和库两张表的对照，在引擎删掉之前用 C++ 的真 `ruleKeyOf` 做；引擎删掉以后这件事自然消失。两个脚本和例外表删掉。
+
+### 中
+- **B5 `extent_of` 的两处特例**：建图器里按 URI 字符串 `":op/extent_of"` 折叠（`builder_operators.cpp:3877`），运行时还挂着一个只会抛错的执行器（`struct.cpp` 的 `__op_extent_of__`）。改成一条通用规则：值只由类型实参决定、没有值操作数的内建，在实例化时求值。不按名字特判，也不留只会抛错的执行器。作为函数值使用时同样在实例化处折叠。
+- **B6 `*_stated` 一族**（`pick_at`、`sum_stated`、`take_stated` 等七个）："线性调用把形状作为已知实参带上"是 17:35 定的，方向对。但它们现在从 `std::tensor` 公开导出，而且把 `[axis, keepdims, d0, …]` 塞进一个 `int[]`，靠位置约定解读。改成：这些是规则内部的线性辅助函数，放进 `rulesets`，不从 `tensor` 导出；参数写成具名的 `axis`、`keepdims`、`extents`，不打包。
+- **B7 `REINTERP …` 读数常开写 stderr，用例去 grep 它**（`readings.h:30`，约 40 处调用）。11-03 已经提过一次。拒绝原因改成结构化诊断，用例断言诊断码；读数改由遍的 `with` 参数打开，不常开。
+- **B8 "结构上为零"的判断一半看出处、一半看值**（`jvp.cpp:93-130`：先查本次抬升写过的集合 `zeroMade`，再看静态常量是否等于 `0.0`，只覆盖 f64/f32）。改成一个按内容的谓词："这个切向就是它切空间登记的零常量"，各种宽度都覆盖，不靠旁边的集合。
+- **B9 `kConversions` 在 C++ 里又写了一遍转换的源类型和目标类型**（`builtin.cpp:54`），prelude 的 `#op` 声明里已经有。改成从声明读。
+- **B10 测试被改得迎合实现**：`resources.plan.toml` 的 `line()` 把所有数字都换成通配、用 `hits.length >= 1` 代替"恰好一处"；`jit_framed.plan.toml` 删掉了钉住的回落原因。改回精确断言，节点号按名字或关系匹配，不用通配。
+- **B11 超时与台账**：余量规则把主机线程池的 `sys` 时间算进了用例的 CPU，于是一条条往上调超时（`para/core.plan.toml` 改成 60000，`stdlib_registry` 改成 240000）。改成只计用例自己的用户态 CPU，计划级的默认值写一次，不在 40 处各写一遍。`scripts/autodiff-migration-ledger.mjs` 里钉死的 `total: 143`/`pass: 22` 和那段变更史删掉，计数只报告，不当闸门。
+- **B12 `36b526c7b` 是用 `--no-verify` 提交的**。规矩是不跳钩子；钩子拦下了，就修钩子报的问题。这一笔补跑一遍钩子，有问题照修。
+
+### 低（一次扫完）
+- 约 200 处注释写着日期、"作者某日裁定"或测量读数（`split.cpp`、`transpose.cpp` 各 30 多处，`jvp.cpp`、`graph_edges.cpp` 等）。注释只写规则，读数进提交信息（11-02 已定，11-03 A10 又提过一次）。
+- `test/plans/feat/compile/golden/sync_ctrl_dedup.dot` 里有主机路径 `/home/zjwei/...`，规范化时去掉 `srcfile`/`origin`。`showcase_s2.plan.toml` 引用的 PyTorch 对照脚本在 `D:\Temp`，不在树里，把它放进 `showcase/` 下面。
+- `Residual` 上的两个布尔字段（`linearHalf`、`afterLoop`）是变换内部的，不在图上，可以接受。能由顺序推出的话，就不要存。
+
+**要负责人定的**：
+1. **`case error e` 里的 `Error` 类型用户写不出来**（`da6c2e0dc`）：编译器持有这个类型，程序却无法写出它的名字，这是一个用户看不见、管不了的机制。我建议在 prelude 里给它起名，让程序能写，这是对语言表面的新增。
+2. **有几笔提交信息被 PowerShell 的反引号转义吃掉了字符**（`476508c13`、`7397efb80`、`cb0147d9b`、`05f9f7439`，比如 `vjp` 变成了 `jp`）。仓库公开前要不要改写这几笔的提交信息？改写历史需要强推，按规矩要你点头。

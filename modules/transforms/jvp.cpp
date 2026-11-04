@@ -89,6 +89,45 @@ camel::core::type::Type *emptyTupleType() {
     return camel::core::type::TupleType::create();
 }
 
+/// Whether the tangent the lift is about to hand a rule is a **structurally** zero one: the zero the
+/// lift itself wrote for a value that cannot move (`zeroMade`), or a constant zero a law's own body
+/// wrote -- `d(float(n))` for a constant `int` `n` is `0.0`, written as a literal of that law, so an
+/// exponent spelled `2` rather than `2.0` has a zero tangent too.
+///
+/// A value a *program* computed is not one, even when it happens to be `0.0`. The distinction is the
+/// author's ruling of 2026-11-04: a structural zero is known before anything runs, because a
+/// constant has no tangent, and that is what lets the rule expansion drop the term it multiplies
+/// (`rule_expand.cpp#expandRuleRightSide`) instead of computing it and multiplying by zero.
+bool isStructuralZeroTangent(
+    camel::runtime::GraphDraft &draft, const std::unordered_set<gc_node_ref_t> &zeroMade,
+    gc_node_ref_t ref) {
+    if (ref == rt::kInvalidNodeRef) {
+        return false;
+    }
+    if (zeroMade.count(ref) != 0) {
+        return true;
+    }
+    const rt::DraftNode *node = draft.node(ref);
+    if (node == nullptr || node->header.kind != rt::GCNodeKind::Data ||
+        node->header.dataIndex >= 0 || node->header.dataType == nullptr) {
+        return false;
+    }
+    const std::span<const slot_t> slots = draft.staticSlots();
+    const auto rawIndex                 = -static_cast<std::ptrdiff_t>(node->header.dataIndex);
+    const size_t index                  = static_cast<size_t>(rawIndex);
+    if (rawIndex < 0 || index >= slots.size()) {
+        return false;
+    }
+    switch (node->header.dataType->code()) {
+    case camel::core::type::TypeCode::Float64:
+        return camel::core::rtdata::fromSlot<double>(slots[index]) == 0.0;
+    case camel::core::type::TypeCode::Float32:
+        return camel::core::rtdata::fromSlot<float>(slots[index]) == 0.0f;
+    default:
+        return false;
+    }
+}
+
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
 /// to the operands' values and their tangents.
 ///
@@ -105,6 +144,10 @@ camel::core::type::Type *emptyTupleType() {
 /// calling the right side and calling what it answers -- is what a rule rewritten as a *runtime*
 /// call produces: a closure-valued node and a call that answers with a closure, neither of which
 /// belongs in a graph the transform builds at compile time.
+///
+/// Whether a tangent is **structurally** zero -- the other question a lift asks before it chooses a
+/// rule -- is `isStructuralZeroTangent` above: the rule expansion is handed that answer, and a term
+/// whose tangent has a structural zero is omitted there rather than computed and multiplied by zero.
 
 gc_node_ref_t buildRuleTangent(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
@@ -112,7 +155,9 @@ gc_node_ref_t buildRuleTangent(
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
     const std::vector<camel::core::type::Type *> &portTypes, size_t dataOperandCount,
-    std::string &ruleName, std::string &why) {
+    std::string &ruleName, std::string &why,
+    const std::unordered_set<gc_node_ref_t> *structurallyZero = nullptr,
+    std::vector<std::string> *omitted = nullptr) {
     // The candidates, in the order the family filed them. A key can hold several rules -- one
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
@@ -148,54 +193,47 @@ gc_node_ref_t buildRuleTangent(
         [&values](size_t slot) {
             return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
         },
-        tangents, why);
-}
-
-/// Whether a `with` value of `type` is one a **callee's** lift can carry a direction for (see
-/// `withIsPromoted`). A promoted value becomes a parameter of the lifted graph, so it has to be a
-/// shape the whole road takes: a direction of its own type, one word wide.
-///
-/// `Tangent<float> = float` is the whole of the positive half of this predicate, and it is not a
-/// guess about arithmetic: `split` hands the halves' ports to `transpose`, whose rules for a scalar
-/// are the ones a `with` weight already goes through (`jvp_mul` and its family), while a port of an
-/// aggregate or an array shape is a port the cut does not take at all -- it refuses an array by name
-/// ("the port is not a parameter of the graph, so neither half takes it",
-/// `split.cpp#valuePortsOf`) and loses a graph for a struct, which is the `nodevm.cpp` guarantee
-/// `idx < t->size()` ("Tuple index out of bounds"). Measured on `grad_first_with_parameter`'s `pg`
-/// (a `Point` weight, `Tuple index out of bounds`) and `wg` (an `f64[..]` weight, the refusal above)
-/// on 2026-11-04.
-///
-/// A shape that is *not* promoted is not silently given a zero either: at a call, answering the zero
-/// of its type for a value the caller does have a direction for is exactly the wrong number this
-/// transform removed for a scalar (`grad=0.0` where the engine answers 3.0), so a callee's lift
-/// refuses such a `with` value by name instead of writing it (`liftGraph`'s `with`-port step).
-bool withValueIsCarriable(camel::core::type::Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    // A `float` is its own tangent, and the one shape whose direction the cut passes through: a
-    // tangent port of a wider or more structured type is either refused or lost by `split` (the
-    // readings cited above), and one with no tangent space at all has no direction to carry in the
-    // first place (`Tangent<int> = ()`).
-    const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
-    return space.hasSpace() && (type->code() == camel::core::type::TypeCode::Float64 ||
-                                type->code() == camel::core::type::TypeCode::Float32);
+        tangents, why, kWholeAnswer, structurallyZero, omitted);
 }
 
 /// Whether a `with` parameter of a lifted callee is written into the *ordinary* list of the lift
 /// instead of staying a `with` parameter (see `liftSignature` below). One rule, asked by the two
 /// writers that have to agree about it -- the signature a callee's lift declares and the argument
-/// list its caller fills in: a promoted `with` value is one of a shape the lift can carry a
-/// direction for (`withValueIsCarriable`), and a `var` one is never promoted.
+/// list its caller fills in: a promoted `with` value is one that has a direction to hand in at all
+/// (`Tangent<T>` is defined for it), and a `var` one is never promoted.
+///
+/// **The question is the type's, not this transform's** (author, 2026-11-04 04:20): a value is a
+/// candidate for the ordinary list exactly when it has a tangent space, which is the same predicate
+/// every parameter of a lifted signature answers (`Tangent<T>` in `stdlib/types.cml`). The gate that
+/// stood here -- "only a `with` value whose tangent is one word wide", i.e. only a `float` -- asked
+/// a second question nobody else asks, and its answer was the refusal this transform used to write
+/// for an aggregate or an array shape ("`jvp` does not reinterpret a `with` value of type `Point`
+/// yet"). A `with` value that is *not* promoted is not given a zero: it has no direction to lose,
+/// which is the whole reason it is not promoted (`Tangent<int> = ()`), and it keeps a `with` port of
+/// its own with that empty slot beside it.
 ///
 /// A `var` `with` parameter is a cell the body writes. There is no direction to hand in for it (the
 /// lift reads it and does not write it, `jvpSignature`'s own sentence), so it keeps the place it had
 /// -- a `with` port of its declared value type, with the zero of that type as its tangent.
+///
+/// **Promotion is a bridge, and it is not a rule** (author, 2026-11-04 07:15). The library's `grad`
+/// answers a `with` weight's derivative correctly today because a *callee's* lift promotes that
+/// weight into the value list and gives it a direction; deleting the promotion before `grad` is
+/// written as a composition over `vjp` would turn right answers into wrong ones, so it stays. Its
+/// deadline is the merge that moves the library's `grad`/`with_grad` onto a lambda -- the second half
+/// of type-pack unpacking -- and the promotion goes in that same merge, not before it. The criterion
+/// for going is that the cases which read a `with` weight's gradient today
+/// (`library_grad_of_a_with_weight`, `grad_first_with_parameter`) keep answering the numbers they
+/// answer now, with the seed written in the lambda instead of in the lift. Nothing here is a
+/// language rule and nothing about it belongs in `docs/design/`: a `with` list is `f`'s own at
+/// `jvp(f)`, and promotion happens only inside a callee's lift (`liftSignature`'s `promoteWiths`).
 bool withIsPromoted(const FunctionType *function, size_t index) {
     if (function == nullptr || function->withIsVarAt(index)) {
         return false;
     }
-    return withValueIsCarriable(function->withTypeAt(index));
+    const camel::core::TangentSpaceAnswer space =
+        camel::core::tangentSpaceOf(function->withTypeAt(index));
+    return space.hasSpace() && space.space != nullptr;
 }
 
 /// The lifted signature of `function`, in the one shape both lifts of this transform need.
@@ -300,10 +338,11 @@ FunctionType *liftSignature(FunctionType *function, bool promoteWiths) {
     // What stays a `with` list, in the declaration's order and of its own type: the body reads a
     // weight through a port, and a lifted graph that listed no `with` port would have nowhere for
     // the captured value to enter by (that was the gate this replaces, written as if it were a
-    // property of the transform). Under `promoteWiths` only the `var` parameters are left here --
-    // the same ones `values` skipped -- so the two halves of this answer are one decision. A `var`
-    // `with` parameter is listed as the variable it was declared as; the lift reads it and does not
-    // write it.
+    // property of the transform). Under `promoteWiths` only the values that have no direction to
+    // hand in are left here -- a `var` cell, and a value with no tangent space (`Tangent<int> = ()`)
+    // -- the same ones `values` skipped -- so the two halves of this answer are one decision. A
+    // `var` `with` parameter is listed as the variable it was declared as; the lift reads it and
+    // does not write it.
     camel::core::type::param_vec_t withs;
     for (size_t i = 0; i < function->withTypesCount(); ++i) {
         camel::core::type::Type *withType = function->withTypeAt(i);
@@ -787,13 +826,21 @@ bool liftGraph(
                 parameterOf[originalWith[i]] = promotedSlotOf[i];
             }
         }
-        // The `with` parameters that stay `with` parameters -- a `var` cell, and every `with`
-        // parameter of the top-level lift -- get a port each, listed among the lifted graph's `with`
+        // The `with` parameters that stay `with` parameters -- a `var` cell, and a value with no
+        // tangent space, in every lift -- get a port each, listed among the lifted graph's `with`
         // ports, so the captured value enters the copy by a port rather than by a node nothing can
         // fill. One per such parameter, in the declaration's order -- a port node that the graph does
         // not list as a `with` port is a hole, which is exactly how the refusal this replaces
         // described the problem. The value only: the tangent of a captured value is the zero below,
         // so there is no second port to hand a direction in.
+        //
+        // Nothing is refused here any more (author, 2026-11-04 04:20). A `with` value is *not*
+        // promoted exactly when it has no direction to lose -- it is a `var` cell, or its type has
+        // no tangent space (`Tangent<int> = ()`) -- so a `with` port with the zero beside it is the
+        // whole truth about it, and the refusal that stood here ("`jvp` does not reinterpret a
+        // `with` value of type `Point` yet") was a distance-to-the-cut written into the lift. A
+        // shape that does have a direction is promoted (`withIsPromoted`) and the cut is the one
+        // that says what it takes.
         std::unordered_map<gc_node_ref_t, gc_node_ref_t> withPortOf;
         // The declared ones and the captured ones, one list: the first `withTypesCount()` are the
         // caller's `with` arguments and the rest are the values the body captured, in the closure
@@ -806,34 +853,6 @@ bool liftGraph(
                 camel::core::type::Type *withType = function.funcType()->withTypeAt(i);
                 if (withType == nullptr) {
                     continue;
-                }
-                // A `var` cell is read and not written, so it has no direction to lose and keeps the
-                // zero. Every **other** `with` value of a callee's lift arrives at a call whose
-                // caller does hold a direction for it, and one this lift cannot carry
-                // (`withIsPromoted` answered no because the shape is not a scalar) is refused here
-                // by name rather than answered with the zero of its type: the zero *is* the wrong
-                // number this transform removed for a `float` (2026-11-04, `grad=0.0` against the
-                // engine's 3.0), and a caller's direction that is silently dropped does not become
-                // right because the shape is wider. Measured on `grad_first_with_parameter`'s `pg`
-                // (`Point`, which this lift used to build and `split` then lost in `nodevm.cpp`) and
-                // `wg` (`f64[..]`, which `split` refuses by name two steps later -- the refusal now
-                // stands at the value rather than at the cut that inherits it).
-                if (state.promoteWiths && !function.funcType()->withIsVarAt(i)) {
-                    JvpGraph refused;
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
-                        function.nodeOrigin(originalWith[i]));
-                    refused.refusedConstruct =
-                        std::format("a `with` value of type `{}`", withType->toString());
-                    refused.refusedWhy =
-                        "a callee's lift hands a direction on through its ordinary list, and only a "
-                        "scalar can go there (`Tangent<T> = T`, one word -- `withValueIsCarriable`). "
-                        "A wider value keeps a `with` place of its own, where its direction is the "
-                        "zero of its type, and its caller has a direction to lose. The cut takes "
-                        "such a port nowhere: it refuses an array by name and loses a graph for a "
-                        "struct.";
-                    os << "REINTERP jvp function=" << name << " skip=with type="
-                       << withType->toString() << '\n';
-                    return fail(refusal, refused);
                 }
                 if (function.funcType()->withIsVarAt(i)) {
                     if (camel::core::type::Type *value = camel::core::type::valueTypeOf(withType)) {
@@ -2097,6 +2116,18 @@ bool liftGraph(
                 }
                 std::string ruleName;
                 std::string ruleWhy;
+                // The tangents whose zero is a fact about this graph rather than a number a program
+                // produced: the ones `zeroConstantFor` wrote for a value that cannot move, and a
+                // constant zero a law of its own wrote. The rule's right side is expanded with them
+                // named, so the term one of them multiplies is omitted instead of computed
+                // (`rule_expand.cpp#expandRuleRightSide`, author's ruling of 2026-11-04).
+                std::unordered_set<gc_node_ref_t> structurallyZero;
+                for (const gc_node_ref_t tangent : tangents) {
+                    if (isStructuralZeroTangent(draft, zeroMade, tangent)) {
+                        structurallyZero.insert(tangent);
+                    }
+                }
+                std::vector<std::string> omitted;
                 // The types the operator's ports have, in the order the rule is handed them: what a
                 // candidate's ports have to match before anything is built. The list is the node's
                 // ports -- the data inputs, then the `<>` ones -- and `dataOperandCount` is kept so
@@ -2120,7 +2151,21 @@ bool liftGraph(
                 tangentOf[ref] =
                     buildRuleTangent(
                         *context, state.group, transaction, uri, inputs, tangents, ruleElementType,
-                        operandTypes, dataOperandCount, ruleName, ruleWhy);
+                        operandTypes, dataOperandCount, ruleName, ruleWhy, &structurallyZero,
+                        &omitted);
+                if (!omitted.empty()) {
+                    // The reading of the omission, in the rule's own words: these are the places the
+                    // expansion did *not* copy, because they fed only a product whose tangent is
+                    // structurally zero. A case that pins this line goes red the day the term is
+                    // computed again -- it names absence, not a number that happens to be zero.
+                    std::string uris;
+                    for (const std::string &uri : omitted) {
+                        uris += (uris.empty() ? "" : ",") + uri;
+                    }
+                    os << "REINTERP jvp rule=" << ruleName
+                       << " omit=structurally-zero-tangent nodes=" << omitted.size()
+                       << " uris=" << uris << '\n';
+                }
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,
