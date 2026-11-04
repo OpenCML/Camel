@@ -151,6 +151,23 @@ it, do not ask whether the difference is explainable. Re-run under the lane's ow
 then is honest and the price is one run; a reconciled number becomes a fact in the next report and
 nobody can tell afterwards that it was never measured.
 
+## 闸门的入口只有一个文件
+
+> 闸门入口只认 `internal/tools/camel-remote.ps1`；`<worktree root>/camel-remote.ps1` 是历史遗留副本，不要用
+
+Worktree roots still hold copies of the script from before the machine-specific values moved into
+`internal/tools/camel-gate.local.json` and before the `-NoBuild` guard could name the build
+configuration. Such a copy is **wider** than the entry, silently, in three measured ways: its guard
+has no `--config` to pass, so `-Tier debug -NoBuild` verifies and accepts an install built Release
+(the fingerprint it compares is a Release one); it does not bring the plan's stderr back, so a plan
+that wrote only its reason to stderr arrives as a bare non-zero exit; and it carries the host, the
+bare repository, the panel's state file and the libstdc++ directory as literals, so a run from
+another machine reaches the host it names -- where the entry stops with exit 2 and names the setting
+it could not find. The copy's own header says none of this, so a lane that runs it believes it ran
+the gate. Point `-File` at the tree's `internal/tools/camel-remote.ps1`, and read the readings of a
+run whose command line did not: `[camel-remote]` lines are printed by both copies and do not say
+which one printed them.
+
 ## A revert that covers part of a change reads as "the rest of the change is still in the tree"
 
 A control experiment is only as wide as the diff it actually reverted, and a partial revert answers a
