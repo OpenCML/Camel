@@ -22,6 +22,7 @@ import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerO
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
+import { describeRefusals, formatRefusalSpec, matchesRefusal, parseRefusalSpec, refusals } from './reading-refusal.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -83,6 +84,7 @@ const TEST_FIELDS = new Set([
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
     'expect_diagnostic_line', 'expect_diagnostic_column',
+    'expect_refusal',
     'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
     'verify_script', 'verify_script_path', 'verify_js',
 ])
@@ -310,6 +312,20 @@ function validatePlanSchema(doc, planPath) {
             }
         }
         checkFieldType(planPath, entry, 'silenced_warnings', where, 'strings')
+        // A refusal is a value, and a plan names it field by field: the cause the transform's table
+        // spells and the place the refusal names, never the sentence the line prints
+        // (`test/tools/reading-refusal.mjs`). The fields are checked here, with the plan and the
+        // test named, so a misspelled field cannot compare nothing and pass.
+        if (entry.expect_refusal !== undefined) {
+            checkFieldType(planPath, entry, 'expect_refusal', where, 'strings')
+            for (const spec of entry.expect_refusal) {
+                try {
+                    parseRefusalSpec(spec)
+                } catch (error) {
+                    throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${error.message}`)
+                }
+            }
+        }
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
         checkFieldType(planPath, entry, 'cuda_free_device', where, 'boolean')
@@ -1925,6 +1941,27 @@ async function validateTest(test, result, context) {
         const needle = expandTextTokens(rawNeedle, scope)
         if (result.normalized.output.includes(needle)) {
             failures.push(`output contains '${needle}'`)
+        }
+    }
+    // The refusal, as the value the site recorded rather than the sentence it printed: each entry
+    // names fields of one `READING_REFUSAL` record, and a record has to answer all of them. Nothing
+    // here reads the `REINTERP` line -- a rename of that wording is not a change of the transform,
+    // and a plan that pinned the wording was red for the rename.
+    if (Array.isArray(test.expect_refusal) && test.expect_refusal.length > 0) {
+        let records = []
+        try {
+            records = refusals(result.normalized.stderr)
+        } catch (error) {
+            failures.push(error.message)
+        }
+        for (const rawSpec of test.expect_refusal) {
+            const spec = parseRefusalSpec(rawSpec)
+            if (!records.some((record) => matchesRefusal(record, spec))) {
+                failures.push(
+                    `no refusal record says '${formatRefusalSpec(spec)}': ` +
+                        `the run recorded ${describeRefusals(records)}`
+                )
+            }
         }
     }
     if (

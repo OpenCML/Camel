@@ -3,6 +3,7 @@
 
 #include "vmap.h"
 
+#include "refusal_readings.h"
 #include "rule_expand.h"
 #include "rule_types.h"
 
@@ -256,7 +257,9 @@ VmapGraph buildVmapGraph(
     }
     FunctionType *signature = vmapSignature(function->funcType());
     if (signature == nullptr) {
-        os << "REINTERP vmap function=" << function->name() << " skip=signature\n";
+        os << "REINTERP vmap function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Signature) << '\n';
+        noteRefusal(RefusalReading("vmap", function->name(), RefusalCause::Signature));
         return VmapGraph{};
     }
     const Type *liftedParameter = signature->normTypeAt(0);
@@ -680,10 +683,14 @@ VmapGraph buildVmapGraph(
             // the ruleset answered up to there. `asked=0 found=0` is a body the walk never reached a
             // primitive in, and `asked=3 found=2` is a ruleset with a hole in it.
             os << "REINTERP vmap function=" << function->name()
-               << " skip=body construct="
+               << " skip=" << refusalCauseName(RefusalCause::Body) << " construct="
                << (refused.refusedConstruct.empty() ? "-" : refused.refusedConstruct)
                << " uri=" << (refused.refusedUri.empty() ? "-" : refused.refusedUri)
                << askedFoundMissing(refused) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::Body)
+                    .atUri(refused.refusedUri)
+                    .atConstruct(refused.refusedConstruct));
             return refused;
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
@@ -707,7 +714,11 @@ VmapGraph buildVmapGraph(
                                                                 : camel::source::kInvalidOriginId;
             refused.refusedConstruct = "the exit";
             refused.refusedWhy       = "the value of the body was not lifted";
-            os << "REINTERP vmap function=" << function->name() << " skip=exit\n";
+            os << "REINTERP vmap function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::Exit) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::Exit)
+                    .atConstruct("the exit"));
             return refused;
         }
         const gc_node_ref_t liftedValue = copyOf[out];
@@ -715,7 +726,11 @@ VmapGraph buildVmapGraph(
         if (header == nullptr || header->dataType == nullptr) {
             refused.refusedConstruct = "the exit";
             refused.refusedWhy       = "the lifted value has no type";
-            os << "REINTERP vmap function=" << function->name() << " skip=exit-type\n";
+            os << "REINTERP vmap function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::ExitType) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::ExitType)
+                    .atConstruct("the exit"));
             return refused;
         }
         draft.setExitNode(liftedValue);
