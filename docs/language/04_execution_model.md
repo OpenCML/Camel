@@ -67,9 +67,13 @@ warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects
    |
  2 |     println('hello from greet')     // 结果没人用，也不在同步块里：不执行
    |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes)
+      nothing needs does not run, and a sync block nothing needs does not run either, so the effects
+      written directly in it do not run with it. This is legal, and where the effect is written
+      decides the writing that runs it: in a loop body, make the body a sync block with
+      'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a
+      function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare
+      'sync { ... }' written as a statement of a body that is not a sync block is not run either.
 
 1
 ```

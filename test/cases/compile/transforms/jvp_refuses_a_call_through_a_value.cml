@@ -10,7 +10,8 @@
 // The engine refuses the same shape from the other side -- `modules/autodiff/pullback.cpp` answers
 // `cannot differentiate through this call of a function value: which function it calls is not
 // evident` -- so a library transform written as a composition cannot put its subject inside a body
-// yet, and `stdlib/vjp.cml#with_grad` says so.
+// yet. It is why the library has no `with_grad`: the name it would be written as needs this
+// construct, and a construction that reaches a crash cannot stand in for one that is refused.
 import { jvp } from transforms
 
 func plain(y: float): float {

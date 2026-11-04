@@ -6,31 +6,30 @@
  * engine's answer and the library's answer stand on one line per group, so the day the two agree
  * the pin below changes and nothing else has to be re-derived.
  *
- * Today they do not agree, and the library does not answer a number at all.
- * `stdlib/vjp.cml#with_grad` refuses because its body has not been written -- the name is a
- * placeholder in that file -- and the sentence it refuses with says that, not a claim about what
- * forward mode can see. The composition it names answers numbers now: `lane-withtan` (merged
- * `713e1ff26`) carries a `with` argument's direction through a lifted call, and
- * `library_grad_of_a_with_weight` pins `weighted` answering 3.0 through `vjp`, the engine's own
- * number. What the four groups below still need is the general body, whose lambda calls a function
- * value: the weight is the first `with` parameter of a function the caller hands over as a value.
- * The sentence the library used to refuse with -- a weight that reaches a body through a `with`
- * list has no direction in forward mode -- stopped being true at that merge, and a case that kept it
- * as the reason would be citing a cause that no longer exists.
+ * The library name is gone by the author's ruling of 2026-11-05 (`080778522`): a placeholder whose
+ * body has not been written is not a name a library keeps, so `stdlib/vjp.cml` exports `vjp` and the
+ * one-parameter `grad` and no `with_grad`, until that name is written as the composition design
+ * principles 9.9 asks for. This case therefore does not compile -- `with_grad` is not a name of
+ * `vjp` any more -- and the plan entry that runs it is marked `known_fail` for that reason.
  *
- * So this case pins both halves: the engine's four answers, which are the numbers the composition
- * owes, and four refusals with the sentence that says which part of the library is missing.
+ * The four groups stay here with the engine's answers, because they are the numbers the composition
+ * owes: `lane-withtan` (merged `713e1ff26`) carries a `with` argument's direction through a lifted
+ * call, and `library_grad_of_a_with_weight` pins `weighted` answering 3.0 through `vjp` -- the
+ * composition works; what is missing is the pair body and the declaration beside it
+ * (`FirstOf<WithOf<F>>`, `stdlib/types.cml`). The day it is written, this case turns over with it:
+ * the four `library=` fields become tuples and the mark goes.
  *
  * The four groups are the case's own, group for group: `weighted` is `x*y + x` with `x` the first
  * `with` parameter, `point_loss` has a struct there, `dot` a tensor, and `scaled` has two `with`
  * parameters where the second stays constant. `grad_first_with_parameter.cml` explains why each one
  * is here and which wrong law each of its numbers separates.
  *
- * The refusals are read through `attempt`, the way `consistency/attempt/refuse_grad.cml` reads a
- * transform's refusal: a fault inside an `attempt`ed call becomes an error value, and its kind and
- * its message are what the assertion holds. No `library=` field carries a number, and that is what
- * the entry is for: a tuple on any of the four lines would be a gradient the library could not have
- * computed.
+ * The four calls the case keeps read their refusals through `attempt`, the way
+ * `consistency/attempt/refuse_grad.cml` reads a transform's refusal: a fault inside an `attempt`ed
+ * call becomes an error value, and its kind and its message are what the assertion holds. They stay
+ * written against the library's name so that the case is the one that turns over when the
+ * composition lands: no `library=` field carries a number today, and a tuple on any of the four
+ * lines would be the gradient the library owes.
  */
 import { grad as engine_grad, with_grad as engine_with_grad } from autodiff
 import { with_grad } from vjp

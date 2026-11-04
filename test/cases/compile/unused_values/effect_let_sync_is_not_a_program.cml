@@ -1,0 +1,13 @@
+/**
+ * The second writing the help used to invite -- binding a sync block to a name, `let u = sync { ... }`
+ * -- is not a program: `sync` modifies a block, it is not an expression a `let` may bind, so the
+ * parser refuses the line before any effect is considered. The help no longer offers this spelling;
+ * this case is what keeps the reason: the writing is not a worse remedy, it is not one.
+ */
+
+func main(): int sync {
+    let u = sync {
+        println('never printed')
+    }
+    return 0
+}

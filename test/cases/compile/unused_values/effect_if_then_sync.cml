@@ -1,0 +1,21 @@
+/**
+ * The remedy the help gives for an effect written in an `if`'s arm: the arm declares itself a sync
+ * block with `then sync { ... }`, so every statement written there runs, not only the arm's value.
+ * The `if` itself is written as a statement, so its value is taken by nobody -- and the arm runs
+ * anyway, because a sync block in arm position is a block modifier and not a block expression.
+ */
+
+func report(take_then: bool): int sync {
+    if take_then then sync {
+        println('then=1')
+        println('then=2')
+    } else sync {
+        println('else=1')
+    }
+    return 0
+}
+
+func main(): int sync {
+    report(true)
+    return 0
+}

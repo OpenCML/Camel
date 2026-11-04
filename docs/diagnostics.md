@@ -8971,7 +8971,7 @@ None: context: an effect reachable only from a branch that never runs; the repai
 **Help**
 
 ```text
-Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
+Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)

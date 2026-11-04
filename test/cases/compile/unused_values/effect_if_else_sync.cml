@@ -1,0 +1,20 @@
+/**
+ * The other half of the arm's remedy: `else sync { ... }`. The same program with the condition on the
+ * other side, so the arm that prints is the one the help names for it, and the arm that is not taken
+ * prints nothing.
+ */
+
+func report(take_then: bool): int sync {
+    if take_then then sync {
+        println('then=1')
+        println('then=2')
+    } else sync {
+        println('else=1')
+    }
+    return 0
+}
+
+func main(): int sync {
+    report(false)
+    return 0
+}
