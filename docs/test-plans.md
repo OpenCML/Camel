@@ -883,6 +883,7 @@ Behavior-style tests may combine:
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
 - `expect_diagnostic_column`
+- `expect_refusal`
 - `verify_script`
 - `verify_script_path`
 - `verify_timeout_ms`
@@ -971,6 +972,30 @@ The runner parses compiler/runtime diagnostics from merged process output and ca
 - column
 
 These fields are independent filters over the parsed diagnostic list.
+
+### `expect_refusal`
+
+A transform's refusal is a value, and this compares the value instead of the sentence:
+
+```toml
+expect_refusal = ["jvp cause=rule function=f uri=math:sin_d"]
+```
+
+The transform writes the machine-readable half of its reading beside the line a reader sees —
+`READING_REFUSAL {"transform":"jvp","function":"f","cause":"rule","uri":"math:sin_d"}` on stderr,
+from `modules/transforms/refusal_readings.h#noteRefusal` — and each entry here names the record
+fields it decides: `transform` (which may be written on its own first, as in the example above),
+`function`, `cause` (the named cause the transform's table spells,
+`refusal_readings.h#RefusalCause`) and the place the refusal names (`uri`, `rule`, `callee`,
+`construct`, or the numbers `node`, `param`, `position`). A record has to answer every field an
+entry names; a field an entry does not name is not compared. A value with a space is quoted
+(`construct="a call"`).
+
+The `REINTERP` line is not read by the runner at all: it is what a person reads, and its wording is
+kept, but it is not the criterion. A cause renamed in the table is one edit and no case changes
+colour on the rename; what goes red is a case whose transform stops making the same decision.
+`test/tools/reading-refusal.mjs` is the reader, and `test/tools/reading_refusal/check.py` holds the
+table and the sites together (one word per cause, one site per cause, one record per printed cause).
 
 ## Verification Script Fields
 

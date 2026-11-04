@@ -1808,7 +1808,10 @@ bool readLoopCut(
     const rt::GCGraph *function, gc_node_ref_t loop, std::ostream &os, LoopCut &cut) {
     const std::string name = function->name();
     const auto refuse = [&](std::string_view what) {
-        os << "REINTERP split function=" << name << " skip=loop (" << what << ")\n";
+        os << "REINTERP split function=" << name
+           << " skip=" << refusalCauseName(RefusalCause::Loop)
+           << " (" << what << ")\n";
+        noteRefusal(RefusalReading("split", name, RefusalCause::Loop));
         return false;
     };
     cut.loop = loop;
@@ -2109,7 +2112,9 @@ SplitGraph cutLoopGraph(
         const rt::GCNode *node = function->node(ref);
         if (node == nullptr || node->dataType() == nullptr) {
             os << "REINTERP split function=" << function->name()
-               << " skip=tape (a value the backward half reads from a round has no type)\n";
+               << " skip=" << refusalCauseName(RefusalCause::Tape)
+               << " (a value the backward half reads from a round has no type)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Tape));
             return built;
         }
         tapeMemberTypes.push_back(node->dataType());
@@ -2138,8 +2143,11 @@ SplitGraph cutLoopGraph(
     }
     const SplitHalves halves = splitHalvesWith(function->funcType(), TupleType::create(cutTypes));
     if (halves.forward == nullptr || halves.backward == nullptr) {
-        os << "REINTERP split function=" << function->name() << " skip=signature (" << halves.why
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Signature)
+           << " (" << halves.why
            << ")\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Signature));
         return built;
     }
     std::unordered_map<gc_node_ref_t, size_t> residualIndexOf;
@@ -2150,8 +2158,10 @@ SplitGraph cutLoopGraph(
     const std::span<const gc_node_ref_t> loopInputs = function->normInputsOf(cut.loop);
     if (loopInputs.size() != 2) {
         os << "REINTERP split function=" << function->name()
-           << " skip=loop (the loop takes " << loopInputs.size()
+           << " skip=" << refusalCauseName(RefusalCause::Loop)
+           << " (the loop takes " << loopInputs.size()
            << " inputs, and a `for` loop with one state takes the array and its first state)\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Loop));
         return built;
     }
     const gc_node_ref_t iterable = loopInputs[0];
@@ -2159,8 +2169,10 @@ SplitGraph cutLoopGraph(
     const std::span<const gc_node_ref_t> initialHalves = function->withInputsOf(initialState);
     if (initialHalves.size() != 2) {
         os << "REINTERP split function=" << function->name()
-           << " skip=loop (the loop's first state is not the pair `jvp` writes, so the loop is not "
+           << " skip=" << refusalCauseName(RefusalCause::Loop)
+           << " (the loop's first state is not the pair `jvp` writes, so the loop is not "
               "lifted)\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Loop));
         return built;
     }
     // The chain above the cell answers the half's own result: the forward half's value on the value
@@ -2182,8 +2194,10 @@ SplitGraph cutLoopGraph(
             forwardPair->size() != 2 || valueTop->dataType() != forwardPair->typeAt(0) ||
             tangentTop->dataType() != halves.backward->exitType()) {
             os << "REINTERP split function=" << function->name()
-               << " skip=loop (the chain the exit reads above the loop does not answer the halves' "
+               << " skip=" << refusalCauseName(RefusalCause::Loop)
+               << " (the chain the exit reads above the loop does not answer the halves' "
                   "results)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Loop));
             return built;
         }
     }
@@ -2213,9 +2227,13 @@ SplitGraph cutLoopGraph(
             }
             if (!forward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=forward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Forward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
         }
@@ -2242,9 +2260,13 @@ SplitGraph cutLoopGraph(
         if (!forward.copyHalf(cut.valueRoot, built)) {
             draft.setInsertRegion(0);
             os << "REINTERP split function=" << function->name()
-               << " skip=forward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Forward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Forward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         std::vector<gc_node_ref_t> tapeMembers;
@@ -2272,18 +2294,26 @@ SplitGraph cutLoopGraph(
             const gc_node_ref_t half = initialHalves[0];
             if (!forward.copyHalf(half, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=forward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Forward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
             firstState = forward.copyOf[half];
         }
         if (!forward.copyHalf(iterable, built)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=forward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Forward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Forward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         const std::array<gc_node_ref_t, 2> forwardInputs{forward.copyOf[iterable], firstState};
@@ -2323,9 +2353,13 @@ SplitGraph cutLoopGraph(
             }
             if (!forward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=forward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Forward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
         }
@@ -2333,9 +2367,13 @@ SplitGraph cutLoopGraph(
         if (cut.exitValueRoot != rt::kInvalidNodeRef) {
             if (!forward.copyHalf(cut.exitValueRoot, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=forward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Forward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
             answered = forward.copyOf[cut.exitValueRoot];
@@ -2384,9 +2422,13 @@ SplitGraph cutLoopGraph(
             }
             if (!backward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=backward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Backward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Backward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
         }
@@ -2395,7 +2437,9 @@ SplitGraph cutLoopGraph(
                                            : backward.closurePorts.back();
         if (tapePort == rt::kInvalidNodeRef) {
             os << "REINTERP split function=" << function->name()
-               << " skip=backward (the tape has no closure port to be read from)\n";
+               << " skip=" << refusalCauseName(RefusalCause::Backward)
+               << " (the tape has no closure port to be read from)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Backward));
             return built;
         }
         rt::GCLoopBody backwardBody = cut.body;
@@ -2424,9 +2468,13 @@ SplitGraph cutLoopGraph(
         if (!backward.copyHalf(cut.tangentRoot, built)) {
             draft.setInsertRegion(0);
             os << "REINTERP split function=" << function->name()
-               << " skip=backward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Backward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Backward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         draft.setInsertRegion(0);
@@ -2439,9 +2487,13 @@ SplitGraph cutLoopGraph(
             const gc_node_ref_t half = initialHalves[1];
             if (!backward.copyHalf(half, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=backward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Backward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Backward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
             firstTangent = backward.copyOf[half];
@@ -2466,9 +2518,13 @@ SplitGraph cutLoopGraph(
             }
             if (!backward.copyHalf(cut.exitTangentRoot, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=backward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Backward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Backward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
             answered = backward.copyOf[cut.exitTangentRoot];
@@ -2544,7 +2600,9 @@ SplitGraph cutBranchGraph(
     for (const Residual &one : cuts) {
         if (one.type == nullptr) {
             os << "REINTERP split function=" << function->name()
-               << " skip=residual (a value the cut carries has no type)\n";
+               << " skip=" << refusalCauseName(RefusalCause::Residual)
+               << " (a value the cut carries has no type)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Residual));
             return built;
         }
         cutTypes.push_back(one.type);
@@ -2552,8 +2610,11 @@ SplitGraph cutBranchGraph(
     Type *cutTuple                = TupleType::create(cutTypes);
     const SplitHalves branchHalves = splitHalvesWith(function->funcType(), cutTuple);
     if (branchHalves.forward == nullptr || branchHalves.backward == nullptr) {
-        os << "REINTERP split function=" << function->name() << " skip=signature ("
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Signature)
+           << " ("
            << branchHalves.why << ")\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Signature));
         return built;
     }
     Type *valueType = function->node(arms.front().value) != nullptr
@@ -2564,7 +2625,9 @@ SplitGraph cutBranchGraph(
                             : nullptr;
     if (valueType == nullptr || tangentType == nullptr) {
         os << "REINTERP split function=" << function->name()
-           << " skip=arm (an arm's half of the pair has no type)\n";
+           << " skip=" << refusalCauseName(RefusalCause::Arm)
+           << " (an arm's half of the pair has no type)\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Arm));
         return built;
     }
     std::unordered_map<gc_node_ref_t, size_t> residualIndexOf;
@@ -2594,9 +2657,13 @@ SplitGraph cutBranchGraph(
         for (const Residual &one : cuts) {
             if (!forward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=forward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Forward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
         }
@@ -2604,9 +2671,13 @@ SplitGraph cutBranchGraph(
         if (!buildHalfBranch(draft, forward, forward.copyOf[condition], arms, false, valueType,
                              built, join)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=forward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Forward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Forward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         std::vector<gc_node_ref_t> residualMembers;
@@ -2623,7 +2694,9 @@ SplitGraph cutBranchGraph(
             }
             if (value == rt::kInvalidNodeRef) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=residual (the forward half does not compute a value the cut carries)\n";
+                   << " skip=" << refusalCauseName(RefusalCause::Residual)
+                   << " (the forward half does not compute a value the cut carries)\n";
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Residual));
                 return built;
             }
             residualMembers.push_back(value);
@@ -2664,9 +2737,13 @@ SplitGraph cutBranchGraph(
         for (const Residual &one : cuts) {
             if (!backward.copyHalf(one.node, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=backward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Backward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Backward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
         }
@@ -2674,9 +2751,13 @@ SplitGraph cutBranchGraph(
         if (!buildHalfBranch(draft, backward, backward.copyOf[condition], arms, true, tangentType,
                              built, join)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=backward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Backward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Backward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         draft.setExitNode(join);
@@ -3013,7 +3094,9 @@ SplitGraph buildSplitGraph(
     for (const Residual &residual : graphResiduals) {
         if (residual.type == nullptr) {
             os << "REINTERP split function=" << function->name()
-               << " skip=residual (" << "a value the backward half reads has no type" << ")\n";
+               << " skip=" << refusalCauseName(RefusalCause::Residual)
+               << " (" << "a value the backward half reads has no type" << ")\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Residual));
             return SplitGraph{};
         }
         residualTypes.push_back(residual.type);
@@ -3027,15 +3110,21 @@ SplitGraph buildSplitGraph(
     Type *residualsType = TupleType::create(residualTypes);
     const SplitHalves halves = splitHalvesWith(function->funcType(), residualsType);
     if (halves.forward == nullptr || halves.backward == nullptr) {
-        os << "REINTERP split function=" << function->name() << " skip=signature (" << halves.why
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Signature)
+           << " (" << halves.why
            << ")\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Signature));
         return SplitGraph{};
     }
     // The exit of a lifted function is the pair (result, tangent): the first component is what the
     // forward half computes, the second is where the tangent comes from.
     const gc_node_ref_t exit = ungated(function, function->exitNodeRef());
     if (exit >= function->nodeCount() || function->node(exit) == nullptr) {
-        os << "REINTERP split function=" << function->name() << " skip=exit\n";
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Exit)
+           << "\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Exit));
         return SplitGraph{};
     }
     const rt::GCNode *exitNode = function->node(exit);
@@ -3215,8 +3304,11 @@ SplitGraph buildSplitGraph(
                     "body into its own region and joins that arm's half of the pair -- but the arm is "
                     "not *chosen* yet: the condition picks it, and reading that condition to pick is "
                     "the next cut, not this one");
-                os << "REINTERP split function=" << function->name() << " skip=branch exit=Join"
+                os << "REINTERP split function=" << function->name()
+                   << " skip=" << refusalCauseName(RefusalCause::Branch)
+                   << " exit=Join"
                    << " condition=" << condition << " why=" << refusal.refusedWhy << '\n';
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Branch));
                 return refusal;
             }
         } break;
@@ -3237,8 +3329,11 @@ SplitGraph buildSplitGraph(
                 "this graph's exit is a Join that holds the pair and no branch names it, so the two "
                 "halves' values meet at a loop -- a loop's residual is what one turn hands the next "
                 "(design 4.2), and a half's walk does not enter a region yet");
-            os << "REINTERP split function=" << function->name() << " skip=loop exit=Join"
+            os << "REINTERP split function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::Loop)
+               << " exit=Join"
                << " why=" << refusal.refusedWhy << '\n';
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Loop));
             return refusal;
         }
         case ExitShape::NotAPair: {
@@ -3272,8 +3367,11 @@ SplitGraph buildSplitGraph(
                 "no pair to cut. This shape is not accepted: "
                 "`docs/handover/questions/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-"
                 "split-cut.cn.md` weighs the three routes through it");
-            os << "REINTERP split function=" << function->name() << " skip=exit ("
+            os << "REINTERP split function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::Exit)
+               << " ("
                << refusal.refusedWhy << ")\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Exit));
             return refusal;
         }
         }
@@ -3282,9 +3380,12 @@ SplitGraph buildSplitGraph(
 
     const std::span<const gc_node_ref_t> sourcePorts = function->normPorts();
     if (sourcePorts.size() != function->funcType()->normTypesCount()) {
-        os << "REINTERP split function=" << function->name() << " skip=ports ("
+        os << "REINTERP split function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Ports)
+           << " ("
            << sourcePorts.size() << " ports for " << function->funcType()->normTypesCount()
            << " parameters)\n";
+        noteRefusal(RefusalReading("split", function->name(), RefusalCause::Ports));
         return SplitGraph{};
     }
 
@@ -3337,9 +3438,11 @@ SplitGraph buildSplitGraph(
             const SplitGraph nested = buildSplitGraph(context, program, const_cast<rt::GCGraph *>(callee), os);
             if (nested.forward == nullptr || nested.program == nullptr) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=callee (the cut of `" << callee->name() << "`, which this body calls, "
+                   << " skip=" << refusalCauseName(RefusalCause::Callee)
+                   << " (the cut of `" << callee->name() << "`, which this body calls, "
                    << "does not build: "
                    << (nested.refusedWhy.empty() ? "no reason was given" : nested.refusedWhy) << ")\n";
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Callee));
                 return SplitGraph{};
             }
             CutMember member;
@@ -3348,8 +3451,11 @@ SplitGraph buildSplitGraph(
                                    ? nested.forward->funcType()->exitType()
                                    : nullptr;
             if (member.answer == nullptr) {
-                os << "REINTERP split function=" << function->name() << " skip=callee (the forward "
+                os << "REINTERP split function=" << function->name()
+                   << " skip=" << refusalCauseName(RefusalCause::Callee)
+                   << " (the forward "
                    << "half of `" << callee->name() << "` declares no exit type)\n";
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Callee));
                 return SplitGraph{};
             }
             // **A cut of a cut.** The forward half of `callee` that this build calls is not the whole
@@ -3378,12 +3484,16 @@ SplitGraph buildSplitGraph(
         Half forward(draft, function, program, false, nullptr, nullptr, &calleeCuts);
         if (!addWithPorts(forward, function)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=forward (a `with` parameter of the source has no type)\n";
+               << " skip=" << refusalCauseName(RefusalCause::Forward)
+               << " (a `with` parameter of the source has no type)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward));
             return SplitGraph{};
         }
         if (!addCapturePorts(forward, function)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=forward (the closure of the source does not name its captured values)\n";
+               << " skip=" << refusalCauseName(RefusalCause::Forward)
+               << " (the closure of the source does not name its captured values)\n";
+            noteRefusal(RefusalReading("split", function->name(), RefusalCause::Forward));
             return SplitGraph{};
         }
         // The lifted list is two halves -- the values, then their tangents -- so the forward half
@@ -3397,9 +3507,13 @@ SplitGraph buildSplitGraph(
         }
         if (!forward.copyHalf(resultHalf, built)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=forward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Forward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Forward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         // A call whose **linear half** crosses the cut is made by this half even when nothing on the
@@ -3412,9 +3526,13 @@ SplitGraph buildSplitGraph(
             }
             if (!forward.copyHalf(residual.node, built)) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=forward construct=" << built.refusedConstruct
+                   << " skip=" << refusalCauseName(RefusalCause::Forward)
+                   << " construct=" << built.refusedConstruct
                    << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                    << " why=" << built.refusedWhy << '\n';
+                noteRefusal(
+                    RefusalReading("split", function->name(), RefusalCause::Forward)
+                        .atConstruct(built.refusedConstruct));
                 return built;
             }
         }
@@ -3434,8 +3552,10 @@ SplitGraph buildSplitGraph(
                                                           : rt::kInvalidNodeRef;
                 if (call == rt::kInvalidNodeRef) {
                     os << "REINTERP split function=" << function->name()
-                       << " skip=residual (the forward half does not make the call whose linear half "
+                       << " skip=" << refusalCauseName(RefusalCause::Residual)
+                       << " (the forward half does not make the call whose linear half "
                           "the cut carries)\n";
+                    noteRefusal(RefusalReading("split", function->name(), RefusalCause::Residual));
                     return built;
                 }
                 const gc_node_ref_t lin =
@@ -3479,7 +3599,9 @@ SplitGraph buildSplitGraph(
             }
             if (value == rt::kInvalidNodeRef) {
                 os << "REINTERP split function=" << function->name()
-                   << " skip=residual (the forward half does not compute a value the cut carries)\n";
+                   << " skip=" << refusalCauseName(RefusalCause::Residual)
+                   << " (the forward half does not compute a value the cut carries)\n";
+                noteRefusal(RefusalReading("split", function->name(), RefusalCause::Residual));
                 return built;
             }
             residualMembers.push_back(value);
@@ -3523,9 +3645,13 @@ SplitGraph buildSplitGraph(
         }
         if (!backward.copyHalf(tangentHalf, built)) {
             os << "REINTERP split function=" << function->name()
-               << " skip=backward construct=" << built.refusedConstruct
+               << " skip=" << refusalCauseName(RefusalCause::Backward)
+               << " construct=" << built.refusedConstruct
                << " uri=" << (built.refusedUri.empty() ? "-" : built.refusedUri)
                << " why=" << built.refusedWhy << '\n';
+            noteRefusal(
+                RefusalReading("split", function->name(), RefusalCause::Backward)
+                    .atConstruct(built.refusedConstruct));
             return built;
         }
         const gc_node_ref_t out = backward.copyOf[tangentHalf];

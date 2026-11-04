@@ -240,14 +240,15 @@ timeout_ms = 20000
 # (`jvp_pow_d`, pinned by `jvp_of_a_pow_call`); the shape is the same one, one operator along.
 [[tests]]
 name = "rulesets_probe_missing.at_the_primitive"
-desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:sin_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:14:12`, the `sin` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:sin_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked. `pow` was the operator this entry named until `math:pow_d` gained a forward rule; `sin` is one no family binds, so nothing in the reading changed but the name."
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:sin_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:14:12`, the `sin` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:sin_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked. `pow` was the operator this entry named until `math:pow_d` gained a forward rule; `sin` is one no family binds, so nothing in the reading changed but the name. What the entry asserts about the refusal is now the cause as a value -- `jvp cause=rule function=f uri=math:sin_d` (`expect_refusal`, docs/test-plans.md) -- and not the sentence the line prints: the line still names it (`skip=rule uri=math:sin_d`), but a wording change is not a change of the transform."
 kind = "behavior"
 case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=rule uri=math:sin_d", "rulesets_probe_missing.cml:14:12: [Error]:", "jvp has no forward rule for `math:sin_d`", "no forward rule bound at all", "raised here"]
+expect_output_contains = ["rulesets_probe_missing.cml:14:12: [Error]:", "jvp has no forward rule for `math:sin_d`", "no forward rule bound at all", "raised here"]
+expect_refusal = ["jvp cause=rule function=f uri=math:sin_d"]
 expect_stdout_not_contains = ["0.9092974268256817"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -602,6 +603,32 @@ case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["every cause has one word, one sentence, and a site that records it", "no sentence of its own lands on the one that names the shape", "renders the sentence from the cause and never from the log", "the list of causes that wait for a site is empty"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The readings' refusals, the same defect one layer along. `REINTERP jvp function=f skip=body`
+# spelled its cause at the site, so the word *was* the fact: a plan that pinned the line was red for
+# a rename, and the plan could not say "this cause" without also saying which sentence. The cause is
+# now `RefusalCause` (`modules/transforms/refusal_readings.h`), spelled in one table
+# (`refusalCauseName`), and every refusing site records it beside the line it prints
+# (`noteRefusal` -> `READING_REFUSAL {json}` on stderr). A plan asserts the value -- cause plus the
+# place it names -- with `expect_refusal` (docs/test-plans.md), and never the sentence.
+#
+# This entry holds the places that have to agree, as relations and not counts (the lesson of the
+# transpose counter: splitting one word into two made `17` red before `18` on two trees that both
+# satisfied every relation): one word per cause, the words in one file only, no site spelling
+# `skip=` itself, one site per cause, and -- the one that keeps the record honest -- one record per
+# printed cause, naming the cause that line printed. That last relation is the point: if the two
+# halves could disagree, the machine-readable half would be a second sentence rather than the fact.
+[[tests]]
+name = "reading_refusal_is_one_cause_in_one_table"
+desc = "A transform's refusal is a value with one spelling and one record, and the four places that say it have to agree. The header declares `RefusalCause` (and `None`, the 'no refusal' member, has no word, so a line that names no cause cannot spell one); `refusalCauseName` spells every cause exactly once, in the one file, with distinct lowercase words, so two causes cannot be one word a reader cannot tell apart; no literal in `jvp.cpp`, `split.cpp` or `vmap.cpp` spells `skip=`, and every `skip=` that is printed is answered by that table, so a site cannot hand-write the word back; and every printed cause has a `noteRefusal` record beside it whose cause is that printed cause, which is what makes the machine-readable half the same fact rather than a second sentence. `None` never appears at a site, and a cause with a word and no site is a promise nothing keeps (the list of causes that wait for a site is written out in the check, and is empty). Held as relations, never as counts: adding a cause with its word, its site and its record is green here."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/reading_refusal/check.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["one word each, spelled in one file only", "no literal spells `skip=`", "every printed cause has a record beside it, and the record names the printed cause", "the list of causes that wait for a site is empty"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
