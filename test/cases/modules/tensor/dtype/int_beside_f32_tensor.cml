@@ -1,5 +1,5 @@
 /**
- * An integer is an element type like any other on the array side: `i64[..] * f32[..]` states two of
+ * An integer is an element type like any other on the array side: `i64[...] * f32[...]` states two of
  * them and so matches no arm (design principles 5.1), whatever the values would fit. An integer
  * becoming a number is a conversion the program writes, and the report names it.
  */

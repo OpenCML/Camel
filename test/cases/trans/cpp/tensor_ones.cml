@@ -1,5 +1,5 @@
 /**
- * `tensor:ones` crosses the bridge, and the value comes back as the type it has: a `T[..]` is the
+ * `tensor:ones` crosses the bridge, and the value comes back as the type it has: a `T[...]` is the
  * shaped array `rt::Array<T>` in this back end, whichever module built it. So the program prints it
  * with the same `println` as an array it wrote itself, and the one line below is std::fvm's, byte
  * for byte.

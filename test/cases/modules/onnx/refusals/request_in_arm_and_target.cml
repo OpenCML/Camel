@@ -8,7 +8,7 @@ import { zeros } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func double(t: f32[..]): f32[..] {
+func double(t: f32[...]): f32[...] {
     return t * 2.0
 }
 

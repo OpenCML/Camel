@@ -8,13 +8,13 @@
 func main(): int sync {
     let one: f32 = 1.0
     let two: f32 = 2.5
-    var written: f32[..] = 1.0
+    var written: f32[...] = 1.0
     println(written)
     sync {
         written = 2.5
     }
     println(written)
-    var computed: f32[..] = one
+    var computed: f32[...] = one
     println(computed)
     sync {
         computed = two

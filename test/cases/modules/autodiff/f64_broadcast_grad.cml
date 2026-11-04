@@ -4,7 +4,7 @@
  * reduction of a broadcast is `tensor:sum_to`, so this is where an f64 gradient met a gate that
  * said f32 only and was refused with:
  *
- *   'the gradient kernels' does not support a value of type 'f64[..]'; it takes f32 tensors.
+ *   'the gradient kernels' does not support a value of type 'f64[...]'; it takes f32 tensors.
  *
  * the direction is to support f64 (and bf16 and f16) rather than refuse it, and the element
  * type of a value is always determined, so the missing arm is a hole and not a rule: a float

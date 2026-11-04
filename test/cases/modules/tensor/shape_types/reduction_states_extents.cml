@@ -1,5 +1,5 @@
 // A reduction along an axis extents follow from the operand's type and the axis it is given, and the
-// result states them: `mean_axis(x, 0, false)` on a `f32[2, 3]` answers a `f32[3]`, not a `f32[..]`.
+// result states them: `mean_axis(x, 0, false)` on a `f32[2, 3]` answers a `f32[3]`, not a `f32[...]`.
 // A function that wants four elements is a compile-time error, and the message names the three the
 // result actually has.
 //

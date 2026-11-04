@@ -763,7 +763,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.typed_boundaries_not_crossed"
-desc = "The boundaries of the typed laws, computed and then computed through `rules::simplify`: (x*2)/2 at INT_MAX is -1, not INT_MAX; (x + 1e30) - 1e30 at 1.0 is 0.0, not 1.0; (x*3)/3 at 7.7 is 7.6999993, not 7.7; x*0 at an infinity is NaN, not 0.0; x/x at an infinity is NaN, not 1.0. The output is identical before and after, on the interpreter and the byte-code VM."
+desc = "The boundaries of the typed laws, computed and then computed through `rules::simplify`: (x*2)/2 at INT_MAX is -1, not INT_MAX; (x + 1e30) - 1e30 at 1.0 is 0.0, not 1.0; (x*3)/3 at 7.7 is 7.6999993, not 7.7; x*0 at an infinity is NaN, not 0.0; x/x at an infinity is NaN, not 1.0. The output is identical before and after, on the interpreter and the byte-code VM. **This entry pins an exact value and must not be turned into a ulp-bound assertion**: the number is one exact point -- a single rounding of a written value into the element type, or a widening that does not round -- so a 1-ulp difference is a defect here, and loosening this assertion would replace a real criterion with a blunt one."
 kind = "behavior"
 case = "../../../cases/modules/rules/typed_boundary.cml"
 args = ["${case}", "rules::simplify", "${backend}"]
@@ -797,7 +797,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.typed_exact_doubling_boundary"
-desc = "The exact-doubling guard at the subnormal: (x*0.1) + (x*0.1) for x = 7*min is 2*min, and the law does not fire."
+desc = "The exact-doubling guard at the subnormal: (x*0.1) + (x*0.1) for x = 7*min is 2*min, and the law does not fire. **This entry pins an exact value and must not be turned into a ulp-bound assertion**: the number is one exact point -- a single rounding of a written value into the element type, or a widening that does not round -- so a 1-ulp difference is a defect here, and loosening this assertion would replace a real criterion with a blunt one."
 kind = "behavior"
 case = "../../../cases/modules/rules/typed_boundary_double.cml"
 args = ["${case}", "typed_pass::apply_double_only", "std::nvm"]
@@ -808,7 +808,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.typed_exact_doubling_boundary_is_real"
-desc = "The same subnormal under the wrong doubling law: it fires and gives min, not 2*min, so the boundary test above is not vacuous."
+desc = "The same subnormal under the wrong doubling law: it fires and gives min, not 2*min, so the boundary test above is not vacuous. **This entry pins an exact value and must not be turned into a ulp-bound assertion**: the number is one exact point -- a single rounding of a written value into the element type, or a widening that does not round -- so a 1-ulp difference is a defect here, and loosening this assertion would replace a real criterion with a blunt one."
 kind = "behavior"
 case = "../../../cases/modules/rules/typed_boundary_double.cml"
 args = ["${case}", "typed_pass::apply_double_wrong", "std::nvm"]
@@ -851,7 +851,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rules.tensor_laws_execute"
-desc = "The same tensor program after `rules::simplify` computes the values the laws promise, on the interpreter and the bytecode back ends alike."
+desc = "The same tensor program after `rules::simplify` computes the values the laws promise, on the interpreter and the bytecode back ends alike. **This entry pins an exact value and must not be turned into a ulp-bound assertion**: the number is one exact point -- a single rounding of a written value into the element type, or a widening that does not round -- so a 1-ulp difference is a defect here, and loosening this assertion would replace a real criterion with a blunt one."
 kind = "behavior"
 case = "../../../cases/modules/rules/tensor_target.cml"
 args = ["${case}", "rules::simplify", "${backend}"]

@@ -69,7 +69,7 @@ void refuseTensorElementType(
     camel::core::error::throwRuntimeFault(
         camel::core::error::RuntimeDiag::OperandTypeUnsupported,
         std::string(op),
-        elementTypeSpelling(tensor->dtype()) + "[..]",
+        elementTypeSpelling(tensor->dtype()) + "[...]",
         supportedElementTypes(supported) + " tensors");
 }
 

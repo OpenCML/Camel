@@ -13,7 +13,7 @@ func compare(a: int, b: int): bool {
     return strict && eq || !ne
 }
 
-func arithmetic(a: float, b: float, X: f32[..], w: f32[..]): float {
+func arithmetic(a: float, b: float, X: f32[...], w: f32[...]): float {
     let sum = a + b - a * b / a % b
     let pow = a ^ 2.0
     let mat = X @ w
@@ -22,7 +22,7 @@ func arithmetic(a: float, b: float, X: f32[..], w: f32[..]): float {
     return sum
 }
 
-func assign(var x: int, var t: f32[..], u: f32[..]) {
+func assign(var x: int, var t: f32[...], u: f32[...]) {
     x = 1
     x += 2
     x -= 3
@@ -55,7 +55,7 @@ func pipes(xs: int[], idx: int): void sync {
     let stepped = xs[0:10:2]
     let all = [1, 2, 3]
     let merged = { x: 1, y: 2 }
-    let tail = concat(all, ..xs)
+    let tail = concat(all, ...xs)
 }
 
 let masked = flags & 3

@@ -2,13 +2,13 @@ import { sum, max, abs, exp, reshape } from tensor
 import { next_key, seed, uniform } from random
 import { run_preferred_resident, download } from tiles
 
-func product(a: f32[..], b: f32[..]): f32[..] { return a @ b }
-func normalize(x: f32[..]): f32[..] {
+func product(a: f32[...], b: f32[...]): f32[...] { return a @ b }
+func normalize(x: f32[...]): f32[...] {
     let e = exp(x - max<1, true>(x))
     return e / sum<1, true>(e)
 }
-func add(a: f32[..], b: f32[..]): f32[..] { return a + b }
-func flatten(x: f32[..]): f32[..] { return reshape<[6]>(x) }
+func add(a: f32[...], b: f32[...]): f32[...] { return a + b }
+func flatten(x: f32[...]): f32[...] { return reshape<[6]>(x) }
 func main(): int sync {
     seed(17)
     let a = (next_key()->uniform::<f32><shape: [17, 35]> * 2.0 - 1.0)

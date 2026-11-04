@@ -53,7 +53,7 @@ timeout_ms = 120000
 # the walls fall this entry is the one that has to become a training run and a falling loss.
 [[tests]]
 name = "train.stops_at_the_wall"
-desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`.  The words changed on develop 2026-11-03: the pin used to be `Cannot import module 'vjp'`, which was the whole module failing to compile; `stdlib/vjp.cml` was rewritten (8194d89fd, the author's ruling of 2026-11-02 11:30), now compiles, and answers scalar and two-scalar functions -- `grad` at 3 gives 6.0 and vjp of a two-parameter product gives its two cotangents -- so the refusal moved to the shape this loop actually needs, a (struct, array) parameter pair, where the library's own `(..xs)` spread reports an empty argument list at vjp.cml:73.  The wall is the same wall; only its sentence is more precise."
+desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`.  The words changed on develop 2026-11-03: the pin used to be `Cannot import module 'vjp'`, which was the whole module failing to compile; `stdlib/vjp.cml` was rewritten (8194d89fd, the author's ruling of 2026-11-02 11:30), now compiles, and answers scalar and two-scalar functions -- `grad` at 3 gives 6.0 and vjp of a two-parameter product gives its two cotangents -- so the refusal moved to the shape this loop actually needs, a (struct, array) parameter pair, where the library's own `(...xs)` spread reports an empty argument list at vjp.cml:73.  The wall is the same wall; only its sentence is more precise."
 kind = "behavior"
 case = "../../../showcase/c3-char-transformer/train.cml"
 args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2"]
@@ -139,7 +139,7 @@ expect_exit = 0
 expect_stdout_contains = ["stage3 step=1 loss=9.182049", "stage3 step=10 loss=8.10387", "stage3 step=25 loss=6.45039", "stage3 step=50 loss=4.18813", "stage3 done steps=50 last=4.11033"]
 timeout_ms = 300000
 
-# The whole model, both layers: `layerNormInfer` no longer answers f32 for a `float[..]` input,
+# The whole model, both layers: `layerNormInfer` no longer answers f32 for a `float[...]` input,
 # `layerNormGrad` writes the input's element type, and `baseline/grow.py --stage 4` writes the
 # reference the fifteen values below come from.
 [[tests]]

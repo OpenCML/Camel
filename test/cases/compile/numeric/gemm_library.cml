@@ -16,15 +16,15 @@ import { next_key, normal, seed } from random
 import { is_numeric } from types
 
 #strict
-func exact::<T>(a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
+func exact::<T>(a: T[...], b: T[...]): T[...] when is_numeric::<T>() {
     return a @ b
 }
 
-func fast::<T>(a: T[..], b: T[..]): T[..] when is_numeric::<T>() {
+func fast::<T>(a: T[...], b: T[...]): T[...] when is_numeric::<T>() {
     return a @ b
 }
 
-func max_abs(t: f32[..]): float {
+func max_abs(t: f32[...]): float {
     return float(sum(max<0>(max<0>(abs(t)))))
 }
 

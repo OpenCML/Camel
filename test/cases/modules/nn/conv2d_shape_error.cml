@@ -11,7 +11,7 @@ import {
     conv2d
 } from nn
 
-func convolve(x: f64[..], kernel: f64[..], bias: f64[..]): f32[..] {
+func convolve(x: f64[...], kernel: f64[...], bias: f64[...]): f32[...] {
     return conv2d(x, kernel, bias)
 }
 

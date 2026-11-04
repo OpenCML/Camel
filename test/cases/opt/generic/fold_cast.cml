@@ -1,14 +1,14 @@
 /**
  * A conversion (`e as T`) of a constant is a constant: std::opt::fold evaluates it, with the
  * check the conversion performs when it runs. `a` is converted to the shape the compiler
- * already knows, `b` comes from a function declared to return a plain `f32[..]` (the conversion
+ * already knows, `b` comes from a function declared to return a plain `f32[...]` (the conversion
  * is checked against the value), `n` is a number converted to another
  * primitive type by the conversion function (`as` does not convert numbers).
  */
 
 import { reshape, sum } from tensor
 
-func weights(): f32[..] { return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) }
+func weights(): f32[...] { return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) }
 
 func three(): int { return 3 }
 

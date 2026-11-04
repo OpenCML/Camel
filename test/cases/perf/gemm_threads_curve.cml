@@ -28,33 +28,33 @@ import { now } from time
 
 /// The operands, allocated once: a visit to a thread count must measure the GEMM, not the allocator.
 type Shapes = {
-    cube_a: f32[..],
-    cube_b: f32[..],
-    forward_a: f32[..],
-    forward_b: f32[..],
-    up_b: f32[..],
-    gradient_a: f32[..],
-    gradient_b: f32[..],
-    batch_a: f32[..],
-    batch_b: f32[..],
-    attention_q: f32[..],
-    attention_k: f32[..],
-    small_a: f32[..],
-    small_b: f32[..]
+    cube_a: f32[...],
+    cube_b: f32[...],
+    forward_a: f32[...],
+    forward_b: f32[...],
+    up_b: f32[...],
+    gradient_a: f32[...],
+    gradient_b: f32[...],
+    batch_a: f32[...],
+    batch_b: f32[...],
+    attention_q: f32[...],
+    attention_k: f32[...],
+    small_a: f32[...],
+    small_b: f32[...]
 }
 
 /// The canonical algorithm: `#strict` withholds every permission, the library GEMM included.
 #strict
-func exact(a: f32[..], b: f32[..]): f32[..] {
+func exact(a: f32[...], b: f32[...]): f32[...] {
     return a @ b
 }
 
 /// The default policy: `tensor::fuse` records this product as the library GEMM's.
-func fast(a: f32[..], b: f32[..]): f32[..] {
+func fast(a: f32[...], b: f32[...]): f32[...] {
     return a @ b
 }
 
-func time_fast(round: int, label: string, a: f32[..], b: f32[..], reps: int): void sync {
+func time_fast(round: int, label: string, a: f32[...], b: f32[...], reps: int): void sync {
     let warm = fast(a, b)
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {
@@ -66,7 +66,7 @@ func time_fast(round: int, label: string, a: f32[..], b: f32[..], reps: int): vo
         round, num_threads(), label, elapsed * 1000.0 / float(reps), measured.1>->println
 }
 
-func time_exact(round: int, label: string, a: f32[..], b: f32[..], reps: int): void sync {
+func time_exact(round: int, label: string, a: f32[...], b: f32[...], reps: int): void sync {
     let warm = exact(a, b)
     let started = now()
     let measured = loop i = 0, s = 0.0 while i < reps do {

@@ -20,7 +20,7 @@
  * half reads (author's ruling of 2026-11-03 15:15: 带 `with` 的函数，pullback 带不带 `with` 列表——
  * 不带，闭包捕获). `split` captures the `with` value the backward half reads in `lin`'s closure, so
  * `lin` is a function of the tangents alone and `transpose(lin)` is the declared `Pullback<F>`
- * `(ct) => (..Tangent<ParamsOf<F>>)` -- `stdlib/types.cml`. The `with` values are written once, in
+ * `(ct) => (...Tangent<ParamsOf<F>>)` -- `stdlib/types.cml`. The `with` values are written once, in
  * the call that supplies them to `vjp`: `let (y, pb) = vjp(scale)<2.0>(3.0); pb(1.0)`.
  *
  * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
@@ -65,16 +65,16 @@ import { jvp, split, transpose } from transforms
 /// a one-long tuple).
 ///
 /// One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
-/// pullback's cotangents are too (stdlib/types.cml), and `<..ws> (..xs)` takes both lists the
+/// pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
 /// instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
 /// stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
 /// body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
-/// `split(jvp(f))<..ws>(..xs)` hands the forward half the list it declares and the parameters it
+/// `split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
 /// takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
 /// list, because the `with` value the backward half reads is a residual the cut captured in its
 /// closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
-/// `(ct) => (..Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
-/// lambda receives them, and `split(jvp(f))<..ws>(..xs)` is the only place they appear. The lambda
+/// `(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
+/// lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
 /// writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
 /// and a body that read a name from there would depend on what the caller of `vjp` called its own
 /// parameters.
@@ -83,8 +83,8 @@ import { jvp, split, transpose } from transforms
 /// derivative there, one member per parameter.
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
-    return <..ws> (..xs) => {
-        let (y, lin) = split(jvp(f))<..ws>(..xs)
+    return <...ws> (...xs) => {
+        let (y, lin) = split(jvp(f))<...ws>(...xs)
         (y, transpose(lin))
     }
 }
@@ -112,7 +112,7 @@ export func grad(f: (x: float) => float): (x: float) => float {
 /// cannot compute.
 ///
 /// The composition is one step: `vjp` differentiates the ordinary parameters only, so the weight is
-/// moved to one by a lambda -- `vjp((ww: W) => f<ww>(..))(w)` -- and the seed 1 read off the
+/// moved to one by a lambda -- `vjp((ww: W) => f<ww>(...))(w)` -- and the seed 1 read off the
 /// pullback is its gradient. The lambda can be written; the body inside it cannot do its half,
 /// because the lambda's parameter goes back into a call's `with` list and forward mode answers the
 /// tangent of a value that crosses that list as the zero of its type (`stdlib/signatures/transforms.cml`
@@ -148,10 +148,10 @@ export func grad(f: (x: float) => float): (x: float) => float {
 /// asked `frozen(3.0)` for a number would not compile, and one that ran would stop with the sentence
 /// above. The gradient of a first `with` parameter is read with `grad`: `grad(weighted)<3.0>(2.0)`.
 /// @example let frozen = with_grad((y: float) => y * 2.0)
-export func with_grad::<F>(f: F): <..WithOf<F>> (..ParamsOf<F>) => never when is_function::<F>() {
+export func with_grad::<F>(f: F): <...WithOf<F>> (...ParamsOf<F>) => never when is_function::<F>() {
     let _ = f
-    return <..ws> (..xs) => {
+    return <...ws> (...xs) => {
         fail<'RuntimeError'>(
-            'vjp is transpose(split(jvp(f))), and forward mode answers the tangent of a value handed to a call\'s `with` list as the zero of its type, so a `with_grad` built on this composition would answer the zero of the gradient\'s type for every weight that reaches the body through that list. Read the gradient of a first `with` parameter with `grad(f)<w>(..)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.')
+            'vjp is transpose(split(jvp(f))), and forward mode answers the tangent of a value handed to a call\'s `with` list as the zero of its type, so a `with_grad` built on this composition would answer the zero of the gradient\'s type for every weight that reaches the body through that list. Read the gradient of a first `with` parameter with `grad(f)<w>(...)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.')
     }
 }

@@ -3,7 +3,7 @@
 //   f(x) = x*x*x,  f'(x) = 3x^2,  f''(2) = 12
 //
 // The writing is the natural one -- differentiate the result of `vjp` -- and it is refused inside
-// the library, at `stdlib/vjp.cml#vjp`'s `split(jvp(f))<..ws>(..xs)`:
+// the library, at `stdlib/vjp.cml#vjp`'s `split(jvp(f))<...ws>(...xs)`:
 //
 //   cannot differentiate through this call of a function value: which function it calls is not
 //   evident where it is called: the function is computed at run time

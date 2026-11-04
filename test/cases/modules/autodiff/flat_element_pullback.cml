@@ -17,7 +17,7 @@
  */
 import { grad } from autodiff
 
-func flat(xs: float[..], i: int): float {
+func flat(xs: float[...], i: int): float {
     return xs[i]
 }
 

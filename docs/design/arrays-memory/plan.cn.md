@@ -150,7 +150,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 ```cpp
 // 前缀维度 + 可选的尾部包（"..s"）；anyRank_ 表示尾部长度不固定
 std::vector<ExtentForm> extents_;   // 已知的前缀维度，规范形式
-bool anyRank_ = false;              // 尾部打开：T[3, ..s]、T[..]
+bool anyRank_ = false;              // 尾部打开：T[3, ...s]、T[...]
 std::string packName_;              // 包的名称；"" 表示匿名
 bool numericUnknown_ = false;       // Tensor 家族：元素是数值，但类型未定
 ```
@@ -224,7 +224,7 @@ virtual const Type *applyArguments(std::span<const TypeArgument> args,
 5. `paramRefined = param->withExtentValues(values, packs)`；`refined->assignableFrom(actual)` 通过就替换，否则按今天的规则 `castSafetyFrom` + `castNodeTo`；形状不符在运行时由 `castSlotFrom` 报错。
 6. 返回类型：`ret->withExtentValues(values, packs)`。若某个维度形式有未绑定的名字（只出现在返回类型），GCT 已经报 `DimensionNameNotBound`（第 4 节），不会走到这里。
 
-`withExtentValues` 的特例：前缀为空、尾部包绑定为空 ⇒ 返回**元素类型**（标量）。这正是 `first_row(xs: T[n, ..rest]): T[..rest]` 对 `f32[3]` 的返回类型。参数位置不会出现这种情况（数组参数至少一个维度），若出现则细化成标量、与实参不匹配，按普通类型错误处理。
+`withExtentValues` 的特例：前缀为空、尾部包绑定为空 ⇒ 返回**元素类型**（标量）。这正是 `first_row(xs: T[n, ...rest]): T[...rest]` 对 `f32[3]` 的返回类型。参数位置不会出现这种情况（数组参数至少一个维度），若出现则细化成标量、与实参不匹配，按普通类型错误处理。
 
 ### 3.6 兼容承诺
 
@@ -250,7 +250,7 @@ arrayType   : specType arrayDim+
 arrayDim    : '[' ']'                          // 一个未知维度，T[] = T[?]
             | '[' extent (',' extent)* ']'
 extent      : '?'                              // 未知
-            | '..' ident?                      // 尾部包：..rest 或 ..
+            | '...' ident?                      // 尾部包：..rest 或 ..
             | linearExpr                       // 只允许 + - * 常数 / 整数
 ```
 
@@ -259,25 +259,25 @@ extent      : '?'                              // 未知
 ```
 Tensor<f32, [n, 784]>     // 长写法，等价于 f32[n, 784]
 Tensor<[3]>               // 元素未定的数值数组，形状 3
-Tensor<f32>               // f32[..]
+Tensor<f32>               // f32[...]
 ```
 
 规则：
 
 - `T[][]` 与今天的含义相同（嵌套数组），**不是** rank 2；rank 2 写作 `T[m, n]`。
-- 一个数组类型里 `..` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[.., 3]` 是错误。
-- 裸 `..` 匿名（打印 `T[3, ..]`）；`..s` 命名，名字只活在类型里。
+- 一个数组类型里 `...` 最多一次，且必须最后（`DimensionAfterAnyRank`）；`T[..., 3]` 是错误。
+- 裸 `...` 匿名（打印 `T[3, ...]`）；`...s` 命名，名字只活在类型里。
 - `?` 是未知维度，`T[?]` 就是 `T[]`；`2 * n - 1` 这类线性形式保留名字。
 - 元素类型可以是类型变量：函数头声明 `T` 后写 `T[n, m]`（`typeUnit` 已有 `identDef 'of'` 前缀）。
 - 形状参数里写 `const`（`Tensor<f32, const [3]>`）报 `InvalidTypeArgument`，消息给出"去掉 `const`"的写法；不新增诊断码（批复 Q2 的同类处理）。
 
 ### 4.2 AST、CST 与格式化
 
-- `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '..' ident? ']'`。
+- `node_kinds.def:113` 的注释更新为 `ArrayType // specType arrayDim+`；新增 `ArrayDim // '[' (extent (',' extent)*)? ']' | '[' '...' ident? ']'`。
 - `src/parse/syntax/parser_type.cpp` 的 `parseArrayType`（158–206）改为循环解析 `ArrayDim`；`parseSpecType`（208+）的 `typeOrData` 增加"以 `[` 开头的形状参数"分支（解析成 `ArrayData`，里面的项是 extent 表达式），`const` 分支保留但只对普通类型参数有效。
-- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `..name`。
-- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[..s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
-- 格式化器：`tools/format/fmt.cpp#Formatter` 的 `visitArrayType` 逐组打印 `[?]/[..s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
+- AST：`include/camel/parse/ast/type.h` 的 `ArrayTypeLoad` 从 `dims_`（计数）改为 `std::vector<DimGroup>`：每组是 `std::vector<node_ptr_t>` 的 extent 表达式 + `pack`（无/匿名/名字）。`geneCode`（`src/parse/ast/type.cpp#ArrayTypeLoad`）按源文本打印，`[]` 仍打印为空括号，`?` 打印 `?`，包打印 `...name`。
+- CST→AST：`src/parse/ast/builder.cpp#visitArrayType` 每遇到一个 `ArrayDim` 建一组；`visitArrayType`（`src/compile/gct/builder.cpp#visitArrayType`）对每组建一个 `ArrayType`：`[]` → `[?]`，`[...s]` → `anyRank` + 包名，`[n, m]` → 两个形式。**一组 `[]` 仍是一个嵌套层**，与今天一致。
+- 格式化器：`tools/format/fmt.cpp#Formatter` 的 `visitArrayType` 逐组打印 `[?]/[...s]/[n, 3]`；`visitSpecType` 打印形状参数不带 `const`。格式化幂等测试（`feat/format`）覆盖新语法。
 
 ### 4.3 绑定规则
 
@@ -289,7 +289,7 @@ Tensor<f32>               // f32[..]
 4. 名字只出现在返回类型、参数里没有 ⇒ 错误 `DimensionNameNotBound`（今天已有）；
 5. 参数里的名字同时是一个可编译期求值的常量（`const IN = 784; f32[b, IN]`）⇒ 按常量维度，不绑定名字（设计 5.4 的例子）；
 6. `?` ⇒ `ExtentForm::unknown()`，不绑定；
-7. `..s` ⇒ 绑定包名 `s`（参数里可再次引用 `..s`）；`..` 匿名；包名与维度名分属两个命名空间，重名是错误；
+7. `...s` ⇒ 绑定包名 `s`（参数里可再次引用 `...s`）；`...` 匿名；包名与维度名分属两个命名空间，重名是错误；
 8. 线性形式只从名字与整数常数构造：`n`、`n + 1`、`2 * n`、`n - 2` 保留；名字乘名字、除法、函数调用 ⇒ `ExtentForm::unknown()`（现有 `visitExtent` 4173–4252 的规则，保留）。
 
 删除 `collectDimensionNames`（3697–3720 的 `constas` 预扫描）：绑定按源顺序发生，不再需要预示。删掉之后，`constas` 在形状位置不再被识别 ⇒ 普通语法错误（批复 Q2：不加 `ConstasRetired`）。`ConstAsLoad` 节点与 `constas` 关键字本身留给后续工作。
@@ -303,7 +303,7 @@ Tensor<f32>               // f32[..]
 | `DimensionMismatch` | 秩/已知维度不符 | 有（GCT） |
 | `DimensionNameNotBound` | 名字只在返回类型或拼错 | 有 |
 | `DimensionNameUsedOnce` | 名字只出现一次（警告） | **新增** |
-| `DimensionAfterAnyRank` | `..` 不在最后或出现两次 | **新增** |
+| `DimensionAfterAnyRank` | `...` 不在最后或出现两次 | **新增** |
 | `InvalidExtentExpression` | 非整数、名字乘名字等 | 有（未知维度不报错，沿用） |
 | `InvalidTypeArgument` | `const` 形状、`Tensor<string>` | 有 |
 
@@ -311,9 +311,9 @@ Tensor<f32>               // f32[..]
 
 ### 4.5 标准库与文档
 
-- `stdlib/prelude.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[..]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[..]`。
-- `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[..]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（下标切片落地后再泛化）。
-- `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`..s`、`Tensor` 别名。
+- `stdlib/prelude.cml`：`map`/`filter`/`foreach`/`reduce` 的声明从 `T[]` 改为 `T[...]` 并在注释里写第一维规则（实际类型规则在 `globals.cpp`，见 P5）；`append`/`extend`/`slice`/`concat` 仍是 `T[]`（只对 rank 1 有意义）；`len` 从 `T[]` 改 `T[...]`。
+- `stdlib/array.cml`：`sort` 家族与 `argsort` 改 `T[...]`；`sort_by` 等 `stdlib/array.cml` 的 Camel 实现保持 rank 1（下标切片落地后再泛化）。
+- `docs/language/08_top_level_and_grammar.md` 与 `en/`（76–77、201–202 行）的 `arrayType` 产生式、`constas` 说明；`docs/language/03_data_model.md` 的类型表加 `T[dims]`、`?`、`...s`、`Tensor` 别名。
 - `docs/stdlib-reference.md` 由 `scripts/stdlib-reference.mjs` 重新生成。
 
 ### 4.6 测试重写（机械，同车道）
@@ -322,7 +322,7 @@ Tensor<f32>               // f32[..]
 - 12 个用例含 `constas`：形状位置改写为首次出现的名字，其余引用；例如 `f<T>(x: T[constas n, 4])` → `f<T>(x: T[n, 4])`。
 - `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。另有一处与加宽无关：`grow(t: Tensor): Tensor` 的裸 `Tensor` 签名返回过渡类型，进不了元素类型已定的格子（`f32[?, ?]`）；改写签名为具体类型（`grow(t: f32[?, ?]): f32[?, ?]`）。
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>` 改写为 `Tensor<f32, [n, 4]>`，并重新生成 `test/plans/feat/tools/golden/grammar/keywords.scopes` 金标。
-- 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`..s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
+- 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`...s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
 - AST/格式化/金样：新增语法进入 `feat/format` 的往返语料；`feat/compile` 的 AST 快照只对 smoke 语料，不改既有快照。
 
 ### 4.7 P3 的文件与门禁
@@ -342,10 +342,10 @@ Tensor<f32>               // f32[..]
 - 导出：`modules/tensor/module.cpp#Reference` 从 `exportType(Reference("Tensor"), TensorType::Default())` 改为 `exportType(Reference("Tensor"), ArrayType::numericUnknown({}))` —— 元素是"数值、类型未定"，任意秩。`elemType()` 是 `Void`，`numericUnknown_` 为真。
 - 应用：`ArrayType::applyArguments`（P2 加的 `Type` 虚函数）在 `numericUnknown_` 为真时解释参数：
   - 无参数 ⇒ 自身（`Tensor`，任意秩）；
-  - 一个类型参数 `E` ⇒ 要求 `E` 是数值标量（`i32/i64/f32/f64/bool/byte/c64/c128`），否则 `InvalidTypeArgument`（`Tensor<string>` 是错误）；带形状参数 ⇒ `E[extents]`，否则 `E[..]`（任意秩）；
+  - 一个类型参数 `E` ⇒ 要求 `E` 是数值标量（`i32/i64/f32/f64/bool/byte/c64/c128`），否则 `InvalidTypeArgument`（`Tensor<string>` 是错误）；带形状参数 ⇒ `E[extents]`，否则 `E[...]`（任意秩）；
   - 只有形状参数 ⇒ `numericUnknown(extents)`，打印 `Tensor<[3]>`；
   - 形状参数 `[]` 按 Q8 的结论处理（建议不支持秩 0，报错并建议写 `[1]`），非空列表按 4.1 的 extent 规则。
-- `Tensor<f32>` 与 `f32[..]` 是**同一个驻留对象**（应用后不再有 `numericUnknown_`）；`Tensor<f32, [n, 784]>` 与 `f32[n, 784]` 同一个对象。两者相等、互相可赋值。
+- `Tensor<f32>` 与 `f32[...]` 是**同一个驻留对象**（应用后不再有 `numericUnknown_`）；`Tensor<f32, [n, 784]>` 与 `f32[n, 784]` 同一个对象。两者相等、互相可赋值。
 - 形状参数的两种来源：常量列表 `[3, 4]` 由 GCT 作为 `TypeArgument.data`（`ArrayData`）传入；含名字的列表（`[n, 4]`）作为 `TypeArgument.extents`（`ExtentForm` 列表）传入。`applyArguments` 两者都接受。
 - 裸 `Tensor` 的打印是 `Tensor`（源码可解析）；`numericUnknown[3]` 打印 `Tensor<[3]>`。
 - 不带类型参数的 `Tensor<>` 视同 `Tensor`。
@@ -367,7 +367,7 @@ P4 的终点：
 
 删除步（P4 合入 develop 之前完成，负责人 2026-10-25：不留过渡、不留技术债。过渡状态只能存在于翻转分支上，develop 上不出现别名 `Tensor`、`numericUnknown` 或本节依赖表里的任何一处）：
 1. `ArrayType::numericUnknown*` 与其标记 `numericUnknown_` 删除；`Tensor` 的 `Reference` 改为
-   `Tensor<T>` 形式（元素类型参数必填，`Tensor<..>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
+   `Tensor<T>` 形式（元素类型参数必填，`Tensor<...>` 的 `applyArguments` 只接受类型参数 + 形状参数）；
 2. 签名里出现裸 `Tensor` 的诊断（`InvalidTypeArgument` 或新的语法诊断）；
 3. 本页第二节列出的每一处过渡依赖同时删除；
 4. `test/cases/compile/array_alias/bare_tensor.cml` 与
@@ -396,11 +396,11 @@ P4 的终点：
 **没有让新的消费者依赖它**：所有从 `TensorType` 迁过来的构造点走 `tensor::ops::tensorOf(...)`，元素类型
 来自事实（`facts.dtype`）；过渡类型只在"事实里没有元素类型"时出现，即 `Tensor` 的两种拼写本身。
 
-`var` 形参写裸 `Tensor` 时，调用点的 cell 按声明的形参类型接管（h419 的那一段）是过渡依赖，列在上表；P4 把这类形参改写成显式泛型（`var w: T[..]`）后两侧同型，接管分支删除。cell"内容类型相等"的不变式不放宽。
+`var` 形参写裸 `Tensor` 时，调用点的 cell 按声明的形参类型接管（h419 的那一段）是过渡依赖，列在上表；P4 把这类形参改写成显式泛型（`var w: T[...]`）后两侧同型，接管分支删除。cell"内容类型相等"的不变式不放宽。
 
 ### 5.2 元素类型精确
 
-- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp` 起）：`Tensor<float>` 就是 `float[..]`（f64 存储），`Tensor<i32>` 就是 `i32[..]`，`Tensor<f64>` 就是 `f64[..]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
+- 删除 `normalizeTensorDType`（P4 已删；`TensorType::get` 只校验元素类型，`modules/tensor/type.cpp` 起）：`Tensor<float>` 就是 `float[...]`（f64 存储），`Tensor<i32>` 就是 `i32[...]`，`Tensor<f64>` 就是 `f64[...]`。`zeros`/`ones` 等不写 dtype 的构造仍是 f32（与今天一致）。
 - 审计模块内核的 dtype 支持：elementwise 已支持 f32/f64/i32/i64（`modules/tensor/kernels/elementwise.cpp`）；conv/bn 的若干内核只接受 `const float*`（`kernels/conv.cpp` 283+、404+、572+）。这些算子的推断处要声明只支持 f32（今天没有声明，遇到 f64 会读错），遇到 f64 输入报运行时故障（而不是静默读错）。测试里没有 `Tensor<float>` 的用例（已核对），只有 `Tensor<int>` 出现在 `modules/nn` 的 checkpoint 用例里，`int` 就是 i64，与今天相同。
 - 删除 `TensorType::castSafetyFrom/castSlotFrom` 里的 dtype 归一化；`as` 的检查变成 `ArrayType::castSlotFrom` 的形状检查（P2）。
 
@@ -423,7 +423,7 @@ P4 的终点：
 逐模块：
 
 - `modules/tensor`（`type.cpp` 整文件删除，约 439 行；`module.cpp`、`ops/*`、`support.cpp`、`interop.cpp`、`npy.cpp`、`binary.cpp`、`passes/index_eval.cpp`、`tensor.cpp` 的类型构造点）；
-- `modules/nn`：checkpoint 的类型文本（`Tensor<f32>` 打印为 `f32[..]`）、`load_tree::<Tensor<int>>`、参数类型；
+- `modules/nn`：checkpoint 的类型文本（`Tensor<f32>` 打印为 `f32[...]`）、`load_tree::<Tensor<int>>`、参数类型；
 - `modules/onnx`：`emitter.cpp`/`exporter.cpp`/`lowering.cpp` 用 `asTensorType` 与 `normalizeTensorDType` 判断 dtype/形状的地方；
 - `modules/tiles`：张量识别与 `Tensor` 拼写；
 - `modules/ckpt`、`modules/autodiff`：签名与算子里的 `Tensor` 类型；
@@ -434,7 +434,7 @@ P4 的终点：
 
 - `modules/tensor` 的 `tensor(...)` 打印删除（`printTensor`），全部走 `Array::print`：rank 1 是 `[1, 2, 3]`，rank 2 是嵌套括号 `[[1, 2], [3, 4]]`（已有的紧凑聚合打印），元素用运行时的 `elemType_` 而不是声明类型的 `Void`（`Array::print` 现在从 `arrayType->elemType()` 取元素类型，`Tensor` 家族要改为 `elemType_` 优先）。
 - 影响面：`test/plans` 里 10 个计划、72 行含 `tensor(` 的期望输出；11 个用例文件。逐行改为嵌套括号。这是 P4 里最机械也最容易漏的部分，按 `grep -l 'tensor('` 清单逐个更新，并由 `feat/modules/tensor` 全绿背书。
-- 类型文本：`f32[]`、`f32[3, 4]`、`f32[..]`、`Tensor`、`Tensor<[3]>`。`docs/stdlib-reference.md` 与诊断文本随之更新。
+- 类型文本：`f32[]`、`f32[3, 4]`、`f32[...]`、`Tensor`、`Tensor<[3]>`。`docs/stdlib-reference.md` 与诊断文本随之更新。
 
 ### 5.5 入口参数与 `.npy`
 
@@ -451,7 +451,7 @@ P4 的终点：
 - `test/cases/modules/tensor/static_types.cml`、`var_tensor_reference.cml`、`shape_inference/var_argument*.cml`：`var` 加宽与裸 `Tensor` 的用法按 Q5 调整。
 - 签名里写裸 `Tensor` 的示例与用例（`test/cases/modules/nn/lrit.cml`、`mnist.cml` 及其 `nn.*` 计划条目等）：P4 终点上裸 `Tensor` 签名是编译错误，按 5.1a 改写成具体元素类型与秩（`var` 形参收的是同秩加宽后的格子类型，写 `f32[?, ?]`；非 `var` 形参可以写定 extent，如 `f32[?, 1]`）或在头部声明的泛型；不放宽可赋值规则，也不把格子写成裸 `Tensor`。
 - `grad(f)` 的结果类型（`modules/tensor/ops/vjp.cpp#vjpTensorType`）：由被微分值的切线类型给出，`grad of f32[?, 4]` 就是 `f32[?, 4]`；不再返回过渡类型（`test/cases/feat/mm/gc/gc_training_peak.cml` 的 `sgd(wf, g, 0.5)` 依赖这一条）。
-- 新增 `test/cases/compile/array_alias/*`：`Tensor<f32>` ≡ `f32[..]`、`Tensor<f32, [2, 3]>` ≡ `f32[2, 3]`、裸 `Tensor` 接受 `int[3]` 拒绝 `string[3]`、`Tensor<string>` 报错、`Tensor<f32>` 的类型文本、`var` 加宽、`as` 的形状检查、四个后端一致。
+- 新增 `test/cases/compile/array_alias/*`：`Tensor<f32>` ≡ `f32[...]`、`Tensor<f32, [2, 3]>` ≡ `f32[2, 3]`、裸 `Tensor` 接受 `int[3]` 拒绝 `string[3]`、`Tensor<string>` 报错、`Tensor<f32>` 的类型文本、`var` 加宽、`as` 的形状检查、四个后端一致。
 - `test/plans/feat/compile/array_alias.plan.toml`。
 
 ### 5.7 P4 的文件与门禁
@@ -509,7 +509,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 - `foreach`：`f` 的参数类型 = `rowType`。
 - `reduce`：`f` 的第一个参数是累加器（`init` 的类型），第二个是 `rowType`。
 - `sort`：参数与结果同类型；`argsort` 结果 `int[d0]`。
-- `len`：`arrType->extents()` 的第一个形式，rank ≥ 1；`T[..]` 的未知维度返回 `int`（运行时是真实长度）。
+- `len`：`arrType->extents()` 的第一个形式，rank ≥ 1；`T[...]` 的未知维度返回 `int`（运行时是真实长度）。
 
 ### 6.4 四个调度器
 
@@ -524,7 +524,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 ### 6.5 标准库
 
-`stdlib/prelude.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[..]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[..]`。
+`stdlib/prelude.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[...]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[...]`。
 
 测试：`test/cases/compile/hof_multidim/*`（map 按行：rank 1 不变、rank 2 得 `U[d0]`、filter 行、foreach 行、reduce 行、sort 字典序、argsort、len、`int[m,n]` 与 `string[m,n]`、空维、1 行、1 列）、`test/plans/feat/compile/hof_multidim.plan.toml`；`feat/mm/hof_block_alloc` 加 rank 2 的分配计数。
 
@@ -701,8 +701,8 @@ println(after - before);             // 期望 0
 | `Tensor` 的打印 | `tensor(...)` | `[[...], [...]]` | 输出（10 个计划、72 行） |
 | `T[]` | `int[]` | `int[?]`（同一对象） | 不变 |
 | `var` 加宽 | 任意秩 | 同秩（Q5） | `static_types.cml` 需要改写 |
-| `map`/`filter`/`foreach`/`reduce`/`sort`/`len` 签名 | `T[]` | `T[..]` | 标准库声明 + 文档 |
-| `Tensor<byte>`/`Tensor<c64>` | 接受为 `TensorType`（许多算子不支持这种元素，运行时才暴露） | `byte[..]`/`c64[..]`；不支持的算子报故障 | 放宽且提前暴露 |
+| `map`/`filter`/`foreach`/`reduce`/`sort`/`len` 签名 | `T[]` | `T[...]` | 标准库声明 + 文档 |
+| `Tensor<byte>`/`Tensor<c64>` | 接受为 `TensorType`（许多算子不支持这种元素，运行时才暴露） | `byte[...]`/`c64[...]`；不支持的算子报故障 | 放宽且提前暴露 |
 
 ### 10.2 测试与文档
 
@@ -711,7 +711,7 @@ println(after - before);             // 期望 0
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>`（金标 `test/plans/feat/tools/golden/grammar/keywords.scopes` 随之更新）。
 - `test/plan-selection.json`：`src/core/type`、`src/core/rtdata/array.cpp`、`include/camel/core/type` 的改动应选中 `feat/compile/array_*`、`feat/mm`、`feat/modules/tensor`（新增规则）。
 - 文档：`docs/language/08_top_level_and_grammar.md`（+`en/`）、`docs/language/03_data_model.md`、`docs/stdlib-reference.md`（重新生成）、`docs/diagnostics.md`（重新生成）、`docs/performance/graph-store-baseline.md`（P7 节）。
-- 格式化：`feat/format` 的往返语料加 `T[n, m]`、`?`、`..s`、`Tensor<f32, [3]>`。
+- 格式化：`feat/format` 的往返语料加 `T[n, m]`、`?`、`...s`、`Tensor<f32, [3]>`。
 - 快照：`feat/compile` 的 AST 金样只在 smoke 语料上；新语法进入 `feat/format` 与 `feat/parse` 的语料，不改旧金样。
 
 ### 10.3 内部接口
@@ -755,8 +755,8 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 
 | 风险 | 表现 | 缓解 |
 |---|---|---|
-| `..s` 空包 | `T[..rest]` 在 rank 1 实参上折叠成元素类型（标量）；语义新，评审要点头 | Q1 先定；`withExtentValues` 一处实现；用例锁住 |
-| 裸 `..` | 打印任意秩类型需要它 | Q2；只允许在最后 |
+| `...s` 空包 | `T[...rest]` 在 rank 1 实参上折叠成元素类型（标量）；语义新，评审要点头 | Q1 先定；`withExtentValues` 一处实现；用例锁住 |
+| 裸 `...` | 打印任意秩类型需要它 | Q2；只允许在最后 |
 | `map` 的行语义 | rank ≥ 2 结果是 `U[d0]` 而非保形 | Q3 确认；rank 1 不变，用例锁住两种秩 |
 | `sort` 行序 | 字典序 vs 其它 | Q4；选字典序 |
 | `var` 加宽 | 同秩会改写 `static_types.cml` | Q5；选同秩，改写一个用例 |
@@ -778,9 +778,9 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 
 ## 12. 给协调者的问题
 
-**Q1（`..s` 空包）**：`f32[..rest]` 在 `xs: f32[3]` 上，`rest` 绑定为空。返回类型 `T[..rest]` 应折叠成元素类型 `T`（标量），这样 `first_row(xs: T[n, ..rest]): T[..rest]` 才能对 rank 1 返回标量。另一种选择是禁止 rank 1 实参、要求至少两维。建议：**折叠**；数组本身仍 rank ≥ 1。
+**Q1（`...s` 空包）**：`f32[...rest]` 在 `xs: f32[3]` 上，`rest` 绑定为空。返回类型 `T[...rest]` 应折叠成元素类型 `T`（标量），这样 `first_row(xs: T[n, ...rest]): T[...rest]` 才能对 rank 1 返回标量。另一种选择是禁止 rank 1 实参、要求至少两维。建议：**折叠**；数组本身仍 rank ≥ 1。
 
-**Q2（裸 `..`）**：打印 `Tensor<f32>` 需要 `f32[..]` 这个拼写。建议：**允许裸 `..`**（匿名包），只允许在最后、最多一次。
+**Q2（裸 `...`）**：打印 `Tensor<f32>` 需要 `f32[...]` 这个拼写。建议：**允许裸 `...`**（匿名包），只允许在最后、最多一次。
 
 **Q3（`map` 的行语义）**：按任务与设计第 8 节的字面规则，`map` 与 `filter`/`foreach`/`reduce`/`sort` 一样按第一维：rank 1 的"行"是元素（行为与今天不变），rank ≥ 2 时 `f` 收到一行、结果是 `U[d0]`（见 6.1）。另一种是逐元素保形（`f` 收到元素、结果保留全部维度），它与任务文字不符、且需要另一套类型规则。建议：**按行**；请确认 rank ≥ 2 时 `map` 的结果是 rank 1 的 `U[d0]`，而不是保形成 `U[d0, ..., dn]`。
 
@@ -788,7 +788,7 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 
 **Q5（`var` 加宽）**：`var xs = [1, 2]; xs->append(3)` 要求加宽保留 rank 1（`int[?]`）。建议：**同秩加宽**（更安全，`append` 仍工作）；代价是 `var w = zeros([2,1]); w = ones([5])` 不再通过，要改写 `static_types.cml` 这一个用例。任意秩加宽会让 `var xs = [1]` 加宽成任意秩、`append` 失去形状检查。
 
-**Q6（裸 `Tensor`）**：建议 `Tensor` = "元素是数值、dtype 未定、任意秩"的数组类型（`numericUnknown_` 标记，打印 `Tensor`），`Tensor<[3]>` 打印 `Tensor<[3]>`；`Tensor<f32>` = `f32[..]`。这样 `Tensor` 不再接受 `string[]`（今天也不接受），且仍是 `ArrayType`，没有第二套类型。请确认这个"标记"而不是"新的元素类型"。
+**Q6（裸 `Tensor`）**：建议 `Tensor` = "元素是数值、dtype 未定、任意秩"的数组类型（`numericUnknown_` 标记，打印 `Tensor`），`Tensor<[3]>` 打印 `Tensor<[3]>`；`Tensor<f32>` = `f32[...]`。这样 `Tensor` 不再接受 `string[]`（今天也不接受），且仍是 `ArrayType`，没有第二套类型。请确认这个"标记"而不是"新的元素类型"。
 
 **Q7（`Tensor<float>` = f64）**：批复 Q1 已同意；确认在文档里写明，并把 conv/bn 等 f32-only 算子的拒绝方式定为运行时故障。
 

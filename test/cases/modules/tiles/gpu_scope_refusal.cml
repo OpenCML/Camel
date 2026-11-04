@@ -3,7 +3,7 @@ import { reshape, tanh, sum } from tensor
 // `tanh` is a pure tensor operator that the device back end does not lower. Inside a `#gpu`
 // scope that is a compile error, not a silent fallback to the host.
 #gpu
-func activate(x: f32[..]): f32[..] { return tanh(x) }
+func activate(x: f32[...]): f32[...] { return tanh(x) }
 
 func main(): int sync {
     let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])

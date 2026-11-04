@@ -97,10 +97,10 @@ std::string debugRunArrayTypeSelfTest() {
                 ->toString() == "f32[?, 3]",
         "an unknown extent does not print as '?' beside a constant");
     require(
-        ArrayType::create(f32, constants({3}), "rest")->toString() == "f32[3, ..rest]",
+        ArrayType::create(f32, constants({3}), "rest")->toString() == "f32[3, ...rest]",
         "an open rank prints its pack");
     require(
-        ArrayType::openRank(f32)->toString() == "f32[..]", "a bare open rank prints as f32[..]");
+        ArrayType::openRank(f32)->toString() == "f32[...]", "a bare open rank prints as f32[...]");
     require(empty->mangle() == "Array_i_1_?", "the int[] mangle changed: " + empty->mangle());
     require(
         fromInts->mangle() == "Array_f32_2_3,4",
@@ -342,7 +342,7 @@ std::string debugRunArrayTypeSelfTest() {
             (numericJoin ? numericJoin->toString() : std::string("<null>")));
     Type *rankJoin = ArrayType::create(i64, shapeOf({3}))->unify(ArrayType::create(i64, shapeOf({3, 4})));
     require(
-        rankJoin != nullptr && rankJoin->toString() == "int[..]",
+        rankJoin != nullptr && rankJoin->toString() == "int[...]",
         "int[3] + int[3, 4] does not unify to an open rank: " +
             (rankJoin ? rankJoin->toString() : std::string("<null>")));
     require(ArrayType::create(i64)->unify(i64) == nullptr, "int[] unified with int");
@@ -358,7 +358,7 @@ std::string debugRunArrayTypeSelfTest() {
     require(
         namedShape->widened()->toString() == "f32[?, ?]", "widening keeps a dimension name");
     require(
-        ArrayType::openRank(f32, constants({3}))->widened()->toString() == "f32[?, ..]",
+        ArrayType::openRank(f32, constants({3}))->widened()->toString() == "f32[?, ...]",
         "widening an open rank drops it");
 
     // ---- Call-site binding: names and packs, and a name fixed by a later argument ----------

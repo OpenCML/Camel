@@ -525,7 +525,7 @@ class Gen:
         self.add_func(name, params, BOOL, body, sym)
 
     def logic_stmt(self, d):
-        """`let n = c && q(..)` (or `||`, `&`, `|`): the effect of `q` happens only when the right
+        """`let n = c && q(...)` (or `||`, `&`, `|`): the effect of `q` happens only when the right
         side is needed, or always for `&` and `|`."""
         probes = [s for s in self.callables(BOOL, eff=True) if self.can_call(s)]
         if not probes:

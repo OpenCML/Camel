@@ -1,5 +1,5 @@
-// `(..A) => R` is a function type with any parameter list.
-func run(f: (..A) => int): int {
+// `(...A) => R` is a function type with any parameter list.
+func run(f: (...A) => int): int {
     return 1
 }
 

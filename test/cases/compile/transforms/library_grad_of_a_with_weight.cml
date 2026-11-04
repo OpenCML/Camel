@@ -19,7 +19,7 @@
  * as one wrong member, not as a line that is wrong as a whole.
  *
  * The third line is the other half of the same argument list. A lifted call's arguments are
- * `(..values, ..their tangents)` (`jvpSignature`, author 2026-11-03), and the lift used to write
+ * `(...values, ...their tangents)` (`jvpSignature`, author 2026-11-03), and the lift used to write
  * each value beside its own tangent as it walked the call's inputs: `(v1, d1, v2, d2)` into a callee
  * that reads `(v1, v2, d1, d2)`. One parameter hid it -- the two orders agree -- and two did not:
  * `split` reads the seam at `count / 2` and refused with "the value half reads the tangent of

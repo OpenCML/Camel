@@ -284,9 +284,20 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 // missing-module shape reaches this branch when the step is a module operator,
                 // whose key comes from the family's index -- the shape `no-such-family` covers only
                 // an operator the family could spell without the module, like `:op/mul_d`).
-                found = "the walk found no rule key for that operator, so there was no rule to look "
-                        "up: the key is the operator's name at its operand count, the family's "
-                        "index spells no such name, and an unbuilt family spells none at all";
+                // The three facts the walk can prove, and nothing more. "The family holds no rule
+                // for this operator" is the index's own reading (`candidates.empty()`); "transpose
+                // is for linear functions" is the language rule; and `vjp` is the way to take a
+                // gradient. What is *not* said is that the operator is not linear in its k-th
+                // parameter: that would need the forward family's index, and a program that only
+                // imports `rulesets.transpose` does not carry it -- so the claim is out of reach
+                // here, and a wrong explanation is worse than none, because a reader acts on it
+                // (docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md).
+                found = refusal.uri.empty()
+                            ? "the family holds no rule for that operator; `transpose` is for linear "
+                              "functions, so take the gradient with `vjp`"
+                            : "the family holds no rule for `" + refusal.uri +
+                                  "`; `transpose` is for linear functions, so take the gradient "
+                                  "with `vjp`";
             } else {
                 found = "the walk recorded no reason for the lookup";
             }
@@ -320,16 +331,23 @@ case TransposeRefusalCause::RuleShape: {
         // law was chosen, and its body -- the cotangent helpers a law that serves several shapes
         // writes, one overload per shape -- has nothing for the ranks this step has. So the sentence
         // names the law, the operator it is filed under, and the ranks, because those three are
-        // what a reader edits or writes a case for.
+        // what a reader edits or writes a case for. The expansion's own words follow when the call
+        // wrote any: they name the helper the body calls and the types it was handed, which is the
+        // difference between "this law serves other ranks" and an edit.
         std::string answer = "the law ";
         answer += refusal.rule.empty() ? std::string("the index filed") : "`" + refusal.rule + "`";
         answer += " has no cotangent for ";
         answer += refusal.uri.empty() ? std::string("this step") : "`" + refusal.uri + "`";
-        answer += " at these operands";
         if (!refusal.ranks.empty()) {
-            answer += ": their ranks are " + refusal.ranks;
+            answer += " at operands of rank " + refusal.ranks;
+        } else {
+            answer += " at the operands this step has";
         }
-        answer += ", and it serves the ranks its cotangents are written for";
+        if (!refusal.expansion.empty()) {
+            answer += ", and no instance of its body applies: " + refusal.expansion;
+        } else {
+            answer += ", and it serves the ranks its cotangents are written for";
+        }
         if (refusal.node.has_value()) {
             answer += " (node " + std::to_string(*refusal.node) + ")";
         }

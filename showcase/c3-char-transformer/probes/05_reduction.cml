@@ -5,7 +5,7 @@ import { mean, ones, sum } from tensor
 import rulesets.jvp
 import { jvp } from transforms
 
-func centred_energy(x: float[..]): float {
+func centred_energy(x: float[...]): float {
     let m = mean<1, true>(x)
     let d = x - m
     return sum(d * d)

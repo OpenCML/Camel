@@ -11,16 +11,16 @@ import { exp, log, log_softmax, one_hot, reshape, softmax, sum, transpose, zeros
 import { is_inf, is_nan } from math
 import { softmax_cross_entropy } from nn
 
-func naive_softmax(x: f32[..]): f32[..] {
+func naive_softmax(x: f32[...]): f32[...] {
     let e = exp(x)
     return e / sum<-1, true>(e)
 }
 
-func naive_log_softmax(x: f32[..]): f32[..] {
+func naive_log_softmax(x: f32[...]): f32[...] {
     return log(naive_softmax(x))
 }
 
-func naive_cross_entropy(logits: f32[..], labels: int): float {
+func naive_cross_entropy(logits: f32[...], labels: int): float {
     let p = naive_softmax(logits)
     let picked = float(sum(log(p) * f32(one_hot([labels], 8))))
     return -picked

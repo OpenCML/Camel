@@ -1,16 +1,16 @@
-// A lambda writes a pack among its `with` parameters (`<..ws> (..xs) => ...`) and forwards it, and
+// A lambda writes a pack among its `with` parameters (`<...ws> (...xs) => ...`) and forwards it, and
 // the two readings that must not move are beside it (author's ruling of 2026-11-03 13:50, on the
 // pack rule of design principles 5.6).
 //
 //   named     apply((x) => x * w)              the body reads the position's name -- 2.0 * 3.0 = 6.0
 //   packed    through(scaled)<2.0>(3.0)        the lambda names the list itself and hands it on:
-//                                              `g<..ws>(x)` with `ws = (2.0)` -- also 6.0
+//                                              `g<...ws>(x)` with `ws = (2.0)` -- also 6.0
 //   square    vjp((x: float) => x * x)(3.0)    the pack is empty here (the function has no `with`
-//                                              parameters): `ws` is `()`, and `split(jvp(f))<..ws>`
+//                                              parameters): `ws` is `()`, and `split(jvp(f))<...ws>`
 //                                              spreads nothing -- value 9.0, slope 6.0
 //
-// The second line is the capability: before, `<..ws>` was
-// `SyntaxDiag::UnexpectedToken: Unexpected '..'; expected a name`. The third line is the shape
+// The second line is the capability: before, `<...ws>` was
+// `SyntaxDiag::UnexpectedToken: Unexpected '...'; expected a name`. The third line is the shape
 // `vjp` itself stands in for every function without `with` parameters, and the one an empty tuple
 // would break first.
 import { vjp } from vjp
@@ -22,7 +22,7 @@ func apply(g: <w: float> (x: float) => float): float {
 // The lambda writes the pack and the position gives it `w`; the body forwards the pack to `g`'s own,
 // so what `g` is called with is `ws` and not a name the caller of `through` chose.
 func through(g: <w: float> (x: float) => float): <w: float> (x: float) => float {
-    return <..ws> (x) => g<..ws>(x)
+    return <...ws> (x) => g<...ws>(x)
 }
 
 with <w: float>

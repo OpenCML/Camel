@@ -1245,7 +1245,7 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
             if (pins.size === 0) continue
             const needles = []
             // One level of brackets is allowed inside the list: a needle is often a fragment of a
-            // printed value, and 'f64[..]' or '[0, 3, 6, 9]' ends the match early when the list is
+            // printed value, and 'f64[...]' or '[0, 3, 6, 9]' ends the match early when the list is
             // read up to the first ']'.
             for (const m of block.matchAll(
                 /expect_(?:output|stdout|stderr)_contains\s*=\s*\[((?:[^\[\]]|\[[^\[\]]*\])*)\]/g

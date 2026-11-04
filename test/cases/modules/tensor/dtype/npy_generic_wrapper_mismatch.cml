@@ -5,7 +5,7 @@
 
 import { load_npy } from tensor
 
-func read_as::<T>(p: string): T[..] { return load_npy::<T>(p) }
+func read_as::<T>(p: string): T[...] { return load_npy::<T>(p) }
 
 func main(): int sync {
     let t = read_as::<f32>('test/cases/modules/nn/fixtures/checkpoint-v1/odd.npy')

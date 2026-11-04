@@ -19,12 +19,12 @@ func dcube(): float {
     return grad(cube)<x>()
 }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func g(): float {
     return float(sum(x * x * x))
 }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func h(): float {
     return float(sum(grad(g)<x>()))
 }

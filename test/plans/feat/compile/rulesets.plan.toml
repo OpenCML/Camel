@@ -236,7 +236,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vmap_argmax_shifts_the_axis_and_agrees_with_row_by_row_map"
-desc = "The two reductions whose result element is not their operand's, batched: `argmax_axis` and `argmin_axis` take a numeric tensor and answer `int64` positions, so their rules are the ones that show what a batching rule is generic in -- the element the operands are made of, read from an operand by the transform (`firstOperandTypeOf`), not from the node, whose type is the positions. The batch is three rows of `float[2, 3]` -- `[[1, 9, 3], [4, 5, 6]]`, `[[7, 2, 5], [0, 8, 1]]`, `[[2, 2, 1], [3, 1, 3]]` -- so down the columns the largest positions are `[1, 0, 1]`, `[0, 1, 0]`, `[1, 0, 1]`, the smallest ones kept as a row are `[[0, 1, 0]]`, `[[1, 0, 1]]`, `[[0, 1, 0]]`, and along the rows the largest positions are `[1, 2]`, `[0, 1]`, `[0, 0]` (the third row ties, and a tie keeps the earlier position). Each batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs; the elements print as integers and every `f` declares `int64[..]`, so positions are compared as positions."
+desc = "The two reductions whose result element is not their operand's, batched: `argmax_axis` and `argmin_axis` take a numeric tensor and answer `int64` positions, so their rules are the ones that show what a batching rule is generic in -- the element the operands are made of, read from an operand by the transform (`firstOperandTypeOf`), not from the node, whose type is the positions. The batch is three rows of `float[2, 3]` -- `[[1, 9, 3], [4, 5, 6]]`, `[[7, 2, 5], [0, 8, 1]]`, `[[2, 2, 1], [3, 1, 3]]` -- so down the columns the largest positions are `[1, 0, 1]`, `[0, 1, 0]`, `[1, 0, 1]`, the smallest ones kept as a row are `[[0, 1, 0]]`, `[[1, 0, 1]]`, `[[0, 1, 0]]`, and along the rows the largest positions are `[1, 2]`, `[0, 1]`, `[0, 0]` (the third row ties, and a tie keeps the earlier position). Each batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs; the elements print as integers and every `f` declares `int64[...]`, so positions are compared as positions."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_argmax.cml"
 args = ["${case}", "${backend}"]
@@ -422,7 +422,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # `where`'s first operand is a condition, not a value arm: its element is `bool` and the answer's
 # element is the arms'. The transform used to instantiate a rule on the first port, so `where` was
-# asked for a `bool` rule and refused (`No candidate of 'vmap_where' applies to (bool[?, ..], ...)`).
+# asked for a `bool` rule and refused (`No candidate of 'vmap_where' applies to (bool[?, ...], ...)`).
 # It now reads the first port that is not a condition, and the reading says which element the rule
 # was made for: `elements=float`, not `bool`. The mask and the second arm are constants of the row's
 # shape, so they are the batch of one row and broadcast -- the batch's rows are the row-wise answers.

@@ -18,7 +18,7 @@ import { now } from time
 // d = 8, s = 4, batch = 1: small enough to run a hundred steps in a second, large enough that
 // every operator of a real step is there.
 // Static shapes, because `nn:adam` asks for `grads: grad of P` and a gradient of a statically shaped
-// parameter tree is statically shaped: a `f32[..]` field here no longer unifies with it.
+// parameter tree is statically shaped: a `f32[...]` field here no longer unifies with it.
 type Block = {
     g1: f32[8],
     g2: f32[8],
@@ -33,13 +33,13 @@ type Block = {
 }
 
 // RMSNorm over the last axis, the gain applied after the normalization.
-func rmsnorm(x: f32[..], g: f32[..]): f32[..] {
+func rmsnorm(x: f32[...], g: f32[...]): f32[...] {
     let scale = mean<-1, true>(x * x)
     return x / sqrt(scale + 1e-6) * g
 }
 
 with <block: Block>
-func attention(x: f32[..]): f32[..] {
+func attention(x: f32[...]): f32[...] {
     let h = rmsnorm(x, block.g1)
     let q = h @ block.wq
     let k = h @ block.wk
@@ -51,16 +51,16 @@ func attention(x: f32[..]): f32[..] {
 }
 
 with <block: Block>
-func feed_forward(x: f32[..]): f32[..] {
+func feed_forward(x: f32[...]): f32[...] {
     let h = rmsnorm(x, block.g2)
     return relu(h @ block.w1 + block.b1) @ block.w2 + block.b2 + x
 }
 
 with <block: Block>
-func logits(x: f32[..]): f32[..] { return feed_forward<block>(attention<block>(x)) }
+func logits(x: f32[...]): f32[...] { return feed_forward<block>(attention<block>(x)) }
 
 with <block: Block>
-func loss(x: f32[..], labels: f32[..]): float {
+func loss(x: f32[...], labels: f32[...]): float {
     return softmax_cross_entropy(logits<block>(x), int(labels))
 }
 

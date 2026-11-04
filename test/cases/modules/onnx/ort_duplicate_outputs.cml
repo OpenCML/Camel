@@ -16,32 +16,32 @@
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
-type Run = { state: f32[..], steps: int }
+type Run = { state: f32[...], steps: int }
 
-func twice(h: f32[..]): (f32[..], f32[..]) {
+func twice(h: f32[...]): (f32[...], f32[...]) {
     return (tanh(h), tanh(h))
 }
 
-func repeated(h: f32[..], k: int): (Run, Run) {
+func repeated(h: f32[...], k: int): (Run, Run) {
     let r: Run = { state: tanh(h), steps: k }
     return (r, r)
 }
 
-func constants(h: f32[..]): (float, float) {
+func constants(h: f32[...]): (float, float) {
     return (1.5, 1.5)
 }
 
-func computed(h: f32[..]): (float, float) {
+func computed(h: f32[...]): (float, float) {
     let s = float(sum(h))
     return (s, s)
 }
 
 func main(): int sync {
     let ex = reshape<[2, 2]>([1.0, -2.0, 0.5, 1.5] as f32[])
-    let _ = export_model<out: 'twice.onnx'>((x: f32[..]): (f32[..], f32[..]) => twice(x), ex)
-    let _ = export_model<out: 'repeated.onnx'>((x: f32[..]): (Run, Run) => repeated(x, 2), ex)
-    let _ = export_model<out: 'constants.onnx'>((x: f32[..]): (float, float) => constants(x), ex)
-    let _ = export_model<out: 'computed.onnx'>((x: f32[..]): (float, float) => computed(x), ex)
+    let _ = export_model<out: 'twice.onnx'>((x: f32[...]): (f32[...], f32[...]) => twice(x), ex)
+    let _ = export_model<out: 'repeated.onnx'>((x: f32[...]): (Run, Run) => repeated(x, 2), ex)
+    let _ = export_model<out: 'constants.onnx'>((x: f32[...]): (float, float) => constants(x), ex)
+    let _ = export_model<out: 'computed.onnx'>((x: f32[...]): (float, float) => computed(x), ex)
     println('exported')
     return 0
 }

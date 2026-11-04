@@ -31,7 +31,7 @@
  *     and why a bare `3.0` printed on its own is the shape of criterion the ruling rejects.
  *
  * The library's `with_grad` would be the same transform written as the composition
- * `vjp((ww: float) => f<ww>(..))(w)` with the seed 1 read off the first member (design principles
+ * `vjp((ww: float) => f<ww>(...))(w)` with the seed 1 read off the first member (design principles
  * 9.9), and it is not in `stdlib/vjp.cml` today: `3a2e8fc90` deleted the export that returned
  * `vjp(f)` under a declared type of `F`, and nothing has replaced it. So both plan entries measure
  * the engine's `with_grad` only. Writing the composition makes the differentiated lambda end in a
@@ -57,8 +57,8 @@ func point_loss(y: float): float {
 }
 
 // The gradient is a tensor of the weight's shape: x.
-with <w: f64[..]>
-func dot(x: f64[..]): float {
+with <w: f64[...]>
+func dot(x: f64[...]): float {
     return float(sum(w * x))
 }
 

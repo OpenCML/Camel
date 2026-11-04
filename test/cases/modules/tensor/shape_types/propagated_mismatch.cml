@@ -1,8 +1,8 @@
 import { zeros, ones, reshape, sum, tanh, load_npy } from tensor
-func g(h: f32[2, 4]): f32[..] {
+func g(h: f32[2, 4]): f32[...] {
     return h
 }
-func f(x: f32[2, 3], w: f32[3, 5]): f32[..] {
+func f(x: f32[2, 3], w: f32[3, 5]): f32[...] {
     return g(x @ w)
 }
 func main(): int sync {

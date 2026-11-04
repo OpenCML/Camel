@@ -12,8 +12,8 @@
  * byte, exit status included.
  */
 
-func open2(v: float[2, 2]): float[..] {
-    return v as float[..]
+func open2(v: float[2, 2]): float[...] {
+    return v as float[...]
 }
 
 func main(): int sync {

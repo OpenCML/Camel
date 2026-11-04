@@ -31,9 +31,9 @@
 import { to_bytes } from tensor
 import { to_array } from bytes
 
-func narrowed(x: f32[..]): bf16[..] { return bf16(x) }
+func narrowed(x: f32[...]): bf16[...] { return bf16(x) }
 
-func halved(x: f32[..]): f16[..] { return f16(x) }
+func halved(x: f32[...]): f16[...] { return f16(x) }
 
 func main(): int sync {
     let tenth: f32[] = [0.1]

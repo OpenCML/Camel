@@ -1,6 +1,6 @@
 /**
  * The tensor laws of the standard rules: one function per law, at the values the counts and the
- * answers use. `Vec` has a known extent, so the rules (written for `f32[..]`) are exercised
+ * answers use. `Vec` has a known extent, so the rules (written for `f32[...]`) are exercised
  * through the type check: a less informed pattern type reads a more informed node type.
  */
 
@@ -34,10 +34,10 @@ func inexact_one(x: Vec): Vec { return x * 0.1 + x }
 
 /// An i64 tensor's own add: the f32 law must not read it (the operator id is shared, the element
 /// type is not).
-func i64_self(t: i64[..]): i64[..] { return t + t }
+func i64_self(t: i64[...]): i64[...] { return t + t }
 
 /// The i64 distribute law: exact, and it grows the writing, so only the saturation has it.
-func i64_distribute(a: i64[..], b: i64[..], c: i64[..]): i64[..] {
+func i64_distribute(a: i64[...], b: i64[...], c: i64[...]): i64[...] {
     return a * (b + c)
 }
 

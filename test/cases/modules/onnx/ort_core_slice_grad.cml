@@ -21,7 +21,7 @@ func loss(): f32 {
     return sum(m.w[1:3] * m.x[1:3])
 }
 
-func step(w: f32[4], x: f32[4]): (f32[..], f32[..]) {
+func step(w: f32[4], x: f32[4]): (f32[...], f32[...]) {
     let m = { w: w, x: x }
     let vg = with_grad(loss)<m>()
     return (reshape<[1]>([f32(vg.0)]), vg.1.x)
@@ -33,7 +33,7 @@ func main(): int sync {
     let r = step(w, x)
     println(r.0)
     println(r.1)
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[4], x: f32[4]): (f32[..], f32[..]) => step(w, x), (w, x))
+    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[4], x: f32[4]): (f32[...], f32[...]) => step(w, x), (w, x))
     println('exported')
     return 0
 }

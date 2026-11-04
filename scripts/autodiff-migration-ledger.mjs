@@ -31,7 +31,7 @@
 //    "where the expectation comes from", below.
 // 3. The three non-`pass` columns are counted **from the case sources and the rule files**, never
 //    from the wording of a diagnostic. `array` is a case whose source spells an array or tensor
-//    type (`[]`, `[..]`, `f32`, `f16`, `bf16`, `Model`, `Plain`); `with` is one whose source spells
+//    type (`[]`, `[...]`, `f32`, `f16`, `bf16`, `Model`, `Plain`); `with` is one whose source spells
 //    a function type carrying a `with` parameter (`<x: float> () => float`); `other` is the rest.
 //    The rule files are counted the same way and printed with `file:line` anchors beside the table.
 //
@@ -350,7 +350,7 @@ function runCase(file, test) {
 // spelled anywhere in the case; `with` is a function type carrying a `with` parameter; `other` is
 // what is left. The same two spellings are counted in the rule files, where the hits are printed with
 // `file:line` anchors so a reader can go and look.
-const ARRAY_SPELLING = /\[\]|\[\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
+const ARRAY_SPELLING = /\[\]|\[\.\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
 const WITH_SPELLING = /<[A-Za-z_]\w*\s*:\s*[^>]+>/
 
 function classifySource(source) {

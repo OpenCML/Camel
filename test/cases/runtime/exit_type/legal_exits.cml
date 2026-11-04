@@ -6,11 +6,11 @@
  *   * `void_hands_on_its_value` -- a function declared `void` hands on the value it computes and
  *     the caller reads nothing back, so the graph names an `int` exit under a `void` signature.
  *     This is the one pair the seal leaves alone, and `42` must stay a legal program.
- *   * `open_rank_from_any` -- declared `float[..]`, and the value is a `float[]`: an open rank
+ *   * `open_rank_from_any` -- declared `float[...]`, and the value is a `float[]`: an open rank
  *     takes any rank of its element type (design principles 5.4).
  *   * `any_rank_from_fixed` -- declared `float[]`, and the value is a `f32[3]`: an unknown extent
  *     takes a known one.
- *   * `rank_zero_read` -- a position read of a `float[..]` is a `float`, so this is an equal pair
+ *   * `rank_zero_read` -- a position read of a `float[...]` is a `float`, so this is an equal pair
  *     and not a narrowing.
  *   * `nullable_null` -- a declared `float?` handed the `null` literal: the builder boxes it, so
  *     the exit is a `float?`.
@@ -30,11 +30,11 @@ type Point = { x: float, y: float }
 
 func void_hands_on_its_value(): void { 42 }
 
-func open_rank_from_any(xs: float[]): float[..] { xs }
+func open_rank_from_any(xs: float[]): float[...] { xs }
 
 func any_rank_from_fixed(t: f32[3]): f32[] { t }
 
-func rank_zero_read(t: float[..]): float { t[0] }
+func rank_zero_read(t: float[...]): float { t[0] }
 
 func nullable_null(): float? { null }
 

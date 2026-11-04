@@ -5,7 +5,7 @@
 
 import { reshape, sum } from tensor
 
-func half(x: int[..]): f32[..] {
+func half(x: int[...]): f32[...] {
     return x * 0.5
 }
 

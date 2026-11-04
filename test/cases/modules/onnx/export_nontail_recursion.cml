@@ -7,11 +7,11 @@ import { export_model } from onnx
 import { get_env } from env
 
 // One if / else must decide the recursion; here the second branch also ends it.
-func pile(h: float[..]): float[..] {
+func pile(h: float[...]): float[...] {
     return if float(sum(h)) < 1.0 then h else (if sum(h * h) > 50.0 then h * 0.1 else pile(h * 0.5) + h)
 }
 
 func main(): void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0])
-    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[..]): float[..] => pile(x), x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>((x: float[...]): float[...] => pile(x), x)
 }

@@ -23,7 +23,7 @@ import rulesets.jvp
 import { jvp } from transforms
 import { reshape, sum } from tensor
 
-func loss_reshape(x: float[..]): float {
+func loss_reshape(x: float[...]): float {
     return float(sum(reshape<[2, 2]>(x) * ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])))
 }
 

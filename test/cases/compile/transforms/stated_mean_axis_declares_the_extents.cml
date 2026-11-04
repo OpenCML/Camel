@@ -8,7 +8,7 @@
 // The reading this case pins is the *type*, not the number: the operator is computed rather than
 // declared (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`), so the node's type is
 // `float` and the `return` that asks for `float` needs no conversion. While the name was declared
-// `T[..]` the node read `float[..]` and a `CAST` stood between it and the return -- which is the
+// `T[...]` the node read `float[...]` and a `CAST` stood between it and the return -- which is the
 // same conversion that made `vjp` refuse a program whose only reduction was this one.
 //
 //     camel test/cases/compile/transforms/stated_mean_axis_declares_the_extents.cml std::gir

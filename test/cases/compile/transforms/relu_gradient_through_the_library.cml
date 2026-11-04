@@ -13,12 +13,12 @@
 //
 //     REINTERP jvp function=total graph=250 ... rules=jvp_relu,jvp_sum
 //     REINTERP split function=jvp_of_total forward=269 backward=270 ... residuals=2
-//     TRANSPOSE function=split_of_jvp_of_total_backward contribution=0 node=6 type=bool[..] space=none from=7
+//     TRANSPOSE function=split_of_jvp_of_total_backward contribution=0 node=6 type=bool[...] space=none from=7
 //     TRANSPOSE function=split_of_jvp_of_total_backward graph=271 type=(float) => (float[],) nodes=10 arms=0 rhs=sum_t,mul_tensor_t
 //
 // The two `TRANSPOSE` lines are what makes the rules work, and they are the reason the forward rule
 // is written `where(x > 0, 1, 0) * dx` rather than `where(x > 0, dx, 0)`: the mask depends on `x`
-// alone, so `split` computes it in the forward half (the `contribution=0 node=6 type=bool[..]` line
+// alone, so `split` computes it in the forward half (the `contribution=0 node=6 type=bool[...]` line
 // is the comparison being carried as a value, not transposed), and the linear half is one
 // `mul_tensor` -- `rhs=sum_t,mul_tensor_t`, two primitive transposes that already existed. The
 // three-operand form puts `where` itself in the linear half, and the walk refuses any node with three
@@ -47,7 +47,7 @@
 //
 // `mul_tensor_t` names each operand's shape in its answer -- `sum_to(ct * w, x)` reads `x`, and
 // `sum_to(ct * x, w)` reads `w` -- so the answer for the tangent's cotangent reads the tangent
-// itself. A transposition is handed the cotangent and known values, `float[..]` does not state the
+// itself. A transposition is handed the cotangent and known values, `float[...]` does not state the
 // shape a carrier would need (`shapeCarrierOf` answers only for a stated shape), and `sum_to` reads
 // that operand for nothing else. The one thing missing is therefore the rule layer's:
 // `mul_tensor_t` has to state the extents the way `sum_stated_t` and `take_stated_t` do. What a rule

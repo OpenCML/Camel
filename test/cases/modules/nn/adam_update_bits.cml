@@ -14,8 +14,8 @@ import tensor
 import { adam, adam_state } from nn
 
 type Model = {
-    w: f32[..],
-    b: f32[..],
+    w: f32[...],
+    b: f32[...],
     scale: float
 }
 

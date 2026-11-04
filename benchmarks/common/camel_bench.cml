@@ -18,23 +18,23 @@ import { export_model } from onnx
 import { now } from time
 
 /// The benchmark input (CAMEL_BENCH_INPUT).
-export func bench_input(): f32[..] {
+export func bench_input(): f32[...] {
     return load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
 }
 
 /// Loads weight `name` from CAMEL_BENCH_WEIGHTS.
-export func weight(name: string): f32[..] {
+export func weight(name: string): f32[...] {
     return load_npy::<f32>((get_env('CAMEL_BENCH_WEIGHTS') ?? '') + '/' + name + '.npy')
 }
 
-func warmup(forward: (x: f32[..]) => f32[..], x: f32[..], remaining: int): int {
+func warmup(forward: (x: f32[...]) => f32[...], x: f32[...], remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let y = forward(x)
         return warmup(forward, x, remaining - 1)
     }
 }
 
-func timed(forward: (x: f32[..]) => f32[..], x: f32[..], remaining: int): int {
+func timed(forward: (x: f32[...]) => f32[...], x: f32[...], remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let start = now()
         let y = forward(x)
@@ -45,7 +45,7 @@ func timed(forward: (x: f32[..]) => f32[..], x: f32[..], remaining: int): int {
 }
 
 /// Exports `forward`, specialized to the benchmark input's dtype and shape, to `path`.
-func export_onnx(forward: (x: f32[..]) => f32[..], path: string): int sync {
+func export_onnx(forward: (x: f32[...]) => f32[...], path: string): int sync {
     let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
     let start = now()
     let _ = export_model<out: path>(forward, x)
@@ -54,7 +54,7 @@ func export_onnx(forward: (x: f32[..]) => f32[..], path: string): int sync {
 }
 
 /// Runs warmup and timed repetitions of `forward` and saves its output.
-func measure(forward: (x: f32[..]) => f32[..]): int sync {
+func measure(forward: (x: f32[...]) => f32[...]): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS') ?? ''))
     let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
     let warmStart = now()
@@ -67,14 +67,14 @@ func measure(forward: (x: f32[..]) => f32[..]): int sync {
     return status
 }
 
-func warm_steps(step: (x: f32[..]) => float, x: f32[..], remaining: int): int {
+func warm_steps(step: (x: f32[...]) => float, x: f32[...], remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let loss = step(x)
         return warm_steps(step, x, remaining - 1)
     }
 }
 
-func timed_steps(step: (x: f32[..]) => float, x: f32[..], remaining: int): int {
+func timed_steps(step: (x: f32[...]) => float, x: f32[...], remaining: int): int {
     return if remaining <= 0 then 0 else sync {
         let start = now()
         let loss = step(x)
@@ -88,7 +88,7 @@ func timed_steps(step: (x: f32[..]) => float, x: f32[..], remaining: int): int {
 /// same weights and its parameter update is discarded. Updates are NOT consumed, so an
 /// optimizing pipeline may legally remove the update and the backward pass that feeds it;
 /// the timings are not training-step timings (kept for comparison with earlier results).
-func stateless_training(step: (x: f32[..]) => float, x: f32[..]): int sync {
+func stateless_training(step: (x: f32[...]) => float, x: f32[...]): int sync {
     'CAMEL_BENCH protocol=stateless updates=not-consumed'->println
     let warmStart = now()
     let first = step(x)
@@ -144,9 +144,9 @@ export func log_final(digest: float): int sync {
 /// CAMEL_BENCH_TRAIN_PROTOCOL=stateless, `step` (which discards its update) is timed from the
 /// same weights every time.
 export func run_training(
-    step: (x: f32[..]) => float,
-    dump: (x: f32[..], dir: string) => int,
-    stateful: (x: f32[..]) => int
+    step: (x: f32[...]) => float,
+    dump: (x: f32[...], dir: string) => int,
+    stateful: (x: f32[...]) => int
 ): int sync {
     set_num_threads(int(get_env('CAMEL_BENCH_THREADS') ?? ''))
     let x = load_npy::<f32>(get_env('CAMEL_BENCH_INPUT') ?? '')
@@ -158,7 +158,7 @@ export func run_training(
 }
 
 /// Runs the benchmark protocol for `forward` and returns the process exit code.
-export func run_benchmark(forward: (x: f32[..]) => f32[..]): int {
+export func run_benchmark(forward: (x: f32[...]) => f32[...]): int {
     let exportPath = get_env('CAMEL_BENCH_EXPORT') ?? ''
     return if exportPath == '' then measure(forward) else export_onnx(forward, exportPath)
 }

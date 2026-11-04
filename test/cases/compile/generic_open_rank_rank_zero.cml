@@ -1,19 +1,19 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// `T[..]` includes rank 0, and a rank-zero array is that element (design principles 5.4): a value
+// `T[...]` includes rank 0, and a rank-zero array is that element (design principles 5.4): a value
 // of the element type is a value of the open rank -- the same value and the same printing. So a
 // generic function's open-rank parameter takes a number at the position where the number is the
 // *first* thing the element type is read from, binds `T` from it, and the call answers that value.
 //
-// The same parameter still takes the arrays it always took: `float[..]` and `float[3]` are the
+// The same parameter still takes the arrays it always took: `float[...]` and `float[3]` are the
 // other two calls, and the rank they have is what they print with.
-func ident::<T>(xs: T[..]): T[..] {
+func ident::<T>(xs: T[...]): T[...] {
     return xs
 }
 
 func main(): int sync {
-    let xs = [1.0, 2.0, 3.0] as float[..]
+    let xs = [1.0, 2.0, 3.0] as float[...]
     let fixed = [1.0, 2.0, 3.0]
     println(`ident(6.0) = ${ident(6.0):.1f}`)
     println(`ident(xs) = ${ident(xs):.1f}`)

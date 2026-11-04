@@ -6,7 +6,7 @@
  */
 
 with <axis: int, keepdims: bool = false>
-func g(xs: float[..]): int { return if keepdims then axis + 100 else axis }
+func g(xs: float[...]): int { return if keepdims then axis + 100 else axis }
 
 func g(xs: float[]): int { return 7 }
 
@@ -17,7 +17,7 @@ with <a: int>
 func h(xs: string[]): int { return a }
 
 with <axis: int, keepdims: bool = false, scale: int = 10>
-func gg::<T>(xs: T[..]): int { return if keepdims then axis * scale + 1 else axis * scale }
+func gg::<T>(xs: T[...]): int { return if keepdims then axis * scale + 1 else axis * scale }
 
 func gg::<T>(xs: T[]): int { return -1 }
 

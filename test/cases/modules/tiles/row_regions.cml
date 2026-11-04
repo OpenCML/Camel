@@ -1,20 +1,20 @@
 import { exp, sum, mean, max, sqrt, abs, reshape } from tensor
 import { next_key, seed, uniform } from random
 import { inspect, run_preferred_resident, download } from tiles
-func softmax(x: f32[..]): f32[..] {
+func softmax(x: f32[...]): f32[...] {
     let e = exp(x - max<1, true>(x))
     return e / sum<1, true>(e)
 }
-func normalize(x: f32[..], scale: f32[..], bias: f32[..]): f32[..] {
+func normalize(x: f32[...], scale: f32[...], bias: f32[...]): f32[...] {
     let centered = x - mean<1, true>(x)
     let variance = mean<1, true>(centered * centered)
     return centered / sqrt(variance + 0.00001) * scale + bias
 }
-func reused(x: f32[..]): f32[..] {
+func reused(x: f32[...]): f32[...] {
     let centered = x - mean<1, true>(x)
     return centered + centered * centered
 }
-func ordered_fallback(x: f32[..]): f32[..] {
+func ordered_fallback(x: f32[...]): f32[...] {
     return x * 0.0 + sum<1, true>(x)
 }
 func main(): int sync {

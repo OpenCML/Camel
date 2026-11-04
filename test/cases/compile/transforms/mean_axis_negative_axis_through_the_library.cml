@@ -39,7 +39,7 @@ import { vjp } from vjp
 import { mean, sum } from tensor
 
 /// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
-func f(x: float[..]): float {
+func f(x: float[...]): float {
     return sum(mean<-1, true>(x))
 }
 

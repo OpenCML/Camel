@@ -3,7 +3,7 @@
 // The open-rank twin is `exp_gradient_through_the_library.cml`, and what stops it is the product law:
 // `stdlib/rulesets/transpose.cml#mul_tensor_t` answers `sum_to(ct * w, x)`, and `sum_to`'s second
 // argument is read for its shape. `x` there is a tangent, so the walk has to answer the shape of a
-// tangent -- and `shapeCarrierOf` answers a **stated** type (`float[2]`) while `float[..]` has no
+// tangent -- and `shapeCarrierOf` answers a **stated** type (`float[2]`) while `float[...]` has no
 // extents to give (author, 2026-11-03 16:15). So the same function with `float[2]` instead of
 // `float[]` answers, and this case is that reading.
 //

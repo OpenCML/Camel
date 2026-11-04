@@ -1,5 +1,5 @@
 /**
- * `gelu`'s gradient on an `f64[..]` input, element by element, beside the value it is the
+ * `gelu`'s gradient on an `f64[...]` input, element by element, beside the value it is the
  * derivative of.
  *
  * `gelu` here is the engine's tanh approximation, not the erf form: at x = 1 the forward is
@@ -11,8 +11,8 @@
  *
  * What this case read before the operator was fixed: the kernel wrote its answer at f32 whatever
  * its input's element type was, while the operator's declared result is the arguments' own element
- * type (gradient_ops.cpp, `gradientLikeTyped`). On an `f64[..]` input the value was a 12-byte f32
- * array behind an `f64[..]` type, so each element read back was an f32 answer's bits in the low
+ * type (gradient_ops.cpp, `gradientLikeTyped`). On an `f64[...]` input the value was a 12-byte f32
+ * array behind an `f64[...]` type, so each element read back was an f32 answer's bits in the low
  * half of a double: [0.0, 1.5769529523e-314, 0.0] at x = [-1.0, 0.0, 1.0] -- zero where the answer
  * was zero and a 1e-314-scale denormal where it was not, and the middle reading moved when the
  * input moved ([-1.0, 0.0, 1.0] gave 1.5769529523e-314 and [1.0, 0.0, -1.0] gave 5.30626085e-315).
@@ -26,10 +26,10 @@
 import { gelu, sum } from tensor
 import { grad } from autodiff
 
-with <x: f64[..]>
+with <x: f64[...]>
 func loss64(): float { return float(sum(gelu(x))) }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func loss32(): float { return float(sum(gelu(x))) }
 
 func main(): int sync {

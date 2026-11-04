@@ -6885,7 +6885,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
         if (packs.size() > 1) {
             std::string declared;
             for (const std::string &name : declaredPackVars_) {
-                declared += (declared.empty() ? "" : ", ") + std::string("..") + name;
+                declared += (declared.empty() ? "" : ", ") + std::string("...") + name;
             }
             std::string wrote;
             for (const std::string &name : named) {
@@ -6894,7 +6894,7 @@ Type *Builder::visitTypeExpr(const AST::node_ptr_t &ast) {
             diags_->of(SemanticDiag::PackExpansionNeedsOnePack)
                 .at(ast->load()->tokenRange())
                 .commit(
-                    ".." + body->toString(),
+                    "..." + body->toString(),
                     "its head declares " + declared + ", and the body names " + wrote);
             throw BuildAbortException();
         }
@@ -7571,7 +7571,7 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                 // type takes a pack, and a shape argument is not a type.
                 diags_->of(SemanticDiag::InvalidTypeArgument)
                     .at(child->load()->tokenRange())
-                    .commit(base->toString(), "a shape argument has no trailing pack (`..`)");
+                    .commit(base->toString(), "a shape argument has no trailing pack (`...`)");
                 throw BuildAbortException();
             }
             std::shared_ptr<const std::vector<camel::core::type::ExtentForm>> extents =
@@ -7797,7 +7797,7 @@ Builder::visitExtents(const AST::DimGroup &group, const AST::node_ptr_t &ast) {
         } else if (dimPacks_ == nullptr || !dimPacks_->contains(group.packName)) {
             diags_->of(SemanticDiag::DimensionNameNotBound)
                 .at(ast->load()->tokenRange())
-                .commit(".." + group.packName);
+                .commit("..." + group.packName);
             return nullptr;
         }
     }

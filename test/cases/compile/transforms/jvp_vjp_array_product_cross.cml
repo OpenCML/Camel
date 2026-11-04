@@ -18,15 +18,15 @@ import { sum } from tensor
 import { jvp } from transforms
 import { vjp } from vjp
 
-func energy(xs: float[..], w: float[..]): float {
+func energy(xs: float[...], w: float[...]): float {
     return sum(xs * w)
 }
 
 func main(): int sync {
-    let xs = [1.0, 2.0, 3.0] as float[..]
-    let w = [2.0, 3.0, 4.0] as float[..]
-    let dxs = [1.0, -1.0, 2.0] as float[..]
-    let dws = [0.0, 1.0, -1.0] as float[..]
+    let xs = [1.0, 2.0, 3.0] as float[...]
+    let w = [2.0, 3.0, 4.0] as float[...]
+    let dxs = [1.0, -1.0, 2.0] as float[...]
+    let dws = [0.0, 1.0, -1.0] as float[...]
     let (value, tangent) = jvp(energy)(xs, w, dxs, dws)
     let (_, pullback) = vjp(energy)(xs, w)
     let (dx, dw) = pullback(1.0)

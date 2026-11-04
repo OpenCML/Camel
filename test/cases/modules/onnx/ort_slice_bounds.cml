@@ -8,12 +8,12 @@ import { reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func head(x: f32[..]): f32[..] {
+func head(x: f32[...]): f32[...] {
     return slice(x, 0, 0, int(sum(x)))
 }
 
 /// A branch on the data: an ONNX If, only the arm taken runs.
-func branch(x: f32[..]): f32[..] {
+func branch(x: f32[...]): f32[...] {
     return if sum(x) > 100.0 then x else head(x)
 }
 
@@ -21,9 +21,9 @@ func main(): int sync {
     let x = reshape<[3]>([1.0, 1.0, 1.0] as f32[])
     println(head(x))
     if (get_env('MODE') ?? '') == 'branch' then {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => branch(x), x)
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => branch(x), x)
     } else {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => head(x), x)
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => head(x), x)
     }
     println('exported')
     return 0

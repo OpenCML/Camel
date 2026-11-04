@@ -787,7 +787,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "reshape",
         .exports   = {"reshape"},
         .params    = {{"t", ParamKind::TensorLike}, {"shape", ParamKind::IntArray}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer          = reshapeInfer,
         .kernel         = &positionally<reshapeKernel>,
         .traits         = {},
@@ -797,7 +797,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "unsqueeze",
         .exports   = {"unsqueeze"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer          = unsqueezeInfer,
         .kernel         = &positionally<unsqueezeKernel>,
         .traits         = {},
@@ -807,7 +807,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "transpose",
         .exports   = {"transpose"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = transposeInfer,
         .kernel    = &transposeKernel,
         .traits    = {}});
@@ -815,7 +815,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "permute",
         .exports   = {"permute"},
         .params    = {{"t", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer          = permuteInfer,
         .kernel         = &positionally<permuteKernel>,
         .traits         = {},
@@ -826,7 +826,7 @@ std::vector<OpDef> layoutOps() {
         .exports = {"concat"},
         .params =
             {{"a", ParamKind::TensorLike}, {"b", ParamKind::TensorLike}, {"axis", ParamKind::Int}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer          = concatInfer,
         .kernel         = &positionally<concatKernel>,
         .traits         = {},
@@ -836,7 +836,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "take",
         .exports   = {"take"},
         .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = takeInfer,
         .kernel    = &takeKernel,
         .traits    = {}});
@@ -856,7 +856,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "take_stated",
         .exports   = {"take_stated"},
         .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
+        .resultDoc = "T[...]",
         .infer     = takeStatedInfer,
         .kernel    = &takeStatedKernel,
         .traits    = {}});
@@ -868,7 +868,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "idx_take",
         .exports   = {"__idx__"},
         .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = subscriptTakeInfer,
         .kernel    = &subscriptTakeKernel,
         .traits    = {}});
@@ -878,7 +878,7 @@ std::vector<OpDef> layoutOps() {
         .params    = {{"t", ParamKind::Tensor},
                       {"indices", ParamKind::TensorLike},
                       {"dy", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = takeGradInfer,
         .kernel    = &takeGradKernel,
         .traits    = {}});
@@ -886,7 +886,7 @@ std::vector<OpDef> layoutOps() {
         .name      = "row_add_at",
         .exports   = {},
         .params    = {{"acc", ParamKind::Tensor}, {"index", ParamKind::Int}, {"row", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = rowAddAtInfer,
         .kernel    = &rowAddAtKernel,
         .traits    = {}});
@@ -898,7 +898,7 @@ std::vector<OpDef> layoutOps() {
         // `createTensor(TypeCode::Float32, ...)`), so this is the one element type to state: the
         // family word `float[..]` would say the element type follows an argument, and this operator
         // has no such argument.
-        .resultDoc = "f32[..]",
+        .resultDoc = "f32[...]",
         .infer     = oneHotInfer,
         .kernel    = &oneHotKernel,
         .traits    = {}});
