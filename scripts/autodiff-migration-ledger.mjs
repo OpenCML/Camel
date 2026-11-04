@@ -203,11 +203,11 @@ let loaderFailure = ''
 // nested `jvp`/`vjp` can and cannot be handed, and each is written with a `with` parameter, which is
 // the class they land in. `pass` does not move: the record holds 23 and the host reads 23.
 const LEDGER_RECORDED = {
-    total: 144,
-    library: 135,
-    pass: 23,
+    total: 143,
+    library: 134,
+    pass: 22,
     with: 53,
-    array: 73,
+    array: 72,
     other: 9,
 }
 
