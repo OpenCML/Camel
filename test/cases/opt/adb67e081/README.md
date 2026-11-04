@@ -15,11 +15,17 @@ every one is the behaviour the program has without the optimization passes: exit
 (`rc05` reads `PROGEN_I0` from the environment, so the harness sets it).
 
 `rc05_seed104` passes now that a pruned branch hands its place to a node of the arm's own region
-(`pruneBranch`, `GraphDraft::armRegionOf`); its runs are in `feat/compile/fold_arms`. The other
-three still fail as recorded, with the same pipelines and the same messages, and are in no test yet:
-running them as passes would put three red cases into the gate before anything fixes them.
+(`pruneBranch`, `GraphDraft::armRegionOf`); its runs are in `feat/compile/fold_arms`. `rc03_seed30`
+and `rc04_seed72` still fail as recorded, with the same pipelines and the same messages, and their
+runs are in `feat/opt/adb67e081` as **work owed**: red on purpose, with no `known_fail` mark, so the
+plan's `fail` count is the debt and moves down only when something fixes them.
+
+`rc00_seed27` is in **no plan**, and that is a gap rather than a decision: it crashes in the
+scheduler (`std::opt std::nvm` SIGSEGV 10/10, while `std::opt` alone returns; `std::opt std::gir`
+and `std::opt std::stats` are fine), which is the execution plan's business and not a rewrite's.
+It is listed here so the next round of lane assignments sees it.
 
 `rc03` and `rc05` are the same family -- a node placed by the folding where it does not run whenever
-the statements around it run, 4.1 rule 3 -- but they are not one defect: `rc05` handed the branch's
-place into a nested region (a loop's condition), `rc03` leaves a node between the `BRCH` and its
-`JOIN` that belongs to no arm at all.
+the statements around it run -- but they are not one defect, and not one rule: `rc05` handed the
+branch's place into a nested region, and reads the value only that region computes (4.1 rule 3);
+`rc03` leaves a node between the `BRCH` and its `JOIN` that belongs to no arm at all (4.1 rule 2).
