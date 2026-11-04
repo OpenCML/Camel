@@ -1,0 +1,134 @@
+id = "opt.inline_cycle"
+order = 481
+tier = "fast"
+tags = ["feat", "opt", "inline", "defects"]
+
+# The defect `a1723fbb9` fixed, and the instance of it no plan guarded: progen seed 23 under
+# `std::opt::fold std::opt::inline`, the `fold+inline@nvm` cell of its 41-cell cross matrix -- the one
+# cell that was red before the commit and green after it. `rc04`'s wall for it was
+# `Pass 'std::opt::inline' failed with an internal error: Runtime graph 'main' breaks its edge
+# invariants: graph 'main' node 16 (11): lies on a cycle of inputs:
+# 16(11) <- 39(11) <- 340(13) <- 334(13) <- 328(13) <- 16`.
+#
+# What the commit changed is *where* the spliced body's head is written: after the statement the call
+# is written after -- with no `sync` predecessor, that is the argument the call reads -- and not after
+# that statement's own predecessor (the call's control frontier). So the place is the whole of the
+# subject, and a case that only asks "did it run" cannot tell the two places apart. `splice_place`
+# below reads the drawing and asks the two questions the place decides, naming nodes:
+#
+#   - no statement is written before one it reads (`:struct/len_arr` moved after the body's tail is
+#     exactly that), and
+#   - no node but a `BRCH` hands the chain on to two statements (the body's head written beside the
+#     argument instead of after it makes the argument's predecessor name two followers).
+#
+# Both are what the seal refuses, and the seal is what the pass hit before the commit; a drawing is
+# therefore only reachable once the place is right. Reading the drawing is the guard that survives a
+# fix which stops refusing -- a place that is wrong without a cycle seals, and only this reads it.
+#
+# The seed is the author's own program, not a reduction of it: `python test/tools/progen/progen.py
+# show --seed 23` (generator version 7) draws it today and it produces the recorded cycle word for
+# word, node numbers included, under the pre-`a1723fbb9` binary.
+
+[defaults]
+kind = "behavior"
+case = "../../../cases/opt/inline_cycle/seed23_fold_inline.cml"
+expect_exit = 0
+envs = ["PROGEN_I0=5", "PROGEN_S1=x"]
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "inline_cycle.reference"
+desc = "The program with no pass at all: the sixteen lines its reference evaluator computes. Green before and after the commit -- it is what the two runs below must reproduce."
+args = ["${case}", "${run_nvm}"]
+expect_stdout_exact = "q45 2\nq45 2\nq45 5\nq45 2\nq45 5\nL3 (2, 5) 5\nL4 xx\nL4 xx\nL4 xx\nL5 true x\nL5 true x\nq45 5\nq45 0\nL6 1.0\nL7 2\nL8 false\n"
+
+[[tests]]
+name = "inline_cycle.fold_then_inline"
+desc = "The folding followed by the inlining -- the pair the cycle was found with: the same sixteen lines. Red before `a1723fbb9`, and the reading is the cycle of inputs itself, quoted whole, so that a return of the defect names the positions and not only the exit code."
+args = ["${case}", "std::opt::fold", "std::opt::inline", "${run_nvm}"]
+expect_stdout_exact = "q45 2\nq45 2\nq45 5\nq45 2\nq45 5\nL3 (2, 5) 5\nL4 xx\nL4 xx\nL4 xx\nL5 true x\nL5 true x\nq45 5\nq45 0\nL6 1.0\nL7 2\nL8 false\n"
+verify_script = """
+({ input, assert }) => {
+    const stderr = input.normalized.stderr.trim()
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${stderr}`)
+    assert(!stderr.includes('PassInternalError'), `the pass refused the graph it built: ${stderr}`)
+    assert(!stderr.includes('lies on a cycle of inputs'), `the splice wrote a statement after one it reads: ${stderr}`)
+}
+"""
+
+[[tests]]
+name = "inline_cycle.splice_place"
+desc = "The same pair drawn with `std::gir`: the placed statements are read, not just counted. No statement is written before one it reads, and no node but a `BRCH` hands the chain on to two statements -- the argument keeps its own place and the body's head follows the argument, not the statement before it."
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::gir"]
+verify_script = """
+({ input, assert }) => {
+    const stderr = input.normalized.stderr.trim()
+    assert(input.exit_code === 0, `camel exited ${input.exit_code}: ${stderr}`)
+    assert(!stderr.includes('PassInternalError'), `the pass refused the graph it built: ${stderr}`)
+    const lines = input.normalized.stdout.split('\n')
+    const edgeRe = /^ *(N[0-9A-F]+) -> (N[0-9A-F]+) \[label="([^"]*)", type="([A-Z_]+)"\]/
+    const nodeRe = /^ *(N[0-9A-F]+) \[label="([^"]*)", type="([A-Z_]+)"/
+    const nodes = new Map()
+    const into = new Map()
+    const out = new Map()
+    let depth = 0
+    for (const line of lines) {
+        if (/^ *subgraph cluster/.test(line)) { depth += 1; continue }
+        if (/^ *} *$/.test(line)) { if (depth > 0) depth -= 1; continue }
+        const n = nodeRe.exec(line)
+        if (n) { nodes.set(n[1], { label: n[2], type: n[3] }); continue }
+        const e = edgeRe.exec(line)
+        if (!e) continue
+        if (!into.has(e[2])) into.set(e[2], [])
+        if (!out.has(e[1])) out.set(e[1], [])
+        into.get(e[2]).push(e)
+        out.get(e[1]).push(e)
+    }
+    const nm = (id) => `${id}[${nodes.has(id) ? nodes.get(id).label : '?'}]`
+    // A guard that examined nothing fails: the program's drawn graph is one statement per line of a
+    // `main` of some 300 statements, and a run that drew fewer than a hundred nodes is not a reading.
+    assert(nodes.size > 400, `the drawing holds ${nodes.size} nodes, too few to be this program`)
+    const sync = []
+    for (const [from, list] of out) {
+        for (const e of list) if (e[4] === 'SYNC') sync.push(e)
+    }
+    assert(sync.length > 40, `the drawing holds ${sync.length} chain edges, too few to be this program`)
+
+    // One statement, one follower. A `BRCH` hands the chain on to the two arms it owns and no other
+    // node has a second follower: a body's head written beside the argument instead of after it makes
+    // the argument's predecessor name two, which is the defect stated as a place.
+    const forks = []
+    for (const [from, list] of out) {
+        const chain = list.filter((e) => e[4] === 'SYNC')
+        if (chain.length > 1) forks.push([from, chain])
+    }
+    const strays = forks.filter(([from]) => (nodes.get(from) || {}).type !== 'BRCH')
+    assert(strays.length === 0, `two statements follow one that is not a branch: ` +
+        strays.map(([from, chain]) => `${nm(from)} -> ${chain.map((e) => nm(e[2])).join(' and ')}`).join('; '))
+
+    // A statement is written after what it reads, never before it. The argument the call reads that
+    // ends up after the body's tail is this relation broken, and the path is printed with it.
+    const reads = new Map()
+    const closure = (start) => {
+        if (reads.has(start)) return reads.get(start)
+        const seen = new Set()
+        const work = [start]
+        while (work.length > 0) {
+            const id = work.pop()
+            for (const e of into.get(id) || []) {
+                if (seen.has(e[1])) continue
+                seen.add(e[1])
+                work.push(e[1])
+            }
+        }
+        reads.set(start, seen)
+        return seen
+    }
+    for (const e of sync) {
+        assert(!closure(e[1]).has(e[2]),
+            `${nm(e[2])} is written after ${nm(e[1])}, which reads it: the chain orders a statement ` +
+            `before one it depends on`)
+    }
+}
+"""

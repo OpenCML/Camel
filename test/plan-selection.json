@@ -49,6 +49,11 @@
     ],
     "rules": [
         {
+            "comment": "The progen seed 23 program of the splice defect `a1723fbb9` fixed (test/cases/opt/inline_cycle): one program, one plan. It is a file rule and not a directory rule for the reason the adb67e081 rule below is one -- the directory rule for test/cases mirrors the segments below test/cases and would look for `test/plans/feat/opt/inline_cycle`, which is a plan file, so nothing would reach it. The plan is fast, so the rule carries no layer.",
+            "paths": ["test/cases/opt/inline_cycle/"],
+            "plans": ["feat/opt/inline_cycle.plan.toml"]
+        },
+        {
             "comment": "The reduced programs of the archiving result adb67e081 (test/cases/opt/adb67e081): the reductions of the finder's report, kept unedited. Two plans run them, and both are named here: `feat/opt/adb67e081` holds the programs whose defect is still open (work owed, so its `fail` count is the debt) and `feat/compile/fold_arms` holds `rc05_seed104`, the one this lane fixed. The rules come first in this list, before the general ones: the directory rule for test/cases below mirrors the segments below test/cases and would look for `test/plans/feat/opt/adb67e081`, which is a plan file, so nothing would reach it.",
             "paths": ["test/cases/opt/adb67e081/"],
             "plans": ["feat/opt/adb67e081.plan.toml", "feat/compile/fold_arms.plan.toml"]

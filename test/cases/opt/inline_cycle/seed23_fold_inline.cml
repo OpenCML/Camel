@@ -1,0 +1,182 @@
+/**
+ * progen seed 23 of `test/tools/progen`, drawn with `python test/tools/progen/progen.py show --seed 23`
+ * (generator version 7, the default feature set, size 1) and copied unedited below this header.
+ *
+ * It is the second program `a1723fbb9` fixed, and the instance of that defect no plan guarded. Under
+ * `std::opt::fold std::opt::inline` the splice wrote the body's head beside the argument the call
+ * reads instead of after it, `resolvePlaceForks` then moved the argument onto the body's tail, and the
+ * pass refused the cycle (docs/technical/17_graph_rewrite_api_contracts.md, 4.2 rule 1):
+ *
+ *   error[RuntimeDiag::PassInternalError]: Pass 'std::opt::inline' failed with an internal error:
+ *   Runtime graph 'main' breaks its edge invariants (1 violation(s)):
+ *     graph 'main' node 16 (11): lies on a cycle of inputs:
+ *     16(11) <- 39(11) <- 340(13) <- 334(13) <- 328(13) <- 16.
+ *
+ * Pipeline: std::opt::fold std::opt::inline -- the `fold+inline@nvm` cell of the 41-cell cross
+ * matrix, the one cell that was red before the fix.
+ * Environment: PROGEN_I0=5, PROGEN_S1=x
+ * Reference output: the sixteen lines the program prints with no pass at all.
+ */
+import { get_env } from env
+
+type P = { x: int, y: int }
+
+type Q = { n: int, tag: string, w: float }
+
+func operator +(a: P, b: P): P {
+    return { x: a.x + b.x, y: a.y +b.y };
+}
+
+func operator -(a: P): P {
+    return { x: -a.x, y: -a.y };
+}
+
+func operator *(k: int, a: P): P {
+    return { x: k *a.x, y: k * a.y };
+}
+
+func operator <(a: P, b: P): bool {
+    return a.x < b.x;
+}
+
+func operator [](a: P, i: int): int {
+    return if i == 0 then a.x else a.y;
+}
+
+func r1(a2: int, a3: int[], a4: bool): int[] {
+    return if a2 <= 0 then (if a4 then ['pq', 'a', 'b', ''] else ['k9'])->map<(p5: string): int => { x: a2, y: 12 }[0]> else {
+        let n6 = r1(a2-1, (a3->append<-3>)->filter<(p7: int): bool => match a4 {
+            case false => true
+            case true => a4
+        }>, a4);
+        return (if a4 then a3 else null) ?? concat(n6, a3);
+    };
+}
+
+func f8(a9: (a0: bool) => bool, a10: Q): bool {
+    let n15 = ((['cd', 'yz']->reduce<(p11: int, p12: string): int => 2 - 5, 7>) + (loop s13 = 12, c14 = 0 while ((c14 < 2) && (true && false)) do (c14, c14+ 1)).0) % 997;
+    let n16 = ('r:{}{}>'->format<'m', ''>) +('{}>{}|'->format<true, n15>);
+    return len([n16, 'x', n16]) <= (31 % 5);
+}
+
+func f17(a18: string, a19: float): int {
+    let n24 = (loop s22 = (loop s20 = 5, c21 = 0 while ((c21 < 5) && (match c21 {
+        case 2 => true
+        case 3 => true
+        case 10 => false
+        case _ => true
+    })) do (12, c21 +1)).0, c23 = 0 while ((c23 < 0) && true) do (s22, c23 + 1)).0;
+    let n27 = (loop s25 = 4 for q26 in [n24, n24, 3] do s25) <= (if false then n24 else -2);
+    return 2;
+}
+
+func w28(a29: int, var c30: string): int sync {
+    return if a29 <= 0 then if true then 7 else a29 else sync {
+        let n31 = w28(a29 - 1, c30);
+        c30 += (if false then null else 'yz') ?? c30;
+        println('L1 {} {} {}'->format<c30, n31, n31>);
+        return n31 +1;
+    };
+}
+
+func w32(a33: int, var c34: int): int sync {
+    return if a33 <= 0 then sync {
+        c34 = c34 % 1000;
+        println(a33);
+        return 12 * 1;
+    } else sync {
+        c34 /= -2;
+        return w32(a33- 1, c34);
+    };
+}
+
+func k35(a36: int): (a0: int) => int sync {
+    var v37 = f17('', 2.0);
+    return (p38: int): int => sync {
+        v37 = f17('ab', 1.5) % 1000;
+        return f17('k9', 1.5);
+    };
+}
+
+func m39(a40: bool, a41: bool): bool? {
+    return if (match a41 {
+        case true => a41
+        case false => true
+    }) then a40 else null;
+}
+
+func u42(a43: bool?, a44: bool): bool {
+    return m39(a44, a44) ?? (if a44 then null else false) ?? (12 > (-2));
+}
+
+func q45(a46: int, a47: bool): bool sync {
+    println('q45 {}'->format<a46>);
+    return a47;
+}
+
+with <k49: float>
+func w48(a50: int): int {
+    return f17(string(match a50 {
+        case -1 => 31
+        case _ => a50
+    }), (if false then 1.0 else k49) - (if false then k49 else k49));
+}
+
+with <k52: float, k53: bool>
+func w51(a54: string): string {
+    return 'yz';
+}
+
+func main(): int sync {
+    let n55 = int((get_env('PROGEN_I0') ?? ''));
+    let n56 = (get_env('PROGEN_S1') ?? '');
+    let n57 = k35(n55*(-2));
+    let o58: int? = if (if true then true else true) then if true then n55 else n55 else null;
+    let n66 = loop s60 = f17(n56, 3.0), c61 = f17(n56, 3.0) for q62 in ([true, false]->map<(p59: bool): int => n55>) do sync {
+        let n65 = ((!false) || (o58 != null)) && q45(f17('pq', 0.25), ['m', n56, n56, 'cd']->reduce<(p63: bool, p64: string): bool => 1.5 > 1.5, true>);
+        return (s60 / 1, o58 ?? c61);
+    };
+    if (loop s70 = false, c71 = (loop s67 = n55, c68 = (n56 + n56) for q69 in [n55, n55] do (10, n56)).0 for q72 in [true, false, false, false] while (match n55 {
+        case 0 => true
+        case 2 => s70
+        case _ => s70
+    }) do (q72, n55)).0 || true then sync {
+        let n73 = (((n55 % (-3)) % 100) > (1 % 10)) && q45(n66.1, if true then false else true);
+        let n74 = ((if n73 then 10 else 12) <= w48<3.0>(-7)) || q45(n66.0, u42(if true then false else null, n73));
+        null;
+    };
+    let n76 = (match n56 {
+        case 'k9' => 2 >= n55
+        case _ => {
+            let n75 = n56 + n56;
+            return true || true;
+        }
+    }) && q45(match n56 {
+        case 'ab' => 7
+        case 'b' => n55
+        case _ => n55
+    }, !false);
+    let n79 = (((if n76 then 2.5 else null) ?? (if false then null else 10.0) ?? 0.25) + (['m', 'x', 'yz']->reduce<(p77: float, p78: string): float => (if false then p77 else null) ?? p77, -0.5>)) *0.5;
+    ((if false then null else [n55]) ?? [12, n55])->foreach<(p80: int) => sync {
+        let n81 = string((-7) +p80);
+        println('L3 {} {}'->format<n66, n55>);
+    }>;
+    (if (o58 != null) && n76 then match n76 {
+        case false => [n56, n56]
+        case true => [n56, n56, n56]
+    } else ['yz']->filter<(p82: string): bool => if n76 then n76 else n76>)->foreach<(p83: string) => sync {
+        let n84 = if n55 < n55 then (if n76 then null else 'k9') ?? n56 else n56 + n56;
+        println('L4 {}'->format<n84>);
+    }>;
+    let n87 = [false && n76, 2 > n55]->reduce<(p85: int, p86: bool): int => sync {
+        println('L5 {} {}'->format<n76, n56>);
+        return ((((p85- 31) % 997)*1) % 100) % 997;
+    }, f17('', 3.0)>;
+    let n88 = f17('r:{}{} {}>'->format<n56, -1, n55>, if true then n79 else 3.0) - (len([12])*0);
+    let n89 = q45(n55, [n88, 3]->contains<n87>);
+    let n97 = (loop s90 = u42(if false then null else true, false), c91 = len('a') for q92 in [n88, n88, n88, n87] while (if true then false else true) do ([100]->reduce<(p95: bool, p96: int): bool => (-3) > (-1), n89>, [n56]->reduce<(p93: int, p94: string): int => 10, 10>)).0 & q45((-1) *0, !true);
+    println('L6 {}'->format<n79>);
+    println('L7 {}'->format<n88>);
+    println('L8 {}'->format<n97>);
+    return 0;
+}
