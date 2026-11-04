@@ -24,7 +24,7 @@ tags = ["showcase", "slow", "c3", "transformer", "vjp", "grad"]
 
 [[tests]]
 name = "probes"
-desc = "The seventeen construct probes of the C3 Transformer run through the library's own `vjp`: the control answers its gradient, and the constructs that make attention a Transformer (matrix product, softmax, reduction along an axis, reshape/transpose, a second parameter, a table row, the causal mask, a `with` parameter tree, `grad` at a model, the whole block) are refused.  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten."
+desc = "The eighteen construct probes of the C3 Transformer run through the library's own `vjp`: thirteen answer (the two controls, the table read and a row of it, the matrix product, softmax, a reduction along an axis, the second parameter, the causal mask, the forward transform at a scalar and at a call, and the three element-type probes) and five are refused (reshape/transpose, a `with` parameter tree, `grad` at a model, one whole attention head, and the f32 causal mask).  The entry fails when the count of answered and refused probes moves, because that is a wall falling or a regression, and both need the report rewritten.  The two that moved on 2026-11-04 are `04_softmax` and `09_causal_mask`: both are answered now, the rules that fell are `jvp_softmax` and `jvp_where`, and the numbers each prints are checked by hand beside the pin in `showcase/c3-char-transformer/probe.py`.  This line read 'seventeen' and listed softmax and the causal mask among the refused; it was the reading of 2026-11-02, before those forward rules landed, and a probe list that is not rewritten when a wall falls is as wrong as one that hides a regression."
 kind = "behavior"
 tool = "python"
 case = "../../../showcase/c3-char-transformer/probe.py"
@@ -53,12 +53,17 @@ timeout_ms = 120000
 # the walls fall this entry is the one that has to become a training run and a falling loss.
 [[tests]]
 name = "train.stops_at_the_wall"
-desc = "train.cml --arg mode=train: the training loop reaches the library's `vjp` at the model's parameter tree and stops where the library cannot follow it today.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`.  The words changed on develop 2026-11-03: the pin used to be `Cannot import module 'vjp'`, which was the whole module failing to compile; `stdlib/vjp.cml` was rewritten (8194d89fd, the author's ruling of 2026-11-02 11:30), now compiles, and answers scalar and two-scalar functions -- `grad` at 3 gives 6.0 and vjp of a two-parameter product gives its two cotangents -- so the refusal moved to the shape this loop actually needs, a (struct, array) parameter pair, where the library's own `(...xs)` spread reports an empty argument list at vjp.cml:73.  The wall is the same wall; only its sentence is more precise."
+desc = "train.cml --arg mode=train: the training loop loads the corpus, prints the cross-entropy of the first window and then reaches the library's `vjp` at the model's parameter tree, where it stops.  The expectation is the refusal's own words, so the entry reports the wall instead of hiding it behind `known_fail`.  The words moved twice: the pin was `Cannot import module 'vjp'` until 2026-11-03 (the whole module failing to compile), then `cannot be called with argument types` (the library's `(...xs)` spread reporting an empty argument list at vjp.cml:73), and on 2026-11-04 the walk refuses one step earlier and more generally: `transforms: jvp has no forward transform for this function`, located at `stdlib/vjp.cml:87` in the `split(jvp(f))` the library composes.  The wall is the same wall; the sentence lost the operand types it used to name, which is recorded here rather than smoothed over.  The model's own two lines are pinned as well, so a run that stopped before the model ran cannot satisfy this entry."
 kind = "behavior"
 case = "../../../showcase/c3-char-transformer/train.cml"
-args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2"]
+# `main` declares five parameters and the entry graph binds only what `--arg` names: a declared
+# default is not assumed at the entry (the runtime says so itself,
+# `RuntimeDiag::EntryArgumentMissing`: "No default is assumed").  `lr` and `seed` therefore have to
+# be given, or the run stops in the argument binder and never reaches the library at all -- which is
+# what this entry's old three-argument form measured on 2026-11-04.
+args = ["${case}", "--arg", "corpus=showcase/c3-char-transformer/corpus.txt", "--arg", "mode=train", "--arg", "steps=2", "--arg", "lr=0.002", "--arg", "seed=7"]
 expect_exit = 1
-expect_stdout_contains = ["cannot be called with argument types"]
+expect_stdout_contains = ["c3 config steps=2 mode=train lr=0.0020 seed=7", "c3 init loss=3.303745", "transforms: jvp has no forward transform for this function"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 120000
 # The parity table: the same block on both sides, five readings compared, RESULTS.md written.

@@ -58,7 +58,17 @@ EXPECTED = {
     # entry; the all-ones direction the probe seeds is therefore `4 * 3.0 = 12.0`.  This is the first
     # probe the new `jvp_sum` rule answers, which is why it moved.
     "03_matmul": "ok",
-    "04_softmax": "refused",
+    # 04 answered by 2026-11-04, and the numbers are checked here rather than taken on trust, because
+    # a probe that stopped refusing is exactly where "it runs, so it is right" costs a report.  The
+    # run printed `value = 0.649419 tangent = 0.000000` for `x = [0.5, -1.0, 2.0]` under `sum(p * p)`,
+    # `p = softmax(x)`.  By hand: `e^0.5 = 1.648721`, `e^-1 = 0.367879`, `e^2 = 7.389056`, sum
+    # `9.405657`, `p = [0.175349, 0.039119, 0.785530]`, `sum(p * p) = 0.649419`.  The tangent along the
+    # all-ones direction is `0` **exactly**: `dp_i/deps = p_i * (1 - sum(p))` and `sum(p) = 1`, so every
+    # component of the tangent is zero -- the same reading 05_reduction pins for a uniform direction.
+    # The wall fell with `jvp_softmax` in `stdlib/rulesets/jvp.cml` (`REINTERP jvp ... rules=
+    # jvp_softmax,jvp_mul_tensor,jvp_sum`), where this pin said `refused` against a run taken before
+    # that rule landed.
+    "04_softmax": "ok",
     # `sum((x - mean<1, true>(x)) ** 2)` at `x = [1, 2, 3, 4]`: the mean is 2.5, the centred row is
     # `[-1.5, -0.5, 0.5, 1.5]`, and its squares sum to `2.25 + 0.25 + 0.25 + 2.25 = 5.0`.  Along the
     # all-ones direction the centred tangent is `1 - mean(1) = 0` at every element -- centring cancels
@@ -73,7 +83,15 @@ EXPECTED = {
     # at the row the index names and zero at the row it does not.  The all-ones direction sums it to
     # `6 + 8 = 14.0`.  `tensor:take` and `tensor:multiply` both have forward rules now.
     "08_embedding": "ok",
-    "09_causal_mask": "refused",
+    # 09 answered by 2026-11-04, and the reading is `value = 90.000000 tangent = 0.000000` for
+    # `x = [[1, 2], [3, 4]]` under `sum(hidden * hidden)` with `hidden = where(keep, x, x - 10.0)` and
+    # `keep = [[true, false], [true, true]]`.  By hand: `hidden = [[1, -8], [3, 4]]`, `sum of squares =
+    # 1 + 64 + 9 + 16 = 90.0`, and along the all-ones direction `hidden` moves by `+1` in every lane
+    # (`keep` is constant and both branches carry the seed), so the tangent is `2 * sum(hidden) =
+    # 2 * (1 - 8 + 3 + 4) = 0` -- exact, not a cancellation that rounds to zero.  The previous pin said
+    # `refused`, taken when `where` had no forward rule; `jvp_where` is what fell
+    # (`rules=jvp_subtract,jvp_where,jvp_mul_tensor,jvp_sum`).
+    "09_causal_mask": "ok",
     "10_with_parameter": "refused",
     "11_grad_of_a_model": "refused",
     "12_attention_block": "refused",
