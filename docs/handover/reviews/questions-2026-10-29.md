@@ -2870,3 +2870,11 @@ P0-2 两处改写、`transpose` 递归捕获、循环倒序、M4 迁移、Transf
 **监测读的是不是我们推的那个分支**：说得对，我这边的监测犯了同一种"判据指向别的东西"的错。`pace.sh` 按提交自身的时间计数，车道攒批快进时，提交时间是在车道上写下的时间，不是到达 develop 的时间。所以 develop 明明在动，我报成了零提交；一批几百笔进来，又显得是"一小时零提交之后突然冒出来"。已改成两个数：develop 首父链上的到达数（施工在不在动），和 fsh-dev 落后 develop 的笔数（我欠几次合并）。
 
 六页挪到 `reviews/` 留档。`5f09eefcd`、`9f5631ecf`（包写 `...`，`T..` 仍是流类型）落了；`328a451f3` 把语法注释里被误改的 `..` 改回，对。
+
+## 缺陷（2026-11-04 13:40，在 v0.2.43 pin 上为 ICPC 实测时发现）
+
+ICPC 的 LLM 实验统一改用 v0.2.43（`ae874ce04`，pin 在 camel-lanes 的 `/work/pins/ae874ce04`），实验期间不换。下面三条在 develop 上修，不回补到那个 pin。
+1. **赋值右边不能直接写 `if`**：`y = if c then a else b` 报 `SyntaxDiag::UnexpectedToken: Unexpected 'if'; expected an expression`，加括号 `y = (if c then a else b)` 就正常，`return if c then a else b` 也正常。`if` 是表达式，凡是能写表达式的位置都应当能写，`return` 后面和赋值右边是同一类位置。规则统一：修语法，不加特例。
+2. **给 `let` 赋值的诊断泄露了内部实现**：`let x = 1; x = 2` 报 `ImmutablePassedToVarParam: 'x' is immutable and cannot be passed to a var parameter of '<__assn__>'`。用户写的是赋值，诊断却说成"传给一个 var 参数"，还露出了内部名 `<__assn__>`。改成一条说赋值的诊断，例如"`x` 是 `let` 绑定，不能赋值；需要改就写 `var x`"，并且不出现内部名。
+3. **`std::opt` 仍会崩溃或报内部错误**：CC 记录的 6 个最小程序（Camel-Archive `CC2027/eval/results/adb67e081/e9_reduced/`），在 v0.2.43 上还剩 4 个：`rc00_seed27`（`std::opt std::nvm`，SIGSEGV）、`rc03_seed30`（`std::opt`，分支臂不变式）、`rc04_seed72`（`std::opt::inline`，输入成环）、`rc05_seed104`（`std::opt::fold`，GATE 读臂内节点）。把这 4 个拷进 `test/cases/opt/` 作正例，期望与不经优化遍运行时的输出一致，逐个修。
+另外确认：`var` 读写顺序（经 `std::cml` 往返也对）、`var` 传给 `T?` 参数，这两项在 v0.2.43 上已经修好。
