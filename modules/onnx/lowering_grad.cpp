@@ -16,6 +16,7 @@
 #include "camel/core/type/composite/tuple.h"
 
 #include <format>
+#include <string>
 
 namespace camel::onnx {
 
@@ -40,6 +41,30 @@ std::string reduce(
         return e.node(op, {x, e.int64s(axes)}, {keep});
     }
     return e.node(op, {x}, {Attribute::makeInts("axes", std::move(axes)), keep});
+}
+
+/// `[2, 3]`: the target extents as the sentence that refuses one spells them.
+std::string fmtExtents(std::span<const int64_t> extents) {
+    std::string out = "[";
+    for (size_t i = 0; i < extents.size(); ++i) {
+        out += i == 0 ? std::to_string(extents[i]) : "," + std::to_string(extents[i]);
+    }
+    return out + "]";
+}
+
+/// `[2, ?]`: the split's shape as the sentence that refuses one spells it.
+std::string fmtShape(const std::optional<tensor::StaticShape> &shape) {
+    if (!shape) {
+        return "...";
+    }
+    std::string out = "[";
+    for (size_t i = 0; i < shape->size(); ++i) {
+        if (i != 0) {
+            out += ",";
+        }
+        out += (*shape)[i] ? std::to_string(*(*shape)[i]) : std::string("?");
+    }
+    return out + "]";
 }
 
 tensor::StaticShape staticShape(const TensorFacts &facts, std::string_view what) {
@@ -67,41 +92,149 @@ std::string shapeOperand(const LowerContext &ctx, size_t index) {
     return ctx.emitter().node("Shape", {ctx.input(index)});
 }
 
-/// `g` summed down to `like`'s shape (the reverse of broadcasting).
-std::string
-sumTo(const LowerContext &ctx, const std::string &g, const TensorFacts &gFacts, size_t likeIndex) {
-    const auto gShape    = staticShape(gFacts, ctx.uri());
-    const auto likeShape = staticShape(ctx.facts(likeIndex), ctx.uri());
-    if (likeShape.size() > gShape.size()) {
-        throw ExportError(
-            std::format("{}: the gradient has a lower rank than its target", ctx.uri()));
+/// `g` summed down to the extents `target`: a leading-axis reduction (ruling 甲), with the target
+/// given by the caller rather than read off another value.
+std::string sumTo(
+    const LowerContext &ctx,
+    const std::string &g,
+    const TensorFacts &gFacts,
+    std::span<const int64_t> target) {
+    if (!gFacts.shape) {
+        // The gradient's rank is not stated -- a mask chain of open-rank values is one such
+        // chain -- so the axes cannot be taken from its shape. The reduction is then written from
+        // the target alone, which is the one thing this operator reads: summing the leading axes
+        // of a row-major tensor is flattening the rows of `numel(target)` elements and summing
+        // the rows. That is the same reduction only when no target axis is 1 -- an extent-1 axis
+        // inside the kept part splits a row -- so a target that states one is refused by name.
+        if (std::ranges::any_of(target, [](int64_t extent) { return extent == 1; })) {
+            throw ExportError(std::format(
+                "{}: the gradient's rank is not known statically and the target has a unit axis "
+                "({}), so the axes to reduce along are not known either",
+                ctx.uri(),
+                fmtExtents(target)));
+        }
+        int64_t numel = 1;
+        for (const int64_t extent : target) {
+            numel *= extent;
+        }
+        const std::vector<int64_t> rows{-1, numel};
+        const std::string flat  = ctx.emitter().node("Reshape", {g, ctx.emitter().int64s(rows)});
+        const std::string total = reduce(ctx.emitter(), "ReduceSum", flat, {0}, true);
+        return ctx.emitter().node("Reshape", {total, ctx.emitter().int64s(target)});
     }
-    const size_t lead = gShape.size() - likeShape.size();
+    const auto gShape = staticShape(gFacts, ctx.uri());
+    if (target.size() > gShape.size()) {
+        throw ExportError(std::format(
+            "{}: the target extents have a higher rank than the gradient ({} axes against {})",
+            ctx.uri(),
+            target.size(),
+            gShape.size()));
+    }
+    const size_t lead = gShape.size() - target.size();
     std::vector<int64_t> axes;
     for (size_t i = 0; i < gShape.size(); ++i) {
         if (i < lead) {
             axes.push_back(static_cast<int64_t>(i));
             continue;
         }
-        const std::optional<int64_t> want = likeShape[i - lead], have = gShape[i];
-        if (want == 1 && have != 1) {
-            if (!have) {
-                throw ExportError(
-                    std::format("{}: cannot tell whether a dynamic axis was broadcast", ctx.uri()));
+        const int64_t want                = target[i - lead];
+        const std::optional<int64_t> have = gShape[i];
+        if (want == 1) {
+            // An axis the target keeps as one: reduce it when the gradient's extent there is not
+            // one either -- and when that extent is *not known*, reducing is right for both
+            // answers (a sum over one element is that element). Only a known extent of one says
+            // there is nothing to do.
+            if (have != 1) {
+                axes.push_back(static_cast<int64_t>(i));
             }
-            axes.push_back(static_cast<int64_t>(i));
+            continue;
+        }
+        if (have && *have != want) {
+            // A provable mismatch: the gradient keeps an extent the target does not state.
+            throw ExportError(std::format(
+                "{}: the target extents are not a suffix of the gradient's shape: position {} is {} "
+                "where the target states {}",
+                ctx.uri(),
+                i,
+                *have,
+                want));
         }
     }
     if (axes.empty()) {
         return g;
     }
     const std::string summed = reduce(ctx.emitter(), "ReduceSum", g, axes, true);
-    return ctx.emitter().node("Reshape", {summed, shapeOperand(ctx, likeIndex)});
+    return ctx.emitter().node("Reshape", {summed, ctx.emitter().int64s(target)});
+}
+
+/// How many entries the target list has, when its type states it (an `int64[n]` array; a constant
+/// list and a `tensor:shape` node of a known rank both are one). The *values* are the model's, the
+/// length is the operator's rank.
+std::optional<int64_t> targetLength(const TensorFacts &atFacts) {
+    if (!atFacts.shape || atFacts.shape->size() != 1) {
+        return std::nullopt;
+    }
+    return (*atFacts.shape)[0];
+}
+
+/// `g` summed down to a target that is a **value** of the graph: the leading axes its rank leaves
+/// are reduced (that is what 甲 says the operator does), and the reshape target is the list
+/// itself. The list's values are never read here -- they are what the model computes -- so an axis
+/// the list states 1 can only be found in the gradient, which is the same question the static path
+/// asks and the same one it leaves open when the extent is not stated.
+std::string sumToRuntime(
+    const LowerContext &ctx,
+    const std::string &g,
+    const TensorFacts &gFacts,
+    const TensorFacts &atFacts,
+    const std::string &at) {
+    const auto gRank  = gFacts.shape ? std::optional<int64_t>(gFacts.shape->size()) : std::nullopt;
+    const auto length = targetLength(atFacts);
+    if (!gRank) {
+        if (length) {
+            // The gradient's rank is not stated, and the list says how many axes it keeps: the
+            // graph resizes to the list. When the two ranks agree that is the whole reduction --
+            // and a value whose rank the graph does not state is one of the dynamic-batch models
+            // this path exists for, whose every axis the list keeps.
+            return ctx.emitter().node("Reshape", {g, at});
+        }
+        throw ExportError(std::format(
+            "{}: neither the target's length ({}) nor the gradient's rank ({}) is known, so the "
+            "axes to reduce along are not either",
+            ctx.uri(),
+            fmtShape(atFacts.shape),
+            fmtShape(gFacts.shape)));
+    }
+    if (length && *length > *gRank) {
+        throw ExportError(std::format(
+            "{}: the target extents have a higher rank than the gradient ({} axes against {})",
+            ctx.uri(),
+            *length,
+            *gRank));
+    }
+    if (!length) {
+        // The list is a value the model computes and nothing here states how many axes it keeps,
+        // so which leading axes to reduce is not known either. The graph keeps the gradient's own
+        // axes and resizes to the list: right whenever the list keeps every axis the gradient
+        // states, which is the dynamic-batch case the model exists for (`sum_to(dy, shape(y))`).
+        return ctx.emitter().node("Reshape", {g, at});
+    }
+    const size_t lead = static_cast<size_t>(*gRank) - static_cast<size_t>(*length);
+    std::vector<int64_t> axes;
+    for (size_t i = 0; i < lead; ++i) {
+        axes.push_back(static_cast<int64_t>(i));
+    }
+    const std::string summed =
+        axes.empty() ? g : reduce(ctx.emitter(), "ReduceSum", g, axes, true);
+    return ctx.emitter().node("Reshape", {summed, at});
 }
 
 Value lowerSumTo(const LowerContext &ctx) {
     const std::string g = ctx.input(0, ctx.result().dtype);
-    return ctx.result(sumTo(ctx, g, ctx.facts(0), 1));
+    if (auto target = ctx.tryConstInts(1)) {
+        return ctx.result(sumTo(ctx, g, ctx.facts(0), *target));
+    }
+    return ctx.result(sumToRuntime(ctx, g, ctx.facts(0), ctx.facts(1), ctx.input(1)));
 }
 
 Value lowerBroadcastLike(const LowerContext &ctx) {
@@ -266,8 +399,8 @@ std::string transposedProduct(
         {Attribute::makeString("equation", equation)});
 }
 
-// matmul_grad_lhs(dy, lhs, rhs) = sum_to(dy @ rhs^T, lhs);
-// matmul_grad_rhs(dy, lhs, rhs) = sum_to(lhs^T @ dy, rhs).
+// matmul_grad_lhs(dy, lhs, rhs) = sum_to(dy @ rhs^T, shape(lhs));
+// matmul_grad_rhs(dy, lhs, rhs) = sum_to(lhs^T @ dy, shape(rhs)).
 // A vector operand is what matmul takes it for: a 1-D lhs is a row (1, n), a 1-D rhs a column
 // (n, 1), and the axis added for it is missing from the product and so from dy. The operands
 // and dy get those axes back, the matrix formula applies, and the gradient of a vector operand
@@ -328,7 +461,14 @@ template <bool Lhs> Value lowerMatmulGrad(const LowerContext &ctx) {
             productShape.pop_back();
         }
     }
-    return ctx.result(sumTo(ctx, product, {dtype, productShape}, Lhs ? 1 : 2));
+    // The reduction's target is the extents of the operand this gradient belongs to, handed to
+    // `sum_to` as the list it takes (ruling 甲) rather than as the operand read for its shape.
+    const tensor::StaticShape target = staticShape(ctx.facts(Lhs ? 1 : 2), ctx.uri());
+    if (!fullyKnown(target)) {
+        throw ExportError(std::format(
+            "{}: the extents the gradient is reduced to are not known statically", ctx.uri()));
+    }
+    return ctx.result(sumTo(ctx, product, {dtype, productShape}, tensor::extentsOf(target)));
 }
 
 Value lowerCastLike(const LowerContext &ctx) {

@@ -969,14 +969,17 @@ Generator reduceAxisCases() {
 
 Generator sumToCases() {
     return [](Rng &rng) {
-        const StaticShape g = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
-        const StaticShape like = rng.chance(20) ? g : broadcastFrom(rng, g);
-        // `sum_to` (and `broadcast_like`) are ::<T>(g: T[..], like: T[..]) (gradient_ops.cpp):
-        // the two operands are one element type, and a generator that writes two is the mixed
-        // caller the rule says to fix rather than a call the operator accepts. `like`'s
-        // elements are not read, so only its element type has to agree.
-        const TypeCode t = pickDtype(rng);
-        return Case{Arg::tensor(randomData(rng, t, g)), Arg::tensor(randomData(rng, t, like))};
+        const StaticShape g  = randomShape(rng, static_cast<size_t>(rng.range(0, 4)));
+        const StaticShape at = rng.chance(20) ? g : broadcastFrom(rng, g);
+        // `sum_to` is ::<T>(t: T[..], at: int[]) (gradient_ops.cpp): the target is the extents
+        // themselves (ruling 甲), so the generator writes the list rather than a tensor read for
+        // its shape. `broadcastFrom` drops leading axes and sets axes to 1, so the list it writes
+        // is a suffix of the tensor's -- exactly what the kernel admits.
+        std::vector<int64_t> target;
+        for (const std::optional<int64_t> &extent : at) {
+            target.push_back(*extent);
+        }
+        return Case{Arg::tensor(randomData(rng, pickDtype(rng), g)), Arg::intsArg(std::move(target))};
     };
 }
 
@@ -1280,7 +1283,8 @@ void queries(std::ostream &os) {
     query(os, "matmul_batch_q9", "tensor:matmul", {T(StaticShape{std::nullopt, 3, 4}), T(StaticShape{std::nullopt, 4, 5})}, {});
     query(os, "matmul_mixed_dtypes", "tensor:matmul", {T(StaticShape{3, 4}), T(StaticShape{4, 5}, TypeCode::Int64)}, {});
     query(os, "show_transpose", "tensor:transpose", {T(StaticShape{std::nullopt, 3, 5})}, {});
-    query(os, "show_sum_to", "tensor:sum_to", {T(StaticShape{4, 2, 3}), T(StaticShape{2, 1})}, {});
+    query(os, "show_sum_to", "tensor:sum_to", {T(StaticShape{4, 2, 3}), ints},
+          {std::nullopt, Arg::intsArg({2, 1})});
     query(os, "show_max_pool2d", "nn:max_pool2d", {T(StaticShape{1, 2, 5, 5}), integer, integer, integer},
           {std::nullopt, Arg::integerArg(3), Arg::integerArg(2), Arg::integerArg(1)});
     query(os, "show_avg_pool2d_unknown_extents", "nn:avg_pool2d", {T(StaticShape{1, 2, std::nullopt, std::nullopt}), integer},

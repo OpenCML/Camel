@@ -97,6 +97,16 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # operator rows, their calls, the block payloads and the byte counts are byte-identical to the
 # previous golden. The rows went because `autodiff` stopped declaring rules, so it no longer
 # declares the two modules the rule machinery lives in.
+#
+# Re-recorded on 2026-11-05: `sum_to` takes the target's length instead of the tensor it belongs to
+# (ruling 甲), so a pullback asks the primal for its runtime shape -- one `tensor:shape` call per
+# `sum_to` -- and the report gains that call, its allocator call, and its row. That is the whole
+# diff: operator calls rise 61 -> 70, allocations 54 -> 63 (inside calls 40 -> 49), operators per
+# step 17 -> 20, allocations per step 9.0 -> 12.0, and `cpu tensor:shape 9` joins the time-sorted
+# table. Nine `sum_to`, nine `shape`: one per call, none shared, because this program runs no
+# pass that would hoist it. The values the program prints, the block payloads, the hint, the loop's
+# step numbers and every other row are the same, which is what makes the re-record safe. The nine
+# calls are the ruling's price on this path and are named as such, not as an improvement.
 
 # The measured numbers a report prints: durations, shares and byte counts. Everything else in the
 # report is a count or a name, and must not change.

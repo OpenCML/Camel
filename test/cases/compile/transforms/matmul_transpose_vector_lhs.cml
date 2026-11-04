@@ -17,15 +17,24 @@
 // sums: `matmul` contracts a row operand's extent against the matrix's first axis. The engine's own
 // pullback answers the same three numbers, and `max_abs_diff` below says so to twelve places.)
 //
-// **This entry is red on purpose, and it is the one that says what is owed.** `v` is declared
-// `float[]` -- rank one, no length -- so the shape the law reads off it (`sum_to(..., v)`'s target,
-// the answer's own shape) is written down **nowhere in the program**: the type does not state it and
-// the transposed function is handed the cotangent and no parameter (`transposeSignature`). Today the
-// step stops at `skip=cotangent-needs-a-value uri=tensor:matmul position=0`. It turns green when the
-// shape travels as a **known argument of the linear call** -- the author's 2026-11-04 12:40 ruling,
-// landed by the twin operators `mul_stated` / `matmul_stated` -- not by writing `float[2]` here.
-// The sibling `matmul_transpose_vector_lhs_stated_extent.cml` is the same arithmetic with the extent
-// stated: it is green, and it is **evidence, not the road**.
+// **This entry is the one that says where the length comes from.** `v` is declared `float[]` --
+// rank one, no length -- so the shape the law reduces to is written down nowhere in the type. It is
+// not lost: the forward rule states it. `stdlib/rulesets/jvp.cml#jvp_matmul` writes
+// `matmul_stated(da, b, shape(a), shape(b))`, where `a` and `b` are values of that half, so `shape(v)`
+// is computed where `v` is in hand and travels to the backward half as a **known argument of the
+// linear call** (the author's 2026-11-04 12:40 ruling). The reverse law
+// (`stdlib/rulesets/transpose.cml#matmul_stated_t`) then reduces with `sum_to_stated(..., sa)`, and it
+// builds the one thing the walk cannot build from a type that states no extents: the zero carrier the
+// helpers read for `v`'s rank, from `sa` itself (`zeros::<T>(sa) as A`). Until 2026-11-04 it passed
+// the operand instead, so the expansion asked the caller for a value behind it, and the step stopped at
+// `skip=parameter-shape uri=tensor:matmul_stated node=11 position=0 param=0 param-type=float[]`.
+//
+// The declared leg in `main` is the control, not the fix: `sum_of_product_declared` writes the extent
+// (`float[2]`) and the two legs' gradients are compared element by element. A law that answered the
+// open type by guessing, or by dropping the reduction, would move one of the two readings -- so the
+// pair is what says the no-length program is served by the *stated* length and not by a branch that
+// stopped reading a shape. The sibling `matmul_transpose_vector_lhs_stated_extent.cml` is the same
+// arithmetic as the declared leg on its own: green, and evidence rather than the road.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_vector_lhs.cml
 import { matmul, sum } from tensor
@@ -35,6 +44,12 @@ import { abs, max } from math
 
 /// The product under a sum, both operands ordinary parameters.
 func sum_of_product(v: float[], w: float[2, 2]): float {
+    return sum(matmul(v, w))
+}
+
+/// The same product with the extent written in the declaration: the control leg beside the `float[]`
+/// one. Its answer has to be the same three numbers, and `max_abs_diff` at the end says so.
+func sum_of_product_declared(v: float[2], w: float[2, 2]): float {
     return sum(matmul(v, w))
 }
 
@@ -75,5 +90,22 @@ func main(): int sync {
     let dw_diff = max(max(dw00, dw01), max(dw10, dw11))
     `matmul_t vector_lhs max_abs_diff_library_vs_engine v={:.12e} w={:.12e} value={:.12e}`
         ->format<max(dv0, dv1), dw_diff, dvalue>->println
+
+    // The control leg: the same two numbers, handed to a function whose declaration writes the
+    // extent. Its answer must be the same three numbers as the `float[]` leg's.
+    let (declared_value, declared_pullback) =
+        vjp(sum_of_product_declared)([1.0, 2.0] as float[2], w)
+    let (dv_declared, dw_declared) = declared_pullback(1.0)
+    `matmul_t vector_lhs declared value={} dL/dv={} dL/dw={}`
+        ->format<declared_value, dv_declared, dw_declared>->println
+    let ddv0 = abs(dv_declared[0] - dv[0])
+    let ddv1 = abs(dv_declared[1] - dv[1])
+    let ddw00 = abs(dw_declared[0][0] - dw[0][0])
+    let ddw01 = abs(dw_declared[0][1] - dw[0][1])
+    let ddw10 = abs(dw_declared[1][0] - dw[1][0])
+    let ddw11 = abs(dw_declared[1][1] - dw[1][1])
+    let ddw_diff = max(max(ddw00, ddw01), max(ddw10, ddw11))
+    `matmul_t vector_lhs max_abs_diff_declared_vs_unstated dv={:.12e} dw={:.12e} value={:.12e}`
+        ->format<max(ddv0, ddv1), ddw_diff, abs(declared_value - value)>->println
     return 0
 }

@@ -218,7 +218,7 @@ grad: (f: (x: float) => float) => (x: float) => float
 with_grad: (f: F) => <...WithOf<F>> (...ParamsOf<F>) => never when is_function::<F>()
 ```
 
-**`tensor`** — import { ... } from tensor — 81 name(s)
+**`tensor`** — import { ... } from tensor — 82 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -303,7 +303,8 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
-sum_to: (t: T[...], like: S) => S when is_float::<T>()
+sum_to: (t: T[...], at: int[]) => T[...] when is_float::<T>()
+broadcast_like: (t: T, like: S) => S
 ```
 
 **`types`** — import { ... } from types — 16 name(s)

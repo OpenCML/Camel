@@ -9,14 +9,22 @@
 //     dL/dx   = [[0.5, 0.25], [0.5, 0.25]]              (each row is `u`, once per row of `x`)
 //     dL/du   = [1 + 3, 2 + 4] = [4, 6]
 //
-// **This entry is red on purpose, and it is the one that says what is owed.** `u` is declared
-// `float[]` -- rank one, no length -- so the shape the law reads off it (`sum_to`'s target) is
-// written down nowhere in the program, and the step stops at
-// `skip=cotangent-needs-a-value uri=tensor:matmul position=1`. It turns green when the shape
-// travels as a **known argument of the linear call** (author, 2026-11-04 12:40), landed by
-// `mul_stated` / `matmul_stated` -- not by writing `float[2]` here. The sibling
-// `matmul_transpose_vector_rhs_stated_extent.cml` is the same arithmetic with the extent stated:
-// green, and evidence rather than the road.
+// **This entry is the one that says where the length comes from.** `u` is declared `float[]` --
+// rank one, no length -- so the shape the law reduces to is written down nowhere in the type, and it
+// is the forward half that states it: `stdlib/rulesets/jvp.cml#jvp_matmul` writes
+// `matmul_stated(da, b, shape(a), shape(b))`, so `shape(x)` and `shape(u)` are computed where both
+// values are in hand and travel to the backward half as **known arguments of the linear call**
+// (author, 2026-11-04 12:40). `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
+// `sum_to_stated(..., sa)` / `sum_to_stated(..., sb)`, and it builds the one thing the walk cannot
+// build from a type that states no extents: the zero carrier the helpers read for `u`'s rank, from
+// `sb` itself (`zeros::<T>(sb) as B`). Until 2026-11-04 it passed the operand instead, so the
+// expansion asked the caller for a value behind it and the step stopped at
+// `skip=parameter-shape uri=tensor:matmul_stated node=8 position=1 param=1 param-type=float[]`.
+//
+// The declared leg in `main` is the control, not the fix: `u` is the same two numbers handed to a
+// function whose declaration writes the extent, and the two legs' gradients are compared element by
+// element. The sibling `matmul_transpose_vector_rhs_stated_extent.cml` is the same arithmetic as the
+// declared leg on its own: green, and evidence rather than the road.
 //
 //     camel test/cases/compile/transforms/matmul_transpose_vector_rhs.cml
 import { matmul, sum } from tensor
@@ -26,6 +34,12 @@ import { abs, max } from math
 
 /// The product under a sum, both operands ordinary parameters.
 func sum_of_product(x: float[2, 2], u: float[]): float {
+    return sum(matmul(x, u))
+}
+
+/// The same product with the extent written in the declaration: the control leg beside the `float[]`
+/// one. Its answer has to be the same three numbers, and `max_abs_diff` at the end says so.
+func sum_of_product_declared(x: float[2, 2], u: float[2]): float {
     return sum(matmul(x, u))
 }
 
@@ -64,5 +78,21 @@ func main(): int sync {
     let dx_diff = max(max(dx00, dx01), max(dx10, dx11))
     `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`
         ->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
+
+    // The control leg: the same two numbers, handed to a function whose declaration writes the
+    // extent. Its answer must be the same three numbers as the `float[]` leg's.
+    let (declared_value, declared_pullback) =
+        vjp(sum_of_product_declared)(x, [0.5, 0.25] as float[2])
+    let (dx_declared, du_declared) = declared_pullback(1.0)
+    `matmul_t vector_rhs declared value={} dL/dx={} dL/du={}`
+        ->format<declared_value, dx_declared, du_declared>->println
+    let ddx00 = abs(dx_declared[0][0] - dx[0][0])
+    let ddx01 = abs(dx_declared[0][1] - dx[0][1])
+    let ddx10 = abs(dx_declared[1][0] - dx[1][0])
+    let ddx11 = abs(dx_declared[1][1] - dx[1][1])
+    let ddx_diff = max(max(ddx00, ddx01), max(ddx10, ddx11))
+    `matmul_t vector_rhs max_abs_diff_declared_vs_unstated du={:.12e} dx={:.12e} value={:.12e}`
+        ->format<max(abs(du_declared[0] - du[0]), abs(du_declared[1] - du[1])), ddx_diff,
+                  abs(declared_value - value)>->println
     return 0
 }

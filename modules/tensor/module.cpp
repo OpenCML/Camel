@@ -78,6 +78,7 @@ class TensorExecutor : public Executor {
 /// `T[..]` and that is the honest one. The declared result is what a program sees; the walk reads the
 /// lists and never the result's extents.
 constexpr std::string_view kDeclaredOperators[] = {
+    "broadcast_like",
     "dim",
     "pick_at",
     "gemm_backend",
