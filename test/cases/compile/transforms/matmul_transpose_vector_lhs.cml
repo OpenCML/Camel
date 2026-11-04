@@ -17,6 +17,16 @@
 // sums: `matmul` contracts a row operand's extent against the matrix's first axis. The engine's own
 // pullback answers the same three numbers, and `max_abs_diff` below says so to twelve places.)
 //
+// **This entry is red on purpose, and it is the one that says what is owed.** `v` is declared
+// `float[]` -- rank one, no length -- so the shape the law reads off it (`sum_to(..., v)`'s target,
+// the answer's own shape) is written down **nowhere in the program**: the type does not state it and
+// the transposed function is handed the cotangent and no parameter (`transposeSignature`). Today the
+// step stops at `skip=cotangent-needs-a-value uri=tensor:matmul position=0`. It turns green when the
+// shape travels as a **known argument of the linear call** -- the author's 2026-11-04 12:40 ruling,
+// landed by the twin operators `mul_stated` / `matmul_stated` -- not by writing `float[2]` here.
+// The sibling `matmul_transpose_vector_lhs_stated_extent.cml` is the same arithmetic with the extent
+// stated: it is green, and it is **evidence, not the road**.
+//
 //     camel test/cases/compile/transforms/matmul_transpose_vector_lhs.cml
 import { matmul, sum } from tensor
 import { vjp } from vjp

@@ -5,6 +5,8 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：0 页
+## 现在在等作者：1 页
 
-（目录为空：没有页在等回答。）
+| 页 | 问什么 |
+| --- | --- |
+| [`2026-11-04-which-word-does-a-declaration-that-states-no-shape-get`](2026-11-04-which-word-does-a-declaration-that-states-no-shape-get.cn.md) | 同一个原因（声明未陈述形状），该用哪个词？ |
