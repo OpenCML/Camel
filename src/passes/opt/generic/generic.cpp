@@ -519,20 +519,27 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     const auto inArm = [&](gc_node_ref_t n) {
         return std::ranges::find(armNodes, n) != armNodes.end();
     };
+    // The region of the arm itself, as against the regions nested in it. A node of a nested region --
+    // the condition or body of a loop written in the arm, the arm of a branch written in it that is
+    // still there -- runs when that region runs, not whenever the branch runs: the loop's condition
+    // runs inside the loop, and an inner arm only when that inner branch takes it. The place the
+    // branch stood in is taken by a node the whole block reaches, so only a node of the arm's own
+    // region may stand there; handing it to a node of a nested region makes the statements after the
+    // branch wait on a value that region computes, and the commit refuses that graph (17, 4.1: a node
+    // reads only nodes that run whenever it runs).
+    const uint32_t armRegion = draft.armRegionOf(brch, *arm);
+    const auto inArmRegion   = [&](gc_node_ref_t n) {
+        return armRegion != 0 && draft.alive(n) && draft.nodeRegion(n) == armRegion;
+    };
     // The statements of the taken arm are the statements of this block once the branch is gone, and a
     // block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
     // arrive as one, so the fragments the arm brings are joined before the branch's place is handed
     // over: only one of them would take the place, and the statements of the others would be reached
     // by nothing and would stop running (2).
     gc_node_ref_t armBlockNode = kInvalidNodeRef;
-    for (uint32_t r = 1; armBlockNode == kInvalidNodeRef && r < draft.regionCount(); ++r) {
-        const auto &region = draft.region(r);
-        if (region.kind != camel::runtime::GCRegionKind::Arm || region.owner != brch ||
-            region.index != *arm) {
-            continue;
-        }
+    if (armRegion != 0) {
         for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
-            if (draft.alive(n) && inArm(n) && draft.nodeRegion(n) == r) {
+            if (draft.alive(n) && draft.nodeRegion(n) == armRegion) {
                 armBlockNode = n;
                 break;
             }
@@ -563,11 +570,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     gc_node_ref_t armTail = kInvalidNodeRef;
     for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
-        if (inArm(pred)) {
+        if (inArmRegion(pred)) {
             armTail = pred;
         }
     }
-    if (armTail == kInvalidNodeRef && inArm(result) && carriesOrdering(draft, result, true)) {
+    if (armTail == kInvalidNodeRef && inArmRegion(result) && carriesOrdering(draft, result, true)) {
         // An arm written as data flow only -- its statements never chained, because what the arm
         // returns is what they compute -- has no tail of its own. What runs last in it is the value
         // it returns, when that value is code that runs and not a constant: `if i % 100 == 0 then
@@ -580,7 +587,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
-            if (!carriesOrdering(draft, n, true)) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
                 continue;
             }
             bool followed = false;
@@ -1577,4 +1584,3 @@ const camel::runtime::Program *simplifyGraph(
         maxRounds);
     return finish(program);
 }
-

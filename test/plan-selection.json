@@ -49,6 +49,11 @@
     ],
     "rules": [
         {
+            "comment": "The reduced programs of the archiving result adb67e081 (test/cases/opt/adb67e081): opt cases by provenance (they are the reductions of the finder's report, kept unedited), but the defect they exercise is the folding of a branch arm, and the plan that runs them is the fast feat/compile/fold_arms. The rules come first in this list, before the general ones: the directory rule for test/cases below mirrors the segments below test/cases, and for these cases that would look for test/plans/feat/opt/adb67e081.plan.toml, which is nothing.",
+            "paths": ["test/cases/opt/adb67e081/"],
+            "plans": ["feat/compile/fold_arms.plan.toml"]
+        },
+        {
             "comment": "The corpus sweep tool: its case is the tool itself, so a change there selects the plan that runs it (a slow plan, so an ordinary change filters it out under --tier fast).",
             "paths": ["test/tools/cml-sweep.mjs"],
             "plans": ["feat/trans/cml_sweep.plan.toml"]
