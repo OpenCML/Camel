@@ -399,9 +399,10 @@ constexpr std::string_view kShapeUri = "tensor:shape";
 /// This is the whole of the pathway the author asked for on 2026-11-03 (17:35 and 17:55): a shape
 /// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
 /// built -- instead of being read off the value of an operand the caller does not have. It is not a
-/// zero standing in for a value (that is what `transpose.cpp#shapeCarrierOf` was, and a law that
-/// multiplied by it answered zeros); it is the extents themselves, and the only thing that reads
-/// them is the shape (5.4: a shape is a fact about a type, and this is that fact written down).
+/// zero standing in for a value (that is what the walk's own zero carrier was, and a law that
+/// multiplied by it answered zeros; removed 2026-11-04); it is the extents themselves, and the only
+/// thing that reads them is the shape (5.4: a shape is a fact about a type, and this is that fact
+/// written down).
 gc_node_ref_t statedExtentsValue(
     camel::runtime::GraphDraft &draft, camel::core::type::Type *extentsType,
     const std::vector<int64_t> &extents) {
@@ -800,10 +801,12 @@ gc_node_ref_t expandRuleRightSide(
         }
         const size_t argument = static_cast<size_t>(at - rhsPorts.begin());
         // Asked before the value, not after it: a caller that has no value for this operand may still
-        // have a *shape* for it, and a caller that has a value may be holding a stand-in for it
-        // (`transpose.cpp#shapeCarrierOf`, a zero array built to be read for its shape). Answering
-        // the shape from the type is the same answer in both cases, and it is the one the author
-        // asked for: the extents the port states, written into the graph where the call stood.
+        // have a *shape* for it, and the shape is the answer whenever the operand's type states it.
+        // (A caller with no shape either has nothing to hand over -- the walk no longer builds a zero
+        // array to be read for its shape, author 2026-11-04 -- so the `valueOf` below is the only
+        // other source and the rule is refused when it answers nothing.) Answering the shape from the
+        // type is the one the author asked for: the extents the port states, written into the graph
+        // where the call stood.
         if (answerTheShapeOf(capturePorts[i], argument)) {
             continue;
         }

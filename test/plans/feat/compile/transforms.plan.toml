@@ -1365,7 +1365,7 @@ timeout_ms = 20000
 # that falls must turn its assertion into a number, and known_fail would hide that.
 [[tests]]
 name = "grad_array_no_int"
-desc = "The gradient of an array through `vjp`, on the backend whose program contains no integer: `xs[0] * xs[1]` over `[3.0, 2.0]` answers `6.0` and the array cotangent `[2.0, 3.0]`, on fvm. The transposed `index_into` member is built; what the walk still needs is the **array's value at the call site** (`TRANSPOSE-NEEDS ... param=0`, then `skip=call-value-missing ... arg=5`), which the member carries only once its closure does."
+desc = "The gradient of an array through `vjp`, on the backend whose program contains no integer: `xs[0] * xs[1]` over `[3.0, 2.0]` answers `6.0` and the array cotangent `[2.0, 3.0]`, on fvm. The transposed `index_into` member is built; what the walk still needs is the **array's value at the call site** (`skip=call-value-missing ... arg=5`), which the member carries only once its closure does."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_array_no_int.cml"
 args = ["${case}", "${backend}"]
@@ -1453,8 +1453,8 @@ timeout_ms = 15000
 # is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
-# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# it, at **the call site that needs the array's value**: the call stops because the member's closure
+# does not carry it (`skip=call-value-missing ... arg=N`). That value is what the member
 # must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
@@ -1482,8 +1482,8 @@ timeout_ms = 30000
 # is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
-# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# it, at **the call site that needs the array's value**: the call stops because the member's closure
+# does not carry it (`skip=call-value-missing ... arg=N`). That value is what the member
 # must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
@@ -1505,8 +1505,8 @@ timeout_ms = 30000
 # is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
-# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# it, at **the call site that needs the array's value**: the call stops because the member's closure
+# does not carry it (`skip=call-value-missing ... arg=N`). That value is what the member
 # must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
@@ -1528,8 +1528,8 @@ timeout_ms = 30000
 # is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
-# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# it, at **the call site that needs the array's value**: the call stops because the member's closure
+# does not carry it (`skip=call-value-missing ... arg=N`). That value is what the member
 # must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
@@ -1551,8 +1551,8 @@ timeout_ms = 30000
 # is **no longer the law**: `index_into`'s transposed member is built -- `TRANSPOSE
 # function=rulesets.jvp::index_into<float> graph=128 type=(int, float[], float) => (float[],) nodes=3
 # arms=0 rhs=idx_arr_t` -- and it answers `(float[],)`. What stops the shapes below is one step above
-# it, at **the call site that needs the array's value**: `TRANSPOSE-NEEDS function=...param=0`, then
-# `TRANSPOSE function=... skip=call-value-missing ... arg=N`. That value is what the member
+# it, at **the call site that needs the array's value**: the call stops because the member's closure
+# does not carry it (`skip=call-value-missing ... arg=N`). That value is what the member
 # must carry in its closure (author, 2026-11-03 17:10); the closure is `b2f`'s lane, and these
 # flip when it lands.
 # (Until 2026-11-03 this block said "the wall is the law `idx_arr_t`, not the shape"; the reading that
@@ -1583,7 +1583,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "grad_of_a_division"
-desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers. Today the first four numbers print and the run stops one step later, on the same wall as the array block: the backward half's body reads a value the transposed function does not carry -- `TRANSPOSE-NEEDS ... param=0`, then `skip=call-value-missing param=3 node=6 arg=3` -- so the two remaining answers wait for the closure (`b2f`)."
+desc = "`grad((x) => x / 4.0)` at 8 is `0.25`, not a crash and not a division by zero: the transposed `div_tangent` divides by `w * w`, a value rather than a constant, so `div_t`'s second position is reached and answered by the rule's second component -- which reads both operands, the way its law does -- instead of by the first component with the operands swapped (`ct / 0`, since the dividend there is `x * dw` and `dw` is the zero tangent of a constant). `grad((x) => 4.0 / x)` at 2 is `-1.0`: the differentiated value is the divisor, its cotangent is `-(ct * x / (c * c))`, and both values it needs are carried. `grad((x) => -x)` is `-1.0` -- the negation's cotangent is `-ct` -- and the multiplication and subtraction beside it keep their numbers. Today the first four numbers print and the run stops one step later, on the same wall as the array block: the backward half's body reads a value the transposed function does not carry -- `skip=call-value-missing param=3 node=6 arg=3` -- so the two remaining answers wait for the closure (`b2f`)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/grad_of_a_division.cml"
 args = ["${case}", "${backend}"]
@@ -1657,7 +1657,7 @@ timeout_ms = 20000
 # `#relu_t`'s `where(x > 0.0, ct, 0.0)`), which no shape can stand in for.
 [[tests]]
 name = "transpose_refuses_a_parameter_value_it_cannot_be_handed"
-desc = "`transpose(pick)` where `pick(x: float[3]) = x[1]`: the cotangent of `x` is a zero array of its shape with slot 1 filled, and the shape is written in the parameter's type, so the zero carrier answers it without being handed the value -- `back(1.0)` prints `([0.0, 1.0, 0.0])` and exits 0 on both back ends. The entry used to pin a refusal here. Before the zero carrier landed this program was a crash on both back ends -- a norm-arity count on nvm whose help asked for the program to be reported, an abort with exit 134 on fvm -- so the entry still asserts that neither of those sentences appears."
+desc = "`transpose(pick)` where `pick(x: float[3]) = x[1]`: the cotangent of `x` is an array of its shape with slot 1 filled, and the shape is the extents the parameter's type **states**, so `idx_arr_t` is handed them as a known operand (`extent_of`'s answer, `modules/transforms/transpose.cpp#statedExtentsNodeOf`) and builds its zeros from them -- `back(1.0)` prints `([0.0, 1.0, 0.0])` and exits 0 on both back ends, without the parameter's value ever being handed over. The entry used to pin a refusal here, and the answer used to come from a zero array standing in for the value; the carrier is gone (author, 2026-11-04) and the answer rests on `extent_of` alone. Before any of this the program was a crash on both back ends -- a norm-arity count on nvm whose help asked for the program to be reported, an abort with exit 134 on fvm -- so the entry still asserts that neither of those sentences appears."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_refuses_a_parameter_value_it_cannot_be_handed.cml"
 args = ["${case}", "${backend}"]
