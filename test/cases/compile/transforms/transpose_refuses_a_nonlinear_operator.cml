@@ -1,0 +1,30 @@
+// A bare `transpose` of a nonlinear operator is refused, and says only what it can prove.
+//
+// `abs` is not linear: its transpose does not exist as a linear map, and the family holds no law
+// for it. So this program stops at the build, and the sentence names the operator, says the family
+// has no rule for it, and points at the way a gradient is actually taken (`vjp`).
+//
+// What the sentence must NOT say is that `abs` is not linear in its first parameter: that fact
+// lives in the forward family's index, and a program that imports only `rulesets.transpose` does
+// not carry it (docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-
+// not-linear.cn.md). A wrong explanation is worse than none, because a reader acts on it.
+//
+// The right numbers for this operator are pinned where they belong -- through `vjp`, in
+// `vjp_answers_abs_log_maximum_and_minimum.cml` -- because a bare `transpose` is not the route that
+// takes a gradient of a nonlinear function, and only one of the two routes is supposed to answer.
+//
+//     camel test/cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { abs, sum } from tensor
+
+/// `x ↦ Σ|x|`: not linear, so a transpose has no linear map to build.
+func f_abs(x: float[3]): float {
+    return float(sum(abs(x)))
+}
+
+func main(): int sync {
+    let cotangent = transpose(f_abs)(1.0)
+    `abs  ct=1.0  {}`->format<cotangent>->println
+    return 0
+}

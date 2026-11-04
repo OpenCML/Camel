@@ -1831,46 +1831,16 @@ expect_output_not_contains = ["skip=condition", "skip=call-no-transpose", "calle
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
-# ---- the four `*_t` laws of the 2026-11-03 tranche, read by a bare `transpose` ----
+# ---- the four laws of the 2026-11-03 tranche, and why they are not here ----
 #
-# The 2026-11-04 ruling's second item is a rule about laws, not about numbers: a law no case reads is
-# not a law that was written, so each of `abs_t`, `log_t`, `maximum_t` and `minimum_t` needs a case
-# that can tell a right law from a wrong one. `vjp` is not that case for any of the four: `vjp` is
-# `split` + `transpose`, the forward half answers the tangent with `jvp_*`'s own mask, and the linear
-# half names other laws -- none of these four -- so a green `vjp` is not evidence about any of them.
-# The route that does read them is a **bare** `transpose`, and those are the two entries that follow.
-# Which laws each route actually names is measured in
-# `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 4.
-[[tests]]
-name = "transpose_dispatches_abs_t_and_log_t"
-desc = "**The subject of this entry is dispatch, not correctness.** A bare `transpose` reaches `abs_t` and `log_t`, and the three numbers pinned here are those laws' own bodies evaluated on a **zero carrier**, not the right answers: the right cotangent of `sum(abs(x))` at x = [1, -2, 3] is [1, -1, 1], and `log_t`'s right cotangent at x = [1, 2, 3] is [1, 0.5, 1/3]. Every printed line carries its own right answer as `right=`, so no reader has to guess, and `inf` is **not** a defect to repair: it is the carrier's zero being divided by, and repairing it means changing what a bare `transpose` owes a law (the open question is `docs/handover/questions/2026-11-04-a-bare-transpose-hands-a-law-a-zero-what-does-the-law-owe.cn.md`). What the entry is for is that the laws are **read at all**: the `rhs=` strings name `abs_t` and `log_t`, so deleting either law makes the case refuse and changing either law's arithmetic moves a pinned number (proved red-then-green; the readings are in `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 4). The third line is the one that tells the two carrier hypotheses apart: at cotangent -3.0 `abs_t` answers `-ct`, i.e. `x` read as non-negative, where a law handed the cotangent as `x` would take the other arm. **All three back ends run here**, because `inf` is the one reading whose spelling could depend on the runtime, and `backends_agree` states that they must print the same thing. The day the walk learns to carry an operand into a bare `transpose`, all three lines change to the right answers and this entry fails and names them."
-kind = "behavior"
-case = "../../../cases/compile/transforms/transpose_dispatches_abs_t_and_log_t.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm", "fvm", "jit"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_output_contains = ["abs  ct=1.0  ([1.0, 1.0, 1.0])  right=[1.0, -1.0, 1.0]", "abs  ct=-3.0 ([-3.0, -3.0, -3.0])  right=[-3.0, 3.0, -3.0]", "log  ct=1.0  ([inf, inf, inf])  right=[1.0, 0.5, 0.3333333333333333]", "rhs=dtod_t,sum_from_type_t,abs_t", "rhs=dtod_t,sum_from_type_t,log_t"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-[[tests]]
-name = "transpose_laws_of_maximum_and_minimum_are_refused"
-desc = "Both laws are **未验证 (unverified)** in this plan, and this entry exists to say exactly where they are blocked instead of covering the gap with a number. `maximum_t` and `minimum_t` are reached by a bare `transpose` -- the walk finds them -- and the law's own cotangent then refuses to instantiate, so the entry pins that refusal: the day either law instantiates, this case fails and names the number that replaced the refusal. The blocker is the law's cotangent port: it is written `ct: T[..]`, and a three-parameter instantiation binds `T` to the operand's **whole type**, so `ct` is an open-rank array *of* `float[3]` rather than `float[..]` and the `where` the law writes cannot match at any rank (three spellings of the zero arm confirm the binding from three sides; the texts are in `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 5). The rank the law *is* written for -- the scalar `where(bool, T, T)` -- is not spellable either: `tensor:maximum` has no scalar overload a program can write (`maximum(x, 1.0)` does not type-check), so there is no rank at which the mismatch would go away and **no case can tell a right `maximum_t` from a wrong one**. That is the finding, and it is different from "a case has not been written yet". The blockers, in the order a fix would meet them: `stdlib/rulesets/transpose.cml#maximum_t` and `#minimum_t` (the `ct: T[..]` port does not bind `T` to the element at a three-parameter instantiation), then the missing scalar spelling of `maximum`/`minimum`. `vjp` does answer right numbers for `max`/`min`, and it does not read these laws at all -- the laws it names are other laws -- so a green `vjp` is not evidence for either of them."
-kind = "negative"
-case = "../../../cases/compile/transforms/transpose_laws_of_maximum_and_minimum_are_refused.cml"
-args = ["${case}", "${backend}"]
-backends = ["nvm"]
-expect_exit = 0
-expect_output_contains = ["max  refused  RuntimeError", "min  refused  RuntimeError", "skip=rule-ranks uri=tensor:maximum rule=maximum_t node=2 position=0 ranks=(1, 1) operands=2", "skip=rule-ranks uri=tensor:minimum rule=minimum_t node=2 position=0 ranks=(1, 1) operands=2"]
-expect_output_not_contains = ["max  answered", "min  answered"]
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 20000
-
-# `stop_gradient` through both halves: the engine answers it with a rule that contributes nothing and
-# the library had no rule at all, which is the second gap of this lane. Two entries, engine and
-# library, because the number is the same number and the point is that the transform does not change
-# what a cut is.
+# `abs`, `log`, `maximum` and `minimum` are not linear, and `transpose` is defined for linear
+# functions: the four `_t` laws that stood here were their pullbacks written a second time, beside
+# the forward rules -- a second truth (author, 2026-11-04 06:55, `d79408e45`). They are gone, and a
+# bare `transpose` of any of the four is refused at the build with a sentence that says only what the
+# index can prove: the family holds no rule for the operator, `transpose` is for linear functions,
+# take the gradient with `vjp`. The three entries below are the pair that keeps this honest -- two
+# refusals and the `vjp` route that does answer -- plus the guard that an operator which does have a
+# law still turns.
 [[tests]]
 name = "stop_gradient_gradient_through_the_engine"
 desc = "`d(stop_gradient(x))/dx` at `x = 4` through the engine's own rules: the value passes through (`4.0`) and the gradient is the zero of its type (`0.0`). The engine's kernel is the identity slot (`modules/autodiff/operators.cpp#stopGradientKernel`) and the rule registered for the operator is `camel::core::noGradient`, which contributes nothing; the pullback then materializes the missing contribution as the zero of the value's own type (`modules/autodiff/pullback.cpp#Backward::checkGradientType`). Pinned as one reading, `value` and `gradient` together, because a cut that also changed the value would be a different operator."
@@ -2734,5 +2704,47 @@ backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["true", "[2]"]
 expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_refuses_a_nonlinear_operator"
+desc = "`abs` is not linear, so it has no transpose, and a bare `transpose` of it stops at the build. The sentence names the operator, says the family holds no rule for it, and points at the way a gradient is taken (`vjp`). It deliberately does **not** say `abs` is not linear in its parameter: that fact lives in the forward family's index, which a program importing only `rulesets.transpose` does not carry, and a wrong explanation is worse than none because a reader acts on it (`docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md`). The right numbers for `abs` are pinned where they belong, through `vjp`, in `vjp_answers_abs_log_maximum_and_minimum` -- only one of the two routes is supposed to answer, which is what makes them a pair."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["operator `tensor:abs`", "the family holds no rule for `tensor:abs`", "`transpose` is for linear functions", "take the gradient with `vjp`"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_refuses_maximum"
+desc = "The same refusal for `maximum`, and the case that `transpose_laws_of_maximum_and_minimum_are_refused` became: that entry pinned `skip=rule-ranks`, an instantiation that could never be made, waiting for a law that the author's 2026-11-04 ruling answered should not exist at all. This one pins a language rule instead of a gap -- the family holds no rule, `transpose` is for linear functions, take the gradient with `vjp` -- so the day the law is (wrongly) restored, this entry fails and names it."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_refuses_maximum.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["operator `tensor:maximum`", "the family holds no rule for `tensor:maximum`", "take the gradient with `vjp`"]
+timeout_ms = 20000
+
+[[tests]]
+name = "vjp_answers_abs_log_maximum_and_minimum"
+desc = "The route that does take these gradients, element by element: `split` cuts the forward half out and the transpose turns the **linear** half, so `vjp` answers `abs` at [1, -2, 3] as [1.0, -1.0, 1.0], `log` at [1, 2, 4] as [1.0, 0.5, 0.25], `maximum(x, [1,2,3])` at [0, 2, 4] as [0.0, 1.0, 1.0] and `minimum` there as [1.0, 1.0, 0.0]. Every number is the right one at its point, which is what the removed laws could not be asked to provide without writing the pullback a second time."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_answers_abs_log_maximum_and_minimum.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["abs vjp   = [1.0, -1.0, 1.0]", "log vjp   = [1.0, 0.5, 0.25]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_still_turns_linear_operators"
+desc = "The guard for the refusal, and the case with the longer shadow: the sentence says \"the family holds no rule for this operator\", a fact about the index -- not a verdict about linearity -- so its failure mode is a **linear** operator whose law is there being refused by mistake, which would tell a reader to use `vjp` for a function `transpose` can turn around. This walks `Σx` -- one law, `sum` -- through a bare `transpose` and pins the map's own answer, the cotangent spread to every element: [1, 1, 1]. What it measures is **\"the law is still there and still usable\", not \"the conclusion is right\"** -- the second is `abs_gradient_both_legs`'s and `vjp`'s, and the two claims must not be confused."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_still_turns_linear_operators.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["total ct=1.0 ([1.0, 1.0, 1.0])  right=[1.0, 1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

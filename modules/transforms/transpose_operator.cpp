@@ -260,9 +260,20 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 // missing-module shape reaches this branch when the step is a module operator,
                 // whose key comes from the family's index -- the shape `no-such-family` covers only
                 // an operator the family could spell without the module, like `:op/mul_d`).
-                found = "the walk found no rule key for that operator, so there was no rule to look "
-                        "up: the key is the operator's name at its operand count, the family's "
-                        "index spells no such name, and an unbuilt family spells none at all";
+                // The three facts the walk can prove, and nothing more. "The family holds no rule
+                // for this operator" is the index's own reading (`candidates.empty()`); "transpose
+                // is for linear functions" is the language rule; and `vjp` is the way to take a
+                // gradient. What is *not* said is that the operator is not linear in its k-th
+                // parameter: that would need the forward family's index, and a program that only
+                // imports `rulesets.transpose` does not carry it -- so the claim is out of reach
+                // here, and a wrong explanation is worse than none, because a reader acts on it
+                // (docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md).
+                found = refusal.uri.empty()
+                            ? "the family holds no rule for that operator; `transpose` is for linear "
+                              "functions, so take the gradient with `vjp`"
+                            : "the family holds no rule for `" + refusal.uri +
+                                  "`; `transpose` is for linear functions, so take the gradient "
+                                  "with `vjp`";
             } else {
                 found = "the walk recorded no reason for the lookup";
             }
