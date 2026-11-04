@@ -127,6 +127,15 @@ enum class TransposeRefusalCause {
     /// (`portType`, `handedType`), and its sentence says whose fault it is. No case pins it: a case
     /// cannot reach it, and a criterion nothing reaches is not a criterion.
     CotangentPortMismatch,
+    /// The function this call applies is **built by the body out of a parameter** of the function
+    /// being transposed: `f(x) = mk(x)(2.0)` with `mk(x) = (y) => x * y`, where the value the call
+    /// applies is `mk`'s answer, assembled from `x`. A bare `transpose(f)` treats every parameter of
+    /// `f` as a linear input, and this call is not one: what it applies was *made* out of a
+    /// parameter, which makes the call a second-order use of that parameter and `f` not linear in it
+    /// (author, 2026-11-04: a callee built from a linear input is a **linearity** refusal -- the
+    /// sentence names the parameter, because "the answer has no source" describes this walk and not
+    /// the language). `param` is the parameter's index, so the sentence can name it.
+    CalleeBuiltFromAParameter,
 };
 
 /// The word the reading log spells `cause` as, or `nullptr` for `None`. The log's spelling and the

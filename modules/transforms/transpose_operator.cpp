@@ -202,6 +202,16 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                refusal.portType + "` and this step has a `" + refusal.handedType +
                "`; a law's port disagreeing with the value the walk hands it is a compiler defect and "
                "not the program's fault";
+    case TransposeRefusalCause::CalleeBuiltFromAParameter:
+        // **The language's rule, and the parameter it is about** (author, 2026-11-04). `transpose`
+        // answers the map a linear function is; a call whose callee the body *built* out of a
+        // parameter applies a function that parameter produced, so the function being transposed is
+        // not linear in that parameter. The sentence names the parameter because that is the edit a
+        // reader makes, and it says "not linear" and not "the answer has no source": the second
+        // describes this walk, the first describes the language.
+        return "this function is not linear in " +
+               (refusal.paramName.empty() ? position : "the parameter '" + refusal.paramName + "'") +
+               ": it builds the function this call applies out of that parameter";
     case TransposeRefusalCause::CallNoTranspose:
         // One of the two causes a call site can meet, and the one this file said for both of them
         // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee
