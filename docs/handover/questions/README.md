@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：52 页
+## 现在在等作者：53 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -57,6 +57,7 @@
 | [`2026-11-04-who-carries-the-shape-as-an-operand`](2026-11-04-who-carries-the-shape-as-an-operand.cn.md) | 形状要当操作数交下来：`mul_stated` 与 `matmul_stated` |
 | [`2026-11-04-who-gives-a-shapeless-cotangent-its-rank`](2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md) | 余切没有形状时，谁给它那个秩：`numel(ct)` 与 `mean_axis_stated_t` 的端口 |
 | [`2026-11-04-who-reads-the-first-operand-as-a-callee`](2026-11-04-who-reads-the-first-operand-as-a-callee.cn.md) | 被调值站在“第一个操作数”位置：该删掉那条读法，还是教调用转置把它写对？ |
+| [`2026-11-04-who-records-which-closure-member-is-which-parameter`](2026-11-04-who-records-which-closure-member-is-which-parameter.cn.md) | 闭包成员与参数的对应，由谁记录、经哪条通道 |
 | [`2026-11-04-who-states-the-extents-a-product-law-reads`](2026-11-04-who-states-the-extents-a-product-law-reads.cn.md) | 乘积律读的那个形状，该由谁写出来？ |
 | [`2026-11-04-who-states-the-extents-of-a-stated-reduction`](2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md) | 一个 stated 归约的 extents，由谁在编译期说出来 |
 | [`2026-11-04-who-states-the-length-when-the-shape-is-open`](2026-11-04-who-states-the-length-when-the-shape-is-open.cn.md) | 形状开放时，长度由谁陈述？ |
