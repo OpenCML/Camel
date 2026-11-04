@@ -1019,6 +1019,16 @@ Available helpers:
 - `assert(condition, message?)`
 - `fail(message?)`
 - `approx(actual, expected, tolerance?)`
+- `ulp(actual, expected, bound?, bits?)` — the assertion a transcendental result is allowed to carry.
+  Design principles 7.1 promises `exp`, `log` and the rest an error of at most a written number of
+  ulps, "not the same bits on every device", so a case that pins such a number bit for bit asserts
+  something the language never promised, and a platform-limited `known_fail` around it hides the
+  real errors that come later. `ulp` answers whether `actual` is within `bound` (default 2) units in
+  the last place of the **declared** value `expected` — the declared value's grid, not the
+  measured one's, so a wrong answer cannot move its own tolerance — at `bits` of precision (default
+  53, the `float`/f64 width; `24` for an `f32` answer). A declared zero, a NaN and an infinity are
+  compared exactly, because 7.1 promises those exactly. `ulpDistance(actual, expected, bits?)`
+  answers the distance itself, for the message a failing assertion should carry.
 - `match(pattern, text?)`
 
 Important payload fields:

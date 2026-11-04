@@ -1475,13 +1475,55 @@ const fail = (message = 'verification failed') => {
 }
 const approx = (actual, expected, tolerance = 1e-9) =>
     Math.abs(Number(actual) - Number(expected)) <= tolerance
+// ---- the declared error bound, in ulps ----
+//
+// A transcendental function is not promised to answer the same bits on every device: design
+// principles 7.1 promises a written error bound instead, in ulps, declared one function at a time
+// (\`stdlib/math.cml\`: "an error of at most 2 ulp ... not the same bits on every device"). An
+// assertion on such a number therefore has to be an assertion about that bound -- a bit comparison
+// asserts something the language never promised, and registering it as a known failure would hide
+// the real errors that come later.
+//
+// The unit is the last place of the **declared** value, not of the measured one: a 2-ulp promise is
+// about the result's own grid, and reading it off the measurement would let a wrong answer move its
+// own tolerance. \`bits\` is the precision the answer is declared at -- 53 for a \`float\` (f64), 24
+// for an f32 -- because the promise is "of the type's own precision".
+const ulpStep = (value, bits = 53) => {
+    const magnitude = Math.abs(Number(value))
+    if (!Number.isFinite(magnitude) || magnitude === 0) {
+        // Not reached for a zero declared value: \`ulp\` compares that exactly, because 7.1 promises
+        // zeros (and their signs) exactly. The grid at zero is the subnormal one, whose step is the
+        // smallest representable value at this precision.
+        return bits >= 53 ? Number.MIN_VALUE : Math.pow(2, -149 + (53 - bits))
+    }
+    const exponent = Math.floor(Math.log2(magnitude))
+    return Math.pow(2, exponent - (bits - 1))
+}
+const ulpDistance = (actual, expected, bits = 53) => {
+    const a = Number(actual)
+    const e = Number(expected)
+    if (Number.isNaN(a) || Number.isNaN(e)) return Number.NaN
+    if (a === e) return 0
+    if (!Number.isFinite(a) || !Number.isFinite(e)) return Number.POSITIVE_INFINITY
+    return Math.abs(a - e) / ulpStep(e, bits)
+}
+// \`ulp(measured, declared, bound)\`: true when the two are within \`bound\` units in the last place of
+// the declared value. Exact special values (NaN, +-inf, +-0) are compared bit for bit, because 7.1
+// promises those exactly.
+const ulp = (actual, expected, bound = 2, bits = 53) => {
+    const a = Number(actual)
+    const e = Number(expected)
+    if (Number.isNaN(e)) return Number.isNaN(a)
+    if (!Number.isFinite(e) || e === 0) return Object.is(a, e)
+    return ulpDistance(a, e, bits) <= bound
+}
 const match = (pattern, text = input.normalized.output) => {
     const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern)
     const found = regex.exec(text)
     if (!found) throw new Error(\`pattern not found: \${regex}\`)
     return found
 }
-const helpers = { input, assert, fail, approx, match }
+const helpers = { input, assert, fail, approx, match, ulp, ulpDistance }
 const inlineSource = ${encodedSource}
 
 try {

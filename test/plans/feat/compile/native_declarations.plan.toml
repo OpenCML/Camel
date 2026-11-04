@@ -1078,12 +1078,23 @@ expect_output_contains = ["This value has type 'float', which is not the declare
 
 [[tests]]
 name = "native.sim_declaration_import"
-desc = "`sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an `int`, `asian_call_price` takes three and answers a `float`, and both calls reach the C++ kernels with the fixed seeds of `modules/std/sim/basic.cml`."
+desc = "`sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an `int`, `asian_call_price` takes three and answers a `float`, and both calls reach the C++ kernels with the fixed seeds of `sim`'s own module. Two numbers, two kinds of promise (design principles 7.1): the hit count is an integer the seeded generator decides, and integers are promised bit-identical across devices, so it is pinned exactly; the price is a `float` built out of 128 chained `exp` calls per path, and a transcendental is promised a written error bound in ulps, not the same bits on every device -- nor on every unit of one device, since the default mode may contract to a fused multiply-add (7.2). So the price is pinned within a bound derived from that composition rather than bit for bit: 2 ulp for each of the 128 `exp`s a path chains (a product of 128 such factors carries at most their sum, first order), plus 2 for the discounting `exp` at the end -- 258, rounded up to 300 for the drift's own rounding under `contract`. A tighter bound would be asserting a promise the language does not make; a `known_fail` would be worse, because the same mark would hide the errors that come later."
 kind = "behavior"
 case = "../../../cases/compile/native/sim_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "7863\n5.894325529519635\n"
+verify_script = """
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.length === 2, `expected two lines (the hit count and the price), got ${lines.length}`)
+assert(lines[0] === '7863', `the seeded hit count is an integer the generator decides and 7.1 promises integers bit-identical: ${lines[0]}`)
+const price = Number(lines[1])
+assert(Number.isFinite(price), `the price is not a finite number: ${lines[1]}`)
+const declared = 5.894325529519635
+assert(
+    ulp(price, declared, 300),
+    `the price is ${ulpDistance(price, declared).toExponential(3)} ulp from the declared value ${declared} (bound 300, derived in this entry's desc): ${lines[1]}`
+)
+"""
 
 [[tests]]
 name = "native.sim_wrong_arity"
