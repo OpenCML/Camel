@@ -24,10 +24,10 @@
 
 import { load_npy, mean, relu, reshape, sum, tanh } from tensor
 
-func mc_main(w1: f32[..], b2: f32[..], x3: f32[..]): f32[..] {
+func mc_main(w1: f32[...], b2: f32[...], x3: f32[...]): f32[...] {
     let t5 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
     let t14 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
-    let y20 = loop v12 = t14 as f32[..] for i13 in 0..4 do {
+    let y20 = loop v12 = t14 as f32[...] for i13 in 0..4 do {
         let t15 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
         let t17 = reshape<[2, 2]>([f32(0.5), f32(0.5), f32(0.5), f32(0.5)])
         let t18 = t15 + t17

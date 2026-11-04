@@ -9,7 +9,7 @@
 import { zeros, ones } from tensor
 import { get_env } from env
 
-func pick(flag: bool): f32[..] {
+func pick(flag: bool): f32[...] {
     return if flag then zeros::<f32>([2, 3]) else ones::<f32>([3, 2])
 }
 

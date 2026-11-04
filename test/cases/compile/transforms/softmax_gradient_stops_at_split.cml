@@ -30,7 +30,7 @@ import { vjp } from vjp
 import { softmax, sum } from tensor
 
 /// The same function as the engine case, with the differentiated value as an ordinary parameter.
-func total(x: float[..]): float {
+func total(x: float[...]): float {
     return sum(softmax<1>(x) * [[1.0, 2.0, 4.0, 8.0], [1.0, -1.0, 0.0, 2.0]] as float[2, 4])
 }
 

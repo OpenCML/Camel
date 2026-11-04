@@ -17,21 +17,21 @@ import { adam, adam_state } from nn
 import { with_grad } from autodiff
 
 type Model = {
-    emb: float[..],
-    f1: float[..],
-    b1: float[..],
-    f2: float[..],
-    b2: float[..],
-    wq1: float[..],
-    wk1: float[..],
-    wv1: float[..]
+    emb: float[...],
+    f1: float[...],
+    b1: float[...],
+    f2: float[...],
+    b2: float[...],
+    wq1: float[...],
+    wk1: float[...],
+    wv1: float[...]
 }
 
-func mask(): float[..] {
+func mask(): float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
-func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
     let q = x @ wq
     let k = transpose(x @ wk)
     let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
@@ -39,7 +39,7 @@ func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float
 }
 
 with <m: Model>
-func block(tokens: int[..]): float {
+func block(tokens: int[...]): float {
     let x = take(m.emb, tokens)
     let r = x + attention(x, m.wq1, m.wk1, m.wv1)
     let hidden = relu(r @ m.f1 + m.b1)

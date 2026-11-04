@@ -5,7 +5,7 @@
  * element type from the context it is written in -- which is what keeps `x * 0.5` with an f32 `x` a
  * single-width call, and is the caller's rule and not an allowance of the operator.
  *
- * The same holds for a value whose extents no fact pins down: `x: f64[..]` beside a tensor of
+ * The same holds for a value whose extents no fact pins down: `x: f64[...]` beside a tensor of
  * another width is refused for its element type, whatever is known of the shape.
  */
 

@@ -938,24 +938,30 @@ void ParserImpl::parseTagRef() {
     close(m, NK::TagRef);
 }
 
-/// whenClause : 'when' ('..' dataExpr | logicalOrExpr)
+/// whenClause : 'when' ('...' dataExpr | logicalOrExpr)
 /// The IDENTIFIER is the name `when`, read here only: a declaration's applicability condition,
 /// after its signature (design principles 4.4). It is evaluated when the declaration is
 /// instantiated, not when it is parsed, and a false condition makes the declaration
 /// inapplicable rather than erroneous. It follows the return type and the resource clause and
 /// precedes the body, so a body-less native declaration may carry one too.
-/// A condition written `..pred::<A>()` holds for every member of the pack its body names (design
-/// principles 5.6): the `..` is read here and kept as the rest-value marker the grammar already
-/// has for `..e`, so the tree holds what was written and the reader of the condition decides
+/// A condition written `...pred::<A>()` holds for every member of the pack its body names (design
+/// principles 5.6): the `...` is read here and kept as the rest-value marker the grammar already
+/// has for `...e`, so the tree holds what was written and the reader of the condition decides
 /// what the marker means in that place.
 /// The `funcDecl` production above gains this clause between `resourceClause` and `stmtBlock`;
 /// see the comment there.
 void ParserImpl::parseWhenClause() {
     const size_t m = mark();
     bump(); // `when`
-    if (cur_ == TK::DotDot) {
+    if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
+        // A pack predicate is written `...` (design principles 5.6); `...` is an interval, a
+        // composition or a stream type. The `...` is reported here, naming the spelling, and then
+        // read on as the pack it was meant to be, so one mistake is one sentence.
+        if (cur_ == TK::DotDot) {
+            unexpected({e(TK::Ellipsis)});
+        }
         const size_t cm = mark();
-        bump(); // `..`
+        bump();
         if (!panic_) {
             parseExpr();
         }
@@ -1012,7 +1018,7 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
     close(m, NK::FuncDecl);
 }
 
-/// typeParams : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
+/// typeParams : '::' '<' ('...'? identDef) (',' '...'? identDef)* ','? '>'
 ///
 /// The type parameters of a generic declaration, written at its head right after the name
 /// (design principles 5.5): `func first::<T>(xs: T[]): T`. The spelling is the one a call site
@@ -1020,8 +1026,8 @@ void ParserImpl::parseFuncDeclRest(size_t m) {
 /// visible in its head; without `::<...>` it is not generic. `rule` and `fact` declare theirs the
 /// same way. A dimension name still binds where a shape first writes it (5.4) and may be listed
 /// here too, which is why the list can name one.
-/// A parameter written with `..` is a pack and not one type (`func zip::<..A>`, design principles
-/// 5.6): a call binds it to one type per member. The `..` is not a token of the parameter's own
+/// A parameter written with `...` is a pack and not one type (`func zip::<...A>`, design principles
+/// 5.6): a call binds it to one type per member. The `...` is not a token of the parameter's own
 /// node, so the name node carries kPackName instead.
 void ParserImpl::parseTypeParams() {
     const size_t m = mark();
@@ -1033,9 +1039,14 @@ void ParserImpl::parseTypeParams() {
     bump(); // `<`
     {
         Scope scope(*this, false);
-        // `::<` at the end of the text: the name is reported, not read.
-        bool pack = cur_ == TK::DotDot;
+        // `::<` at the end of the text: the name is reported, not read. A pack is written `...`
+        // (design principles 5.6) and a `...` here is reported as that spelling, then read on as
+        // the pack it was meant to be.
+        bool pack = cur_ == TK::DotDot || cur_ == TK::Ellipsis;
         if (pack) {
+            if (cur_ == TK::DotDot) {
+                unexpected({e(TK::Ellipsis)});
+            }
             bump();
         }
         {
@@ -1046,9 +1057,12 @@ void ParserImpl::parseTypeParams() {
             }
         }
         while (!panic_ && eat(TK::Comma) &&
-               (cur_ == TK::Identifier || cur_ == TK::DotDot)) {
-            const bool packAgain = cur_ == TK::DotDot;
+               (cur_ == TK::Identifier || cur_ == TK::DotDot || cur_ == TK::Ellipsis)) {
+            const bool packAgain = cur_ == TK::DotDot || cur_ == TK::Ellipsis;
             if (packAgain) {
+                if (cur_ == TK::DotDot) {
+                    unexpected({e(TK::Ellipsis)});
+                }
                 bump();
             }
             const size_t nm = mark();
@@ -1064,7 +1078,7 @@ void ParserImpl::parseTypeParams() {
     close(m, NK::TypeParams);
 }
 
-/// Marks the IdentDef just closed as one written with `..`: the type parameter is a pack. `mark`
+/// Marks the IdentDef just closed as one written with `...`: the type parameter is a pack. `mark`
 /// is what mark() was before the name was read, so a name the parser could not read (and did not
 /// close) leaves nothing marked.
 void ParserImpl::markNameAsPack(size_t mark) {
@@ -1366,8 +1380,8 @@ void ParserImpl::parseBracketedIdents(TK closer, NK kind, bool wildcards) {
 }
 
 /// keyParamPair : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
-///              | '..' identDef (':' typeExpr)?
-///              | '..' typeExpr
+///              | '...' identDef (':' typeExpr)?
+///              | '...' typeExpr
 ///              | 'constas' identDef (':' typeExpr)?
 /// A rest parameter is written untyped and last in a function declaration's parameter list
 /// (design principles 5.5). A `constas` parameter is written first in that list and is a
@@ -1392,9 +1406,15 @@ void ParserImpl::parseKeyParamPair(bool allowRest, bool allowConstas, bool angle
         close(m, NK::TupleParam);
         return;
     }
-    if (allowRest && cur_ == TK::DotDot) {
+    if (allowRest && (cur_ == TK::DotDot || cur_ == TK::Ellipsis)) {
+        // A parameter pack is written `...` (design principles 5.6); `...` is an interval, a
+        // composition or a stream type. Reported here, naming the spelling, and read on as the
+        // pack it was meant to be, so one mistake is one sentence.
+        if (cur_ == TK::DotDot) {
+            unexpected({e(TK::Ellipsis)});
+        }
         bump();
-        // `..ts` (and `..P` in a function type) is a name; `..ParamsOf<F>` is a type expression,
+        // `...ts` (and `...P` in a function type) is a name; `...ParamsOf<F>` is a type expression,
         // a pack written out in a function type's parameter list.
         const bool plain =
             cur_ == TK::Identifier &&
@@ -1464,7 +1484,8 @@ void ParserImpl::parseParentParams(bool allowRest, bool allowConstas) {
         Scope scope(*this, false);
         if (cur_ == TK::Identifier || cur_ == TK::KwVar || cur_ == TK::KwConst ||
             (lambdaParams_ && cur_ == TK::LParen) ||
-            (allowRest && cur_ == TK::DotDot) || (allowConstas && cur_ == TK::KwConstas)) {
+            (allowRest && (cur_ == TK::DotDot || cur_ == TK::Ellipsis)) ||
+            (allowConstas && cur_ == TK::KwConstas)) {
             parsePairedParams(TK::RParen, allowRest, allowConstas);
         } else if (cur_ != TK::RParen && cur_ != TK::Comma) {
             unexpected(

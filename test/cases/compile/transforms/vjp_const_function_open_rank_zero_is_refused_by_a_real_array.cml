@@ -2,7 +2,7 @@
 // case is the reading that says what that array does when it meets a real one: it is refused by
 // shape, it does not become a number.
 //
-//   f(x) = 1.0 for every x  =>  f'(x) = 0, and for `x` a `float[..]` the answer is the zero the type
+//   f(x) = 1.0 for every x  =>  f'(x) = 0, and for `x` a `float[...]` the answer is the zero the type
 //                                states -- a zero with no extents, i.e. 1 dimension of length 0.
 //
 // Why the answer has no length: the transposed function is handed the cotangent and nothing else
@@ -28,13 +28,13 @@ import rulesets.transpose
 import { shape, sum } from tensor
 import { vjp } from vjp
 
-func const_open(x: float[..]): float {
+func const_open(x: float[...]): float {
     let _ = x
     return 1.0
 }
 
 func main(): int sync {
-    let x = [1.0, 2.0, 3.0] as float[..]
+    let x = [1.0, 2.0, 3.0] as float[...]
     let (value, pull) = vjp(const_open)(x)
     let dx = pull(1.0).0
     println('value=', value)

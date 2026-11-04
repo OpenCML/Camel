@@ -1,0 +1,3 @@
+// shape 5: a spread call, old spelling.
+func q(..ts: (int, int)): int { return 0 }
+func main(): int sync { let t = (1, 2) return q(..t) }

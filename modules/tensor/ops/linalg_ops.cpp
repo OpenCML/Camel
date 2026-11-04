@@ -150,7 +150,7 @@ std::vector<OpDef> linalgOps() {
         .name      = "matmul",
         .exports   = {"__mat__", "matmul"},
         .params    = {{"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = matmulInfer,
         .kernel    = &matmulKernel,
         .traits    = {}});
@@ -161,7 +161,7 @@ std::vector<OpDef> linalgOps() {
             {{"x", ParamKind::Tensor},
              {"weight", ParamKind::Tensor},
              {"bias", ParamKind::Tensor, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = linearInfer,
         .kernel    = &linearKernel,
         .traits    = {}});

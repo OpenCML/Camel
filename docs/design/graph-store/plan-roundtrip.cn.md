@@ -72,7 +72,7 @@ ROUNDTRIP checked=494 equivalent=447 not_equivalent=47 over_budget=0 unfaithful=
 | `array_shape/literal_length.cml` | `let cml1: f32[] = [1.0, 2.0]`（4 个只剩 2 个） | `let cml1: f32[] = [1.0, 2.0, 3.0, 4.0]` |
 | `array_shape/open_rank_element.cml` | `let grid: f32[2, 2] = [1.0, 2.0]` | `let grid: f32[2, 2] = [[1.0, 2.0], [3.0, 4.0]]` |
 
-**② `byref` 的 `var` 实参。** `var a: f32[..] = [1.0, 2.0, 3.0]` 的图是 `DATA → COPY → CAST → :var/new`，打印机为了让字面量那个 `f32[]` 类型有个落脚处，先写 `let cml1: f32[] = [1.0, 2.0, 3.0]`、再写 `var a: f32[..] = (cml1 as f32[..])`——而 `let` 是一个 store，图里没有这个节点，于是这一例从"能打印"变成"不等价"。改成：**只被一处读、且那一处自己写着类型的字面量不另起 `let`**（`typeWrittenByUse`：穿过 `COPY` 看唯一用户；用户是 `as` 时，只有值的类型没有比 `as` 多说一句才省标注——一个未知 extent 的 `f32[]` 对开秩 `f32[..]` 正是这种，而 `f32[2, 2]` 对 `f32[..]` 有形状要说，标注留着；用户是 `:var/new` 时按 `var` 声明的类型比）。现在打成 `var a: f32[..] = ([1.0, 2.0, 3.0] as f32[..])`，编得过且**与源等价**。
+**② `byref` 的 `var` 实参。** `var a: f32[...] = [1.0, 2.0, 3.0]` 的图是 `DATA → COPY → CAST → :var/new`，打印机为了让字面量那个 `f32[]` 类型有个落脚处，先写 `let cml1: f32[] = [1.0, 2.0, 3.0]`、再写 `var a: f32[...] = (cml1 as f32[...])`——而 `let` 是一个 store，图里没有这个节点，于是这一例从"能打印"变成"不等价"。改成：**只被一处读、且那一处自己写着类型的字面量不另起 `let`**（`typeWrittenByUse`：穿过 `COPY` 看唯一用户；用户是 `as` 时，只有值的类型没有比 `as` 多说一句才省标注——一个未知 extent 的 `f32[]` 对开秩 `f32[...]` 正是这种，而 `f32[2, 2]` 对 `f32[...]` 有形状要说，标注留着；用户是 `:var/new` 时按 `var` 声明的类型比）。现在打成 `var a: f32[...] = ([1.0, 2.0, 3.0] as f32[...])`，编得过且**与源等价**。
 
 ```
 node test/tools/cml-sweep.mjs --jobs 16
@@ -242,12 +242,12 @@ kind is the value it holds, so a print that cannot read it cannot write the stat
 /// @example print('a', 1)    // a 1
 #op(':io/print')
 with <fmt: string>
-export func print::<T>(x: T, ..rest): T
+export func print::<T>(x: T, ...rest): T
 ```
 
 `println` 同形，`with <fmt: string>`。图里它是**一条 WITH 边**（`std::gir` 的 `N00 -> N03 [label="0|0", type="WITH"]`），格式字符串是那次调用的常量。`float_special` 的 `println<'{:>8}'>`、`println<'{:+}'>` 是同一个槽——**宽度与符号不是 print 的另一个参数，就是格式串本身**，所以这两个用例是同一类。
 
-**打印机把它丢了**：算子那条路只写名字和括号里的值，`with` 槽里的格式从不写回（`print<'{}-{}'>(3, 4)` 打成 `print(3, 4)`）；`callForm->withCount == 0` 才允许写名字，`print` 的合并调用形（`print()`、`print::<T>(x, ..rest)`、`print::<T>` 三份声明的共同形）正是 0。
+**打印机把它丢了**：算子那条路只写名字和括号里的值，`with` 槽里的格式从不写回（`print<'{}-{}'>(3, 4)` 打成 `print(3, 4)`）；`callForm->withCount == 0` 才允许写名字，`print` 的合并调用形（`print()`、`print::<T>(x, ...rest)`、`print::<T>` 三份声明的共同形）正是 0。
 
 **改法**：算子调用的名字后、括号前写 `<...>`，槽里的每个值按 `expression` 打印；**配置不是格式串就具名拒绝**：
 

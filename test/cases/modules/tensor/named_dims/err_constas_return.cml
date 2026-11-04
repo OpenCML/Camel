@@ -1,6 +1,6 @@
 import { ones } from tensor
 // A return type uses the names its parameters bound; it binds none.
-func bad(x: f32[..]): f32[n] {
+func bad(x: f32[...]): f32[n] {
     return x as f32[?]
 }
 func main(): int sync {

@@ -31,7 +31,7 @@ import { grad } from autodiff
 import { sum, tanh } from tensor
 
 /// The differentiated value is the `with` parameter (design principles 9.9).
-with <x: float[..]>
+with <x: float[...]>
 func total(): float {
     return sum(tanh(x))
 }

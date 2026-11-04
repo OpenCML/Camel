@@ -125,8 +125,8 @@ tagPositionName    : IDENTIFIER
 tagReaders         : identRef (',' identRef)* ','?
 tagUse             : '#' (tagRef | '[' (tagRef (',' tagRef)* ','?)? ']')
 tagRef             : identRef parentArgues?
-whenClause         : 'when' ('..' dataExpr | logicalOrExpr)
-typeParams         : '::' '<' ('..'? identDef) (',' '..'? identDef)* ','? '>'
+whenClause         : 'when' ('...' dataExpr | logicalOrExpr)
+typeParams         : '::' '<' ('...'? identDef) (',' '...'? identDef)* ','? '>'
 operatorName       : IDENTIFIER (OPERATOR | '[' ']')
 dataDecl           : ('let' | 'var') carrier (':' typeList)? '=' dataList
                      | 'let' '_' (':' typeList)? '=' dataList
@@ -144,8 +144,8 @@ parentIdents       : '(' identList? ','? ')'
 bracedIdents       : '{' identList? ','? '}'
 bracketIdents      : '[' identList? ','? ']'
 keyParamPair       : ('var' | 'const')? identDef (':' typeExpr ('=' dataExpr)?)?
-                     | '..' identDef (':' typeExpr)?
-                     | '..' typeExpr
+                     | '...' identDef (':' typeExpr)?
+                     | '...' typeExpr
                      | 'constas' identDef (':' typeExpr)?
 pairedParams       : keyParamPair (',' keyParamPair)*
 parentParams       : '(' pairedParams? ','? ')'
@@ -180,7 +180,7 @@ primaryData        : identRef | constasData | literal | arrayData | structData |
 constasData        : 'constas' identDef
 literal            : ('+' | '-')? INTEGER | ('+' | '-')? REAL | STRING | MULTI_STR | FSTRING
                      | 'true' | 'false' | 'null'
-indexValue         : '..'? dataExpr
+indexValue         : '...'? dataExpr
 keyValuePair       : identDef ':' dataExpr
 pairedValues       : keyValuePair (',' keyValuePair)*
 argumentValues     : (keyValuePair | indexValue) (',' (keyValuePair | indexValue))*
@@ -219,10 +219,10 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-typeExpr           : '..' typeExpr | arrayType ('?' | '!' | '..')*
+typeExpr           : '...' typeExpr | arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
-arrayDimItem       : '?' | '..' identDef? | dataExpr
+arrayDimItem       : '?' | '...' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'

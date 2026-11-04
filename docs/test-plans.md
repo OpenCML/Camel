@@ -1019,6 +1019,25 @@ Available helpers:
 - `assert(condition, message?)`
 - `fail(message?)`
 - `approx(actual, expected, tolerance?)`
+- `ulp(actual, expected, bound?, bits?)` — the assertion a transcendental result is allowed to carry.
+  Design principles 7.1 promises `exp`, `log` and the rest an error of at most a written number of
+  ulps, "not the same bits on every device", so a case that pins such a number bit for bit asserts
+  something the language never promised, and a platform-limited `known_fail` around it hides the
+  real errors that come later. `ulp` answers whether `actual` is within `bound` (default 2) units in
+  the last place of the **declared** value `expected` — the declared value's grid, not the
+  measured one's, so a wrong answer cannot move its own tolerance — at `bits` of precision (default
+  53, the `float`/f64 width; `24` for an `f32` answer). A declared zero, a NaN and an infinity are
+  compared exactly, because 7.1 promises those exactly. `ulpDistance(actual, expected, bits?)`
+  answers the distance itself, for the message a failing assertion should carry.
+
+  The bound is a claim about the program, so it lives in the entry's own `desc` with its
+  derivation (how many chained transcendental steps, and what the licence adds); a number chosen to
+  make the case pass is not a bound. Two rules for using it: **a cross-back-end comparison's
+  reference is the declared value, never another back end** — "A and B agree" is never evidence that
+  a number is right, and folding a tolerance into `backends_agree` would call "both wrong the same
+  way" a pass, which is the trap this rule exists to close; and **an exact operator keeps its exact
+  assertion** — 7.1 promises bit-identity for `+ - * /` and `sqrt` under `#strict`, so a difference
+  there is a defect on any platform and must be neither loosened nor registered.
 - `match(pattern, text?)`
 
 Important payload fields:

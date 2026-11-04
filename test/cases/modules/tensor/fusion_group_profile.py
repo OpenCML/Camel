@@ -53,7 +53,7 @@ GOLDEN_JSON = HERE / "fusion_group_none.profile.golden.json"
 # not move: every line the two goldens changed is an allocator-call count.
 #
 # The text golden moved for the same reason on 2026-10-24: `stdlib/tensor.cml` spells the element
-# type of its tensor signatures as an explicit type variable (`func to_bytes::<T>(t: T[..]) when
+# type of its tensor signatures as an explicit type variable (`func to_bytes::<T>(t: T[...]) when
 # is_numeric::<T>()`, design principles 4.1), the `when` reads `is_numeric` from the module
 # `types`, so `types` is compiled whenever `tensor` is imported and the report's
 # "compilation - self time by phase" table gains that module's five rows (`resolve types` through

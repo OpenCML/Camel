@@ -10,7 +10,7 @@
  * src/builtin/operators/struct.cpp). The same check refused the pullback of an array literal's third
  * computed element, which is the case next to this one in test/cases/modules/autodiff.
  */
-func at(x: float[..], i: int): float {
+func at(x: float[...], i: int): float {
     return x[i]
 }
 

@@ -4,7 +4,7 @@ func chain(x: f32[2, 3]): f32[2,3] {
     let y = x + x
     return y * y
 }
-func dynamic(x: f32[..]): f32[..] { return x + x }
+func dynamic(x: f32[...]): f32[...] { return x + x }
 func cpu(x: f32[2,3]): f32[2,3] { return x }
 func detour(x: f32[2,3]): f32[2,3] {
     let y = x + x

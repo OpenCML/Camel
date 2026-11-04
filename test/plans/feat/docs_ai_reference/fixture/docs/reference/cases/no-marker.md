@@ -19,7 +19,7 @@ A `**target**` note names its design under `docs/design/`, and a diagnostic is w
 | Literal | `null` |
 | Reserved | `is` |
 
-**Operators and separators** (3): `=` `->` `..`
+**Operators and separators** (3): `=` `->` `...`
 <!-- camel-for-ai end: lexical -->
 
 ## Precedence
@@ -65,7 +65,7 @@ unaryExpr          : linkExpr (('as' | 'is') typeExpr)?
 linkExpr           : negExpr (('->' | '->') compExpr)*
 negExpr            : ('-' | '!') negPower | compExpr
 negPower           : ('-' | '!') negPower | compExpr ('^' negPower)?
-compExpr           : annoExpr ('..' annoExpr)*
+compExpr           : annoExpr ('...' annoExpr)*
 annoExpr           : accessExpr (indices | parentArgues | '!')*
 ```
 <!-- camel-for-ai end: precedence -->

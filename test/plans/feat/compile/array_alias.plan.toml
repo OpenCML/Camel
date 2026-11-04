@@ -6,8 +6,8 @@
 # `alias.bare_tensor` (below) and the signature in test/cases/loops/iterate_tensor.cml were the two
 # places that locked the *transitional* spelling. The deletion step removed the name and the
 # diagnostic that asked for an element type, so a signature that writes the old name now writes an
-# unknown name, and the spellings that state an element type are the array types (`f32[..]`,
-# `f32[2, 3]`) or a type variable declared in the head (`func f::<T>(x: T[..])`).
+# unknown name, and the spellings that state an element type are the array types (`f32[...]`,
+# `f32[2, 3]`) or a type variable declared in the head (`func f::<T>(x: T[...])`).
 id = "compile.array_alias"
 order = 343
 tier = "fast"
@@ -16,7 +16,7 @@ desc = "A tensor's type is the native array type (docs/design/arrays-memory/plan
 
 [[tests]]
 name = "alias.bare_tensor"
-desc = "A tensor type states its element type and the name that did not is gone: a signature that writes `Tensor` writes an unknown name, and the report says so where it is written. The spellings that state an element type are the array types (`f32[..]`, `f32[2, 3]`), and a signature taking any element type declares a type variable in its head (`func f::<T>(x: T[..])`). The positive spelling of that rewrite is test/cases/loops/iterate_tensor.cml."
+desc = "A tensor type states its element type and the name that did not is gone: a signature that writes `Tensor` writes an unknown name, and the report says so where it is written. The spellings that state an element type are the array types (`f32[...]`, `f32[2, 3]`), and a signature taking any element type declares a type variable in its head (`func f::<T>(x: T[...])`). The positive spelling of that rewrite is test/cases/loops/iterate_tensor.cml."
 kind = "negative"
 case = "../../../cases/compile/array_alias/bare_tensor.cml"
 args = ["${case}", "${backend}"]
@@ -29,14 +29,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "alias.type_text"
-desc = "The printed form of a type is its array spelling: `f32[..]` and `f32[2, 3]`. The candidate list of a refused call names both in one line."
+desc = "The printed form of a type is its array spelling: `f32[...]` and `f32[2, 3]`. The candidate list of a refused call names both in one line."
 kind = "negative"
 case = "../../../cases/compile/array_alias/type_text.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["takes: (a: f32[..], b: f32[2, 3]) => int"]
+expect_output_contains = ["takes: (a: f32[...], b: f32[2, 3]) => int"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

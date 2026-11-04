@@ -3,7 +3,7 @@
  * that the rest parameter does not have, and is refused instead of materialized.
  */
 
-func first(..ts): int {
+func first(...ts): int {
     return ts
 }
 

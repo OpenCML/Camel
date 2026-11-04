@@ -11,7 +11,7 @@
  * are the shape's: `[6.0, 15.0]` is one dimension of two and `[[6.0], [15.0]]` two dimensions with
  * the reduced one kept.
  *
- * `sum_axis`'s result type is the open rank `T[..]`, so these `shape` calls are also the reading that
+ * `sum_axis`'s result type is the open rank `T[...]`, so these `shape` calls are also the reading that
  * an open rank is not what used to stop `shape`: the rank is a fact about the value and the value
  * carries it, while an open rank is a fact about the type and says nothing about this value.
  *

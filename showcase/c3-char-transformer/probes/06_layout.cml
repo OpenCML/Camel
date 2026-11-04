@@ -6,7 +6,7 @@ import { ones, reshape, sum, transpose } from tensor
 import rulesets.jvp
 import { jvp } from transforms
 
-func turned(x: float[..]): float {
+func turned(x: float[...]): float {
     let m = reshape<[3, 2]>(x)
     let t = transpose(m)
     return sum(t * t)

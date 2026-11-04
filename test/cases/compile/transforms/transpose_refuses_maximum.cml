@@ -1,0 +1,22 @@
+// A bare `transpose` of `maximum` is refused for the same reason `abs`'s is: the operator is not
+// linear, and the family holds no law for it. This is the case that `transpose_laws_of_maximum_and
+// _minimum_are_refused` was, before the laws it was waiting for were answered with "they should not
+// exist": the old case pinned `skip=rule-ranks`, an instantiation that could never be made; this
+// one pins a refusal that is a language rule rather than a gap.
+//
+// The gradient of `maximum` is taken with `vjp` (`vjp_answers_abs_log_maximum_and_minimum.cml`).
+//
+//     camel test/cases/compile/transforms/transpose_refuses_maximum.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { maximum, sum } from tensor
+
+func f_max(x: float[3]): float {
+    return float(sum(maximum(x, [1.0, 2.0, 3.0])))
+}
+
+func main(): int sync {
+    let cotangent = transpose(f_max)(1.0)
+    `max  ct=1.0  {}`->format<cotangent>->println
+    return 0
+}

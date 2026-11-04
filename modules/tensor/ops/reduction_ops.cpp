@@ -843,7 +843,7 @@ std::vector<OpDef> reductionOps() {
         .infer     = wholeReductionInfer(k::ReduceOp::Sum),
         .kernel    = &sumAllKernel,
         .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum", "T[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum", "T[...]"));
     defs.push_back(OpDef{
         .name      = "mean",
         .exports   = {"mean"},
@@ -852,7 +852,7 @@ std::vector<OpDef> reductionOps() {
         .infer     = wholeReductionInfer(k::ReduceOp::Mean),
         .kernel    = &meanAllKernel,
         .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[...]"));
     // The two stated twins of the reductions above (`sumStatedKernel`, `meanAxisStatedKernel`):
     // the same value, with the extents the reverse law needs as a second operand. Both are one
     // ordinary operand and one integer list, which is the count the transpose walk answers.
@@ -868,7 +868,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "mean_axis_stated",
         .exports   = {"mean_axis_stated"},
         .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
+        .resultDoc = "T[...]",
         .infer     = meanAxisStatedInfer,
         .kernel    = &meanAxisStatedKernel,
         .traits    = {}});
@@ -879,7 +879,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "sum_axis_stated",
         .exports   = {"sum_axis_stated"},
         .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
+        .resultDoc = "T[...]",
         .infer     = sumAxisStatedInfer,
         .kernel    = &sumAxisStatedKernel,
         .traits    = {}});
@@ -900,7 +900,7 @@ std::vector<OpDef> reductionOps() {
         .params    = {{"t", ParamKind::Tensor},
                       {"mask", ParamKind::BoolArray},
                       {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
+        .resultDoc = "T[...]",
         .infer     = extremumAxisStatedInfer<k::ReduceOp::Max>(),
         .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Max>,
         .traits    = {}});
@@ -910,14 +910,14 @@ std::vector<OpDef> reductionOps() {
         .params    = {{"t", ParamKind::Tensor},
                       {"mask", ParamKind::BoolArray},
                       {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
+        .resultDoc = "T[...]",
         .infer     = extremumAxisStatedInfer<k::ReduceOp::Min>(),
         .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Min>,
         .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[..]"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[..]"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[..]"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin", "int[..]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[...]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[...]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[...]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin", "int[...]"));
     defs.push_back(OpDef{
         .name      = "max",
         .exports   = {"max"},
@@ -955,7 +955,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "softmax",
         .exports   = {"softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer          = softmaxInfer,
         .kernel         = &positionally<softmaxKernel>,
         .traits         = {},
@@ -965,7 +965,7 @@ std::vector<OpDef> reductionOps() {
         .name      = "log_softmax",
         .exports   = {"log_softmax"},
         .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer          = softmaxInfer,
         .kernel         = &positionally<logSoftmaxKernel>,
         .traits         = {},
@@ -976,7 +976,7 @@ std::vector<OpDef> reductionOps() {
         .exports = {"softmax_grad"},
         .params =
             {{"y", ParamKind::Tensor}, {"dy", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = floatLikeFirst,
         .kernel    = &softmaxGradKernel,
         .traits    = {}});
@@ -988,7 +988,7 @@ std::vector<OpDef> reductionOps() {
              {"gamma", ParamKind::Tensor},
              {"beta", ParamKind::Tensor},
              {"eps", ParamKind::Number, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = layerNormInfer,
         .kernel    = &layerNormKernel,
         .traits    = {}});

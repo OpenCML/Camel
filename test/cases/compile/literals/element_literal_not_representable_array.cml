@@ -3,7 +3,7 @@
 /// is a `0.5` the element type cannot hold, refused at the literal rather than left to the
 /// operator's "no matching function".
 
-func half::<T>(x: T[..]): T[..] {
+func half::<T>(x: T[...]): T[...] {
     return x * 0.5
 }
 

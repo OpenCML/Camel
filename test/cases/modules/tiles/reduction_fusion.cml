@@ -3,18 +3,18 @@ import { get_env } from env
 import { inspect, run_preferred_resident, download } from tiles
 
 func sample(i: int): f32 { return f32(float(i % 17 - 8) * 0.125) }
-func rows(x: f32[..], b: f32[..]): f32[..] {
+func rows(x: f32[...], b: f32[...]): f32[...] {
     return sum<1>((x + b) * 0.5)
 }
-func columns(x: f32[..]): f32[..] {
+func columns(x: f32[...]): f32[...] {
     return mean<0>(transpose(x) * 0.25)
 }
-func middle(x: f32[..]): f32[..] { return sum<1>(x * 0.5) }
-func epilogue(x: f32[..], b: f32[..]): f32[..] {
+func middle(x: f32[...]): f32[...] { return sum<1>(x * 0.5) }
+func epilogue(x: f32[...], b: f32[...]): f32[...] {
     return (sum<1>(x * 0.5) + b) * 0.25
 }
-func two_reductions(x: f32[..]): f32[..] { return sum<1>(x * 0.5) + mean<1>(x) }
-func rounded(x: f32[..]): f32[..] { return sum<1>(x) - 16777216.0 }
+func two_reductions(x: f32[...]): f32[...] { return sum<1>(x * 0.5) + mean<1>(x) }
+func rounded(x: f32[...]): f32[...] { return sum<1>(x) - 16777216.0 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
     let x = reshape<[17, 513]>((0..(17 * 513))->map<sample>)

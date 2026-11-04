@@ -1,7 +1,7 @@
 // The check that only takes a law written for the shape it meets must not refuse the shape the law
 // *was* written for. Here the operands are two arrays of a concrete extent (`float[3]`, not
-// `float[..]`), and the law `mul_tensor_t` names `T[..]` -- an open rank -- so this is the reading
-// that says an open rank takes a fixed extent while a `T[..]` port still refuses a number.
+// `float[...]`), and the law `mul_tensor_t` names `T[...]` -- an open rank -- so this is the reading
+// that says an open rank takes a fixed extent while a `T[...]` port still refuses a number.
 //
 // Hand arithmetic at xs = (1, 2, 3), w = (2, 3, 4), the output summed so the pullback is a number:
 //

@@ -54,6 +54,11 @@
             "plans": ["feat/trans/cml_sweep.plan.toml"]
         },
         {
+            "comment": "The probe cases of the canonical pack spelling (test/cases/probe): the programs that must still be refused and the accepted twins written with the canonical spelling. They are named as file rules because the three plans sit in test/plans/probe/, which no directory under test/plans/feat mirrors, and a directory rule cannot name them: its plan path is looked up by the segments below test/cases/probe/, and these cases are directly in that directory, so the lookup has no segment to add and answers with no plan. Naming the three files is the rule the self-test asks for -- every plan under test/plans must be selected by a case path it names.",
+            "paths": ["test/cases/probe/"],
+            "plans": ["probe/dpack.plan.toml", "probe/dpack5.plan.toml", "probe/dpack5ok.plan.toml"]
+        },
+        {
             "comment": "The `std::cml` round-trip comparator: its case is the tool itself, so a change there selects the plan that runs it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/tools/roundtrip-compare.mjs"],
             "plans": ["feat/trans/cml.plan.toml"]

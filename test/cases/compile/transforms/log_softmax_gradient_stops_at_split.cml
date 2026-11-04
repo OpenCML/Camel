@@ -31,7 +31,7 @@ import { vjp } from vjp
 import { log_softmax, sum } from tensor
 
 /// The same function as the engine case, with the differentiated value as an ordinary parameter.
-func total(x: float[..]): float {
+func total(x: float[...]): float {
     return sum(log_softmax<0>(x))
 }
 

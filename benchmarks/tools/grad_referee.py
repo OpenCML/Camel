@@ -187,7 +187,7 @@ def make_variant(model: str, activation: str, out_dir: Path) -> Path:
         # the variant calling a softplus that nothing defines).
         imports = ["exp", "log"]
         text = replace_import(text, "tensor", "relu", imports, f"{model} with {activation}")
-        definition = "func softplus(x: f32[..]): f32[..] {\n    return log(exp(x) + 1.0)\n}\n\n"
+        definition = "func softplus(x: f32[...]): f32[...] {\n    return log(exp(x) + 1.0)\n}\n\n"
         text, added = re.subn(r"^func ", definition + "func ", text, count=1, flags=re.MULTILINE)
         if added != 1:
             raise SystemExit(f"grad_referee: {model} with {activation}: no top-level func to define softplus before")

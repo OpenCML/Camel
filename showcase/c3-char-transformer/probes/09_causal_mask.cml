@@ -6,7 +6,7 @@ import { ones, sum, where } from tensor
 import rulesets.jvp
 import { jvp } from transforms
 
-func masked(x: float[..]): float {
+func masked(x: float[...]): float {
     let keep = [[true, false], [true, true]] as bool[2, 2]
     let hidden = where(keep, x, x - 10.0)
     return sum(hidden * hidden)

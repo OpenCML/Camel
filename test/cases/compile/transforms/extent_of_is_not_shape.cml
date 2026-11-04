@@ -5,12 +5,12 @@
 // This case pins both halves, so neither function can drift into being the other:
 //
 //   same([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]])   -> true     (float[2, 3]: the type states it)
-//   by_value([1.0, 2.0])                        -> [2]      (float[..]: only the value states it)
+//   by_value([1.0, 2.0])                        -> [2]      (float[...]: only the value states it)
 //
 // Measured 2026-11-04 on `lane-extentof` (host `88zjwei`): `true`, `[2]`, exit 0. The `true` line is
 // `shape(t) == extent_of::<float[2, 3]>()` on the same parameter, so the equivalence is asserted by
 // the program and not by a comment; the `[2]` line is the same question where only the value can
-// answer, and `extent_of::<float[..]>()` there is the refusal
+// answer, and `extent_of::<float[...]>()` there is the refusal
 // `extent_of_refuses_an_open_rank_type.cml` pins.
 
 import { shape } from tensor
@@ -19,7 +19,7 @@ func same(t: float[2, 3]): bool {
     return shape(t) == extent_of::<float[2, 3]>()
 }
 
-func by_value(t: float[..]): int[] {
+func by_value(t: float[...]): int[] {
     return shape(t)
 }
 

@@ -381,7 +381,7 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
                 parts.push_back(literal(", "));
             }
             if (fn->hasWithRest() && i + 1 == withCount) {
-                parts.push_back(literal(".."));
+                parts.push_back(literal("..."));
                 if (fn->hasArgNames()) {
                     parts.push_back(literal(std::string(fn->argNameAt(i))));
                 }
@@ -412,12 +412,12 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             parts.push_back(literal(", "));
         }
         if (fn->hasRest() && i + 1 == normCount) {
-            parts.push_back(literal(".."));
+            parts.push_back(literal("..."));
             if (fn->hasArgNames()) {
                 parts.push_back(literal(std::string(fn->argNameAt(withCount + i))));
             }
             if (fn->restPack() != nullptr) {
-                parts.push_back(literal(": .."));
+                parts.push_back(literal(": ..."));
                 pushChild(parts, fn->restPack(), "<null>");
             }
             continue;

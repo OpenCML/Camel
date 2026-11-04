@@ -6,7 +6,7 @@ import { ones, softmax, sum } from tensor
 import rulesets.jvp
 import { jvp } from transforms
 
-func spread(x: float[..]): float {
+func spread(x: float[...]): float {
     let p = softmax<1>(x)
     return sum(p * p)
 }

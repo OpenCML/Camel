@@ -14,26 +14,26 @@ import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }
+type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
 
 with <m: Mlp>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return float(mean(y * y))
 }
 
-func step(m: Mlp, x: f32[..]): (float, Mlp) {
+func step(m: Mlp, x: f32[...]): (float, Mlp) {
     let loss_with_grad = with_grad(loss)
     let vg = loss_with_grad<m>(x)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 
-func noisy(x: f32[..]): f32[..] {
+func noisy(x: f32[...]): f32[...] {
     return x + next_key()->normal::<f32><shape: [2, 2]>
 }
 
-func export_step(m: Mlp, x: f32[..]): void! sync {
+func export_step(m: Mlp, x: f32[...]): void! sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
     println('exported step')
     return null
@@ -42,7 +42,7 @@ func export_step(m: Mlp, x: f32[..]): void! sync {
 /// `noisy` has an effect, so the export is refused and the error value it gives
 /// is this function's result: nothing handles it, so it reaches the exit of
 /// `main` (design principles 3.9).
-func export_noisy(x: f32[..]): void! sync {
+func export_noisy(x: f32[...]): void! sync {
     return export_model<out: get_env('ONNX_OUT') ?? ''>(noisy, x)
 }
 

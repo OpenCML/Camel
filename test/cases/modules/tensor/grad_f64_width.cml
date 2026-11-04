@@ -58,7 +58,7 @@ func lossNorm(): float sync {
     return float(sum(layer_norm(m.x, m.g, m.b)))
 }
 
-func line(label: string, t: float[..]) {
+func line(label: string, t: float[...]) {
     println("{} bytes={} d={}"->format<label, len(to_array(to_bytes(t))), t>)
 }
 

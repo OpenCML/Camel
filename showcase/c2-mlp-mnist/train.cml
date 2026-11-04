@@ -30,16 +30,16 @@ import { now } from time
 // The parameter tree: one type, four tensors.  `b1`/`b2` broadcast over the rows of the
 // batch, the same way PyTorch's `nn.Linear` adds its bias.
 type Mlp = {
-    w1: f32[..],
-    b1: f32[..],
-    w2: f32[..],
-    b2: f32[..]
+    w1: f32[...],
+    b1: f32[...],
+    w2: f32[...],
+    b2: f32[...]
 }
 
 // == model ==
 // x: [batch, 784] -> hidden: [batch, 128] -> logits: [batch, 10].
 with <m: Mlp>
-func logits(x: f32[..]): f32[..] {
+func logits(x: f32[...]): f32[...] {
     let hidden = relu(x @ m.w1 + m.b1)
     return hidden @ m.w2 + m.b2
 }
@@ -48,7 +48,7 @@ func logits(x: f32[..]): f32[..] {
 // The training loss of one minibatch.  Its `with` parameter is the whole parameter tree, so
 // `with_grad` gives back a tree of the same shape.  The targets are integer class labels.
 with <m: Mlp>
-func loss(x: f32[..], labels: int[..]): float {
+func loss(x: f32[...], labels: int[...]): float {
     return float(softmax_cross_entropy(logits<m>(x), labels))
 }
 
@@ -66,7 +66,7 @@ func load_model(data: string): Mlp {
 
 // == evaluate ==
 // Validation: the loss over all rows at once and the fraction classified correctly.
-func evaluate(m: Mlp, x: f32[..], labels: int[..]): (float, float) {
+func evaluate(m: Mlp, x: f32[...], labels: int[...]): (float, float) {
     let value = logits<m>(x)
     let correct = float(sum(argmax<1>(value) === labels))
     return (float(softmax_cross_entropy(value, labels)), float(correct) / float(shape(x)[0]))
@@ -97,7 +97,7 @@ func main(
 
     let model = load_model(data)
     let leaves = tree_paths(model)
-    let params = tree_reduce<(count: int, leaf: f32[..]): int => count + numel(leaf)>(model, 0)
+    let params = tree_reduce<(count: int, leaf: f32[...]): int => count + numel(leaf)>(model, 0)
     let rows = shape(train_x)[0]
     let batches = rows / batch
     let before = evaluate(model, val_x, val_labels)
@@ -137,7 +137,7 @@ func main(
     let restored = dir->load_tree::<Mlp><dataset_id> !! model
     let after_restore = evaluate(restored, val_x, val_labels)
     let drift = tree_reduce<(total: float, leaf: float): float => total + leaf>(
-        tree_map<(a: f32[..], b: f32[..]): float => float(sum(abs(a - b)))>(trained, restored), 0.0)
+        tree_map<(a: f32[...], b: f32[...]): float => float(sum(abs(a - b)))>(trained, restored), 0.0)
     `c2 checkpoint val_loss=${after_restore.0:.9f} val_accuracy=${after_restore.1:.9f} l1_drift=${drift:.9f}`->println
     `c2 leaves ${leaves}`->println
     return 0

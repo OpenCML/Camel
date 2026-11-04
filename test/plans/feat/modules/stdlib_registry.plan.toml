@@ -92,7 +92,7 @@ timeout_ms = 30000
 
 # A declaration states the type its call gives back, and the operator states its own in the
 # signature it registers; `--verify-ops` compares the two, so a declaration cannot promise a type
-# the operator does not return. Nothing compared them before: `one_hot` was declared `int64[..]`
+# the operator does not return. Nothing compared them before: `one_hot` was declared `int64[...]`
 # for months while its kernel, its inference and every test returned f32 rows, and the reference
 # run stayed green because only names, arity, parameter names and purity were read. The run names
 # both halves -- how many result types it compared and which operators it could not compare -- and
@@ -132,7 +132,7 @@ timeout_ms = 30000
 
 # The other half of the same signature: what the operator says it takes, position by position,
 # against what the declaration promises. The operator's side is ten kinds (`Tensor` is any tensor,
-# `int[]` a number array, `float[..] | number` a tensor or a number) and the declaration's is one
+# `int[]` a number array, `float[...] | number` a tensor or a number) and the declaration's is one
 # type, so the comparison is containment -- a declaration may narrow a kind, never promise a value
 # the operator refuses. `one_hot`'s neighbour: the same run that never read a result type never read
 # a parameter type either, so `axis: int` could have been written `axis: float` for months.

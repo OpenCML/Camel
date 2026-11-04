@@ -50,7 +50,7 @@ expect_output_contains = ["The value the graph 'target' hands on has type 'float
 
 [[tests]]
 name = "runtime.exit_type.legal_exits_are_not_refused"
-desc = "The legal side of the same judgement, one shape per line of the case: a `void` function keeps the value it computes (the one pair the seal leaves alone), a `float[..]` takes a `float[]`, a `float[]` takes a `f32[3]`, a position read of a `float[..]` is a `float`, a `float?` takes `null`, an `int!` takes a value, a named type takes an unnamed value with its fields, and `int`/`float` take themselves. Every one of these is a graph the seal accepts, so a widening of the check that refused one of them would be a false positive, and the printed line is the same numbers read from the same shapes."
+desc = "The legal side of the same judgement, one shape per line of the case: a `void` function keeps the value it computes (the one pair the seal leaves alone), a `float[...]` takes a `float[]`, a `float[]` takes a `f32[3]`, a position read of a `float[...]` is a `float`, a `float?` takes `null`, an `int!` takes a value, a named type takes an unnamed value with its fields, and `int`/`float` take themselves. Every one of these is a graph the seal accepts, so a widening of the check that refused one of them would be a false positive, and the printed line is the same numbers read from the same shapes."
 case = "../../../cases/runtime/exit_type/legal_exits.cml"
 expect_exit = 0
 expect_stdout_contains = ["legal_exits 2 3 4.5 -1.0 42 3.0 42 1.5"]

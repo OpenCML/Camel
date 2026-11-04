@@ -1,11 +1,11 @@
 import { exp, sum, mean, max, sqrt } from tensor
 import { next_key, seed, uniform } from random
 import { benchmark } from tiles
-func softmax(x: f32[..]): f32[..] {
+func softmax(x: f32[...]): f32[...] {
     let e = exp(x - max<1, true>(x))
     return e / sum<1, true>(e)
 }
-func layernorm(x: f32[..]): f32[..] {
+func layernorm(x: f32[...]): f32[...] {
     let c = x - mean<1, true>(x)
     return c / sqrt(mean<1, true>(c * c) + 0.00001)
 }

@@ -6,7 +6,7 @@ desc = "A type conversion applies to every element of an array, as the arithmeti
 
 [[tests]]
 name = "conversions.array_elementwise"
-desc = "`float(ints)`, `f32(ints)`, `int(floats)` and `f64(ones(..))` give arrays of the conversion's element type with the input's shape; the scalar forms are unchanged."
+desc = "`float(ints)`, `f32(ints)`, `int(floats)` and `f64(ones(...))` give arrays of the conversion's element type with the input's shape; the scalar forms are unchanged."
 kind = "behavior"
 case = "../../../cases/compile/conversions/array_elementwise.cml"
 args = ["${case}", "${backend}"]

@@ -177,6 +177,11 @@ struct TransposeRefusal {
     /// The operands' ranks (`RuleRanks`), in the law's own order, spelled `(3, 2)`: the fact the
     /// refusal is about, because a law that dispatches on rank serves a set of them.
     std::string ranks;
+    /// What the law's body could not be instantiated as, in the words the call's candidate search
+    /// wrote (`RuleRanks`): the helper the law calls and the argument types it was handed
+    /// (`No candidate of 'spread_over' applies to (float[3], int[])`), which is the fact that turns
+    /// "the body has no instance" into an edit. Empty when the expansion wrote no words.
+    std::string expansion;
     /// The parameter's name as the declaration writes it (`x`), for the cause that is about one
     /// (`ParameterShape`): the sentence names the parameter a reader has to edit, and the position
     /// alone would leave them counting parameters.

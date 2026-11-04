@@ -549,14 +549,14 @@ timeout_ms = 8000
 
 [[tests]]
 name = "native.declaration_type_argument"
-desc = "`numel`'s declaration states one type variable — `func numel::<T>(t: T[..]): int when is_numeric::<T>()` — so a call that names two type arguments names one the declaration does not have: refused at the call, and the overload the message lists is the declaration's own signature with its type variable."
+desc = "`numel`'s declaration states one type variable — `func numel::<T>(t: T[...]): int when is_numeric::<T>()` — so a call that names two type arguments names one the declaration does not have: refused at the call, and the overload the message lists is the declaration's own signature with its type variable."
 kind = "negative"
 case = "../../../cases/compile/native/declaration_type_argument.cml"
 args = ["${case}"]
 expect_exit = 1
 # The message spans two lines (it lists the declaration as the available overload), so the
 # short format the runner parses as one diagnostic line does not apply; check the text.
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:12:30", "argument types: <> (float[1, 2])", "<tensor:numel>: (t: T[..]) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "declaration_type_argument.cml:12:30", "argument types: <> (float[1, 2])", "<tensor:numel>: (t: T[...]) => int"]
 
 [[tests]]
 name = "native.declaration_per_result_type"
@@ -862,7 +862,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:11:18", "argument types: <> (f32[1, 2], int)", "<tensor:numel>: (t: T[..]) => int"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_arity.cml:11:18", "argument types: <> (f32[1, 2], int)", "<tensor:numel>: (t: T[...]) => int"]
 
 [[tests]]
 name = "native.tensor_wrong_type"
@@ -871,11 +871,11 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC", "tensor_type.cml:10:21", "No candidate of 'to_bytes' applies to (<> (string))", "(t: T[..]) => Bytes", "when is_plain::<T>()"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC", "tensor_type.cml:10:21", "No candidate of 'to_bytes' applies to (<> (string))", "(t: T[...]) => Bytes", "when is_plain::<T>()"]
 #  ---- The declaration of `show` ----
 #
 # `show` is the last zero-syntax name of the inventory: its result is fixed `void`, and its
-# umbrella parameter (`TensorLike`: a tensor or any array) is one declaration over `A[..]`, whose
+# umbrella parameter (`TensorLike`: a tensor or any array) is one declaration over `A[...]`, whose
 # element type the argument binds. The C++ module keeps the kernel, the traits, the semantics and
 # the resources; it no longer exports the group, so the declaration is the module's signature for
 # the name. `show([])` is the boundary: the empty array's element type binds no type variable, so
@@ -883,7 +883,7 @@ expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC",
 
 [[tests]]
 name = "native.tensor_show_declaration_import"
-desc = "`show`'s declaration is what an importer sees: the tensor call and the array call both type-check against the one rule `func show::<A>(t: A[..])` and both reach the C++ operator, printing the array form (the single print form of the rule: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
+desc = "`show`'s declaration is what an importer sees: the tensor call and the array call both type-check against the one rule `func show::<A>(t: A[...])` and both reach the C++ operator, printing the array form (the single print form of the rule: the value's own shape in brackets, each element in the shortest text of its own type); the marker line proves the program ran to the end."
 kind = "behavior"
 case = "../../../cases/compile/native/tensor_show_declaration_import.cml"
 args = ["${case}"]
@@ -897,7 +897,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:11:5", "argument types: <> (f32[1, 2], int)", "<tensor:show>: (t: A[..]) => void"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "tensor_show_arity.cml:11:5", "argument types: <> (f32[1, 2], int)", "<tensor:show>: (t: A[...]) => void"]
 
 [[tests]]
 name = "native.tensor_show_wrong_type"
@@ -906,7 +906,7 @@ kind = "negative"
 case = "../../../cases/compile/native/tensor_show_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC", "tensor_show_type.cml:10:5", "No candidate of 'show' applies to (<> (string))", "(t: A[..]) => void", "when is_numeric::<A>() || is_same::<A, bool>()"]
+expect_output_contains = ["SemanticDiag::WhenConditionUnmet", "code=0x030001AC", "tensor_show_type.cml:10:5", "No candidate of 'show' applies to (<> (string))", "(t: A[...]) => void", "when is_numeric::<A>() || is_same::<A, bool>()"]
 
 [[tests]]
 name = "native.tensor_show_empty_array"
@@ -1078,12 +1078,23 @@ expect_output_contains = ["This value has type 'float', which is not the declare
 
 [[tests]]
 name = "native.sim_declaration_import"
-desc = "`sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an `int`, `asian_call_price` takes three and answers a `float`, and both calls reach the C++ kernels with the fixed seeds of `modules/std/sim/basic.cml`."
+desc = "`sim`'s declarations are what an importer sees: `pi_hits` takes two `int`s and answers an `int`, `asian_call_price` takes three and answers a `float`, and both calls reach the C++ kernels with the fixed seeds of `sim`'s own module. Two numbers, two kinds of promise (design principles 7.1): the hit count is an integer the seeded generator decides, and integers are promised bit-identical across devices, so it is pinned exactly; the price is a `float` built out of 128 chained `exp` calls per path, and a transcendental is promised a written error bound in ulps, not the same bits on every device -- nor on every unit of one device, since the default mode may contract to a fused multiply-add (7.2). So the price is pinned within a bound derived from that composition rather than bit for bit: 2 ulp for each of the 128 `exp`s a path chains (a product of 128 such factors carries at most their sum, first order), plus 2 for the discounting `exp` at the end -- 258, rounded up to 300 for the drift's own rounding under `contract`. A tighter bound would be asserting a promise the language does not make; a `known_fail` would be worse, because the same mark would hide the errors that come later."
 kind = "behavior"
 case = "../../../cases/compile/native/sim_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "7863\n5.894325529519635\n"
+verify_script = """
+const lines = input.normalized.stdout.trimEnd().split('\n')
+assert(lines.length === 2, `expected two lines (the hit count and the price), got ${lines.length}`)
+assert(lines[0] === '7863', `the seeded hit count is an integer the generator decides and 7.1 promises integers bit-identical: ${lines[0]}`)
+const price = Number(lines[1])
+assert(Number.isFinite(price), `the price is not a finite number: ${lines[1]}`)
+const declared = 5.894325529519635
+assert(
+    ulp(price, declared, 300),
+    `the price is ${ulpDistance(price, declared).toExponential(3)} ulp from the declared value ${declared} (bound 300, derived in this entry's desc): ${lines[1]}`
+)
+"""
 
 [[tests]]
 name = "native.sim_wrong_arity"

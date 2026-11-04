@@ -227,7 +227,7 @@ Expansion expandPack(
         return e.second == length;
     });
     if (!same) {
-        std::string text = "..";
+        std::string text = "...";
         text += pattern->toString() + "|";
         for (size_t i = 0; i < measure.seen.size(); ++i) {
             text += (i == 0 ? "" : ", ") + measure.seen[i].first + " has " +

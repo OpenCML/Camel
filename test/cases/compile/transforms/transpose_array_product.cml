@@ -21,13 +21,13 @@ import rulesets.transpose
 import { numel, sum } from tensor
 import { vjp } from vjp
 
-func energy(xs: float[..], w: float[..]): float {
+func energy(xs: float[...], w: float[...]): float {
     return sum(xs * w)
 }
 
 func main(): int sync {
-    let xs = [1.0, 2.0, 3.0] as float[..]
-    let w = [2.0, 3.0, 4.0] as float[..]
+    let xs = [1.0, 2.0, 3.0] as float[...]
+    let w = [2.0, 3.0, 4.0] as float[...]
     let (value, pullback) = vjp(energy)(xs, w)
     let (dx, dw) = pullback(1.0)
     println(`value = ${value:.1f}`)

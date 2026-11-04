@@ -2,7 +2,7 @@ id = "compile.prelude_signatures"
 order = 341
 tier = "fast"
 tags = ["feat", "compile", "prelude", "rest"]
-desc = "The built-in functions are declared in the prelude (stdlib/prelude.cml): a lambda written for one takes its parameter types from the declaration, and a pack stands for the arguments a declaration leaves open (`with <..args>`, `(..A) => R`)."
+desc = "The built-in functions are declared in the prelude (stdlib/prelude.cml): a lambda written for one takes its parameter types from the declaration, and a pack stands for the arguments a declaration leaves open (`with <...args>`, `(...A) => R`)."
 
 [[tests]]
 name = "imported_name_reads_the_file_once"
@@ -34,7 +34,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "function_type_pack"
-desc = "A parameter of type `(..A) => R` takes functions with any parameter list."
+desc = "A parameter of type `(...A) => R` takes functions with any parameter list."
 kind = "behavior"
 case = "../../../cases/compile/prelude_signatures/function_type_pack.cml"
 args = ["${case}", "std::fvm"]
@@ -49,7 +49,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "with_pack_with_body"
-desc = "A function with a body may write a pack among its `with` parameters, on the rule the ordinary parameters follow: `with <..ws> func ident(x: float): float` is called with no `with` argument and returns its argument."
+desc = "A function with a body may write a pack among its `with` parameters, on the rule the ordinary parameters follow: `with <...ws> func ident(x: float): float` is called with no `with` argument and returns its argument."
 kind = "behavior"
 case = "../../../cases/compile/prelude_signatures/with_pack_with_body.cml"
 args = ["${case}"]

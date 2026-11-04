@@ -75,7 +75,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature"
-desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[..]..` the stream of open-rank arrays, while `int[..]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
+desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[...]..` the stream of open-rank arrays, while `int[...]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}"]
@@ -87,7 +87,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature_printed"
-desc = "One element type, one spelling: every stream type of a signature reaches `std::jgir` as the suffix that was written - `int..`, `int?..`, `int..?`, `int[3]..`, `int[..]..` - and the open-rank array `f32[..]` is still an array. The signature of the graph is where a type is read by every tool, so this is the printing the diagnostics and `std::gir` share."
+desc = "One element type, one spelling: every stream type of a signature reaches `std::jgir` as the suffix that was written - `int..`, `int?..`, `int..?`, `int[3]..`, `int[...]..` - and the open-rank array `f32[...]` is still an array. The signature of the graph is where a type is read by every tool, so this is the printing the diagnostics and `std::gir` share."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}", "std::jgir"]
@@ -103,13 +103,13 @@ const signature = (name) => {
 }
 assert(signature('count') === '(s: int..) => int pure', `count is ${signature('count')}`)
 assert(
-    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int pure',
+    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[...]..) => int pure',
     `shapes is ${signature('shapes')}`,
 )
 assert(signature('teePair') === '(pair: (int.., int)) => int pure', `teePair is ${signature('teePair')}`)
-assert(signature('openRank') === '(rows: f32[..]) => int pure', `openRank is ${signature('openRank')}`)
+assert(signature('openRank') === '(rows: f32[...]) => int pure', `openRank is ${signature('openRank')}`)
 const types = [...new Set(doc.graphs.flatMap((g) => g.nodes.map((n) => n.outputType)).filter(Boolean))]
-for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[..]..', 'f32[..]', '(int.., int)']) {
+for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[...]..', 'f32[...]', '(int.., int)']) {
     assert(types.includes(wanted), `${wanted} is not among ${JSON.stringify(types)}`)
 }
 }
@@ -193,7 +193,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_as"
-desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '...'; expected '}'.` at the `...`."
 kind = "negative"
 case = "../../../cases/compile/stream/type_as.cml"
 args = ["${case}"]
@@ -225,7 +225,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_generic"
-desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `..` cannot take at all."
+desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `...` cannot take at all."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_generic.cml"
 args = ["${case}"]
@@ -257,7 +257,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `...`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]

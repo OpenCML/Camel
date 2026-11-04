@@ -155,8 +155,8 @@ bool TensorModule::load() {
     // objects (docs/design/cpp-standalone/README.cn.md 9). The signature here says only what kind
     // of value they return; one call's concrete type depends on the type argument and on the
     // shape it is given, and is described by the call site.
-    context_->execMgr().declareBridgeSignature("tensor:ones", "T[..]");
-    context_->execMgr().declareBridgeSignature("tensor:zeros", "T[..]");
+    context_->execMgr().declareBridgeSignature("tensor:ones", "T[...]");
+    context_->execMgr().declareBridgeSignature("tensor:zeros", "T[...]");
     // A tensor constant's exact type carries its dtype and shape.
     static const bool refinerAdded = [] {
         camel::core::ValueTypeRefinerRegistry::instance().add(

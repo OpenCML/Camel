@@ -2,11 +2,11 @@
 // clause has moved to its own line: the parameters go one per line as well, and the result type
 // follows the closing parenthesis.
 func combine_all::<T>(
-    first: T[..],
-    second: T[..],
-    third: T[..],
+    first: T[...],
+    second: T[...],
+    third: T[...],
     scale: T
-): T[..]
+): T[...]
     when is_numeric::<T>() {
     return first + second + third
 }

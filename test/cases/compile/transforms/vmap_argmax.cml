@@ -21,7 +21,7 @@
  *
  * Each batched result is printed beside the row-by-row `array.vmap` of the same function; the plan
  * compares the two strings rather than a written golden. The elements print as integers, not as
- * floats, and each `f` declares `int[..]` -- a typing no float answer would satisfy -- so the
+ * floats, and each `f` declares `int[...]` -- a typing no float answer would satisfy -- so the
  * comparison is of positions as positions.
  */
 import rulesets.vmap
@@ -30,17 +30,17 @@ import { argmax_axis, argmin_axis } from tensor
 import { vmap } from transforms
 
 // The axis is the row's first one: in the lifted value it is the second.
-func column_argmax(x: float[2, 3]): int[..] {
+func column_argmax(x: float[2, 3]): int[...] {
     return argmax_axis(x, 0, false)
 }
 
 // `keepdims` keeps the reduced axis, so the batch keeps it too.
-func column_argmin(x: float[2, 3]): int[..] {
+func column_argmin(x: float[2, 3]): int[...] {
     return argmin_axis(x, 0, true)
 }
 
 // The axis is the row's second one, which is the lifted value's third.
-func row_argmax(x: float[2, 3]): int[..] {
+func row_argmax(x: float[2, 3]): int[...] {
     return argmax_axis(x, 1, false)
 }
 

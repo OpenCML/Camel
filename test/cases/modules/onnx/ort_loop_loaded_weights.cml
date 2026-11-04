@@ -2,7 +2,7 @@
  * A loop whose depth depends on the model input, with weights READ FROM A FILE into a captured
  * struct: the forward (state, counter) and the gradient of a loss over the state with respect
  * to the weights, exported with a dynamic batch axis. The declared type of the weights states
- * the element type and no extent (`{ w: f32[..] }`); the export gives the captured constant the
+ * the element type and no extent (`{ w: f32[...] }`); the export gives the captured constant the
  * shape its value has. Without that the body of the loop knew less about the weights than the place
  * calling it, and the export's simplification unrolled the recursion until it ran out of
  * memory ("Runtime draft encoding failed to allocate ... bytes").
@@ -16,21 +16,21 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: f32[..] }
+type P = { w: f32[...] }
 
 with <m: P>
-func walk(h: f32[..], k: int): (f32[..], int) {
+func walk(h: f32[...], k: int): (f32[...], int) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let (h, k) = walk<m>(x, 0)
     return float(sum(h * h))
 }
 
 with <m: P>
-func step(x: f32[..]): (f32[..], int, float[..], f32[..]) {
+func step(x: f32[...]): (f32[...], int, float[...], f32[...]) {
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
     return (h, k, reshape<[1]>([g.0]), g.1.w)
@@ -45,7 +45,7 @@ func main(): int sync {
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((x: f32[..]): (f32[..], int, float[..], f32[..]) => step<m>(x), x)
+        let _ = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((x: f32[...]): (f32[...], int, float[...], f32[...]) => step<m>(x), x)
         1
     } else 0
     println(exported)

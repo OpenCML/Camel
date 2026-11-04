@@ -6,15 +6,15 @@
 import { layer_norm, softmax, sum, transpose } from tensor
 import { with_grad } from autodiff
 
-func mask(): float[..] { return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2] }
+func mask(): float[...] { return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2] }
 
-type Model = { g: float[..], b: float[..], wq: float[..], wk: float[..], wv: float[..] }
-
-with <m: Model>
-func normed(x: float[..]): float { return sum(layer_norm(x, m.g, m.b)) }
+type Model = { g: float[...], b: float[...], wq: float[...], wk: float[...], wv: float[...] }
 
 with <m: Model>
-func attended(x: float[..]): float {
+func normed(x: float[...]): float { return sum(layer_norm(x, m.g, m.b)) }
+
+with <m: Model>
+func attended(x: float[...]): float {
     let q = x @ m.wq
     let k = transpose(x @ m.wk)
     let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
@@ -22,7 +22,7 @@ func attended(x: float[..]): float {
 }
 
 with <m: Model>
-func both(x: float[..]): float {
+func both(x: float[...]): float {
     return sum(layer_norm(x, m.g, m.b) @ m.wq)
 }
 

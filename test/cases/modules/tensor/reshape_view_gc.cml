@@ -8,12 +8,12 @@
 import { reshape, unsqueeze, sum, concat, dim } from tensor
 
 // A fresh owner every call: only the returned view keeps it alive.
-func make_view(i: int): f32[..] {
+func make_view(i: int): f32[...] {
     let base = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3] * f32(i)
     return unsqueeze<0>(reshape<[6]>(reshape<[3, 2]>(base)))
 }
 
-func spin(i: int, n: int, acc: f32[..]): f32[..] {
+func spin(i: int, n: int, acc: f32[...]): f32[...] {
     return if i >= n then acc else sync {
         let v = make_view(i)
         // A view of a view reads the same owner.

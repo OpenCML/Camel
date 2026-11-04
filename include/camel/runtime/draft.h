@@ -320,6 +320,35 @@ struct DraftUserLists {
 /// the constructor out of line.
 uint64_t nextDraftEpoch();
 
+/// Whether the region a chain place is handed to survives the rewrite that hands it over -- the one
+/// fact `handChainPlaceTo` cannot read off the draft, because it is about the graph the rewrite is
+/// making rather than the graph it is holding. It is a parameter type and not a member of
+/// `GraphDraft` so that a caller stating it does not name the type: the direct-connection ledger
+/// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction, and
+/// a caller that passes a value is not one of them.
+///
+/// The judgement is not read off the graph, it is declared by the caller: the graph has no quantity
+/// that separates the two cases. The draft does hold the region and its owner, so the tempting
+/// predicate is "the tail stands in an arm whose owner is still alive -- refuse". Measured, that is
+/// the wrong question: `src/passes/opt/generic/generic.cpp#pruneBranch` hands the place over while the
+/// branch it is pruning is still alive and its arm is still an arm (the probe reads
+/// `tkind=1 owner=15 ownerAlive=1 same=0`), and a predicate read that way refuses the handover that
+/// rewrite must make. Only the caller knows whether the region outlives the rewrite, so it says.
+///
+/// The default is the conservative side: a call site that does not say gets `KeepsItsBlock`, so a new
+/// caller that forgets is stricter than it needs to be, never looser. A guard whose default was the
+/// permissive side would be worse than no guard, because it would look like one.
+enum class PlaceHandover {
+    /// The code the place is handed to keeps a block of its own (the body an inline splice moved in).
+    /// A statement of another block does not run whenever a statement of that block runs, so it heads
+    /// its own block's chain instead of following that block's tail.
+    KeepsItsBlock,
+    /// The block the place is handed to is dissolved into `id`'s block by the same rewrite (a pruned
+    /// branch, whose arm's code becomes the block's code when `eraseNode` re-parents its regions), so
+    /// by the time the graph is committed the two ends are statements of one block.
+    DissolvedIntoIdsBlock,
+};
+
 class GraphDraft {
   public:
     /// A draft of `graph`, a graph of `program`: the draft reads the graphs it refers to (the
@@ -671,7 +700,19 @@ class GraphDraft {
     /// the place is handed over rather than closed over `id`. Handing it over is what keeps the
     /// replacing code reachable from the graph's result: the chain is what says a statement runs
     /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
-    void handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail);
+    ///
+    /// `how` says whether that block survives the rewrite. A caller splicing code it keeps -- an
+    /// inlined body -- keeps it, and then a statement of *another* block cannot follow `tail`: it does
+    /// not run whenever `tail` runs (src/runtime/branch_arms.cpp refuses exactly that graph,
+    /// docs/technical/17_graph_rewrite_api_contracts.md 4.1), so it heads its own block's chain
+    /// instead -- the same sentence `closeChainOver` applies to a predecessor of another block. A
+    /// caller that dissolves the block in the same rewrite -- a pruned branch, whose arm's code
+    /// becomes the block's code when `eraseNode` re-parents its regions -- hands the place over
+    /// normally, because by the time the graph is committed the two ends are statements of one block.
+    /// The distinction is the caller's to make: it is the only place that knows whether the region
+    /// outlives the rewrite, and it says so with `PlaceHandover`.
+    void handChainPlaceTo(
+        gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how = PlaceHandover::KeepsItsBlock);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
     /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to

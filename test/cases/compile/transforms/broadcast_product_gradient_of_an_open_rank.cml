@@ -1,7 +1,7 @@
 // A broadcasting product's gradient with the shapes left **open**: the refusal that says why the
 // library cannot answer it, and the case that would catch the plausible wrong fix.
 //
-// Same program as `broadcast_product_gradient_of_a_stated_shape.cml` with `float[..]` in place of
+// Same program as `broadcast_product_gradient_of_a_stated_shape.cml` with `float[...]` in place of
 // `float[3]` and `float[1]`. Hand, exactly as there: `x = [1.0, 2.0, 3.0]`, `w = [2.0]`,
 //
 //     value = 12.0
@@ -11,7 +11,7 @@
 // The engine answers both of those today (`accumulateOperand` hands `sum_to` the operand itself,
 // which it can do because its pullback holds the primal values). The library cannot: the walk asks
 // `stdlib/rulesets/transpose.cml#mul_tensor_t` for the tangent's cotangent, the law's `sum_to` reads
-// that operand for its shape, the operand is a tangent, and `float[..]` states no extents --
+// that operand for its shape, the operand is a tangent, and `float[...]` states no extents --
 // `shapeCarrierOf` answers only a stated type (author, 2026-11-03 16:15). Measured 2026-11-04:
 //
 //     TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry
@@ -31,12 +31,12 @@
 import { numel, sum } from tensor
 import { vjp } from vjp
 
-func total(x: float[..], w: float[..]): float {
+func total(x: float[...], w: float[...]): float {
     return sum(x * w)
 }
 
 func main(): int sync {
-    let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[..], [2.0] as float[..])
+    let (value, pullback) = vjp(total)([1.0, 2.0, 3.0] as float[...], [2.0] as float[...])
     let (dx, dw) = pullback(1.0)
     `open value={} d/dx numel={} d/dx={} d/dw numel={} d/dw={}`->format<value, numel(dx), dx, numel(dw), dw>->println
     return 0

@@ -45,7 +45,7 @@ func main(): int sync {
     // The per-step f32 fold, and the same elements through the array reduction.
     let foldA   = foldF32(a)
     let arrayA  = array_sum(a)
-    // The same call with the array spelling of the operand: `sum::<T>(x: T[..]): T` at f32.
+    // The same call with the array spelling of the operand: `sum::<T>(x: T[...]): T` at f32.
     let arrayArgA = sum(a)
     // The f64 accumulation of the same elements: the sum this call answered while its result type
     // was float, and the mean's sum before it was divided.

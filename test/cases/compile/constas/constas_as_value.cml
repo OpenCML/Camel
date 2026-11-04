@@ -4,7 +4,7 @@ func total(constas n: int, x: f32[n]): float {
     return float(sum(x))
 }
 
-func apply(f: (x: f32[..]) => float, x: f32[..]): float {
+func apply(f: (x: f32[...]) => float, x: f32[...]): float {
     return f(x)
 }
 

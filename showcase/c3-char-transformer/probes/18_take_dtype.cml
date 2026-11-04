@@ -1,8 +1,8 @@
 // WALL PROBE 18 -- the lookup's element type.  `take(table, [0])` reads a row out of a table, and
-// an embedding is exactly that read.  The model's table is declared `float[..]`; the row is added
-// to a position vector that is also `float[..]`.  If the row comes back `f32`, then every tensor
+// an embedding is exactly that read.  The model's table is declared `float[...]`; the row is added
+// to a position vector that is also `float[...]`.  If the row comes back `f32`, then every tensor
 // downstream of the embedding is f32 while every weight is float, and the first matrix product in
-// the model is where that is noticed (`'__mat__' with (f32[..], float[..])`).
+// the model is where that is noticed (`'__mat__' with (f32[...], float[...])`).
 import { sum, take, zeros } from tensor
 
 func main(): int sync {

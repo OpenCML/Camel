@@ -9,16 +9,16 @@ import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func scaled(t: f32[..]): f32[..] sync {
+func scaled(t: f32[...]): f32[...] sync {
     println('EFFECT inside exported function')
     return relu(t) * 2.0
 }
 
-func noisy(t: f32[..]): f32[..] sync {
+func noisy(t: f32[...]): f32[...] sync {
     return scaled(t) + 1.0
 }
 
 func main(): void! sync {
     let x = reshape<[4]>([1.0, -2.0, 3.0, 0.5] as f32[])
-    export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[..]): f32[..] => noisy(t), x)
+    export_model<out: get_env('ONNX_OUT') ?? ''>((t: f32[...]): f32[...] => noisy(t), x)
 }

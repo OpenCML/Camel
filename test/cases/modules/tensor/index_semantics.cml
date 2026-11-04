@@ -21,27 +21,27 @@ func layers(x: f32[2, 3], b: f32[3], w: f32[3, 4]): float {
 }
 
 /// The first extent is open: a parameter without a value; the bias broadcasts on the other.
-func rows(x: f32[?, 3], b: f32[3]): f32[..] {
+func rows(x: f32[?, 3], b: f32[3]): f32[...] {
     return x + b
 }
 
 /// Both first extents are open: either may be 1, so whether it broadcasts is not known (Q9).
-func open(x: f32[?, 3], y: f32[?, 3]): f32[..] {
+func open(x: f32[?, 3], y: f32[?, 3]): f32[...] {
     return x + y
 }
 
 /// Nothing is known of the rank.
-func unknown(x: f32[..], y: f32[..]): f32[..] {
+func unknown(x: f32[...], y: f32[...]): f32[...] {
     return x * y
 }
 
 /// The program allows the sum to be regrouped.
 #[reassociate]
-func regrouped(x: f32[4, 5]): f32[..] {
+func regrouped(x: f32[4, 5]): f32[...] {
     return sum<1>(x)
 }
 
-func pooled(x: f32[1, 1, 4, 4]): f32[..] {
+func pooled(x: f32[1, 1, 4, 4]): f32[...] {
     return max_pool2d(x, 2, 2, 1)
 }
 

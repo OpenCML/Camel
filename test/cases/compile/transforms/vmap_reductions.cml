@@ -17,7 +17,7 @@
  * plan compares the two strings rather than a written golden: what this pins is that the two
  * writings are one computation.
  *
- * A reduction's result type is the open rank `T[..]` -- the rank is a fact about the value, which
+ * A reduction's result type is the open rank `T[...]` -- the rank is a fact about the value, which
  * carries it, not about the type (`test/cases/trans/cpp/sum_axis_rank.cml`) -- so each `f` here
  * declares its result open-rank, and the brackets of the numbers below are the shape the value has.
  */
@@ -27,25 +27,25 @@ import { max_axis, mean_axis, min_axis, sum_axis } from tensor
 import { vmap } from transforms
 
 // The axis is the row's first one: in the lifted value it is the second.
-func column_sum(x: float[2, 3]): float[..] {
+func column_sum(x: float[2, 3]): float[...] {
     return sum_axis(x, 0, false)
 }
 
 // `keepdims` keeps the reduced axis, so the batch keeps it too: `float[?, 2, 1]`.
-func row_sum_kept(x: float[2, 3]): float[..] {
+func row_sum_kept(x: float[2, 3]): float[...] {
     return sum_axis(x, 1, true)
 }
 
-func column_max(x: float[2, 3]): float[..] {
+func column_max(x: float[2, 3]): float[...] {
     return max_axis(x, 0, false)
 }
 
 // The axis is the row's last one: it stays the last one of the lifted value.
-func row_min(x: float[2, 3]): float[..] {
+func row_min(x: float[2, 3]): float[...] {
     return min_axis(x, 1, false)
 }
 
-func column_mean(x: float[2, 3]): float[..] {
+func column_mean(x: float[2, 3]): float[...] {
     return mean_axis(x, 0, false)
 }
 

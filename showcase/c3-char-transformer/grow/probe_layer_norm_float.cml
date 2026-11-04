@@ -1,7 +1,7 @@
-// Does `layer_norm` on `float[..]` answer `float[..]`, or does it answer `f32[..]`?
+// Does `layer_norm` on `float[...]` answer `float[...]`, or does it answer `f32[...]`?
 //
 // `stage2_residual_ln.cml` refuses at its next `matmul` with `No matching function found for argument
-// types: <> (f32[..], float[..], float[..], float[..])`, i.e. the normalization's result reached the
+// types: <> (f32[...], float[...], float[...], float[...])`, i.e. the normalization's result reached the
 // product as `f32` while the weights are `float`.  Both `layer_norm` overloads are in
 // `stdlib/signatures/tensor.cml` (f32 first at line 305, f64 at 313), and this program asks for the
 // f64 one by naming the element type.  It prints one number: with beta = [0.1, -0.2] and each row

@@ -3,10 +3,11 @@
 > **Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first** (English translation: [`design-principles.en.md`](../docs/design-principles.en.md)). It is the language author's normative statement of what Camel is and of its execution model; it prevails over code and other documents, and questions it leaves undecided go to the language author.
 
 ## General Policy
+- **Before writing a file, print the target's absolute path.** `[System.IO.File]::WriteAllText` and shell redirection (`>` , `Out-File`) resolve a *relative* path against the process's working directory, not against the directory a previous `cd` put the shell in -- and that working directory is not always the worktree the reader assumes. On 2026-11-02 six writes landed in the main checkout `D:\Projects\Camel` that way, two of them as **0-byte** files: a 0-byte file is the worst shape, because it looks like "I created it" while nothing was written. So: derive the path from an absolute root (or `$PSScriptRoot`), print it with `Resolve-Path -LiteralPath` / `[IO.Path]::GetFullPath()`, and end a round with `git -C D:\Projects\Camel status --porcelain`, which must print nothing.
+- **And verify such a write with the same absolute path, never with `Select-String` or `Get-Content` alone.** Those two follow *PowerShell's* location, while `[IO.File]` follows the process's, so checking a write with them can read a **different file** and "prove" a write that did not happen -- or report that a file still holds text it no longer has. Measured 2026-11-04: `[IO.File]::ReadAllText('stdlib/rulesets/transpose.cml')` read the main checkout while `Select-String -Path stdlib\rulesets\transpose.cml` read the lane's tree, and for one round the two answers contradicted each other (`pow_d_t` "still there" versus "gone") until both were given absolute paths. A safe read-back is `[IO.File]::ReadAllText((Resolve-Path -LiteralPath <absolute path>))`, and `git -C <tree> diff --numstat -- <path>` is the second opinion: a write that changed nothing shows a diff of `0 0` or no hunk at all.
 - Prefer TDD: write tests before implementation whenever feasible.
 - Place test cases under `test/`.
 - For substantial refactors, update `docs/` in the same change set.
-- **Before writing a file, print the target's absolute path.** `[System.IO.File]::WriteAllText` and shell redirection (`>` , `Out-File`) resolve a *relative* path against the process's working directory, not against the directory a previous `cd` put the shell in -- and that working directory is not always the worktree the reader assumes. On 2026-11-02 six writes landed in the main checkout `D:\Projects\Camel` that way, two of them as **0-byte** files: a 0-byte file is the worst shape, because it looks like "I created it" while nothing was written. So: derive the path from an absolute root (or `$PSScriptRoot`), print it with `Resolve-Path -LiteralPath` / `[IO.Path]::GetFullPath()`, and end a round with `git -C D:\Projects\Camel status --porcelain`, which must print nothing.
 - **A commit that no remote branch contains does not exist for anyone else.** The last command of a round is `git branch -r --contains HEAD`: an empty list means the round's work is invisible to every other lane, however green its readings were. On 2026-11-02 four commits sat on a local branch while another lane reported, in good faith, that the rule it needed was not in the tree -- "I committed it" is not "it can be merged". Push the branch (or hand the merge lane a branch that is pushed) before saying a round is done.
 - **Only a tip that `origin/<branch>` resolves to is a reading that can be merged.** `git cat-file -t <sha>` answering `commit` proves the object is in *this* repository and nothing more; `git branch -r --contains <sha>` printing nothing proves no remote branch carries it. Both together mean the reading cannot be checked by anyone else, which is the same class of problem as a change written into somebody else's checkout: the numbers may be right and nobody can reproduce them. On 2026-11-02 the fix for the Debug link error `typeinfo for camel::rewritemod::ProofObject` was reported at `41f2303d7` -- a commit that existed locally and that no remote branch contained. A merge lane's answer to "is this ready" is therefore `git ls-remote --heads origin | grep <branch>` and a `rev-parse` of that ref, never "the lane says its branch is at <sha>".
 - **A merge runs three instruments first, and any one of them red stops the merge.** `node scripts/conflict-markers.mjs` for conflict markers -- all four forms: the head, the diff3 base block, the separator and the tail. The one-line `git grep -n '^<<<<<<< '` we typed by hand sees only the first, and on 2026-11-02 that missed a merge that had been aborted and committed as `407a7ee9f`, which left a base block in test/plans/feat/trans/cml.plan.toml -- a plan file that still parses far enough to be reported as a case. A bare separator counts only where a hunk head precedes it, because in Markdown it is a setext heading underline; `node scripts/diagnostics-catalog.mjs --check` for a code registry that still names what the tree emits; and `node scripts/check-doc-links.mjs --questions-index`, because `docs/handover/questions/` is a table whose row count is maintained by hand and whose pages move to `reviews/` when the author rules on them. The index rule is one line: **the page is generated, not written.** ode scripts/check-doc-links.mjs --questions-index --write builds it from the directory -- one row per page, the page title as the sentence, the header counting the directory -- and --questions-index without --write compares the file with exactly that text, so a hand edit is a red that names the line and prints both versions. The fix is always to regenerate. The author made this the rule at 11:10, after a night in which the same table broke three times in three merges (3 pending-index problems, a row for a page that had moved to reviews/, a header one behind the directory) and after he retired every hand-kept state table at 08:10: an index kept by hand beside a directory is two sources for one fact.
@@ -127,6 +128,48 @@ Two ways to name a process, and only two: `kill <PID>`, or `pkill -f '~/camel-wo
 `pkill -f 'run-tests.mjs'` and `pkill node` are forbidden. On 2026-11-02 one lane used the first while five lanes were running: every one of them was inside that pattern, and only the accident that `pkill` matched the killing shell's own `bash -c` first kept them alive; a `pgrep` afterwards found all five still running. **Alive was luck, not judgement.**
 
 The same day made the other half of the point with a check instead of an accident: with the "zero tests started" gate in place, 31 of the tree's 309 plans turned out to be silent zeros - their tier puts them out of an ordinary run, and until the gate existed they said nothing at all - and the first real defect came with them, `test/plans/feat/trans/cml_sweep.plan.toml` missing a plan-level `tier`, calling itself fast while its only test is slow, reddening the whole fast pass. **Green because nothing ran is not green.**
+
+## A host checkout name is a lane's identity, and two runs under one name overwrite each other's reading
+
+`camel-remote.ps1` keeps one checkout per worktree name on the host, so the name is the only thing
+that says which lane a build directory belongs to. Two lanes that pass the same `-Path`, or one
+session's two runs on two branches, take turns on one directory: the checkout and patch phase of
+whichever starts second rewrites the tree the first one's plan phase is still reading, and the build
+directory stays incremental across both.
+
+2026-11-04 measured how quietly that goes wrong. A lane's confirmation run on `m-train` started at
+19:47 with `-Plan all -Tier fast -Jobs 8`; a second run under the same `mtrain` name started at
+19:54 from another branch of the same repository. The first run finished with an entirely ordinary
+line -- `[SUMMARY] total: 8804, pass: 8759, fail: 2, skip: 13, known failures: 30`, killed 0, timed
+out 0 -- and only the line above it disagreed: `[provenance] tip 5d3017ca2…`, a commit the measured
+branch never contained. A summary reading 2 where the same tree read 11 an hour earlier is not
+evidence of progress; it is evidence that somebody else's tree was measured.
+
+So **give every lane its own checkout name** (`mtrain`, `b3full`, `devbase`), and when a
+`[provenance]` line names a tip this tree does not contain, throw the reading away: do not reconcile
+it, do not ask whether the difference is explainable. Re-run under the lane's own name. The number
+then is honest and the price is one run; a reconciled number becomes a fact in the next report and
+nobody can tell afterwards that it was never measured.
+
+## A revert that covers part of a change reads as "the rest of the change is still in the tree"
+
+A control experiment is only as wide as the diff it actually reverted, and a partial revert answers a
+different question than the one it looks like it answers: it measures **what the part left in place
+still does**, never **whether the change was the cause**.
+
+2026-11-04 paid for this twice. A change made of two commits (`bb432e8ae` + `821f30c83`, five files)
+was suspected as the source of ten `cotangent-needs-a-value` failures. The probe reverted one of the
+two commits: two of the five files. It read `fail = 10` and was reported as "the change explains one
+of the ten, the other nine are pre-existing debts". A second lane reverted the change whole -- five
+files -- and read `fail = 2`: the eight names the half revert left red were that change's own
+regressions, never debts at all. The half-revert number looked exactly like a complete verdict, so it
+was cited as one, twice, by two different readers.
+
+So a control experiment states **which diff it reverted, file by file and commit by commit, and
+whether that is the whole change**; and a number from a partial revert is never compared with a number
+from a full one. If the change is made of two commits, revert both or say in the first line that the
+reading is about the remainder. **A number that answers half the question is not a small answer, it
+is an answer to another question.**
 
 ## A guard that reports and then reads on can turn a red into a green
 
@@ -391,3 +434,25 @@ note point there.
 The cost of getting this wrong has been paid: a note carried "a ruling flips about 16 cases" for four
 hours after the tree changed so that flipping flipped nothing, and that sentence kept everyone from
 touching a line of code that had no consumer left.
+
+## An assertion on a spelling pins the whole sentence, never the punctuation
+
+`...` is the string most likely to appear in diagnostic output by accident: the runner truncates a
+long message and the cut lands in `(name=SyntaxDiag::MissingTo...`, an ellipsis in prose is three
+dots, and a path or a version can carry one. So `expect_output_contains = ["..."]` does not assert
+what it looks like it asserts -- it asserts that three dots appear somewhere, which a wrong
+diagnostic satisfies as readily as a right one.
+
+Pin the whole sentence instead, quotes included (`expected '...'`), and add a negative assertion for
+the sentence the change replaced, so that the old behaviour cannot come back while the case stays
+green. Both halves are needed: the positive one says the new wording is there, the negative one says
+the failure it replaced is gone.
+
+The cost of getting this wrong has been paid, twice in one evening. When a parser began reporting
+`expected '...'` for a `..` pack, four cases were written with `expect_output_contains = ["..."]`
+and four of them passed -- against a binary that reported the *old* semantic sentence instead,
+whose truncated `(name=SyntaxDiag::...)` supplied the three dots. The same evening, a migration
+script rewrote the very cases that were supposed to hold the old spelling, and the next run
+reported a regression that was really the counter-examples deleting themselves. Assertions are
+evidence only while nothing else rewrites them; a case that must keep the old spelling belongs on
+the script's exclusion list.

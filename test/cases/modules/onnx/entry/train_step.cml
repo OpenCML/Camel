@@ -11,7 +11,7 @@ import { sgd } from nn
 type Linear = { w: f32[3, 4], b: f32[4] }
 
 with <p: Linear>
-func loss(x: f32[..], y: f32[..]): float {
+func loss(x: f32[...], y: f32[...]): float {
     let d = tanh(x @ p.w + p.b) - y
     return float(mean(d * d))
 }

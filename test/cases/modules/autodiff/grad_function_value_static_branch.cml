@@ -3,10 +3,10 @@ import { grad } from autodiff
 
 // Refused like any branch: the condition is a constant expression, but the graph grad sees
 // still chooses the function by a branch (nothing folds it before grad runs).
-with <p: f64[..]>
+with <p: f64[...]>
 func loss(): float {
     let s = float(sum(p))
-    let g = if 1 > 0 then (t: f64[..]): f64[..] => tanh(t * s) else (t: f64[..]): f64[..] => t * s
+    let g = if 1 > 0 then (t: f64[...]): f64[...] => tanh(t * s) else (t: f64[...]): f64[...] => t * s
     return float(sum(g(p)))
 }
 

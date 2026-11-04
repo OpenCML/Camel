@@ -1,11 +1,11 @@
 /**
- * The negative of `rules_angle_args_mean_transpose.cml`: the same function with `x: float[..]`, and
+ * The negative of `rules_angle_args_mean_transpose.cml`: the same function with `x: float[...]`, and
  * the rule that refuses it.
  *
  * A transposition is the adjoint of a linear map, and the adjoint needs the shape of the map's
  * domain: `transpose(loss_mean)` is handed the cotangent of the result (`float[3]`) and no argument,
  * so nothing in the graph says how many positions `x` has. The shape is not in the type either
- * (`float[..]` states neither a rank nor a length) and no value in the program carries it, so the
+ * (`float[...]` states neither a rank nor a length) and no value in the program carries it, so the
  * pullback of `mean_axis` cannot be built: `mean_axis_cotangent` reads `xs` for `numel(xs)` and
  * `ones_like(xs)`.
  *
@@ -23,7 +23,7 @@ import rulesets.transpose
 import { transpose } from transforms
 import { mean_axis, sum } from tensor
 
-func loss_mean(x: float[..]): float {
+func loss_mean(x: float[...]): float {
     return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
 }
 

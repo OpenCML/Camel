@@ -90,13 +90,13 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 14
-expect_diagnostic_column = 83
+expect_diagnostic_column = 85
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("operator 'nn:softmax_cross_entropy' has no ONNX lowering at opset 17"), 'missing unsupported-operator detail')
-assert(/[^ ]*export_unsupported[.]cml:14:83:/.test(text), 'missing source position of the unsupported call')
+assert(/[^ ]*export_unsupported[.]cml:14:85:/.test(text), 'missing source position of the unsupported call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
@@ -113,13 +113,13 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 13
-expect_diagnostic_column = 87
+expect_diagnostic_column = 89
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = input.normalized.output
 assert(text.includes("impure operator 'rand:next_key' cannot be exported"), 'missing impure-operator detail')
-assert(/[^ ]*export_impure[.]cml:13:87:/.test(text), 'missing source position of the impure call')
+assert(/[^ ]*export_impure[.]cml:13:89:/.test(text), 'missing source position of the impure call')
 assert(text.includes('ExportUnsupported'), 'the refusal must be the error value of the export_model call')
 }
 """
@@ -134,7 +134,7 @@ args = ["${case}"]
 envs = ["ONNX_OUT=${test_tmp}/export_mixed_width_refused.onnx"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["Invalid call to '__add__'", "(float[..], f32[..])", "the two tensor operands have different element types ('float' and 'f32')"]
+expect_output_contains = ["Invalid call to '__add__'", "(float[...], f32[...])", "the two tensor operands have different element types ('float' and 'f32')"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
 
@@ -2215,7 +2215,7 @@ expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 22
-expect_diagnostic_column = 79
+expect_diagnostic_column = 81
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 async ({ input, assert }) => {
@@ -2535,7 +2535,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pass_export_entry.unknown_shape"
-desc = "A parameter whose shape nobody stated (`x: f32[..]`) cannot be a model input: the refusal is located at main and names the parameter. No file is written."
+desc = "A parameter whose shape nobody stated (`x: f32[...]`) cannot be a model input: the refusal is located at main and names the parameter. No file is written."
 kind = "negative"
 case = "../../../cases/modules/onnx/entry/unknown_shape.cml"
 args = ["${case}", "std::macro", "std::opt", 'onnx::export out="${test_tmp}/entry_unknown_shape.onnx"']
@@ -2544,7 +2544,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 8
 expect_diagnostic_column = 1
-expect_output_contains = ["parameter 'x' of 'main' is declared 'f32[..]', which leaves its shape unknown"]
+expect_output_contains = ["parameter 'x' of 'main' is declared 'f32[...]', which leaves its shape unknown"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 verify_script = """
@@ -3030,7 +3030,7 @@ expect_diagnostic_name = "RuntimeDiag::TranslationRefused"
 expect_diagnostic_code = "0x0400000B"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 12
-expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "a model has no function values"]
+expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[...]) => float[...] pure')", "a model has no function values"]
 expect_output_not_contains = ["onnx::export: wrote", ":?:?:", "arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000
@@ -3046,7 +3046,7 @@ expect_diagnostic_name = "RuntimeDiag::UnhandledError"
 expect_diagnostic_code = "0x04000051"
 expect_diagnostic_line = 13
 expect_diagnostic_column = 12
-expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[..]) => float[..] pure')", "function_branch.cml:13:12"]
+expect_output_contains = ["a branch on a condition that depends on the model input chooses between functions (its value is a '(x: float[...]) => float[...] pure')", "function_branch.cml:13:12"]
 expect_output_not_contains = ["arm_out"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 60000

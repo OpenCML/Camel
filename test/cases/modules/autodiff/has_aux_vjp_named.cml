@@ -10,8 +10,8 @@
  * this declaration does not have, and it is refused as exactly that: `'has_aux' is not a
  * parameter of ...`, with the resolved type of `vjp` printed where the callee's name would
  * stand (it is a generic declaration, so what the argument list was checked against is the
- * instantiated signature `(f: F) => <__pack_0: ..WithOf<F>> (__pack_0: ..ParamsOf<F>) =>
- * (ResultOf<F>, (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>,))`). It is not refused by
+ * instantiated signature `(f: F) => <__pack_0: ...WithOf<F>> (__pack_0: ...ParamsOf<F>) =>
+ * (ResultOf<F>, (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>,))`). It is not refused by
  * silently differentiating the pair's first element, and not by answering a shape the writer did
  * not ask for.
  *

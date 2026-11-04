@@ -26,7 +26,7 @@ func only_maps::<T>(): string {
 }
 
 func main(): int sync {
-    println(shape_of::<int[]>(), shape_of::<f32[..]>(), shape_of::<int?>(), shape_of::<string!>())
+    println(shape_of::<int[]>(), shape_of::<f32[...]>(), shape_of::<int?>(), shape_of::<string!>())
     println(shape_of::<Map<string, int>>(), shape_of::<Set<int>>(), shape_of::<{ a: int }>())
     println(shape_of::<(int, int)>(), shape_of::<(x: int) => int>(), shape_of::<float>())
     println(only_maps::<Map<string, int>>(), only_maps::<Set<int>>(), only_maps::<int?>(), only_maps::<(int, int)>())

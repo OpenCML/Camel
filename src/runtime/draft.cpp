@@ -1496,7 +1496,7 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     }
 }
 
-void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
+void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how) {
     requireOneWriting("handChainPlaceTo");
     if (id == tail || node(id) == nullptr || node(tail) == nullptr) {
         return;
@@ -1525,16 +1525,38 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail) {
     // The statements written after `id` are written after the code that replaced it: they were
     // waiting on the place `id` had, and that place is `tail`'s now. The edge is written in both
     // kinds the ordering is carried as (src/runtime/graph_edges.cpp, `checkSyncEdges`).
+    //
+    // A sync edge joins two statements of one block (docs/design/effects/edges.cn.md 4.6), and the
+    // judgement of whether these two are in one block is about the graph as it is committed, not
+    // about the regions of the draft half way through the rewrite. A caller that keeps the replacing
+    // code's block -- an inlined body, whose last statement may sit inside a branch arm -- leaves the
+    // statement written after `id` in another block, and that statement does not run whenever a
+    // statement of the arm runs (src/runtime/branch_arms.cpp refuses exactly that graph). It heads
+    // its own block's chain instead, the sentence `closeChainOver` above applies to a predecessor of
+    // another block, and what still orders it against the arm's code is the order edge the splice
+    // wrote beside the call (src/runtime/draft_inline.cpp, `addSpliceOrderEdges`) plus the control
+    // edge it already carries. A caller that dissolves the block in the same rewrite says so
+    // (`PlaceHandover::DissolvedIntoIdsBlock`) and the place is handed over as it reads: by the time
+    // the graph is committed, `eraseNode` has re-parented the arm's regions and the two are one block.
+    const bool keepsItsBlock = how == PlaceHandover::KeepsItsBlock;
     for (gc_node_ref_t user : users) {
-        if (user != tail && alive(user)) {
-            chainTo(user, tail);
+        if (user == tail || !alive(user)) {
+            continue;
         }
+        if (!keepsItsBlock || sameSyncBlock(*this, user, tail)) {
+            chainTo(user, tail);
+            continue;
+        }
+        setSyncInputs(user, {});
     }
     // The replacing code is entered from where `id` stood: with no chain of its own, `tail` heads
-    // the chain of the block it joined. A tail that already stands in a chain keeps its place.
+    // the chain of the block it joined. A tail that already stands in a chain keeps its place, and a
+    // tail of another block than the predecessor heads its own block's chain instead (`id`'s place
+    // cannot enter a region from outside the block that holds it).
     if (syncInputsOf(tail).empty()) {
         for (gc_node_ref_t pred : preds) {
-            if (pred != tail && alive(pred)) {
+            if (pred != tail && alive(pred) &&
+                (!keepsItsBlock || sameSyncBlock(*this, tail, pred))) {
                 chainTo(tail, pred);
                 break;
             }

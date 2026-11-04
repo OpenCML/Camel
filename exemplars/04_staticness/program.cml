@@ -21,41 +21,41 @@ import { ones, zeros, shape, reshape, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
+func run(t: int, steps: int, x: f32[...], h: f32[...]): f32[...] {
     let batch = shape(x)[0]
     let features = shape(x)[2]
     return if t >= steps then h else run(t + 1, steps, x, h + reshape<[batch, features]>(slice(x, 1, t, t + 1)))
 }
 
-func forward(x: f32[..]): f32[..] {
+func forward(x: f32[...]): f32[...] {
     return run(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]]))
 }
 
-func shrink(t: f32[..]): f32[..] {
+func shrink(t: f32[...]): f32[...] {
     return if sum(t) > 1.0 then shrink(t * 0.5) else t
 }
 
-func pile(t: f32[..]): f32[..] {
+func pile(t: f32[...]): f32[...] {
     return if sum(t) > 1.0 then pile(t * 0.5) + t else t
 }
 
-func settle(t: f32[..]): f32[..] {
+func settle(t: f32[...]): f32[...] {
     return if sum(t) > 1.0 then (if sum(t * t) > 50.0 then t * 0.1 else settle(t * 0.5) + t) else t
 }
 
-func export_static(x: f32[..]): void! sync {
+func export_static(x: f32[...]): void! sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(forward, x)
     println('exported forward')
     return null
 }
 
-func export_dynamic(x: f32[..]): void! sync {
+func export_dynamic(x: f32[...]): void! sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(shrink, x)
     println('exported shrink')
     return null
 }
 
-func export_linear(x: f32[..]): void! sync {
+func export_linear(x: f32[...]): void! sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(pile, x)
     println('exported pile')
     return null
@@ -64,7 +64,7 @@ func export_linear(x: f32[..]): void! sync {
 /// `settle` is refused, and its refusal is this function's result: nothing
 /// handles it, so writing the call as the result of the body carries it to the
 /// exit of `main` (design principles 3.9).
-func export_nontail(x: f32[..]): void! sync {
+func export_nontail(x: f32[...]): void! sync {
     return export_model<out: get_env('ONNX_OUT') ?? ''>(settle, x)
 }
 

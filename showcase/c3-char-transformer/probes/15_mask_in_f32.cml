@@ -7,12 +7,12 @@
 // the mask is for.
 import { full, ones, sum, where, zeros } from tensor
 
-func mask(): f32[..] {
+func mask(): f32[...] {
     let keep = [[true, false], [true, true]] as bool[2, 2]
     return where(keep, zeros::<f32>([2, 2]), full::<f32>([2, 2], -1000.0))
 }
 
-func masked_score(x: f32[..]): float {
+func masked_score(x: f32[...]): float {
     return float(sum(x + mask()))
 }
 
