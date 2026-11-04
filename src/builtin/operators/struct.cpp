@@ -72,21 +72,15 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // The value is settled where the call is built, not where it runs: an OPER node carries the
 // instantiated type of the call, never the type argument it was written with, so nothing at run
 // time still says which type the extents belong to. A reader that has the type -- the transposition
-// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#shapeFromTypeOf`), and
-// the kernel below is the case of a call that reached the run without being settled.
-
-slot_t __op_extent_of__(ArgsView &with, ArgsView &norm, Context &ctx) {
-    (void)with;
-    (void)norm;
-    (void)ctx;
-    throwRuntimeFault(
-        RuntimeDiag::PassInternalError,
-        "calling `extent_of`",
-        "the extents of `A` are a fact of the type the call names, and an OPER node records the "
-        "instantiated type of the call but not the type argument it was written with, so the value "
-        "is settled where the call is built and there is nothing left for the run to read");
-    return 0;
-}
+// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#shapeFromTypeOf`).
+//
+// So this operator has no kernel, and deliberately not one that would only throw. The rule accepts
+// a call only when the type argument states every extent (`resolveForCall`), and every accepted call
+// is settled from that same `statedExtentsOf` before a node is made (`valueFromTypeArgs`, from
+// `Builder::visitLinkNode` and `Builder::functionValueOf`), so no path builds an OPER node of this
+// operator for a run to execute. The kernel that used to stand here answered every such run with
+// `RuntimeDiag::PassInternalError` -- a compiler's defect reported as the program's fault -- and
+// nothing could reach it.
 
 namespace {
 
