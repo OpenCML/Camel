@@ -115,6 +115,10 @@
 #     except the entries marked `planStage`: those read the plan stage's own record and are asked for
 #     by name beside the plan they read (`-Plan <target> -Check plan-debt`), because a check with no
 #     reading of its own must refuse rather than pass over nothing;
+#   * `all` is therefore the static layer and not the whole table, and the closing summary says which
+#     entries that leaves out instead of leaving it to the reader: the line after "N run" names every
+#     `planStage` entry this run skipped, and a run that named one prints that it is not part of
+#     `all`. Both read the table as it stands, so a new `planStage` entry appears there by itself;
 #   * the stages are build -> plan -> checks, so one call answers both questions and a failing plan
 #     still gets its checkers (their readings are not thrown away with the plan's);
 #   * the run exits non-zero when any checker failed, and the exit code is the plan's when it failed,
@@ -231,8 +235,8 @@ param(
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
-    # `all` leaves out the `planStage` entries (today: `plan-debt`), which read the plan stage's own
-    # record and are named beside the plan they read.
+    # `all` leaves out the entries marked `planStage` (they read the plan stage's own record and are
+    # named beside the plan they read); the run's closing summary names the ones it left out.
     # An unknown name is exit 2 before anything runs; see "what the panel sees" and the -Check
     # section of the header for the stages and the exit code.
     [string[]]$Check = @(),
@@ -343,6 +347,18 @@ foreach ($requested in $Check) {
     }
 }
 $checkList = $checkNames -join ' '
+
+# What `all` cannot mean, read out of the table above and never out of a list written beside it.
+# Every entry marked `planStage` is a check whose evidence is the plan stage, and `all` has no plan
+# to offer it. Typing those names here would just move "remember which checks are named-only" from a
+# person's head into a second list that misses the next added entry; derived from `$checkers`, the
+# closing line below picks a new `planStage` entry up with no edit of its own.
+#
+# `$planStageSkipped` is what this run left out, not what `all` leaves out: `-Check all,plan-debt`
+# runs it, and a line claiming otherwise would be the same wrong reading this line exists to remove.
+$checkHasAll = $Check -contains 'all'
+$planStageNames = @($checkers.Keys | Where-Object { $checkers[$_].planStage })
+$planStageSkipped = @($planStageNames | Where-Object { $checkNames -notcontains $_ })
 
 # A reading taken on a loaded host is not comparable to one taken on a quiet one: this machine also
 # runs every other lane's build, and several lanes at -Jobs 8 is more work than there are cores. So
@@ -1342,6 +1358,21 @@ exit `$code
         Write-Host ("[camel-remote] checks: {0} run, {1} failed ({2} s)" -f `
             $checkResults.Count, $checkFailed.Count, $checksSeconds)
         foreach ($result in $checkResults) { Write-Host ("[camel-remote]   {0} exit {1}" -f $result.name, $result.exit) }
+
+        # `N run` above is the static layer, not the whole table, and that count has been read as
+        # "every check ran" while a named-stage check had not run at all. So the count is followed by
+        # what it leaves out. The names come from `$planStageNames`, the table, so a new entry marked
+        # `planStage` shows up here without this line being touched; a run with none to name prints
+        # nothing, because then there is nothing the count is not counting.
+        if ($checkHasAll -and $planStageSkipped.Count -gt 0) {
+            Write-Host ("[camel-remote] checks: {0} named-stage check(s) not run by -Check all: {1} (use -Check <name>)" -f `
+                $planStageSkipped.Count, ($planStageSkipped -join ', '))
+        }
+        # The other direction, for a run that named one: it did run, and it is still not part of
+        # `all`. Without this line the same "all green" sentence is read over a check `all` never runs.
+        foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].planStage })) {
+            Write-Host ("[camel-remote] checks: {0} is a named-stage check, not part of -Check all; it ran because it was named" -f $result.name)
+        }
     }
 
     if ($null -ne $planStartedAt) {
