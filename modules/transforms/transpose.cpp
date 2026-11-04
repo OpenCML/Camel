@@ -113,6 +113,8 @@ const char *transposeRefusalWord(TransposeRefusalCause cause) {
         return "no-cotangent-arithmetic";
     case TransposeRefusalCause::CotangentPortMismatch:
         return "cotangent-port-mismatch";
+    case TransposeRefusalCause::CalleeBuiltFromAParameter:
+        return "callee-built-from-a-parameter";
     }
     return nullptr;
 }
@@ -4186,6 +4188,53 @@ bool buildTransposeMember(
                                                   ? static_cast<int>(carrierNode2->kind)
                                                   : -1);
                     };
+                    // **Not linear in the parameter this call was built from** (author, 2026-11-04).
+                    // A bare `transpose(f)` reads every parameter of `f` as a linear input, and a call
+                    // whose **callee the body made out of a parameter** is not one: `f(x) =
+                    // mk(x)(2.0)` applies a function `x` produced, so the call is a second-order use
+                    // of `x` and `f` is not linear in it. That is the language's rule, and the
+                    // sentence names the parameter -- the edit a reader can make -- instead of saying
+                    // the answer has no source, which is this walk's state and not the language's.
+                    // The parameter is read by walking the value's norm inputs to a port of this
+                    // graph, whose position is a parameter index through `portParameter` (one port
+                    // per non-`()` parameter, in order).
+                    if (!carried && !capturedValues.empty()) {
+                        const auto ports           = function->normPorts();
+                        std::vector<bool> seen(nodeCount, false);
+                        std::vector<gc_node_ref_t> work{capturedValues.front()};
+                        std::optional<size_t> builtFrom;
+                        while (!work.empty() && !builtFrom.has_value()) {
+                            const gc_node_ref_t at = work.back();
+                            work.pop_back();
+                            if (at >= nodeCount || seen[at]) {
+                                continue;
+                            }
+                            seen[at] = true;
+                            for (size_t i = 0; i < ports.size(); ++i) {
+                                if (ports[i] == at) {
+                                    builtFrom = i < portParameter.size() ? portParameter[i] : i;
+                                    break;
+                                }
+                            }
+                            if (builtFrom.has_value()) {
+                                break;
+                            }
+                            for (const gc_node_ref_t input : function->normInputsOf(at)) {
+                                work.push_back(input);
+                            }
+                        }
+                        if (builtFrom.has_value() &&
+                            *builtFrom < function->funcType()->normTypesCount()) {
+                            refuse(TransposeRefusalCause::CalleeBuiltFromAParameter, builtFrom);
+                            os << " node=" << ref << " callee=none value="
+                               << describe(capturedValues.front()) << " built-from=" << *builtFrom;
+                            if (!namedReason.empty()) {
+                                os << " reason=" << namedReason;
+                            }
+                            os << '\n';
+                            return false;
+                        }
+                    }
                     refuse(TransposeRefusalCause::CallNoTranspose);
                     os << " node=" << ref << " callee=none value="
                        << describe(inputs.front());
