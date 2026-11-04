@@ -111,15 +111,21 @@ enum class TransposeRefusalCause {
     /// declares an addition); it exists so the state has a name instead of a `float` sum.
     NoCotangentArithmetic,
     /// The rule's cotangent port declares one type and the walk hands it another, with no conversion
-    /// between them (author, 2026-11-04 04:20: compare the port's declared type with the type of the
-    /// value really handed, and refuse a disagreement by the language's own rules). A law is filed
+    /// between them: the comparison the author asked for on 2026-11-04 (compare the port's declared
+    /// type with the type of the value really handed, and refuse a disagreement). A law is filed
     /// under its operator's head and its operand count, so nothing about the index ties the law's
     /// cotangent port to the shape the step has: `mul_tangent`'s law writes `(ct: T[..])`, and at a
     /// `float` step the cotangent the member is handed is the number itself.
-    /// The expansion reads the port's type to instance the law's right side and hands the value
-    /// through it, so a difference is not a missing capability of the transform -- it is a value the
-    /// law would read as another shape, which is how a wrong number or a bad read gets in. Refused
-    /// before anything is built, with both spellings in hand (`portType`, `handedType`).
+    ///
+    /// **This is a compiler defect, not a language rule** (author, 2026-11-04, second ruling on the
+    /// item): measured, no program reaches it, because the cotangent a program can hand a transposed
+    /// function is `Tangent<ResultOf<F>>` -- the type the declaration states -- so a port that
+    /// disagrees with it is a law whose writing and whose instancing came apart inside the compiler.
+    /// The cause stays as a guard against that inconsistency (the expansion reads the port's type to
+    /// instance the law's right side and hands the value through it, which is how a wrong number or
+    /// a bad read would get in), it is refused before anything is built, it carries both spellings
+    /// (`portType`, `handedType`), and its sentence says whose fault it is. No case pins it: a case
+    /// cannot reach it, and a criterion nothing reaches is not a criterion.
     CotangentPortMismatch,
 };
 

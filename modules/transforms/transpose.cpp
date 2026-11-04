@@ -1781,27 +1781,35 @@ bool buildTransposeMember(
                 }
             }
             // **The port's declared type against the type of the value really handed** (author,
-            // 2026-11-04 04:20). A law is filed under its operator's head and its operand count and
-            // the index reads no operand types, so nothing ties the port the law writes for its
-            // cotangent to the shape this step has: `mul_tangent`'s law says `(ct: T[..])` and a
-            // `float` step hands it the number it was transposed at. The two agree here when the cast
-            // above made them one type -- the rank-zero cotangent read as the open-rank array it is
-            // -- and the language converts between them nowhere else. So a difference is refused
-            // where both types are in hand, and it is refused as the language's rule about what a
-            // cotangent is rather than as a limit of this walk: handing the value over would have the
-            // law's body read it as another shape, which is how a wrong number or a bad read enters.
-            // Nothing is built on the refusal path, and the sentence names both spellings.
+            // 2026-11-04). A law is filed under its operator's head and its operand count and the index
+            // reads no operand types, so nothing ties the port the law writes for its cotangent to the
+            // shape this step has: `mul_tangent`'s law says `(ct: T[..])` and a `float` step hands it
+            // the number it was transposed at. The two agree here when the cast above made them one
+            // type -- the rank-zero cotangent read as the open-rank array it is.
             //
-            // What the comparison covers is a difference of the **same kind**: two arrays whose
-            // element types differ (`float[3]` and `f32[3]`), or two numbers of different codes (the
-            // measured `f32` step handed to a `float` law, 2026-11-04). A difference across kinds is
-            // not this walk's to refuse: a number handed to an array port is the rank-zero case the
-            // cast above answers (design principles 5.4), an array handed to a number port is what
-            // the law's own instancing answers from the operands' types, and a `Ref` is a type that
-            // is not decided yet, which `Type::assignableFrom` cannot compare at all. Measured
-            // 2026-11-04: with the cross-kind cases included, `mean_axis`'s law refused two cases
-            // that answer correct numbers (`mean_axis1_keepdims_gradient_reads_the_row_length`), and
-            // refusing a right number to catch a wrong one is the trade this transform does not make.
+            // **A disagreement is a compiler defect, not a language rule** (the author's second ruling
+            // on the item, 2026-11-04). Measured: no program reaches the refusal below. The cotangent a
+            // program can hand a transposed function is `Tangent<ResultOf<F>>`, which is the type the
+            // declaration states, so a port that disagrees with it is a law whose writing and whose own
+            // instancing came apart inside the compiler -- the walk has no reading of a program that
+            // produces one. So the check is a **guard**, kept because a guard at the one place that
+            // hands a value through a port is worth its three lines, and the sentence it feeds says
+            // `internal error: ... a compiler defect and not the program's fault`. What it must never
+            // be is a sentence about what the language allows: the language allows no such program.
+            //
+            // What the comparison covers is a difference of the **same kind**: two arrays whose element
+            // types differ (`float[3]` and `f32[3]`), or two numbers of different codes (the measured
+            // `f32` step handed to a `float` law, 2026-11-04). A difference across kinds is not a
+            // disagreement at all: a number handed to an array port is the rank-zero case the cast
+            // above answers (design principles 5.4), an array handed to a number port is what the law's
+            // own instancing answers from the operands' types, and a `Ref` is a type that is not
+            // decided yet, which `Type::assignableFrom` cannot compare at all. Measured 2026-11-04,
+            // with the cross-kind cases included: `mean_axis`'s law refused two cases that answer
+            // correct numbers (`mean_axis1_keepdims_gradient_reads_the_row_length`,
+            // `mean_axis_negative_axis.through_the_library`). That is **narrowing the check to the
+            // quantity it claims to measure**, not relaxing it so a red turns green: under
+            // correctness > an explicit refusal > a wrong number > a crash, turning a right number into
+            // a refusal is a step *down*, and no guard is worth that.
             const bool portIsArray   = port != nullptr && port->code() == camel::core::type::TypeCode::Array;
             const bool handedIsArray = ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array;
             const bool undecided     = (port != nullptr && port->code() == camel::core::type::TypeCode::Ref) ||
