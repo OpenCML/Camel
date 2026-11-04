@@ -89,6 +89,45 @@ camel::core::type::Type *emptyTupleType() {
     return camel::core::type::TupleType::create();
 }
 
+/// Whether the tangent the lift is about to hand a rule is a **structurally** zero one: the zero the
+/// lift itself wrote for a value that cannot move (`zeroMade`), or a constant zero a law's own body
+/// wrote -- `d(float(n))` for a constant `int` `n` is `0.0`, written as a literal of that law, so an
+/// exponent spelled `2` rather than `2.0` has a zero tangent too.
+///
+/// A value a *program* computed is not one, even when it happens to be `0.0`. The distinction is the
+/// author's ruling of 2026-11-04: a structural zero is known before anything runs, because a
+/// constant has no tangent, and that is what lets the rule expansion drop the term it multiplies
+/// (`rule_expand.cpp#expandRuleRightSide`) instead of computing it and multiplying by zero.
+bool isStructuralZeroTangent(
+    camel::runtime::GraphDraft &draft, const std::unordered_set<gc_node_ref_t> &zeroMade,
+    gc_node_ref_t ref) {
+    if (ref == rt::kInvalidNodeRef) {
+        return false;
+    }
+    if (zeroMade.count(ref) != 0) {
+        return true;
+    }
+    const rt::DraftNode *node = draft.node(ref);
+    if (node == nullptr || node->header.kind != rt::GCNodeKind::Data ||
+        node->header.dataIndex >= 0 || node->header.dataType == nullptr) {
+        return false;
+    }
+    const std::span<const slot_t> slots = draft.staticSlots();
+    const auto rawIndex                 = -static_cast<std::ptrdiff_t>(node->header.dataIndex);
+    const size_t index                  = static_cast<size_t>(rawIndex);
+    if (rawIndex < 0 || index >= slots.size()) {
+        return false;
+    }
+    switch (node->header.dataType->code()) {
+    case camel::core::type::TypeCode::Float64:
+        return camel::core::rtdata::fromSlot<double>(slots[index]) == 0.0;
+    case camel::core::type::TypeCode::Float32:
+        return camel::core::rtdata::fromSlot<float>(slots[index]) == 0.0f;
+    default:
+        return false;
+    }
+}
+
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
 /// to the operands' values and their tangents.
 ///
@@ -105,6 +144,10 @@ camel::core::type::Type *emptyTupleType() {
 /// calling the right side and calling what it answers -- is what a rule rewritten as a *runtime*
 /// call produces: a closure-valued node and a call that answers with a closure, neither of which
 /// belongs in a graph the transform builds at compile time.
+///
+/// Whether a tangent is **structurally** zero -- the other question a lift asks before it chooses a
+/// rule -- is `isStructuralZeroTangent` above: the rule expansion is handed that answer, and a term
+/// whose tangent has a structural zero is omitted there rather than computed and multiplied by zero.
 
 gc_node_ref_t buildRuleTangent(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
@@ -112,7 +155,9 @@ gc_node_ref_t buildRuleTangent(
     std::string_view uri, const std::vector<gc_node_ref_t> &values,
     const std::vector<gc_node_ref_t> &tangents, camel::core::type::Type *elementType,
     const std::vector<camel::core::type::Type *> &portTypes, size_t dataOperandCount,
-    std::string &ruleName, std::string &why) {
+    std::string &ruleName, std::string &why,
+    const std::unordered_set<gc_node_ref_t> *structurallyZero = nullptr,
+    std::vector<std::string> *omitted = nullptr) {
     // The candidates, in the order the family filed them. A key can hold several rules -- one
     // spelling names several operators (`float(x: float)` and `float(x: int)` are both `float` at
     // one operand) -- and the type decides: the instance is asked for at the type the *operand* is
@@ -148,7 +193,7 @@ gc_node_ref_t buildRuleTangent(
         [&values](size_t slot) {
             return slot < values.size() ? values[slot] : rt::kInvalidNodeRef;
         },
-        tangents, why);
+        tangents, why, kWholeAnswer, structurallyZero, omitted);
 }
 
 /// Whether a `with` parameter of a lifted callee is written into the *ordinary* list of the lift
@@ -2059,6 +2104,18 @@ bool liftGraph(
                 }
                 std::string ruleName;
                 std::string ruleWhy;
+                // The tangents whose zero is a fact about this graph rather than a number a program
+                // produced: the ones `zeroConstantFor` wrote for a value that cannot move, and a
+                // constant zero a law of its own wrote. The rule's right side is expanded with them
+                // named, so the term one of them multiplies is omitted instead of computed
+                // (`rule_expand.cpp#expandRuleRightSide`, author's ruling of 2026-11-04).
+                std::unordered_set<gc_node_ref_t> structurallyZero;
+                for (const gc_node_ref_t tangent : tangents) {
+                    if (isStructuralZeroTangent(draft, zeroMade, tangent)) {
+                        structurallyZero.insert(tangent);
+                    }
+                }
+                std::vector<std::string> omitted;
                 // The types the operator's ports have, in the order the rule is handed them: what a
                 // candidate's ports have to match before anything is built. The list is the node's
                 // ports -- the data inputs, then the `<>` ones -- and `dataOperandCount` is kept so
@@ -2082,7 +2139,21 @@ bool liftGraph(
                 tangentOf[ref] =
                     buildRuleTangent(
                         *context, state.group, transaction, uri, inputs, tangents, ruleElementType,
-                        operandTypes, dataOperandCount, ruleName, ruleWhy);
+                        operandTypes, dataOperandCount, ruleName, ruleWhy, &structurallyZero,
+                        &omitted);
+                if (!omitted.empty()) {
+                    // The reading of the omission, in the rule's own words: these are the places the
+                    // expansion did *not* copy, because they fed only a product whose tangent is
+                    // structurally zero. A case that pins this line goes red the day the term is
+                    // computed again -- it names absence, not a number that happens to be zero.
+                    std::string uris;
+                    for (const std::string &uri : omitted) {
+                        uris += (uris.empty() ? "" : ",") + uri;
+                    }
+                    os << "REINTERP jvp rule=" << ruleName
+                       << " omit=structurally-zero-tangent nodes=" << omitted.size()
+                       << " uris=" << uris << '\n';
+                }
                 if (tangentOf[ref] == rt::kInvalidNodeRef) {
                     // Named, not guessed: the transform has no derivative for this operator, and
                     // the refusal carries the place the primitive was written -- the node's origin,

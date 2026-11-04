@@ -10,11 +10,13 @@
 // operators. Which of the two answers this program is not measured here and is not what the anchor
 // is about; that the engine answers it is.
 //
-// The library's half is the neighbouring case, `pow_gradient_refused_by_the_library.cml`: the same
-// function's gradient through `vjp` refuses by name (`skip=rule uri=math:pow_d reason=unbound`),
-// because the forward rule `jvp_pow` exists and the reverse rule `pow_t` does not. The two readings
-// cannot share a program -- the refusal happens where the graph is built, so a program holding both
-// would never print this number.
+// The library's half is the neighbouring case, `pow_gradient_of_a_caret_through_the_library.cml`:
+// until 2026-11-04 the same function's gradient through `vjp` refused by name (`skip=condition`, then
+// `skip=call-no-transpose` on the `pow_tangent` call), because the tangent the rule answered with was
+// written behind an `if dw == T(0)` guard. The guard is gone -- the term is omitted in the rule
+// expansion instead, so no law branches on a tangent's value -- and the library now answers this same
+// number, which is what makes `^` a member of the difference set that has been closed rather than one
+// that is still open.
 //
 // The forward half of `^` is already pinned by `jvp_of_a_power.cml` (the `jvp_pow` tangent, the
 // constant exponent's zero tangent, `log(-3.0)` staying out of the arithmetic); nothing here

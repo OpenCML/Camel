@@ -7396,18 +7396,26 @@ wherever `x ^ w` is. The second is the derivative with respect to the **exponent
 `x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
 exists only for integer exponents and has no derivative in the exponent there.
 
-So the second term is computed only where it contributes. A tangent is a number, and a constant
-exponent's tangent is a zero constant (`jvp.cpp`'s `zeroConstantFor`: "the tangent a constant
-gets: the zero of the value's own type"), so `dw = 0` is a *zero* tangent, not a missing one --
-and the product it multiplies is exactly zero. Multiplying that zero by `log(x)` in floating
-point is not zero, it is `NaN` (the log of a negative number), which would turn an ordinary
-`(-3.0) ^ 2.0` into `NaN` for a term that is arithmetically nothing. The zero is therefore taken
-where it is, and where `dw` is not zero the log is asked for and left to answer `NaN`: an
-undefined derivative says so, and is not written as a zero.
+**No branch on a tangent's value.** The author's ruling of 2026-11-04 (`docs/handover/reviews/
+2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md`) took the
+`if dw == T(0)` guard this helper used to carry away: the zero of a constant's tangent is
+**structurally known** -- a constant has no tangent -- and not a value a law computes and
+compares. What replaces it happens before anything runs: the rule's right side is expanded with
+the structurally-zero tangents named, and the product one of them multiplies is omitted rather
+than computed (`modules/transforms/rule_expand.cpp#expandRuleRightSide`). So `(-3.0) ^ 2.0`
+still answers `-6.0` and `log(-3.0)` is never asked for its `NaN`, while a law with no branch
+is a law the backward walk can turn around: `^`'s pullback answers the same number as `pow`'s
+(`test/cases/compile/transforms/pow_gradient_through_the_library.cml` against
+`pow_gradient_of_a_caret_through_the_library.cml`).
+
+A program that calls this helper itself hands it a real `dw`, and then the second term is a real
+term: at a negative base it answers `NaN`, because the derivative in the exponent does not exist
+there. The omission is the rule expander's, not this function's -- there is nothing here that
+could omit it, which is why the law below is written out rather than called.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example: `pow_tangent(3.0, 2.0, 1.0, 0.0)` gives `6.0`
-- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `-6.0`
+- Example: `pow_tangent(2.0, 3.0, 0.0, 1.0)` gives `5.545177444479562`
+- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `nan`
 
 <a id="rulesets.vmap"></a>
 

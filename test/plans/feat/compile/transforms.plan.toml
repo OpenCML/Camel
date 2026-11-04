@@ -1671,14 +1671,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "jvp_of_a_power"
-desc = "`x ^ 2.0` is a power of a float, and until today the transform could not lift it: `^` had no key (`ruleKeyOf` derives a `:op/` key only from `add sub mul div neg`), so the walk stopped with `skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`. `pow` is one of the written operations now, and `jvp_pow` is its rule, so `d(x^2)` answers `2x dx`: 9.0 and 6.0 at x = 3, and 9.0 and -6.0 at x = -3. The second pair is the one that keeps the rule honest -- the constant exponent carries a zero tangent, the term it multiplies is `x^w * log(x) * dw`, and `log(-3.0)` is NaN, so a rule without the guard would answer NaN instead of -6.0. The third function writes the exponent as the integer literal `2`: no conversion node is made for it, the lift sees one operator (`rules=jvp_pow` alone, no `jvp_ltod`), and the tangent is the same 6.0."
+desc = "`x ^ 2.0` is a power of a float, and until 2026-11-04 the transform could not lift it: `^` had no key (`ruleKeyOf` derives a `:op/` key only from `add sub mul div neg`), so the walk stopped with `skip=rule uri=:op/pow_d reason=the operator has no forward rule bound at all`. `pow` is one of the written operations now, and `jvp_pow` is its rule, so `d(x^2)` answers `2x dx`: 9.0 and 6.0 at x = 3, and 9.0 and -6.0 at x = -3. The second pair is the one that keeps the rule honest: the constant exponent's tangent has a **structural** zero (a constant has no tangent), so the term that tangent multiplies -- `x^w * log(x) * dw`, whose `log(-3.0)` is NaN -- is not built at all, and `omit=structurally-zero-tangent` in the expansion's reading is the record of it (the 2026-11-04 ruling: the term is omitted where the rule is expanded, `modules/transforms/rule_expand.cpp`, and `pow_tangent`'s `if dw == T(0)` guard is gone; the rule no longer branches on a tangent's value). The third function writes the exponent as the integer literal `2`: the lift sees one operator (`rules=jvp_pow` alone, no `jvp_ltod`) and the exponent's tangent is a constant `0.0` written in the graph, which the expansion recognises by its own type and value -- `omit=structurally-zero-tangent` appears for it too, and the tangent is the same 6.0."
 kind = "behavior"
 case = "../../../cases/compile/transforms/jvp_of_a_power.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["REINTERP jvp function=p graph=", "rules=jvp_pow", "REINTERP jvp function=q graph=", "REINTERP jvp function=s graph=", "9.0", "6.0", "-6.0", "56.66253179403897", "-0.037037037037037035", "nan"]
+expect_output_contains = ["REINTERP jvp function=p graph=", "rules=jvp_pow", "omit=structurally-zero-tangent", "REINTERP jvp function=q graph=", "REINTERP jvp function=s graph=", "9.0", "6.0", "-6.0", "56.66253179403897", "-0.037037037037037035", "nan"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1813,15 +1813,52 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
-name = "pow_gradient_refused_by_the_library"
-desc = "The same gradient through the library's `vjp`: the forward half runs (`rules=jvp_pow`) and the transposition stops where it needs the reverse rule, which is not written -- `skip=condition`, then `skip=call-no-transpose … callee=rulesets.jvp::pow_tangent<float>`, and the sentence `this call's callee has no transpose of its own`. What the walk reaches -- a branch and a call the family cannot turn around, one step past the products -- and the reading that named it are in docs/handover/reports/2026-11-04-readings-moved-out-of-plan-notes.cn.md, section 2. Pinned as the reading on both streams, not as an exit code, so the day a `pow_t` is written this entry fails and names what replaced it. This is the first member of the difference set that has to be empty before the engine's `pullback.cpp` can be deleted; the engine's answer for the same function is the neighbouring entry."
-kind = "negative"
-case = "../../../cases/compile/transforms/pow_gradient_refused_by_the_library.cml"
+name = "pow_gradient_of_a_caret_through_the_library"
+desc = "The gradient of a power through the library's `vjp`, for the spelling that used to stop: this entry was `pow_gradient_refused_by_the_library` until 2026-11-04, when it pinned `skip=condition` and then `skip=call-no-transpose` on `rulesets.jvp::pow_tangent` -- the guard on the exponent's tangent, which the backward walk cannot turn around. The ruling of 2026-11-04 removed the guard and put the omission in the rule expansion (a tangent whose zero is structural does not get its term built at all), and `jvp_pow` writes its law out instead of calling the two-port helper, so the linear half is products of the operand's own tangents and the walk has laws for both. The criterion is four sentences: `(-3.0) ^ 2` answers 9.0 with tangent -6.0 (the pair the guard used to protect, `log(-3.0)` never asked for); the expansion says which places it did **not** copy, by name, which is absence and not a value of zero; the two spellings of one power answer the same numbers at 3.0 **and** the same numbers at -3.0, which is the ruling's second criterion; and the three strings of the wall that fell are in `expect_output_not_contains`, so reinstating either the guard or the helper call is red here. The readings behind all four are in `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 1; the neighbouring `pow_gradient_through_the_library` is the same criterion for `pow(x, 3.0)` and is unchanged."
+kind = "behavior"
+case = "../../../cases/compile/transforms/pow_gradient_of_a_caret_through_the_library.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
-expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around"]
-expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float>"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+expect_output_contains = ["caret jvp(-3.0) value=9.0 tangent=-6.0", "REINTERP jvp rule=jvp_pow omit=structurally-zero-tangent nodes=3 uris=:op/mul_d,math:log_d,math:pow_d", "rhs=add_t,mul_t", "caret vjp( 3.0) value=9.0 dL/dx=6.0", "named vjp( 3.0) value=9.0 dL/dx=6.0", "caret vjp(-3.0) value=9.0 dL/dx=-6.0", "named vjp(-3.0) value=9.0 dL/dx=-6.0"]
+expect_output_not_contains = ["skip=condition", "skip=call-no-transpose", "callee=rulesets.jvp::pow_tangent"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# ---- the four `*_t` laws of the 2026-11-03 tranche, read by a bare `transpose` ----
+#
+# The 2026-11-04 ruling's second item is a rule about laws, not about numbers: a law no case reads is
+# not a law that was written, so each of `abs_t`, `log_t`, `maximum_t` and `minimum_t` needs a case
+# that can tell a right law from a wrong one. `vjp` is not that case for any of the four: `vjp` is
+# `split` + `transpose`, the forward half answers the tangent with `jvp_*`'s own mask, and the linear
+# half names other laws -- none of these four -- so a green `vjp` is not evidence about any of them.
+# The route that does read them is a **bare** `transpose`, and those are the two entries that follow.
+# Which laws each route actually names is measured in
+# `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 4.
+[[tests]]
+name = "transpose_dispatches_abs_t_and_log_t"
+desc = "**The subject of this entry is dispatch, not correctness.** A bare `transpose` reaches `abs_t` and `log_t`, and the three numbers pinned here are those laws' own bodies evaluated on a **zero carrier**, not the right answers: the right cotangent of `sum(abs(x))` at x = [1, -2, 3] is [1, -1, 1], and `log_t`'s right cotangent at x = [1, 2, 3] is [1, 0.5, 1/3]. Every printed line carries its own right answer as `right=`, so no reader has to guess, and `inf` is **not** a defect to repair: it is the carrier's zero being divided by, and repairing it means changing what a bare `transpose` owes a law (the open question is `docs/handover/questions/2026-11-04-a-bare-transpose-hands-a-law-a-zero-what-does-the-law-owe.cn.md`). What the entry is for is that the laws are **read at all**: the `rhs=` strings name `abs_t` and `log_t`, so deleting either law makes the case refuse and changing either law's arithmetic moves a pinned number (proved red-then-green; the readings are in `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 4). The third line is the one that tells the two carrier hypotheses apart: at cotangent -3.0 `abs_t` answers `-ct`, i.e. `x` read as non-negative, where a law handed the cotangent as `x` would take the other arm. **All three back ends run here**, because `inf` is the one reading whose spelling could depend on the runtime, and `backends_agree` states that they must print the same thing. The day the walk learns to carry an operand into a bare `transpose`, all three lines change to the right answers and this entry fails and names them."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_dispatches_abs_t_and_log_t.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_contains = ["abs  ct=1.0  ([1.0, 1.0, 1.0])  right=[1.0, -1.0, 1.0]", "abs  ct=-3.0 ([-3.0, -3.0, -3.0])  right=[-3.0, 3.0, -3.0]", "log  ct=1.0  ([inf, inf, inf])  right=[1.0, 0.5, 0.3333333333333333]", "rhs=dtod_t,sum_from_type_t,abs_t", "rhs=dtod_t,sum_from_type_t,log_t"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_laws_of_maximum_and_minimum_are_refused"
+desc = "Both laws are **未验证 (unverified)** in this plan, and this entry exists to say exactly where they are blocked instead of covering the gap with a number. `maximum_t` and `minimum_t` are reached by a bare `transpose` -- the walk finds them -- and the law's own cotangent then refuses to instantiate, so the entry pins that refusal: the day either law instantiates, this case fails and names the number that replaced the refusal. The blocker is the law's cotangent port: it is written `ct: T[..]`, and a three-parameter instantiation binds `T` to the operand's **whole type**, so `ct` is an open-rank array *of* `float[3]` rather than `float[..]` and the `where` the law writes cannot match at any rank (three spellings of the zero arm confirm the binding from three sides; the texts are in `docs/handover/reports/2026-11-04-a-zero-tangent-term-that-was-never-built.cn.md`, section 5). The rank the law *is* written for -- the scalar `where(bool, T, T)` -- is not spellable either: `tensor:maximum` has no scalar overload a program can write (`maximum(x, 1.0)` does not type-check), so there is no rank at which the mismatch would go away and **no case can tell a right `maximum_t` from a wrong one**. That is the finding, and it is different from "a case has not been written yet". The blockers, in the order a fix would meet them: `stdlib/rulesets/transpose.cml#maximum_t` and `#minimum_t` (the `ct: T[..]` port does not bind `T` to the element at a three-parameter instantiation), then the missing scalar spelling of `maximum`/`minimum`. `vjp` does answer right numbers for `max`/`min`, and it does not read these laws at all -- the laws it names are other laws -- so a green `vjp` is not evidence for either of them."
+kind = "negative"
+case = "../../../cases/compile/transforms/transpose_laws_of_maximum_and_minimum_are_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["max  refused  RuntimeError", "min  refused  RuntimeError", "skip=rule-ranks uri=tensor:maximum rule=maximum_t node=2 position=0 ranks=(1, 1) operands=2", "skip=rule-ranks uri=tensor:minimum rule=minimum_t node=2 position=0 ranks=(1, 1) operands=2"]
+expect_output_not_contains = ["max  answered", "min  answered"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
