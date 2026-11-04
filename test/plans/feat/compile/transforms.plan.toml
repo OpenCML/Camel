@@ -2734,13 +2734,13 @@ kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_answers_abs_log_maximum_and_minimum.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["abs vjp   = [1.0, -1.0, 1.0]", "log vjp   = [1.0, 0.5, 0.25]"]
+expect_stdout_contains = ["abs vjp   = [1.0, -1.0, 1.0]", "log vjp   = [1.0, 0.5, 0.25]", "max vjp   = [0.0, 1.0, 1.0]", "min vjp   = [1.0, 1.0, 0.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
 name = "transpose_still_turns_linear_operators"
-desc = "The guard for the refusal, and the case with the longer shadow: the sentence says \"the family holds no rule for this operator\", a fact about the index -- not a verdict about linearity -- so its failure mode is a **linear** operator whose law is there being refused by mistake, which would tell a reader to use `vjp` for a function `transpose` can turn around. This walks `Σx` -- one law, `sum` -- through a bare `transpose` and pins the map's own answer, the cotangent spread to every element: [1, 1, 1]. What it measures is **\"the law is still there and still usable\", not \"the conclusion is right\"** -- the second is `abs_gradient_both_legs`'s and `vjp`'s, and the two claims must not be confused."
+desc = "The guard for the refusal, and the case with the longer shadow: the sentence says \"the family holds no rule for this operator\", a fact about the index -- not a verdict about linearity -- so its failure mode is a **linear** operator whose law is there being refused by mistake, which would tell a reader to use `vjp` for a function `transpose` can turn around. This walks `Σx` -- one law, `sum` -- through a bare `transpose` and pins the map's own answer, the cotangent spread to every element: [1, 1, 1]. What it measures is **\"the law is still there and still usable\", not \"the conclusion is right\"** -- the second is `abs_gradient_both_legs`'s and `vjp`'s, and the two claims must not be confused. Its operator is `sum`, not "any linear operator": it was chosen because `mul`, `add` and `neg` on arrays reach no law today (another line is repairing that), and a guard written on an operator that merely happens to work today proves that one path is alive -- not the class. **A guard written on a lucky sample goes red the day the sample dies, while the thing it guards may have been healthy throughout**, which is why the reason for the sample is written here rather than left to the run."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_still_turns_linear_operators.cml"
 args = ["${case}"]

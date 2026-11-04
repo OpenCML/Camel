@@ -12,7 +12,7 @@
 //
 //     camel test/cases/compile/transforms/vjp_answers_abs_log_maximum_and_minimum.cml
 import { vjp } from vjp
-import { abs, log, sum } from tensor
+import { abs, log, maximum, minimum, sum } from tensor
 
 func total_abs(x: float[3]): float {
     return float(sum(abs(x)))
@@ -22,10 +22,22 @@ func total_log(x: float[3]): float {
     return float(sum(log(x)))
 }
 
+func total_max(x: float[3]): float {
+    return float(sum(maximum(x, [1.0, 2.0, 3.0])))
+}
+
+func total_min(x: float[3]): float {
+    return float(sum(minimum(x, [1.0, 2.0, 3.0])))
+}
+
 func main(): int sync {
     let (_, absPullback) = vjp(total_abs)([1.0, -2.0, 3.0] as float[])
     `abs vjp   = {}`->format<absPullback(1.0).0>->println
     let (_, logPullback) = vjp(total_log)([1.0, 2.0, 4.0] as float[])
     `log vjp   = {}`->format<logPullback(1.0).0>->println
+    let (_, maxPullback) = vjp(total_max)([0.0, 2.0, 4.0] as float[])
+    `max vjp   = {}`->format<maxPullback(1.0).0>->println
+    let (_, minPullback) = vjp(total_min)([0.0, 2.0, 4.0] as float[])
+    `min vjp   = {}`->format<minPullback(1.0).0>->println
     return 0
 }
