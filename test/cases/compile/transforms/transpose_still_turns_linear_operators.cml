@@ -1,0 +1,27 @@
+// The guard for the refusal: an operator whose walk still finds a law still answers through a bare
+// `transpose`.
+//
+// The refusal says "the family holds no rule for this operator" -- a fact about the index, not a
+// verdict about linearity -- so its failure mode is the opposite one: an operator whose law is there
+// being refused by mistake, which would tell a reader to use `vjp` for something `transpose` can turn
+// around. `sum` is such an operator, and the number below is `transpose`'s own answer: the cotangent
+// of `Σx` spreads to every element, [1.0, 1.0, 1.0].
+//
+// What this measures is "the law is still there and still usable", **not** "the conclusion is
+// right" -- whether the gradient route agrees is a different claim, made by `vjp`'s cases.
+//
+//     camel test/cases/compile/transforms/transpose_still_turns_linear_operators.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { sum } from tensor
+
+/// `x ↦ Σx`: the sum law, and nothing else.
+func f_total(x: float[3]): float {
+    return float(sum(x))
+}
+
+func main(): int sync {
+    let cotangent = transpose(f_total)(1.0)
+    `total ct=1.0 {}  right=[1.0, 1.0, 1.0]`->format<cotangent>->println
+    return 0
+}

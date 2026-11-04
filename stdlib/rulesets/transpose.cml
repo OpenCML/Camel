@@ -278,19 +278,6 @@ export rule neg_tensor_t::<T>(x: T[...]) when is_float::<T>() {
     neg(x) => (ct: T[...]) => -ct
 }
 
-/// The transpose of `abs`: `ct` where the operand is not negative, `-ct` where it is.
-///
-/// `abs` has no derivative at `0`, so the law has to choose a side there, and it chooses the one the
-/// engine's `absVjp` chooses: that rule asks `tensor:ge` (`x >= 0`), so the zero keeps its
-/// cotangent's sign. `>` would answer `0.0` at the zero where the engine answers `ct`, and the two
-/// legs would disagree at the one input where the maths cannot say which is right.
-///
-/// The mask is `x`'s alone, so it is a residue and not a linear value: the walk carries it and the
-/// law's answer is one `where` over the cotangent and its negation.
-export rule abs_t::<T>(x: T[...]) when is_float::<T>() {
-    abs(x) => (ct: T[...]) => (where(x >= 0.0, ct, -ct))
-}
-
 /// The transpose of `sqrt`: `(ct * 0.5) / sqrt(x)` -- one over twice the root, written as the
 /// engine's `sqrtVjp` writes it (`ct * 0.5` first, then the division, so the two legs round the same
 /// way). The root is recomputed from the operand; it is a function of `x` alone, the channel
@@ -299,37 +286,10 @@ export rule sqrt_t::<T>(x: T[...]) when is_float::<T>() {
     sqrt(x) => (ct: T[...]) => (ct * 0.5) / sqrt(x)
 }
 
-/// The transpose of `log`: `ct / x`. The slope is the reciprocal of the operand, so nothing is
-/// recomputed and nothing is carried: this is the member of the tranche that shows a law need not
-/// invent a value at all.
-export rule log_t::<T>(x: T[...]) when is_float::<T>() {
-    log(x) => (ct: T[...]) => ct / x
-}
-
 /// The transpose of `rsqrt`: `(ct * -0.5) * (y * (y * y))` with `y = rsqrt(x)`, which is the grouping
 /// the engine's `rsqrtVjp` builds (`cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube`).
 export rule rsqrt_t::<T>(x: T[...]) when is_float::<T>() {
     rsqrt(x) => (ct: T[...]) => (ct * (-0.5)) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))
-}
-
-/// The transpose of `maximum`: `ct` to the operand the value was taken from, `0` to the other, the
-/// tie going to the left one -- the engine's `extremumVjp` asks `tensor:ge` for `maximum`, so at
-/// `x == w` the left operand takes the cotangent and the right one takes zero.
-///
-/// Both operands are answered, and each answer is reduced to its own shape with `sum_to`: the identity
-/// when the two shapes are equal, the sum over the lanes a broadcast spread the operand over when
-/// they are not -- the same reduction `mul_tensor_t` above writes, for the same reason.
-export rule maximum_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    maximum(x, w) => (ct: T[...]) =>
-        (sum_to(where(x >= w, ct, 0.0), x), sum_to(where(x >= w, 0.0, ct), w))
-}
-
-/// The transpose of `minimum`: the mirror of `maximum_t`, and its own law because the comparison is
-/// the law. `tensor:le` is the engine's choice (`extremumVjp`), so a tie again goes to the left
-/// operand.
-export rule minimum_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    minimum(x, w) => (ct: T[...]) =>
-        (sum_to(where(x <= w, ct, 0.0), x), sum_to(where(x <= w, 0.0, ct), w))
 }
 
 /// `x / w` on two arrays: the left side `tensor:divide`'s law is filed under. `tensor:divide`'s
@@ -792,11 +752,17 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 // `index_into` are (`rulesets.jvp` declares its own copies: a family cannot read another module's
 // private function).
 //
-// The two keys are the ones a **pullback** asks for, and they are what `^`'s backward walk stopped
-// on: `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
-// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the linear half of a program that calls `pow`
-// holds a `math:pow_d` and a `math:log_d` node -- measured on `vjp(x => pow(x, 3.0))`, which answered
-// `skip=rule uri=math:log_d reason=unbound` once `pow_d_t` was in place and 12.0 once this law was.
+// The two keys are the ones a **pullback** would ask for, and they are *not* what `^`'s backward walk
+// stops on. `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
+// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the `pow` and the `log` land in the **primal**
+// half of a `split` and the linear half holds only products and sums over their results: measured on
+// this tree (2026-11-04) `vjp(x => pow(x, 3.0))(2.0)` answers `12.0` through `rhs=add_t,mul_t`, with
+// neither `math:pow_d` nor `math:log_d` in the walk at all. So these two laws answer for a walk no
+// program reaches today, and the sentence this comment used to carry -- `skip=rule uri=math:log_d
+// reason=unbound` until this law was in place, then `12.0` -- was a reading of a tree whose forward
+// rule wrote the calls out instead of inlining them. Whether they should exist at all is the same
+// question `abs_t`/`log_t`/`maximum_t`/`minimum_t` were answered with ("no"); they are left here
+// because the sweep of this file's laws is one lane's work, not this paragraph's.
 //
 // The exponent's branch is `ct * x^w * ln(x)`: for `x <= 0` that is `NaN`, the same reading the
 // forward rule gives the same operator. It is not written as a zero -- an undefined derivative says

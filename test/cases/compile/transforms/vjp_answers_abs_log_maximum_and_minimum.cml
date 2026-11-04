@@ -1,0 +1,43 @@
+// The route that does take a gradient of a nonlinear operator: `vjp`.
+//
+// `abs` and `log` are not linear, so they have no transpose to write; their gradients come from
+// `split` and the transpose of the **linear** half, which is what `vjp` is.
+//
+//   - `abs` at [1, -2, 3]: the sign of each element, [1.0, -1.0, 1.0].
+//   - `log` at [1, 2, 4]: 1/x, [1.0, 0.5, 0.25].
+//
+// The negative half of the pair is `transpose_refuses_a_nonlinear_operator.cml`: a bare `transpose`
+// of the same operator is refused at the build. Only one of the two routes is supposed to answer,
+// which is what makes them a pair rather than two cases that are green either way.
+//
+//     camel test/cases/compile/transforms/vjp_answers_abs_log_maximum_and_minimum.cml
+import { vjp } from vjp
+import { abs, log, maximum, minimum, sum } from tensor
+
+func total_abs(x: float[3]): float {
+    return float(sum(abs(x)))
+}
+
+func total_log(x: float[3]): float {
+    return float(sum(log(x)))
+}
+
+func total_max(x: float[3]): float {
+    return float(sum(maximum(x, [1.0, 2.0, 3.0])))
+}
+
+func total_min(x: float[3]): float {
+    return float(sum(minimum(x, [1.0, 2.0, 3.0])))
+}
+
+func main(): int sync {
+    let (_, absPullback) = vjp(total_abs)([1.0, -2.0, 3.0] as float[])
+    `abs vjp   = {}`->format<absPullback(1.0).0>->println
+    let (_, logPullback) = vjp(total_log)([1.0, 2.0, 4.0] as float[])
+    `log vjp   = {}`->format<logPullback(1.0).0>->println
+    let (_, maxPullback) = vjp(total_max)([0.0, 2.0, 4.0] as float[])
+    `max vjp   = {}`->format<maxPullback(1.0).0>->println
+    let (_, minPullback) = vjp(total_min)([0.0, 2.0, 4.0] as float[])
+    `min vjp   = {}`->format<minPullback(1.0).0>->println
+    return 0
+}
