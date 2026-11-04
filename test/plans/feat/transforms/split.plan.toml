@@ -261,7 +261,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["lift value= 7.0  tangent= 3.0", "g y= 7.0", "g d= 3.0", "type=(int, float) => (float, ((), float) => float pure) pure residuals=3"]
+expect_output_contains = ["lift value= 7.0  tangent= 3.0", "g y= 7.0", "g d= 3.0", "type=(int, float) => (float, ((), float) => float pure) pure residuals=2"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -336,14 +336,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "remat_tag_removes_the_parameter_residual"
-desc = "`#remat` written on a function is the same request as calling `remat(f)`: it becomes the graph's recompute bit at build time (`src/compile/gir/builder.cpp`), so the whole downstream -- `jvp`'s lift carrying it, `split` reading it -- is one mechanism and the tag has no reader of its own. Two cubics, `g` tagged and `h` not: both lifts carry one non-parameter residual (`x*x`), and only `g`'s cut drops it, reading `residuals=2 recompute=1` against `h`'s `residuals=3` -- the count includes the parameter, which the backward half reads (`ca1941405`), so the difference is the one the tag removes. The values are the same 27.0, which is what \"store less, compute again\" means; a cut that also changed the answer would be a different bug, not a cheaper cut."
+desc = "`#remat` written on a function is the same request as calling `remat(f)`: it becomes the graph's recompute bit at build time (`src/compile/gir/builder.cpp`), so the whole downstream -- `jvp`'s lift carrying it, `split` reading it -- is one mechanism and the tag has no reader of its own. Two cubics, `g` tagged and `h` not: both lifts carry one non-parameter residual (`x*x`), and only `g`'s cut drops it, reading `residuals=2 recompute=1` against `h`'s `residuals=3` -- the count includes the parameter, which the backward half reads (`ca1941405`), and both counts are one lower than they were before `modules/transforms/split.cpp#residualsOf` stopped listing a tangent port as a residual (2026-11-04) -- so the difference the tag makes is still one, which is what the two numbers are read for. The values are the same 27.0, which is what \"store less, compute again\" means; a cut that also changed the answer would be a different bug, not a cheaper cut."
 kind = "behavior"
 case = "../../../cases/transforms/split/remat_tag_residuals.cml"
 args = ["${case}", "std::nvm"]
 envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_g", "residuals=2 recompute=1", "REINTERP split function=jvp_of_h", "residuals=3", "tagged dx= 27.0", "plain dx= 27.0"]
+expect_output_contains = ["REINTERP split function=jvp_of_g", "residuals=1 recompute=1", "REINTERP split function=jvp_of_h", "residuals=2", "tagged dx= 27.0", "plain dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -356,7 +356,7 @@ args = ["${case}", "std::nvm"]
 envs = ["CAMEL_PACKAGES=../../../cases/transforms/split"]
 backends = ["nvm"]
 expect_exit = 0
-expect_output_contains = ["REINTERP split function=jvp_of_remat_lib::g", "residuals=2 recompute=1", "tagged dx= 27.0"]
+expect_output_contains = ["REINTERP split function=jvp_of_remat_lib::g", "residuals=1 recompute=1", "tagged dx= 27.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
