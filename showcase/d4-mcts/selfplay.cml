@@ -41,9 +41,9 @@ func winner(board: int[]): int {
 
 // A value network over the nine places: 9 -> 16 -> 1. One number, the position's expected result.
 type Net = {
-    w1: float[..],
-    b1: float[..],
-    w2: float[..]
+    w1: float[...],
+    b1: float[...],
+    w2: float[...]
 }
 
 with <m: Net>

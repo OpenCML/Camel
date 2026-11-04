@@ -15,8 +15,8 @@ export const SPELLINGS = [
     // scalars
     'int', 'float', 'bool', 'string', 'Bytes', 'i32', 'i64', 'f32', 'f64', 'c64',
     // arrays: every form of extent
-    'int[]', 'int[3]', 'int[3, 4]', 'int[?]', 'int[?, 4]', 'int[n]', 'int[n, 4]', 'int[n, m]', 'int[..]',
-    'int[n, ..]', 'int[n, ..rest]', 'f32[n, 784]', 'int[][]', 'int[3][4]', 'string[]', 'bool[2, 2]',
+    'int[]', 'int[3]', 'int[3, 4]', 'int[?]', 'int[?, 4]', 'int[n]', 'int[n, 4]', 'int[n, m]', 'int[...]',
+    'int[n, ...]', 'int[n, ...rest]', 'f32[n, 784]', 'int[][]', 'int[3][4]', 'string[]', 'bool[2, 2]',
     // arrays of everything
     '(int, string)[]', '(int,)[]', '{ a: int }[]', 'Point[]', 'Color[]', 'Box<int>[]', 'Set<int>[]',
     '(int?)[]', '(int?)[3]', '(int!)[]', '(int!)[2, 2]', '(int?!)[]',

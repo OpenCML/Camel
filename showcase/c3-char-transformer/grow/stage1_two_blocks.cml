@@ -16,20 +16,20 @@ import { adam, adam_state } from nn
 import { with_grad } from autodiff
 
 type Model = {
-    wq1: float[..],
-    wk1: float[..],
-    wv1: float[..],
-    wq2: float[..],
-    wk2: float[..],
-    wv2: float[..]
+    wq1: float[...],
+    wk1: float[...],
+    wv1: float[...],
+    wq2: float[...],
+    wk2: float[...],
+    wv2: float[...]
 }
 
-func mask(): float[..] {
+func mask(): float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
 with <m: Model>
-func block(x: float[..]): float {
+func block(x: float[...]): float {
     let x1 = x
     let q1 = x1 @ m.wq1
     let k1 = transpose(x1 @ m.wk1)

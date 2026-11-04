@@ -325,13 +325,13 @@ timeout_ms = 10000
 
 [[tests]]
 name = "npy_generic_wrapper_mismatch"
-desc = "The element type a generic wrapper declares reaches the load: `read_as::<f32>` on the int64 `.npy` is the same fault as a direct `load_npy::<f32>`, a RuntimeDiag::RuntimeError reported at the call inside the wrapper (`npy_generic_wrapper_mismatch.cml:8:54` is the `load_npy::<T>(p)` of its body, with `T` instantiated to f32) and naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). A wrapper that erased the element type would load the file instead (design principles 5.1, 5.5)."
+desc = "The element type a generic wrapper declares reaches the load: `read_as::<f32>` on the int64 `.npy` is the same fault as a direct `load_npy::<f32>`, a RuntimeDiag::RuntimeError reported at the call inside the wrapper (`npy_generic_wrapper_mismatch.cml:8:55` is the `load_npy::<T>(p)` of its body, with `T` instantiated to f32) and naming the file's element type and the declared one (`the file holds i64 and the program declares f32`). A wrapper that erased the element type would load the file instead (design principles 5.1, 5.5)."
 kind = "negative"
 case = "../../../../cases/modules/tensor/dtype/npy_generic_wrapper_mismatch.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::RuntimeError"
-expect_output_contains = ["the file holds i64 and the program declares f32", "npy_generic_wrapper_mismatch.cml:8:54"]
+expect_output_contains = ["the file holds i64 and the program declares f32", "npy_generic_wrapper_mismatch.cml:8:55"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 # A scalar operand beside a reduced-precision tensor: the literal takes the element type the

@@ -1,7 +1,7 @@
 # Indexed Computation, Schedules, and Resource Graphs
 
 Status: proposed target architecture, not a semantic rule. The initial
-[`tiles` module](.../../../modules/tiles/README.md) implements a small executable
+[`tiles` module](../../../modules/tiles/README.md) implements a small executable
 subset; the schedule/resource model described here remains proposed.
 Date: 2026-10-15. Working branch: `wzj-dev`.
 

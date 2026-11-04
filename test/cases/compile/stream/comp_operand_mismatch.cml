@@ -2,7 +2,7 @@
 // 4.2), so the compiler refuses the construct and names what it does take.
 
 func main(): int sync {
-    let xs = 'a'...'b'
+    let xs = 'a'..'b'
     println(xs)
     return 0
 }

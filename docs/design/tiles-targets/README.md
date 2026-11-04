@@ -3,7 +3,7 @@
 Status: architecture direction accepted by the user on 2026-10-16; concrete public
 signatures and implementation remain in progress. Placement is the `#gpu` label, which `tiles::compile` reads;
 target descriptors and compiled CPU kernels remain pending. This extends the approved
-[Tiles route](.../tiles-route/README.cn.md), preserving its graph semantics and
+[Tiles route](../tiles-route/README.cn.md), preserving its graph semantics and
 numerical contract. CUDA is currently the only compiled device backend.
 
 ## Public boundary

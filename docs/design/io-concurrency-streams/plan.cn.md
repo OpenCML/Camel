@@ -497,25 +497,25 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 **t1 `t1_stream_type.cml`** —— `let s: int.. = [1, 2, 3]`：
 
 ```
-(h248_t1_stream_type)/.../t1_stream_type.cml:8:15: [Error]: Unexpected '...'; expected '='.  (name=SyntaxDiag::UnexpectedToken, code=0x0200000A)
+(h248_t1_stream_type)/../t1_stream_type.cml:8:15: [Error]: Unexpected '...'; expected '='.  (name=SyntaxDiag::UnexpectedToken, code=0x0200000A)
 ```
 
 **t2 `t2_as_stream.cml`** —— `let s = xs as int..`：
 
 ```
-(h248_t2_as_stream)/.../t2_as_stream.cml:9:22: [Error]: Unexpected '...'; expected '}'.  (name=SyntaxDiag::UnexpectedToken, code=0x0200000A)
+(h248_t2_as_stream)/../t2_as_stream.cml:9:22: [Error]: Unexpected '...'; expected '}'.  (name=SyntaxDiag::UnexpectedToken, code=0x0200000A)
 ```
 
 **t3 `t3_yield.cml`** —— `func pairs(n: int): (int, int).. { ... yield (i, i + 1) }`：
 
 ```
-(h248_t3_yield)/.../t3_yield.cml:7:31: [Error]: Unexpected '...'; expected a declaration or the end of the file.  (name=SyntaxDiag::UnexpectedToken, code=0x0200000A)
+(h248_t3_yield)/../t3_yield.cml:7:31: [Error]: Unexpected '...'; expected a declaration or the end of the file.  (name=SyntaxDiag::UnexpectedToken, code=0x0200000A)
 ```
 
 **t4 `t4_comp.cml`** —— `let g = inc..dbl`：
 
 ```
-(h248_t4_comp)/.../t4_comp.cml:11:16: [Error]: '...' is not supported: function composition is not implemented; write a lambda, e.g. '(x: int): int => g(f(x))'. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
+(h248_t4_comp)/../t4_comp.cml:11:16: [Error]: '...' is not supported: function composition is not implemented; write a lambda, e.g. '(x: int): int => g(f(x))'. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
 ```
 
 **t5 `t5_for_stream.cml`** —— `loop acc = 0 for x in n do acc + x`（`n: int`）：
@@ -575,7 +575,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 **t13 `t13_range.cml`** —— `let xs = 1..5`：
 
 ```
-(h248_t13_range)/.../t13_range.cml:9:15: [Error]: '...' is not supported: function composition is not implemented; write a lambda, e.g. '(x: int): int => g(f(x))'. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
+(h248_t13_range)/../t13_range.cml:9:15: [Error]: '...' is not supported: function composition is not implemented; write a lambda, e.g. '(x: int): int => g(f(x))'. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
 ```
 
 **t14 `t14_open_rank.cml`** —— `let xs: f32[...] = [1.0, 2.0]`，`EXIT=0`（既有开秩数组，改动后必须保持）：

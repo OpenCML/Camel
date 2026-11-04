@@ -1,6 +1,6 @@
 # 8. Program and grammar
 
-English | [中文](.../08_top_level_and_grammar.md)
+English | [中文](../08_top_level_and_grammar.md)
 
 This chapter describes the top-level structure of a program and gives a summary of the grammar. The complete grammar is in [8.5](#85-the-complete-grammar); it is generated from the source of the parser.
 
@@ -51,7 +51,7 @@ or         : and ('|' and)*
 and        : equality ('&' equality)*
 equality   : relational (('===' | '!==' | '==' | '!=') relational)*
 relational : range (('<' | '>' | '<=' | '>=') range)*
-range      : additive ('...' additive)*
+range      : additive ('..' additive)*
 additive   : multiplicative (('+' | '-') multiplicative)*
 multiplicative : power (('*' | '/' | '@' | '%') power)*
 power      : nullable ('^' power)?
@@ -83,7 +83,7 @@ variant   : name | name '(' type, ... ')' | name '{' name: type, ... '}'
 
 - `T?`, `T!`: [3.4](03_data_model.md#34-may-be-null-t-and-may-fail-t).
 - `::<T>`: a function, `rule` or `fact` declares its type parameters after its name ([7.5](07_statements.md#75-generic-functions)).
-- `constas n`: two uses, both compile-time names ([design principles 5.4](.../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape does not write `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
+- `constas n`: two uses, both compile-time names ([design principles 5.4](../../design-principles.en.md)): it names a dimension in a `const` argument -- the name is bound by `constas` where it first appears in a parameter type, and written as plain `n` afterwards -- or it is a **value parameter** of a function declaration (`func f(constas n: int, ...)`), bound by the constant at the call ([7.5](07_statements.md#75-generic-functions)). A value parameter may be written at any position in the parameter list, and there may be any number of them; each value is its own part of the instance key. A dimension name in a shape does not write `constas`: the name binds where it first appears in a parameter type and is written as plain `n` afterwards (see the array row of [3.1](03_data_model.md)).
 - `enum`: [3.5](03_data_model.md#35-enums).
 - Angle brackets: the arguments of a type function ([7.7](07_statements.md#77-type-declarations)) or the arguments of a module type.
 
@@ -103,7 +103,7 @@ blockStmt          : stmtBlock | funcAnno+ stmtBlock
 stmtList           : stmt (SEP? stmt)* SEP?
 stmtBlock          : 'sync'? '{' stmtList? '}'
 blockExpr          : stmtBlock | dataExpr
-moduleName         : ('.' | '...' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
+moduleName         : ('.' | '..' | '...')? IDENTIFIER ('.' IDENTIFIER)* ('::' IDENTIFIER)*
 importDecl         : 'import' (moduleName ('as' identDef)? | (importItem | bracedImports) 'from'
 bracedImports      : '{' (importItem (',' importItem)*)? ','? '}'
 importItem         : identDef ('as' identDef)?
@@ -162,7 +162,7 @@ orExpr             : andExpr ('|' andExpr)*
 andExpr            : equalityExpr ('&' equalityExpr)*
 equalityExpr       : relationalExpr (('===' | '!==' | '==' | '!=') relationalExpr)*
 relationalExpr     : rangeExpr (('<' | '>' | '<=' | '>=') rangeExpr)*
-rangeExpr          : additiveExpr ('...' additiveExpr)*
+rangeExpr          : additiveExpr ('..' additiveExpr)*
 additiveExpr       : multiplicativeExpr (('+' | '-') multiplicativeExpr)*
 multiplicativeExpr : powerExpr (('*' | '/' | '@' | '%') powerExpr)*
 powerExpr          : nullableExpr ('^' powerExpr)?
@@ -219,7 +219,7 @@ loopExpr           : 'loop' loopState (',' loopState)* loopFor? loopWhile? 'do' 
 loopState          : identDef '=' logicalOrExpr
 loopFor            : 'for' identDef 'in' logicalOrExpr
 loopWhile          : 'while' logicalOrExpr
-typeExpr           : '...' typeExpr | arrayType ('?' | '!' | '...')*
+typeExpr           : '...' typeExpr | arrayType ('?' | '!' | '..')*
 arrayType          : specType arrayDim+
 arrayDim           : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
 arrayDimItem       : '?' | '...' identDef? | dataExpr

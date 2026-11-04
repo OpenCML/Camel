@@ -52,7 +52,7 @@ var count = 0
   ```
 
   结构体解构 `let { x, y } = p` 与数组解构 `let [a, b] = xs` 不在语言里：名字位置上的 `{` 或 `[` 是普通语法错误。用 `p.x`、`xs[0]`。
-- **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。单独写是这样；元组解构的名字表里也可以写 `_`（`let (x, _) = t`），表示丢掉对应位置的那个元素——名字的个数仍要与元组的元素个数相等，少了或多了都是 `SemanticDiag::TupleUnpackingCountMismatch`，报在 `let` 上。`var _` 仍不是写法。**这条迁移过**：以前名字少于元素个数是静默截断（只绑前几个，其余丢掉），现在是上面那条错误；外部程序里靠少写名字丢值的写法要补上 `_` 或补全名字（见 [reports/unpack-count-migration.md](.../handover/reports/unpack-count-migration.md)）。
+- **`let _ = e` 有意丢弃 `e` 的值。** `_` 不是名字：它不绑定任何东西，所以同一个块里可以写任意多次，也不能读它。表达式与任何 `let` 的初值一样求值（在同步块里按顺序）。这是表明有意忽略一个 `T!` 的写法（[7.1](#71-表达式语句)）。单独写是这样；元组解构的名字表里也可以写 `_`（`let (x, _) = t`），表示丢掉对应位置的那个元素——名字的个数仍要与元组的元素个数相等，少了或多了都是 `SemanticDiag::TupleUnpackingCountMismatch`，报在 `let` 上。`var _` 仍不是写法。**这条迁移过**：以前名字少于元素个数是静默截断（只绑前几个，其余丢掉），现在是上面那条错误；外部程序里靠少写名字丢值的写法要补上 `_` 或补全名字（见 [reports/unpack-count-migration.md](../handover/reports/unpack-count-migration.md)）。
 - 模块顶层的 `let` 是全局常量，顶层的 `var` 是本模块的一个资源，函数读它、写它，可以导出，也可以写进 `uses`（[5.3](05_modules.md#53-导出)）。**顶层的声明与书写顺序无关，只看依赖**：`let area = pi * r * r` 可以写在 `let pi` 之前；顶层的值之间成环是 `SemanticDiag::ModuleValueCycle`（[5.6](05_modules.md#56-模块的加载)）。函数体里的局部 `let` 仍是先声明后使用。
 
 ## 7.3 `return`
@@ -218,7 +218,7 @@ int 1 string a
 |---|---|
 | `sync` | 函数体是同步块（[4.3.3](04_execution_model.md#433-函数体的-sync函数修饰符)） |
 
-没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](.../design-principles.cn.md)），C++ 提供的值是同一条规则，写成不带右边的 `export let inf: float`：它是 C++ 模块以 `inf` 为名登记的那个值，类型与登记的不一致是 `SemanticDiag::NativeValueMismatch`，没有这个名字的值是 `SemanticDiag::NativeValueNotLoaded`；只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
+没有别的修饰符。C++ 实现的函数写成无函数体的 `export func` 声明（[6.4](../design-principles.cn.md)），C++ 提供的值是同一条规则，写成不带右边的 `export let inf: float`：它是 C++ 模块以 `inf` 为名登记的那个值，类型与登记的不一致是 `SemanticDiag::NativeValueMismatch`，没有这个名字的值是 `SemanticDiag::NativeValueNotLoaded`；只在模块内使用的辅助函数写成不导出的 `func`：`func` 本身就是模块私有。
 
 `#macro` 不是修饰符，是写在函数声明前的标准标签（[4.5](04_execution_model.md#45-macro-函数)）。
 
@@ -256,7 +256,7 @@ func main(): int sync {
 
 - **可以重载的**：二元的 `+` `-` `*` `/` `%` `^` `@` `==` `<` `<=` `>` `>=` `&` `|`，下标 `[]`（被取下标的值与至少一个下标），一元的 `-` `!` `~`。`-` 有一个形参是取负，两个是减法。
 - **重载 `==` 即得到 `!=`**（设计原则 4.3）：用到这个 `==` 重载的 `a != b` 就是 `!(a == b)`，两者不会不一致；这个重载要返回 `bool`，否则在用到 `!=` 的地方是 `SemanticDiag::OperatorOverloadInvalid`。`!=` 本身不能单独重载（`SemanticDiag::OperatorNotOverloadable`）。
-- **不能重载的**：`&&`、`||`（分支）、`??`、`!!`（对空值与错误的分支）、`->`（把值交给函数，并传递空值与错误）、`...`、`as`、赋值、`!=`（跟随 `==`），以及 `===`、`!==`。写了是 `SemanticDiag::OperatorNotOverloadable`，诊断给出原因。复合赋值没有自己的重载：`a += b` 就是 `a = a + b`，跟随 `+` 的重载。
+- **不能重载的**：`&&`、`||`（分支）、`??`、`!!`（对空值与错误的分支）、`->`（把值交给函数，并传递空值与错误）、`..`、`as`、赋值、`!=`（跟随 `==`），以及 `===`、`!==`。写了是 `SemanticDiag::OperatorNotOverloadable`，诊断给出原因。复合赋值没有自己的重载：`a += b` 就是 `a = a + b`，跟随 `+` 的重载。
 - 运算符的形参个数不对、带 `with` 形参或 `var` 形参，是 `SemanticDiag::OperatorOverloadInvalid`。泛型的重载把类型参数写在运算符名字后的 `::<…>` 里（`func operator +::<T>(a: T[], b: T[]): T[]`），不写在形参类型里。
 - **各层的重载合成一组。** 其他名字只取最近的一层（局部 > 本模块 > 导入的 > 内建），运算符例外（设计原则 10.2）：本模块的、导入的模块导出的、内建的与 C++ 模块的重载是同一组，一次调用取接受这些操作数的那一个。
 - **更具体的重载优先**（设计原则 4.3）。“更具体”的定义：一个程序的重载，形参类型恰好就是操作数的类型（不经装入 `T?`、`T!`），而其他接受这些操作数的都只是把它们当作某一族类型中的一员——内建或 C++ 模块中按类型规则接受多种类型的算子（数组、元组、结构体的按内容比较，张量上的运算），或泛型的重载——这时调用取这个程序的重载。于是结构体可以有自己的相等：`func operator ==(a: V, b: V): bool` 让 `p == q`（`p`、`q` 是 `V`）调用它，而不是按内容比较；其他结构体类型仍按内容比较。内建算子中为恰好这些类型声明的（`int + int`、`float == float`）与之同样具体：声明这样的重载是 `SemanticDiag::OperatorOverloadConflict`。
@@ -530,7 +530,7 @@ tag finite = [kernel, fast]                 // 标签组：成员一起生效
 
 语言核心自带一组**数值许可标签**（设计原则 7.2），不必导入，写在 `on nodes`：`reassociate`、`contract`、`approx_math`、`change_precision`、`no_nans`、`no_infs`、`no_signed_zeros`、`flush_subnormals`、`nondeterministic`（允许结果随调度变化，如浮点原子加），以及把它们前四项合在一起的组 `finite_math`；`strict`（7.4）也是核心的标签，写在 `on func, nodes`。`#contract` 落在节点的许可列上（dump 里的 `numeric="..."`），`#strict` 落在节点的属性集里（`attrs="strict"`），读者通过同一个查询（`camel/core/tags.h` 的 `permissionsOf` / `effectivePermissions`）取得许可：`effectivePermissions` 对 `#strict` 返回空集。默认值见 7.3：`reassociate` 与 `contract` 本来就允许，其余要写明才生效。
 
-规则的声明之前可以写 `#requires(许可, ...)`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](.../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
+规则的声明之前可以写 `#requires(许可, ...)`：实参是许可名、核心的组 `finite_math`，或本模块用 `tag 名字 = [许可, ...]` 声明的组（成员递归展开，组名等于其中各许可的并集）。规则只在节点所在的数值策略满足这些许可时才被应用（[46 规则](../technical/46_rules.md)）。要求写成普通的标签、写成未声明的名字，或者在规则之外写 `#requires`，都是定位到该处的错误，不会静默放过。
 
 `#` 有三种写法，可以写在函数、类型声明、结构体字段或块之前：
 
@@ -563,7 +563,7 @@ func main(): int {
 
 `on nodes` 的标签是**节点的属性**（`camel/core/node_attrs.h`）：写在前面的标签对那个函数体或块里写下的节点生效，与外面同名的标签按属性的合并规则累积，内层带参数的标签取内层的值。`on func`、`on type`、`on field` 的标签属于声明本身，C++ 模块用 `tag::factsOf` 一处读取（标签、许可、读者；`tag::ofDeclaration` / `tag::ofField` 仍在）；在 Camel 代码里读它们要等泛型的第一阶段。
 
-形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法；签名固定时直接写具体的函数类型 `(x: T) => R`。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp::<F>(rule: F) on func when is_function::<F>()` 的：`#vjp(rule)` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](.../technical/26_autodiff_as_graph_rewrite.md)）。
+形参也可以是一个函数：声明成类型参数，加上条件 `when is_function::<F>()`，与遍的签名 `opt::<F>(f: F): F! when is_function::<F>()` 是同一种写法；签名固定时直接写具体的函数类型 `(x: T) => R`。实参是一个函数，标签的事实就是那个函数本身（还原成那个函数），不是它的名字，也不是任何内部记号；它的签名是否合用，由读这个标签的一方在贴的位置检查。自动微分模块就是这样声明 `export tag vjp::<F>(rule: F) on func when is_function::<F>()` 的：`#vjp(rule)` 写在函数声明之前，调用这个函数时用规则而不是函数体的导数（[26 自动微分](../technical/26_autodiff_as_graph_rewrite.md)）。
 
 **`#impl(f)`：Camel 函数体是语义，原生内核是执行**（设计原则 10.4）。它写在带函数体的函数声明之前：
 
@@ -700,7 +700,7 @@ export type Txn<F>
 sync? { 语句 ... }
 ```
 
-块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行**它自己直接写着的**语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；里面的分支臂、循环体与嵌套块按它们自己的写法执行（同步块不向内继承，[设计原则 3.4](.../design-principles.cn.md#34-sync-块)）。不带 `sync` 的块按依赖求值。
+块是表达式：它的值由块里的 `return` 给出，没有 `return` 时没有值。块引入一个作用域。带 `sync` 的块按书写顺序执行**它自己直接写着的**语句（[4.3.1](04_execution_model.md#431-同步块块修饰符)）；里面的分支臂、循环体与嵌套块按它们自己的写法执行（同步块不向内继承，[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。不带 `sync` 的块按依赖求值。
 
 块用作函数体、分支臂、lambda 体，也可以单独作语句。
 

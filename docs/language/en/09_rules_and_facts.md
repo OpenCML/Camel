@@ -1,6 +1,6 @@
 # 9. Rules and facts
 
-English | [中文](.../09_rules_and_facts.md)
+English | [中文](../09_rules_and_facts.md)
 
 The first eight chapters are about how the language computes on its own. This chapter is about the knowledge a reader **teaches the compiler**: a `rule` says "these two writings are one value", and a `fact` says "this value has this property". Both are **values** — a rule is a `Rule`, a fact is a function that can be queried — and neither takes effect by being written down: whoever wants them hands them over ([9.4](#94-a-rule-set-is-handed-over-explicitly)).
 
@@ -22,7 +22,7 @@ rule name(parameters) { left <=> right }
 
 The declared type of a parameter is checked by the matcher, so a rule needs no guard of its own such as `isI32(c)`: `const c: int` matches only `int` constants, `const c: f32` only `f32` constants.
 
-A `rule` declaration declares a `Rule` value (like a constant declared with `let`, not like a function): it can be passed to a function, put in an array, filtered by a condition. **A rule set is an ordinary `Rule[]`**, and scheduling is ordinary Camel code ([rules language v2, section 8.5](.../../design/rewrite/v2.cn.md)).
+A `rule` declaration declares a `Rule` value (like a constant declared with `let`, not like a function): it can be passed to a function, put in an array, filtered by a condition. **A rule set is an ordinary `Rule[]`**, and scheduling is ordinary Camel code ([rules language v2, section 8.5](../../design/rewrite/v2.cn.md)).
 
 ```cml
 
@@ -40,7 +40,7 @@ export func simplify::<F>(p: F): F! {
 }
 ```
 
-A rule also carries its name and its requirements: `rule_name`, `rule_two_way`, `rule_needs` and `rule_consts` read a `Rule` value ([standard library reference](.../../stdlib-reference.md)).
+A rule also carries its name and its requirements: `rule_name`, `rule_two_way`, `rule_needs` and `rule_consts` read a `Rule` value ([standard library reference](../../stdlib-reference.md)).
 
 ## 9.2 Conditions and permissions
 
@@ -67,7 +67,7 @@ rule keep_positive(x: float, const c: float) when reports(c) { x * c => x }
 error[SemanticDiag::EffectInRuleCondition]: The call of 'println' in the function 'reports' has an effect, and it is inside the condition of the rule 'keep_positive'.
 ```
 
-**Permissions.** A rule may be preceded by `#requires(permission, ...)`: the engine applies the rule only where the numeric policy of the nodes it matched allows those permissions ([7.6.1](07_statements.md#761-numeric-permission-tags)). The arguments are permission names (`reassociate`, `contract`, `approx_math`, `change_precision`, `nondeterministic`, and the four parts of `finite_math`), the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]`. `reassociate` and `contract` are default permissions, so writing them only spells out what already holds ([design principles 7.3](.../../design-principles.en.md)).
+**Permissions.** A rule may be preceded by `#requires(permission, ...)`: the engine applies the rule only where the numeric policy of the nodes it matched allows those permissions ([7.6.1](07_statements.md#761-numeric-permission-tags)). The arguments are permission names (`reassociate`, `contract`, `approx_math`, `change_precision`, `nondeterministic`, and the four parts of `finite_math`), the core's group `finite_math`, or a group the module declares with `tag name = [permission, ...]`. `reassociate` and `contract` are default permissions, so writing them only spells out what already holds ([design principles 7.3](../../design-principles.en.md)).
 
 ```cml
 // A sum of two scaled copies of one value is one scaled copy only where regrouping is allowed.
@@ -84,7 +84,7 @@ with <name: type = default, ...>
 rule name::<T>(parameters...) when condition? { left => right }
 ```
 
-The kinds of parameter come from different places ([design principles 5.5](.../../design-principles.en.md)):
+The kinds of parameter come from different places ([design principles 5.5](../../design-principles.en.md)):
 
 | Parameter | Who decides its value |
 |---|---|
@@ -115,12 +115,12 @@ export func apply::<F>(p: F): F! {
 - A parameter with no default that is not bound where the rule set is written is a compile error (`SemanticDiag::RuleWithParameterUnbound`): no value in that rule value is there for its condition to read.
 - **Type arguments and `with` arguments go through the same instantiation channel, and the key of an instance is that pair**: the same pair hits the same instance, and different bindings are different instances. This is the same thing as the instantiation of a generic function, and with both written the spelling is the function's too: `name::<T><value>`.
 - **Both sides of a rule and its condition read the `with` parameters**: the left side, the right side and the `when` are all functions of them and read them by name -- `{ x + 0 => x + shift }` and `when shift > 0` are the two halves of one rule and the same value is bound to both, so the `shift` of the right side is the one this instance was bound to.
-- The bullet above and this one are one thing: a rule may write `::<T>` and `with <tile: int>` together, the type half comes from the matched type, the scheduling half is bound where the rule is used, and together they are the key of the instance. The acceptance form is `tile_matmul` in [rules language v2, section 1](.../../design/rewrite/v2.cn.md): `with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`.
+- The bullet above and this one are one thing: a rule may write `::<T>` and `with <tile: int>` together, the type half comes from the matched type, the scheduling half is bound where the rule is used, and together they are the key of the instance. The acceptance form is `tile_matmul` in [rules language v2, section 1](../../design/rewrite/v2.cn.md): `with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`.
 
 ## 9.4 A rule set is handed over explicitly
 
-- **A rewrite pass always receives its rule set explicitly**: importing a module never adds a pass to the pipeline, and rules are never collected on their own. Writing a `rule` in a module does not quietly change what any other pass does ([rules language v2, section 8.5](.../../design/rewrite/v2.cn.md); the pass model of [design principles](.../../design-principles.en.md), section 9).
-- The Camel spelling is the `rewrite` module of the [standard library reference](.../../stdlib-reference.md): `p->rewrite<rules>` applies a set in one direction to a fixed point; `p->saturate<rules, rounds: 8>` also uses the rules that reorder; `run<rules>` brings the round budget and the cost out explicitly (`explain` and `why_not` read it). A pass is a function ([4.7](04_execution_model.md#47-passes-and-pipelines)), so composition is function composition and pipes.
+- **A rewrite pass always receives its rule set explicitly**: importing a module never adds a pass to the pipeline, and rules are never collected on their own. Writing a `rule` in a module does not quietly change what any other pass does ([rules language v2, section 8.5](../../design/rewrite/v2.cn.md); the pass model of [design principles](../../design-principles.en.md), section 9).
+- The Camel spelling is the `rewrite` module of the [standard library reference](../../stdlib-reference.md): `p->rewrite<rules>` applies a set in one direction to a fixed point; `p->saturate<rules, rounds: 8>` also uses the rules that reorder; `run<rules>` brings the round budget and the cost out explicitly (`explain` and `why_not` read it). A pass is a function ([4.7](04_execution_model.md#47-passes-and-pipelines)), so composition is function composition and pipes.
 - The standard optimization pass `std::opt` simplifies with the standard library's laws (`stdlib/rules.cml`). To hand it your own rules as well: in Camel write `f->std::opt<rules: [negate]>`, on the command line write `std::opt rules=[law::negate]` (a `Rule[]` is a constant expression, read by the pass-parameter rules).
 
 **Not implemented.** `std::opt` has no `rules` parameter today: writing it on the command line gives `SemanticDiag::ParamArgumentUnknown` ("'rules' is not a parameter of 'std::opt'"), and the name `std::opt` does not resolve in source either. To apply your own rules today, write a pass of your own — a pass is a function from a function to a function (`(f: F) => F!`) — and hand it to the command line. The pass takes the module's name (here the file's name), so it is invoked like this:
@@ -191,7 +191,7 @@ fact name(parameters...): fact type match the value or tuple matched {
 
 In theory these are ⊔/⊓/∇/Δ of abstract interpretation.
 
-`join`, `meet`, `widen` and `narrow` take a **function**, so what is written here is a name that exists in a library (such as `max`) or a lambda. **`or`/`and` are not standard library functions**, and no new ones are added: the boolean "or" is `|` (evaluated on both sides, an ordinary overloadable logical operator, [design principles 4.2](.../../design-principles.en.md)), so the merge of a boolean fact is written `join (lhs: bool, rhs: bool) => lhs | rhs`. `||` is the reserved operator that turns into a branch; it is not a function value that can be passed, and cannot be written here.
+`join`, `meet`, `widen` and `narrow` take a **function**, so what is written here is a name that exists in a library (such as `max`) or a lambda. **`or`/`and` are not standard library functions**, and no new ones are added: the boolean "or" is `|` (evaluated on both sides, an ordinary overloadable logical operator, [design principles 4.2](../../design-principles.en.md)), so the merge of a boolean fact is written `join (lhs: bool, rhs: bool) => lhs | rhs`. `||` is the reserved operator that turns into a branch; it is not a function value that can be passed, and cannot be written here.
 
 ```cml
 
@@ -287,7 +287,7 @@ export func apply::<F>(p: F): F! {
 
 - **Different arguments are different facts**: the engine computes and caches by "fact + arguments", so `capped<3>` and `capped` each have a value of their own, and writing one argument does not change the fact read elsewhere.
 - **An argument must be a compile-time constant**: the value of a fact is decided by the program and by the arguments as written, so that every rule sees one answer. An argument that is not a constant is refused (`SemanticDiag::FactArgumentNotConstant`).
-- **The argument of a query is a node**: a fact says **how** a value on the program's graph came to be, so it belongs to the graph and not to a value at run time; the `v: T` of the head `fact range::<T>(v: T)` therefore means **the node that produces type `T`** ([rules language v2](.../../design/rewrite/v2.cn.md), section 1). A query is thus written where a node is at hand: a rule's condition (`when`), the body of another fact ([9.5](#95-facts)), or any function that has a `Node`. An ordinary function body runs at run time, where there is no "this value on the graph" to ask about, so a query is not written there: passing a value to a query reads `SemanticDiag::NoMatchingFunction` today (whose help lists `name: (v: Node) => fact type`), and by the rule it should be a diagnostic that names the rule, which is not implemented yet.
+- **The argument of a query is a node**: a fact says **how** a value on the program's graph came to be, so it belongs to the graph and not to a value at run time; the `v: T` of the head `fact range::<T>(v: T)` therefore means **the node that produces type `T`** ([rules language v2](../../design/rewrite/v2.cn.md), section 1). A query is thus written where a node is at hand: a rule's condition (`when`), the body of another fact ([9.5](#95-facts)), or any function that has a `Node`. An ordinary function body runs at run time, where there is no "this value on the graph" to ask about, so a query is not written there: passing a value to a query reads `SemanticDiag::NoMatchingFunction` today (whose help lists `name: (v: Node) => fact type`), and by the rule it should be a diagnostic that names the rule, which is not implemented yet.
 
 Counter-example: the argument of the fact is the rule's parameter `y`, which is not a constant.
 
@@ -334,7 +334,7 @@ sampled sub_self: proposition equality, evidence samples 100, fired 8 of 8, cove
 sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, coverage integer scalar int: ((x * c1) + (x * c2)) = (x * (c1 + c2))
 ```
 
-- Readers: `rule_name`, `rule_two_way`, `rule_needs` and `rule_consts` read a `Rule`; the `Run` that `run<rules>` returns is read by `explain`, `explain_all` and `why_not` ([standard library reference](.../../stdlib-reference.md)).
+- Readers: `rule_name`, `rule_two_way`, `rule_needs` and `rule_consts` read a `Rule`; the `Run` that `run<rules>` returns is read by `explain`, `explain_all` and `why_not` ([standard library reference](../../stdlib-reference.md)).
 - **Asserting "which rule fired" from a graph dump**: such an assertion compares `text` blocks of the dump, and before comparing it must **normalize the attributes that carry a position** — `origin`, `span`, `srcfile` and the like — and it compares an excerpt as a run of consecutive lines. Otherwise changing an unrelated line, or a temporary directory, turns the assertion red: even `origin` of one node differs before and after a rewrite.
 
 A small program that does nothing else shows how to read it: the source of `distance` is `abs(a + b)`, and after
@@ -393,7 +393,7 @@ the addition node, so the `math:abs_l` node is gone.
 
 ## 9.8 Forms that are not implemented
 
-These forms are all ruled ([rules language v2](.../../design/rewrite/v2.cn.md), section 1, and [design principles 5.5](.../../design-principles.en.md)), and this page marks each of them "not implemented" where it uses it. What they read as today:
+These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), section 1, and [design principles 5.5](../../design-principles.en.md)), and this page marks each of them "not implemented" where it uses it. What they read as today:
 
 | Form | Today |
 |---|---|
@@ -402,7 +402,7 @@ These forms are all ruled ([rules language v2](.../../design/rewrite/v2.cn.md), 
 
 ## Related documents
 
-- [Rules language v2 (design)](.../../design/rewrite/v2.cn.md): the target spelling of rules and facts, `check`, the scheduling combinators
-- [46 Rules](.../../technical/46_rules.md): what rules and facts look like in the implementation (a technical record)
-- [Standard library reference](.../../stdlib-reference.md): every function of the `rewrite` module (`rewrite`, `saturate`, `extract`, `check`, `run`, `explain`, `why_not`, the four readers)
-- [Chapter 17 · Teaching the compiler a law](.../../tutorial/17_teaching_a_law.en.md): writing a rule from scratch and checking it with `check`
+- [Rules language v2 (design)](../../design/rewrite/v2.cn.md): the target spelling of rules and facts, `check`, the scheduling combinators
+- [46 Rules](../../technical/46_rules.md): what rules and facts look like in the implementation (a technical record)
+- [Standard library reference](../../stdlib-reference.md): every function of the `rewrite` module (`rewrite`, `saturate`, `extract`, `check`, `run`, `explain`, `why_not`, the four readers)
+- [Chapter 17 · Teaching the compiler a law](../../tutorial/17_teaching_a_law.en.md): writing a rule from scratch and checking it with `check`

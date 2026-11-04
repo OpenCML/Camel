@@ -18,12 +18,12 @@ import { now } from time
 // == model ==
 // Both problems use the same affine model; only the loss and the reported metric differ.
 type Model = {
-    w: f32[..],
-    b: f32[..]
+    w: f32[...],
+    b: f32[...]
 }
 
 with <m: Model>
-func predict(x: f32[..]): f32[..] {
+func predict(x: f32[...]): f32[...] {
     return x @ m.w + m.b
 }
 
@@ -32,7 +32,7 @@ func predict(x: f32[..]): f32[..] {
 // form `relu(z) - z*y + log(1 + exp(-|z|))`, which never evaluates exp of a large positive
 // number; `y` is 0 or 1.
 with <m: Model>
-func loss(x: f32[..], y: f32[..], kind: int): float {
+func loss(x: f32[...], y: f32[...], kind: int): float {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = z - y
@@ -51,7 +51,7 @@ func load_model(data: string): Model {
 // == evaluate ==
 // The first number is the validation loss, the second the metric that fits the problem: mean
 // absolute error for regression, accuracy for classification.
-func evaluate(m: Model, x: f32[..], y: f32[..], kind: int): (float, float) {
+func evaluate(m: Model, x: f32[...], y: f32[...], kind: int): (float, float) {
     let z = predict<m>(x)
     return if kind == 0 then {
         let errors = abs(z - y)
@@ -62,7 +62,7 @@ func evaluate(m: Model, x: f32[..], y: f32[..], kind: int): (float, float) {
         // read as the numbers they stand for once the conversion is written, at the f32 this
         // model computes in (design principles 5.1).
         let correct = (z > 0.0) === (y > 0.5)
-        let hit: f32[..] = f32(correct)
+        let hit: f32[...] = f32(correct)
         (float(mean(relu(z) - z * y + log(exp(-abs(z)) + 1.0))), float(mean(hit)))
     }
 }

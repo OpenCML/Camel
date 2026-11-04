@@ -1098,6 +1098,13 @@ void ParserImpl::parseArrayData() {
     {
         Scope scope(*this, false);
         if (cur_ != TK::RBracket) {
+            // A spread is not in the language (design principles 5.5): an array literal is a list
+            // of values, and `[...xs]` is refused at the marker. `parseIndexValue` reads the
+            // marker for a subscript, where it stands for the values left over; here there is
+            // nothing for it to stand for, so it is an ordinary syntax error.
+            if (cur_ == TK::Ellipsis) {
+                unexpected({});
+            }
             const size_t im = mark();
             parseIndexValue();
             if (cur_ == TK::KwFor && !panic_) {

@@ -10,16 +10,16 @@ import { reshape, relu, mean } from tensor
 import { with_grad } from autodiff
 import { sgd } from nn
 
-type Mlp = { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }
+type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
 
 with <m: Mlp>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return float(mean(y * y))
 }
 
-func train(m: Mlp, x: f32[..], step: int, steps: int): Mlp {
+func train(m: Mlp, x: f32[...], step: int, steps: int): Mlp {
     return if step >= steps then m else sync {
         let vg = with_grad(loss)<m>(x)
         `step ${step} loss ${vg.0}`->println

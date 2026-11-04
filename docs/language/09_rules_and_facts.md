@@ -22,7 +22,7 @@ rule 名字(形参) { 左边 <=> 右边 }
 
 形参的声明类型由匹配器检查，所以一条规则不必自己写 `isI32(c)` 一类的守卫：`const c: int` 只匹配 `int` 常量，`const c: f32` 只匹配 `f32` 常量。
 
-一条 `rule` 声明的是一个 `Rule` 值（像 `let` 声明的常量，不是函数）：它可以被传进函数、放进数组、按条件过滤。**规则集就是普通的 `Rule[]`**，调度也是普通的 Camel 函数（[规则语言第二版 8.5](.../design/rewrite/v2.cn.md)）。
+一条 `rule` 声明的是一个 `Rule` 值（像 `let` 声明的常量，不是函数）：它可以被传进函数、放进数组、按条件过滤。**规则集就是普通的 `Rule[]`**，调度也是普通的 Camel 函数（[规则语言第二版 8.5](../design/rewrite/v2.cn.md)）。
 
 ```cml
 
@@ -40,7 +40,7 @@ export func simplify::<F>(p: F): F! {
 }
 ```
 
-一条规则还带着它的名字与要求：`rule_name`、`rule_two_way`、`rule_needs`、`rule_consts` 读一个 `Rule` 值（[标准库参考](.../stdlib-reference.md)）。
+一条规则还带着它的名字与要求：`rule_name`、`rule_two_way`、`rule_needs`、`rule_consts` 读一个 `Rule` 值（[标准库参考](../stdlib-reference.md)）。
 
 ## 9.2 条件与许可
 
@@ -67,7 +67,7 @@ rule keep_positive(x: float, const c: float) when reports(c) { x * c => x }
 error[SemanticDiag::EffectInRuleCondition]: The call of 'println' in the function 'reports' has an effect, and it is inside the condition of the rule 'keep_positive'.
 ```
 
-**许可。** 规则之前可以写 `#requires(许可, ...)`：规则只在它匹配到的节点所在的数值策略允许这些许可时才被应用（[7.6.1](07_statements.md#761-数值许可标签)）。实参是许可名（`reassociate`、`contract`、`approx_math`、`change_precision`、`nondeterministic`，以及 `finite_math` 的四个分项）、核心的组 `finite_math`，或者本模块用 `tag 名字 = [许可, ...]` 声明的组。`reassociate` 与 `contract` 是默认许可，写出来只是把它写明（[设计原则 7.3](.../design-principles.cn.md)）。
+**许可。** 规则之前可以写 `#requires(许可, ...)`：规则只在它匹配到的节点所在的数值策略允许这些许可时才被应用（[7.6.1](07_statements.md#761-数值许可标签)）。实参是许可名（`reassociate`、`contract`、`approx_math`、`change_precision`、`nondeterministic`，以及 `finite_math` 的四个分项）、核心的组 `finite_math`，或者本模块用 `tag 名字 = [许可, ...]` 声明的组。`reassociate` 与 `contract` 是默认许可，写出来只是把它写明（[设计原则 7.3](../design-principles.cn.md)）。
 
 ```cml
 // A sum of two scaled copies of one value is one scaled copy only where regrouping is allowed.
@@ -84,7 +84,7 @@ with <名字: 类型 = 默认值, ...>
 rule 名字::<T>(形参...) when 条件? { 左边 => 右边 }
 ```
 
-几种参数来源不同（[设计原则 5.5](.../design-principles.cn.md)）：
+几种参数来源不同（[设计原则 5.5](../design-principles.cn.md)）：
 
 | 参数 | 谁决定它的值 |
 |---|---|
@@ -93,7 +93,7 @@ rule 名字::<T>(形参...) when 条件? { 左边 => 右边 }
 | `::<T>` | 匹配到的类型：泛型规则按类型实例化 |
 | `with <tile: int>` | 选用这条规则的人绑定一次，之后按这个值用在整段改写上 |
 
-规则的形参在条件里是**节点**，节点的类型写出它承载的值的类型：形参写 `x: T`，条件里的 `x` 就是 `Node<T>`，写 `x: int` 就是 `Node<int>`；`const c: T` 在条件里仍是**值**，它的节点是 `node_of(c)`，类型 `Node<T>`（[9.2](#92-条件与许可)）。`Node<T>` 是程序写得出的类型，头部写 `n: Node<int>` 就是"值类型为 `int` 的那个节点"。类型实参照[设计原则 5.9](.../design-principles.cn.md) 从实参的节点推出：条件里 `range(x)` 的 `x` 是 `Node<T>`，于是 `T` 就是规则自己的 `T`；推不出来时写出来（`range::<int>(n)`）。
+规则的形参在条件里是**节点**，节点的类型写出它承载的值的类型：形参写 `x: T`，条件里的 `x` 就是 `Node<T>`，写 `x: int` 就是 `Node<int>`；`const c: T` 在条件里仍是**值**，它的节点是 `node_of(c)`，类型 `Node<T>`（[9.2](#92-条件与许可)）。`Node<T>` 是程序写得出的类型，头部写 `n: Node<int>` 就是"值类型为 `int` 的那个节点"。类型实参照[设计原则 5.9](../design-principles.cn.md) 从实参的节点推出：条件里 `range(x)` 的 `x` 是 `Node<T>`，于是 `T` 就是规则自己的 `T`；推不出来时写出来（`range::<int>(n)`）。
 
 `with` 参数的文法与函数的 `with` 参数相同（[7.4.2](07_statements.md#742-with-形参)）：可以写默认值，可以按名字给。**绑定写在用它的地方**，与函数的部分应用同一种写法：
 
@@ -117,12 +117,12 @@ export func apply::<F>(p: F): F! {
 - 没有默认值又没绑定就放进规则集，是编译错误（`SemanticDiag::RuleWithParameterUnbound`）：这个规则值里没有任何值给它的条件读。
 - **类型实参与 `with` 实参走同一条实例化通道，实例的键就是这一对**：同一对键命中同一个实例，不同的绑定是不同的实例。这与泛型函数的实例化是同一件事，两个都写出来时的写法也与函数相同：`名字::<T><值>`。
 - **规则的两边与条件都读 `with` 参数**：左边、右边与 `when` 都是它的函数，按名字读它——`{ x + 0 => x + shift }` 与 `when shift > 0` 是同一条规则的两半，绑定的是同一个值，右边的 `shift` 就是绑定给这个实例的那个。
-- 上一条与这一条是同一件事：一条规则可以同时写 `::<T>` 与 `with <tile: int>`，类型那一半由匹配到的类型给出，调度那一半由用它的地方绑定，合起来是实例的键。验收形态是[规则语言第二版第 1 节](.../design/rewrite/v2.cn.md)的 `tile_matmul`：`with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`。
+- 上一条与这一条是同一件事：一条规则可以同时写 `::<T>` 与 `with <tile: int>`，类型那一半由匹配到的类型给出，调度那一半由用它的地方绑定，合起来是实例的键。验收形态是[规则语言第二版第 1 节](../design/rewrite/v2.cn.md)的 `tile_matmul`：`with <tile: int> rule tile_matmul::<T>(a: T[m, k], b: T[k, n]) when m % tile == 0 { a @ b => tiled_matmul<tile>(a, b) }`。
 
 ## 9.4 规则集是显式交出去的
 
-- **一条改写遍总是显式拿到规则集**：语言不会因为 import 某个模块就往流水线里加遍，也不会自动收集规则。在一个模块里写下一条 `rule`，不会悄悄改变别的遍做什么（[规则语言第二版 8.5](.../design/rewrite/v2.cn.md)、[设计原则](.../design-principles.cn.md) 第 9 节的遍模型）。
-- Camel 里的用法见[标准库参考](.../stdlib-reference.md) 的 `rewrite` 模块：`p->rewrite<rules>` 单向应用到不动点；`p->saturate<rules, rounds: 8>` 连重排的规则一起用；`run<rules>` 把轮数与代价显式带出来（`explain`、`why_not` 读它）。遍就是函数（[4.7](04_execution_model.md#47-遍与流水线)），组合就是函数组合与管道。
+- **一条改写遍总是显式拿到规则集**：语言不会因为 import 某个模块就往流水线里加遍，也不会自动收集规则。在一个模块里写下一条 `rule`，不会悄悄改变别的遍做什么（[规则语言第二版 8.5](../design/rewrite/v2.cn.md)、[设计原则](../design-principles.cn.md) 第 9 节的遍模型）。
+- Camel 里的用法见[标准库参考](../stdlib-reference.md) 的 `rewrite` 模块：`p->rewrite<rules>` 单向应用到不动点；`p->saturate<rules, rounds: 8>` 连重排的规则一起用；`run<rules>` 把轮数与代价显式带出来（`explain`、`why_not` 读它）。遍就是函数（[4.7](04_execution_model.md#47-遍与流水线)），组合就是函数组合与管道。
 - 标准优化遍 `std::opt` 用标准库那批定律（`stdlib/rules.cml`）化简。要把自己的规则也交给它：Camel 里写 `f->std::opt<rules: [negate]>`，命令行写 `std::opt rules=[law::negate]`（`Rule[]` 是一个常量表达式，按遍参数的规则读）。
 
 **尚未实现。** 今天的 `std::opt` 没有 `rules` 参数：命令行写它会得到 `SemanticDiag::ParamArgumentUnknown`（"'rules' is not a parameter of 'std::opt'"），源码里也还解析不到 `std::opt` 这个名字。今天要应用自己的规则，就写一条自己的遍——遍是一个取函数、返回函数的函数（`(f: F) => F!`）——再把它交给命令行。这条遍的名字是模块名（这里是文件名），所以下面这样调用：
@@ -193,7 +193,7 @@ fact 名字(参数...): 事实类型 match 被匹配的值或元组 {
 
 理论上它们就是抽象解释的 ⊔/⊓/∇/Δ。
 
-`join`、`meet`、`widen`、`narrow` 接的是一个**函数**，所以这里写库里真有的名字（`max` 一类）或 lambda。**`or`/`and` 不是标准库里的函数**，也不会新加：布尔的"或"就是 `|`（两边都求值、可重载的普通逻辑运算，[设计原则 4.2](.../design-principles.cn.md)），所以布尔事实的合并写成 `join (lhs: bool, rhs: bool) => lhs | rhs`。`||` 是"转成分支"的保留运算，不是能传出去的函数值，不能写在这里。
+`join`、`meet`、`widen`、`narrow` 接的是一个**函数**，所以这里写库里真有的名字（`max` 一类）或 lambda。**`or`/`and` 不是标准库里的函数**，也不会新加：布尔的"或"就是 `|`（两边都求值、可重载的普通逻辑运算，[设计原则 4.2](../design-principles.cn.md)），所以布尔事实的合并写成 `join (lhs: bool, rhs: bool) => lhs | rhs`。`||` 是"转成分支"的保留运算，不是能传出去的函数值，不能写在这里。
 
 ```cml
 
@@ -289,7 +289,7 @@ export func apply::<F>(p: F): F! {
 
 - **不同的实参是不同的两项事实**：引擎按"事实 + 实参"分别计算与缓存，`capped<3>` 与 `capped` 各有一份值，写下一个实参不改变别处读到的那一项事实。
 - **实参必须是编译期常量**：一项事实的值只由程序与写出来的实参决定，所有规则看到同一个答案。写出不是常量的实参会被拒（`SemanticDiag::FactArgumentNotConstant`）。
-- **查询的实参是节点**：一项事实说的是程序图上一个值**是怎么得来的**，它属于图，不属于运行期的值，所以头部 `fact range::<T>(v: T)` 里的 `v: T` 意思是**值类型为 `T` 的那个节点**，写成 `Node<T>`（[规则语言第二版](.../design/rewrite/v2.cn.md) 第 1 节）。于是查询写在有节点可用的地方：规则的条件（`when`）、另一项事实的主体（[9.5](#95-事实)），或者任何拿到 `Node` 的函数。**`Node<T>` 是程序写得出的类型**：形参写 `n: Node<int>` 就是"值类型为 `int` 的那个节点"，它自己给出事实的类型实参；遍里读到的节点不写值类型（裸 `Node`），那时查询写出类型实参（`range::<int>(n)`），不写就问不出类型实参。普通函数体在运行期，那里没有"图上的这个值"可问，所以查询不写在里面：把一个值（不是节点）传给查询会被拒，报的是**参数取 `Node<T>`、实参是该值的类型**这条不匹配（`SemanticDiag::GenericArgumentsMismatch` 的 `argument 1 has type 'int', but its parameter 'v: Node<T>'`），不是 `NoMatchingFunction`。
+- **查询的实参是节点**：一项事实说的是程序图上一个值**是怎么得来的**，它属于图，不属于运行期的值，所以头部 `fact range::<T>(v: T)` 里的 `v: T` 意思是**值类型为 `T` 的那个节点**，写成 `Node<T>`（[规则语言第二版](../design/rewrite/v2.cn.md) 第 1 节）。于是查询写在有节点可用的地方：规则的条件（`when`）、另一项事实的主体（[9.5](#95-事实)），或者任何拿到 `Node` 的函数。**`Node<T>` 是程序写得出的类型**：形参写 `n: Node<int>` 就是"值类型为 `int` 的那个节点"，它自己给出事实的类型实参；遍里读到的节点不写值类型（裸 `Node`），那时查询写出类型实参（`range::<int>(n)`），不写就问不出类型实参。普通函数体在运行期，那里没有"图上的这个值"可问，所以查询不写在里面：把一个值（不是节点）传给查询会被拒，报的是**参数取 `Node<T>`、实参是该值的类型**这条不匹配（`SemanticDiag::GenericArgumentsMismatch` 的 `argument 1 has type 'int', but its parameter 'v: Node<T>'`），不是 `NoMatchingFunction`。
 
 反例：事实的实参写了规则的形参 `y`，它不是常量。
 
@@ -336,7 +336,7 @@ sampled sub_self: proposition equality, evidence samples 100, fired 8 of 8, cove
 sampled fold_scales: proposition equality, evidence samples 100, fired 8 of 8, coverage integer scalar int: ((x * c1) + (x * c2)) = (x * (c1 + c2))
 ```
 
-- 读取器：`rule_name`、`rule_two_way`、`rule_needs`、`rule_consts` 读一条 `Rule`；`run<rules>` 返回的 `Run` 由 `explain`、`explain_all`、`why_not` 读（[标准库参考](.../stdlib-reference.md)）。
+- 读取器：`rule_name`、`rule_two_way`、`rule_needs`、`rule_consts` 读一条 `Rule`；`run<rules>` 返回的 `Run` 由 `explain`、`explain_all`、`why_not` 读（[标准库参考](../stdlib-reference.md)）。
 - **读图转储断言"哪个规则开火了"**：这类断言比较的是转储里的 `text` 块，比较前要**先把与位置有关的属性归一化**——`origin`、`span`、`srcfile` 一类——再比；节选按"在输出里连续出现"来比。否则改一行无关的代码、换一个临时目录，断言就会红：同一个节点在改写前后连 `origin` 都不同。
 
 下面用一个只做这件事的小程序看它的读法：`distance` 的源码是 `abs(a + b)`，跑过 `fired::simplify` 之后这个簇里
@@ -392,7 +392,7 @@ camel fired.cml fired::simplify std::gir
 
 ## 9.8 尚未实现的形态
 
-下面这些形态都已经裁定（[规则语言第二版](.../design/rewrite/v2.cn.md) 第 1 节与[设计原则 5.5](.../design-principles.cn.md)），本页在用到的地方都标了"尚未实现"。它们今天的读数：
+下面这些形态都已经裁定（[规则语言第二版](../design/rewrite/v2.cn.md) 第 1 节与[设计原则 5.5](../design-principles.cn.md)），本页在用到的地方都标了"尚未实现"。它们今天的读数：
 
 | 形态 | 今天 |
 |---|---|
@@ -401,7 +401,7 @@ camel fired.cml fired::simplify std::gir
 
 ## 相关文档
 
-- [规则语言第二版（设计稿）](.../design/rewrite/v2.cn.md)：规则与事实的目标写法、`check`、调度组合子
-- [46 规则](.../technical/46_rules.md)：规则与事实在实现里的样子（技术记录）
-- [标准库参考](.../stdlib-reference.md)：`rewrite` 模块的全部函数（`rewrite`、`saturate`、`extract`、`check`、`run`、`explain`、`why_not`、四个读取器）
-- [第 17 章 · 教编译器一条定律](.../tutorial/17_teaching_a_law.cn.md)：从零写一条规则，并用 `check` 检查它
+- [规则语言第二版（设计稿）](../design/rewrite/v2.cn.md)：规则与事实的目标写法、`check`、调度组合子
+- [46 规则](../technical/46_rules.md)：规则与事实在实现里的样子（技术记录）
+- [标准库参考](../stdlib-reference.md)：`rewrite` 模块的全部函数（`rewrite`、`saturate`、`extract`、`check`、`run`、`explain`、`why_not`、四个读取器）
+- [第 17 章 · 教编译器一条定律](../tutorial/17_teaching_a_law.cn.md)：从零写一条规则，并用 `check` 检查它

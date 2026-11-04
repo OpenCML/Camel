@@ -131,9 +131,9 @@ class FromBytesResolver final : public FuncTypeResolver {
         // The aggregate arm carries no dtype: its element type is the one the call names, so the
         // signature says that rather than a letter standing in for it.
         if (dtype_ == TypeCode::Void) {
-            return "::<T>(bytes: Bytes, shape: int[]) => T[..]";
+            return "::<T>(bytes: Bytes, shape: int[]) => T[...]";
         }
-        return "::<" + std::string(dtypeName(dtype_)) + ">(bytes: Bytes, shape: int[]) => " + std::string(dtypeName(dtype_)) + "[..]";
+        return "::<" + std::string(dtypeName(dtype_)) + ">(bytes: Bytes, shape: int[]) => " + std::string(dtypeName(dtype_)) + "[...]";
     }
 
   private:
@@ -149,7 +149,7 @@ std::vector<OpDef> binaryOps() {
                 .name      = name,
                 .exports   = {},
                 .params    = {{"bytes", ParamKind::Bytes}, {"shape", ParamKind::IntArray}},
-                .resultDoc = "float[..]",
+                .resultDoc = "float[...]",
                 .infer     = [dtype](const InferContext &ctx) -> std::optional<Type *> {
                     return resultType(dtype, ctx);
                 },
@@ -175,7 +175,7 @@ std::vector<OpDef> binaryOps() {
             .name      = "from_bytes_aggregate",
             .exports   = {},
             .params    = {{"bytes", ParamKind::Bytes}, {"shape", ParamKind::IntArray}},
-            .resultDoc = "void[..]",
+            .resultDoc = "void[...]",
             .kernel    = &fromBytesAggregateKernel,
             .traits    = {}});
     return defs;

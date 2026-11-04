@@ -10,7 +10,7 @@ import { ones, sum } from tensor
 import rulesets.jvp
 import { jvp } from transforms
 
-func quadratic(w: float[..]): float {
+func quadratic(w: float[...]): float {
     return sum(w @ w)
 }
 

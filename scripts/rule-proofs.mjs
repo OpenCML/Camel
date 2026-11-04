@@ -960,7 +960,7 @@ function instancesOf(rule, functions) {
         }
         if (answers.length > 0) types = types.filter((type) => answers.includes(type))
     }
-    // A parameter of a concrete type pins the instance as well (`x: f32[..]` is an f32 rule). A `const`
+    // A parameter of a concrete type pins the instance as well (`x: f32[...]` is an f32 rule). A `const`
     // parameter never does: it is a coefficient or an axis, a value the rule matches, not the element
     // type.
     for (const parameter of rule.params) {

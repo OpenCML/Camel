@@ -38,7 +38,7 @@
 | D6 | **动态网络**：混合专家（按数据路由）、提前退出网络、束搜索解码 | 依赖数据的分派与提前终止 | 分支与循环在编译后的图中保留 |
 | D7 | **HMC / NUTS 采样** | 蛙跳积分的循环、NUTS 动态建树 | 循环、递归、可复现的随机数 |
 | D8 | **图神经网络**：消息传递（稀疏邻接） | 不规则的稀疏结构 | 收集与散射、按声明的性质并行 |
-| D9 | **智能体**：多步推理的研究助手，每步并行调用多个工具（搜索、读网页、运行代码） | 长耗时的网络调用、超时、竞速与取消、流式接收模型输出 | 没有 `async`/`await` 的自动并发、无序资源、整个流程就是一张图；对照 LangGraph（[网络、并发与流](.../io-concurrency-streams/README.cn.md)） |
+| D9 | **智能体**：多步推理的研究助手，每步并行调用多个工具（搜索、读网页、运行代码） | 长耗时的网络调用、超时、竞速与取消、流式接收模型输出 | 没有 `async`/`await` 的自动并发、无序资源、整个流程就是一张图；对照 LangGraph（[网络、并发与流](../io-concurrency-streams/README.cn.md)） |
 | D10 | **概率编程**：贝叶斯回归、层次模型、高斯混合，用 NUTS 与变分推断（SVI）求后验；对照 NumPyro（同一模型、同一数据、同一推断算法） | 同一个模型要被多种推断算法以不同方式解释（抽样、给定参数求对数密度、条件化） | `sample`/`observe` 是 `prob` 资源上的效应；每种推断是用 Camel 写的遍，把模型图变换成对数密度函数等，再接 `grad`、`vmap` 与规则优化——NumPyro 用效应处理器逐个解释，Camel 变换整张图；依赖 JAX 对齐 |
 
 ### 第三层：工业规模
@@ -126,9 +126,9 @@
 机器是 AMD EPYC 7343（32 硬件线程、503 GiB）、Ubuntu 22.04；Python 3.10.12、PyTorch
 2.14.1+cu130、Camel v0.2.24（提交 `ab9cb4579` 干净构建）。主机是共享的：测量期间 1 分钟负载
 31.7→34.1，所以小于约 0.3 ms 的差异不算数，绝对值也不能当成跨机器常数。命令、版本、方差与
-早期数字的讨论见示例的 [README](.../../../examples/models/naive-in-expert-out/README.cn.md)，
+早期数字的讨论见示例的 [README](../../../examples/models/naive-in-expert-out/README.cn.md)，
 原始 JSON 在
-[`results/2026-10-23-linux.json`](.../../../examples/models/naive-in-expert-out/results/2026-10-23-linux.json)。
+[`results/2026-10-23-linux.json`](../../../examples/models/naive-in-expert-out/results/2026-10-23-linux.json)。
 
 **Camel 侧还缺什么**
 

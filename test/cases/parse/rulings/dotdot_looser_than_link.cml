@@ -1,5 +1,5 @@
-// `...` is looser than `->`, so `3->inc..dbl` is `(3->inc)..dbl`: the pipe passes 3 to inc and
-// the composition takes what that call gives, an `int`, beside a function. `...` composes two
+// `..` is looser than `->`, so `3->inc..dbl` is `(3->inc)..dbl`: the pipe passes 3 to inc and
+// the composition takes what that call gives, an `int`, beside a function. `..` composes two
 // functions or takes two integers, so the left operand being an `int` and the right one a
 // function is refused, and the message names the two operands it saw - the grouping in one line.
 // Under the other grouping (`3->(inc..dbl)`) the program would print 8.

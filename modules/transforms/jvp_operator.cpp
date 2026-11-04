@@ -155,7 +155,7 @@ class JvpResolver final : public FuncTypeResolver {
     /// states a false type is worse than one that states the rule (author, A2 of 2026-11-03: the type
     /// follows the declaration, and the declaration is the only source).
     std::string signature() const override {
-        return "(f: (..) => any) => (the parameters and their tangents) => (value, tangent)";
+        return "(f: (...) => any) => (the parameters and their tangents) => (value, tangent)";
     }
 
     /// `f` is the only parameter, in every form: `jvp(f: g)` has to bind to it.

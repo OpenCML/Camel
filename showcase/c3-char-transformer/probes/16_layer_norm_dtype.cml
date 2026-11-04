@@ -4,7 +4,7 @@
 // file has to be f32 -- which is a fact about the API, not about this example.
 import { layer_norm, ones, sum } from tensor
 
-func normed(x: float[..], gamma: float[..], beta: float[..]): float {
+func normed(x: float[...], gamma: float[...], beta: float[...]): float {
     return float(sum(layer_norm(x, gamma, beta)))
 }
 

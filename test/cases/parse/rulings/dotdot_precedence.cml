@@ -1,4 +1,4 @@
-// `...` sits between the comparisons and `+`/`-` (design principles 4.2, level 6a of the
+// `..` sits between the comparisons and `+`/`-` (design principles 4.2, level 6a of the
 // precedence table): `1..n+1` is `1..(n+1)`, not `(1..n)+1`, and a negative bound is written
 // without parentheses (`-1..n` is `(-1)..n`). It is looser than `->`, so `3->inc..dbl` is
 // `(3->inc)..dbl`: a pipe does not swallow an operand into a composition, which is written

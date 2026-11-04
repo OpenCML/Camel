@@ -278,7 +278,7 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->func generic::<T>(x: T, y: T, z: f32[..]): T {
+>func generic::<T>(x: T, y: T, z: f32[...]): T {
 #^^^^ meta.function.definition.camel storage.type.function.camel
 #     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
 #            ^^ punctuation.separator.namespace.camel
@@ -296,10 +296,11 @@
 #                                 ^^^ meta.parens.camel support.type.primitive.camel
 #                                    ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
 #                                     ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
-#                                       ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                        ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                         ^ punctuation.separator.colon.camel
-#                                             ^ meta.block.camel punctuation.section.block.begin.camel
+#                                       ^ meta.parens.camel meta.brackets.camel punctuation.accessor.camel
+#                                        ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                         ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                          ^ punctuation.separator.colon.camel
+#                                              ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 >}

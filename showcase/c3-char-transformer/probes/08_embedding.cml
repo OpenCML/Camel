@@ -6,7 +6,7 @@ import { ones, sum, take } from tensor
 import rulesets.jvp
 import { jvp } from transforms
 
-func picked(table: float[..]): float {
+func picked(table: float[...]): float {
     let row = take(table, [1])
     return sum(row * row)
 }

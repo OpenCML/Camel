@@ -152,7 +152,7 @@ desc = "`CAMEL_MODULE_PATH` naming the directory that holds `only_here` is not s
 kind = "negative"
 case = "../../../cases/compile/module_imports/include_path/prog/only_from_include.cml"
 args = ["-E", "short", "${case}"]
-envs = ["CAMEL_MODULE_PATH=.../roots/one"]
+envs = ["CAMEL_MODULE_PATH=../roots/one"]
 expect_exit = 1
 # 101 is what `only_here` returns: the variable used to add the root, and the run printed that.
 expect_stdout_not_contains = ["101"]

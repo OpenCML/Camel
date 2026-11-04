@@ -4,9 +4,9 @@
 
 ## 1.1 本参考的用途
 
-本参考描述 Camel 的语法与核心语义。行文按主题分章，示例都可以原样运行。初次接触 Camel 请先读[入门教程](.../tutorial/tutorial.cn.md)；命令行见 [cli.cn.md](.../cli.cn.md)；每条诊断的含义见 [diagnostics.md](.../diagnostics.md) 或 `camel --explain <名字>`。
+本参考描述 Camel 的语法与核心语义。行文按主题分章，示例都可以原样运行。初次接触 Camel 请先读[入门教程](../tutorial/tutorial.cn.md)；命令行见 [cli.cn.md](../cli.cn.md)；每条诊断的含义见 [diagnostics.md](../diagnostics.md) 或 `camel --explain <名字>`。
 
-语言的根本定位与执行模型由 [设计原则](.../design-principles.cn.md) 规定，它是规范性的：本参考与它冲突时以它为准。
+语言的根本定位与执行模型由 [设计原则](../design-principles.cn.md) 规定，它是规范性的：本参考与它冲突时以它为准。
 
 ## 1.2 Camel 是什么
 

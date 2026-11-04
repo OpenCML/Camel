@@ -1,6 +1,6 @@
 # 5. Modules
 
-English | [中文](.../05_modules.md)
+English | [中文](../05_modules.md)
 
 Every source file is a module. This chapter describes a module's name, imports, exports and namespaces.
 
@@ -27,7 +27,7 @@ import { inc } from lib::Tools       // bring in names of a namespace of the mod
 - **A module may import itself, to no effect** (design principles 10.1): `import m` or `import { f } from m` in `module m` binds nothing; its names are its own already (with `m::` in front or without, [5.4](#54-namespaces)). An entry file that imports itself by its file name is not loaded a second time.
 - **A name can be renamed when it is imported**: `import { find as str_find } from str` brings the `find` of the module in under the name `str_find`; renamed and plain names may stand in one import (`import { find as str_find, trim } from str`). After a renaming the original name is not visible in this module. When two modules have a function of the same name, rename one of them, or import one and use the qualified name for the other (`import array`, then `array::find`). A single name can be renamed too (`import find as str_find from str`), and a whole module is renamed with `import m as n`.
 - Two imports by name that bring functions of the same name and the same parameter types are `SemanticDiag::ImportNameConflict`, located at the later `import` and pointing to the earlier one; neither is chosen silently. Functions of the same name and different parameter types form one set of overloads, chosen by the argument types (functions of one name in one layer are one set of overloads, [5.4](#54-namespaces)).
-- **Search order**: a module's `import` looks in the module's own directory first; then in the module roots — the directories given by `-I <dir>` in the order given, then the directories listed in the environment variable `CAMEL_PACKAGES`; then in the standard library installed with Camel (design principles 10.2). The entry program follows the same rule as a library module: its own imports look first in its directory, and that directory is not a search root for any other module. So the standard library's own `import graph` gets the standard library's `graph` and is not replaced by a same-named file of the entry directory, while the entry program's own `import graph` still gets the file in its directory, and a library's import resolves to the same place whoever imports it. In one directory only `.cml` and `.cmo` are module files, a same-named file of any other extension is not a module, and a `xx.cmo` comes before a same-named `xx.cml`, whose `.cml` beside it is its declaration module. An `import` names a module, not a file path: `import ../lib` is a syntax error, and this rule adds no way to walk up out of the module's directory; a name written with leading dots is resolved against the module's name, not from the directory upward — the dots are the number of components to drop from the importing module's own name (`...lib` in `a.b` is `lib`); when there are more dots than components, the name names nothing, the import fails with `SemanticDiag::ModuleNotFound` and says why, no directory is searched, and the spelling is never read as a path.
+- **Search order**: a module's `import` looks in the module's own directory first; then in the module roots — the directories given by `-I <dir>` in the order given, then the directories listed in the environment variable `CAMEL_PACKAGES`; then in the standard library installed with Camel (design principles 10.2). The entry program follows the same rule as a library module: its own imports look first in its directory, and that directory is not a search root for any other module. So the standard library's own `import graph` gets the standard library's `graph` and is not replaced by a same-named file of the entry directory, while the entry program's own `import graph` still gets the file in its directory, and a library's import resolves to the same place whoever imports it. In one directory only `.cml` and `.cmo` are module files, a same-named file of any other extension is not a module, and a `xx.cmo` comes before a same-named `xx.cml`, whose `.cml` beside it is its declaration module. An `import` names a module, not a file path: `import ../lib` is a syntax error, and this rule adds no way to walk up out of the module's directory; a name written with leading dots is resolved against the module's name, not from the directory upward — the dots are the number of components to drop from the importing module's own name (`..lib` in `a.b` is `lib`); when there are more dots than components, the name names nothing, the import fails with `SemanticDiag::ModuleNotFound` and says why, no directory is searched, and the spelling is never read as a path.
 
 ```cml
 import math
@@ -65,7 +65,7 @@ Names that can be used without an import (global built-ins): `print`, `println`,
 | `tensor`, `nn`, `autodiff`, `onnx` | Tensors, network layers and optimisers, gradients, ONNX export; the row gather `take`, `one_hot`, and `softmax_cross_entropy` overloaded on the target's type (one-hot rows or integer class labels) |
 | `python` | Embedded Python (must be enabled at build time) |
 
-For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](.../../stdlib-reference.md); for the conventions see [5.5](#55-standard-library). Tensor row gathering, class labels and keyed random are in [43_rows_labels_and_keys.md](.../../technical/43_rows_labels_and_keys.md); array indexing and slicing are in [design principles 5.4](.../../design-principles.en.md).
+For every function of the modules in the table other than `tensor`, `nn`, `autodiff`, `onnx` and `python`, see the [standard library reference](../../stdlib-reference.md); for the conventions see [5.5](#55-standard-library). Tensor row gathering, class labels and keyed random are in [43_rows_labels_and_keys.md](../../technical/43_rows_labels_and_keys.md); array indexing and slicing are in [design principles 5.4](../../design-principles.en.md).
 
 ## 5.3 Exports
 
@@ -227,7 +227,7 @@ func f(): int {
 
 ## 5.5 Standard library
 
-For the functions each module exports (signature, whether it is pure, behaviour on failure, examples) see the [standard library reference](.../../stdlib-reference.md), which is generated from `stdlib/signatures/*.cml` and the libraries written in Camel (`stdlib/*.cml`). Conventions:
+For the functions each module exports (signature, whether it is pure, behaviour on failure, examples) see the [standard library reference](../../stdlib-reference.md), which is generated from `stdlib/signatures/*.cml` and the libraries written in Camel (`stdlib/*.cml`). Conventions:
 
 - The value a function works on is its ordinary parameter and the values that configure the call are `with` parameters, so calls can be chained:
 

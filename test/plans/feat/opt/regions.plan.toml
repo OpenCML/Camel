@@ -9,7 +9,7 @@ a program's largest graph in two nested regions and commits; the new version has
 and a second commit with no change in between give the same version, and the program runs as
 before (no back end reads regions yet).
 
-The two entries that ran that pass on `.../../../cases/opt/generic/arm_tail_gate.cml` moved to
+The two entries that ran that pass on `../../../cases/opt/generic/arm_tail_gate.cml` moved to
 `arm_tail_gate_regions.cml`, word for word. That program's arms read its body's ports and its
 condition, so every body value is one an arm reads, and a block around them would be read from an
 arm across two branches -- a shape a region may not have (the commit refuses it). The old case file

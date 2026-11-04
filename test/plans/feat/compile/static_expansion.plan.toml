@@ -472,7 +472,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "static_loop_sequence"
-desc = "`static loop` walks a sequence written after `in`. The constant interval `a..b` is read half-open as `...` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
+desc = "`static loop` walks a sequence written after `in`. The constant interval `a..b` is read half-open as `..` is everywhere else, the trip count is the interval's and not any tuple's, an empty interval unrolls to no round, a `let` bound once to a constant is a bound the compiler knows, the iteration variable is a compile-time constant used as a value and as a `t.[i]` key at once, and one sequence loop nests in another."
 kind = "behavior"
 case = "../../../cases/compile/static_expansion/static_loop_sequence.cml"
 args = ["${case}", "std::fvm"]

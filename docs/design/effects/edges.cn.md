@@ -24,7 +24,7 @@
 
 > **被收回的话留在原地最危险，因为它的语气和当时一样肯定。更正不是删掉它，是在它旁边说"这句不再成立"。**
 >
-> **更正：** 本节"同一资源上两个都执行的效应按书写顺序"只保证**执行的先后**，不保证**读拿到哪个版本**。20:35 曾据这一条说"未登记的写只由同步块和资源顺序保证，不为它造版本边"；22:50 的裁定已收回这句话——登记表现在按**保守的写者集合**登记（程序里所有写该变量的函数，建图前整个程序扫一遍），看不见的写不再存在。见 [`reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md`](.../../handover/reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md)。
+> **更正：** 本节"同一资源上两个都执行的效应按书写顺序"只保证**执行的先后**，不保证**读拿到哪个版本**。20:35 曾据这一条说"未登记的写只由同步块和资源顺序保证，不为它造版本边"；22:50 的裁定已收回这句话——登记表现在按**保守的写者集合**登记（程序里所有写该变量的函数，建图前整个程序扫一遍），看不见的写不再存在。见 [`reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md`](../../handover/reviews/questions-2026-10-31-two-references-write-one-object-outside-a-sync-block.md)。
 
 ## 1.5 数据边只有一种，端口带角色（已定）
 

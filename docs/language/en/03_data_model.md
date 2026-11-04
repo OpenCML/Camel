@@ -1,6 +1,6 @@
 # 3. Data model
 
-English | [中文](.../03_data_model.md)
+English | [中文](../03_data_model.md)
 
 This chapter describes Camel's types and values: basic types, compound types, `let` and `var`, the types that may be null and may fail, maps and sets.
 
@@ -120,7 +120,7 @@ func main(): int sync {
   | `map`, `filter`, `reduce`, `foreach` | See [6.10](06_expressions.md#610-higher-order-operators) |
   | `xs->append<v>` | A **new array** with `v` at the end; `xs` is unchanged. To append to a variable write `xs = xs->append<v>` (see 3.7); to join two arrays use `concat(xs, ys)` |
 
-- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](.../../stdlib-reference.md).
+- More array functions are in the `array` module, which has to be imported (`import { reverse, sum } from array`): `reverse`, `take`, `drop`, `enumerate`, `flatten`, `unique`, `index_of`, `find`, `find_index`, `any`, `all`, `count`, `chunks`, `sum`, `mean`, `min`, `max`, `argmax`, `argmin`, `flat_map`, `sort_by`, `zip_with`; see the [standard library reference](../../stdlib-reference.md).
 
 ### 3.3.2 Tuples
 
@@ -186,7 +186,7 @@ A string is immutable text and is **always valid UTF-8**; length and subscripts 
 | `strs->join<sep>` | Joins an array of strings |
 | `s[i]` | The `i`-th code point; the result is a string containing just that one character; an out-of-range subscript is a fault |
 
-The remaining string functions are in the `str` module ([standard library reference](.../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `index_of` (positions in code points; a cut is the core's `s[a:b]`), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
+The remaining string functions are in the `str` module ([standard library reference](../../stdlib-reference.md)): `split`, `trim`, `to_upper`, `to_lower`, `replace`, `index_of` (positions in code points; a cut is the core's `s[a:b]`), `starts_with`, `ends_with`, `repeat`, `codepoints`, `from_codepoints`.
 
 ```cml
 import { split, trim, to_upper } from str
@@ -388,7 +388,7 @@ func main(): int sync {
 - When the value type is itself nullable (`Map<string, int?>`), the type of `m[k]` is just `int?`: a missing key and a `null` value cannot be told apart; use `has` where needed.
 - The coexistence of the three call forms; the print format; `json::decode_as` using a type argument to specify the target type of decoding.
 
-For the implementation and trade-offs see [technical document 31](.../../technical/31_map_and_set.md).
+For the implementation and trade-offs see [technical document 31](../../technical/31_map_and_set.md).
 
 ## 3.7 `let`, `var` and references
 

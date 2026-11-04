@@ -101,16 +101,16 @@ string: (x: T) => string
 parse_int: (text: string) => int!
 parse_float: (text: string) => float!
 error: (kind: string, message: string) => Error
-print: <fmt: string> (x: T, ..rest) => T
-print: (x: T, ..rest) => T
+print: <fmt: string> (x: T, ...rest) => T
+print: (x: T, ...rest) => T
 print: () => void
-println: <fmt: string> (x: T, ..rest) => T
-println: (x: T, ..rest) => T
+println: <fmt: string> (x: T, ...rest) => T
+println: (x: T, ...rest) => T
 println: () => void
-eprintln: <fmt: string> (x: T, ..rest) => T
-eprintln: (x: T, ..rest) => T
+eprintln: <fmt: string> (x: T, ...rest) => T
+eprintln: (x: T, ...rest) => T
 eprintln: () => void
-format: <..args> (fmt: string) => string
+format: <...args> (fmt: string) => string
 join: <sep: string> (xs: string[]) => string
 len: (x: string) => int
 len: (x: A) => int when is_array::<A>()
@@ -124,7 +124,7 @@ slice: <axis: int, start: int, end: int, step: int = 1> (x: Bytes) => Bytes
 concat: (xs: T[], ys: T[]) => T[]
 contains: <value: T> (xs: T[]) => bool
 contains: <sub: string> (s: string) => bool
-zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
+zip: (...xs: ...A) => (...ElementOf<A>)[] when ...is_array::<A>()
 append: <value: T> (xs: T[]) => T[]
 map: <f: (item: T) => U> (xs: T[]) => U[]
 filter: <f: (item: T) => bool> (xs: T[]) => T[]
@@ -195,7 +195,7 @@ load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs
 
 ```text
 tree_paths: (t: T, here: string = '') => ?
-tree_map: <f: F> (t: T, ..ts) => ?
+tree_map: <f: F> (t: T, ...ts) => ?
 tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
@@ -215,85 +215,85 @@ remat: (f: F) => F when is_function::<F>()
 ```text
 vjp: (f: F) => Vjp<F> when is_function::<F>()
 grad: (f: (x: float) => float) => (x: float) => float
-with_grad: (f: F) => <..WithOf<F>> (..ParamsOf<F>) => never when is_function::<F>()
+with_grad: (f: F) => <...WithOf<F>> (...ParamsOf<F>) => never when is_function::<F>()
 ```
 
 **`tensor`** — import { ... } from tensor — 79 name(s)
 
 ```text
-zeros: (shape: int[]) => T[..] when is_numeric::<T>()
-ones: (shape: int[]) => T[..] when is_numeric::<T>()
-full: (shape: int[], value: number) => float[..]
-eye: (n: int) => T[..] when is_numeric::<T>()
-maximum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-minimum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
-where: (cond: bool[..], lhs: float[..] | number, rhs: float[..] | number) => float[..]
-abs: (t: float[..]) => float[..]
-exp: (t: float[..]) => float[..]
-log: (t: float[..]) => float[..]
-sqrt: (t: float[..]) => float[..]
-rsqrt: (t: float[..]) => float[..]
-sigmoid: (t: float[..]) => float[..]
-tanh: (t: float[..]) => float[..]
-relu: (t: float[..]) => float[..]
-gelu: (t: float[..]) => float[..]
-erf: (t: float[..]) => float[..]
-erfc: (t: float[..]) => float[..]
-reshape: (t: float[..] | number[], shape: int[]) => float[..]
-unsqueeze: (t: float[..], axis: int) => float[..]
-transpose: (t: float[..]) => float[..]
-permute: (t: float[..], perm: int[]) => float[..]
-concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[..]
-take: (t: float[..], indices: int64[..] | number[]) => float[..]
-one_hot: (labels: int64[..] | number[], classes: int) => f32[..]
-shape: (t: T[..]) => int[] when is_numeric::<T>()
-numel: (t: T[..]) => int when is_numeric::<T>()
-dim: <axis: int> (t: T[..]) => int when is_numeric::<T>()
-dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
-pick_at: (t: T[..], at: int[]) => T when is_numeric::<T>()
-sum: (t: T[..]) => T
-sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
-sum_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
-mean: (t: T[..]) => T
-mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
-mean_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
-max: (t: T[..]) => T
-min: (t: T[..]) => T
-argmax: (t: T[..]) => int
-argmin: (t: T[..]) => int
-max: (t: T[..], axis: int, keepdims?: bool) => T[..]
-max_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
-min: (t: T[..], axis: int, keepdims?: bool) => T[..]
-min_axis: (t: T[..], axis: int, keepdims: bool) => T[..]
-argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
-argmax_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
-argmin: (t: float[..], axis: int, keepdims?: bool) => int64[..]
-argmin_axis: (t: T[..], axis: int, keepdims: bool) => int[..]
-mean_axis_stated: (t: T[..], at: int[]) => T[..]
-softmax: (t: f32[..], axis?: int) => f32[..]
-softmax: (t: float[..], axis?: int) => float[..]
-log_softmax: (t: f32[..], axis?: int) => f32[..]
-log_softmax: (t: float[..], axis?: int) => float[..]
-softmax_grad: (y: f32[..], dy: f32[..], axis?: int) => f32[..]
-softmax_grad: (y: float[..], dy: float[..], axis?: int) => float[..]
-layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
-layer_norm: (x: float[..], gamma: float[..], beta: float[..], eps?: number) => float[..]
-matmul: (lhs: float[..], rhs: float[..]) => float[..]
-linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
-linear: (x: float[..], weight: float[..], bias?: float[..]) => float[..]
-zeros_like: (t: float[..]) => float[..]
-ones_like: (t: float[..]) => float[..]
-load_npy: (path: string) => T[..]
-show: (t: A[..]) => void when is_numeric::<A>() || is_same::<A, bool>()
-from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
-to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
-save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
-sum_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
-take_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
-sum_axis_stated: (t: T[..], at: int[]) => T[..] when is_numeric::<T>()
-mean_stated: (t: T[..], at: int[]) => T when is_numeric::<T>()
-max_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
-min_axis_stated: (t: T[..], mask: bool[..], at: int[]) => T[..] when is_numeric::<T>()
+zeros: (shape: int[]) => T[...] when is_numeric::<T>()
+ones: (shape: int[]) => T[...] when is_numeric::<T>()
+full: (shape: int[], value: number) => float[...]
+eye: (n: int) => T[...] when is_numeric::<T>()
+maximum: (lhs: float[...] | number, rhs: float[...] | number) => float[...]
+minimum: (lhs: float[...] | number, rhs: float[...] | number) => float[...]
+where: (cond: bool[...], lhs: float[...] | number, rhs: float[...] | number) => float[...]
+abs: (t: float[...]) => float[...]
+exp: (t: float[...]) => float[...]
+log: (t: float[...]) => float[...]
+sqrt: (t: float[...]) => float[...]
+rsqrt: (t: float[...]) => float[...]
+sigmoid: (t: float[...]) => float[...]
+tanh: (t: float[...]) => float[...]
+relu: (t: float[...]) => float[...]
+gelu: (t: float[...]) => float[...]
+erf: (t: float[...]) => float[...]
+erfc: (t: float[...]) => float[...]
+reshape: (t: float[...] | number[], shape: int[]) => float[...]
+unsqueeze: (t: float[...], axis: int) => float[...]
+transpose: (t: float[...]) => float[...]
+permute: (t: float[...], perm: int[]) => float[...]
+concat: (a: float[...] | number[], b: float[...] | number[], axis: int) => float[...]
+take: (t: float[...], indices: int64[...] | number[]) => float[...]
+one_hot: (labels: int64[...] | number[], classes: int) => f32[...]
+shape: (t: T[...]) => int[] when is_numeric::<T>()
+numel: (t: T[...]) => int when is_numeric::<T>()
+dim: <axis: int> (t: T[...]) => int when is_numeric::<T>()
+dim: <axis: i32> (t: T[...]) => int when is_numeric::<T>()
+pick_at: (t: T[...], at: int[]) => T when is_numeric::<T>()
+sum: (t: T[...]) => T
+sum: (t: T[...], axis: int, keepdims?: bool) => T[...]
+sum_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+mean: (t: T[...]) => T
+mean: (t: T[...], axis: int, keepdims?: bool) => T[...]
+mean_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+max: (t: T[...]) => T
+min: (t: T[...]) => T
+argmax: (t: T[...]) => int
+argmin: (t: T[...]) => int
+max: (t: T[...], axis: int, keepdims?: bool) => T[...]
+max_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+min: (t: T[...], axis: int, keepdims?: bool) => T[...]
+min_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+argmax: (t: float[...], axis: int, keepdims?: bool) => int64[...]
+argmax_axis: (t: T[...], axis: int, keepdims: bool) => int[...]
+argmin: (t: float[...], axis: int, keepdims?: bool) => int64[...]
+argmin_axis: (t: T[...], axis: int, keepdims: bool) => int[...]
+mean_axis_stated: (t: T[...], at: int[]) => T[...]
+softmax: (t: f32[...], axis?: int) => f32[...]
+softmax: (t: float[...], axis?: int) => float[...]
+log_softmax: (t: f32[...], axis?: int) => f32[...]
+log_softmax: (t: float[...], axis?: int) => float[...]
+softmax_grad: (y: f32[...], dy: f32[...], axis?: int) => f32[...]
+softmax_grad: (y: float[...], dy: float[...], axis?: int) => float[...]
+layer_norm: (x: f32[...], gamma: f32[...], beta: f32[...], eps?: number) => f32[...]
+layer_norm: (x: float[...], gamma: float[...], beta: float[...], eps?: number) => float[...]
+matmul: (lhs: float[...], rhs: float[...]) => float[...]
+linear: (x: f32[...], weight: f32[...], bias?: f32[...]) => f32[...]
+linear: (x: float[...], weight: float[...], bias?: float[...]) => float[...]
+zeros_like: (t: float[...]) => float[...]
+ones_like: (t: float[...]) => float[...]
+load_npy: (path: string) => T[...]
+show: (t: A[...]) => void when is_numeric::<A>() || is_same::<A, bool>()
+from_bytes: (bytes: Bytes, shape: int[]) => T[...] when is_plain::<T>()
+to_bytes: (t: T[...]) => Bytes when is_plain::<T>()
+save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
+sum_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
+take_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
+sum_axis_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
+mean_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
+max_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
+min_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
 num_threads: () => int
 set_num_threads: (n: int) => void
 set_num_threads: (n: i32) => void
@@ -301,7 +301,7 @@ gemm_backend: () => string
 gemm_threads: () => int
 gemm_library_threads: () => int
 gemm_library: () => string
-sum_to: (t: T[..], like: S) => S when is_float::<T>()
+sum_to: (t: T[...], like: S) => S when is_float::<T>()
 ```
 
 **`types`** — import { ... } from types — 16 name(s)
@@ -334,7 +334,7 @@ drop: <n: int> (xs: T[]) => T[]
 chunks: <n: int> (xs: T[]) => T[][]
 enumerate: (xs: T[]) => (int, T)[]
 flatten: (xss: T[][]) => T[]
-flatten: (xs: T[..]) => T[] when !is_array::<T>()
+flatten: (xs: T[...]) => T[] when !is_array::<T>()
 unique: (xs: T[]) => T[]
 find_index: <pred: (x: T) => bool> (xs: T[]) => int?
 find: <pred: (x: T) => bool> (xs: T[]) => T?
@@ -342,22 +342,22 @@ index_of: <x: T> (xs: T[]) => int?
 any: <pred: (x: T) => bool> (xs: T[]) => bool
 all: <pred: (x: T) => bool> (xs: T[]) => bool
 count: <pred: (x: T) => bool> (xs: T[]) => int
-sum: (xs: T[..]) => T when is_numeric::<T>()
-mean: (xs: T[..]) => T when is_float::<T>()
-min: (xs: T[..]) => T when is_ordered::<T>()
-max: (xs: T[..]) => T when is_ordered::<T>()
-argmax: (xs: T[..]) => int when is_ordered::<T>()
-argmin: (xs: T[..]) => int when is_ordered::<T>()
-sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
-min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-max: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
-argmax: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-argmin: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
-shape: (xs: T[..]) => int[]
-numel: (xs: T[..]) => int
-dim: <axis: int> (xs: T[..]) => int
-to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
+sum: (xs: T[...]) => T when is_numeric::<T>()
+mean: (xs: T[...]) => T when is_float::<T>()
+min: (xs: T[...]) => T when is_ordered::<T>()
+max: (xs: T[...]) => T when is_ordered::<T>()
+argmax: (xs: T[...]) => int when is_ordered::<T>()
+argmin: (xs: T[...]) => int when is_ordered::<T>()
+sum: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
+mean: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_float::<T>()
+min: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
+max: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
+shape: (xs: T[...]) => int[]
+numel: (xs: T[...]) => int
+dim: <axis: int> (xs: T[...]) => int
+to_bytes: (xs: T[...]) => Bytes when is_plain::<T>()
 argsort: (keys: i32[]) => int[]
 argsort: (keys: int[]) => int[]
 argsort: (keys: f32[]) => int[]
@@ -470,9 +470,9 @@ key: (seed: int) => Key
 fold: (k: Key, i: int) => Key
 split: (k: Key) => (Key, Key)
 uniform: (k: Key) => T when is_float::<T>()
-uniform: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+uniform: <shape: int[]> (k: Key) => T[...] when is_float::<T>()
 normal: (k: Key) => T when is_float::<T>()
-normal: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: <shape: int[]> (k: Key) => T[...] when is_float::<T>()
 randint: <low: int, high: int> (k: Key) => int
 permutation: (k: Key, n: int) => int[]
 shuffle: <k: Key> (xs: T[]) => T[]
@@ -701,8 +701,8 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: f32[..]) => Device<f32[..]> uses driver
-download: (value: Device<f32[..]>) => f32[..] uses driver
+upload: (value: f32[...]) => Device<f32[...]> uses driver
+download: (value: Device<f32[...]>) => f32[...] uses driver
 run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
 source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
@@ -742,23 +742,23 @@ from_py: (obj: PyObject) => T! when has_python_form::<T>()
 **`nn`** — import { ... } from nn — 19 name(s)
 
 ```text
-conv2d: (input: f32[..], kernel: f32[..], bias: f32[..], stride?: int, padding?: int) => f32[..]
-conv2d_input_grad: (input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int) => f32[..]
-conv2d_kernel_grad: (input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int) => f32[..]
-conv2d_bias_grad: (bias: f32[..], dy: f32[..]) => f32[..]
-max_pool2d: (input: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
-avg_pool2d: (input: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
-max_pool2d_grad: (input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
-avg_pool2d_grad: (input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
-batch_norm: (input: f32[..], mean: f32[..], var: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
-batch_norm_train: (input: f32[..], gamma: f32[..], beta: f32[..], running_mean: f32[..], running_var: f32[..], momentum?: number, eps?: number) => (f32[..], f32[..], f32[..])
-batch_norm_train_grad: (input: f32[..], gamma: f32[..], dy: f32[..], eps?: number) => (f32[..], f32[..], f32[..])
-embedding: (table: f32[..], indices: f32[..]) => f32[..]
-embedding_table_grad: (table: f32[..], indices: f32[..], dy: f32[..]) => f32[..]
-softmax_cross_entropy: (logits: f32[..], target: f32[..]) => float
-softmax_cross_entropy: (logits: f32[..], target: f32[..] | number[]) => float
-softmax_cross_entropy_grad: (logits: f32[..], target: f32[..], dy: number) => f32[..]
-softmax_cross_entropy_grad: (logits: f32[..], target: f32[..] | number[], dy: number) => f32[..]
+conv2d: (input: f32[...], kernel: f32[...], bias: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_input_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_kernel_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
+conv2d_bias_grad: (bias: f32[...], dy: f32[...]) => f32[...]
+max_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+avg_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+max_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+avg_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
+batch_norm: (input: f32[...], mean: f32[...], var: f32[...], gamma: f32[...], beta: f32[...], eps?: number) => f32[...]
+batch_norm_train: (input: f32[...], gamma: f32[...], beta: f32[...], running_mean: f32[...], running_var: f32[...], momentum?: number, eps?: number) => (f32[...], f32[...], f32[...])
+batch_norm_train_grad: (input: f32[...], gamma: f32[...], dy: f32[...], eps?: number) => (f32[...], f32[...], f32[...])
+embedding: (table: f32[...], indices: f32[...]) => f32[...]
+embedding_table_grad: (table: f32[...], indices: f32[...], dy: f32[...]) => f32[...]
+softmax_cross_entropy: (logits: f32[...], target: f32[...]) => float
+softmax_cross_entropy: (logits: f32[...], target: f32[...] | number[]) => float
+softmax_cross_entropy_grad: (logits: f32[...], target: f32[...], dy: number) => f32[...]
+softmax_cross_entropy_grad: (logits: f32[...], target: f32[...] | number[], dy: number) => f32[...]
 sgd: (params: P, grads: P, lr: float) => P
 adam_state: (params: P) => OptimizerState
 adam: (params: P, grads: P, state: OptimizerState, lr: float, beta1?: number, beta2?: number, eps?: number) => (P, OptimizerState)
@@ -826,28 +826,28 @@ vmap_sub: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_mul: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_div: (a: T[], b: T[]) => T[] when is_numeric::<T>()
 vmap_neg: (a: T[]) => T[] when is_numeric::<T>()
-vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+vmap_mul_tensor: (a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
 idx_batch: (xs: Lift<T[]>, i: int[]) => Lift<T>
-vmap_matmul: (lhs: T[..], rhs: T[..]) => T[..] when is_numeric::<T>()
-vmap_sum_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
-vmap_mean_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
-vmap_max_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
-vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
-vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
-vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
-vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
-vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
-vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
-vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
-vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
-vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
-vmap_reshape: (xs: T[..], dims: int[..]) => T[..] when is_numeric::<T>()
-vmap_unsqueeze: (xs: T[..], axis: int[]) => T[..] when is_numeric::<T>()
-vmap_transpose: (xs: T[..]) => T[..] when is_numeric::<T>()
-vmap_permute: (xs: T[..], perm: int[..]) => T[..] when is_numeric::<T>()
-vmap_concat: (a: T[..], b: T[..], axis: int[]) => T[..] when is_numeric::<T>()
-vmap_dim: (xs: T[..], axis: int[]) => int[] when is_numeric::<T>()
-vmap_where: (cond: bool[..], a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+vmap_matmul: (lhs: T[...], rhs: T[...]) => T[...] when is_numeric::<T>()
+vmap_sum_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_mean_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_max_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_min_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
+vmap_argmax_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
+vmap_argmin_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
+vmap_sum: (xs: T[...]) => T[...] when is_numeric::<T>()
+vmap_mean: (xs: T[...]) => T[...] when is_float::<T>()
+vmap_max: (xs: T[...]) => T[...] when is_numeric::<T>()
+vmap_min: (xs: T[...]) => T[...] when is_numeric::<T>()
+vmap_argmax: (xs: T[...]) => int[...] when is_numeric::<T>()
+vmap_argmin: (xs: T[...]) => int[...] when is_numeric::<T>()
+vmap_reshape: (xs: T[...], dims: int[...]) => T[...] when is_numeric::<T>()
+vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...] when is_numeric::<T>()
+vmap_transpose: (xs: T[...]) => T[...] when is_numeric::<T>()
+vmap_permute: (xs: T[...], perm: int[...]) => T[...] when is_numeric::<T>()
+vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...] when is_numeric::<T>()
+vmap_dim: (xs: T[...], axis: int[]) => int[] when is_numeric::<T>()
+vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 **`sim`** — import { ... } from sim — 2 name(s)

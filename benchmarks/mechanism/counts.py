@@ -31,7 +31,7 @@ Counting calibrations:
                       add\(\s*"([^"]+)"\s*,\s*(.+?)\s*(?:,\s*(\d+)\s*)?\)\s*;
                   dynamic entries are add(...) calls whose first argument is not
                   a string literal; each counts N = product of the cardinalities
-                  of the enclosing `for (.. : {"a","b",..})` loops (brace
+                  of the enclosing `for (... : {"a","b",...})` loops (brace
                   tracking on the comment/string-stripped line structure).
   * grad_reg    : per-operator gradient registrations in a foreign codebase,
                   counted by a stated grep/regex pattern so absence (0) is as
@@ -312,7 +312,7 @@ def count_registry(path: Path, section: str, scope: str) -> tuple[int, int]:
         "registrations_dynamic",
         dynamic,
         "entries",
-        "add() with non-literal first arg, expanded by enclosing for(..:{..}) loop cardinalities",
+        "add() with non-literal first arg, expanded by enclosing for(...:{..}) loop cardinalities",
     )
     emit(
         section,
