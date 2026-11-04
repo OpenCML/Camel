@@ -1,4 +1,4 @@
-# 值那一半：兜底不是原因，缺的是参与微分的那个参数**自己的值**
+# 参与微分的那个参数自己的值，由谁交给转置？
 
 **状态**：主目标**未达成**；本页是读数、最小改动面与三条路的代价。**默认建议**：不动代码（第 6 节丁），
 把“值”这一半交给一条新裁（丙）。
@@ -23,6 +23,13 @@
 > 2245 条。
 
 ## 2 读数 A：翻 `wantsCotangent` 的兜底 = **0 条**（不是 16 条）
+
+> **这一节的结论，一句话，请当作读数引用：**
+> **「16 条」只适用于 `d1aa176ee` 之前的树；在今天的 `origin/develop`（`34b659107`）上，字面翻兜底的读数是
+> 0 条（8422 条逐条比对，0 变动）；把同一条裁定读在“问”那一侧，读数是 7 条。**
+> 记这一条的理由不只是数字：**一个“兜底”在它的消费者被删掉之后留在原地，看起来仍然像在兜底**。它不是
+> 无害的死代码——它今天在纸面上支撑着“翻它会翻 16 条”这个结论，而那个结论会让下一个人不敢动它，也让
+> 6 个 `known_fail_note` 写着一句今天不成立的话。
 
 树 `D:\Projects\Camel-wt\knownop`（`lane-knownoperand`，基线 `34b659107`）；宿主 `88zjwei`（32 核）；
 2026-11-04 07:31–07:44；宿主 load 40.36/28.33/22.13（1m/5m/15m，跑前）。闸门只走 `camel-remote.ps1`，
@@ -89,6 +96,27 @@ modules/transforms/CMakeFiles/transforms_cmo_objects.dir/Release/transpose.cpp.o
 **结论**：#1 是唯一真正的红→绿，且它要的是“别去问一个只由已知值算出的东西”——这正是 19:55 那句话的
 正面用法；#2/#3 说明同一条规则一刀切会**静默送零**，所以它只能落在“问”上、不能落在“收”上（与第 2 节的
 0 条互为印证：收的那一侧今天根本没被用到）。
+
+### 3.0 第 1 条那条标记查过了：**今天没过期**
+
+协调者的怀疑是「`transpose_hand_closed_lambda` 今天已经绿了，只是标记还挂着」。**量过了，不是。**
+在**没翻任何东西**的树上（`c84d3e17d`，`build-info.json` 里 `dirty: false`、`dirtyCount: 0`，
+`footprint 261103_235935_c84d3e17d`）直接跑这一条：
+
+```
+$ out/latest/bin/camel test/cases/compile/transforms/transpose_hand_closed_lambda.cml std::nvm
+cut ct1= (6.0)
+cut ct3= (18.0)
+TRANSPOSE function=__g_322__ skip=cotangent-needs-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry
+REAL_EXIT=1
+```
+
+- `cut ct1` / `cut ct3` 两行在，`hand ct1` / `hand ct3` 两行不在（`expect_output_contains` 的四条它只满足两条）；
+- 退出码 1；
+- 拒绝的原话与 `known_fail_msg` 逐字一致（`skip=cotangent-needs-a-value uri=:op/mul_d position=0`）。
+
+所以**标记今天是有效的**，不是过期标记；它是第 3 节实验 3 之后才“本来能绿”。把标记摘掉要等答案真的变了
+（也就是那条裁定落地）——**现在摘会把一条拒绝登记成缺陷**。
 
 ## 4 读数 C：缺的那个值到底是什么
 
