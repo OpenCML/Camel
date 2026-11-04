@@ -870,7 +870,7 @@ bool buildTransposeMember(
     // record it -- a parameter's index per member, handed to the call site so it could forward the
     // value from the closure -- is gone with the read that filled it by position: a rule that needs a
     // value beside the cotangent reads it as an **operand of the call it expands**
-    // (`element_at(dxs, [i, len(xs)])` states the length), so the value travels in the call and the
+    // (`pick_at(dxs, [i, len(xs)])` states the length), so the value travels in the call and the
     // member stands on no capture of its own. `needs` is therefore empty for every member built here;
     // the parameter stays because the call site and `transposeSignature` are written from it.
     gc_node_ref_t result = rt::kInvalidNodeRef;
@@ -995,14 +995,6 @@ bool buildTransposeMember(
         if (carriesClosure && function->closureType() != nullptr) {
             draft.setClosureType(const_cast<camel::core::type::TupleType *>(function->closureType()));
         }
-        // Where a parameter's own value sits among the residuals, and why a *parameter's number* is the
-        // place rather than a type. `residualsOf` numbers the residuals as the parameters by their
-        // index and then the values the body computed (`modules/transforms/split.cpp`, "program
-        // order"), one residual per parameter the tangent side reads -- so slot `at` is parameter
-        // `at`'s value, and this graph declares one closure port per residual in that order. Which
-        // parameter this is therefore decides the slot: two arrays of one element type are two
-        // parameters, and the shape an answer must be written in is *this* parameter's, not the
-        // first member's of that type.
         // A closure member is forwarded to the member the transposed graph carries, and nothing
         // about where it came from is asked (author, 2026-11-03 08:50). A member the cut wrote and
         // a member a caller closed by hand are the same shape -- a port the function is handed --
@@ -1438,7 +1430,7 @@ bool buildTransposeMember(
                         // A participating one has no port at all -- it is what the answer is a
                         // cotangent of -- and nothing here invents a value for it: what a rule needs
                         // beside the cotangent arrives as an operand of the call it is expanding
-                        // (`element_at(dxs, [i, len(xs)])` states the length), so the value is a slot
+                        // (`pick_at(dxs, [i, len(xs)])` states the length), so the value is a slot
                         // of that call rather than a member of this closure picked by position.
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
@@ -2215,7 +2207,7 @@ if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
                     }
                     if (!hasTangentSpace(inputs[i])) {
                         // An operand that cannot hold a cotangent is not a position the law has to
-                        // answer for: `element_at(dxs, at)` states the length in an `int[]`, and the
+                        // answer for: `pick_at(dxs, at)` states the length in an `int[]`, and the
                         // law's right side answers the array alone. Asking it for the position of the
                         // length is a question with no answer, and answering it "the rule's right side
                         // answers one name" is not what the reader did. Recorded as the zero it is,

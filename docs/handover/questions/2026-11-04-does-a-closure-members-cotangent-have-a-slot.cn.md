@@ -38,25 +38,36 @@
 
 甲要动的面，我按第 2 节数到的最小集是：**2 条用例的答案元组 + `split.cpp#answersAPair` 一处机制**（那一处覆盖全部 19 条 split 用例的读数，但是同一处改动）。**阈值写死：若落地时发现除这 2 条之外还要改超过 20 条用例的期望，就改乙**，并在 `Vjp<F>` 那一句里写清"答案按参数、闭包成员的余切丢弃"。
 
-## 4. ① 落地的代价：七条从"答对的数"变成"拒绝"
+**作者 2026-11-03 19:55 裁的是乙**，理由与本节相反：闭包成员是**已知值**（捕获的常量），不是线性输入，没有余切可收；甲不取，因为答案的形状就不再只由 `F` 决定。这一节保留为当时的默认与理由，供读者对照——**不是今天的建议**。
 
-**这七条在 `545b24d92` 上答的是对的数**（与引擎逐元素相同）；① 删掉按位置读之后，同一个值没有合法通道进转置侧，于是从"对"变成"拒绝"。按作者 17:35 的方向，值应当由规则层作为已知实参交出；闭合成员这一路还没交出，所以问的是"闭包成员的余切有没有槽"。
+## 4. 七条的今天：拒绝，且已量过它们能被什么改回去
 
-两边都是实测：左边是我在基线 `545b24d92` 上重跑的读数（这几条在基线全 PASS，所以读的就是程序打印的那一行），右边是集成树上的拒绝原句。
+作者 19:55 的裁定是**乙：闭包成员不收余切**（闭包成员是已知值，不是线性输入），并且指出这七条从"答对"变成"拒绝"的原因是**另一个**：转置规则要读一个已知值（`mul_d` 的另一个操作数），这个值在被转置的函数里是**闭包端口**，而 `forward` 还不会处理闭包端口。裁定给的改法是：`forward` 遇到闭包端口就转发成成员自己的闭包端口（成员的闭包 = 被转置函数的闭包，调用点照常填）。
 
-| 用例 | 基线 `545b24d92` 的读数 | 今天的拒绝 |
+所以这七条今天的读数是这样，**标记是临时的，改法一次到位它们就回来**：
+
+| 用例 | 改法落地后应有的读数（= 基线 `545b24d92`） | 今天的拒绝 |
 | --- | --- | --- |
-| `transpose_hand_closed_lambda.same_answer_as_the_cut` | `cut ct1= (6.0)` / `cut ct3= (18.0)` / `hand ct1= (6.0)` / `hand ct3= (18.0)` —— 手的闭包与切的半边**逐位相同** | `TRANSPOSE function=__g_322__ skip=cotangent-needs-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` |
-| `relu_gradient_through_the_library` | `relu library value=3.0 dL/dx=[0.0, 0.0, 1.0, 0.0]` | `TRANSPOSE function=split_of_jvp_of_relu_sum_backward skip=cotangent-needs-a-value uri=tensor:multiply position=0` |
-| `exp_gradient_through_the_library` | `exp library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]` | 同上（`uri=tensor:multiply position=0`） |
+| `transpose_hand_closed_lambda.same_answer_as_the_cut` | `cut ct1= (6.0)` / `cut ct3= (18.0)` / `hand ct1= (6.0)` / `hand ct3= (18.0)` —— 手的闭包与切的半边逐位相同 | `skip=cotangent-needs-a-value uri=:op/mul_d position=0`（`__g_322__`） |
+| `relu_gradient_through_the_library` | `relu library value=3.0 dL/dx=[0.0, 0.0, 1.0, 0.0]` | `uri=tensor:multiply position=0` |
+| `exp_gradient_through_the_library` | `exp library value=10.107337927389695 d=[2.718281828459045, 7.38905609893065]` | 同上 |
 | `sigmoid_gradient_through_the_library` | `sigmoid library value=0.8914007525718497 d=[0.2350037122015945, 0.19661193324148185]` | 同上 |
 | `tanh_gradient_through_the_library` | `tanh library value=-0.2994769986957551 d=[0.7864477329659274, 0.41997434161402614]` | 同上 |
-| `transpose_array_product.answers_both_operands` | `value = 20.0`，`d/dxs = 2.0 3.0 4.0`，`d/dw = 1.0 2.0 3.0`——`sum(xs*w)` 的 adjoint，手推即此 | 同上 |
+| `transpose_array_product.answers_both_operands` | `value = 20.0`，`d/dxs = 2.0 3.0 4.0`，`d/dw = 1.0 2.0 3.0` | 同上 |
 | `jvp_vjp_array_product.one_point_two_ends` | `value = 20.0`，`forward <jvp tangent, ct> = 6.0`，`backward <dxs, d/dxs> + <dws, d/dw> = 6.0` | 同上 |
 
-三条 `*_through_the_library` 的基线数与各自 `*_through_the_engine` 的读数逐元素相同，所以"基线那个数是对的"不是靠期望串推出来的，是两条路径对上了。`transpose_array_product` 两条在基线上是当场重跑的（`total: 2, pass: 2, fail: 0`），没有借旧的日志。
+三条 `*_through_the_library` 的读数与各自 `*_through_the_engine` 逐元素相同；`transpose_array_product` 两条在基线上是当场重跑的（`total: 2, pass: 2, fail: 0`）。**所以"改法落地后应当答这些数"不是猜的**：这是它们自己的历史读数，不是期望串。
 
-**为什么它们一起卡在同一句上**：`mul_tensor` 的律给"另一个操作数"的余切要读它的**值**（`w` 对 `xs`、`xs` 对 `w`），`exp`/`sigmoid`/`tanh`/`relu` 的律要读**前向值**（`exp(x)`、`s(x)`、`1-y*y`、`x>0` 的掩码），`__g_322__` 那个手写闭包要读 `dx`。这些值在前向半里都算了出来，**以残差的形式进了闭包**，而转置侧今天唯一的读法是"按位置读闭包那一格"，① 删的就是它。
+### 4.1 我量到的一件事：改法落地时别顺手把按位置取值恢复回来
+
+在 `c4391db57` 之上试过一次"把按位置读恢复"（`closurePorts[slot]` + `wantedValues` + `TRANSPOSE-NEEDS`）：
+
+- **七条全部回到上表右列的数**（`feat/compile/transforms` 105 = 103 pass / 2 fail，两条红仍是那两道久墙）；
+- 但 `transpose_many_parameters` 与 `pow_gradient_refused_by_the_library` **从答对数变成拒绝**；
+- 分开量下来是三件事：**恢复"读"**（`closurePorts[slot]`）本身就足以让七条回来、且不动那两条；**恢复"问"**（`wantedValues` 的记录与 `TRANSPOSE-NEEDS` 打印）只记账；**恢复"交"**（`needsOut.released = true`，把集合按参数序号交给调用点）才会把那两条弄红——调用点现在按被调函数的**内容**转发值（`transposePairCall`），同一个值再按参数序号交一遍，两个调用点的 arity 就变了。
+- 按位置取值在 `feat/compile/transforms` 一次运行里的命中数是 **12 次 / 3 组 (function, param)**，全是 `param 0`：`split_of_jvp_of_total_backward` 8、`split_of_jvp_of_loss_row_mean_backward` 2、`__g_322__` 2。**这是第二步的起点**，也是"这七条今天靠哪条通道"的答案。
+
+这次试验**已丢弃**（`git checkout --`，没 stash，没提交）：19:55 的裁定不改按位置取值，改 `forward`。上面三行是给下一次动手的人的地图，不是建议回退。
 
 ## 要作者答的一句
 

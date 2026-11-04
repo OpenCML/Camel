@@ -38,7 +38,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { element_at, exp, full, log_softmax, matmul, mean_axis, mean_axis_stated, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { pick_at, exp, full, log_softmax, matmul, mean_axis, mean_axis_stated, numel, relu, sigmoid, subtract, sum, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 
 /// The transpose of `x + c`: the cotangent of the sum, of `x` and of `c`.
 export rule add_t::<T>(x: T, c: T) when is_float::<T>() {
@@ -410,7 +410,7 @@ func zeros_of::<T>(ct: T, n: int): T[] when is_float::<T>() {
     return zeros::<T>([n])
 }
 
-/// The transpose of `tensor:element_at(xs, at)`: `ct` at `at[0]`, zero everywhere else, where the
+/// The transpose of `tensor:pick_at(xs, at)`: `ct` at `at[0]`, zero everywhere else, where the
 /// zeros are `at[1]` of them and that is the length the **forward** half stated.
 ///
 /// This is the law the linear half of a read meets (`rulesets.jvp`'s `jvp_idx_arr` passes
@@ -419,8 +419,8 @@ func zeros_of::<T>(ct: T, n: int): T[] when is_float::<T>() {
 /// as an operand instead of being taken from the array the cotangent comes back through. `len(xs)`
 /// is a value of the primal, which the cut carries to the half that reads it, so what a call site
 /// hands over is one integer list.
-export rule element_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
-    element_at(xs, at) => (ct: T) => scatter_into(zeros_of(ct, at[1]), at[0], ct)
+export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
+    pick_at(xs, at) => (ct: T) => scatter_into(zeros_of(ct, at[1]), at[0], ct)
 }
 
 /// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else, in the extents the operand's **type**
@@ -430,12 +430,13 @@ export rule element_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
 /// (design principles 4.3), so the number of positions comes from `extent_of::<X>()` -- the walk
 /// states the type's extents as an `int[]` and hands it over as the law's last port -- and `xs` is
 /// named here only because the operator has it. `zeros_of` is the rank-one base the scatter writes
-/// into, exactly as in `element_at_t` above.
+/// into, exactly as in `pick_at_t` above.
 ///
 /// A type that states no extents (`float[..]`) reaches no law at all: the walk refuses the step by
 /// name (`parameter-shape`) instead of inventing a length.
 export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() {
     index_into(xs, i) => (ct: T) => scatter_into(zeros_of(ct, extent_product(at)), i, ct)
+}
 }
 
 // ---- the transpose rule of `tensor:take` ----

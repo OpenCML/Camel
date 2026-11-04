@@ -98,8 +98,8 @@ export func dim::<T>(t: T[..]): int when is_numeric::<T>()
 /// @pure
 /// @fails fault `RuntimeError` when the list is not two entries, `at[1]` disagrees with the tensor,
 /// or `at[0]` is outside it
-/// @example element_at([1.0, 2.0, 3.0] as float[], [2, 3])    // 3.0
-export func element_at::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
+/// @example pick_at([1.0, 2.0, 3.0] as float[], [2, 3])    // 3.0
+export func pick_at::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 
 // ---- the same operations, with the extents the reverse law needs ----
 //
@@ -112,7 +112,7 @@ export func element_at::<T>(t: T[..], at: int[]): T when is_numeric::<T>()
 //
 // So the forward half states them, and these three declarations are what it states them to. Each is
 // the operation above it with one more operand, an `int[]` the value does not need and the reverse
-// law reads instead of the array. `element_at` is the same arrangement for the read: `at[1]` is the
+// law reads instead of the array. `pick_at` is the same arrangement for the read: `at[1]` is the
 // length `xs[i]` cannot state for itself. The extents travel in one list because a transpose walk
 // answers an operator with one or two normal operands: a third position would be refused before any
 // law was looked up.
