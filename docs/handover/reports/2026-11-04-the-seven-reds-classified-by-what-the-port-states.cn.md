@@ -53,7 +53,7 @@
    `TRANSPOSE function=split_of_jvp_of_total_plain_backward skip=cotangent-needs-a-value uri=tensor:matmul position=0`——**还是同一句**。
 3. **为什么没动**：位置 0 的余切是 `ct · bᵀ`，它需要的是 **`b` 的值本身**，不是 `b` 的形状。删掉 `sum_to` 只去掉了"读 `a` 的形状"这一半，另一半"读 `b` 的值"还在，而 `b` 的值**没有一个端口带进来**。这就是 `cotangent-needs-a-value` 的原话：the rule's right side reads a value the caller does not carry。
 4. **所以这一族（7 条红 + 三条 `matmul_t` 基线红）的根因是同一个，而且不是形状、不是算子、不是律的写法**：**转置成员没有拿到**被转置那一步的**原值**（`dL/da = ct·bᵀ` 里的 `b`；`ct * w` 里的 `w`）。`vector_lhs_law`(`dL/dv = ct·wᵀ`)、`vector_rhs_law`(`dL/dx = ct·uᵀ`)、`matmul_t` 的矩阵车道全是这一个病；`rank_three_is_refused_by_name` 是它的下游（连律都选不出来，钉的是 `node=6`，实测已是 `node=7`）。
-5. **落点**：`split` 交给成员的闭合端口与参数（及被转置那一步的操作数）之间的对应——与本轮第 4 项同一处，见 `2026-11-04-who-carries-the-shape-as-an-operand.cn.md` 第 4 节。**律里没有便宜的那一步**；这一步要动 `split`/`transpose` 的成员端口，不是律，也不是算子。
+5. **落点**：`split` 交给成员的闭合端口与参数（及被转置那一步的操作数）之间的对应——与本轮第 4 项同一处，见 `docs/handover/reviews/2026-11-04-who-carries-the-shape-as-an-operand.cn.md` 第 4 节。**律里没有便宜的那一步**；这一步要动 `split`/`transpose` 的成员端口，不是律，也不是算子。
 
 本轮对 `stdlib/rulesets/transpose.cml` 的改动**已全部撤掉**（`git checkout --`，工作区干净），宿主 `out/latest/stdlib` 也推回了提交版；试验只留下了上面这几行读数。
 

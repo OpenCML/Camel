@@ -28,6 +28,6 @@ from-type shape= [3, 4]  reduced= [3, 4]  // zeros::<float>(extent_of::<float[3,
 
 ## 3. 我方默认
 
-**甲，且排在孪生算子（`mul_stated`/`matmul_stated`）之后。** 理由：孪生算子关掉的是**红的五条**（见 `2026-11-04-who-carries-the-shape-as-an-operand.cn.md`），`sum_to_at` 关掉的是**一处多余的分配和一处绕弯的写法**，没有任何用例因为缺它而红。同日作者对"更干净"的说法也正是"排在后面"。
+**甲，且排在孪生算子（`mul_stated`/`matmul_stated`）之后。** 理由：孪生算子关掉的是**红的五条**（见 `docs/handover/reviews/2026-11-04-who-carries-the-shape-as-an-operand.cn.md`），`sum_to_at` 关掉的是**一处多余的分配和一处绕弯的写法**，没有任何用例因为缺它而红。同日作者对"更干净"的说法也正是"排在后面"。
 
 落地时的清单（照 `sum_stated` 的位置）：`modules/tensor/ops/**` 新增 OpDef（`name = "sum_to_at"`，三处导出、`infer` 读 `at` 的长度、内核转调今天的 `sum_to`）、注册表、`stdlib/tensor.cml` 声明、`stdlib/signatures/tensor.cml` 与 `docs/stdlib-reference.md` 由仓库脚本重生成、`test/plans/feat/modules/stdlib_registry` 的算子表现更新、`stdlib/rulesets/transpose.cml#sum_to_stated` 改成 `sum_to_at(t, at)` 并删掉那一串零。

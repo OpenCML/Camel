@@ -43,7 +43,7 @@ camel-remote.ps1 -Path D:\Projects\Camel-wt\zerocarrier -Plan <plan> -Tier fast 
 | `first_step.tensor_vjp_answers_the_step` | `skip=cotangent-needs-a-value uri=tensor:multiply position=0` |
 | `matmul_t.law_read_through_vjp` | `skip=cotangent-needs-a-value uri=tensor:matmul position=0` |
 
-**改动前的基线读数本轮没有重跑**；这七条在本轮之前是绿的（它们不在各自 plan 的 `known_fail` 名单里，拒绝词也与那些条目不同）。七条的来龙去脉：它们靠的正是被删掉的那个零——律写 `sum_to_stated(ct * w, shape(x))`，`shape(x)` 要的是**被回答那一位**的形状，那个值在反程里没有，零载体就按参数类型造一串零、让它 `shape` 得出来。删掉之后缺的不是值（另一个操作数的值闭包里都有），是**切线那一侧的形状**，而切线的值按实测的旧账不进闭包（`modules/transforms/split.cpp#residualsOf` 里那条注记：`g(x) = f(x) * x` 答成恒定函数、`grad(g)` 静悄悄 0.0）。所以这七条的唯一出路是作者同一份裁定里的另一句：**把形状当已知实参交给乘法（与 `sum_stated` 同一个做法）**——那是一个新算子，见 `docs/handover/questions/2026-11-04-who-carries-the-shape-as-an-operand.cn.md`。
+**改动前的基线读数本轮没有重跑**；这七条在本轮之前是绿的（它们不在各自 plan 的 `known_fail` 名单里，拒绝词也与那些条目不同）。七条的来龙去脉：它们靠的正是被删掉的那个零——律写 `sum_to_stated(ct * w, shape(x))`，`shape(x)` 要的是**被回答那一位**的形状，那个值在反程里没有，零载体就按参数类型造一串零、让它 `shape` 得出来。删掉之后缺的不是值（另一个操作数的值闭包里都有），是**切线那一侧的形状**，而切线的值按实测的旧账不进闭包（`modules/transforms/split.cpp#residualsOf` 里那条注记：`g(x) = f(x) * x` 答成恒定函数、`grad(g)` 静悄悄 0.0）。所以这七条的唯一出路是作者同一份裁定里的另一句：**把形状当已知实参交给乘法（与 `sum_stated` 同一个做法）**——那是一个新算子，见 `docs/handover/reviews/2026-11-04-who-carries-the-shape-as-an-operand.cn.md`。
 
 ## 3. 本轮落了什么、没落什么
 
@@ -51,7 +51,7 @@ camel-remote.ps1 -Path D:\Projects\Camel-wt\zerocarrier -Plan <plan> -Tier fast 
 | --- | --- |
 | 1. 删零载体；固定形状走 `extent_of`；开秩裸 `transpose` 按语言规则拒绝 | **已落**。消费者清单见第 1 节，`git grep` 证据见第 1 节开头；七条红的代价见第 2 节 |
 | 2. `sum_to` 收长度时第二个操作数拿到正确目标形状 | **已确认**，`sum_to` 不改。探针（树同上，宿主 23:5x）：`source shape= [2, 3, 4]`、`template shape= [3, 4] numel= 12`、`reduced shape= [3, 4]`，`extent_of::<float[3, 4]>()` 那一支同为 `[3, 4]`。更干净的 `sum_to_at(t, at)` 写成 TODO 页：`2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md`，本轮不做 |
-| 3. `exp`/`erf`/`gelu` 的 `jvp` 律把形状当已知实参交给乘法 | **未落**。它要的孪生算子（`mul_stated`/`matmul_stated`）是一整次算子落地，本轮时间不够把它做对；设计、落地清单与"凭什么相信它能关上这七条"写在 `2026-11-04-who-carries-the-shape-as-an-operand.cn.md`。裸 `transpose` 在开秩上仍然按语言规则拒绝——这一点本轮没动，也没被绕开 |
+| 3. `exp`/`erf`/`gelu` 的 `jvp` 律把形状当已知实参交给乘法 | **未落**。它要的孪生算子（`mul_stated`/`matmul_stated`）是一整次算子落地，本轮时间不够把它做对；设计、落地清单与"凭什么相信它能关上这七条"写在 `docs/handover/reviews/2026-11-04-who-carries-the-shape-as-an-operand.cn.md`。裸 `transpose` 在开秩上仍然按语言规则拒绝——这一点本轮没动，也没被绕开 |
 | 4. `vjp` 路径上零余切照原值的形状造 | **未落，且量到作者那句话今天不成立**。试过并已回退：`split.cpp#residualsOf` 收开秩参数（只收类型不陈述 extents 的那些，`residuals` 0→1）、`buildTransposeMember` 的零余切那一段改 `forward(ports[port])` 并去掉 `zeroOfType` 回落，实测 `vjp_const_function_answers_zero` 的开放那一支由 `([])` 变成 `skip=parameter-shape port=1 at=0 no-cotangent-zero`——**值进了闭包，成员却没有端口读它**。所以"原值是残差，在闭包里"缺的是 `split` 交给成员的闭合端口与参数之间的对应，要自己一轮；留着那次改动只会把一条已钉住的读数换成一个拒绝 |
 
 ## 4. 全量 `feat`（`-Tier fast`）与本轮的账
