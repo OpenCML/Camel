@@ -125,6 +125,23 @@ file list shown in the merge message. Documents cannot make code green or red, s
 Being behind by a commit that touches code is not an exception — it is the thing the check exists
 to catch.
 
+### An escaped spelling does not survive a merge that rewrites it
+
+This tree spells the same operator two ways — `..` for an interval, a composition and a stream type,
+`...` for a pack — so a regular expression written `\.\.` matches only the first of them. A text
+migration cannot see that pattern (a backslash separates the dots), so **a merge that brings a
+migrated spelling together with such a pattern silently turns a check into one that finds nothing**:
+it does not throw, it answers "no problems". Measured twice on 2026-11-04: `scripts/law-cotangent-ports.mjs`
+(`kindOfType`'s `\[\s*\.\.\]`) and `test/cases/compile/rulesets/deleted_row_reduction_helpers.mjs`.
+Before reporting a merge green, run:
+
+```
+git grep -n '\\\.\\\.' -- '*.mjs' '*.ts' '*.cml' '*.toml'
+```
+
+Each hit is read as "does this pattern still mean what it meant when it was written". A check that
+quietly finds nothing is worse than one that fails loudly, because nothing about it looks wrong.
+
 ### When a ruling and a reading disagree
 
 A ruling is a decision about what the language should be; a reading is what the tree does today. They

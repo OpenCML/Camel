@@ -965,7 +965,7 @@ function instancesOf(rule, functions) {
     // type.
     for (const parameter of rule.params) {
         if (parameter.constant) continue
-        const element = parameter.type.replace(/\[\s*\.\.\s*\]$/, '').trim()
+        const element = parameter.type.replace(/\[\s*\.\.\.\s*\]$/, '').trim()
         if (!rule.typeParam || element !== rule.typeParam) {
             if (FORMATS[element]) types = types.filter((type) => type === element)
         }
@@ -1026,7 +1026,7 @@ function proveInstance(solver, rule, functions, type, valueConjuncts, timeoutMs,
     const types = new Map()
     const declarations = []
     for (const parameter of rule.params) {
-        const element = parameter.type.replace(/\[\s*\.\.\s*\]$/, '').trim()
+        const element = parameter.type.replace(/\[\s*\.\.\.\s*\]$/, '').trim()
         const elementType = FORMATS[element] ? element : type
         types.set(parameter.name, elementType)
         declarations.push(declare(parameter.name, elementType, smtModel === 'real'))
