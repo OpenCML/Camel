@@ -447,8 +447,8 @@ template <k::ReduceOp Op> InferFn extremumAxisStatedInfer() {
 /// the cotangent by the number of elements, and that count is a value of the primal, so the
 /// forward half states it as the extents the reverse law multiplies out.
 slot_t meanStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
-    const std::vector<int64_t> at = intListArg(norm, 1, "mean_stated");
-    checkStatedExtents(tensorArg(norm, 0), at, 0, "mean_stated");
+    const std::vector<int64_t> extents = intListArg(norm, 1, "mean_stated");
+    checkStatedExtents(tensorArg(norm, 0), extents, 0, "mean_stated");
     return meanAllKernel(with, norm, ctx);
 }
 
@@ -885,7 +885,7 @@ std::vector<OpDef> reductionOps() {
     defs.push_back(OpDef{
         .name      = "mean_stated",
         .exports   = {"mean_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        .params    = {{"t", ParamKind::Tensor}, {"extents", ParamKind::IntArray}},
         .resultDoc = "T",
         .infer     = meanStatedInfer,
         .kernel    = &meanStatedKernel,

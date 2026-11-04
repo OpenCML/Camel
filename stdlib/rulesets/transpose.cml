@@ -573,14 +573,14 @@ export rule sum_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, exten
     sum_axis_stated(t, axis, keepdims, extents) => (ct: T[...]) => lane_spread(ct, extents, axis, keepdims)
 }
 
-/// The cotangent of `mean_stated(t, at)`: the one number it answers is the mean of every element, so
-/// its adjoint gives a `numel(t)`-th of that number to every element of the extents `at` states.
+/// The cotangent of `mean_stated(t, extents)`: the one number it answers is the mean of every
+/// element, so its adjoint gives a `numel(t)`-th of that number to every element of the extents.
 ///
-/// The count is `at`'s product -- the same number the mean divided by -- and the division is one
+/// The count is `extents`' product -- the same number the mean divided by -- and the division is one
 /// operation per element over the spread, which is the engine's `(dy / count)` broadcast exactly:
 /// the two orders divide the same values by the same count.
-export rule mean_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    mean_stated(t, at) => (ct: T) => spread_over(ct, at) / float(extent_product(at))
+export rule mean_stated_t::<T, X, A>(t: X, extents: A) when is_float::<T>() {
+    mean_stated(t, extents) => (ct: T) => spread_over(ct, extents) / float(extent_product(extents))
 }
 
 /// The cotangent of `max_axis_stated(t, mask, at)`: the lane's cotangent, spread back along the axis

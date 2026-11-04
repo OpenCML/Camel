@@ -2636,18 +2636,20 @@ outside the rank
 #### `mean_stated`
 
 ```camel
-mean_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
+mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 ```
 
-The mean of every element, with the operand's extents stated: `mean(t)`, and `at` is `shape(t)`.
+The mean of every element, with the operand's extents stated: `mean(t)`, and `extents` is
+`shape(t)`.
 
 The value is the mean -- the sum and the division both in `f64`, rounded into the element type
 once, which is `mean`'s own definition -- and the extents are what its adjoint needs: the reverse
 law (`rulesets.transpose`'s `mean_stated_t`) divides the cotangent by the number of elements and
 spreads it over those extents, and neither number is in the cotangent's type.
+element
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape, or the tensor has no element.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the tensor has no.
 - Example: `mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])` gives `2.5`
 
 #### `max_axis_stated`
