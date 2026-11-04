@@ -6,7 +6,7 @@ import { Lift, lift, div_jvp, mul_jvp, sub_jvp } from rulesets.jvp
 func open_rank::<T>(x: T): int {
     return match type T {
         case f32[?] => 1
-        case f32[..] => 2
+        case f32[...] => 2
         case _ => 0
     }
 }

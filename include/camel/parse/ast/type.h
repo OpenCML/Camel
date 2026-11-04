@@ -37,7 +37,7 @@ class TypeParam {
 
     const std::string &name() const { return name_; }
     bool pack() const { return pack_; }
-    std::string toString() const { return (pack_ ? ".." : "") + name_; }
+    std::string toString() const { return (pack_ ? "..." : "") + name_; }
 
   private:
     std::string name_;

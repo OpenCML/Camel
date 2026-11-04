@@ -22,7 +22,7 @@
 //                 follows it (nn.softmax_cross_entropy, the loss C2 uses)
 //   update        one Adam step of the parameter tree against that loss (nn.adam)
 //
-// `transpose(split(reinterp<jvp>(f)))` reads a function's *parameters*: `vjp(f)(..xs)` gives
+// `transpose(split(reinterp<jvp>(f)))` reads a function's *parameters*: `vjp(f)(...xs)` gives
 // `(y, pullback)` and `pullback(ct)` gives one cotangent per parameter (ruling 2026-11-02 11:30).
 // So the loss takes the model as its first parameter -- `window_loss(m, window, targets)` -- and
 // the gradient is `pullback(1.0).0`, a value of the model's own type.  The model is a struct of
@@ -95,53 +95,53 @@ func tokens(corpus: string): int[] {
 // builds are values of the same type and no code names a leaf.  Two layers are written out rather
 // than nested, because a struct of structs has no tangent arm in the ruleset yet (WALLS.cn.md).
 type Transformer = {
-    emb: float[..],
-    pos: float[..],
+    emb: float[...],
+    pos: float[...],
     // layer 1: attention then MLP
-    g1a: float[..],
-    b1a: float[..],
-    wq1: float[..],
-    bq1: float[..],
-    wk1: float[..],
-    bk1: float[..],
-    wv1: float[..],
-    bv1: float[..],
-    wo1: float[..],
-    bo1: float[..],
-    g1b: float[..],
-    b1b: float[..],
-    f11: float[..],
-    fb1: float[..],
-    f12: float[..],
-    fb2: float[..],
+    g1a: float[...],
+    b1a: float[...],
+    wq1: float[...],
+    bq1: float[...],
+    wk1: float[...],
+    bk1: float[...],
+    wv1: float[...],
+    bv1: float[...],
+    wo1: float[...],
+    bo1: float[...],
+    g1b: float[...],
+    b1b: float[...],
+    f11: float[...],
+    fb1: float[...],
+    f12: float[...],
+    fb2: float[...],
     // layer 2: the same, again
-    g2a: float[..],
-    b2a: float[..],
-    wq2: float[..],
-    bq2: float[..],
-    wk2: float[..],
-    bk2: float[..],
-    wv2: float[..],
-    bv2: float[..],
-    wo2: float[..],
-    bo2: float[..],
-    g2b: float[..],
-    b2b: float[..],
-    f21: float[..],
-    fb21: float[..],
-    f22: float[..],
-    fb22: float[..],
+    g2a: float[...],
+    b2a: float[...],
+    wq2: float[...],
+    bq2: float[...],
+    wk2: float[...],
+    bk2: float[...],
+    wv2: float[...],
+    bv2: float[...],
+    wo2: float[...],
+    bo2: float[...],
+    g2b: float[...],
+    b2b: float[...],
+    f21: float[...],
+    fb21: float[...],
+    f22: float[...],
+    fb22: float[...],
     // the head
-    gf: float[..],
-    bf: float[..],
-    wout: float[..],
-    bout: float[..]
+    gf: float[...],
+    bf: float[...],
+    wout: float[...],
+    bout: float[...]
 }
 
 // The rows of a causal mask: `0` where position `i` may read position `j` (j <= i) and `-1000`
 // where it may not -- a constant of the program, because the mask is a fact about attention and
 // not a parameter.  Row-major over the T x T grid: element `k` is row `k / T`, column `k % T`.
-func causal_mask(): float[..] {
+func causal_mask(): float[...] {
     let n = 8
     let flat = range(0, n * n, 1)->map<(k: int): float => if k % n <= k / n then 0.0 else -1000.0>
     return reshape<[8, 8]>(flat)
@@ -156,9 +156,9 @@ func causal_mask(): float[..] {
 //   mixed  = softmax(scores, last) @ v                         [H, T, Dh]
 //   [H, T, Dh] -> [T, H, Dh] -> [T, D]                         the join
 func attention(
-    x: float[..], wq: float[..], bq: float[..], wk: float[..], bk: float[..],
-    wv: float[..], bv: float[..], wo: float[..], bo: float[..]
-): float[..] {
+    x: float[...], wq: float[...], bq: float[...], wk: float[...], bk: float[...],
+    wv: float[...], bv: float[...], wo: float[...], bo: float[...]
+): float[...] {
     let q = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wq + bq))
     let k = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wk + bk))
     let v = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wv + bv))
@@ -170,10 +170,10 @@ func attention(
 
 // One post-layer-norm block: attention then a two-layer MLP, each a residual around its sublayer.
 func block(
-    x: float[..], ga: float[..], ba: float[..], wq: float[..], bq: float[..], wk: float[..],
-    bk: float[..], wv: float[..], bv: float[..], wo: float[..], bo: float[..],
-    gb: float[..], bb: float[..], f1: float[..], fb1: float[..], f2: float[..], fb2: float[..]
-): float[..] {
+    x: float[...], ga: float[...], ba: float[...], wq: float[...], bq: float[...], wk: float[...],
+    bk: float[...], wv: float[...], bv: float[...], wo: float[...], bo: float[...],
+    gb: float[...], bb: float[...], f1: float[...], fb1: float[...], f2: float[...], fb2: float[...]
+): float[...] {
     let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
     let hidden = relu(layer_norm(attended, gb, bb) @ f1 + fb1)
     return attended + (hidden @ f2 + fb2)
@@ -181,7 +181,7 @@ func block(
 
 // The forward pass: a window of token indices in, the logits at every position out.
 with <m: Transformer>
-func logits(window: int[..]): float[..] {
+func logits(window: int[...]): float[...] {
     let embedded = take(m.emb, window) + m.pos
     let first = block(
         embedded, m.g1a, m.b1a, m.wq1, m.bq1, m.wk1, m.bk1, m.wv1, m.bv1, m.wo1, m.bo1,
@@ -196,7 +196,7 @@ func logits(window: int[..]): float[..] {
 // The training loss of one window: the cross-entropy of the logits at each position against the
 // character that follows it, averaged over the positions.  The model is the *first parameter*
 // because that is the parameter `vjp` differentiates.
-func window_loss(m: Transformer, window: int[..], targets: int[..]): float {
+func window_loss(m: Transformer, window: int[...], targets: int[...]): float {
     return float(softmax_cross_entropy(logits<m>(window), targets))
 }
 

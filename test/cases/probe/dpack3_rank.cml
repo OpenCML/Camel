@@ -1,0 +1,3 @@
+// shape 3: any rank in a dimension list, old spelling.
+func total(x: f32[..]): float { return 0.0 }
+func main(): int sync { return 0 }

@@ -65,29 +65,29 @@ func row_argmin(r: float[3]): int {
 
 // ---- the same six with an axis word: `sum_axis/3` ... `argmin_axis/3` ----
 // A row of two axes, so the answer is the rank below the row's (and its static type says so: the
-// axis reductions are declared `T[..]`/`int[..]`, an open rank, because which axis an axis word
+// axis reductions are declared `T[...]`/`int[...]`, an open rank, because which axis an axis word
 // drops is a fact at the call).
-func plane_sum_axis(r: float[2, 3]): float[..] {
+func plane_sum_axis(r: float[2, 3]): float[...] {
     return sum_axis(r, 0, false)
 }
 
-func plane_mean_axis(r: float[2, 3]): float[..] {
+func plane_mean_axis(r: float[2, 3]): float[...] {
     return mean_axis(r, 0, false)
 }
 
-func plane_max_axis(r: float[2, 3]): float[..] {
+func plane_max_axis(r: float[2, 3]): float[...] {
     return max_axis(r, 0, false)
 }
 
-func plane_min_axis(r: float[2, 3]): float[..] {
+func plane_min_axis(r: float[2, 3]): float[...] {
     return min_axis(r, 0, false)
 }
 
-func plane_argmax_axis(r: float[2, 3]): int[..] {
+func plane_argmax_axis(r: float[2, 3]): int[...] {
     return argmax_axis(r, 0, false)
 }
 
-func plane_argmin_axis(r: float[2, 3]): int[..] {
+func plane_argmin_axis(r: float[2, 3]): int[...] {
     return argmin_axis(r, 0, false)
 }
 

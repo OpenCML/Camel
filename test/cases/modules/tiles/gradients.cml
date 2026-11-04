@@ -5,26 +5,26 @@ import { run_preferred_resident, download } from tiles
 // functions so that tiles::run can hand them a device argument.
 // A whole-tensor reduction answers the operand's element type (design principles 7.3), so the
 // f64 reading this loss is written at is the conversion the call site writes.
-with <x: f32[..]>
+with <x: f32[...]>
 func square(): float { return float(sum(x * x)) }
-with <x: f32[..]>
+with <x: f32[...]>
 func rows(): float { let r = sum<1>(x); return float(sum(r * r)) }
-type Dense = { x: f32[..], w: f32[..], b: f32[..] }
+type Dense = { x: f32[...], w: f32[...], b: f32[...] }
 with <p: Dense>
 func dense(): float { let y = p.x @ p.w + p.b; return float(sum(y * y)) }
-type Broadcast = { a: f32[..], b: f32[..] }
+type Broadcast = { a: f32[...], b: f32[...] }
 with <p: Broadcast>
 func broadcast_loss(): float { return float(sum(p.a + p.b)) }
 with <p: Broadcast>
 func weighted_loss(): float { return float(sum(p.a * p.b)) }
 func main(): int sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    let derivative = (v: f32[..]): f32[..] => grad(square)<v>()
+    let derivative = (v: f32[...]): f32[...] => grad(square)<v>()
     let cpu = derivative(x)
     let gpu = download(run_preferred_resident<derivative>(x))
     println(sum(abs(cpu - gpu)))
     println(sum(abs(gpu - x * 2.0)))
-    let row_grad = (v: f32[..]): f32[..] => grad(rows)<v>()
+    let row_grad = (v: f32[...]): f32[...] => grad(rows)<v>()
     println(sum(abs(download(run_preferred_resident<row_grad>(x)) - row_grad(x))))
     let p = { x: x, w: reshape<[3, 2]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]), b: zeros::<f32>([1, 2]) }
     let dense_grad = (q: Dense): Dense => grad(dense)<q>()

@@ -133,7 +133,7 @@ such as Tiles keeps its own compile cache, keyed as design 10.6 says.
   (`test::facts`), facts across `std::opt::inline` and `std::opt` (`test::facts_seed`, `test::facts_check`), the persistence round trip (`test::facts_persist`),
   and `inspect --facts`. The check pass prints the declaration epoch and the graph revisions it
   finds (`FACTS epoch check=`, `FACTS check revision`), a per-kind tally per graph (`FACTS graph
-  kind <graph> <kind>`), and `FACTS after recompute valid=.. stale=.. gone=..`: after the stale
+  kind <graph> <kind>`), and `FACTS after recompute valid=... stale=... gone=...`: after the stale
   facts are computed again no fact a consumer can read is stale. The test passes are named in the
   pipeline; no environment variable gates them.
 

@@ -6,9 +6,9 @@
 //   - At the ranks a program actually writes (`x` and `w` both `float[3]`) the walk finds the law
 //     and the law's own cotangent refuses to instantiate -- `skip=rule-ranks` naming the rule, the
 //     node, the position and the ranks, which is what this entry pins.
-//   - The blocker is the cotangent port itself: the law writes `ct: T[..]`, and a three-parameter
+//   - The blocker is the cotangent port itself: the law writes `ct: T[...]`, and a three-parameter
 //     instantiation binds `T` to the **operand's whole type**, so `ct` is an open-rank array *of*
-//     `float[3]` instead of `float[..]`. The `where` the law writes is the scalar one
+//     `float[3]` instead of `float[...]`. The `where` the law writes is the scalar one
 //     (`where(bool, T, T)`), so its array mask and its scalar zero cannot match either, and three
 //     other spellings of the zero arm fail for the same binding rather than for their own reason.
 //     The four refusals are in `docs/handover/reports/` (the page
@@ -24,7 +24,7 @@
 // So both are **unverified** in `test/plans/feat/compile/transforms.plan.toml`, and the reason is
 // "no case can tell a right one from a wrong one", not "a case has not been written yet". The
 // blockers, in the order a fix would meet them: `stdlib/rulesets/transpose.cml#maximum_t` (its
-// `ct: T[..]` does not bind `T` to the element at a three-parameter instantiation) and `#minimum_t`
+// `ct: T[...]` does not bind `T` to the element at a three-parameter instantiation) and `#minimum_t`
 // behind it, then the missing scalar spelling of `maximum`/`minimum`. This case pins the refusal on
 // both streams: the day the law instantiates, it fails and names the number that replaced it.
 //

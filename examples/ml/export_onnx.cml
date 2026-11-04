@@ -10,9 +10,9 @@ import { export_model } from onnx
 import { mkdirs, file_size } from fs
 import { get_env } from env
 
-type Weights = { hidden: f32[..], out: f32[..] }
+type Weights = { hidden: f32[...], out: f32[...] }
 
-func forward(x: f32[..], w: Weights): f32[..] {
+func forward(x: f32[...], w: Weights): f32[...] {
     return tanh(x @ w.hidden) @ w.out
 }
 
@@ -36,7 +36,7 @@ func main(): int sync {
     let _ = dir->mkdirs
     // The closure captures the weights, so they are stored in the model; `[0]` leaves the
     // first axis (the batch size) open.
-    let _ = export_model<out: path, dynamic_axes: [0]>((t: f32[..]): f32[..] => forward(t, w), x)
+    let _ = export_model<out: path, dynamic_axes: [0]>((t: f32[...]): f32[...] => forward(t, w), x)
     println('model file written:', (path->file_size !! 0) > 0)
     return 0
 }

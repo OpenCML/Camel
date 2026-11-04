@@ -1,7 +1,7 @@
 import { reshape, max, sum, exp } from tensor
 import { run_preferred_resident, download } from tiles
 
-func normalize(x: f32[..]): f32[..] {
+func normalize(x: f32[...]): f32[...] {
     let shifted = x - max<1, true>(x)
     let e = exp(shifted)
     return e / sum<1, true>(e)

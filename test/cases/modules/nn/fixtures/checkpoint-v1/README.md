@@ -14,7 +14,7 @@ import { Tensor, new, zeros } from tensor
 import { save_tree } from ckpt
 
 type Record = {
-    w: f32[..], odd: int[..], empty: f32[..],
+    w: f32[...], odd: int[...], empty: f32[...],
     note: string, cursor: (int, float), enabled: bool
 }
 

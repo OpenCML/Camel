@@ -41,8 +41,8 @@ for (const name of deleted) {
 // What replaced them: the operator, written once each. The exact spellings are the point -- a
 // different reshape or a fold of axis 0 would answer another shape and another set of numbers.
 const replacements = [
-    ['export func vmap_max::<T>(xs: T[..]): T[..]', 'max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)'],
-    ['export func vmap_min::<T>(xs: T[..]): T[..]', 'min_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)'],
+    ['export func vmap_max::<T>(xs: T[...]): T[...]', 'max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)'],
+    ['export func vmap_min::<T>(xs: T[...]): T[...]', 'min_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)'],
 ]
 for (const [head, body] of replacements) {
     const at = ruleset.indexOf(head)
@@ -62,7 +62,7 @@ const keys = [
     ['mean', 'vmap_mean'],
 ]
 for (const [head, callee] of keys) {
-    const rule = new RegExp(`rule vmap_rule_${head}::<T>\\(xs: T\\[\\.\\.\\]\\)[^{]*\\{\\s*${head}\\(xs\\) => [^\\n]*${callee}\\(bxs\\)`)
+    const rule = new RegExp(`rule vmap_rule_${head}::<T>\\(xs: T\\[\\.\\.\\.\\]\\)[^{]*\\{\\s*${head}\\(xs\\) => [^\\n]*${callee}\\(bxs\\)`)
     if (!rule.test(ruleset)) {
         throw new Error(`the key ${head}/1 no longer names ${callee}`)
     }

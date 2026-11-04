@@ -3,5 +3,5 @@ func pair(a: int, b: int): int {
 }
 
 func main(): int sync {
-    return pair(..(1, 2, 3))
+    return pair(...(1, 2, 3))
 }

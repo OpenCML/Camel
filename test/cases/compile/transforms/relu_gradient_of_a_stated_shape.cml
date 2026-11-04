@@ -1,7 +1,7 @@
 // `relu`'s gradient through the library, with the shape written into the type.
 //
 // The open-rank twin is `relu_gradient_through_the_library.cml`, and it still refuses: the product
-// law reads the tangent's own shape for `sum_to` and `float[..]` states no extents. Here the type is
+// law reads the tangent's own shape for `sum_to` and `float[...]` states no extents. Here the type is
 // `float[4]`, `shapeCarrierOf` answers it (author, 2026-11-03 16:15), and both legs answer.
 //
 // Hand first. `relu`'s slope is one where `x > 0` and zero at or below it, and `sum`'s adjoint is one

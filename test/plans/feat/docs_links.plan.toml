@@ -276,8 +276,8 @@ timeout_ms = 60000
 # three the change was accepted on: the tree's own laws, and the two directions of one disagreement.
 #
 # The author's ruling of 2026-11-04 04:20 (`docs/handover/reviews/questions-2026-10-29.md`, "秩 0：
-# 只有一个转换点") withdrew the allowance this check briefly carried: the ports say `T[..]` and the
-# rank-zero conversion is the compiler's, at the one place a value's type goes from `T` to `T[..]`.
+# 只有一个转换点") withdrew the allowance this check briefly carried: the ports say `T[...]` and the
+# rank-zero conversion is the compiler's, at the one place a value's type goes from `T` to `T[...]`.
 # So the pair that was allowed is now the third negative control, and the library is green because
 # its ports are written as its answers are -- not because a rule was relaxed.
 #
@@ -287,7 +287,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "docs.every_laws_port_agrees_with_its_body"
-desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length. There is no allowance: the author's ruling of 2026-11-04 04:20 (`docs/handover/reviews/questions-2026-10-29.md`, \"秩 0：只有一个转换点\") has the ports say `T[..]` as the answer is and leaves the rank-zero conversion to the compiler, so a port of `T` over a body that reads an array is a finding however the two spellings might be reconciled at the run. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
+desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length. There is no allowance: the author's ruling of 2026-11-04 04:20 (`docs/handover/reviews/questions-2026-10-29.md`, \"秩 0：只有一个转换点\") has the ports say `T[...]` as the answer is and leaves the rank-zero conversion to the compiler, so a port of `T` over a body that reads an array is a finding however the two spellings might be reconciled at the run. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"
@@ -299,24 +299,24 @@ timeout_ms = 60000
 
 [[tests]]
 name = "docs.a_port_and_its_body_disagreeing_are_caught_both_ways"
-desc = "The reverse reading, so the rule cannot be a blanket: on probe modules this script writes under the system temp directory, an element port whose body hands it to a parameter of three elements is reported with the declaration that makes it a requirement (`element_port_fixed_extent.cml#three_lanes`, `ct: T[3]` -- a fixed extent reads more than one element), an array port handed to `spread_over` is reported as the other direction, an element port handed to that same element's open rank (`ct: T[..]`) is reported too -- the pair the withdrawn allowance used to let through -- and the two laws of the library as they are written now are not reported at all, which is what says the check is not merely refusing everything."
+desc = "The reverse reading, so the rule cannot be a blanket: on probe modules this script writes under the system temp directory, an element port whose body hands it to a parameter of three elements is reported with the declaration that makes it a requirement (`element_port_fixed_extent.cml#three_lanes`, `ct: T[3]` -- a fixed extent reads more than one element), an array port handed to `spread_over` is reported as the other direction, an element port handed to that same element's open rank (`ct: T[...]`) is reported too -- the pair the withdrawn allowance used to let through -- and the two laws of the library as they are written now are not reported at all, which is what says the check is not merely refusing everything."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"
 args = ["${case}", "--self-test"]
 expect_exit = 0
-expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array", "cotangent port is 'T[..]' but the body hands it to 'spread_over', which takes an element", "cotangent port is 'T' but the body hands it to 'lanes_of', which reads an array", "a port 'T' handed to a parameter 'T[3]' is reported", "a port 'T[..]' handed to a parameter 'T' is reported", "the rank-zero pair 'T' -> 'T[..]' is reported, and the two laws of the library as they are written are not reported", "all three disagreements are caught, in both directions and in the open rank, and the laws of the library are not"]
+expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array", "cotangent port is 'T[...]' but the body hands it to 'spread_over', which takes an element", "cotangent port is 'T' but the body hands it to 'lanes_of', which reads an array", "a port 'T' handed to a parameter 'T[3]' is reported", "a port 'T[...]' handed to a parameter 'T' is reported", "the rank-zero pair 'T' -> 'T[...]' is reported, and the two laws of the library as they are written are not reported", "all three disagreements are caught, in both directions and in the open rank, and the laws of the library are not"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000
 
 [[tests]]
 name = "docs.the_stated_lane_means_port_is_its_own_open_rank"
-desc = "The ruling read on the library itself: `stdlib/rulesets/transpose.cml#mean_axis_stated_t` states its cotangent as `T[..]` -- the type its twin `sum_axis_stated_t` states, and the one the answer has whether it is a lane per number or the one number of a rank-zero answer -- and hands it to `mean_axis_cotangent(ct: T[..])`, so `--explain` reads the row as an agreement and not as a disagreement. The rank-zero answer is not this law's to state: design principles 5.4 makes it the element, and the compiler boxes a scalar entering a `T[..]` position (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through `ArrayType::castSlotFrom`). The row is pinned so the day the port is narrowed again, or the body is taught to read the element, the table says so."
+desc = "The ruling read on the library itself: `stdlib/rulesets/transpose.cml#mean_axis_stated_t` states its cotangent as `T[...]` -- the type its twin `sum_axis_stated_t` states, and the one the answer has whether it is a lane per number or the one number of a rank-zero answer -- and hands it to `mean_axis_cotangent(ct: T[...])`, so `--explain` reads the row as an agreement and not as a disagreement. The rank-zero answer is not this law's to state: design principles 5.4 makes it the element, and the compiler boxes a scalar entering a `T[...]` position (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through `ArrayType::castSlotFrom`). The row is pinned so the day the port is narrowed again, or the body is taught to read the element, the table says so."
 kind = "behavior"
 tool = "node"
 case = "../../../scripts/law-cotangent-ports.mjs"
 args = ["${case}", "--explain"]
 expect_exit = 0
-expect_stdout_contains = ["mean_axis_stated_t", "array (stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[..]`)"]
+expect_stdout_contains = ["mean_axis_stated_t", "array (stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[...]`)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000

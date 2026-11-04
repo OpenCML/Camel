@@ -1806,16 +1806,16 @@ function namesOfDeclaration(entry) {
 // registers: `inspect --ops` prints that signature, and the text after its last `=>` is the
 // operator's result (`resultDoc` for a kernel of `tensor`/`nn`, what the resolver computes for a
 // module whose rules are C++). Comparing only names, arity, parameter names and purity left the
-// result free to be a lie: `one_hot` was declared `int64[..]` while its kernel, its inference and
+// result free to be a lie: `one_hot` was declared `int64[...]` while its kernel, its inference and
 // every test returned `float32` rows, and nothing read the two statements against each other.
 //
 // The comparison is on the type, not on the spelling. The authority for which spellings name one
 // type is the compiler's own table (`initInnerTypes`, src/compile/gct/builder.cpp): `int` and
 // `i64` are Int64, `float` and `f64` are Float64, and `f32`, `i32`, `bf16`, `f16`, `c64`, `c128`,
 // `bool`, `string`, `Bytes`, `void` and `never` are their own. Two types are the same only when
-// their codes are, so `f32[..]` and `float[..]` stay two types here (design principles 5.1: no
-// value converts between them), while `int64[..]`, `i64[..]` and `int[..]` are one. A name this
-// table does not hold is not read at all: a type variable (`T[..]`), a module's named type
+// their codes are, so `f32[...]` and `float[...]` stay two types here (design principles 5.1: no
+// value converts between them), while `int64[...]`, `i64[...]` and `int[...]` are one. A name this
+// table does not hold is not read at all: a type variable (`T[...]`), a module's named type
 // (`Gradient<F>`, `Device<f32>`) and an aggregate the C++ side names in prose (`Tensor`,
 // `NumericAggregate`) are reported as not compared, never as a difference.
 
@@ -1825,8 +1825,8 @@ function namesOfDeclaration(entry) {
 // same types (`i64` for Int64, which the declaration files write as `int64`; `float64` for
 // Float64), and the names the tensor module writes an element type with (`dtypeName`,
 // modules/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
-// those are what a kernel's own `resultDoc` says, so a claim of `float32[..]` and a declaration of
-// `f32[..]` are the same type here.
+// those are what a kernel's own `resultDoc` says, so a claim of `float32[...]` and a declaration of
+// `f32[...]` are the same type here.
 const RESULT_SCALARS = new Map([
     ['int', 'int'],
     ['i64', 'int'],
@@ -1918,7 +1918,7 @@ function dimensionIndex(text) {
     return -1
 }
 
-// What a dimension list says, in the form the two sides are compared in: `[..]` is any number of
+// What a dimension list says, in the form the two sides are compared in: `[...]` is any number of
 // dimensions, `[?]` is one of unknown extent (`[]` is that list too), and `[n, m]` keeps the
 // extents it writes. null when the text is not a dimension list.
 function dimensionsOf(text) {
@@ -1934,7 +1934,7 @@ function dimensionsOf(text) {
         if (one === '?') return '?'
         return one.replace(/\s+/g, '')
     })
-    if (written.length > 0 && written.every((one) => one === '..')) return '[..]'
+    if (written.length > 0 && written.every((one) => one === '..')) return '[...]'
     return `[${written.join(', ')}]`
 }
 
@@ -1942,8 +1942,8 @@ function dimensionsOf(text) {
 // is not a result type at all. `opaque` marks a name only the module can read (a type variable, a
 // named type, an aggregate), which makes the two sides incomparable rather than different.
 // A tuple writes its parts in parentheses and may carry a dimension list of its own
-// (`(f32[..], f32[..])[]`), and a pack may be written with a trailing comma
-// (`(..ElementOf<A>,)`), which is the same tuple.
+// (`(f32[...], f32[...])[]`), and a pack may be written with a trailing comma
+// (`(...ElementOf<A>,)`), which is the same tuple.
 function canonicalResult(text) {
     const source = withoutConditions(text)
     if (source === '') return null
@@ -1978,7 +1978,7 @@ function canonicalResult(text) {
     // `float` alone is the word the tensor module writes where an operator gives back a tensor of
     // its argument's element type: `softmax`, `layer_norm`, `linear` and `softmax_grad` return
     // `dtypeOf<T>()` of the input (modules/tensor/kernels/reduce.cpp) and their `resultDoc` says
-    // `float[..]`, while an operator that returns f64 says `float64[..]` (`from_bytes_f64`,
+    // `float[...]`, while an operator that returns f64 says `float64[...]` (`from_bytes_f64`,
     // `to_bytes_f64`). So a bare `float` in a claim is the element family, not one element type.
     return { text: `${known}${dimensions}`, opaque: false, family: base === 'float' }
 }
@@ -1990,14 +1990,14 @@ function claimedResult(signature) {
 }
 
 // What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
-// are not types but sets of them, and `float[..]` in one is the operator's spelling for "a tensor",
+// are not types but sets of them, and `float[...]` in one is the operator's spelling for "a tensor",
 // not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
 // it takes. A signature a resolver builds instead writes real types; those are compared as types.
 const KIND_SETS = new Map([
     ['Tensor', ['tensor']],
-    ['float[..] | number[]', ['tensor', 'array']],
-    ['float[..] | number', ['tensor', 'number']],
-    ['float[..] | number[] | number', ['tensor', 'array', 'number']],
+    ['float[...] | number[]', ['tensor', 'array']],
+    ['float[...] | number', ['tensor', 'number']],
+    ['float[...] | number[] | number', ['tensor', 'array', 'number']],
     ['int', ['int']],
     ['number', ['number']],
     ['bool', ['bool']],
@@ -2045,7 +2045,7 @@ const EXCEPTIONS = {
     // The operator's own result text is a shape no type variable holds: a function type, a tuple, a
     // record, a `gradient of W0`, a generic application (`Device<T>`), a named aggregate (`Tensor`),
     // a bare type variable, or no result text at all; and the cases where the rule reads and the
-    // declaration is the side that does not (`T[..]` from `from_bytes`, `Jvp<F>` from the
+    // declaration is the side that does not (`T[...]` from `from_bytes`, `Jvp<F>` from the
     // transforms).
     result: {
         'rule states no result': {
@@ -2060,9 +2060,9 @@ const EXCEPTIONS = {
         },
         'rule states a tuple': {
             'batch_norm_train (nn:batch_norm_train)#result':
-                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[..]`',
+                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[...]`',
             'batch_norm_train_grad (nn:batch_norm_train_grad)#result':
-                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[..]`',
+                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[...]`',
             'grad (autodiff:grad_aux)#result':
                 'the rule answers `(gradient of W0, aux)`, a pair one half of which is a phrase; the declaration writes `GradientAndAux<F>`',
             'jvp (transforms:jvp)#result':
@@ -2084,67 +2084,67 @@ const EXCEPTIONS = {
         },
         'rule states a generic application': {
             'upload (tiles:upload)#result':
-                'the rule answers `Device<T>`, a generic application; the declaration narrows it to `Device<f32[..]>`',
+                'the rule answers `Device<T>`, a generic application; the declaration narrows it to `Device<f32[...]>`',
         },
         'rule states a named type': {
             'avg_pool2d (nn:avg_pool2d)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'avg_pool2d_grad (nn:avg_pool2d_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'batch_norm (nn:batch_norm)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d (nn:conv2d)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_bias_grad (nn:conv2d_bias_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_input_grad (nn:conv2d_input_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_kernel_grad (nn:conv2d_kernel_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'embedding (nn:embedding)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'embedding_table_grad (nn:embedding_table_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'max_pool2d (nn:max_pool2d)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'max_pool2d_grad (nn:max_pool2d_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'run_preferred_resident (tiles:run_preferred_resident)#result':
                 'the rule answers `DeviceAggregate`, a named aggregate; the declaration writes `Device<f32>`',
             'softmax_cross_entropy_grad (nn:softmax_cross_entropy_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'softmax_cross_entropy_grad (nn:softmax_cross_entropy_labels_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
         },
         'rule states a type variable': {
             'download (tiles:download)#result':
-                'the rule answers `T`, the element type of the device it read; the declaration writes `f32[..]`',
+                'the rule answers `T`, the element type of the device it read; the declaration writes `f32[...]`',
         },
         'declaration states a type variable': {
             'from_bytes (tensor:from_bytes_bf16)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `bfloat16[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `bfloat16[...]`',
             'from_bytes (tensor:from_bytes_bool)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `bool[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `bool[...]`',
             'from_bytes (tensor:from_bytes_f16)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float16[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `float16[...]`',
             'from_bytes (tensor:from_bytes_f32)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float32[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `float32[...]`',
             'from_bytes (tensor:from_bytes_f64)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float64[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `float64[...]`',
             'from_bytes (tensor:from_bytes_i32)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `int32[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `int32[...]`',
             'from_bytes (tensor:from_bytes_i64)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `int64[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `int64[...]`',
             'load_npy (tensor:load_npy_bool)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `bool[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `bool[...]`',
             'load_npy (tensor:load_npy_f32)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `float32[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `float32[...]`',
             'load_npy (tensor:load_npy_f64)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `float64[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `float64[...]`',
             'load_npy (tensor:load_npy_i32)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `int32[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `int32[...]`',
             'load_npy (tensor:load_npy_i64)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `int64[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `int64[...]`',
             'remat (transforms:remat)#result':
                 'the rule answers the argument\'s own type (`(f: F) => F`), which the declaration writes `F`; this rule states `float` for the two-parameter function it was asked about',
         },
@@ -2174,11 +2174,11 @@ const EXCEPTIONS = {
         },
         'untyped pack ..rest': {
             'eprintln (:io/eprintln)#parameter':
-                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+                'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
             'print (:io/print)#parameter':
-                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+                'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
             'println (:io/println)#parameter':
-                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+                'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
         },
         'function-typed parameter': {
             'attempt (:mark/attempt)#parameter':
@@ -2188,7 +2188,7 @@ const EXCEPTIONS = {
             'grad (autodiff:grad_aux)#parameter':
                 'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
             'jvp (transforms:jvp)#parameter':
-                'parameter 1 is `(..) => any`, a function type whose positions are not spelled',
+                'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
             'remat (transforms:remat)#parameter':
                 'parameter 1 is `(float, float) => float`, a function type the declaration writes as a bare `F`',
             'split (transforms:split)#parameter':
@@ -2543,7 +2543,7 @@ function operatorAccepts(text) {
 // What a declaration requires of one position, as the set it names: 'tensor', 'array', 'int',
 // 'i32', 'f32', 'float', 'bf16', 'f16', 'c64', 'c128', 'bool', 'string', 'Bytes' or 'number'. null
 // when the text is not a type this checker reads -- a bare type variable (`F`), a module's own type
-// (`OptimizerState`, `Device<f32[..]>`), a function type (`(a: float) => float`) or a tuple.
+// (`OptimizerState`, `Device<f32[...]>`), a function type (`(a: float) => float`) or a tuple.
 function declaredNeed(text) {
     const source = (text || '').trim()
     if (source === '') return null
@@ -2561,7 +2561,7 @@ function declaredNeed(text) {
     }
     // The bracket suffix decides the arrangement: `[]` is the rank-one array a kind writes as
     // `int[]` (the element type a declaration names there is narrower than what the kind says, so
-    // it is not compared), and every other suffix -- `[..]`, `[?]`, `[n]`, `[n, m]` -- is a
+    // it is not compared), and every other suffix -- `[...]`, `[?]`, `[n]`, `[n, m]` -- is a
     // tensor, including a type variable applied to dimensions.
     if (source.slice(at).trim() === '[]') return 'array'
     return dimensionsOf(source.slice(at).trim()) === null ? null : 'tensor'
@@ -2588,7 +2588,7 @@ function declaredNeeds(text) {
 function signatureParams(signature) {
     let text = (signature || '').trim()
     // A signature may open with its const type parameters (`<count: int> (x: T) => T`, or
-    // `::<T>(bytes: Bytes, shape: int[]) => T[..]`); they are not positions of the call, and the
+    // `::<T>(bytes: Bytes, shape: int[]) => T[...]`); they are not positions of the call, and the
     // declaration states them as `::<count: int>`.
     if (text.startsWith('::')) text = text.slice(2).trim()
     if (text.startsWith('<')) {
@@ -2741,7 +2741,7 @@ function verifyOps() {
             //
             // The parameter types are compared the way a kind is compared with a type, not the way
             // two types are. A declaration of one name differs from the registered rule in type
-            // (that is what an overload is: `len` is declared for `string`, `T[..]`, `Map<K, V>`
+            // (that is what an overload is: `len` is declared for `string`, `T[...]`, `Map<K, V>`
             // and `Set<T>`, and one rule of `len` writes `Map<K, V> | Set<T>`), and the two sides
             // spell the types in different words (`i32` for `int`): comparing them as equal texts
             // reports one difference per overload and per alias, which is what it did when it was
@@ -2854,7 +2854,7 @@ function verifyOps() {
             }
             const agreed =
                 claimed !== null && promised.some((one) => one.declared !== null && one.declared.text === claimed.text)
-            // A claim the module writes as the element family (`float[..]`) does not say which
+            // A claim the module writes as the element family (`float[...]`) does not say which
             // element type the result has, so a declaration that writes one of that family is not
             // a difference: the operator takes the element type from its argument and the
             // declaration is the one instance it supports. It is not agreement either -- the

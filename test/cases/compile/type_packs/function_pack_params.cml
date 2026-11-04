@@ -1,5 +1,5 @@
-/// A pack in a function type's parameter list: `(..P) => R` with `P` bound to a pack, `(..ParamsOf<F>)
-/// => R`, and `<..W>` for the `with` parameters. The types the design of the program transforms
+/// A pack in a function type's parameter list: `(...P) => R` with `P` bound to a pack, `(...ParamsOf<F>)
+/// => R`, and `<...W>` for the `with` parameters. The types the design of the program transforms
 /// writes -- the swap of a function, its pullback and its vjp -- are compared with the function
 /// types written out, for a function of no parameter, of one and of three. `Pullback` and `Vjp` are
 /// the standard library``s own (`types`), so the cotangents here are the *real* `Tangent`s: a
@@ -8,8 +8,8 @@
 import { ParamsOf, WithOf, ResultOf, Vjp, Pullback, is_same } from types
 
 type Tangent<T> = T
-type Swap<F> = (r: ResultOf<F>) => (..ParamsOf<F>)
-type Weighted<F> = <..WithOf<F>> (..ParamsOf<F>) => ResultOf<F>
+type Swap<F> = (r: ResultOf<F>) => (...ParamsOf<F>)
+type Weighted<F> = <...WithOf<F>> (...ParamsOf<F>) => ResultOf<F>
 
 type F0 = () => float
 type F1 = (a: int) => float

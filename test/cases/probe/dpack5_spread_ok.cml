@@ -1,0 +1,9 @@
+// shape 5 with the new spelling: a spread call, whose argument is a compile-time tuple.
+func sum(...ts): int {
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    println("sum=", sum(...(1, 2)))
+    return 0
+}

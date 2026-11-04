@@ -1,0 +1,4 @@
+// shape 2: a `with` parameter pack, old spelling.
+with <..ws: float>
+func g(x: float): float { return x }
+func main(): int sync { return 0 }

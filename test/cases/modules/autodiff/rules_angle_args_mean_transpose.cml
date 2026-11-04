@@ -11,7 +11,7 @@
  * (author, 2026-11-03 16:15): the transposed function is handed the cotangent (`float[3]`) and
  * nothing else, so the shape a law reads `xs` for is the shape the type states. `x: float[2, 3]`
  * states it, and `transpose` builds the graph from it -- 6 positions over 3 lanes, so each lane is 2
- * long. A parameter declared `x: float[..]` states no shape and no other value in the program
+ * long. A parameter declared `x: float[...]` states no shape and no other value in the program
  * carries one, and that program is refused by name, with the repair ("write the shape in the type")
  * as the sentence: `transpose_needs_parameter_shape.cml` in this directory is that reading, and it
  * is the negative of this one.

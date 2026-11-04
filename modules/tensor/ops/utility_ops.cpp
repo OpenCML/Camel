@@ -207,7 +207,7 @@ class LoadNpyResolver final : public FuncTypeResolver {
     /// call would have to name, and the result it gives.
     std::string signature() const override {
         return "::<" + std::string(dtypeName(dtype_)) + ">(path: string) => " +
-               std::string(dtypeName(dtype_)) + "[..]";
+               std::string(dtypeName(dtype_)) + "[...]";
     }
 
   private:
@@ -336,7 +336,7 @@ std::vector<OpDef> utilityOps() {
                 .name      = name,
                 .exports   = {},
                 .params    = {{"path", ParamKind::String}},
-                .resultDoc = "float[..]",
+                .resultDoc = "float[...]",
                 .infer     = [dtype](const InferContext &) -> std::optional<Type *> {
                     return npyTensorType(dtype);
                 },

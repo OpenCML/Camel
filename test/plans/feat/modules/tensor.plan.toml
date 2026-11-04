@@ -124,7 +124,7 @@ case = "../../../cases/modules/tensor/binary_aggregate_not_plain.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_output_contains = ["No candidate of 'to_bytes' applies to", "(t: T[..]) => Bytes — when is_plain::<T>()"]
+expect_output_contains = ["No candidate of 'to_bytes' applies to", "(t: T[...]) => Bytes — when is_plain::<T>()"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -817,7 +817,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gelu_grad.f64"
-desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
+desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_f64.cml"
 args = ["${case}"]
@@ -828,7 +828,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "erf_grad.f64"
-desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
 kind = "behavior"
 case = "../../../cases/modules/tensor/erf_grad_f64.cml"
 args = ["${case}"]
@@ -1120,7 +1120,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "generic_signature.element_type"
-desc = "The array spelling of a tensor signature's parameter is an explicit generic: `shape`, `numel`, `dim` and `to_bytes` take a `f32[3]`, a `f32[..]` and an `int[3]`, the argument's element type instantiates the type variable (`t[0]` is that type, so `firstElement` returns `f32` for the float array and `int` for the int array), and the rank is the argument's. The module `Tensor` spelling of the same names still stands, so what the tensor operators return is unchanged."
+desc = "The array spelling of a tensor signature's parameter is an explicit generic: `shape`, `numel`, `dim` and `to_bytes` take a `f32[3]`, a `f32[...]` and an `int[3]`, the argument's element type instantiates the type variable (`t[0]` is that type, so `firstElement` returns `f32` for the float array and `int` for the int array), and the rank is the argument's. The module `Tensor` spelling of the same names still stands, so what the tensor operators return is unchanged."
 kind = "behavior"
 case = "../../../cases/modules/tensor/generic_signature_element_type.cml"
 args = ["${case}", "${backend}"]
@@ -1142,14 +1142,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "generic_signature.text_elements"
-desc = "The signature states its element type: `func f::<T>(x: T[..]) when is_numeric::<T>()` applies exactly where `T` is a number, so an array of text fills no arm of `shape` and the refusal names the condition — `WhenConditionUnmet` lists the candidate with its `when`, instead of a kernel faulting later."
+desc = "The signature states its element type: `func f::<T>(x: T[...]) when is_numeric::<T>()` applies exactly where `T` is a number, so an array of text fills no arm of `shape` and the refusal names the condition — `WhenConditionUnmet` lists the candidate with its `when`, instead of a kernel faulting later."
 kind = "negative"
 case = "../../../cases/modules/tensor/generic_signature_text_elements.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[..]) => int[] — when is_numeric::<T>()"]
+expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[...]) => int[] — when is_numeric::<T>()"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 # The kernel-timing table is a pass parameter (`std::profile opstats=true`): a run that asks for

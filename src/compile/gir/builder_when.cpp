@@ -1229,7 +1229,7 @@ WhenResult Builder::whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &n
         }
         return whenResultOf(
             WhenOutcome::NotEvaluable, {},
-            "`..` in a condition expands a type pack, and the declaration binds none");
+            "`...` in a condition expands a type pack, and the declaration binds none");
     }
     for (const auto &[name, length] : packs) {
         if (length != packs.front().second) {
@@ -1240,7 +1240,7 @@ WhenResult Builder::whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &n
             }
             return whenResultOf(
                 WhenOutcome::NotEvaluable, {},
-                "`..` expands packs of different lengths: " + detail);
+                "`...` expands packs of different lengths: " + detail);
         }
     }
     for (size_t i = 0; i < packs.front().second; ++i) {

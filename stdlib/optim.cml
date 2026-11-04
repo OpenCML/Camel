@@ -226,7 +226,7 @@ func sgd_leaf::<P, G>(p: P, g: G, rate: float) {
 
 // One tensor leaf of `sgd`, one instance per element type: the rate is rounded to the element type
 // the leaf writes before it multiplies, which is `float(lr)` in the native kernel.
-func sgd_value_leaf::<T>(p: T[..], g: T[..], rate: float) when is_float::<T>() {
+func sgd_value_leaf::<T>(p: T[...], g: T[...], rate: float) when is_float::<T>() {
     return match type T {
         case float => p - rate * g
         case _ => p - f32(rate) * g
@@ -276,7 +276,7 @@ func decay_leaf::<L>(x: L, rate_decay: float) {
 
 // One tensor leaf of the decay, one instance per element type: the factor is rounded to the element
 // type the leaf writes, and a multiplication by a `float` would widen an f32 leaf to f64.
-func decay_value_leaf::<T>(x: T[..], rate_decay: float) when is_float::<T>() {
+func decay_value_leaf::<T>(x: T[...], rate_decay: float) when is_float::<T>() {
     return match type T {
         case float => x * (1.0 - rate_decay)
         case _ => x * f32(1.0 - rate_decay)
@@ -317,7 +317,7 @@ func adam_leaf::<P, G, M, V>(p: P, g: G, m: M, v: V, c: Rates) {
 // (modules/tensor/kernels/update.h). A leaf of any other element type never reaches an optimizer --
 // it has no tangent, `tensorTangentType` -- and the native leaf refuses it by name rather than
 // converting it, which is what the `when` condition says here.
-func adam_value_leaf::<T>(p: T[..], g: T[..], m: T[..], v: T[..], c: Rates) when is_float::<T>() {
+func adam_value_leaf::<T>(p: T[...], g: T[...], m: T[...], v: T[...], c: Rates) when is_float::<T>() {
     return match type T {
         case float => adam_wide(p, g, m, v, c)
         case _ => narrow_tensors(adam_wide(p, g, m, v, c))

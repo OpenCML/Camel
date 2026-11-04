@@ -11,22 +11,22 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: f32[..] }
+type P = { w: f32[...] }
 
 // A: a loop whose length depends on the data.
 with <m: P>
-func iterate(i: int, n: int, v: f32[..]): f32[..] {
+func iterate(i: int, n: int, v: f32[...]): f32[...] {
     return if i >= n then v else iterate<m>(i + 1, n, tanh(v @ m.w) + v * 0.5)
 }
 
 with <m: P>
-func loss_a(x: f32[..]): float {
+func loss_a(x: f32[...]): float {
     return float(sum(iterate<m>(0, int(float(sum(x * x)) * 0.5), x)))
 }
 
 // B: the same with a data-dependent branch in the body.
 with <m: P>
-func iterate_b(i: int, n: int, v: f32[..]): f32[..] {
+func iterate_b(i: int, n: int, v: f32[...]): f32[...] {
     return if i >= n then v else iterate_b<m>(
         i + 1,
         n,
@@ -35,11 +35,11 @@ func iterate_b(i: int, n: int, v: f32[..]): f32[..] {
 }
 
 with <m: P>
-func loss_b(x: f32[..]): float {
+func loss_b(x: f32[...]): float {
     return float(sum(iterate_b<m>(0, int(float(sum(x * x)) * 0.5), x)))
 }
 
-func step(w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..]) {
+func step(w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...]) {
     let m = { w: w }
     let a = with_grad(loss_a)<m>(x)
     let b = with_grad(loss_b)<m>(x)
@@ -55,7 +55,7 @@ func main(): int sync {
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[..], x: f32[..]): (float[..], f32[..], float[..], f32[..]) => step(w, x), (w, x))
+        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[...], x: f32[...]): (float[...], f32[...], float[...], f32[...]) => step(w, x), (w, x))
         1
     } else 0
     println(exported)

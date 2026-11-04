@@ -1,0 +1,64 @@
+id = "probe.dpack5"
+tier = "fast"
+tags = ["probe"]
+desc = "The five pack shapes after the `...` migration: each one must report a syntax error naming `...`, and never the semantic sentence it used to report."
+
+[[tests]]
+name = "shape1_param"
+desc = "Shape 1, an ordinary parameter pack `(...xs: int)`."
+kind = "behavior"
+case = "../../cases/probe/dpack1_param.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["expected '...'"]
+expect_output_not_contains = ["cannot write a type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape2_with"
+desc = "Shape 2, a `with` parameter pack `<...ws: float>`."
+kind = "behavior"
+case = "../../cases/probe/dpack2_with.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["expected '...'"]
+expect_output_not_contains = ["cannot write a type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape3_rank"
+desc = "Shape 3, any rank in a dimension list `f32[...]`."
+kind = "behavior"
+case = "../../cases/probe/dpack3_rank.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["expected '...'"]
+expect_output_not_contains = ["cannot write a type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape4_functype"
+desc = "Shape 4, a parameter pack in a function type `(...int) => float`."
+kind = "behavior"
+case = "../../cases/probe/dpack4_functype.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["expected '...'"]
+expect_output_not_contains = ["cannot write a type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "shape5_spread"
+desc = "Shape 5, a spread call `q(...t)`."
+kind = "behavior"
+case = "../../cases/probe/dpack5_spread.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["expected '...'"]
+expect_output_not_contains = ["cannot write a type"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

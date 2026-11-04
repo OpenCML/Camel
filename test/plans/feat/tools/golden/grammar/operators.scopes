@@ -70,7 +70,7 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->func arithmetic(a: float, b: float, X: f32[..], w: f32[..]): float {
+>func arithmetic(a: float, b: float, X: f32[...], w: f32[...]): float {
 #^^^^ meta.function.definition.camel storage.type.function.camel
 #     ^^^^^^^^^^ meta.function.definition.camel entity.name.function.camel
 #               ^ meta.parens.camel punctuation.section.parens.begin.camel
@@ -87,18 +87,20 @@
 #                                       ^^^ meta.parens.camel support.type.primitive.camel
 #                                          ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
 #                                           ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
-#                                             ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                              ^ meta.parens.camel punctuation.separator.comma.camel
-#                                                ^ meta.parens.camel variable.parameter.camel
-#                                                 ^ meta.parens.camel punctuation.separator.colon.camel
-#                                                   ^^^ meta.parens.camel support.type.primitive.camel
-#                                                      ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
-#                                                       ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
-#                                                         ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                                          ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                                           ^ punctuation.separator.colon.camel
-#                                                             ^^^^^ support.type.primitive.camel
-#                                                                   ^ meta.block.camel punctuation.section.block.begin.camel
+#                                             ^ meta.parens.camel meta.brackets.camel punctuation.accessor.camel
+#                                              ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                               ^ meta.parens.camel punctuation.separator.comma.camel
+#                                                 ^ meta.parens.camel variable.parameter.camel
+#                                                  ^ meta.parens.camel punctuation.separator.colon.camel
+#                                                    ^^^ meta.parens.camel support.type.primitive.camel
+#                                                       ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                                                        ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
+#                                                          ^ meta.parens.camel meta.brackets.camel punctuation.accessor.camel
+#                                                           ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                                            ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                             ^ punctuation.separator.colon.camel
+#                                                               ^^^^^ support.type.primitive.camel
+#                                                                     ^ meta.block.camel punctuation.section.block.begin.camel
 >    let sum = a + b - a * b / a % b
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
@@ -135,7 +137,7 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->func assign(var x: int, var t: f32[..], u: f32[..]) {
+>func assign(var x: int, var t: f32[...], u: f32[...]) {
 #^^^^ meta.function.definition.camel storage.type.function.camel
 #     ^^^^^^ meta.function.definition.camel entity.name.function.camel
 #           ^ meta.parens.camel punctuation.section.parens.begin.camel
@@ -150,16 +152,18 @@
 #                               ^^^ meta.parens.camel support.type.primitive.camel
 #                                  ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
 #                                   ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
-#                                     ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                      ^ meta.parens.camel punctuation.separator.comma.camel
-#                                        ^ meta.parens.camel variable.parameter.camel
-#                                         ^ meta.parens.camel punctuation.separator.colon.camel
-#                                           ^^^ meta.parens.camel support.type.primitive.camel
-#                                              ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
-#                                               ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
-#                                                 ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
-#                                                  ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                                    ^ meta.block.camel punctuation.section.block.begin.camel
+#                                     ^ meta.parens.camel meta.brackets.camel punctuation.accessor.camel
+#                                      ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                       ^ meta.parens.camel punctuation.separator.comma.camel
+#                                         ^ meta.parens.camel variable.parameter.camel
+#                                          ^ meta.parens.camel punctuation.separator.colon.camel
+#                                            ^^^ meta.parens.camel support.type.primitive.camel
+#                                               ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.begin.camel
+#                                                ^^ meta.parens.camel meta.brackets.camel keyword.operator.compose.camel
+#                                                  ^ meta.parens.camel meta.brackets.camel punctuation.accessor.camel
+#                                                   ^ meta.parens.camel meta.brackets.camel punctuation.section.brackets.end.camel
+#                                                    ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                      ^ meta.block.camel punctuation.section.block.begin.camel
 >    x = 1
 #      ^ meta.block.camel keyword.operator.assignment.camel
 #        ^ meta.block.camel constant.numeric.integer.decimal.camel
@@ -376,7 +380,7 @@
 #                          ^ meta.block.camel meta.block.camel punctuation.separator.colon.camel
 #                            ^ meta.block.camel meta.block.camel constant.numeric.integer.decimal.camel
 #                              ^ meta.block.camel meta.block.camel punctuation.section.block.end.camel
->    let tail = concat(all, ..xs)
+>    let tail = concat(all, ...xs)
 #    ^^^ meta.block.camel meta.declaration.let.camel storage.type.let.camel
 #        ^^^^ meta.block.camel meta.declaration.let.camel variable.other.constant.camel
 #             ^ meta.block.camel keyword.operator.assignment.camel
@@ -384,7 +388,8 @@
 #                     ^ meta.block.camel meta.parens.camel punctuation.section.parens.begin.camel
 #                         ^ meta.block.camel meta.parens.camel punctuation.separator.comma.camel
 #                           ^^ meta.block.camel meta.parens.camel keyword.operator.compose.camel
-#                               ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
+#                             ^ meta.block.camel meta.parens.camel punctuation.accessor.camel
+#                                ^ meta.block.camel meta.parens.camel punctuation.section.parens.end.camel
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >

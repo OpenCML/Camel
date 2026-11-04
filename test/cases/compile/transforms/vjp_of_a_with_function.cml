@@ -22,7 +22,7 @@
 // different numbers only if each value lands in its own slot: a body that took the wrong one would
 // answer 9.75 / 7.0 for the pair, which is on neither line.
 //
-// This is the path that used to stop at `ArgumentsMismatch` in `split(jvp(f))(..xs)`: `jvp(f)` is a
+// This is the path that used to stop at `ArgumentsMismatch` in `split(jvp(f))(...xs)`: `jvp(f)` is a
 // function of `f`'s `with` list, and the lambda `vjp` answers had no way to name the list it took
 // from its position.
 import { vjp } from vjp

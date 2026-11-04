@@ -1,9 +1,9 @@
-// The same shape with a type written after `..`: a lambda's rest parameter is refused by the same
+// The same shape with a type written after `...`: a lambda's rest parameter is refused by the same
 // rule. A rest parameter is untyped everywhere (design principles 5.5), so the type here is beside
 // the point -- the shape is refused because a lambda's rest parameters are not built, and the
 // report says that rather than a compiler error saying it.
 func main(): int {
-    let slope = (..xs: float[..]) => 0.0
+    let slope = (...xs: float[...]) => 0.0
     let _ = slope
     return 0
 }

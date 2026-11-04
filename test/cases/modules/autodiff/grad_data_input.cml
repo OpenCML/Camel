@@ -10,8 +10,8 @@ func scaled(scale: float): float {
     return w * float(int(scale))
 }
 
-with <w: f64[..]>
-func weighted(labels: i64[..]): float {
+with <w: f64[...]>
+func weighted(labels: i64[...]): float {
     let ids  = int(labels)
     let data = float(ids)
     return float(sum(data * w))

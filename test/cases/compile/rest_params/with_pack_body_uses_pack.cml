@@ -1,11 +1,11 @@
 // ① the body reads the pack: `ws` is a compile-time tuple of the `with` arguments given past the
 // fixed ones, and `ws.[0]` takes the first of them.
-with <..ws>
+with <...ws>
 func scale(x: float): float {
     return x * ws.[0]
 }
 
-with <..ws: float>
+with <...ws: float>
 func scale_typed(x: float): float {
     return x * ws.[0]
 }

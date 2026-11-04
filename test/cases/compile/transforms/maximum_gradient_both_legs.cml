@@ -21,13 +21,13 @@ import { vjp } from vjp
 import { abs, maximum, sum } from tensor
 
 /// The engine's spelling of `d/dx`: the differentiated value is the `with` parameter.
-with <x: float[..]>
+with <x: float[...]>
 func total_x(w: float[]): float {
     return sum(maximum(x, w))
 }
 
 /// The same for `d/dw`: the other operand is the `with` parameter.
-with <w: float[..]>
+with <w: float[...]>
 func total_w(x: float[]): float {
     return sum(maximum(x, w))
 }

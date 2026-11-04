@@ -314,7 +314,10 @@ std::string ArrayType::shapeText() const {
         if (!extents_.empty()) {
             text += ", ";
         }
-        text += "..";
+        // The trailing dimension pack of an open rank is written `...` (design principles 5.4):
+        // the text a type prints is a spelling a program can write, so it carries the pack's
+        // spelling and not the mark the stream type uses.
+        text += "...";
         text += packName();
     }
     text += "]";

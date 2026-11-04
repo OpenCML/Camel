@@ -8,7 +8,7 @@
 import { reshape, log, log_softmax, softmax, sum } from tensor
 
 #[refine_accuracy]
-func composed(x: f32[..]): f32[..] {
+func composed(x: f32[...]): f32[...] {
     return log(softmax<-1>(x))
 }
 

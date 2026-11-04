@@ -27,7 +27,7 @@
  * different capture answers a different array.
  *
  * The extent is stated (`f64[3]`), and that is the boundary this case draws rather than a preference:
- * with an open extent (`f64[..]`) the cut answers but its tangent half carries the capture's zero as a
+ * with an open extent (`f64[...]`) the cut answers but its tangent half carries the capture's zero as a
  * value the transposition cannot reach, and `transpose` refuses it by name
  * (`skip=cotangent-needs-a-value uri=tensor:multiply`). Measured 2026-11-04, `withport`.
  */

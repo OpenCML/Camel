@@ -10,17 +10,17 @@ import { softmax, sum, transpose } from tensor
 import { with_grad } from autodiff
 
 type Head = {
-    wq: float[..],
-    wk: float[..],
-    wv: float[..]
+    wq: float[...],
+    wk: float[...],
+    wv: float[...]
 }
 
-func mask(): float[..] {
+func mask(): float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
 with <h: Head>
-func block(x: float[..]): float {
+func block(x: float[...]): float {
     let q = x @ h.wq
     let k = transpose(x @ h.wk)
     let scores = q @ k * 0.70710678118654752

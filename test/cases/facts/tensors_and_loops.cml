@@ -11,7 +11,7 @@ func total(x: f32[2, 4]): float {
     return float(sum(x))
 }
 
-func twice(a: f32[..]): f32[..] {
+func twice(a: f32[...]): f32[...] {
     return loop y = a for k in [1, 2] do y + a
 }
 

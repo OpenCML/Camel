@@ -53,7 +53,7 @@ export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
 /// residuals -- the values it reads -- and takes the tangents and nothing else.
 ///
-///     split(f) = (fwd)  where  fwd(..values) = (result, lin)
+///     split(f) = (fwd)  where  fwd(...values) = (result, lin)
 ///     lin      = the back half, its residuals captured rather than passed
 ///
 /// The residuals are therefore **not a position in any type**: they are `lin`'s closure tuple, whose

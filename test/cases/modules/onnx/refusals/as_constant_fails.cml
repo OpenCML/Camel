@@ -1,6 +1,6 @@
 /**
  * A conversion of a constant that fails, inside an exported function: `weights()` is declared
- * to return a plain f32[..], so the compiler accepts the conversion to [3, 2], and the value is
+ * to return a plain f32[...], so the compiler accepts the conversion to [3, 2], and the value is
  * a [2, 3] tensor. Constant folding leaves the conversion in the graph (it is the program's
  * error to report), and the export refuses at the conversion (line 16) with what the
  * conversion itself says.
@@ -9,9 +9,9 @@
 import { reshape } from tensor
 import { export_model } from onnx
 
-func weights(): f32[..] { return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) }
+func weights(): f32[...] { return reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) }
 
-func f(x: f32[..]): f32[..] {
+func f(x: f32[...]): f32[...] {
     let w = weights() as f32[3, 2]
     return x @ w
 }

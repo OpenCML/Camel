@@ -14,7 +14,7 @@
  *
  * `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
  * leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
- * built: `( ..ts )` is not written (a rest argument is only a call argument), and a function
+ * built: `( ...ts )` is not written (a rest argument is only a call argument), and a function
  * with a rest parameter has no value to return. It stays `ckpt:tree_leaves` until value-tuple
  * expansion exists.
  *
@@ -46,11 +46,11 @@ func dotted(a: string, b: string): string {
 /// is that of the first tree.
 /// @example tree_map<(x: int): int => x + 1>({ a: 1, b: (2, 3) })    // { a: 2, b: (3, 4) }
 with <f: F>
-export func tree_map::<T, F>(t: T, ..ts) {
+export func tree_map::<T, F>(t: T, ...ts) {
     return match type T {
         case struct | tuple => T { static for n, _ in fields T =>
-            tree_map<f>(t.[n], ..( static for j in indices ts => ts.[j].[n] )) }
-        case _ => f(t, ..( static for j in indices ts => ts.[j] ))
+            tree_map<f>(t.[n], ...( static for j in indices ts => ts.[j].[n] )) }
+        case _ => f(t, ...( static for j in indices ts => ts.[j] ))
     }
 }
 

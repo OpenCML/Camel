@@ -160,7 +160,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "lambda_inference.with_list_from_the_position"
-desc = "A lambda takes the `with` list it does not write from the position it stands in (design principles 5.9), as it takes the parameter types: `apply` expects `<w: float> (x: float) => float`, and `(..xs) => 7.0` there is a function of a `with` argument. Two `with` parameters keep the position's order. Before, the first line was an invariant violation -- the completion read the expected type's ordinary slots at the lambda's own numbering, past the end of `normTypeAt`."
+desc = "A lambda takes the `with` list it does not write from the position it stands in (design principles 5.9), as it takes the parameter types: `apply` expects `<w: float> (x: float) => float`, and `(...xs) => 7.0` there is a function of a `with` argument. Two `with` parameters keep the position's order. Before, the first line was an invariant violation -- the completion read the expected type's ordinary slots at the lambda's own numbering, past the end of `normTypeAt`."
 kind = "behavior"
 case = "../../../cases/compile/lambda_inference/with_list_from_the_position.cml"
 args = ["${case}", "std::nvm"]
@@ -171,7 +171,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "lambda_inference.with_pack_on_a_lambda"
-desc = "A lambda writes a pack among its `with` parameters and forwards it (author's ruling of 2026-11-03 13:50, the pack rule of design principles 5.6), and the completion binds that pack to the `with` list of the position the lambda stands in -- the same rule an ordinary rest parameter follows from the expected type. `through(scaled)` answers `<..ws> (x) => g<..ws>(x)`: the position's `w` = 2.0 and `x` = 3.0 give 6.0, the same number as the lambda that reads the position's name (`apply((x) => x * w)`), so the pack carries the value and not only the syntax. Before, `<..ws>` was `Unexpected '..'; expected a name` -- the `with` half of the 10:00 ruling while the ordinary pack already parsed. The third line is the empty pack: `vjp` of a function with no `with` parameters stands at a position whose list is empty, `ws` is `()`, and `split(jvp(f))<..ws>(x)` spreads nothing -- value 9.0, slope 6.0."
+desc = "A lambda writes a pack among its `with` parameters and forwards it (author's ruling of 2026-11-03 13:50, the pack rule of design principles 5.6), and the completion binds that pack to the `with` list of the position the lambda stands in -- the same rule an ordinary rest parameter follows from the expected type. `through(scaled)` answers `<...ws> (x) => g<...ws>(x)`: the position's `w` = 2.0 and `x` = 3.0 give 6.0, the same number as the lambda that reads the position's name (`apply((x) => x * w)`), so the pack carries the value and not only the syntax. Before, `<...ws>` was `Unexpected '...'; expected a name` -- the `with` half of the 10:00 ruling while the ordinary pack already parsed. The third line is the empty pack: `vjp` of a function with no `with` parameters stands at a position whose list is empty, `ws` is `()`, and `split(jvp(f))<...ws>(x)` spreads nothing -- value 9.0, slope 6.0."
 kind = "behavior"
 case = "../../../cases/compile/lambda_inference/with_pack_on_a_lambda.cml"
 args = ["${case}", "std::nvm"]

@@ -1,7 +1,7 @@
 // A pack among the `with` parameters is allowed on a declaration with a body, on the rule the
 // ordinary parameters follow (design principles 4.4, 5.6): the pack stands for the `with`
 // arguments a call gives beyond the fixed ones.
-with <..ws>
+with <...ws>
 func ident(x: float): float {
     return x
 }

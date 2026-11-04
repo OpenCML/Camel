@@ -51,6 +51,6 @@ func control(dir: string, xs: int[]): int! {
     return error('Failed', 'failed')
 }
 
-func generic::<T>(x: T, y: T, z: f32[..]): T {
+func generic::<T>(x: T, y: T, z: f32[...]): T {
     return x
 }

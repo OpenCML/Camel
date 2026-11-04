@@ -15,23 +15,23 @@ import { adam, adam_state } from nn
 import { with_grad } from autodiff
 
 type Model = {
-    wq1: float[..],
-    wk1: float[..],
-    wv1: float[..],
-    g1: float[..],
-    b1: float[..],
-    wq2: float[..],
-    wk2: float[..],
-    wv2: float[..],
-    g2: float[..],
-    b2: float[..]
+    wq1: float[...],
+    wk1: float[...],
+    wv1: float[...],
+    g1: float[...],
+    b1: float[...],
+    wq2: float[...],
+    wk2: float[...],
+    wv2: float[...],
+    g2: float[...],
+    b2: float[...]
 }
 
-func mask(): float[..] {
+func mask(): float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
-func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
     let q = x @ wq
     let k = transpose(x @ wk)
     let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
@@ -39,7 +39,7 @@ func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float
 }
 
 with <m: Model>
-func block(x: float[..]): float {
+func block(x: float[...]): float {
     let first = x + attention(x, m.wq1, m.wk1, m.wv1)
     let normed = layer_norm(first, m.g1, m.b1)
     let second = first + attention(normed, m.wq2, m.wk2, m.wv2)

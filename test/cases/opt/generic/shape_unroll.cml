@@ -1,5 +1,5 @@
 /**
- * Shape specialization: the extent a declaration leaves open (`x: f32[..]`) is not part of what a
+ * Shape specialization: the extent a declaration leaves open (`x: f32[...]`) is not part of what a
  * call instantiates, so `forward` keeps the type it writes and the recursion it calls is the one
  * std::opt specializes to the shape the argument's type fixes: `shape(x)[1]` folds to a constant
  * and the recursion is unrolled into straight-line instances. The value must not change.
@@ -7,13 +7,13 @@
 
 import { ones, zeros, shape, reshape } from tensor
 
-func run(t: int, steps: int, x: f32[..], h: f32[..]): f32[..] {
+func run(t: int, steps: int, x: f32[...], h: f32[...]): f32[...] {
     let batch = shape(x)[0]
     let features = shape(x)[2]
     return if t >= steps then h else run(t + 1, steps, x, h + reshape<[batch, features]>(slice(x, 1, t, t + 1)))
 }
 
-func forward(x: f32[..]): f32[..] {
+func forward(x: f32[...]): f32[...] {
     return run(0, shape(x)[1], x, zeros::<f32>([shape(x)[0], shape(x)[2]]))
 }
 

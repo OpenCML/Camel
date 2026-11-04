@@ -17,7 +17,7 @@ Every expression has a definite type at compile time; the graph contains only co
 | Complex | `c64`, `c128` | Single and double precision complex: a real and an imaginary floating-point part |
 | Boolean | `bool` | `true`, `false` |
 | String | `string` | Sequence of bytes, immutable |
-| Array | `T[]`, `T[4]`, `T[n]`, `T[..]` | Elements of the same type; the brackets hold dimensions: a constant, the unknown `?`, or a trailing pack `..s`; `T[][]` is a nested array, rank 2 is written `T[m, n]` |
+| Array | `T[]`, `T[4]`, `T[n]`, `T[...]` | Elements of the same type; the brackets hold dimensions: a constant, the unknown `?`, or a trailing pack `...s`; `T[][]` is a nested array, rank 2 is written `T[m, n]` |
 | Tuple | `(T1, T2, ...)` | By position, accessed with `.0`, `.1` |
 | Struct | `{ x: T1, y: T2 }`, or the name a `type` declares | By name, accessed with `.x`; `type Name = { ... }` declares a named type, see 3.3.3 |
 | Function | `(x: T) => R` | See [6.9](06_expressions.md#69-lambdas-and-function-types) |
@@ -32,7 +32,7 @@ There is no type `any`: after compilation every value has a definite type (desig
 
 Reading JSON: for a known shape use `json::decode_as::<T>(text)`, whose result is a `T!`; for an unknown shape use `json::decode(text)`, which gives a `Json!`: an error value `JsonParseError` when the text is not JSON, and `JsonTooDeep` when the document nests deeper than the limit (neither is a fault, design principles 11.2; the limit is 10000), otherwise a `Json`, whose type is definite and whose content is known only at run time; take parts out with `get`, `as_int`, `as_array` and the like, each of which gives a value of a definite type (null when there is none) and also takes a `Json?`, `Json!` or `Json!?` so that calls chain, as in `j->get<'server'>->get<'port'>->as_int ?? 8080`; an accessor of a `Json!` gives the two-layer result (`Json!?` and the like) with the error of the document passed on unchanged, taken apart with `??` and `!!`; `as_float` takes an integer too, and `get<index>` out of range gives `null` (the accessor design settled in 11.2).
 
-The `T` and the rest parameter `..rest` in the signatures of the standard library (as in `println: (x: T, ..rest) => T`) are how the declaration is written: a call is instantiated at the types of its arguments, and the graph holds concrete types only.
+The `T` and the rest parameter `...rest` in the signatures of the standard library (as in `println: (x: T, ...rest) => T`) are how the declaration is written: a call is instantiated at the types of its arguments, and the graph holds concrete types only.
 
 Use `type` to give a type a name, see [7.7](07_statements.md#77-type-declarations):
 

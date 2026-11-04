@@ -4,7 +4,7 @@
 
 import { tanh, reshape } from tensor
 
-func main(): float[..] {
+func main(): float[...] {
     let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3])
     let x = reshape<[2, 2]>([1.0, 2.0, 0.5, -1.0])
     return tanh(x @ w)

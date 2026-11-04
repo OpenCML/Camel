@@ -90,9 +90,9 @@ func bitsOfF16(value: f16): int[] {
 
 func main(): int sync {
     // ---- the reference paths: the body of an instance, and the rules written out ----
-    let bodySum: (xs: f32[..]) => f32 = sum
-    let bodyMin: (xs: f32[..]) => f32 = min
-    let bodyMax: (xs: f32[..]) => f32 = max
+    let bodySum: (xs: f32[...]) => f32 = sum
+    let bodyMin: (xs: f32[...]) => f32 = min
+    let bodyMax: (xs: f32[...]) => f32 = max
 
     // 2^24 then 1025 ones: the exact sum is 16778241 and the one f32 rounding is 16778240.
     let a = (0..1026)->map<(i: int) => if i == 0 then f32(16777216.0) else f32(1.0)>
@@ -112,16 +112,16 @@ func main(): int sync {
     let bfB: bf16[] = [bf16(32768.0), bf16(1.0), bf16(0.5)]
     let sumWideA = sum(wideA)
     let sumWideB = sum(wideB)
-    let halfSum: (xs: f16[..]) => f16 = sum
-    let bfSum: (xs: bf16[..]) => bf16 = sum
+    let halfSum: (xs: f16[...]) => f16 = sum
+    let bfSum: (xs: bf16[...]) => bf16 = sum
     let tieF16 = sumWideA - sumWideB == f16(0.0) && sumWideA != f16(0.0)
     let tieBf = sum(wideBf) - sum(bfB) == bf16(0.0) && sum(wideBf) == bf16(32768.0)
 
     // ---- the body agrees, element type by element type (the acceptance) ----
     let small: i32[] = [1, 2, 3]
-    let bodyInt: (xs: int[..]) => int = sum
-    let intBody: (xs: i32[..]) => i32 = sum
-    let f64Sum: (xs: f64[..]) => f64 = sum
+    let bodyInt: (xs: int[...]) => int = sum
+    let intBody: (xs: i32[...]) => i32 = sum
+    let f64Sum: (xs: f64[...]) => f64 = sum
     let sameInt = sum([1, 2, 3, 4]) == bodyInt([1, 2, 3, 4])
     let sameI32 = sum(small) == intBody(small)
     let sameF32 = sumA == bodySum(a) && sum(halfway) == bodySum(halfway)
@@ -132,7 +132,7 @@ func main(): int sync {
     // ---- min and max: NaN anywhere, -0 below +0, agreement with the body ----
     let fs: f32[] = [3.0, 9.0, 2.0]
     let withNan: f32[] = [3.0, f32(nan), 2.0]
-    let halfMin: (xs: f16[..]) => f16 = min
+    let halfMin: (xs: f16[...]) => f16 = min
     let nanMin = is_nan(min(withNan)) && is_nan(bodyMin(withNan))
     let nanMax = is_nan(max(withNan)) && is_nan(bodyMax(withNan))
     // -0 first, +0 second: the minimum must take the -0 it was given (the two compare equal, so
@@ -149,10 +149,10 @@ func main(): int sync {
     let bzr: bf16[] = [-bf16(0.0), bf16(0.0)]
     let fz: f16[] = [f16(0.0), -f16(0.0)]
     let fzr: f16[] = [-f16(0.0), f16(0.0)]
-    let bfHalfMin: (xs: bf16[..]) => bf16 = min
-    let bfHalfMax: (xs: bf16[..]) => bf16 = max
-    let f16HalfMin: (xs: f16[..]) => f16 = min
-    let f16HalfMax: (xs: f16[..]) => f16 = max
+    let bfHalfMin: (xs: bf16[...]) => bf16 = min
+    let bfHalfMax: (xs: bf16[...]) => bf16 = max
+    let f16HalfMin: (xs: f16[...]) => f16 = min
+    let f16HalfMax: (xs: f16[...]) => f16 = max
     let bzeroNeg = bitsOfBf16(-bf16(0.0))
     let bzeroPos = bitsOfBf16(bf16(0.0))
     let fzeroNeg = bitsOfF16(-f16(0.0))

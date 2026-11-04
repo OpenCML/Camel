@@ -11,7 +11,7 @@
 
 import { reshape, sum } from tensor
 
-func pair(x: f32[..], w: f32[..], b: f32[..]): (f32[..], f32[..]) {
+func pair(x: f32[...], w: f32[...], b: f32[...]): (f32[...], f32[...]) {
     let loose = x @ w + b
     #strict {
         let tight = x @ w + b

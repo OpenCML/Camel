@@ -3,11 +3,11 @@
 /// type states
 /// the element type: `shape`, `numel`, `dim` and `to_bytes` take a
 /// native array of any rank and any numeric element type, the call site's argument type fixes the
-/// element type, and a function whose parameter is written `T[..]` sees that element type in its
+/// element type, and a function whose parameter is written `T[...]` sees that element type in its
 /// body (`t[0]` is `T`, never a fixed `float`). The module's own array spelling stands beside it, so
 /// the programs that pass what the tensor operators return are unchanged.
 ///
-/// The rank the argument carries is the rank the body sees: a `f32[3]` and a `f32[..]` bound to the
+/// The rank the argument carries is the rank the body sees: a `f32[3]` and a `f32[...]` bound to the
 /// same open-rank parameter each read their own extent, and nothing here is specialised to one
 /// rank. (A rank-2 native array has no producer yet — the module type a tensor operator returns
 /// is not the array alias until P4, and a nested literal is refused — so this case stays at the
@@ -18,18 +18,18 @@ import { is_numeric } from types
 
 /// The element type of the parameter, taken from the call site: `t[0]` is a `T`, so this compiles
 /// for `f32` and for `int`, and the result is a value of that element type.
-func firstElement::<T>(t: T[..]): T when is_numeric::<T>() {
+func firstElement::<T>(t: T[...]): T when is_numeric::<T>() {
     return t[0]
 }
 
 /// The rank of the argument decides what `len` reads, and nothing here is fixed to one rank.
-func firstDim::<T>(t: T[..]): int when is_numeric::<T>() {
+func firstDim::<T>(t: T[...]): int when is_numeric::<T>() {
     return len(t)
 }
 
 func main(): int sync {
     let a: f32[3] = [1.0, 2.0, 3.0]
-    let open: f32[..] = a
+    let open: f32[...] = a
     let ints: int[3] = [10, 20, 30]
 
     // The extents, from a shaped array, from an open-rank array and from an int array.
@@ -50,7 +50,7 @@ func main(): int sync {
     println(firstDim(ints))
 
     // The tensor spelling still fills the same names, so no existing program changed.
-    let t: f32[..] = ones::<f32>([2, 3])
+    let t: f32[...] = ones::<f32>([2, 3])
     println(shape(t))
     return 0
 }

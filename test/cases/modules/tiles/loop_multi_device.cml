@@ -12,54 +12,54 @@ func fibonacci(a: float, b: float): (float, float) {
 func rotate(a: float, b: float, c: float): (float, float, float) {
     return loop x = a, y = b, z = c for k in [1, 2] do (y, z, x)
 }
-func recurrence(a: f32[..], b: f32[..]): (f32[..], f32[..]) {
+func recurrence(a: f32[...], b: f32[...]): (f32[...], f32[...]) {
     return loop x = a, y = b for k in [1, 2, 3] do (y, x + y)
 }
-func first(a: f32[..], b: f32[..]): f32[..] { return recurrence(a, b).0 }
-func second(a: f32[..], b: f32[..]): f32[..] { return recurrence(a, b).1 }
-func reordered(a: f32[..], b: f32[..]): (f32[..], f32[..], f32[..]) {
+func first(a: f32[...], b: f32[...]): f32[...] { return recurrence(a, b).0 }
+func second(a: f32[...], b: f32[...]): f32[...] { return recurrence(a, b).1 }
+func reordered(a: f32[...], b: f32[...]): (f32[...], f32[...], f32[...]) {
     let pair = recurrence(a, b)
     return (pair.1, pair.0, pair.1)
 }
-func captured(a: f32[..], b: f32[..], bias: f32[..]): (f32[..], f32[..]) {
+func captured(a: f32[...], b: f32[...], bias: f32[...]): (f32[...], f32[...]) {
     return loop x = a, y = b for k in [1, 2, 3] do (y + bias, x + bias + bias)
 }
-func swap(a: f32[..], b: f32[..]): (f32[..], f32[..]) {
+func swap(a: f32[...], b: f32[...]): (f32[...], f32[...]) {
     return loop x = a, y = b for k in [1, 2, 3] do (y, x)
 }
-func empty(a: f32[..], b: f32[..]): (f32[..], f32[..]) {
+func empty(a: f32[...], b: f32[...]): (f32[...], f32[...]) {
     let domain: int[] = []
     return loop x = a, y = b for k in domain do (y, x + y)
 }
-func rounding(a: f32[..], b: f32[..]): (f32[..], f32[..]) {
+func rounding(a: f32[...], b: f32[...]): (f32[...], f32[...]) {
     return loop x = a, y = b for k in [1, 2, 3] do (x + y, y)
 }
-func strict_madd(x: f32[..], a: f32[..], b: f32[..]): f32[..] { return x * a + b }
+func strict_madd(x: f32[...], a: f32[...], b: f32[...]): f32[...] { return x * a + b }
 #[contract]
-func permissions(a: f32[..], b: f32[..]): (f32[..], f32[..]) {
+func permissions(a: f32[...], b: f32[...]): (f32[...], f32[...]) {
     return loop x = a, y = a for k in [1] do (strict_madd(x, a, b), y * a + b)
 }
-func strict_projection(a: f32[..], b: f32[..]): f32[..] { return permissions(a, b).0 }
+func strict_projection(a: f32[...], b: f32[...]): f32[...] { return permissions(a, b).0 }
 #[contract]
-func permitted_madd(x: f32[..], a: f32[..], b: f32[..]): f32[..] { return x * a + b }
-func permission_one(a: f32[..], b: f32[..]): f32[..] {
+func permitted_madd(x: f32[...], a: f32[...], b: f32[...]): f32[...] { return x * a + b }
+func permission_one(a: f32[...], b: f32[...]): f32[...] {
     let pair = loop x = a, y = a for k in [1] do (y, permitted_madd(y, a, b))
     return pair.0
 }
-func permission_two(a: f32[..], b: f32[..]): f32[..] {
+func permission_two(a: f32[...], b: f32[...]): f32[...] {
     let pair = loop x = a, y = a for k in [1, 2] do (y, permitted_madd(y, a, b))
     return pair.0
 }
-func permission_empty(a: f32[..], b: f32[..]): f32[..] {
+func permission_empty(a: f32[...], b: f32[...]): f32[...] {
     let domain: int[] = []
     let pair = loop x = a, y = a for k in domain do (y, permitted_madd(y, a, b))
     return pair.0
 }
 func main(): int sync {
     let folder = get_env('TILES_TEST_OUT') ?? ''
-    let a = load_npy::<f32>(folder + '/a.npy') as f32[..]
-    let b = load_npy::<f32>(folder + '/b.npy') as f32[..]
-    let c = load_npy::<f32>(folder + '/c.npy') as f32[..]
+    let a = load_npy::<f32>(folder + '/a.npy') as f32[...]
+    let b = load_npy::<f32>(folder + '/b.npy') as f32[...]
+    let c = load_npy::<f32>(folder + '/c.npy') as f32[...]
     println('VALUES')
     println(scalar_swap(2.0, 7.0), download(run_preferred_resident<scalar_swap>((2.0, 7.0))))
     println(fibonacci(0.0, 1.0), download(run_preferred_resident<fibonacci>((0.0, 1.0))))

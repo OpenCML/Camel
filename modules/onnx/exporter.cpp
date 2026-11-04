@@ -4995,7 +4995,7 @@ void refuseUnendedUnrolling(
             "changing; here every level that was unrolled gave the next call arguments more "
             "specific than the loop's own (a more precise type, or a constant), so one more "
             "level was unrolled each time. Give the values the recursion carries and the "
-            "constants it uses types that say their element type and shape (`x as f32[..]`, "
+            "constants it uses types that say their element type and shape (`x as f32[...]`, "
             "`x as f32[const [...] ]`)",
             isSourceName(name) ? std::format(" of '{}'", name) : std::string(),
             full->graph(),

@@ -6,7 +6,7 @@
 > 详见文末「stage4 的第一步梯度」；**看到一个全零梯度，先问它为什么是零，再决定它是不是错了。**
 > **第一个"模型真跑起来"的数：`c3 forward init loss=3.303745`**（两层两头，chars=4278、context=8、
 > width=16、heads=2、classes=28、seed=7）。 以前从来没拿到过；拿到它是因为 `layerNormInfer` 不再按
-> "形状未知"把 `float[..]` 的归一化结果退回 `f32`（墙 10 的更正）。 墙再多，也比不上这一行。
+> "形状未知"把 `float[...]` 的归一化结果退回 `f32`（墙 10 的更正）。 墙再多，也比不上这一行。
 # C3 的墙
 
 **这张表怎么数（2026-11-03 收口）**：**十三堵墙**。编号是**台账号，不是序号** —— 空号与合节各有原因，不代表缺失：
@@ -79,7 +79,7 @@ of the generic function ...] (name=SemanticDiag::ArgumentsMismatch)
 - **要让它倒**：修 `stdlib/vjp.cml#vjp` 那处把 `(float, float) => float` 用单个参数调用的地方（第 73、78 行）
   （组合时的参数列表与类型律不一致）。
 
-**墙 1 的根因之一（2026-11-03 补，另一条车道的读数）**：类型包拼接把**数组参数按类型合并**。`(..ParamsOf<F>, ..Tangent<ParamsOf<F>>)` 在 `F` 有三个数组参数时给出 **2 个成员**（应 6 个）⇒ 调用点按 2 个实参填、被调方按 6 个读 ⇒ 上面那句 `cannot be called with argument types: <>`。
+**墙 1 的根因之一（2026-11-03 补，另一条车道的读数）**：类型包拼接把**数组参数按类型合并**。`(...ParamsOf<F>, ...Tangent<ParamsOf<F>>)` 在 `F` 有三个数组参数时给出 **2 个成员**（应 6 个）⇒ 调用点按 2 个实参填、被调方按 6 个读 ⇒ 上面那句 `cannot be called with argument types: <>`。
 - **判据**：纯函数最小例，`Swap` 对 1 / 2 / 3 个数组参数**全为 true** —— 分解本身没错，**拼接之后重数丢了**。
 - **现状**：拼接在类型层完成，重数在有数组参数时必错；与 `stdlib/vjp.cml#vjp` 的那处调用是同一堵墙的两面，不改这里它也不倒。
 ## 墙 2–7：前向规则缺失（`rulesets/jvp.cml`）
@@ -144,7 +144,7 @@ C [RuntimeDiag::RuntimeError]
 `full::<f32>([2, 2], -1000.0)` 不成立：形状是 `int[]`、值是 `float`，而 `full::<T>` 要一个 `T`。
 模型里唯一的常量张量就是因果 mask，于是：
 
-- `zeros::<f32>` 拿得到 0，`full(-1000.0)` 拿不到 −1000，`where` 又要求 `bool[..]` 的**张量**条件，
+- `zeros::<f32>` 拿得到 0，`full(-1000.0)` 拿不到 −1000，`where` 又要求 `bool[...]` 的**张量**条件，
   而 `bool[]` 喂不进 `reshape<[8, 8]>`（它的签名只收数值数组）。
 - **归 类**：缺规则（**类型/常量规则**），四类里最接近「缺规则」，但它缺的不是微分规则而是
   张量构造规则，报告里单列。
@@ -159,14 +159,14 @@ C [RuntimeDiag::RuntimeError]
 
 ```
 (forward)/showcase/c3-char-transformer/forward.cml:177:33: [Error]:
-No matching function found for argument types: <> (f32[..], float[..], float[..], ...)
+No matching function found for argument types: <> (f32[...], float[...], float[...], ...)
 (forward)/showcase/c3-char-transformer/forward.cml:192:45: [Error]:
-Invalid call to '__mat__' with argument types <> (f32[..], float[..]):
+Invalid call to '__mat__' with argument types <> (f32[...], float[...]):
 the two tensor operands have different element types ('f32' and 'float')
 ```
 
-模型的字段都声明 `float[..]`，第一处不匹配出现在 `attention(layer_norm(x, ga, ba), ...)` 的第一个
-实参上：`layer_norm` 的回答被当成 `f32[..]`。 已经排除的候选（各自都有一个今天**有答案**的探针）：
+模型的字段都声明 `float[...]`，第一处不匹配出现在 `attention(layer_norm(x, ga, ba), ...)` 的第一个
+实参上：`layer_norm` 的回答被当成 `f32[...]`。 已经排除的候选（各自都有一个今天**有答案**的探针）：
 `layer_norm` 的 float 分枝（16）、`normal::<float>`（17）、`take` 的读行（18）。 所以这条的成因
 **没有定位**，只剩「`with` 参数里读出的字段类型」与「`+` 之后元素的类型」两个候选——下一个探针该
 写的是后者，程序见本节末。
@@ -230,26 +230,26 @@ the two tensor operands have different element types ('f32' and 'float')
 - `if` 的每个分枝都要 `then`（`if mode == 'forward' then { ... }`）。
 - 这几处修好之后探针的答案才变成上面那张表：前两轮的红是我自己的拼写，不是墙。
 
-## 墙 10（新）：`nn.layer_norm` 把 `float[..]` 归一化成 `f32[..]`
+## 墙 10（新）：`nn.layer_norm` 把 `float[...]` 归一化成 `f32[...]`
 
 把注意力块长成 Transformer 时撞到的第一面新墙。 坐标：
 
 ```
 grow/stage2_residual_ln.cml:45:35: [Error]: No matching function found for argument types:
-<> (f32[..], float[..], float[..], float[..]). Check the number and ...
-    attention: (x: float[..], wq: float[..], wk: float[..], wv: float[..]) => float[..] pure
+<> (f32[...], float[...], float[...], float[...]). Check the number and ...
+    attention: (x: float[...], wq: float[...], wk: float[...], wv: float[...]) => float[...] pure
  (name=SemanticDiag::NoMatchingFunction, code=0x0300000F)
 ```
 
-- 说得出来的：`layer_norm(first, m.g1, m.b1)` 的实参三个都是 `float[..]`，它照样接受了，**回来的是
-  `f32[..]`**；紧跟着的 `attention`（第一个参数 `float[..]`）就拒绝了。 两个重载都在
+- 说得出来的：`layer_norm(first, m.g1, m.b1)` 的实参三个都是 `float[...]`，它照样接受了，**回来的是
+  `f32[...]`**；紧跟着的 `attention`（第一个参数 `float[...]`）就拒绝了。 两个重载都在
   `stdlib/signatures/tensor.cml`：f32 的在 305 行、f64 的在 313 行，浮点实参走到前面那个（隐式窄化）。
 - 说显式类型也不行：`layer_norm<float>(x, g, b)` →
   `grow/probe_layer_norm_float.cml:15:24: [Error]: 'float' is used as a value here, but it names an
   operator with 8 signatures [...]`。
 - 归类：这是原来「墙 9（元素类型传播）」的第一个**精确坐标**——不是新的一句诊断，是同一根现在有了
   文件名和列号。 整模型（两层，`grow/stage4_full_model.cml`）就停在同一处，`stage4` 的用例把它
-  锁成 negative，消息里那句 `f32[..], float[..]` 就是它。
+  锁成 negative，消息里那句 `f32[...], float[...]` 就是它。
 - 清掉之后：`baseline/grow.py --stage 2` 的四个读数是验收值——step1 `0.000000000000`、
   step10 `-0.072004447310`、step25 `-0.192068171421`、step50 `-0.836281312279`、更新后
   `-0.856052891460`。 `stage4` 同理，由 `--stage 4` 给出。
@@ -288,7 +288,7 @@ grow/stage2_residual_ln.cml:45:35: [Error]: No matching function found for argum
 x && ctx.facts(0).dtype == TypeCode::Float64 ? Float64 : Float32      // x 是 shape，不是 dtype
 ```
 
-也就是**形状未知就退回 `f32`**，哪怕 `dtype` 明明是 `f64`。 `float[..]` 实参正是"形状未知、类型 f64"，
+也就是**形状未知就退回 `f32`**，哪怕 `dtype` 明明是 `f64`。 `float[...]` 实参正是"形状未知、类型 f64"，
 于是归一化的结果被声明成 `f32`，下一个 `matmul` 就拒。 改成同文件邻居 `softmax_grad` 已经在用的
 `floatLikeFirst(ctx)`（只读 dtype），一行，不动算法。
 
@@ -600,7 +600,7 @@ argmax **[1, 0]（两行都对）**。
 ## 墙 14（新，暂记）：`split` 拒绝"操作数不在半程出口可达集里"的函数
 
 - **判据**：`split(jvp(f))` 对某些形状的 `f` 报 `transforms: split does not build this function (an operand of the node is not reachable from the half's exit)` —— 是**具名拒绝**，不是崩溃，也不是类型错。
-- **原文（完整）**：`error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: split does not build this function (an operand of the node is not reachable from the half's exit).` 位置 `stdlib/vjp.cml#vjp` 的 `let (y, lin) = split(jvp(f))(..xs)`。
+- **原文（完整）**：`error[RuntimeDiag::RuntimeError]: An error has occurred: transforms: split does not build this function (an operand of the node is not reachable from the half's exit).` 位置 `stdlib/vjp.cml#vjp` 的 `let (y, lin) = split(jvp(f))(...xs)`。
 - **证据**：单个函数的四个"把待测元素当唯一参数、其余写死"的标量函数里，`fa00` 通过（导数 11.0 = 纸面 `dC·Bᵀ[0][0]`），`fa11` 在 `split` 这一步被拒；同一份程序、同一棵树。
 - **现状**：同一个 `vjp` 组合，对同构但不同的求和形状一处通过一处被拒 —— **这是形状相关，不是类型相关**；根因未定（可能与"半程出口的可达集"如何收集有关），**判准与否待裁**，故按候选记录。
 ### stage8 按行拆开：两行都更差 ⇒ "因果注意力只对后一个位置可用"这个解释**不成立**

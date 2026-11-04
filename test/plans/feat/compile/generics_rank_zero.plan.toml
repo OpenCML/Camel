@@ -2,11 +2,11 @@ id = "compile.generics_rank_zero"
 order = 324
 tier = "fast"
 tags = ["feat", "compile", "generics", "types"]
-desc = "An open-rank parameter `T[..]` binds its element type from a rank-zero argument -- `T[..]` includes rank 0 and a rank-zero array is that element -- while `T[]` and `float[]` keep refusing one (design principles 5.4)."
+desc = "An open-rank parameter `T[...]` binds its element type from a rank-zero argument -- `T[...]` includes rank 0 and a rank-zero array is that element -- while `T[]` and `float[]` keep refusing one (design principles 5.4)."
 
 [[tests]]
 name = "open_rank_takes_rank_zero"
-desc = "A rank-zero argument at the position that binds `T` of `T[..]` is accepted, prints as the element, and the same parameter still takes `float[..]` and `float[3]`."
+desc = "A rank-zero argument at the position that binds `T` of `T[...]` is accepted, prints as the element, and the same parameter still takes `float[...]` and `float[3]`."
 kind = "behavior"
 case = "../../../cases/compile/generic_open_rank_rank_zero.cml"
 args = ["${case}", "std::fvm"]

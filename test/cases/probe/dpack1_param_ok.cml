@@ -1,0 +1,9 @@
+// shape 1 with the new spelling: an ordinary parameter pack.
+func count(...xs): int {
+    return static loop acc = 0 for j in indices xs do acc + 1
+}
+
+func main(): int sync {
+    println("count=", count(1, 2, 3))
+    return 0
+}

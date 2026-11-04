@@ -8,7 +8,7 @@ import { grad } from autodiff
 import { sum } from tensor
 import tensor_definitions
 
-with <x: f32[..]>
+with <x: f32[...]>
 func mean_of(): float {
     return float(tensor_definitions::mean(x))
 }

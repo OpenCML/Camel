@@ -8,7 +8,7 @@
 // Hand-computed, 200 rounds unless the call says otherwise (a loop that starts at length 1 and
 // runs `while len(xs) < n` runs n - 1 rounds):
 //
-//   threeTyped   appends another state's old value: xs = [0, 0, 1, .., 198], count = 199,
+//   threeTyped   appends another state's old value: xs = [0, 0, 1, ..., 198], count = 199,
 //                flip toggled 199 times (false), total 199 * 0.25 = 49.75
 //   growMixed    int[] and float[] (different element types): the last elements are 1 and 0.25
 //    growStruct a struct state: its fields are the loop's state components, so the array

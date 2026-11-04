@@ -28,7 +28,7 @@
  * for the integers and the floats (`x * 1`, `x / 1`, `x - 0`, `-(-x)`, `x + x`) is one rule for
  * both; a law that differs (`x + 0` for integers, `x + -0.0` for floats), or needs a permission
  * only one family asks for, is one rule per family. The array form of a law is a rule of its own
- * (`array_mul_one`): `x: T[..]` binds `T` to the element type, so one rule is the law for every
+ * (`array_mul_one`): `x: T[...]` binds `T` to the element type, so one rule is the law for every
  * shape, which a parameter that bound the whole array type could not be. A parameter of a rule is
  * the node it matches, of type `Node<T>`; a `const` parameter is the constant's value.
  *
@@ -83,20 +83,20 @@ export rule neg_neg::<T>(x: T) when is_real::<T>() { -(-x) => x }
 export rule add_self::<T>(x: T) when is_real::<T>() { x + x => x * 2 }
 
 /// `x * 1` is `x`, elementwise.
-export rule array_mul_one::<T>(x: T[..]) when is_real::<T>() { x * 1 => x }
+export rule array_mul_one::<T>(x: T[...]) when is_real::<T>() { x * 1 => x }
 
 /// `x / 1` is `x`, elementwise, for floats: the quotient of two integer arrays is a float array,
 /// so for an integer array the right side would be of another type.
-export rule array_div_one::<T>(x: T[..]) when is_float::<T>() { x / 1 => x }
+export rule array_div_one::<T>(x: T[...]) when is_float::<T>() { x / 1 => x }
 
 /// `x - 0` is `x`, elementwise.
-export rule array_sub_zero::<T>(x: T[..]) when is_real::<T>() { x - 0 => x }
+export rule array_sub_zero::<T>(x: T[...]) when is_real::<T>() { x - 0 => x }
 
 /// `-(-x)` is `x`, elementwise.
-export rule array_neg_neg::<T>(x: T[..]) when is_real::<T>() { -(-x) => x }
+export rule array_neg_neg::<T>(x: T[...]) when is_real::<T>() { -(-x) => x }
 
 /// `x + x` is `x * 2`, elementwise.
-export rule array_add_self::<T>(x: T[..]) when is_real::<T>() { x + x => x * 2 }
+export rule array_add_self::<T>(x: T[...]) when is_real::<T>() { x + x => x * 2 }
 
 // ---- Integers: wrapping arithmetic, every law is exact ----
 //
@@ -146,7 +146,7 @@ export rule int_distribute::<T>(a: T, b: T, c: T) when is_integer::<T>() { a * (
 /// design grants, because the products may overflow where the sum does not (`a * (b + c)` is 0
 /// where `a * b + a * c` is `inf + -inf`, a NaN).
 #requires(reassociate)
-export rule array_distribute::<T>(a: T[..], b: T[..], c: T[..]) when is_integer::<T>() {
+export rule array_distribute::<T>(a: T[...], b: T[...], c: T[...]) when is_integer::<T>() {
     a * (b + c) <=> a * b + a * c
 }
 
@@ -163,7 +163,7 @@ export rule array_distribute::<T>(a: T[..], b: T[..], c: T[..]) when is_integer:
 export rule float_add_neg_zero::<T>(x: T) when is_float::<T>() { x + -0.0 => x }
 
 /// `x + -0.0` is `x`, elementwise.
-export rule array_add_neg_zero::<T>(x: T[..]) when is_float::<T>() { x + -0.0 => x }
+export rule array_add_neg_zero::<T>(x: T[...]) when is_float::<T>() { x + -0.0 => x }
 
 // ---- Floats: the laws a numeric permission allows (design principles 7.2-7.4) ----
 //
@@ -270,40 +270,40 @@ export rule float_combine_one_mixed::<T>(x: T, const c: T)
 
 /// `x * c1 + x * c2` is `x * (c1 + c2)`, elementwise.
 #requires(reassociate)
-export rule array_combine::<T>(x: T[..], const c1: T, const c2: T)
+export rule array_combine::<T>(x: T[...], const c1: T, const c2: T)
     when is_float::<T>() && combine_same_sign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
 /// The same for coefficients of opposite signs.
 #requires(reassociate, no_infs, no_signed_zeros)
-export rule array_combine_mixed::<T>(x: T[..], const c1: T, const c2: T)
+export rule array_combine_mixed::<T>(x: T[...], const c1: T, const c2: T)
     when is_float::<T>() && combine_mixed_sign(c1, c2) {
     x * c1 + x * c2 => x * (c1 + c2)
 }
 
 /// `(x * c1) * c2` is `x * (c1 * c2)`, elementwise.
 #requires(reassociate, no_infs)
-export rule array_fold::<T>(x: T[..], const c1: T, const c2: T)
+export rule array_fold::<T>(x: T[...], const c1: T, const c2: T)
     when is_float::<T>() && fold_coefficients(c1, c2) {
     (x * c1) * c2 => x * (c1 * c2)
 }
 
 /// `x * c + x * c` is `x * (c + c)`, elementwise, exact for a small integer `c`.
-export rule array_double::<T>(x: T[..], const c: T) when is_float::<T>() && exact_doubling(c) {
+export rule array_double::<T>(x: T[...], const c: T) when is_float::<T>() && exact_doubling(c) {
     x * c + x * c => x * (c + c)
 }
 
 /// The bare operand, elementwise: `x * c + x` is `x * c + x * 1.0`.
 #requires(reassociate)
-export rule array_combine_one::<T>(x: T[..], const c: T)
+export rule array_combine_one::<T>(x: T[...], const c: T)
     when is_float::<T>() && combine_one_same_sign(c) {
     x * c + x => x * (c + 1.0)
 }
 
 /// The bare operand with a coefficient of the other sign, elementwise.
 #requires(reassociate, no_infs, no_signed_zeros)
-export rule array_combine_one_mixed::<T>(x: T[..], const c: T)
+export rule array_combine_one_mixed::<T>(x: T[...], const c: T)
     when is_float::<T>() && combine_one_mixed_sign(c) {
     x * c + x => x * (c + 1.0)
 }
@@ -328,7 +328,7 @@ export rule array_combine_one_mixed::<T>(x: T[..], const c: T)
 /// `log(softmax(x))` is `log_softmax(x)`: rounding each probability becomes an absolute error in
 /// its log, and a probability that rounds to zero gives -inf where the true log-softmax is finite.
 #requires(refine_accuracy)
-export rule array_log_softmax_of_softmax(x: f32[..], const axis: int) {
+export rule array_log_softmax_of_softmax(x: f32[...], const axis: int) {
     log_array(softmax<axis>(x)) => log_softmax<axis>(x)
 }
 
@@ -370,7 +370,7 @@ export rule float_expm1::<T>(x: T) when hasScalarKernel::<T>() {
 /// are the same IEEE operations in the same order, so the rewrite changes no bit
 /// (`rules.fusion_bit_identical`); what changes is the cost: four kernels and four passes over the
 /// data become one.
-export rule array_sigmoid_chain(x: f32[..]) {
+export rule array_sigmoid_chain(x: f32[...]) {
     1.0 / (1.0 + exp_array(-x)) => sigmoid(x)
 }
 

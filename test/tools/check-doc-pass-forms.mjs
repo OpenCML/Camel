@@ -473,7 +473,7 @@ const PASS_NAMES = new Set()
 // make one: every generic function of the module is written that way, and reading the head alone
 // put `array::reverse`, `array::sum`, `random::choice`, `optim::init` and `tensor::show` among the
 // passes of their modules. The explicit-generic spelling the design gives a tensor signature
-// (`export func to_bytes::<T>(t: T[..]) when is_numeric::<T>()`, design principles 4.1) joined that
+// (`export func to_bytes::<T>(t: T[...]) when is_numeric::<T>()`, design principles 4.1) joined that
 // set, and `tensor::to_bytes` is then a "pass name followed by `(`" on the page that names the
 // operator (`docs/design/training/bytes.cn.md`), which the command line has never read as a pass:
 // only the head-plus-shape reading keeps the rule about passes and stops reporting operators.

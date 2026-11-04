@@ -19,38 +19,38 @@ import { adam, adam_state } from nn
 import { with_grad } from autodiff
 
 type Model = {
-    emb: float[..],
-    g1a: float[..],
-    b1a: float[..],
-    wq1: float[..],
-    wk1: float[..],
-    wv1: float[..],
-    g1b: float[..],
-    b1b: float[..],
-    f1_1: float[..],
-    fb1_1: float[..],
-    f2_1: float[..],
-    fb2_1: float[..],
-    g2a: float[..],
-    b2a: float[..],
-    wq2: float[..],
-    wk2: float[..],
-    wv2: float[..],
-    g2b: float[..],
-    b2b: float[..],
-    f1_2: float[..],
-    fb1_2: float[..],
-    f2_2: float[..],
-    fb2_2: float[..],
-    gout: float[..],
-    bout: float[..]
+    emb: float[...],
+    g1a: float[...],
+    b1a: float[...],
+    wq1: float[...],
+    wk1: float[...],
+    wv1: float[...],
+    g1b: float[...],
+    b1b: float[...],
+    f1_1: float[...],
+    fb1_1: float[...],
+    f2_1: float[...],
+    fb2_1: float[...],
+    g2a: float[...],
+    b2a: float[...],
+    wq2: float[...],
+    wk2: float[...],
+    wv2: float[...],
+    g2b: float[...],
+    b2b: float[...],
+    f1_2: float[...],
+    fb1_2: float[...],
+    f2_2: float[...],
+    fb2_2: float[...],
+    gout: float[...],
+    bout: float[...]
 }
 
-func mask(): float[..] {
+func mask(): float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
-func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
     let q = x @ wq
     let k = transpose(x @ wk)
     let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
@@ -58,7 +58,7 @@ func attention(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float
 }
 
 with <m: Model>
-func loss_of(tokens: int[..]): float {
+func loss_of(tokens: int[...]): float {
     let x = take(m.emb, tokens)
     let attended1 = x + attention(layer_norm(x, m.g1a, m.b1a), m.wq1, m.wk1, m.wv1)
     let hidden1 = relu(layer_norm(attended1, m.g1b, m.b1b) @ m.f1_1 + m.fb1_1)

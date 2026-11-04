@@ -5,7 +5,7 @@
  * `a == b` on two arrays answers one bool, by content, element by element (design principles 4.2) --
  * it is `Array<T>::operator==` in the emitted program. `a != b` is `!(a == b)`, so the graph holds
  * the equality and a `not` on the bool. Neither form is elementwise: `a === b` is the tensor
- * module's comparison and answers `bool[..]`, which is a different operator with a different
+ * module's comparison and answers `bool[...]`, which is a different operator with a different
  * result.
  *
  * The third block is the one a short-circuit written into the comparison would get wrong: the two

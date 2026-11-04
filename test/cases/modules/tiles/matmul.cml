@@ -1,7 +1,7 @@
 import { reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
-func product(a: f32[..], b: f32[..]): f32[..] {
+func product(a: f32[...], b: f32[...]): f32[...] {
     return a @ b
 }
 

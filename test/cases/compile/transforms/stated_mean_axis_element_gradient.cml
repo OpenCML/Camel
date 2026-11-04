@@ -2,7 +2,7 @@
 //
 // One axis, `keepdims = false`, on a rank-one operand: the mean of four values answers one value,
 // and a rank-zero answer *is* its element (design principles 5.4). So the cotangent the reverse law
-// is handed has no shape -- and the law's port is `T[..]`, whose slot is an array.
+// is handed has no shape -- and the law's port is `T[...]`, whose slot is an array.
 //
 // A mean of four elements divides by four, so every position gets a quarter:
 //
@@ -13,7 +13,7 @@
 // and before the walk made the conversion 5.4 names, the law read it as an array: `numel(ct)`
 // answered a number's bits as a pointer and the run died on a SIGSEGV inside the numel kernel.
 //
-// The fix is the conversion, not a second law: a value's type going from `T` to `T[..]` is where the
+// The fix is the conversion, not a second law: a value's type going from `T` to `T[...]` is where the
 // run gets a rank-zero array to read (`ArrayType::castSlotFrom`, inserted by `Builder::coerceTo`
 // everywhere a value enters such a position), and a law's right side is entered by the transpose walk
 // rather than by a call, so the walk makes it (`modules/transforms/transpose.cpp`, `ruleCotangent`).

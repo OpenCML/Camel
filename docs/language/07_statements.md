@@ -300,7 +300,7 @@ func main(): int sync {
 - **类型变量从实参得到类型。** 每个实参按它所在形参的类型与形参统一；实参什么都没说时（是 `null`，或是一个自己还在等类型的泛型函数），取它在别处出现的位置上的类型。所有实参给出的约束收集完再检查：每个形参按代入后的类型检查，不做隐式转换（值进入 `T?`/`T!` 形参除外，见 [3.4](03_data_model.md)）。`pick(true, 1, 2.5)` 是错误（`T` 已绑定为 `int`）；定不下来的变量是编译期错误，诊断指出是哪一个。
 - 函数头声明的名字可以在签名的任何类型位置上写：数组元素、元组元素、结构体字段、函数类型的形参与返回值、`T?`/`T!` 的内层、`Map`/`Set` 与类型函数的实参。不能作为模块类型的实参。
 - 只有函数头声明的名字才是类型变量。形参类型里一个不指向任何类型、也没有在函数头声明的名字是未知类型错误（`SemanticDiag::UnresolvedTypeReference`），不会被自动绑定。同一个名字在函数头声明两次是 `SemanticDiag::TypeVariableRedeclared`；声明了却不在签名里写是警告 `SemanticDiag::TypeVariableUnused`，声明仍然可用。函数头声明的名字与已有类型同名时，在这个函数里它是类型参数：头部的声明优先。
-- 只出现在返回类型中的变量由期望类型推出：`let xs: int[] = empty()`、已知形参类型的位置、声明的返回位置。没有足够上下文时写显式类型实参：`empty::<int>()`。类型实参按函数头里变量声明的顺序给出，也可以按名字给出，不依赖位置：`pair::<A = int, B = string>(..)`。同一处要么全按位置、要么全按名字，不能混写；按名字时每个类型变量都要给出，名字写错或重复是编译错误；内建算子（`tree`、`json::decode_as` 等）只接受按位置。类型实参只在编译期参与实例化；`f<w>` 继续表示值上下文参数，合用时为 `f::<T><w>(x)`。显式实例也可以作函数值：`let f = id::<int>`。
+- 只出现在返回类型中的变量由期望类型推出：`let xs: int[] = empty()`、已知形参类型的位置、声明的返回位置。没有足够上下文时写显式类型实参：`empty::<int>()`。类型实参按函数头里变量声明的顺序给出，也可以按名字给出，不依赖位置：`pair::<A = int, B = string>(...)`。同一处要么全按位置、要么全按名字，不能混写；按名字时每个类型变量都要给出，名字写错或重复是编译错误；内建算子（`tree`、`json::decode_as` 等）只接受按位置。类型实参只在编译期参与实例化；`f<w>` 继续表示值上下文参数，合用时为 `f::<T><w>(x)`。显式实例也可以作函数值：`let f = id::<int>`。
 - **函数体在实例化时检查。** 函数体里的类型错误在实例化时报告，诊断给出错误在函数体里的位置，并指出是哪个实例、由哪一处调用实例化的。从未被调用的泛型函数不会被检查。
 - 递归的泛型函数可以用（要写出返回类型）。每次递归都换成更大类型的函数无法终止实例化，嵌套到 8 层时报错。
 - 函数体里可以用 `T`：lambda 的形参类型、`let z: T = 0`、`e as T`。
@@ -350,16 +350,16 @@ func main(): int sync {
 - 确定不了是编译期错误 `SemanticDiag::GenericFunctionAsValue`（或作为实参时的 `SemanticDiag::GenericArgumentsMismatch`），指出哪个变量定不下来：`let g = id` 没有上下文（写出类型）；`apply(id, id)` 两个实参互相等对方。
 - 导入的泛型函数同样可以作值（`xss->map<reverse>`，`reverse` 来自 `array` 模块）。
 
-**剩余参数（rest parameter）**：函数声明的最后一个形参可以写 `..ts`，它没有类型，代表调用时剩下的全部实参。调用点写出的固定实参依次绑定到固定形参，其余实参按顺序成为 `ts` 的元素；`ts` 是编译期已知的元组，可以用 `indices ts`、`ts.[j]` 和 `..ts`。
+**剩余参数（rest parameter）**：函数声明的最后一个形参可以写 `...ts`，它没有类型，代表调用时剩下的全部实参。调用点写出的固定实参依次绑定到固定形参，其余实参按顺序成为 `ts` 的元素；`ts` 是编译期已知的元组，可以用 `indices ts`、`ts.[j]` 和 `...ts`。
 
 ```cml
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
     println(sum(1, 2, 3))
-    println(sum(..(4, 5)))
+    println(sum(...(4, 5)))
     return 0
 }
 ```
@@ -370,10 +370,10 @@ func main(): int sync {
 ```
 
 - **调用在编译期展开。** 带剩余参数的函数没有运行时的参数个数，因此不为它建实例图，也不生成调用结点；每个直接调用都把函数体展开在调用者的图里，固定形参绑定到实参结点，`ts` 绑定到剩下的结点。`ts` 可以是 0 个元素。
-- **`ts` 是编译期元组，不是值。** 它只有三种用法：`indices ts` 取位置表、`ts.[j]` 取一个元素、`..ts` 把元素展开成实参。三种用法都不为 `ts` 建 `FILL`，也不为元素建 `ACCS`。把 `ts` 本身放到需要运行期值的位置（打印、返回、赋给变量、作为普通实参）报 `SemanticDiag::StaticTupleEscapes`，不会悄悄物化成一个运行期元组；需要运行期元组时写元组字面量 `(a, b)`。
-- **剩余实参**写作 `..e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `..ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`..e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
-- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明和函数类型里（lambda 和规则里写 `..` 是语法错误）。
-- **同一个写法也用在 `with` 参数和函数类型上。** `with <..args>` 表示 `with` 实参在固定的几个之后还可以再给任意多个、任意类型，写成 `with <..args: T>` 则每一个都是 `T`（类型写的是包自己的实参，普通形参的规则往外一层）；`(..A) => R` 是形参表不限的函数类型，任何结果类型合适的函数都能放进去。包对带函数体的函数与对没有函数体的声明是**同一条规则**（原则 4.4、5.6），`with <..args>` 两处都能写：没有函数体的那种声明一个由 C++ 实现的算子（`format`、`print` 就是这样在标准库的 `prelude.cml` 里声明自己的形状），带函数体的那种就是普通函数。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。带函数体的函数里，包和 `ts` 一样是编译期元组：`ws.[j]` 取一个、`indices ws` 取位置表、`..ws` 把元素展开成实参（`f<..ws>(..xs)` 就这样把包转给另一个函数的包）；固定形参写在包前面（`with <w: float, ..rest>`）时，`w` 拿前几个、`rest` 拿剩下的。**lambda 也一样写**：`<..ws> (..xs) => …`（原则 §5，作者裁定 2026-11-03 13:50），解析、GCT 与签名补全走 `func` 的同一条路。区别只在于 lambda 是一个**值**，签名里不留个数未知的包：它站在一个已知函数类型的位置上时，补全把这个包**绑成位置的那份 `with` 列表**（与 `..xs` 从期望类型补全是同一条规则），体里的 `ws` 就是那份值的编译期元组；不在有任何期望类型的位上写 `with` 包报 `SemanticDiag::LambdaParameterWithoutType`。
+- **`ts` 是编译期元组，不是值。** 它只有三种用法：`indices ts` 取位置表、`ts.[j]` 取一个元素、`...ts` 把元素展开成实参。三种用法都不为 `ts` 建 `FILL`，也不为元素建 `ACCS`。把 `ts` 本身放到需要运行期值的位置（打印、返回、赋给变量、作为普通实参）报 `SemanticDiag::StaticTupleEscapes`，不会悄悄物化成一个运行期元组；需要运行期元组时写元组字面量 `(a, b)`。
+- **剩余实参**写作 `...e`，且必须是调用实参表的最后一项。`e` 必须是编译期元组：元组字面量、元组推导式，或外层剩余函数的 `...ts`。运行时的元组值没有固定个数，是 `SemanticDiag::RestArgumentNotTuple`；`...e` 后面还有实参是 `SemanticDiag::RestArgumentNotLast`。
+- 剩余形参必须在最后（`SemanticDiag::RestParameterNotLast`），不能写类型（`SemanticDiag::RestParameterTypeNotSupported`），只能出现在函数声明和函数类型里（lambda 和规则里写 `...` 是语法错误）。
+- **同一个写法也用在 `with` 参数和函数类型上。** `with <...args>` 表示 `with` 实参在固定的几个之后还可以再给任意多个、任意类型，写成 `with <...args: T>` 则每一个都是 `T`（类型写的是包自己的实参，普通形参的规则往外一层）；`(...A) => R` 是形参表不限的函数类型，任何结果类型合适的函数都能放进去。包对带函数体的函数与对没有函数体的声明是**同一条规则**（原则 4.4、5.6），`with <...args>` 两处都能写：没有函数体的那种声明一个由 C++ 实现的算子（`format`、`print` 就是这样在标准库的 `prelude.cml` 里声明自己的形状），带函数体的那种就是普通函数。固定形参少给实参是 `SemanticDiag::RestArgumentsMismatch`。带函数体的函数里，包和 `ts` 一样是编译期元组：`ws.[j]` 取一个、`indices ws` 取位置表、`...ws` 把元素展开成实参（`f<...ws>(...xs)` 就这样把包转给另一个函数的包）；固定形参写在包前面（`with <w: float, ...rest>`）时，`w` 拿前几个、`rest` 拿剩下的。**lambda 也一样写**：`<...ws> (...xs) => …`（原则 §5，作者裁定 2026-11-03 13:50），解析、GCT 与签名补全走 `func` 的同一条路。区别只在于 lambda 是一个**值**，签名里不留个数未知的包：它站在一个已知函数类型的位置上时，补全把这个包**绑成位置的那份 `with` 列表**（与 `...xs` 从期望类型补全是同一条规则），体里的 `ws` 就是那份值的编译期元组；不在有任何期望类型的位上写 `with` 包报 `SemanticDiag::LambdaParameterWithoutType`。
 - 带剩余参数的函数**不是值**：不能赋给变量、作为实参或导出后当函数值用（`SemanticDiag::RestFunctionNeedsExpansion`），只能直接调用。调用可以跨模块：函数体仍然在声明它的模块里解析（和泛型实例一样），展开在调用者的图里；函数体里用到声明模块的顶层**值**时，那个值在调用者的图里没有结点，会报 `SemanticDiag::RestFunctionNeedsExpansion`，函数和它自己的实参不受影响。
 - `with` 实参命名泛型函数或一组重载时（`tree_map<twice>`、`tree_map<bump>`），调用在被调函数里按每处调用的实参类型解析它；这要求被调函数带剩余参数（实例在调用点展开），普通的泛型函数仍按参数类型选定一个函数值。
 
@@ -401,11 +401,11 @@ func main(): int sync {
 - **类型不止 `int`。** `string`、`int`、`float`、`bool` 等有编译期常量的类型都可以；值必须与形参类型相容。类型要写出来（`SemanticDiag::ConstasTypeRequired`）。`enum` 成员目前还不能作为编译期值传递（`SemanticDiag::ConstasValueNotConstant`），要等 `enum` 值有了编译期表示。
 - **值由函数体读取。** `n` 在实例体里是一个编译期常量：可以当类型里的具名维度（`f32[n]`），可以当字段名（`t.[n]`），也可以当普通值用于算术、条件、打印。它不需要被任何类型读到：只有函数体读它也是合法的。
 - **不是运行时参数。** 调用点要给出常量，但它不进入调用结点：实例的形参表里没有 `n`，调用只传其余的实参（`total(3, xs)` 的调用只有一个实参 `xs`）。
-- **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ..ts) { return column(n, ..ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
-- **和剩余参数一起用。** `func column(constas n: string, ..ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
+- **值可以转手。** 一个 `constas` 值可以传给另一个 `constas` 参数，也可以来自 `static for` 绑定的字段名、`indices` 的位置这类编译期名字。`func columnOf(constas n: string, ...ts) { return column(n, ...ts) }` 合法：`tree_map` 正是这样把字段名和树一起交给 `column`。
+- **和剩余参数一起用。** `func column(constas n: string, ...ts)` 合法：值在展开前绑定，`ts` 得到剩下的实参。设计稿 3.1.1 的 `column` 今天可以写成
 
   ```cml
-  func column(constas n: string, ..ts): (int, int) {
+  func column(constas n: string, ...ts): (int, int) {
       return ( static for j in indices ts => ts.[j].[n] )
   }
   ```
@@ -415,7 +415,7 @@ func main(): int sync {
 - 值必须是编译期常量（`SemanticDiag::ConstasValueNotConstant`）：运行期的值不行，因为它要选实例。目前常量可以是字面量、另一个 `constas` 值、`static for` 的 `n` 和 `indices` 的 `j` 这类编译期名字，以及一个纯函数在所有实参都是编译期常量时的调用（`label(first_field::<S>())`），编译期把它折叠成那个值；读不出来的调用按自己的名字拒绝（`SemanticDiag::FoldCallNotEvaluable`，其余 `FoldCall*` 诊断说明原因）。
 - `n` 只在实例体里绑定。具名维度写在形参的声明类型里（`x: f32[n]`）；函数体里的类型位置按"维度名由形参类型里第一次出现的那个绑定"来读，`let z: f32[n]` 在那里没有把实例的 `n` 带进来（`SemanticDiag::DimensionNameNotBound`）。
 
-**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ..ts)`。
+**目前的限制**：泛型函数不能加标注；带上下文实参的泛型函数（`f<w>`）不能作值；带 `constas` 参数的函数不能作值，也不能和无体声明组合，`enum` 值还不能作为 `constas` 实参。设计稿 3.1.1 的 `column(constas n, ts)` 省写了类型，今天要写成 `column(constas n: string, ...ts)`。
 
 ## 7.6 标注
 

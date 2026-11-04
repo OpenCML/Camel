@@ -5,12 +5,12 @@
 
 import { tanh, reshape } from tensor
 
-func activate(x: f32[..]): f32[..] {
+func activate(x: f32[...]): f32[...] {
     return tanh(x)
 }
 
 #gpu
-func step(x: f32[..]): f32[..] {
+func step(x: f32[...]): f32[...] {
     return activate(x)
 }
 

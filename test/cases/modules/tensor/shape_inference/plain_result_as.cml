@@ -1,5 +1,5 @@
 import { tanh, sum, ones } from tensor
-func g(x: f32[3]): f32[..] {
+func g(x: f32[3]): f32[...] {
     return tanh(x * 0.0) + 2.0
 }
 func h(a: f32[3]): float {

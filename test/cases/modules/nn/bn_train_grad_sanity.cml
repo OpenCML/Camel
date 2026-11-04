@@ -12,29 +12,29 @@ import { reshape, mean, sum, abs, sqrt } from tensor
 import { grad } from autodiff
 import { batch_norm_train, batch_norm_train_grad } from nn
 
-type Inputs = { t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..] }
+type Inputs = { t: f32[...], g: f32[...], b: f32[...], rm: f32[...], rv: f32[...] }
 
 // The fixed loss weights: loss = sum(y * w), so dL/dy = w.
-func w(): f32[..] {
+func w(): f32[...] {
     return reshape<[2, 2, 2, 2]>([
         0.5, -1.0, 0.25, 2.0, -0.75, 1.5, 0.125, -0.5, 1.0, 0.0, -2.0, 0.75, 0.5, 0.5, -0.25, 1.25
     ] as f32[])
 }
 
-func x(): f32[..] {
+func x(): f32[...] {
     return reshape<[2, 2, 2, 2]>([
         1.0, 0.5, -0.5, 2.0, 0.0, 1.5, -1.0, 0.25, 0.75, -0.25, 1.25, 0.5, -0.75, 0.0, 2.0, -0.5
     ] as f32[])
 }
 
 // Per-channel mean over (batch, spatial) of a rank-4 NCHW tensor: [N,C,H,W] -> [C].
-func bmean(t: f32[..]): f32[..] {
+func bmean(t: f32[...]): f32[...] {
     return mean<1>(mean<1>(mean<0>(t)))
 }
 
 // The manual decomposition: biased batch variance for the normalize, UNBIASED (M/(M-1))
 // variance for the running variance, running <- (1-m)*running + m*batch_stat.
-func reference(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..], m: float, eps: float): (f32[..], f32[..], f32[..]) {
+func reference(t: f32[...], g: f32[...], b: f32[...], rm: f32[...], rv: f32[...], m: float, eps: float): (f32[...], f32[...], f32[...]) {
     let mu = bmean(t)
     let xc = t - reshape<[1, 2, 1, 1]>(mu)
     let va = bmean(xc * xc)
@@ -45,7 +45,7 @@ func reference(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..], m: 
     return (y, new_rm, new_rv)
 }
 
-func loss_at(t: f32[..], g: f32[..], b: f32[..], rm: f32[..], rv: f32[..]): float {
+func loss_at(t: f32[...], g: f32[...], b: f32[...], rm: f32[...], rv: f32[...]): float {
     let r = batch_norm_train(t, g, b, rm, rv, 0.1, 0.00001)
     return float(sum(r.0 * w()))
 }
