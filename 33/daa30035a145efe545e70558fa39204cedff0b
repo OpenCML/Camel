@@ -2,7 +2,7 @@ docs: the split side already reads original values from closure ports; the ALIGN
 
 ## 后一半读原值：`split` 侧已达成，判据指向的是另一个量
 
-**读数先说**：`feat/showcase_s2` = total 7 / pass 5 / **fail 2**（`matmul_t.vector_lhs_law`、`matmul_t.vector_rhs_law`）；`feat/compile` = total 2337 / pass 2317 / **fail 0** / known failures 20；两条计划 killed 0。tip `33daa3003`，宿主检出名 `splitcp`，代码树与 `origin/develop` 逐字相同（本提交是空提交，只有这份报告）。
+**读数先说**：`feat/showcase_s2` = total 7 / pass 5 / **fail 2**（`matmul_t.vector_lhs_law`、`matmul_t.vector_rhs_law`）；`feat/compile` = total 2337 / pass 2317 / **fail 0** / known failures 20；两条计划 killed 0。tip `33daa3003`，宿主检出名 `splitcp`；`lane-splitcp` 与 `origin/develop` 是同一个提交，无改动。
 
 ## 1. `split` 侧已达成（裁定要的状态就是今天的树）
 
@@ -46,4 +46,4 @@ ALIGN key=4 kind=1 type=float[2, 2] closureMember=-1 param=1 withPort=-1
 
 ## 6. 这一轮改了什么
 
-**代码零改动**（`split.cpp`、`transpose.cpp` 与 `origin/develop` 逐字相同；探针 `git checkout --` 全部撤回）。分支 `lane-splitcp` 上只有这一笔空提交，承载这份报告；工作树留着给协调者合并，宿主检出 `splitcp` 未清理。
+**代码零改动**（`split.cpp`、`transpose.cpp` 与 `origin/develop` 逐字相同；探针 `git checkout --` 全部撤回）。分支 `lane-splitcp` 停在 `33daa3003`，本报告挂在该提交的 handover note 上，不写进树；工作树留着给协调者合并，宿主检出 `splitcp` 未清理。
