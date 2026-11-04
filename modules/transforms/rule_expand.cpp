@@ -6,6 +6,7 @@
 #include "camel/core/rtdata/func.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/base.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/parse/ast/rule_head.h"
@@ -18,6 +19,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::transforms {
@@ -427,6 +429,66 @@ gc_node_ref_t statedExtentsValue(
 
 } // namespace
 
+namespace {
+
+/// The operators a **product** is written with: the scalar `*` of the written table, in the two
+/// float widths it has, and the elementwise tensor product. A right side multiplies a tangent by a
+/// coefficient with one of these, and a product is the only shape whose value is decided by an
+/// input being zero: `where(x, dx, 0)` is not a product and its answer still depends on `x`.
+///
+/// The list is written here rather than derived from an operator table because what is being asked
+/// is not "which operators are multiplications" but "which operators a *rule's* right side uses for
+/// a linear term", and the answer to that is the arithmetic the rulesets are written in
+/// (`stdlib/rulesets/**`): the scalar written ops and the tensor product. A product the list does
+/// not name is simply not collapsed -- no rule is made wrong by being absent here, the term is just
+/// computed the way it was before.
+bool isProductUri(std::string_view uri) {
+    return uri == ":op/mul_d" || uri == ":op/mul_f" || uri == ":op/mul" || uri == "tensor:multiply";
+}
+
+/// Whether a body node is a product this expansion can write as a zero instead of computing.
+///
+/// The type has to be a float scalar: the zero of such a type is one number, which this graph can
+/// write down while it is built. An array's zero needs its extents, and a product whose value the
+/// expansion cannot write is left alone -- computing it and multiplying by a structural zero is the
+/// old behaviour, which is wrong only where the coefficient has no real value, and that is exactly
+/// the scalar case (`log(x)` at a negative `x`).
+bool isCollapsibleProduct(const rt::GCGraph &body, gc_node_ref_t ref) {
+    const rt::GCNode *node = body.node(ref);
+    if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+        return false;
+    }
+    if (node->dataType() == nullptr) {
+        return false;
+    }
+    const auto code = node->dataType()->code();
+    if (code != camel::core::type::TypeCode::Float64 &&
+        code != camel::core::type::TypeCode::Float32) {
+        return false;
+    }
+    const auto *oper = body.nodeBodyAs<rt::GCOperBody>(ref);
+    return oper != nullptr && isProductUri(oper->uri());
+}
+
+/// The zero of a float type, written into this graph: what a collapsed product answers with.
+gc_node_ref_t staticZeroOf(camel::runtime::GraphDraft &draft, camel::core::type::Type *type) {
+    if (type == nullptr) {
+        return rt::kInvalidNodeRef;
+    }
+    switch (type->code()) {
+    case camel::core::type::TypeCode::Float64:
+        return draft.materializeStaticValue(
+            camel::core::rtdata::toSlot<double>(0.0), type, rt::kGCNodeFlagConstant);
+    case camel::core::type::TypeCode::Float32:
+        return draft.materializeStaticValue(
+            camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
+    default:
+        return rt::kInvalidNodeRef;
+    }
+}
+
+} // namespace
+
 std::vector<camel::core::type::Type *>
 ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
     std::vector<camel::core::type::Type *> ports;
@@ -455,7 +517,9 @@ gc_node_ref_t expandRuleRightSide(
     camel::runtime::GraphDraftGroup &group, camel::runtime::GraphTransaction &transaction,
     const camel::compile::gir::GenericRuleInstance &instance,
     const std::function<gc_node_ref_t(size_t)> &valueOf,
-    const std::vector<gc_node_ref_t> &tangents, std::string &why, size_t position) {
+    const std::vector<gc_node_ref_t> &tangents, std::string &why, size_t position,
+    const std::unordered_set<gc_node_ref_t> *structurallyZero,
+    std::vector<std::string> *omitted) {
     RuleRightSide right;
     if (!findRuleRightSide(instance, right, why)) {
         return rt::kInvalidNodeRef;
@@ -531,6 +595,120 @@ gc_node_ref_t expandRuleRightSide(
     if (capturePorts.size() != right.captures.size() || parameterPorts.size() != tangents.size()) {
         why = "the rule's right side does not take the values and tangents the rule binds";
         return rt::kInvalidNodeRef;
+    }
+    // ---- the term a structurally-zero tangent multiplies ----
+    //
+    // A right side hands the tangent of each operand to a product with the law's own coefficient,
+    // and when the caller's tangent is **structurally** zero -- the zero a lift wrote for a value
+    // that cannot move, or a constant zero a law's own body wrote -- that product is nothing. It is
+    // nothing *before* the coefficient is evaluated, which is the whole point: `x^w * log(x) * dw`
+    // with a structural zero `dw` is arithmetically zero only when `log(x)` has a value, and at
+    // `x < 0` it is `NaN * 0` = `NaN`, so an ordinary `(-3.0) ^ 2.0` would answer `NaN` for a term
+    // that is nothing. So the product is written as the zero of its own type and the nodes nothing
+    // else reads -- the coefficient, and the calls it is made of -- are not copied at all.
+    //
+    // This is the author's ruling of 2026-11-04: the zero of a tangent is a structural fact (a
+    // constant has no tangent), not a value a law computes and branches on. Deciding it here, on
+    // the graph, is what lets `pow_tangent`'s rule carry no `if dw == T(0)` and still answer -6.0.
+    std::vector<bool> collapsed;
+    bool anyCollapsed = false;
+    if (structurallyZero != nullptr && !structurallyZero->empty()) {
+        // A body node whose value is structurally zero: the tangent ports the caller handed a
+        // structural zero for, and every product one of them is an input of.
+        std::vector<bool> zeroValue(body->nodeCount(), false);
+        for (size_t i = 0; i < parameterPorts.size(); ++i) {
+            if (structurallyZero->count(tangents[i]) != 0) {
+                zeroValue[parameterPorts[i]] = true;
+            }
+        }
+        collapsed.assign(body->nodeCount(), false);
+        // The body is a straight line, so one pass in node order would do; the fixed point is what
+        // makes the answer independent of that, and it costs one more pass over a short body.
+        bool grew = true;
+        while (grew) {
+            grew = false;
+            for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+                if (collapsed[ref] || !isCollapsibleProduct(*body, ref)) {
+                    continue;
+                }
+                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                    if (input < zeroValue.size() && zeroValue[input]) {
+                        collapsed[ref]  = true;
+                        zeroValue[ref]  = true;
+                        anyCollapsed    = true;
+                        grew            = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (anyCollapsed) {
+        // What the answer is made of once the collapsed products stop being computations: the walk
+        // that picks a position's nodes, done again with the collapsed nodes as leaves. Their
+        // inputs are then not kept, which is what drops the coefficient and its calls.
+        keep.assign(body->nodeCount(), false);
+        std::vector<gc_node_ref_t> work{answerRef};
+        while (!work.empty()) {
+            const gc_node_ref_t ref = work.back();
+            work.pop_back();
+            if (ref >= keep.size() || keep[ref]) {
+                continue;
+            }
+            keep[ref] = true;
+            if (collapsed[ref]) {
+                continue;
+            }
+            for (gc_node_ref_t input : body->normInputsOf(ref)) {
+                work.push_back(input);
+            }
+            for (gc_node_ref_t input : body->withInputsOf(ref)) {
+                work.push_back(input);
+            }
+        }
+        if (omitted != nullptr) {
+            // The reading: the places that fed only a collapsed product. Reported by uri, in body
+            // order, deduplicated, so a case can print "these are not in the graph" and be counted.
+            std::vector<gc_node_ref_t> work2;
+            for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+                if (!collapsed[ref]) {
+                    continue;
+                }
+                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+                for (const gc_node_ref_t input : body->withInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+            }
+            std::vector<bool> seen(body->nodeCount(), false);
+            while (!work2.empty()) {
+                const gc_node_ref_t ref = work2.back();
+                work2.pop_back();
+                if (ref >= seen.size() || seen[ref] || (ref < keep.size() && keep[ref])) {
+                    continue;
+                }
+                seen[ref] = true;
+                const rt::GCNode *node = body->node(ref);
+                if (node != nullptr && node->kind != rt::GCNodeKind::Port &&
+                    node->kind != rt::GCNodeKind::Data) {
+                    std::string uri;
+                    if (const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref)) {
+                        uri = oper->uri();
+                    }
+                    if (!uri.empty() &&
+                        std::find(omitted->begin(), omitted->end(), uri) == omitted->end()) {
+                        omitted->push_back(std::move(uri));
+                    }
+                }
+                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+                for (const gc_node_ref_t input : body->withInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+            }
+        }
     }
     // A capture is a port of the right side's graph, which is one of the arguments the rule is
     // called with: the operands, in the order the left side writes them. Only the captures the body
@@ -663,6 +841,17 @@ gc_node_ref_t expandRuleRightSide(
             continue;
         }
         if (!keep.empty() && !keep[ref]) {
+            continue;
+        }
+        if (ref < collapsed.size() && collapsed[ref]) {
+            // A product of a structurally-zero tangent: nothing, written down. Its inputs are not
+            // asked for, and the nodes that fed only it were dropped from `keep` above.
+            copied[ref] = staticZeroOf(draft, node->dataType());
+            if (copied[ref] == rt::kInvalidNodeRef) {
+                why = "the rule's right side multiplies a structurally-zero tangent and the zero of "
+                      "the product's type cannot be written";
+                return rt::kInvalidNodeRef;
+            }
             continue;
         }
         if (const auto stated = statedShapes.find(ref); stated != statedShapes.end()) {
