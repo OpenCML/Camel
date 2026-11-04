@@ -113,36 +113,55 @@ export func grad(f: (x: float) => float): (x: float) => float {
 ///
 /// The composition is one step: `vjp` differentiates the ordinary parameters only, so the weight is
 /// moved to one by a lambda -- `vjp((ww: W) => f<ww>(...))(w)` -- and the seed 1 read off the
-/// pullback is its gradient. The lambda can be written; the body inside it cannot do its half,
-/// because the lambda's parameter goes back into a call's `with` list and forward mode answers the
-/// tangent of a value that crosses that list as the zero of its type (`stdlib/signatures/transforms.cml`
-/// states the rule under `Jvp<F>`: a value that reaches a body through a `with` parameter does not
-/// move). Measured on this tree, `x_times_y` being `x * y`:
+/// pullback is its gradient. **That step answers the engine's number**: since `lane-withtan`
+/// (2026-11-04) a `with` argument keeps its direction through a lifted call, so the derivative is no
+/// longer the wall it was when this name was written. Written where the subject is named --
+/// `weighted(y) = x*y + x`, the weight through the `with` list -- the composition reads
+/// `value=9.0 grad=3.0` against the engine's 3.0
+/// (`test/cases/compile/transforms/library_grad_of_a_with_weight.cml`), `[4.0, 5.0, 6.0]` for the
+/// tensor weight and `{ a: 4.0, b: 1.0 }` for the struct one (measured 2026-11-05 at a call site
+/// where the subject is a name, against the same four groups of
+/// `test/cases/modules/autodiff/grad_first_with_parameter.cml`).
 ///
-///     jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)   value=6.0 tangent=0.0
-///     jvp((y: float) => x_times_y<3.0>(y))(2.0, 1.0)     value=6.0 tangent=3.0
+/// What stops this name is the lambda's **body**. Inside a library function the subject is a value,
+/// and a body that calls a function value is the one construct neither half of the composition
+/// reaches:
 ///
-/// The first line is the shape every `with_grad` composition has, and the derivative it owes is
-/// `d/dx (x*y)` at `y = 2`, which is 2.0. So the composition answers the zero of the gradient's
-/// type for every weight that reaches the body through that list -- and a weight always does, since
-/// the `with` list is what a weight is written as. The other shapes a `with_grad` is asked for stop
-/// before that point and are refused where they stop, so each one names its own wall instead of
-/// answering a number: a `with` parameter that is a struct, and a function of two `with` parameters
-/// with no ordinary parameter, both stop in `jvp`; a tensor `with` parameter whose lambda captures
-/// an array stops in `split`.
+///   * It cannot be written. A nested lambda cannot capture the enclosing parameter pack
+///     (`Unresolved reference: 'xs'` on `<...ws> (...xs) => { vjp((ww) => f<ww>(...xs))(w) }`,
+///     measured 2026-11-05), and the `with` list cannot be split by pattern instead: `<w, ...rest>`
+///     in a lambda's parameter list does not infer when the expected list ends at the first `with`
+///     parameter (`LambdaParameterWithoutType`: "the expected type '<__pack_0_0: float> () =>
+///     (float, float)' ends before the rest parameter"). A `let`-bound copy of a pack is not
+///     spliceable either (`RestArgumentNotTuple`), and a named function that reads its own pack from
+///     a nested lambda stops the compiler itself (`builder_support.h#linkNodes`, a violated
+///     guarantee) rather than refusing.
+///   * It cannot be lifted. `jvp` answers with a graph, and a call through a value names no graph to
+///     lift: a lifted call reaches a lifted callee and hands it `(value, tangent)` pairs, while the
+///     graph a value stands for is a question only the run time answers. Until 2026-11-05 that shape
+///     killed the process -- `jvp(use)(plain, 2.0, (), 1.0)` on
+///     `func use(f: (y: float) => float, z: float): float { return f(z) }` segfaulted on `std::nvm`,
+///     `std::fvm` and `std::jit` -- and it is refused by name now (`skip=callee`, "a call through a
+///     function value"), which is what the engine says about the same shape from the other side
+///     ("cannot differentiate through this call of a function value").
+///
+/// So the four shapes a `with_grad` is asked for stop in three different places, and each names its
+/// own: a float `with` parameter stops at the body above, a struct one and one of two `with`
+/// parameters with no ordinary parameter stop in `jvp`'s callee rule, and a tensor `with` parameter
+/// whose lambda captures an array stops in `split`.
 ///
 /// The result type says only what is true of this call: it never gives a value. The declaration the
 /// engine's transform has -- `ValueAndGradient<F>`, whose second member is the type of the *first*
-/// member of `F`'s `with` list -- is not writable in the library today: `stdlib/types.cml` writes
+/// member of `F`'s `with` list -- is not writable on this tree: `stdlib/types.cml` writes
 /// `ParamsOf<F>`, `WithOf<F>`, `ResultOf<F>` and `Tangent<T>`, and no type function names the first
-/// element of a pack, so a declaration written here would either refuse to compile or be an
-/// approximation of the shape it claims. `never` is neither.
+/// element of a pack (`FirstOf` is written on `lane-gradtype` and is not on `develop`), so a
+/// declaration written here would either refuse to compile or be an approximation of the shape it
+/// claims. `never` is neither.
 ///
-/// The day forward mode carries the tangent of a value handed to a `with` list, the body of this
-/// function is `vjp`'s own composition and the declaration is the engine's; the four shapes to
-/// measure it on are the four groups of
-/// `test/cases/modules/autodiff/grad_first_with_parameter.cml`, and the entry that holds this
-/// refusal is `test/cases/compile/transforms/with_grad_from_the_library.cml`.
+/// The day forward mode lifts a call through a value, the body of this function is `vjp`'s own
+/// composition and the declaration is the engine's; the four shapes to measure it on are the four
+/// groups of `test/cases/modules/autodiff/grad_first_with_parameter.cml`, and the entry that holds
+/// this refusal is `test/cases/compile/transforms/with_grad_from_the_library.cml`.
 /// The example is a program of its own and stops at the name: it writes a call that is a value, and it
 /// reads nothing out of it, because the function `with_grad` answers returns `never` -- a program that
 /// asked `frozen(3.0)` for a number would not compile, and one that ran would stop with the sentence
@@ -152,6 +171,6 @@ export func with_grad::<F>(f: F): <...WithOf<F>> (...ParamsOf<F>) => never when 
     let _ = f
     return <...ws> (...xs) => {
         fail<'RuntimeError'>(
-            'vjp is transpose(split(jvp(f))), and forward mode answers the tangent of a value handed to a call\'s `with` list as the zero of its type, so a `with_grad` built on this composition would answer the zero of the gradient\'s type for every weight that reaches the body through that list. Read the gradient of a first `with` parameter with `grad(f)<w>(...)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.')
+            'a `with_grad` written as a composition is `vjp` of a lambda that moves the weight to an ordinary parameter, and that lambda answers the engine\'s number where the subject is a name. Inside a library the subject is a value: a nested lambda cannot capture the enclosing parameter pack, so the body cannot be written, and a body that calls a function value is refused by `jvp` (a call through a function value). Read the value and the gradient of a first `with` parameter with `with_grad(f)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.')
     }
 }

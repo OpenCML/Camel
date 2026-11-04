@@ -1849,65 +1849,40 @@ bool liftGraph(
                 break;
             }
             case rt::GCNodeKind::Call: {
-                // A call passes the lifted callee its arguments as pairs and answers with a pair.
-                // The first norm input is the function value, the rest are the arguments; an
-                // argument the transform carries a pair for goes in as `(value, tangent)`.
-                std::vector<gc_node_ref_t> args;
-                bool isCallee = true;
-                for (gc_node_ref_t input : function.normInputsOf(ref)) {
-                    if (input >= function.nodeCount() || !copied[input]) {
-                        return fail(refusal);
-                    }
-                    if (isCallee) {
-                        args.push_back(copyOf[input]);
-                        isCallee = false;
-                        continue;
-                    }
-                    const NodeFace *in = function.node(input);
-                    if (in != nullptr && pairOf(in->dataType()) != nullptr) {
-                        if (tangentOf[input] == rt::kInvalidNodeRef) {
-                            return fail(refusal);
-                        }
-                        const gc_node_ref_t half =
-                            valueOf[input] != rt::kInvalidNodeRef ? valueOf[input] : copyOf[input];
-                        // Two ordinary arguments, not one tuple: the lifted signature takes
-                        // `(value, tangent)` as two values of the argument's own type.
-                        args.push_back(half);
-                        args.push_back(tangentOf[input]);
-                    } else {
-                        args.push_back(copyOf[input]);
-                    }
-                }
-                if (args.empty()) {
-                    return fail(refusal);
-                }
-                TupleType *callPair = pairOf(node->dataType());
-                const gc_node_ref_t made = draft.addCallNode(
-                    callPair != nullptr ? static_cast<Type *>(callPair) : node->dataType(),
-                    rt::GCCallBody{});
-                draft.setNormInputs(made, args);
-                std::vector<gc_node_ref_t> captures;
-                for (gc_node_ref_t input : function.withInputsOf(ref)) {
-                    if (input >= function.nodeCount() || !copied[input]) {
-                        return fail(refusal);
-                    }
-                    captures.push_back(copyOf[input]);
-                }
-                if (!captures.empty()) {
-                    draft.setWithInputs(made, captures);
-                }
-                copyOf[ref] = made;
-                // The call's value is the pair: a reader wants the value half, a rule the tangent.
-                const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
-                draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
-                const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
-                draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
-                valueOf[ref]   = half;
-                tangentOf[ref] = halfTangent;
-                pairIsTheCopy.insert(ref);
-                copied[ref]    = true;
-                ++copiedKinds;
-                break;
+                // A `Call` node is a call **through a value**: its first norm input is the function
+                // value, and which graph that value stands for is a question only the run time
+                // answers. This transform's answer is a graph, and a lifted call has to reach the
+                // *lifted* callee -- the arguments go in as `(value, tangent)` and the answer comes
+                // back as a pair -- so a call whose callee is not a graph this lift can name has no
+                // lifted callee to reach. The lift used to copy the call as it stood and pair its
+                // arguments anyway, and the answer was a process that died where the number should
+                // have been: `jvp(use)(plain, 2.0, (), 1.0)` on
+                // `func use(f: (y: float) => float, z: float): float { return f(z) }` segfaults on
+                // `std::nvm`, `std::fvm` and `std::jit` (`SIGSEGV` in `NodeVMSchedPass::call` ->
+                // `rtdata::isViewValue`, measured 2026-11-05), and so does a body that calls a
+                // function value it made for itself. A crash is worse than a refusal (design
+                // principles 9.9: a rule that is missing is refused at the construct, never answered
+                // with a wrong value), so the construct is named here instead.
+                //
+                // Refusing is also what the engine says about the same shape -- its pullback refuses
+                // `cannot differentiate through this call of a function value: which function it
+                // calls is not evident` -- and that is why a library transform written as a
+                // composition cannot wrap its subject in a body yet: see `stdlib/vjp.cml`.
+                JvpGraph refused;
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function.nodeOrigin(ref));
+                refused.refusedConstruct = "a call through a function value";
+                refused.refusedWhy =
+                    "the callee is a value the body reads, so the lift has no graph of its own to "
+                    "lift for this call: a lifted call reaches a lifted callee and passes it "
+                    "(value, tangent) pairs, and a value whose graph is only known when the program "
+                    "runs has no lifted callee to reach";
+                os << "REINTERP jvp function=" << name
+                   << " skip=" << refusalCauseName(RefusalCause::Callee)
+                   << " construct=" << refused.refusedConstruct << '\n';
+                noteRefusal(RefusalReading("jvp", name, RefusalCause::Callee)
+                                .atConstruct(refused.refusedConstruct));
+                return fail(refusal, refused);
             }
             case rt::GCNodeKind::Loop: {
                 // A loop is a region of this graph: the rounds are the region's and the LOOP
