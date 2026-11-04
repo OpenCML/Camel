@@ -21,6 +21,7 @@
       "modules/tiles/src/region_extract.cpp",
       "modules/tiles/src/region_outline.cpp",
       "modules/transforms/jvp.cpp",
+      "modules/transforms/rule_expand.cpp",
       "modules/transforms/split.cpp",
       "modules/transforms/split.h",
       "modules/transforms/transpose.cpp",
