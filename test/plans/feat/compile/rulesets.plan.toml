@@ -327,14 +327,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vmap_transform_refuses_a_call_by_name"
-desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have."
+desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have. The refusal itself is asserted as the value `vmap cause=body function=g uri=f` (`expect_refusal`), not as the sentence: the line that prints it is for a reader, and its wording is not the criterion -- `construct` is recorded (`a call`) and not asserted, because it is the transform's prose about the construct rather than the operator the entry is about."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_call_refused.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_output_contains = ["REINTERP vmap function=g skip=body construct=a call uri=f", "asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
+expect_output_contains = ["asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
+expect_refusal = ["vmap cause=body function=g uri=f"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

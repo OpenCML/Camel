@@ -262,7 +262,7 @@ semantic	UnknownResource	0x0001A0	error	The name '{0}' in the resource clause of
 semantic	PureAndUses	0x0001A1	error	The signature of '{0}' says both 'pure' and 'uses'.	'pure' says the call touches no resource at all; 'uses' names the resources it touches. Write one of the two.	none: choice: the repair is a decision only the writer can make
 #/ A resource group names itself, directly or through other groups.
 semantic	ResourceGroupCycle	0x0001A2	error	The resource group '{0}' contains itself: {1}.	A group names resources, or other groups that name resources. Expand them in an order: a group cannot be one of its own members.	none: choice: the repair is a decision only the writer can make
-#/ `#resource` is written before a type declaration that is not nominal.
+#/ The `#resource` tag is what makes a handle type, so a nominal declaration cannot carry one.
 semantic	HandleTypeNotNominal	0x0001A3	error	'{0}' is not a nominal type declaration, so '#resource' says nothing about it.	A handle is a type with an identity of its own, one resource per value. Write the tag before a struct or an enum declaration (a `type` that names its fields or variants), not before an alias or a type function.	none: choice: the repair is a decision only the writer can make
 #/ A body-less declaration's clause differs from the operator's declared resources.
 semantic	NativeResourceMismatch	0x0001A4	error	The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'.	A body-less declaration is the whole signature of a C++ operator, its resources included: write the clause the operator declares, or remove the clause and let the operator's declaration be the one the module publishes.	none: choice: the repair is a decision only the writer can make
@@ -344,7 +344,8 @@ semantic	LambdaParameterWithoutType	0x00017E	error	The type of the parameter '{0
 # README R3). 0x1B3 and up.
 #/ The expression after `typeof` has no value, so the type it stands for cannot be taken.
 semantic	TypeOfNotAValue	0x0001B3	error	typeof {0} has no value type: {1}.	`typeof` takes the type of a value. Write an expression that produces one, or name the type directly.	none: choice: the repair is a decision only the writer can make
-#/ `typeof` is written inside a larger type (`typeof e[]`, `(typeof e, int)`).
+#/ `typeof` stands for a whole type, so it cannot stand inside a larger type (`typeof e[]`,
+#/ `(typeof e, int)`).
 semantic	TypeOfNotWholeType	0x0001B4	error	typeof is written inside the larger type {0}.	`typeof` stands for a whole type. Bind the value in a `let` and name its type, or write the enclosing type out.	none: choice: the repair is a decision only the writer can make
 #/ `T { static for ... }` names a type that is not a struct or a tuple.
 semantic	SameShapeComprehensionNotComposite	0x0001B5	error	{0} is not a struct or a tuple, so it has no shape to fill.	A same-shape comprehension names a struct or a tuple type; a leaf has no fields.	none: choice: the repair is a decision only the writer can make
@@ -404,8 +405,8 @@ semantic	CompOperandMismatch	0x0001E1	error	'..' takes two functions or two inte
 semantic	CompOperandNotUnary	0x0001E2	error	'..' composes a unary function on the left; '{0}' takes {1} parameters.	The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.	none: choice: the repair is a decision only the writer can make
 #/ An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
 semantic	CompOperandGenericWithoutType	0x0001E4	error	'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.	The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.	none: choice: which instance the operand stands for is the writer's to say, and the help names both ways to settle it
-#/ The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
-#/ the language used to have is gone (design principles 4.2).
+#/ A range over two integers is one construct, `a..b`, with no call form of its own
+#/ (design principles 4.2).
 #/ `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2,
 #/ which makes a step of 0 a fault and a constant one a compile-time error).
 semantic	RangeStepZero	0x0001E6	error	The range 'range({0}, {1}, 0)' has a step of 0, so it is no sequence of integers.	The integers of `range(a, b, step)` are `a`, `a + step`, ... below `b`, so the step decides which integers the range holds: a step that does not move names no one sequence, whatever the bounds are (design principles 4.2). The step is a constant here, so the call can never be right and the refusal is at the call, where the step is written. Give a non-zero step, or write the interval `a..b` when the step is 1. A step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument).	none: choice: which step the range takes is the writer's to say, and the message names both a stepped range and the interval

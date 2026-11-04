@@ -2187,6 +2187,12 @@ class Builder {
     // such function (it changes an argument in place).
     compile_graph_ptr_t
     operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
+    /// A function of no parameters that gives `answer`: what a name whose call is already its own
+    /// answer (`extent_of::<float[2, 3]>`) stands for when it is used as a value. Its body is the
+    /// value itself -- there is no operator to call and no argument to read
+    /// (`FuncTypeResolver::valueFromTypeArgs`).
+    compile_graph_ptr_t
+    answerValueGraphOf(Type *answerType, slot_t answer, const GCT::node_ptr_t &origin);
     /// `attempt(f)` (design principles 3.9): the function value whose parameters are `f`'s and
     /// whose result is `f`'s result plus `!`. It is a closure -- a graph of its own that captures
     /// `f` and whose body is one marked call of it -- so no node of the calling graph stands for

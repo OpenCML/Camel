@@ -604,10 +604,12 @@ takes has no value to read (`func pick(x: float[3])`). `transpose(pick)` answers
 `x` is declared with, and this is the language's one spelling of "the shape a type writes down" --
 the transposition walk asks the same rule (`statedExtentsOf`).
 
-The value is settled where the call is built, and the graph holds the list itself: the operator
-records the instantiated type of the call but not the type argument it was written with, so the
-run has nothing left to read (`src/compile/gir/builder_operators.cpp`, the `:op/extent_of`
-settlement).
+The value is settled where the call is built and where the name is used as a value, and the
+graph holds the list itself: the operator records the instantiated type of the call but not the
+type argument it was written with, so the run has nothing left to read
+(`src/builtin/operators/struct.cpp#ExtentOfResolver`, the rule's
+`valueFromTypeArgs`). The refusal names the **position** that has no number in it
+(`SemanticDiag::ExtentOfNeedsStatedShape`).
 
 - Pure.
 - Example: `extent_of::<float[2, 3]>()` gives `[2, 3]`

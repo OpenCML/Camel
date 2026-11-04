@@ -173,9 +173,23 @@ timeout_ms = 60000
 # Each leg is read three ways -- the hand calculation, `vjp`, and the engine's `with_grad` with the
 # *vector* moved into the `with` clause, so the rank-one cotangent is the engine's answer as well and not
 # only the library's. Every difference is exactly 0.0, because every literal here is exact in binary.
+#
+# **Two entries per shape, and they answer two different questions.** The two below declare the vector
+# `float[]` -- rank one, no length -- and they are the ones the ledger calls `fail`: the shape the law
+# reads off that operand is written down nowhere in the program, so the step stops at
+# `skip=cotangent-needs-a-value uri=tensor:matmul position=0` (`position=1` for the column). They turn
+# green on the author's 2026-11-04 12:40 ruling -- the shape travels as a **known argument of the linear
+# call**, landed by the twin operators `mul_stated` / `matmul_stated` -- and nothing in this file may be
+# made green by writing `float[2]` instead: a program that can write no length is the only reason those
+# operators exist.
+#
+# The `*_law_stated_extent` pair beside them is the same arithmetic with the extent stated. It is green,
+# and it is evidence of two things -- the law's rank-one arithmetic is right (0.0 against the engine) and
+# a stated shape can be answered from the type -- and it is **not the road**. Do not delete the two red
+# ones when they look redundant: they are the program the ruled design is for.
 [[tests]]
 name = "matmul_t.vector_lhs_law"
-desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector's own cotangent is the one the law used to refuse"
+desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector's own cotangent is the one the law used to refuse. Red today, on purpose: the vector is declared `float[]`, so the shape the law reads has no place in the program, and the step stops at `skip=cotangent-needs-a-value uri=tensor:matmul position=0` -- it goes green when `mul_stated`/`matmul_stated` carry the shape as a known argument (author, 2026-11-04 12:40)"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_lhs.cml"
 args = ["${case}", "${backend}"]
@@ -187,9 +201,38 @@ timeout_ms = 60000
 
 [[tests]]
 name = "matmul_t.vector_rhs_law"
-desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, the half `sum_to` had to build"
+desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, the half `sum_to` had to build. Red today, on purpose: `u` is declared `float[]`, so the shape has no place in the program and the step stops at `skip=cotangent-needs-a-value uri=tensor:matmul position=1` -- it goes green when `mul_stated`/`matmul_stated` carry the shape as a known argument (author, 2026-11-04 12:40)"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_rhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine_u value=3.5", "matmul_t vector_rhs max_abs_diff_library_vs_engine u=0.000000000000e+00 x=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same two arithmetic legs with the vector's extent stated in the declaration (`float[2]`), which is
+# what the language can answer today: `sum_to`'s target is written from `extent_of::<float[2]>()`. Green,
+# and kept for what it is worth -- it pins the rank-one arithmetic against the engine at 0.0 and shows a
+# stated shape being answered from the type. It is not the design's terminal road: see the two entries
+# above and `docs/handover/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
+[[tests]]
+name = "matmul_t.vector_lhs_law_stated_extent"
+desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead (author, 2026-11-04 12:40)"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs engine value=3.0 dL/dw=[[1.0, 1.0], [2.0, 2.0]] dL/dv=[0.75, 1.125]", "matmul_t vector_lhs engine_v value=3.0", "matmul_t vector_lhs max_abs_diff_library_vs_engine v=0.000000000000e+00 w=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_t.vector_rhs_law_stated_extent"
+desc = "The same matrix-times-column law as `matmul_t.vector_rhs_law`, with the vector declared `float[2]`: dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, every `max_abs_diff` 0.0 against the engine. Evidence rather than the fix, for the reason the left-hand entry states"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0

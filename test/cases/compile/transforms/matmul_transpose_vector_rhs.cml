@@ -9,6 +9,15 @@
 //     dL/dx   = [[0.5, 0.25], [0.5, 0.25]]              (each row is `u`, once per row of `x`)
 //     dL/du   = [1 + 3, 2 + 4] = [4, 6]
 //
+// **This entry is red on purpose, and it is the one that says what is owed.** `u` is declared
+// `float[]` -- rank one, no length -- so the shape the law reads off it (`sum_to`'s target) is
+// written down nowhere in the program, and the step stops at
+// `skip=cotangent-needs-a-value uri=tensor:matmul position=1`. It turns green when the shape
+// travels as a **known argument of the linear call** (author, 2026-11-04 12:40), landed by
+// `mul_stated` / `matmul_stated` -- not by writing `float[2]` here. The sibling
+// `matmul_transpose_vector_rhs_stated_extent.cml` is the same arithmetic with the extent stated:
+// green, and evidence rather than the road.
+//
 //     camel test/cases/compile/transforms/matmul_transpose_vector_rhs.cml
 import { matmul, sum } from tensor
 import { vjp } from vjp

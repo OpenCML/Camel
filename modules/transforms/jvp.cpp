@@ -3,6 +3,7 @@
 
 #include "jvp.h"
 
+#include "refusal_readings.h"
 #include "rule_expand.h"
 #include "rule_types.h"
 
@@ -467,7 +468,9 @@ JvpGraph buildJvpGraph(
     }
     FunctionType *signature = jvpSignature(function.funcType());
     if (signature == nullptr) {
-        os << "REINTERP jvp function=" << name << " skip=signature\n";
+        os << "REINTERP jvp function=" << name
+           << " skip=" << refusalCauseName(RefusalCause::Signature) << '\n';
+        noteRefusal(RefusalReading("jvp", name, RefusalCause::Signature));
         return JvpGraph{};
     }
     // A function of any number of `float` parameters: every one of them becomes a pair, so the
@@ -1704,8 +1707,11 @@ bool liftGraph(
                         "promoted `with` values are a graph the nested program does not hold. One "
                         "level of that call is built and answers its numbers; the second is refused "
                         "here until the cut adopts the graph it names.";
-                    os << "REINTERP jvp function=" << name << " skip=callee callee="
-                       << callee->name() << '\n';
+                    os << "REINTERP jvp function=" << name
+                       << " skip=" << refusalCauseName(RefusalCause::Callee)
+                       << " callee=" << callee->name() << '\n';
+                    noteRefusal(
+                        RefusalReading("jvp", name, RefusalCause::Callee).atCallee(callee->name()));
                     return fail(refusal, refused);
                 }
                 // The arguments, in the order the lifted callee declares them: **every value first**
@@ -2171,8 +2177,10 @@ bool liftGraph(
                     // the refusal carries the place the primitive was written -- the node's origin,
                     // which the kernel turns into a fault at that `file:line` -- so the error names
                     // the operator in `f`, not the call that asked for `jvp`.
-                    os << "REINTERP jvp function=" << name << " skip=rule uri=" << uri
+                    os << "REINTERP jvp function=" << name
+                       << " skip=" << refusalCauseName(RefusalCause::Rule) << " uri=" << uri
                        << " reason=" << ruleWhy << '\n';
+                    noteRefusal(RefusalReading("jvp", name, RefusalCause::Rule).atUri(uri));
                     JvpGraph refused;
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(
                         function.nodeOrigin(ref));
@@ -2190,7 +2198,9 @@ bool liftGraph(
             }
         }
         if (!complete) {
-            os << "REINTERP jvp function=" << name << " skip=body\n";
+            os << "REINTERP jvp function=" << name
+               << " skip=" << refusalCauseName(RefusalCause::Body) << '\n';
+            noteRefusal(RefusalReading("jvp", name, RefusalCause::Body));
             return fail(refusal);
         }
         draft.setInsertRegion(0);
@@ -2273,7 +2283,9 @@ bool liftGraph(
             draft.rewriteNode(join, init);
         }
         if (!complete) {
-            os << "REINTERP jvp function=" << name << " skip=branch\n";
+            os << "REINTERP jvp function=" << name
+               << " skip=" << refusalCauseName(RefusalCause::Branch) << '\n';
+            noteRefusal(RefusalReading("jvp", name, RefusalCause::Branch));
             return fail(refusal);
         }
         // A loop's wiring: its state input becomes a pair (the initial state and its zero tangent),
@@ -2436,7 +2448,9 @@ bool liftGraph(
             draft.setWithInputs(loopCopy, loopWith);
         }
         if (!complete) {
-            os << "REINTERP jvp function=" << name << " skip=loop\n";
+            os << "REINTERP jvp function=" << name
+               << " skip=" << refusalCauseName(RefusalCause::Loop) << '\n';
+            noteRefusal(RefusalReading("jvp", name, RefusalCause::Loop));
             return fail(refusal);
         }
         // The value the copied chain produces: the node the original graph's exit names. The exit
@@ -2462,7 +2476,9 @@ bool liftGraph(
             oldValue = rt::kInvalidNodeRef;
         }
         if (oldValue >= function.nodeCount() || !copied[oldValue]) {
-            os << "REINTERP jvp function=" << name << " skip=value\n";
+            os << "REINTERP jvp function=" << name
+               << " skip=" << refusalCauseName(RefusalCause::Value) << '\n';
+            noteRefusal(RefusalReading("jvp", name, RefusalCause::Value));
             return fail(refusal);
         }
         const gc_node_ref_t chainValue = copyOf[oldValue];
@@ -2479,7 +2495,9 @@ bool liftGraph(
                                    chain->dataType == exitPair &&
                                    pairIsTheCopy.contains(oldValue);
         if (chainTangent == rt::kInvalidNodeRef && !alreadyLifted) {
-            os << "REINTERP jvp function=" << name << " skip=tangent\n";
+            os << "REINTERP jvp function=" << name
+               << " skip=" << refusalCauseName(RefusalCause::Tangent) << '\n';
+            noteRefusal(RefusalReading("jvp", name, RefusalCause::Tangent));
             return fail(refusal);
         }
         // Route B (author's ruling of 2026-11-03 15:15: 抬升后的图一律以两元 tuple `Fill` 收尾): a

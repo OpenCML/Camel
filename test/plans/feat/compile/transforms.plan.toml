@@ -240,14 +240,15 @@ timeout_ms = 20000
 # (`jvp_pow_d`, pinned by `jvp_of_a_pow_call`); the shape is the same one, one operator along.
 [[tests]]
 name = "rulesets_probe_missing.at_the_primitive"
-desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:sin_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:14:12`, the `sin` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:sin_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked. `pow` was the operator this entry named until `math:pow_d` gained a forward rule; `sin` is one no family binds, so nothing in the reading changed but the name."
+desc = "With a primitive carrying no forward rule, `jvp(f)` is a diagnostic and not a value: it names the operator (`math:sin_d`) and the reason no rule was found, and its position is the primitive's own -- `rulesets_probe_missing.cml:14:12`, the `sin` in `f` -- which is the position a reader has to be sent to, not the `jvp(f)` call. The reading line still names what was refused (`skip=rule uri=math:sin_d`), and the run's exit is non-zero: the program does not go on to print a value it could not differentiate. Read as a whole the assertions say *when* the fault is raised: the diagnostic carries the primitive's own position, the reason the table gave (`no forward rule bound at all`), and the raise-site hint that keeps the `jvp(f)` call beside it -- a graph-time fault, not a value computed and then checked. `pow` was the operator this entry named until `math:pow_d` gained a forward rule; `sin` is one no family binds, so nothing in the reading changed but the name. What the entry asserts about the refusal is now the cause as a value -- `jvp cause=rule function=f uri=math:sin_d` (`expect_refusal`, docs/test-plans.md) -- and not the sentence the line prints: the line still names it (`skip=rule uri=math:sin_d`), but a wording change is not a change of the transform."
 kind = "behavior"
 case = "../../../cases/compile/transforms/rulesets_probe_missing.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 1
-expect_output_contains = ["skip=rule uri=math:sin_d", "rulesets_probe_missing.cml:14:12: [Error]:", "jvp has no forward rule for `math:sin_d`", "no forward rule bound at all", "raised here"]
+expect_output_contains = ["rulesets_probe_missing.cml:14:12: [Error]:", "jvp has no forward rule for `math:sin_d`", "no forward rule bound at all", "raised here"]
+expect_refusal = ["jvp cause=rule function=f uri=math:sin_d"]
 expect_stdout_not_contains = ["0.9092974268256817"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -602,6 +603,32 @@ case = "../../../tools/transpose_refusal/check.py"
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["every cause has one word, one sentence, and a site that records it", "no sentence of its own lands on the one that names the shape", "renders the sentence from the cause and never from the log", "the list of causes that wait for a site is empty"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The readings' refusals, the same defect one layer along. `REINTERP jvp function=f skip=body`
+# spelled its cause at the site, so the word *was* the fact: a plan that pinned the line was red for
+# a rename, and the plan could not say "this cause" without also saying which sentence. The cause is
+# now `RefusalCause` (`modules/transforms/refusal_readings.h`), spelled in one table
+# (`refusalCauseName`), and every refusing site records it beside the line it prints
+# (`noteRefusal` -> `READING_REFUSAL {json}` on stderr). A plan asserts the value -- cause plus the
+# place it names -- with `expect_refusal` (docs/test-plans.md), and never the sentence.
+#
+# This entry holds the places that have to agree, as relations and not counts (the lesson of the
+# transpose counter: splitting one word into two made `17` red before `18` on two trees that both
+# satisfied every relation): one word per cause, the words in one file only, no site spelling
+# `skip=` itself, one site per cause, and -- the one that keeps the record honest -- one record per
+# printed cause, naming the cause that line printed. That last relation is the point: if the two
+# halves could disagree, the machine-readable half would be a second sentence rather than the fact.
+[[tests]]
+name = "reading_refusal_is_one_cause_in_one_table"
+desc = "A transform's refusal is a value with one spelling and one record, and the four places that say it have to agree. The header declares `RefusalCause` (and `None`, the 'no refusal' member, has no word, so a line that names no cause cannot spell one); `refusalCauseName` spells every cause exactly once, in the one file, with distinct lowercase words, so two causes cannot be one word a reader cannot tell apart; no literal in `jvp.cpp`, `split.cpp` or `vmap.cpp` spells `skip=`, and every `skip=` that is printed is answered by that table, so a site cannot hand-write the word back; and every printed cause has a `noteRefusal` record beside it whose cause is that printed cause, which is what makes the machine-readable half the same fact rather than a second sentence. `None` never appears at a site, and a cause with a word and no site is a promise nothing keeps (the list of causes that wait for a site is written out in the check, and is empty). Held as relations, never as counts: adding a cause with its word, its site and its record is green here."
+kind = "behavior"
+tool = "python"
+case = "../../../tools/reading_refusal/check.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["one word each, spelled in one file only", "no literal spells `skip=`", "every printed cause has a record beside it, and the record names the printed cause", "the list of causes that wait for a site is empty"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
 
@@ -2423,7 +2450,7 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
-expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and an extent it writes is not a number"]
+expect_output_contains = ["answers the extents the type `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[]', and position 0 is open: it has no number written in it"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -2670,7 +2697,7 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
-expect_output_contains = ["the type it is instantiated at is 'float[...]', and an extent it writes is not a number", "take the shape from a value the program has"]
+expect_output_contains = ["the type it is instantiated at is 'float[...]', and position 0 is open: `..` states no dimension there, so no position has a length to read", "take the shape from a value the program has"]
 expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -2699,6 +2726,51 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_contains = ["true", "[2]"]
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The two special cases of `extent_of`, one entry each: what a known operand changes about the
+# answer (nothing: the type is the source, and the value is not read), and what an open position
+# costs (a refusal that names it).
+
+[[tests]]
+name = "extent_of_answers_a_known_operand"
+desc = "A known operand does not change the question: `extent_of::<A>()` answers the type's extents whether a value of that type is in the function's hands or not, and it never reads the value. Four spellings answer `[2, 3]` -- a call with nothing of the type at hand (`from_type`), a call in a function whose parameter `xs` is a known operand (`shape_of`), the name handed on as a value to a function that has no type argument of its own (`takes_it(extent_of::<float[2, 3]>)`), and the same name where a position states a function type (`typed_binding`) -- and the fifth line is the control: `shape(xs)` reads the operand and answers the same list, so the two sources agree here and the entry would say so the day they stop. Two of those spellings were red: measured 2026-11-04 on `ca464bca2` the third and the fourth each stopped the run with `RuntimeDiag::PassInternalError` ('Pass ''calling `extent_of`'' failed with an internal error'), which is the compiler complaining about a program that is right, because the answer existed in the type argument written at that position and only the run had nothing left to read. They are settled where the name is used as a value now (`Builder::functionValueOf`, `Builder::overloadValueFor`), and the answer is a function of no parameters that gives the list."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 3]\n[2, 3]\n[2, 3]\n[2, 3]\n[2, 3]\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_answers_a_known_operand.graph"
+desc = "The other half of the same reading, and the one that can fail while the numbers stay right: the graph holds the answer itself. `std::gir` of the case above shows a `DATA` node labelled `[2, 3]` of type `int[]` and **no** `:op/extent_of` node at all -- no operand of the answer exists to read, so nothing of `xs` reaches it. A reader that took the shape from the value (as `shape(xs)` does) would print the same four lines and put an OPER node in the graph, so this entry, not the numbers, is what says the answer is the type's."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_answers_a_known_operand.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\""]
+expect_output_not_contains = [":op/extent_of"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_names_the_open_position"
+desc = "A type whose shape is not written down is refused, and the sentence names the **position** that is open, because that position is where the repair is written: `float[...]` states no rank at all, so position 0 is the open one and `..` gives no position after it a length; `float[2, ?]` states two positions and leaves the second without a number; `float[]` (= `float[?]`) has one position and no length for it. Measured 2026-11-04 on `ca464bca2` the sentence was 'an extent it writes is not a number' -- a reader who wrote `float[2, ?]` had to find the second extent themselves -- and all three refusals are reported together, each at its own call. The refusal must stay a refusal: `[]` would be the rank-zero shape, which `sum_to` reads as one element, a wrong number no diagnostic would name."
+kind = "negative"
+case = "../../../cases/compile/transforms/extent_of_names_the_open_position.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExtentOfNeedsStatedShape"
+expect_output_contains = ["the type it is instantiated at is 'float[...]', and position 0 is open: `..` states no dimension there, so no position has a length to read", "the type it is instantiated at is 'float[2, ?]', and position 1 is open: it has no number written in it", "the type it is instantiated at is 'float[]', and position 0 is open: it has no number written in it", "take the shape from a value the program has"]
 expect_output_not_contains = ["PassInternalError", "internal error", "defect of the compiler"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
