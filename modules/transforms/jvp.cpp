@@ -238,6 +238,9 @@ gc_node_ref_t buildRuleTangent(
 /// answer now, with the seed written in the lambda instead of in the lift. Nothing here is a
 /// language rule and nothing about it belongs in `docs/design/`: a `with` list is `f`'s own at
 /// `jvp(f)`, and promotion happens only inside a callee's lift (`liftSignature`'s `promoteWiths`).
+/// The two gaps this bridge holds open, named so that removing it is a check and not a guess:
+/// `vjp`'s lambda body cannot call the function value `f`, and a lambda's parameter list cannot
+/// write `<w, ...Rest>`. When both are in place, this function and the block above go together.
 bool withIsPromoted(const FunctionType *function, size_t index) {
     if (function == nullptr || function->withIsVarAt(index)) {
         return false;
