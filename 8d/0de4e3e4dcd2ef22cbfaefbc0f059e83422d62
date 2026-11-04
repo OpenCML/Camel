@@ -1,0 +1,11 @@
+known_fail 位点 23 处（feat 27 格 + perf 1 格），过期 0 条：28 格今天全 XFAIL，无一「标记着却通过」（runner 把这种情形记红，实测 fail=0）。
+散文过期 6 条，全方向一，已改：adb67e081 三处（plan 正文「still fail」+ rc03_seed30_std_opt、rc04_seed72_inline 两条 desc 的 RED TODAY），progen8_arm 三处（注释「work owed」+ inline_then_fold、std_opt 两条 desc）。
+方向二 0 条：另扫 'is fixed|now green|was fixed|has landed'，fold_arms（5 PASS）、transpose_array_product（2 PASS）两处「已修」声明实跑也成立。
+改前读数（origin/develop f08951def5，7 张 plan 一次跑）：total 236 / pass 209 / fail 0 / known 27；这 7 条用例早已在 pass 里，只有字是旧的。
+改后读数：被写成「红」的 4 条 PASS->PASS（rc03_seed30_std_opt、rc04_seed72_inline、inline_then_fold、std_opt），另 3 条 reference 同样 PASS->PASS。
+git diff --stat：只有两张 plan（14±6、8±5）；test/cases/ 0 行；expect_/args/case/verify_script/normalizers/timeout_ms/kind/backends 改动 0 行 —— 没碰断言，绿是真的。
+没拿掉任何 known_fail，所以「拿掉标记后仍绿」那个陷阱这轮不成立；23 处标记仍全红，全数承重。
+门禁：-Plan 两张 plan -Tier fast -Jobs 8 → total 7 / pass 7 / fail 0 / killed 0，退出 0。
+检查：check-doc-links --citations 865/865 符号、2386 路径、EXIT 0；--questions-index EXIT 0。
+提交 8d0de4e3e（lane-stale，未 push）；报告在本 note，未进树；工作树 D:\Projects\Camel-wt\stale 保留待你合并。
+瑕疵一处：提交标题写 five，实际四条（每张 plan 两条）；按车道规矩未改写历史，口径请在合并提交里改。
