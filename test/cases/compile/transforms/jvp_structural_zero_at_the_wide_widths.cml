@@ -1,0 +1,36 @@
+// A constant has no tangent: the lift gives it the zero of its own type, and a rule that multiplies
+// its operand's tangent by a coefficient is handed that zero for the constant's tangent. The zero is
+// a fact about the graph -- the tangent *is* the constant the type's tangent space registers -- so
+// the rule expansion drops the term it multiplies instead of computing it and multiplying by zero.
+//
+// This case pins the two widths that answered before the criterion asked the tangent space
+// (`float` and `f32`), and it pins them by **absence**: the expansion prints
+// `omit=structurally-zero-tangent` with the operators it did *not* copy, so the reading says which
+// path was not walked rather than "the answer came out zero". The term dropped here is
+// `x^w * log(x) * dw`, whose `log(-3.0)` has no real value: the printed tangent is the other term's
+// number, and it is the number the case pins.
+//
+// The criterion is the tangent space's, not this transform's (design principles 9.9: the tangent
+// space is settled type by type): `zeroTangentConstantOf` answers "what is this type's zero, as a
+// constant", and a tangent whose slot is that constant is structurally zero at every width the
+// registry answers for. A case that pinned only the widths written in one `switch` would stay green
+// while a width nobody listed there fell through -- which is what the half-width case beside this
+// one reads.
+import rulesets.jvp
+import { jvp } from transforms
+
+func wide(x: float): float {
+    return x ^ 2.0
+}
+
+func narrow(x: f32): f32 {
+    return x ^ 2.0
+}
+
+func main(): int sync {
+    let (wideValue, wideTangent) = jvp(wide)(0.0 - 3.0, 1.0)
+    `float value={} tangent={}`->format<wideValue, wideTangent>->println
+    let (narrowValue, narrowTangent) = jvp(narrow)(0.0 - 3.0, 1.0)
+    `f32 value={} tangent={}`->format<narrowValue, narrowTangent>->println
+    return 0
+}

@@ -1,0 +1,43 @@
+// Zero is a **value**; "structurally zero" is a fact about where a tangent comes from. Only the
+// second may be dropped from a rule's right side, because dropping a term is not the same claim as
+// "this term's answer is zero":
+//
+//   - a *seed* is a value the caller hands in. It is zero when the caller seeds nothing, and it is
+//     not zero when the caller seeds a direction, but either way it is a value the graph carries:
+//     the term it multiplies is computed, and the coefficient is evaluated. A criterion that
+//     widened to "this tangent's value is zero", or to "this tangent is not a constant" read the
+//     other way round, would drop a term the caller's direction makes real, and the silent
+//     acceptance of a wrong number is exactly what "zero" buys when it is wrong.
+//   - the tangents of a product's two parameters are both seeds here, at `float` and at `bf16`, so
+//     the answer has one contribution from each direction. A criterion that judged either seed
+//     structurally zero would answer with one contribution instead of two.
+//   - `power` seeds the exponent with `0.0`. The tangent is arithmetically nothing there, and the
+//     answer is still `nan`, because `log(-3.0)` is asked for: a zero the program hands in is not a
+//     zero the graph knows before it runs (the author's ruling of 2026-11-04).
+//
+// The reading is both halves at once: the printed numbers, and the *absence* of the expansion's
+// `omit=structurally-zero-tangent` line -- no term was dropped anywhere in this case.
+import rulesets.jvp
+import { jvp } from transforms
+
+func product(x: float, y: float): float {
+    return x * y
+}
+
+func halfProduct(x: bf16, y: bf16): bf16 {
+    return x * y
+}
+
+func power(x: float, w: float): float {
+    return x ^ w
+}
+
+func main(): int sync {
+    let (productValue, productTangent) = jvp(product)(3.0, 2.0, 1.0, 1.0)
+    `product  value={} tangent={}`->format<productValue, productTangent>->println
+    let (halfValue, halfTangent) = jvp(halfProduct)(3.0, 2.0, 1.0, 1.0)
+    `half     value={} tangent={}`->format<halfValue, halfTangent>->println
+    let (powerValue, powerTangent) = jvp(power)(0.0 - 3.0, 2.0, 1.0, 0.0)
+    `zeroed   value={} tangent={}`->format<powerValue, powerTangent>->println
+    return 0
+}

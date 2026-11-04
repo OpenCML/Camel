@@ -91,9 +91,19 @@ camel::core::type::Type *emptyTupleType() {
 }
 
 /// Whether the tangent the lift is about to hand a rule is a **structurally** zero one: the zero the
-/// lift itself wrote for a value that cannot move (`zeroMade`), or a constant zero a law's own body
-/// wrote -- `d(float(n))` for a constant `int` `n` is `0.0`, written as a literal of that law, so an
-/// exponent spelled `2` rather than `2.0` has a zero tangent too.
+/// lift itself wrote for a value that cannot move (`zeroMade`), or the constant zero of the
+/// tangent's own space, written in this graph -- `d(float(n))` for a constant `int` `n` is `0.0`, a
+/// literal of that law, so an exponent spelled `2` rather than `2.0` has a zero tangent too.
+///
+/// **Which types have such a constant is the tangent space's answer** (`zeroTangentConstantOf`,
+/// `camel/core/derivative.h`), not a list written here: a tangent space states its zero as a
+/// constant when the zero is one value -- every float width the registry knows, `f64` and `f32` as
+/// well as `bf16` and `f16` -- and as an operator when it is made from a value (an array's
+/// `:tangent/zeros_arr`, which is a zero `zeroMade` holds and this function does not have to
+/// recognise by value). Naming only the widths that happened to be written down here is what made
+/// this question half a question: a `bf16` or `f16` constant's zero is the same fact as a `float`
+/// one's, and it fell through to `false` (design principles 9.9: the tangent space is settled type
+/// by type, so a type the registry answers for is not this transform's to re-list).
 ///
 /// A value a *program* computed is not one, even when it happens to be `0.0`. The distinction is the
 /// author's ruling of 2026-11-04: a structural zero is known before anything runs, because a
@@ -113,20 +123,20 @@ bool isStructuralZeroTangent(
         node->header.dataIndex >= 0 || node->header.dataType == nullptr) {
         return false;
     }
+    const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(node->header.dataType);
+    if (!zero.has_value()) {
+        return false;
+    }
     const std::span<const slot_t> slots = draft.staticSlots();
     const auto rawIndex                 = -static_cast<std::ptrdiff_t>(node->header.dataIndex);
     const size_t index                  = static_cast<size_t>(rawIndex);
     if (rawIndex < 0 || index >= slots.size()) {
         return false;
     }
-    switch (node->header.dataType->code()) {
-    case camel::core::type::TypeCode::Float64:
-        return camel::core::rtdata::fromSlot<double>(slots[index]) == 0.0;
-    case camel::core::type::TypeCode::Float32:
-        return camel::core::rtdata::fromSlot<float>(slots[index]) == 0.0f;
-    default:
-        return false;
-    }
+    // The constant *is* the zero its space registers, bit for bit: `-0.0` is a different constant
+    // from the `0.0` the registry states, and nothing in this transform writes one (a lift writes
+    // `zeroTangentConstantOf`, a law writes its own literal).
+    return slots[index] == *zero;
 }
 
 /// The tangent of one primitive: the rule `stdlib/rulesets/jvp.cml` files for its operator, applied
@@ -610,8 +620,11 @@ bool liftGraph(
         // node per type, because every rule of that type shares it.
         //
         // *Which* types have a zero is `tangentSpaceOf`'s answer, not a list written here: a
-        // floating scalar is `Self` and its zero is one machine number, and an array of them is
-        // `Self` too -- its zero is an array of the same shape with every element zero. Both are
+        // floating scalar is `Self` and its zero is the one constant its space registers
+        // (`zeroTangentConstantOf`, at every width the registry knows -- naming two widths here is
+        // how `bf16` and `f16` constants came to stop the lift at `skip=body`), and an array of
+        // them is `Self` too -- its zero is an array of the same shape with every element zero,
+        // the shape read below because an array's zero is a value and not a constant. Both are
         // the same question asked once (design principles 9.9), and a constant of array type is
         // not an edge case: `f(x) = sum(reshape<[2, 2]>(x) * [[1, 2], [3, 4]])` puts a `float[2, 2]`
         // constant where a rule over an array operand reads it, and a rule is handed the tangent of
@@ -642,16 +655,11 @@ bool liftGraph(
                 }
             }
             gc_node_ref_t made = rt::kInvalidNodeRef;
-            switch (type->code()) {
-            case camel::core::type::TypeCode::Float64:
-                made = draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<double>(0.0), type, rt::kGCNodeFlagConstant);
-                break;
-            case camel::core::type::TypeCode::Float32:
-                made = draft.materializeStaticValue(
-                    camel::core::rtdata::toSlot<float>(0.0f), type, rt::kGCNodeFlagConstant);
-                break;
-            case camel::core::type::TypeCode::Array: {
+            if (const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(type)) {
+                // A space that states its zero as a constant: one machine number in the width the
+                // type has. Which widths answer is the registry's list, not this file's.
+                made = draft.materializeStaticValue(*zero, type, rt::kGCNodeFlagConstant);
+            } else if (type->code() == camel::core::type::TypeCode::Array) {
                 const auto *arrayType = static_cast<const camel::core::type::ArrayType *>(type);
                 const std::span<const camel::core::type::ExtentForm> stated = arrayType->extents();
                 std::vector<int64_t> extents;
@@ -684,10 +692,6 @@ bool liftGraph(
                             rt::kGCNodeFlagConstant);
                     }
                 }
-                break;
-            }
-            default:
-                break;
             }
             if (shareable) {
                 zeroConstants.emplace(type, made);
