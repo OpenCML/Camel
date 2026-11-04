@@ -1,0 +1,11 @@
+B10 断言恢复，报告（`727de204c`，lane-b10assert）
+
+放宽 30 条（`9e48ccfc0`）：`resources` 28 条带数字的读数全走 `\d+`（13 条节点/对 + 15 条事实、值、合成图 id），另整条删掉 1 条 fs:exists 节点读数；`jit_framed` 1 条把 loop 理由砍到 `helper:`（原文 `helper: the round contains OPER at pc=16`）。
+旧判据「每个数字都可是任意数字、至少一行命中」→ 新判据：13 条整行精确（bounds/version/writes/text/conservative/overlap/footprint×2/合成 2 条/值 `4`、`16`、`[1, 2, 3]`）；11 条节点行只把节点号写成 `<>`（图、标签、访问、操作数、result 类全钉，号本身不钉）；5 条 `order` 不再钉数字，改为按标签读成一对（`one`/`target`/`readsOf`/`pairSays`）——钉序号正是不该恢复的那一类。
+改坏就红 31 次，每次只红一个测试。13 条精确行（读数均为 `Error: missing: <该行>`）：bounds 写 `[9,9]`、version 写 `@1.6`、writes 写 `var_op 2`、text 写 `norm 1`、conservative 写 `norm 2`、overlap 写 `a-c 0`、footprint bump/countdown 写 `norm 1`、合成 `result same 1`/`norm 1`、值写 `5`/`17`/`[1, 2, 4]`。
+11 条节点行（读数均为 `Error: missing: <该行>`）：`:var/new` 改 `allocates object`、`FUNC bump` 改 `result same 0`、`FUNC countdown` 与 `countdown` 图改 `result fresh`、`rand:seed` 改 `read ambient rng`、`:op/assn_l` 改 `result same 1`、`:var/take` 改 `may_alias 1`、`array:sort_l_in_place` 改 `result same 1`、`fs:exists` 改 `read ambient stderr`、合成两行改 `(node 1)`/`rmw unknown (all)`。
+5 条对，把 data/control 对调，红读数是被测那对的实际行：`Error: main 8 9 resource ordered by control: RESOURCES order main 8 9 resource ordered by data`（`9 10`、`19 21`、`12 35` 同式）、`Error: countdown 4 12 resource ordered by data: RESOURCES order countdown 4 12 resource ordered by control`。
+1 条 loop 理由，把 `ticks` 的状态改成单分量：`[FAIL] framed.loops.regions.lowered`，`[INFO] output does not contain '... loop rounds: helper: the round contains OPER'`，实际读作 `... helper: the state is a single value, not a slot the body writes every round`。
+程序侧再红一次：`c = c + 2` → `c = c + 3`，`[FAIL] core`，`Error: missing: 4`。
+闸门分开跑：两份计划 `[SUMMARY] total: 63, pass: 63, fail: 0`，RUN_EXIT=0；`feat/compile` `[SUMMARY] total: 2343, pass: 2323, fail: 0, known failures: 20`，RUN_EXIT=0；`check-doc-links --citations` 842/842 符号、2377 路径 EXIT=0，`--questions-index` EXIT=0。
+提交 `727de204c`；主检出 `status --porcelain` 为空；未 kill 任何进程或测试，未 push，未动 develop/main。
