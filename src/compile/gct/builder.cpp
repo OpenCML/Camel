@@ -7503,6 +7503,86 @@ void Builder::rejectDuplicateLiteralKeys(
     }
 }
 
+namespace {
+
+/// The plain name a member of a pattern writes inside `...`, or empty: `...Rest` writes one, and
+/// `...ParamsOf<F>` writes a type expression, which a pattern's member can be but a name it cannot
+/// bind.
+std::string packRestNameOf(const AST::node_ptr_t &member) {
+    if (member == nullptr || member->type() != AST::LoadType::Type) {
+        return {};
+    }
+    if (member->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Expr) {
+        return {};
+    }
+    const auto written = member->loadAs<AST::TypeExprLoad>();
+    if (written->op() != AST::TypeOp::Pack || member->size() == 0) {
+        return {};
+    }
+    const AST::node_ptr_t &inner = member->at(0);
+    if (inner == nullptr || inner->type() != AST::LoadType::Type ||
+        inner->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Ref) {
+        return {};
+    }
+    const auto ref = inner->loadAs<AST::RefTypeLoad>();
+    return ref->ref().paths().empty() ? ref->ref().ident() : std::string();
+}
+
+/// The plain name a member of a pattern writes as it stands, or empty: `(W, ...Rest)` names its
+/// first member `W`, and `(f32[2], ...Rest)` names none.
+std::string writtenNameOf(const AST::node_ptr_t &member) {
+    if (member == nullptr || member->type() != AST::LoadType::Type ||
+        member->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Ref) {
+        return {};
+    }
+    const auto ref = member->loadAs<AST::RefTypeLoad>();
+    return ref->ref().paths().empty() ? ref->ref().ident() : std::string();
+}
+
+} // namespace
+
+bool Builder::isPackPattern(const AST::node_ptr_t &typeAst) const {
+    if (typeAst == nullptr || typeAst->type() != AST::LoadType::Type ||
+        typeAst->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Tuple) {
+        return false;
+    }
+    if (typeAst->size() == 0) {
+        return false;
+    }
+    const auto &members = *typeAst->atAs<AST::RepeatedLoad>(0);
+    return members.size() > 0 && !packRestNameOf(members.at(members.size() - 1)).empty();
+}
+
+void Builder::packPatternNamesOf(const AST::node_ptr_t &typeAst, std::vector<std::string> &bound) {
+    if (!isPackPattern(typeAst)) {
+        return;
+    }
+    // The names the case has written so far, and the types the scopes and the imports answer,
+    // decide which of the pattern's names are new (design principles 5.4 binds a dimension name the
+    // same way: a name a type here already answers is a reference).
+    const auto binds = [&](const std::string &name) {
+        if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
+            return false;
+        }
+        if (typeScope_->get(Reference(name)).has_value()) {
+            return false;
+        }
+        return module_ == nullptr || !module_->getImportedType(Reference(name)).has_value();
+    };
+    const auto &members = *typeAst->atAs<AST::RepeatedLoad>(0);
+    // The members the pattern writes out bind first, then the rest binds what is left of the pack.
+    for (size_t i = 0; i + 1 < members.size(); ++i) {
+        const std::string member = writtenNameOf(members.at(i));
+        if (!member.empty() && binds(member)) {
+            bound.push_back(member);
+        }
+    }
+    const std::string rest = packRestNameOf(members.at(members.size() - 1));
+    if (!rest.empty() && binds(rest)) {
+        bound.push_back(rest);
+    }
+}
+
 /*
 MatchTypeType : Type subject, RepeatedLoad TypeCase ;
 A `match type` in a type position (design principles 5.6): a type of its own while the subject
@@ -7522,10 +7602,39 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         MatchTypeArm arm;
-        for (const AST::TypeCasePattern &pattern : armAst->loadAs<AST::TypeCaseLoad>()->patterns()) {
+        const auto caseLoad         = armAst->loadAs<AST::TypeCaseLoad>();
+        // A case that writes the rest of a pack (`case (W, ...Rest)`) takes the subject pack apart,
+        // and the names it writes stand for the members it reached (design principles 5.6: a type
+        // pack takes apart the way a value pack does). They are bound in this case alone -- in the
+        // patterns and in the type the case gives -- and a name a type here already answers is that
+        // type, as a dimension name written once too often is a reference and not a new name (5.4).
+        std::vector<std::string> written;
+        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
+            packPatternNamesOf(pattern.type, written);
+        }
+        struct PatternScope {
+            Builder &self;
+            scope_ptr_t<Reference, Type *> outer;
+            bool entered = false;
+            ~PatternScope() {
+                if (entered) {
+                    self.typeScope_ = std::move(outer);
+                }
+            }
+        } patternScope{*this, typeScope_};
+        if (!written.empty()) {
+            pushScope();
+            patternScope.entered = true;
+            for (const std::string &name : written) {
+                typeScope_->insert(Reference(name), TypeVarType::create(name, false));
+            }
+        }
+        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
             const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
             if (kind == GCT::TypeCaseKind::Identity) {
-                if (Type *identity = visitType(pattern.type)) {
+                if (isPackPattern(pattern.type)) {
+                    arm.packPatterns.push_back(visitType(pattern.type));
+                } else if (Type *identity = visitType(pattern.type)) {
                     arm.identities.push_back(identity);
                 }
                 continue;

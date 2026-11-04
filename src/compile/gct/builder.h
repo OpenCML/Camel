@@ -406,6 +406,14 @@ class Builder {
     Type *visitRefType(const AST::node_ptr_t &ast);
     Type *visitSpecType(const AST::node_ptr_t &ast);
     Type *visitMatchTypeType(const AST::node_ptr_t &ast);
+    /// Whether a `match type` case pattern writes the rest of a pack (`case (W, ...Rest)`), which is
+    /// how a case takes the subject pack apart (design principles 5.6): a tuple type whose last
+    /// member is `...Name`.
+    bool isPackPattern(const AST::node_ptr_t &typeAst) const;
+    /// The names such a pattern introduces -- the members it writes out and the rest -- appended to
+    /// `bound`, the names the case has already written: a name a type here already answers is that
+    /// type and not a new binding.
+    void packPatternNamesOf(const AST::node_ptr_t &typeAst, std::vector<std::string> &bound);
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>

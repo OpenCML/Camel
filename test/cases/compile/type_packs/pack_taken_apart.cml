@@ -1,0 +1,51 @@
+/**
+ * A type pack is taken apart by a `match type` that a program writes itself (design principles 5.6):
+ * the case `(W, ...Rest)` binds the member at the head of the pack and the rest of it, and the type
+ * a case gives is written over those names. A type pack takes apart the way a value pack does.
+ *
+ * **What this case is for.** The pattern is the language's and not the standard library's. This
+ * file imports the two type functions that compute a pack -- `WithOf<F>` and `ParamsOf<F>` -- and
+ * nothing that takes one apart: it writes `type Head<P> = match type P { case (W, ...Rest) => W }`
+ * itself. A library name that answered the same question by hand, either as a primitive the
+ * compiler provides or as a type computed in C++, would leave this file uncompilable, so the lines
+ * below are the standing witness that taking a pack apart is something a program writes, and the
+ * library's `FirstOf<P>` is that same case and nothing more.
+ *
+ * **What the lines are.** `Head<WithOf<Loss>>` is the type of the first `with` parameter, and
+ * `Head<ParamsOf<Loss>>` the type of the first ordinary one -- one pattern for both packs.
+ * `Second<P>` writes two members out before the rest, so the member after the head is reached by
+ * position, and a pack whose head is that type answers false for it. `FirstWithOf<F>` is then a
+ * function type computed from `F` in this file: the `with` list and the parameters of `F`, and the
+ * head of the pack of `with` parameters as the result -- the shape `Gradient<F>` has, written
+ * without any type function the standard library declares.
+ */
+import { is_same, ParamsOf, WithOf } from types
+
+type Loss = <w: f32[2], k: int> (x: float) => float
+
+// The head of a pack: the member the case names first, and no case for a pack with none.
+type Head<P> = match type P { case (W, ...Rest) => W }
+
+// The member after the head: the names written out before the rest are matched by position, and
+// what is left of the pack reaches `...Rest`.
+type Second<P> = match type P { case (A, B, ...Rest) => B }
+
+// The rest of a pack is a pack of its own, so `...Rest` written back expands it: the members after
+// the ones the case wrote out, and the empty tuple when the case wrote every member out.
+type RestOf<P> = match type P { case (W, ...Rest) => Rest }
+
+// A function type computed from `F` here, in the program: the packs `F` has, and the type of its
+// first `with` parameter as the result.
+type FirstWithOf<F> = <...WithOf<F>> (...ParamsOf<F>) => Head<WithOf<F>>
+type LossShape = <w: f32[2], k: int> (x: float) => f32[2]
+
+func main(): int sync {
+    println(is_same::<Head<WithOf<Loss>>, f32[2]>())
+    println(is_same::<Head<ParamsOf<Loss>>, float>())
+    println(is_same::<Second<WithOf<Loss>>, int>())
+    println(is_same::<Head<WithOf<Loss>>, int>())
+    println(is_same::<FirstWithOf<Loss>, LossShape>())
+    println(is_same::<(...RestOf<WithOf<Loss>>), (int,)>())
+    println(is_same::<(...RestOf<ParamsOf<Loss>>), ()>())
+    return 0
+}

@@ -249,6 +249,56 @@ Expansion expandPack(
 
 } // namespace
 
+/// A pattern a `match type` case writes to take a type pack apart (`case (W, ...Rest)`), tried
+/// against the pack `subject`: whether it fits, and what the names it writes stand for, appended to
+/// `bindings`. The pattern is a tuple type whose members are matched against the pack's members and
+/// whose last member, `...Rest`, stands for the ones after them -- which may be none, so
+/// `(W, ...Rest)` fits every pack with a member and no pack with nothing in it (design principles
+/// 5.6: a type pack takes apart the way a value pack does, and an empty pack has no first member).
+bool takePackApart(Type *pattern, Type *subject, type_bindings_t &bindings) {
+    if (!TypeCallType::isPack(subject)) {
+        return false;
+    }
+    Type *shape = substituteTypeVars(pattern, bindings);
+    if (shape == nullptr || shape->code() != TypeCode::Tuple) {
+        return false;
+    }
+    const std::span<Type *const> written = static_cast<TupleType *>(shape)->types();
+    const std::span<Type *const> members = TypeCallType::packMembers(subject);
+    size_t fixed                         = written.size();
+    const bool hasRest = fixed > 0 && TypeCallType::isExpand(written.back());
+    if (hasRest) {
+        --fixed;
+    }
+    if (fixed > members.size()) {
+        return false;
+    }
+    type_bindings_t bound = bindings;
+    for (size_t i = 0; i < fixed; ++i) {
+        Type *entry  = substituteTypeVars(written[i], bound);
+        Type *member = members[i];
+        if (entry != nullptr && entry->code() == TypeCode::TypeVar) {
+            // A name the pattern writes binds this member; written twice, it is the same member.
+            bound.emplace_back(static_cast<TypeVarType *>(entry)->name(), member);
+            continue;
+        }
+        if (entry == nullptr || containsTypeVar(entry) || !typeEquals(entry, member)) {
+            return false;
+        }
+    }
+    if (hasRest) {
+        Type *rest = static_cast<TypeCallType *>(written.back())->paramsSpan()[0];
+        if (rest == nullptr || rest->code() != TypeCode::TypeVar) {
+            return false;
+        }
+        bound.emplace_back(
+            static_cast<TypeVarType *>(rest)->name(),
+            TypeCallType::makePack(members.subspan(fixed)));
+    }
+    bindings = std::move(bound);
+    return true;
+}
+
 /// A factory holding `func` with the variables (and, when `extents` is not null, the named
 /// extents) replaced; `changed` tells whether anything was. A `constas` parameter is part of the
 /// declaration's identity, not a runtime argument: it is dropped when `dropConstas` says the
@@ -697,6 +747,14 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
             for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                // A case that takes the pack apart selects it by the pattern it writes, and its
+                // names stand for the members the pattern reached (design principles 5.6).
+                for (Type *pattern : match->armPackPatterns(arm)) {
+                    type_bindings_t taken = bindings;
+                    if (takePackApart(pattern, subject, taken)) {
+                        return substituteTypeVars(match->armResult(arm), taken);
+                    }
+                }
                 bool selected = (match->armShapes(arm) & shapes) != 0;
                 for (Type *identity : match->armIdentities(arm)) {
                     Type *pattern = substituteTypeVars(identity, bindings);

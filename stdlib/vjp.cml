@@ -131,12 +131,15 @@ export func grad(f: (x: float) => float): (x: float) => float {
 /// with no ordinary parameter, both stop in `jvp`; a tensor `with` parameter whose lambda captures
 /// an array stops in `split`.
 ///
-/// The result type says only what is true of this call: it never gives a value. The declaration the
-/// engine's transform has -- `ValueAndGradient<F>`, whose second member is the type of the *first*
-/// member of `F`'s `with` list -- is not writable in the library today: `stdlib/types.cml` writes
-/// `ParamsOf<F>`, `WithOf<F>`, `ResultOf<F>` and `Tangent<T>`, and no type function names the first
-/// element of a pack, so a declaration written here would either refuse to compile or be an
-/// approximation of the shape it claims. `never` is neither.
+/// The result type says only what is true of this call: it never gives a value. The engine's
+/// transform has a declaration of its own -- `ValueAndGradient<F>`, whose second member is the type
+/// of the *first* member of `F`'s `with` list -- and the type can be named: `stdlib/types.cml`
+/// writes `ParamsOf<F>`, `WithOf<F>`, `ResultOf<F>`, `Tangent<T>` and `FirstOf<P>`, the head of a
+/// pack taken apart by a `match type` case (design principles 5.6, `FirstOf<WithOf<F>>`). What is
+/// written here is still `never`, because the body such a declaration would come with answers the
+/// zero of that type for every weight (the two lines above), and a declaration that promised a
+/// number the body cannot compute would be an approximation of the shape it claims. `never` is
+/// neither.
 ///
 /// The day forward mode carries the tangent of a value handed to a `with` list, the body of this
 /// function is `vjp`'s own composition and the declaration is the engine's; the four shapes to
