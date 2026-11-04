@@ -18,6 +18,7 @@
 #include "camel/core/tangent_space.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/resolver.h"
 #include "camel/parse/ast/rule_head.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_session.h"
@@ -399,6 +400,23 @@ FunctionType *jvpSignature(FunctionType *function) {
 }
 
 namespace {
+
+/// The type of `jvp(f)` for a function of this type: `(f: F) => jvpSignature(F)`, or null when `F`
+/// has no forward transform. It is built from the **same law** the operator's resolver asks
+/// (`jvp_operator.cpp#jvpOperatorSignature`), so the `jvp(v)` node a lift writes for a call through a
+/// function value is typed exactly as a `jvp(v)` a program writes is, and the two cannot drift apart.
+/// Never the type of a lifted *callee* -- that is `jvpCalleeSignature`, and only a graph the lift
+/// itself calls takes one.
+FunctionType *jvpOperatorType(FunctionType *function) {
+    FunctionType *lifted = jvpSignature(function);
+    if (lifted == nullptr) {
+        return nullptr;
+    }
+    camel::core::type::FunctionTypeFactory factory;
+    factory.addNormArg("f", function, false);
+    factory.setExitType(lifted);
+    return factory.build();
+}
 
 /// What a lift hands on to the lifts it starts: the group the members live in, and the callee graphs
 /// already lifted, so that a function called twice is lifted once (key: the original graph's id).
@@ -1278,6 +1296,30 @@ bool liftGraph(
             }
         }
         draft.setInsertRegion(0);
+        // The tangent slot one argument of a call fills in the lifted callee's list. Both call
+        // shapes ask it -- a call by name (`Func`) and a call through a value (`Call`) -- because
+        // both hand the lifted callee the same list: the value of every argument, then the tangent
+        // of each, in the same order (`liftSignature`).
+        //
+        // The tangent of a value with no tangent space is the `()` slot the lifted signature writes
+        // for it: the slot is a port there, so the call has to fill it, and a `()` value is the only
+        // thing that fits. One node, shared: it is a constant.
+        gc_node_ref_t emptyTangent = rt::kInvalidNodeRef;
+        const auto tangentSlotOf = [&](gc_node_ref_t input, const NodeFace *in) {
+            if (in != nullptr && pairOf(in->dataType()) != nullptr) {
+                if (tangentOf[input] == rt::kInvalidNodeRef) {
+                    return rt::kInvalidNodeRef;
+                }
+                return tangentOf[input];
+            }
+            if (emptyTangent == rt::kInvalidNodeRef) {
+                emptyTangent = draft.materializeStaticValue(
+                    camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
+                        ::Tuple::create(0, mm::autoSpace())),
+                    emptyTupleType());
+            }
+            return emptyTangent;
+        };
         for (camel::runtime::gc_node_ref_t ref = 0; ref < function.nodeCount(); ++ref) {
             const NodeFace *node = function.node(ref);
             if (node == nullptr) {
@@ -1739,25 +1781,6 @@ bool liftGraph(
                     calleeLifted != nullptr ? calleeLifted->normTypesCount() / 2 : 0;
                 std::vector<gc_node_ref_t> values;
                 std::vector<gc_node_ref_t> tangents;
-                // The tangent of a value with no tangent space is the `()` slot the lifted signature
-                // writes for it: the slot is a port there, so the call has to fill it, and a `()`
-                // value is the only thing that fits. One node, shared: it is a constant.
-                gc_node_ref_t emptyTangent = rt::kInvalidNodeRef;
-                const auto tangentSlotOf = [&](gc_node_ref_t input, const NodeFace *in) {
-                    if (in != nullptr && pairOf(in->dataType()) != nullptr) {
-                        if (tangentOf[input] == rt::kInvalidNodeRef) {
-                            return rt::kInvalidNodeRef;
-                        }
-                        return tangentOf[input];
-                    }
-                    if (emptyTangent == rt::kInvalidNodeRef) {
-                        emptyTangent = draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<camel::core::rtdata::Object *>(
-                                ::Tuple::create(0, mm::autoSpace())),
-                            emptyTupleType());
-                    }
-                    return emptyTangent;
-                };
                 std::vector<gc_node_ref_t> carries;
                 std::vector<gc_node_ref_t> arguments;
                 if (!isValue) {
@@ -1852,40 +1875,132 @@ bool liftGraph(
                 break;
             }
             case rt::GCNodeKind::Call: {
-                // A `Call` node is a call **through a value**: its first norm input is the function
-                // value, and which graph that value stands for is a question only the run time
-                // answers. This transform's answer is a graph, and a lifted call has to reach the
-                // *lifted* callee -- the arguments go in as `(value, tangent)` and the answer comes
-                // back as a pair -- so a call whose callee is not a graph this lift can name has no
-                // lifted callee to reach. The lift used to copy the call as it stood and pair its
-                // arguments anyway, and the answer was a process that died where the number should
-                // have been: `jvp(use)(plain, 2.0, (), 1.0)` on
-                // `func use(f: (y: float) => float, z: float): float { return f(z) }` segfaults on
-                // `std::nvm`, `std::fvm` and `std::jit` (`SIGSEGV` in `NodeVMSchedPass::call` ->
-                // `rtdata::isViewValue`, measured 2026-11-05), and so does a body that calls a
-                // function value it made for itself. A crash is worse than a refusal (design
-                // principles 9.9: a rule that is missing is refused at the construct, never answered
-                // with a wrong value), so the construct is named here instead.
+                // A `Call` node is a call **through a value**: the callee is a value the body reads
+                // (its first `with` input -- `nodevm.cpp#NodeVM::call` reads `withInputs().front()`),
+                // and which graph that value stands for is a question only the run time answers
+                // (author, 2026-11-05: 提升时还不知道这个值是哪张图，只有运行时才知道).
                 //
-                // Refusing is also what the engine says about the same shape -- its pullback refuses
-                // `cannot differentiate through this call of a function value: which function it
-                // calls is not evident` -- and that is why a library transform written as a
-                // composition cannot wrap its subject in a body yet: see `stdlib/vjp.cml`.
-                JvpGraph refused;
-                refused.refusedOrigin =
-                    static_cast<camel::source::origin_id_t>(function.nodeOrigin(ref));
-                refused.refusedConstruct = "a call through a function value";
-                refused.refusedWhy =
-                    "the callee is a value the body reads, so the lift has no graph of its own to "
-                    "lift for this call: a lifted call reaches a lifted callee and passes it "
-                    "(value, tangent) pairs, and a value whose graph is only known when the program "
-                    "runs has no lifted callee to reach";
-                os << "REINTERP jvp function=" << name
-                   << " skip=" << refusalCauseName(RefusalCause::Callee)
-                   << " construct=" << refused.refusedConstruct << '\n';
-                noteRefusal(RefusalReading("jvp", name, RefusalCause::Callee)
-                                .atConstruct(refused.refusedConstruct));
-                return fail(refusal, refused);
+                // So the lift writes **a call of `jvp(v)`** and lets that answer the question where
+                // the program runs: the node is the operator's own, typed `(f: F) => Jvp<F>` by the
+                // same law a program's `jvp(v)` is typed by, and the call of its answer goes through
+                // a `Call` node exactly as the source's call did. This is the shape `transpose`
+                // writes for the same node (author, 2026-11-04 04:20: 调用一个函数值，转置成调用
+                // `transpose(v)`), and it is one rule: the lift never reads which graph `v` is, so a
+                // value the body made, a captured one, a `with` one and a parameter are all just `v`.
+                // A closure's members stay in `v` as the known values the value carries -- `jvp(v)`
+                // keeps `f`'s closure (`jvp_operator.cpp#jvpKernel` copies the tuple over), and a
+                // member's direction is not one the lift hands in.
+                //
+                // The call fills the list `Jvp<F>` states: the value of every ordinary argument,
+                // then the tangent of each, and the call's `with` arguments as they stand (a `with`
+                // value takes no direction at `jvp(f)` -- its tangent is the zero of its type,
+                // `liftSignature`). The answer is the pair (result, tangent), and the readers of the
+                // call project it exactly as they project a lifted call's pair, so nothing
+                // downstream has to know which of the two ways the callee arrived by.
+                const std::vector<gc_node_ref_t> withInputs = function.withInputsOf(ref);
+                if (withInputs.empty()) {
+                    return fail(refusal);
+                }
+                const gc_node_ref_t calleeValue = withInputs.front();
+                if (calleeValue >= function.nodeCount() || !copied[calleeValue]) {
+                    return fail(refusal);
+                }
+                const NodeFace *calleeFace = function.node(calleeValue);
+                auto *calleeType =
+                    calleeFace != nullptr
+                        ? tt::as_ptr<FunctionType>(const_cast<Type *>(calleeFace->dataType()))
+                        : nullptr;
+                if (calleeType == nullptr) {
+                    return fail(refusal);
+                }
+                FunctionType *jvpType = jvpOperatorType(calleeType);
+                if (jvpType == nullptr) {
+                    // `jvp` takes a function of at least one ordinary parameter whose result has a
+                    // tangent space; a value outside that shape has no forward transform to reach,
+                    // and the operator says so itself where a program asks for it.
+                    return fail(refusal);
+                }
+                const auto *liftedType = tt::as_ptr<FunctionType>(jvpType->exitType());
+                if (liftedType == nullptr) {
+                    return fail(refusal);
+                }
+                const gc_node_ref_t carrier =
+                    valueOf[calleeValue] != rt::kInvalidNodeRef ? valueOf[calleeValue]
+                                                               : copyOf[calleeValue];
+                if (carrier == rt::kInvalidNodeRef) {
+                    return fail(refusal);
+                }
+                const gc_node_ref_t liftedValue =
+                    draft.addOperNode(jvpType, nullptr, "transforms:jvp");
+                draft.setNormInputs(
+                    liftedValue, std::span<const gc_node_ref_t>(&carrier, size_t(1)));
+                // The value half's length is the lifted signature's own answer, not a count read
+                // here: a call whose arguments do not fill exactly one value per slot is refused
+                // rather than written one place off.
+                const size_t valueSlots = liftedType->normTypesCount() / 2;
+                std::vector<gc_node_ref_t> values;
+                std::vector<gc_node_ref_t> tangents;
+                for (gc_node_ref_t input : function.normInputsOf(ref)) {
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        return fail(refusal);
+                    }
+                    const NodeFace *in = function.node(input);
+                    values.push_back(valueOf[input] != rt::kInvalidNodeRef ? valueOf[input]
+                                                                          : copyOf[input]);
+                    const gc_node_ref_t tangent = tangentSlotOf(input, in);
+                    if (tangent == rt::kInvalidNodeRef) {
+                        return fail(refusal);
+                    }
+                    tangents.push_back(tangent);
+                }
+                if (values.size() != valueSlots) {
+                    return fail(refusal);
+                }
+                // The `with` arguments of the call, as the values they are: the lifted callee
+                // declares `f`'s `with` list as its own (`jvpSignature`), so a direction for one has
+                // no slot to go in and the value is what the call passes.
+                std::vector<gc_node_ref_t> carries;
+                for (size_t i = 1; i < withInputs.size(); ++i) {
+                    const gc_node_ref_t input = withInputs[i];
+                    if (input >= function.nodeCount() || !copied[input]) {
+                        return fail(refusal);
+                    }
+                    carries.push_back(valueOf[input] != rt::kInvalidNodeRef ? valueOf[input]
+                                                                           : copyOf[input]);
+                }
+                if (carries.size() != liftedType->withTypesCount()) {
+                    return fail(refusal);
+                }
+                TupleType *resultPair = pairOf(node->dataType());
+                if (resultPair == nullptr) {
+                    // The lifted callee answers a pair this graph carries no type for: the copy
+                    // would answer one the readers cannot project. Refused, not guessed.
+                    return fail(refusal);
+                }
+                std::vector<gc_node_ref_t> arguments;
+                arguments.reserve(values.size() + tangents.size());
+                arguments.insert(arguments.end(), values.begin(), values.end());
+                arguments.insert(arguments.end(), tangents.begin(), tangents.end());
+                const gc_node_ref_t made = draft.addCallNode(resultPair);
+                if (!arguments.empty()) {
+                    draft.setNormInputs(made, arguments);
+                }
+                std::vector<gc_node_ref_t> callWith;
+                callWith.reserve(1 + carries.size());
+                callWith.push_back(liftedValue);
+                callWith.insert(callWith.end(), carries.begin(), carries.end());
+                draft.setWithInputs(made, callWith);
+                copyOf[ref] = made;
+                const gc_node_ref_t half = draft.addAccsNode(node->dataType(), 0);
+                draft.setNormInputs(half, std::span<const gc_node_ref_t>(&made, 1));
+                const gc_node_ref_t halfTangent = draft.addAccsNode(node->dataType(), 1);
+                draft.setNormInputs(halfTangent, std::span<const gc_node_ref_t>(&made, 1));
+                valueOf[ref]   = half;
+                tangentOf[ref] = halfTangent;
+                pairIsTheCopy.insert(ref);
+                copied[ref] = true;
+                ++copiedKinds;
+                break;
             }
             case rt::GCNodeKind::Loop: {
                 // A loop is a region of this graph: the rounds are the region's and the LOOP

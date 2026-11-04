@@ -13,6 +13,7 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/resolver.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/draft_clone.h"
 #include "camel/runtime/draft_session.h"
@@ -196,6 +197,52 @@ gc_node_ref_t fillTuple(rt::GraphDraft &draft, Type *type, std::span<const gc_no
     return fill;
 }
 
+/// The **lifted signature** a function value stands for, read from its type alone: a value of a
+/// lifted type is the lifted function itself, and a value of `(f: F) => Lift<F>` -- the type of the
+/// `jvp(v)` node a lift writes for a call through a value (`jvp.cpp#jvpOperatorType`) -- is the
+/// operator whose **answer** is that lifted function. Both answers come from types; nothing is read
+/// about which graph the value is, because that is not known until the program runs (author,
+/// 2026-11-05: 提升时还不知道这个值是哪张图，只有运行时才知道).
+camel::core::type::FunctionType *liftedSignatureOf(const camel::core::type::Type *type) {
+    auto *self = const_cast<camel::core::type::FunctionType *>(
+        tt::as_ptr<camel::core::type::FunctionType>(const_cast<camel::core::type::Type *>(type)));
+    if (self == nullptr) {
+        return nullptr;
+    }
+    if (splitHalvesOf(self).pair != nullptr) {
+        return self;
+    }
+    if (self->normTypesCount() != 1 || !self->hasExitType()) {
+        return nullptr;
+    }
+    auto *answer = tt::as_ptr<camel::core::type::FunctionType>(self->exitType());
+    if (answer == nullptr || splitHalvesOf(answer).pair == nullptr) {
+        return nullptr;
+    }
+    return answer;
+}
+
+/// The **type** of the function value a call through a value names. A `Call` node's callee is its
+/// first `with` input (`nodevm.cpp#NodeVM::call` reads `withInputs().front()`), and that value's type
+/// is the only thing a cut can read about it: which graph it stands for is answered when the program
+/// runs, so the halves name the signature and call the transform that answers the graph --
+/// `split(v)` -- instead of reading it.
+camel::core::type::FunctionType *callValueSignatureOf(const rt::GCGraph &graph, gc_node_ref_t ref) {
+    if (ref >= graph.nodeCount() || graph.node(ref) == nullptr ||
+        graph.node(ref)->kind != rt::GCNodeKind::Call) {
+        return nullptr;
+    }
+    const std::span<const gc_node_ref_t> with = graph.withInputsOf(ref);
+    if (with.empty()) {
+        return nullptr;
+    }
+    const rt::GCNode *value = graph.node(with.front());
+    if (value == nullptr) {
+        return nullptr;
+    }
+    return liftedSignatureOf(value->dataType());
+}
+
 /// `Lift<T>`, read from types: the lifted parameter list is the original's, values first, and then
 /// one tangent slot per parameter in the same order (`jvpSignature`, author 2026-11-03), so the value
 /// ports are simply the first half. A slot for a parameter with no tangent space (`n: int`) is `()`
@@ -212,6 +259,20 @@ std::vector<size_t> valuePortsOf(const camel::core::type::FunctionType *liftedTy
         values.push_back(i);
     }
     return values;
+}
+
+/// The type of `split(f)` for a function of this type: `(f: F) => forward`, built from the **same
+/// law** the operator's resolver asks (`split_operator.cpp#splitOperatorSignature`), so a `split(v)`
+/// a cut writes is typed exactly as a `split(v)` a program writes is.
+FunctionType *splitOperatorType(FunctionType *function) {
+    const SplitHalves halves = splitHalvesOf(function);
+    if (halves.pair == nullptr) {
+        return nullptr;
+    }
+    camel::core::type::FunctionTypeFactory factory;
+    factory.addNormArg("f", function, false);
+    factory.setExitType(const_cast<Type *>(halves.pair));
+    return factory.build();
 }
 
 /// Which parameter a lifted port belongs to, and whether it is that parameter's tangent. A port that
@@ -248,13 +309,31 @@ const rt::GCGraph *calleeGraphOf(
     return rt::isValid(callee) ? program->graph(callee) : nullptr;
 }
 
-/// Whether the call `ref` names a function that answers the pair (`answersAPair`). This is the one
-/// thing the cut needs to know about a callee, and it is a question about **content**, not about where
-/// the graph came from: a call to such a callee is answered, on the value half, by `split`'s forward
-/// half of that callee (author, 2026-11-03 17:55).
+/// Whether the function a **call through a value** names answers the pair, asked of its **type**:
+/// the same question `answersAPair` asks of a callee graph, asked of the signature where there is no
+/// graph to ask yet. Which graph the value turns out to be is asked at run time by `split(v)`
+/// itself, which refuses there, by name, when the graph does not answer a pair.
+bool answersAPairByValueAt(const rt::GCGraph &graph, gc_node_ref_t ref) {
+    camel::core::type::FunctionType *valueType = callValueSignatureOf(graph, ref);
+    if (valueType == nullptr) {
+        return false;
+    }
+    return splitHalvesOf(valueType).pair != nullptr;
+}
+
+/// Whether the call `ref` names a function that answers the pair (`answersAPair`) -- by a callee
+/// graph it names, or, for a call through a value, by the value's signature
+/// (`answersAPairByValueAt`). This is the one thing the cut needs to know about a callee, and it is a
+/// question about **content**, not about where the graph came from: a call to such a callee is
+/// answered, on the value half, by `split`'s forward half of that callee (author, 2026-11-03 17:55).
 bool answersAPairAt(const rt::GCGraph &graph, const rt::Program *program, gc_node_ref_t ref) {
-    if (ref >= graph.nodeCount() || graph.node(ref) == nullptr ||
-        graph.node(ref)->kind != rt::GCNodeKind::Func) {
+    if (ref >= graph.nodeCount() || graph.node(ref) == nullptr) {
+        return false;
+    }
+    if (graph.node(ref)->kind == rt::GCNodeKind::Call) {
+        return answersAPairByValueAt(graph, ref);
+    }
+    if (graph.node(ref)->kind != rt::GCNodeKind::Func) {
         return false;
     }
     return answersAPair(calleeGraphOf(graph, program, ref));
@@ -283,7 +362,9 @@ std::vector<gc_node_ref_t> tangentArgumentsOf(
     const size_t ordinary                = all.size() > withCount ? all.size() - withCount : 0;
     const size_t half                    = ordinary / 2;
     const rt::GCGraph *callee            = calleeGraphOf(graph, program, ref);
-    const FunctionType *calleeType       = callee != nullptr ? callee->funcType() : nullptr;
+    const FunctionType *calleeType       = callee != nullptr
+                                               ? callee->funcType()
+                                               : callValueSignatureOf(graph, ref);
     std::vector<gc_node_ref_t> tangents;
     tangents.reserve(half);
     for (size_t i = half; i < ordinary; ++i) {
@@ -414,9 +495,15 @@ struct Half {
         if (!answersAPairAt(*source, program, ref)) {
             return all;
         }
-        const rt::GCGraph *callee = calleeOf(ref);
-        const std::vector<size_t> valuePorts =
-            valuePortsOf(callee != nullptr ? callee->funcType() : source->funcType());
+        // Which half of the call's list this half takes is the **callee's** signature's answer: the
+        // value ports are the first half of `Lift<F>`. For a call by name that is the callee graph's
+        // type; for a call through a value it is the value's own type (there is no graph yet).
+        const camel::core::type::FunctionType *liftedType = callValueSignatureOf(*source, ref);
+        const rt::GCGraph *callee = liftedType != nullptr ? nullptr : calleeOf(ref);
+        if (liftedType == nullptr) {
+            liftedType = callee != nullptr ? callee->funcType() : source->funcType();
+        }
+        const std::vector<size_t> valuePorts = valuePortsOf(liftedType);
         std::vector<gc_node_ref_t> values;
         values.reserve(valuePorts.size());
         for (size_t port : valuePorts) {
@@ -724,6 +811,45 @@ struct Half {
             // inputs and the rule's own graph is the function value on its context port (`jvp.cpp`
             // builds exactly that shape). The callee is a graph of the program and is not copied, so
             // the call is the same call with its inputs placed on this half's side of the cut.
+            //
+            // A call through a value whose **signature answers the pair** is the other shape: the
+            // value is a lifted function (it came from `jvp(v)`), so the value half cannot call it --
+            // it takes the tangents too -- and the call it places is `split(v)`, the forward half of
+            // whatever cut that value turns out to have (author, 2026-11-05: split 对通过函数值的调用
+            // 同样处理：前一半调用 `split(v)`，后一半的余切交给它返回的 `lin`). Which graph `v` is
+            // is asked at run time by the operator, never read here. The answer is `(result, lin)`,
+            // and the tangent the source read is the second half's call of that `lin` (`residualsOf`
+            // carries it as the call's linear half).
+            if (!tangent && answersAPairByValueAt(*source, ref)) {
+                camel::core::type::FunctionType *valueType = callValueSignatureOf(*source, ref);
+                FunctionType *splitType =
+                    valueType != nullptr ? splitOperatorType(valueType) : nullptr;
+                const size_t withCount = source->withInputsOf(ref).size();
+                if (splitType == nullptr || withCount == 0 || withCount > inputs.size()) {
+                    return refuseAt(
+                        refusal, source, ref, "a call through a function value",
+                        "the value's signature has no halves and no `split` of it to call, or the "
+                        "call passes no value for the place its callee stands in");
+                }
+                const size_t values = inputs.size() - withCount;
+                const SplitHalves halves = splitHalvesOf(valueType);
+                if (halves.forward == nullptr) {
+                    return refuseAt(
+                        refusal, source, ref, "a call through a function value",
+                        "the value's signature has no forward half, so the call has no value to "
+                        "answer with");
+                }
+                std::vector<gc_node_ref_t> placed = inputs;
+                const gc_node_ref_t splitValue =
+                    draft.addOperNode(splitType, nullptr, "transforms:split");
+                draft.setNormInputs(
+                    splitValue, std::span<const gc_node_ref_t>(&placed[values], size_t(1)));
+                placed[values] = splitValue;
+                const gc_node_ref_t made = draft.addCallNode(halves.forward->exitType());
+                placeCallArguments(made, ref, placed);
+                copyOf[ref] = made;
+                return true;
+            }
             const auto *body = source->nodeBodyAs<rt::GCCallBody>(ref);
             const gc_node_ref_t made = body != nullptr
                                            ? draft.addCallNode(node->dataType(), *body)
@@ -1094,9 +1220,16 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             if (const gc_node_ref_t call = pairTangentReadOf(lifted, program, ref);
                 call != rt::kInvalidNodeRef) {
                 const rt::GCGraph *calleeGraph = calleeGraphOf(lifted, program, call);
-                Type *linType =
+                // The linear half's type is the callee's own backward half. A call through a value
+                // has no callee graph to ask, so the type comes from the value's signature -- the
+                // same halves, read from the only place that exists before the program runs.
+                const FunctionType *linearOf =
                     calleeGraph != nullptr && calleeGraph->funcType() != nullptr
-                        ? splitHalvesOf(calleeGraph->funcType()).backward
+                        ? calleeGraph->funcType()
+                        : callValueSignatureOf(lifted, call);
+                Type *linType =
+                    linearOf != nullptr
+                        ? splitHalvesOf(const_cast<FunctionType *>(linearOf)).backward
                         : nullptr;
                 if (linType == nullptr) {
                     // No linear half to name: the call is then only the pair it is, and the branch
@@ -1138,7 +1271,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 const size_t withArguments                   = lifted.withInputsOf(ref).size();
                 const size_t ordinary =
                     arguments.size() > withArguments ? arguments.size() - withArguments : 0;
-                if (answersAPair(lateCallee)) {
+                if (answersAPair(lateCallee) || answersAPairByValueAt(lifted, ref)) {
                     for (size_t i = 0; i < ordinary / 2; ++i) {
                         onward.push_back(arguments[i]);
                     }
@@ -1187,7 +1320,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
                 const GraphId calleeId = lifted.calleeIdOf(ref);
                 const rt::GCGraph *calleeGraph =
                     program != nullptr && rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
-                if (!answersAPair(calleeGraph)) {
+                if (!answersAPair(calleeGraph) && !answersAPairByValueAt(lifted, ref)) {
                     found.push_back(ref);
                     continue;
                 }
@@ -1292,7 +1425,7 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             const GraphId calleeId = lifted.calleeIdOf(ref);
             const rt::GCGraph *calleeGraph =
                 rt::isValid(calleeId) ? program->graph(calleeId) : nullptr;
-            return answersAPair(calleeGraph);
+            return answersAPair(calleeGraph) || answersAPairByValueAt(lifted, ref);
         });
     }
     // The linear halves are the remaining members of the list: a computed value like any other, in
@@ -1364,11 +1497,16 @@ std::vector<Residual> residualsOf(const rt::GCGraph &lifted, const rt::Program *
             // The linear half of a call: its type is the callee's own backward half, `(tangents) =>
             // tangent`, and its name is the call because that is what it is the second answer of.
             const rt::GCGraph *calleeGraph = calleeGraphOf(lifted, program, ref);
+            const FunctionType *linearOf =
+                calleeGraph != nullptr && calleeGraph->funcType() != nullptr
+                    ? calleeGraph->funcType()
+                    : callValueSignatureOf(lifted, ref);
             residual.parameter  = Residual::kNotAParameter;
             residual.linearHalf = true;
-            residual.type       = calleeGraph != nullptr && calleeGraph->funcType() != nullptr
-                                      ? splitHalvesOf(calleeGraph->funcType()).backward
-                                      : nullptr;
+            residual.type =
+                linearOf != nullptr
+                    ? splitHalvesOf(const_cast<FunctionType *>(linearOf)).backward
+                    : nullptr;
             residuals.push_back(residual);
             continue;
         }

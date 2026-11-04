@@ -1,0 +1,42 @@
+// `split` cuts a lifted body that calls a **function value** the same way it cuts one that calls a
+// named function: the forward half calls `split(v)` -- the forward half of whatever cut that value
+// turns out to have -- and the cotangent goes to the `lin` it hands back (author, 2026-11-05).
+//
+// Which graph `v` stands for is answered at run time, so the cut reads only the value's signature;
+// the two calls below are the reading that says so: one cut, two values, each answering its own
+// graph's derivative.
+//
+//   use(f, z) = f(z)    plain(y) = y*y    thrice(y) = 3*y
+//   split(jvp(use))(plain, 2)  -> (4.0, lin)   lin(1) = 4.0
+//   split(jvp(use))(thrice, 2) -> (6.0, lin)   lin(1) = 3.0
+import rulesets.jvp
+import rulesets.transpose
+import { jvp, split, transpose } from transforms
+
+func plain(y: float): float {
+    return y * y
+}
+
+func thrice(y: float): float {
+    return 3.0 * y
+}
+
+func use(f: (y: float) => float, z: float): float {
+    return f(z)
+}
+
+func main(): int sync {
+    let cut = split(jvp(use))
+    let (a, lin_a) = cut(plain, 2.0)
+    let (b, lin_b) = cut(thrice, 2.0)
+    // `lin`'s signature keeps a `()` slot for the parameter with no tangent space (`Tangent<f>`), the
+    // way `Vjp<F>`'s pullback answers one slot per parameter, so the cotangent is read through the
+    // transposed half: `(ct) => (..tangents)`.
+    let pull_a = transpose(lin_a)
+    let (af, adz) = pull_a(1.0)
+    let pull_b = transpose(lin_b)
+    let (bf, bdz) = pull_b(1.0)
+    'plain={} {} {}'->format<a, af, adz>->println
+    'thrice={} {} {}'->format<b, bf, bdz>->println
+    return 0
+}
