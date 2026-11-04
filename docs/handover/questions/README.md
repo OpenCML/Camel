@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：54 页
+## 现在在等作者：59 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -26,10 +26,12 @@
 | [`2026-11-04-axis-reductions-state-their-extents`](2026-11-04-axis-reductions-state-their-extents.cn.md) | 轴归约的结果类型：把声明退掉交给推导，还是留着声明另开一条路？ |
 | [`2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out`](2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out.cn.md) | `autodiff` 能不能在改写时自己把 `split` 造出来的那个值造出来？ |
 | [`2026-11-04-does-a-build-gated-case-count-as-a-name-pin`](2026-11-04-does-a-build-gated-case-count-as-a-name-pin.cn.md) | 只在 no-JIT / arm64 构建里才跑得到的用例，算不算把这条码按名字钉住了？ |
+| [`2026-11-04-does-a-call-stand-on-its-callees-lin-or-on-its-body`](2026-11-04-does-a-call-stand-on-its-callees-lin-or-on-its-body.cn.md) | 一条**静态具名**的调用，转置时站哪儿：被调函数的 body，还是它的 `lin`？ |
 | [`2026-11-04-does-a-closure-members-cotangent-have-a-slot`](2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md) | 闭包成员的余切应不应该有一个槽？ |
 | [`2026-11-04-does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it`](2026-11-04-does-a-transpose-law-count-when-the-first-order-walk-does-not-read-it.cn.md) | 一条转置律没被一阶走查读到，算不算"律已经补上"？ |
 | [`2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value`](2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md) | 转置成员要不要给"一个参数自己的值"留一个端口？ |
 | [`2026-11-04-does-a-with-value-get-a-tangent`](2026-11-04-does-a-with-value-get-a-tangent.cn.md) | `with` 值该不该有自己的切向？ |
+| [`2026-11-04-does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain`](2026-11-04-does-adopt-carry-what-it-adopted-or-does-a-cut-carry-its-own-chain.cn.md) | 嵌套两级的 cut 丢掉自己的孙程序：把 `adopt` 改成传递，还是让每个 cut 自带一条链？ |
 | [`2026-11-04-does-pick-at-need-a-forward-rule`](2026-11-04-does-pick-at-need-a-forward-rule.cn.md) | 问题：`pick_at` 该补一条**前向**律吗？ |
 | [`2026-11-04-does-the-engine-need-a-pick-at-rule`](2026-11-04-does-the-engine-need-a-pick-at-rule.cn.md) | 问题：引擎的反向表要不要给 `pick_at` 补一条规则？ |
 | [`2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings`](2026-11-04-does-the-library-need-forward-rules-for-the-stated-spellings.cn.md) | 问题：`rulesets.jvp` 要不要给四个"stated"拼写补前向律？ |
@@ -46,6 +48,7 @@
 | [`2026-11-04-should-the-library-with-grad-be-an-export-that-refuses`](2026-11-04-should-the-library-with-grad-be-an-export-that-refuses.cn.md) | 库层 `with_grad` 今天就该挂一个一律拒绝的可调用导出，还是等 `jvp` 的 `with` 切向落地再挂？ |
 | [`2026-11-04-the-two-tuple-cases-have-no-closure-member`](2026-11-04-the-two-tuple-cases-have-no-closure-member.cn.md) | 那两条元组用例里没有闭包成员：19:55 那条裁决的前提，今天量不出来 |
 | [`2026-11-04-two-f32-combination-cases-meet-their-own-call-text`](2026-11-04-two-f32-combination-cases-meet-their-own-call-text.cn.md) | 两条 f32 组合用例撞上的是自己的调用写法（还有一处数字） |
+| [`2026-11-04-what-answers-a-length-from-a-type-alone`](2026-11-04-what-answers-a-length-from-a-type-alone.cn.md) | `extent_of` 到底答「形状」还是答「某一维的长度」？ |
 | [`2026-11-04-what-does-a-call-of-a-value-that-is-not-a-function-say`](2026-11-04-what-does-a-call-of-a-value-that-is-not-a-function-say.cn.md) | 调用一个类型不是函数的值，诊断该怎么写？ |
 | [`2026-11-04-what-does-the-second-derivative-need`](2026-11-04-what-does-the-second-derivative-need.cn.md) | 二阶自动微分卡在哪一层：一个"图叫得出名字"的函数值？ |
 | [`2026-11-04-what-is-a-value-of-extent-of`](2026-11-04-what-is-a-value-of-extent-of.cn.md) | `extent_of::<A>` 当一个值用：答，还是拒绝这个值？ |
@@ -57,8 +60,10 @@
 | [`2026-11-04-who-adopts-the-graphs-of-a-nested-cut`](2026-11-04-who-adopts-the-graphs-of-a-nested-cut.cn.md) | 两级嵌套的切：谁来带第二层的图 |
 | [`2026-11-04-who-carries-the-cxx-runtime-into-the-install`](2026-11-04-who-carries-the-cxx-runtime-into-the-install.cn.md) | 安装自己带 C++ 运行时，还是继续要调用方补一条导出？ |
 | [`2026-11-04-who-gives-a-shapeless-cotangent-its-rank`](2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md) | 余切没有形状时，谁给它那个秩：`numel(ct)` 与 `mean_axis_stated_t` 的端口 |
+| [`2026-11-04-who-reads-the-first-operand-as-a-callee`](2026-11-04-who-reads-the-first-operand-as-a-callee.cn.md) | 被调值站在“第一个操作数”位置：该删掉那条读法，还是教调用转置把它写对？ |
 | [`2026-11-04-who-states-the-extents-a-product-law-reads`](2026-11-04-who-states-the-extents-a-product-law-reads.cn.md) | 乘积律读的那个形状，该由谁写出来？ |
 | [`2026-11-04-who-states-the-extents-of-a-stated-reduction`](2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md) | 一个 stated 归约的 extents，由谁在编译期说出来 |
+| [`2026-11-04-who-states-the-length-when-the-shape-is-open`](2026-11-04-who-states-the-length-when-the-shape-is-open.cn.md) | 形状开放时，长度由谁陈述？ |
 | [`2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects`](2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects.cn.md) | 放宽 `Float64` 这道闸门时，十余处写死的类型会在同一刻变成缺陷 |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ |

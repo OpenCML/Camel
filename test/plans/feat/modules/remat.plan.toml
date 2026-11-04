@@ -52,14 +52,14 @@ timeout_ms = 20000
 
 [[tests]]
 name = "remat.split"
-desc = "The mark read where it matters, the cut: `split(jvp(h))` for `h(x, y) = x * x * y` carries three residuals (x, y, and the product x*x the backward half's rule reads), and `split(remat(jvp(h)))` carries two -- the parameters -- and says `recompute=1`: the backward half makes x*x again from x. The four numbers are the same either way, digit for digit."
+desc = "The mark read where it matters, the cut: `split(jvp(h))` for `h(x, y) = x * x * y` carries three residuals (x, y, and the product x*x the backward half's rule reads), and `split(remat(jvp(h)))` carries two -- the parameters -- and says `recompute=1`: the backward half makes x*x again from x. The four numbers are the same either way, digit for digit. The two counts are 3 and 2 and not the 5 and 4 this entry pinned before 2026-11-04: the list used to hold each parameter's **tangent** port as well -- copied in as if a port were a computed value -- and the parameters' value ports are `x` and `y` themselves, already members, so nothing is carried twice (modules/transforms/split.cpp#residualsOf)."
 kind = "behavior"
 case = "../../../cases/transforms/remat/remat_split.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["residuals=5", "residuals=4 recompute=1", "split_remat plain value=18.0 dfdx=12.0 dfdy=9.0", "split_remat marked value=18.0 dfdx=12.0 dfdy=9.0"]
+expect_output_contains = ["residuals=3", "residuals=2 recompute=1", "split_remat plain value=18.0 dfdx=12.0 dfdy=9.0", "split_remat marked value=18.0 dfdx=12.0 dfdy=9.0"]
 expect_output_not_contains = ["UnknownInternalError", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

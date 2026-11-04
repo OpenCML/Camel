@@ -1241,6 +1241,8 @@ expect_exit = 1
 expect_output_contains = ["skip=call-no-transpose node=", "callee=none"]
 expect_output_not_contains = ["callee=mk", "TRANSPOSE function=mk "]
 known_fail = ["nvm"]
+known_fail_owner = "lane-fnarg"
+known_fail_reason = "the callee is still read out of the `with` input with `calleeIdOf`, so the sentence names `mk` where the value names no graph: `transpose.cpp#staticFunctionGraphOf` is the entry that answers the value's own graph and refuses `not-a-data-node` here"
 known_fail_msg = "callee=mk"
 known_fail_note = "Marked 2026-11-04 (lane-fnarg): measured with `nvm`, exit 1, `TRANSPOSE function=mk skip=signature` and `TRANSPOSE function=f skip=call-no-transpose node=3 callee=mk`. This mark survives the fix that removed the operand question, and deliberately: that fix took the callee out of the *ordinary* inputs, and this program's callee stands in a `with` input that holds a call's value. `calleeIdOf` answers for any FUNC node -- including one whose value is this call's callee -- so the name is still `mk`. The verdict (refused, exit 1) is the one the shape owes; the sentence is not. The mark goes away when the `with` question is asked with an entry that answers `what graph does this *value* name` (`staticFunctionGraphOf`, which refuses `not-a-data-node` here) instead of `calleeIdOf` -- the same shape of edit, one input list over."
 
@@ -1824,7 +1826,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_stdout_contains = ["transpose has no transpose for this function: this call's callee has no transpose of its own, so the call cannot be turned around"]
-expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=6 callee=rulesets.jvp::pow_tangent<float>"]
+expect_stderr_contains = ["skip=condition", "skip=call-no-transpose node=5 callee=rulesets.jvp::pow_tangent<float>"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -2636,28 +2638,26 @@ timeout_ms = 20000
 
 
 
-# The gradient across a call, pinned as the number it must answer. `f` is a function of its own,
-# `g` calls it, and `g'(3)` is 12 -- `d/dx (2*x*x) = 4x`. The author's ruling of 2026-11-03 19:35
-# makes that one step of a chain, not a special case: `transpose(call(g, x)) = transpose(lin_g)`.
-#
-# The mark is `known_fail` on the author's ruling of 2026-11-03 00:30 (a case that cannot pass today
-# belongs in the plan, with the wall named, and is not deleted). Owner: `lane-linres`.
-# `known_fail_msg` is the line this tree prints today, so a case that starts failing another way is
-# red rather than quietly re-marked. When the wall falls, the mark goes in the same commit that
-# flips the number, and `flat` must still answer 12.0.
+
+
+# The same defect read from the top: `grad` is `transpose(split(jvp(f)))`, so a linear half that is
+# a constant function of its direction gives a pullback with no cotangent to send and an answer the
+# program never had to compute -- `grad(g)` printed 0.0 in silence. The four numbers are the two
+# levels (`g = 2x²`, `g2 = 2x³`: 12 at 3, 20 at 5, 54 at 3) and the flat spelling of the same
+# function `g` as the guard (`h(x) = 2.0 * x * x`, 12), which never went through the cut's residual
+# list and must not move. The two-level reading also pins the second half of the fix: a cut adopts
+# its callee's program and not the cuts that program adopted, so `g2` used to stop the run at `a
+# direct call names a function whose graph is not in the program's graph table`
+# (modules/transforms/split.h#SplitGraph::standing).
 [[tests]]
-name = "cross_call_gradient_is_not_zero"
-desc = "The gradient across a call: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`; the same arithmetic written flat answers 12.0 in the same run and must keep answering it. Today the call line answers `g'(3) = 0.0` with no diagnostic: `jvp(g)` is right (`jvp(g)(3.0, 1.0)` = `(18.0, 12.0)`, `jvp(g)(3.0, 2.0)` = `(18.0, 24.0)`), and `split(jvp(g)).1` -- the `lin_g` the ruling transposes -- is a constant function, `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`, where 36 is `mul_tangent(y = 6, x = 3, lin_f(3) = 6, 3)`: the value `x = 3` spent as the tangent `dx`. So the wall is not the transposition (the cotangent reaches the right node and the answer assembly reads a parameter port the body never uses) but the cut's residual list, which carries the tangent parameter as a residual and hands the backward half a parameter port nothing reads. The reading is in `docs/handover/questions/2026-11-04-does-a-call-stand-on-its-callees-lin-or-on-its-body.cn.md`."
+name = "grad_across_a_call"
+desc = "`grad` through a call, at one level and at two: `f(x) = 2.0 * x`, `g(x) = f(x) * x` (2x², so 12 at 3 and 20 at 5), `g2(x) = g(x) * x` (2x³, so 54 at 3), and `h(x) = 2.0 * x * x` -- the flat spelling of g -- as the guard that the path which was already right still reads 12. Before the fix the first two answered 0.0 without a word and the third stopped the run at a callee graph that the outermost program did not hold."
 kind = "behavior"
-case = "../../../cases/compile/transforms/cross_call_gradient_is_not_zero.cml"
+case = "../../../cases/compile/transforms/grad_across_a_call.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["g(3) = 18.0", "g'(3) = 12.0", "flat(3) = 18.0", "flat'(3) = 12.0"]
-known_fail = ["nvm"]
-known_fail_owner = "lane-linres"
-known_fail_reason = "`modules/transforms/split.cpp#residualsOf` lists the lifted graph tangents among the values that cross the cut, so the backward half is handed a parameter port its body never reads and reads a residual the forward half cannot compute"
-known_fail_msg = "g'(3) = 0.0"
-known_fail_note = "Owner `lane-linres`. Waits on the cut, not on the transposition: `modules/transforms/split.cpp#residualsOf` lists the lifted graph's tangent parameter as a value that crosses the cut, so `split_of_jvp_of_g_backward` carries one parameter port (`normPorts = [4]`) that its body never reads and reads a closure port (`node 1`) the forward half does not compute; `transpose` then answers the parameter with the zero the walk gives an unreached parameter (`TRANSPOSE function=split_of_jvp_of_g_backward ... answer=zero`). Measured 2026-11-04 on this branch: `jvp(g)` is right at `(18.0, 12.0)` and `(18.0, 24.0)`; `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`; `g'(3) = 0.0` and `flat'(3) = 12.0`. The same wall answers 0.0 for `p(x) = f(x) + x` at 2 (should be 3.0) and is not reached by `q(x) = f(x) * 4.0` (8.0, right) or `r(x) = f(f(x))` (4.0, right), so the shape is the cut's residual list and not every call."
+expect_output_contains = ["grad_g_3= 12.0", "grad_g_5= 20.0", "grad_g2_3= 54.0", "grad_h_3= 12.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-timeout_ms = 30000
+timeout_ms = 20000
