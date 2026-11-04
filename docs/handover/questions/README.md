@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：61 页
+## 现在在等作者：62 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -22,6 +22,7 @@
 | [`2026-11-04-a-member-read-is-not-a-parameter-read`](2026-11-04-a-member-read-is-not-a-parameter-read.cn.md) | 读一个参数的成员，不是读这个参数：`transpose` 该跟到端口吗 |
 | [`2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction`](2026-11-04-a-parameter-holds-no-cotangent-on-a-two-operand-reduction.cn.md) | 为什么 `sqrt`/`log`/`divide` 的两腿用例停在“一个参数拿不到余切，因为没有东西用它” |
 | [`2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer`](2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md) | 秩 0 的余切被当成指针读：`mean_axis_stated_t` 的端口写着 `float[..]` |
+| [`2026-11-04-a-refusal-removed-is-a-defect-hidden`](2026-11-04-a-refusal-removed-is-a-defect-hidden.cn.md) | 一个拒绝被拿掉之后，它挡住的缺陷就只剩读数了 |
 | [`2026-11-04-a-struct-field-read-refused-or-copied-by-key`](2026-11-04-a-struct-field-read-refused-or-copied-by-key.cn.md) | 一个 struct 字段读（`qq.a`）：切里按名字拒，还是把 key 抄过去 |
 | [`2026-11-04-axis-reductions-state-their-extents`](2026-11-04-axis-reductions-state-their-extents.cn.md) | 轴归约的结果类型：把声明退掉交给推导，还是留着声明另开一条路？ |
 | [`2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out`](2026-11-04-can-a-pass-build-the-graph-a-transform-hands-out.cn.md) | `autodiff` 能不能在改写时自己把 `split` 造出来的那个值造出来？ |
