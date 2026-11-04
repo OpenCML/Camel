@@ -32,17 +32,24 @@ func dynamic(x: f32[...]): f32[...] {
     return slice(reshape<[int(12.0 / float(sum(x))), int(sum(x))]>(x), 1, 1, 3)
 }
 
-func main(): int sync {
+func main(): string! sync {
     if (get_env('MODE') ?? '') == 'constant' then {
         let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => constants(x), x)
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => constants(x), x) {
+            case error e => { return e }
+            case v => 'exported'
+        }
     } else if (get_env('MODE') ?? '') == 'dynamic' then {
         let x = reshape<[1, 12]>([12.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0] as f32[])
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => dynamic(x), x)
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => dynamic(x), x) {
+            case error e => { return e }
+            case v => 'exported'
+        }
     } else {
         let x = reshape<[3]>([1.0, 2.0, 3.0] as f32[])
-        let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => head(x), x)
+        return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => head(x), x) {
+            case error e => { return e }
+            case v => 'exported'
+        }
     }
-    println('exported')
-    return 0
 }

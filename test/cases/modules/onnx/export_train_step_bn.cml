@@ -48,7 +48,7 @@ func step(m: CnnBn, s: BnStats, x: float[...]): (float, CnnBn, BnStats) {
     return (vg.0, sgd(m, vg.1, 0.01), r.1)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let m = {
         conv1_w: reshape<[2, 1, 3, 3]>([
             0.3, -0.2, 0.1, 0.4, -0.5, 0.2, 0.1, 0.6, -0.3,
@@ -79,7 +79,8 @@ func main(): int sync {
         -0.2, 0.6, 0.5, -0.4, 0.1,
         0.3, -0.5, 0.4, 0.2, -0.7,
         0.1, 0.2, -0.1, 0.6, 0.4] as float[])
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, s, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, s, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }
