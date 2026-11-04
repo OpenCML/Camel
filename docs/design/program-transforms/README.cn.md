@@ -138,10 +138,10 @@ type Split<F> = ((..ParamsOf<F>)          => (ResultOf<F>, (..Tangent<ParamsOf<F
 
 ```camel
 func transpose::<F>(f: F): Transpose<F> when is_linear::<F>()
-type Transpose<F> = (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
 ```
 
-对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**（作者，2026-11-03，`origin/fsh-dev` `6eceaa89d`：声明即契约，`transpose`/`jvp` 按声明建类型，不许近似声明；类型包拼接丢重数的事先修）：构建必须产出声明写下的形状。今天两者还不一致，是因为**类型包还写不出准确形状** —— `(..A, ..B)` 丢重数，且缺"按调用点仍要传的值参数"与"值/切向交错"两个运算，那是**待补的类型包能力**，不是可以保留的口径。准确形状要表达的是：取余切的参数不再传，没有切空间的参数（`int`、`bool`、字符串）与体从外面读到的值各占一格，余切永远在最后 —— 因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
+对一个对其输入线性的函数（残差是已知值），把数据流反过来。上面那条**声明就是契约**：构建必须产出声明写下的形状，产物是 `modules/transforms/transpose.cpp#transposeSignature`。形状是"一个实参（结果的余切），一个参数一份余切"，**没有值参数、没有 `with` 列表**：体要用而调用点没有的已知值，是**被转置的函数自己闭包上的残差**，由转置后的图从闭包端口读（`transpose((dx) => 2.0 * x * dx)` 里的 `x`，`lin` 的残差元组是同一条路）。没有切空间的参数（`int`、`bool`、字符串）是例外，它不是余切而是调用点仍然要传的值，所以它是转置图里唯一一个不是余切的端口。因此单 `float` 函数的转置是 `transpose(f)(1.0)`。
 
 - **原语**：换成它的 `#transpose` 规则；
 - **一个值被用了几次**：反过来就是几份相加；
