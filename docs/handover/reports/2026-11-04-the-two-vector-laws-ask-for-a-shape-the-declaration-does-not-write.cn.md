@@ -76,3 +76,22 @@ func sum_of_product(x: float[2, 2], u: float[2])      let u = [0.5, 0.25] as flo
 2. **不要以为 vjp 那条路「不许 `float[]`」。** 语言拒绝的是「律要这个参数的形状、而声明没写」，
    不是拒绝开放长度的向量本身：同一个 `v: float[]` 放进 `with <v: float[]>` 的 `with_grad` 那一腿是绿的
    （引擎的 kernel 自己不读形状）。
+
+## 六、更正：`docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md` 对这两条的归类
+
+那一页是三件事上最先把这条路量清楚的（`position` 的含义、`sum_to` 的第二操作数只被读形状、
+「`sum_to(..., a)` 不是为了归约而是为了把返回类型钉成 `a` 的秩」——§5.1 的编译错误确实是这么说的），
+本页第一、二节与它一致。但它的 §3.1 与 §4 表把这两条并进「`extents=stated`、所以类型答不出」的那一族，
+而**这两条恰恰是唯一 `extents` 没有 stated 的**：`pos=0` 的操作数是 `v: float[]`，`pos=1` 的是 `u: float[]`。
+所以第 3 条给的落点（把律改写成 `sum_to_stated(..., shape(a))`）对这两条**不必走**：walk 那一侧的
+`shapeFromTypeOf` 就会把 `float[2]` 的 extents 写成 `tensor:zeros` 交给 `sum_to`，律一个字不用改。
+判据是现成的：同一棵树里 `matmul_t.law_read_through_vjp`（`x: float[2, 2]` × `w: float[2, 2]`）与
+`linear_gradient_both_legs` 都是绿的，它们走的是**同一条** `sum_to(..., 操作数)`。
+
+一处应当保留的分野：§3.2 的「乙」（`x: float[..]` 开秩，`grad` 返回的切线是运行时长度的数组）是真的答不出，
+`float[..]` 里连 rank 都没有，那是 `sum_to_at`/孪生算子那条待裁的路
+（`docs/handover/questions/2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md`）；本页的两条不是它。
+
+**给下一个人的一句**：先把失败位置的**操作数类型**抄出来（`float[2]` 还是 `float[]`），再决定「补值 / 改律 / 改声明」。
+这一族的三次判断——先是「B3 删了供给」（证伪，见 `docs/handover/reports/2026-11-04-b3-reverted-and-the-ten-it-does-not-explain.cn.md`），
+后是「转置成员没拿到原值」（对这两条不成立），都是先归了类、后看类型。
