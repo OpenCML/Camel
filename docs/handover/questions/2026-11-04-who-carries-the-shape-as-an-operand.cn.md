@@ -1,6 +1,6 @@
 # 形状要当操作数交下来：`mul_stated` 与 `matmul_stated`
 
-**状态**：待裁，**但第 4 节的默认已被 01:2x 的实测推翻一半**：七条红逐条打印后，两条 matmul 是**甲**（类型陈述了，律把 `a` 当值交给 `sum_to` 了），修法在律里；五条 `mul_tensor_t` 是**甲（值）+ 乙（形状）**两半，孪生算子只对乙那一半有理由，且单独关不掉任何一条。证据在 `docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md`，下一步见该页第 5 节。
+**状态**：**第 4 节的建议已被实测排除（本页保留，价值在"为什么被推翻"）**。三次实测（原话见 `docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md` 第 5 节）：① 删掉四个车道里的身份归约 ⇒ 编译不过（`ReturnNeedsConversion`，`sum_to(..., a)` 是把返回类型钉成 `a` 的秩，不是归约）；② 返回类型放宽成 `float[..]` ⇒ 编译过、读数**一字未动**（仍 `skip=cotangent-needs-a-value uri=tensor:matmul position=0`）；③ 成员端口三对齐打印（`closureOf` / `portOfParam` / `forward` 的键）⇒ **缺的是值不是形状**：键就是参数端口（`normPorts 0:ref3[at=0]`），而 `portOfParam[0]` 是空的。所以"把形状当操作数交进律"这条路对 10 条一条也关不掉，新型算子 `mul_stated`/`matmul_stated` 随之作废。以下为原建议，保留只为说明它为什么被推翻：七条红逐条打印后，两条 matmul 是**甲**（类型陈述了，律把 `a` 当值交给 `sum_to` 了），修法在律里；五条 `mul_tensor_t` 是**甲（值）+ 乙（形状）**两半，孪生算子只对乙那一半有理由，且单独关不掉任何一条。证据在 `docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md`，下一步见该页第 5 节。
 
 写这页的直接原因：作者 2026-11-04 04:20 裁"**现在就删掉 `shapeFromTypeOf` 里的零载体回落**；写死形状的类型用 `extent_of`；开秩的裸 `transpose` 按语言规则拒绝"，同一份裁定里"`exp`/`erf`/`gelu` 的 `jvp` 规则把形状作为已知实参交给乘法（与 `sum_stated` 同一个做法）"。前半句本轮落了（零载体已删，见 `docs/handover/reports/2026-11-04-extent-of-reads-the-type-and-hands-it-over.cn.md`），后半句要一个新算子，本轮没落——而**删掉零载体之后，正是这七条从绿转红**，所以这页不是可选工作，是那七条的唯一出路。
 

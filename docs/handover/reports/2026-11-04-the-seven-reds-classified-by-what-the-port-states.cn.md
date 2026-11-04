@@ -57,7 +57,50 @@
 
 本轮对 `stdlib/rulesets/transpose.cml` 的改动**已全部撤掉**（`git checkout --`，工作区干净），宿主 `out/latest/stdlib` 也推回了提交版；试验只留下了上面这几行读数。
 
-## 6. 下一步
+## 6. 三对齐打印：闭合成员／参数／取值键（2026-11-04 02:4x，`knownValue` 拒绝处）
 
-1. **成员端口**（唯一剩下的路）：让 `split` 交给转置成员的闭合里带上"被转置那一步的操作数"的值，并让 `buildTransposeMember` 的 `forward(...)` 真的能从那里取到值。第 4 项那次的读数是"值进了 `residuals`，成员却拿不到端口"，所以这一处要从端口对应下手，而不是再从残差下手。
-2. 五条 `mul_tensor_t` 的形状那一半（乙）：等上面那条落地后重测；若仍红，再拿开秩 `float[..]`（`grad` 返回的切线是运行时长度的数组，**任何调用点都无法陈述**）去找作者裁。
+在 `modules/transforms/transpose.cpp#knownValue` 的拒绝处临时打印三样东西——**闭合的成员**（`closureOf`，及每个成员建成了哪个端口）、**参数**（`paramCount`、`portOfParam`、`normPorts` 与 `portParameter`）、**取值键**（`forward` 被问的那个 `ref`，连同它的节点种类与类型）。一次构建（`build 411.6 s`）、跑完 `git checkout --` 撤掉；带打印那次 plan 仍是 `total: 170, pass: 151, fail: 5, known failures: 14`，与不带逐条相同。
+
+**`linear_gradient_both_legs`（`matmul`，`float[2,2]×float[2,2]`），原话：**
+
+```
+ALIGN key=3 kind=1 type=float[2, 2] closureMember=0 paramPort=2 withPort=0
+  closureOf(3): 0[k=1,t=float[2, 2],p=0] 1[k=1,t=float[2, 2],p=1] 2[k=1,t=float[2, 2],p=2]
+  portOfParam(2): 0->4294967295 1->4294967295
+  paramCount=2 nodeCount=10
+  normPorts(2): 0:ref3[at=0] 1:ref4[at=1]
+  closureNodes(3): 0[ported] 1[ported] 2[ported]
+```
+
+**`erf_gradient_both_legs`（`mul`，`float[..]×float`），原话：**
+
+```
+ALIGN key=9 kind=11 type=float[..] closureMember=0 paramPort=1 withPort=0
+  closureOf(2): 0[k=1,t=float[4],p=0] 1[k=1,t=float[4],p=1]
+  portOfParam(1): 0->4294967295
+  paramCount=1 nodeCount=12
+  normPorts(1): 0:ref2[at=0]
+  closureNodes(2): 0[ported] 1[ported]
+```
+
+**三样对不上，而且是这一处**：
+
+1. **取值键是"参数端口"。** `linear` 的键 `ref=3`，`normPorts(2): 0:ref3[at=0]` —— **它就是参数 0 的端口**，不是某个"值节点"。
+2. **参数没有端口。** `portOfParam(2): 0->invalid 1->invalid` —— 两个参数**一个端口都没建**。这就是 `forward` 在 `portOfParam[at]` 处返回 `invalid` 的直接原因（`transpose.cpp#forward` 的 Port 分支）。
+3. **闭合里有值，只是没和这个键连上。** `closureNodes(3): 0[ported] 1[ported] 2[ported]` —— 三个成员**都**建了端口（`p=0,1,2`，类型都是 `float[2,2]`）。**值在闭合里，键指向参数端口，两者之间没有一条边**。`erf` 同型：闭合两个成员都 ported，键 `ref=9` 是算子节点（`kind=11`），它的输入链尽头仍是"没有端口的参数端口"。
+
+**所以判据的答案是"对不齐"，且对不齐的位置就是 `portOfParam` 空着**：`transpose.cpp#forward` 的注释写着"participating 的参数没有端口，值由调用的槽位（`valueOf`）送来"，而 `valueOf` 走的正是 `knownValue → forward`，于是那句话自我指涉：**要值的律问 `forward`，`forward` 说要问调用槽位，调用槽位又回到 `forward`。** 这一圈闭合不了的地方，就是 `portOfParam` 与 `closurePortOf` 没有接上的那一处。
+
+## 7. 下一步
+
+1. **接上那一处**：让"被转置那一步的操作数"要么在 `portOfParam` 里有端口，要么在 `closureOf` 里以同一 `ref` 出现（今天的打印说明它两边都没有）。这一处改完，10 条应该一起动（同一根因），届时重测并贴并排读数。
+2. `matmul_t.rank_three_is_refused_by_name` **已单独修好**：它今天红在两处，第二处是钉子里的节点号——见 §8。
+3. 五条 `mul_tensor_t` 的形状那一半（乙）：等第 1 条落地后重测；若仍红，再拿开秩 `float[..]`（`grad` 返回的切线是运行时长度的数组，**任何调用点都无法陈述**）去找作者裁。
+
+## 8. 三行表：`showcase_s2.plan.toml` 的节点号（本次唯一改的期望值）
+
+| 文件 | 旧值 | 新值 | 为什么 |
+| --- | --- | --- | --- |
+| `test/plans/feat/showcase_s2.plan.toml`（`matmul_t.rank_three_is_refused_by_name` 的 `expect_stderr_contains`，及同条 `desc` 与上方两行注释） | `node=6 position=0 ranks=(3, 2)` | `node=7 position=0 ranks=(3, 2)` | **节点号是下游数的**：它是被转置图里那个 `tensor:matmul` 节点的序号，由这一趟走法数出来，不是我们挑的。今天的树读 `node=7`（发布侧那条写的是 `node=6`，来自他们自己的树）；两句原文一并记在这里——`node=6` 是我这条车道动手之前别人读到的，`node=7` 是今天这棵树的实测。**没有把它改成"任意号"，`position=0 ranks=(3, 2)` 与两种流水（stdout 的整句、stderr 的 `reason=` 行）都没动。** |
+
+读数：改前 `showcase_s2` 五条红（`first_step` / `matmul_t.law_read_through_vjp` / `vector_lhs` / `vector_rhs` / `rank_three`）；改后 `[SUMMARY] total: 7, pass: 3, fail: 4`，**`matmul_t.rank_three_is_refused_by_name` 转绿**，其余四条一字未动。也就是说这条基线红**原本只是钉子错**，不是一个行为缺陷。
