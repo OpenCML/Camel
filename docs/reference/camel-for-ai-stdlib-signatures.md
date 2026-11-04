@@ -218,7 +218,7 @@ grad: (f: (x: float) => float) => (x: float) => float
 with_grad: (f: F) => <...WithOf<F>> (...ParamsOf<F>) => never when is_function::<F>()
 ```
 
-**`tensor`** — import { ... } from tensor — 79 name(s)
+**`tensor`** — import { ... } from tensor — 81 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -290,6 +290,8 @@ to_bytes: (t: T[...]) => Bytes when is_plain::<T>()
 save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
 sum_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
 take_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
+mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
 sum_axis_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
 mean_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
 max_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
