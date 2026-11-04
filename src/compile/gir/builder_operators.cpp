@@ -3928,10 +3928,11 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 // A call whose answer is a fact of the type arguments it names and which reads no
                 // operand (`extent_of::<float[2, 3]>()` is `[2, 3]`) is settled here, and by the
                 // rule itself rather than by its name: `FuncTypeResolver::valueFromTypeArgs` says
-                // a rule's answer exists and what it is. The node keeps the instantiated type of
-                // the call but not the type argument it was written with
-                // (`src/builtin/operators/struct.cpp#__op_extent_of__`), so nothing at run time
-                // could answer it -- the graph holds the list itself, as a constant.
+                // a rule's answer exists and what it is. A node keeps the instantiated type of
+                // the call but not the type argument it was written with, so nothing at run time
+                // could answer it -- the graph holds the list itself, as a constant. That is also
+                // why such an operator carries no kernel (`src/builtin/operators/struct.cpp`, the
+                // `extent_of` section): this is the only place its answer is made.
                 //
                 // Nothing is invented: a type argument the rule cannot answer for was refused by
                 // the resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so
