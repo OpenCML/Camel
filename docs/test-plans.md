@@ -44,6 +44,12 @@ When adding a new feature or test case, manually run the case from the command l
   serial execution, useful to reproduce a failure or to compare output.
 - `node scripts/test.js --changed` selects the plans a change touches (see "Selecting plans from
   a change").
+- `node scripts/test.js --tier-report` answers what a layer's entry count is made of instead of
+  running anything: the entries the plan files declare, the entries a `[[sweeps]]` entry derives
+  from them, and how many sweep entries do the deriving, per layer. It starts no test and needs no
+  build (`scripts/tier-report.mjs`). `--tier <name>` narrows it to one layer, `--quiet` prints the
+  totals only, and a target or `--changed` beside it is refused: a query about the plan tree has no
+  run to narrow. See "What A Layer's Entry Count Is Made Of".
 
 The runner prints one line per test and, at the end, `[SUMMARY]` counts and the wall time with
 the job count and layer, then the gate's split:
@@ -153,6 +159,15 @@ above started is a defect** -- an entry the file declares for this layer that ne
 skipped appears in no summary, so the plan proves less than its file says while printing green -- and
 it names the plan and fails the run. Both numbers are counted, never computed: multiplying by
 `backends.length` reads `7339` for a layer that starts `3404`.
+
+`declared` in that line means *one per entry the runner's loader returns*, and the loader returns
+the copies a `[[sweeps]]` entry generates as well as the entries the files write. At `946b6f4d4`
+the milestone layer's 3539 entries are 246 written entries and 3293 copies of one sweep entry --
+and the same measurement read 3518 / 3272 eleven hours earlier, because the number moves with the
+plans a sweep names, not with the sweep: it is a reading of a commit, never a constant.
+`node scripts/test.js --tier-report --tier milestone` re-measures it and says which part is which.
+The two lines answer different questions about the same total: "What A Layer's Entry Count Is Made
+Of", below.
 
 Immediately before `[SUMMARY]`, every run states the artifact its numbers belong to:
 
@@ -1165,6 +1180,126 @@ sweep: it checks the handle rules of the collector (`docs/technical/36_gc_handle
 against the tests of the modules, so an operator added later is covered as soon as it has a
 test. A test that cannot run under a sweep (it asserts wall-clock time, or which graphs a back
 end compiles) says `sweep = false` with a comment.
+
+## What A Layer's Entry Count Is Made Of
+
+A layer's size is quoted as one number, and one number cannot separate the entries somebody wrote
+from the entries a sweep copies out of them. `node scripts/test.js --tier-report` answers that per
+layer. It reads the plan files through the runner's own loader
+(`test/tools/run-tests.mjs#expandSweeps`, `#loadPlanTests`, `#testTier`), so it needs no build and
+no install, and `--tier <name>` narrows it to one layer:
+
+```
+$ node scripts/test.js --tier-report --tier milestone
+[tier-report] tree <tip> | 366 plan files
+[tier-report] milestone: 246 declared test entries / 3293 derived / 1 [[sweeps]] entry = 3539 total (93% derived)
+[tier-report]   declared: 242 distinct commands (4 repeated, most launched 3 time(s))
+[tier-report]   test/plans/feat/mm/gc_poison_sweep.plan.toml#poison: 3293 copies, 3241 distinct (tool, case, args, envs) commands (52 repeated, most launched 4 time(s)), 3266 distinct command+assertion pairs (27 repeated), from 177 source plan(s)
+```
+
+The first line is the commit the numbers belong to: a tree with uncommitted edits has no tip and
+prints `(dirty: N files)` instead, because what it would read is that commit plus edits nobody
+recorded. `--quiet` prints the layer totals without the per-sweep lines.
+
+- **declared** -- entries a plan file's own `[[tests]]` name for the layer, back ends expanded, as
+  `loadPlanTests` reads them.
+- **derived** -- entries a `[[sweeps]]` entry generates out of other plans' entries.
+- **the third number** -- how many `[[sweeps]]` entries those derived entries come from.
+
+| layer | declared | derived | sweep entries | total | derived share |
+|-------|---------:|--------:|--------------:|------:|--------------:|
+| fast | 8624 | 214 | 1 | 8838 | 2% |
+| slow | 163 | 0 | 0 | 163 | 0% |
+| milestone | 246 | 3293 | 1 | 3539 | 93% |
+| debug | 2 | 0 | 0 | 2 | 0% |
+
+Measured on 2026-11-05 at `946b6f4d4`. Every number here is a reading of a commit: the same
+measurement read 3272 copies (3518 entries) earlier that night and 3273 at `eacdf5b65` eleven hours
+before this one, because a sweep's source set is *whatever the plans it names contain* -- a test
+added to `smoke`, `modules`, `compile`, `linear`, `para`, `trans` or `consistency` adds a copy the
+same day, and nothing announces it.
+
+**A sweep's entry count is a function of the plans it names, not a constant.** Add a test to one of
+those 215 plans and the milestone layer grows by one entry that day: no command reports the growth,
+the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
+split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
+than to the runner, and it is asked in
+`docs/handover/questions/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+
+### The one sweep, and what it expands to
+
+The milestone layer's whole derived part is one entry: the `[[sweeps]]` table of
+`test/plans/feat/mm/gc_poison_sweep.plan.toml#poison`. As the file writes it:
+
+```toml
+name = "poison"
+plans = ["../../smoke", "../modules", "../compile", "../linear", "../para", "../trans",
+         "../consistency/attempt.plan.toml", "../consistency/faults.plan.toml",
+         "../consistency/cleanup.plan.toml", "../consistency/values.plan.toml",
+         "../consistency/match.plan.toml"]
+exclude = ["modules/autodiff", "modules/onnx"]
+args = ["--gc-check", "poison"]
+skip_args_prefix = "--gc-"
+timeout_scale = 20
+fast_sample = 1
+risk_tags = ["collections", "closures", "iterators", "comprehension", "loops", "collect",
+             "higher_order", "rules"]
+risk_sample = 3
+```
+
+Its dimensions, measured through `test/tools/run-tests.mjs#expandSweeps`:
+
+| dimension | count |
+|-----------|------:|
+| `plans` entries (directories and plan files) | 11 |
+| plan files those entries reach | 220 |
+| left out by `exclude` (`modules/autodiff`, `modules/onnx`) | 5, leaving 215 |
+| source plans with at least one eligible test | 186 (29 contribute none) |
+| eligible source tests -- one copy each | 3507 |
+| tests those 215 plans declare, left out as ineligible | 1902 of 5409 (not `behavior`/`snapshot`, `sweep = false`, `known_fail`, own `--gc-` option, or not a run) |
+| copies sampled into the fast layer (`fast_sample = 1`; 14 of the 16 plans that carry a `risk_tags` tag keep 3, the other 172 keep 1) | 214 |
+| copies the sample did not take -- **the milestone layer** | 3293 |
+
+So the 93% is not a layer that grew by thousands of decisions: it is one decision -- "every
+eligible test of those 215 plans runs once more under `--gc-check poison`" -- priced at 3293 runs.
+
+**If that sweep were collapsed into one entry, the milestone layer would read 247 entries:**
+
+```
+3539 - 3293 + 1 = 247   (246 written entries + 1 sweep entry)
+```
+
+and the same arithmetic on the earlier reading is `3518 - 3272 + 1 = 247`, because the written part
+is 246 in both.
+
+### The copies are not thereby redundant, and this report does not decide that
+
+"All 3293 copies come from one entry" and "3293 copies are 3293 claims" can both be true, and only
+one of them being false makes a defect. A count of provenance cannot tell them apart, so the report
+also counts what the copies launch: `(tool, case, args, envs)` with the variables resolved the way
+`test/tools/run-tests.mjs#runOneTest` resolves them, and then `(command, the assertions made about
+it)`.
+
+- 3293 copies launch **3241 distinct commands**: 52 copies launch a command another copy already
+  launches.
+- of those, 27 also assert the same fields: **27 copies are one assertion paid for twice**.
+- that is the rate the written entries already repeat at, not a rate the sweep creates: the fast
+  layer's 8624 declared entries are 8469 distinct commands (155 repeated, 1.8%), and the copies
+  repeat at 1.6%. The mechanism is in the source plans -- `linear.captured_writes` names one case
+  once for `opt` and once for `simplify` -- and the sweep copies both halves. Fixing it in the
+  source plan fixes both.
+
+**The trap this reading exists in spite of**: count the argument lists *as written* and the same
+sweep reads 2233 distinct with 1060 repeats. `${backend}` is a pass list from `test/vars.toml`
+(`run_nvm`, `run_fvm`, ...), so the `.nvm`/`.fvm`/`.jit` copies of one test spell it identically
+while running different pipelines. A count of the written words is not a count of what runs, which
+is why `scripts/tier-report.mjs#commandOf` expands through `test/tools/run-tests.mjs#expandArgs`
+instead of comparing text.
+
+What the report cannot answer is whether 3293 poisoned runs of 3241 commands is the right price for
+the handle rules it checks -- that is a ruling about design, not a reading. Nothing here cuts,
+merges, re-tiers or deletes a plan entry: the layers, the plan files and every `tier` line are
+exactly as they were, and the report is a measurement of them.
 
 ## Runner environment
 
