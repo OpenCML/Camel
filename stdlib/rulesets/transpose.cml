@@ -811,7 +811,6 @@ func take_cotangent_from_type::<T>(ct: T[...], indices: int[], at: int[]): T[...
 export rule take_from_type_t::<T, X, I>(t: X, indices: I) when is_float::<T>() {
     take(t, indices) => (ct: T[...]) => take_cotangent_from_type(ct, indices, extent_of::<X>())
 }
-}
 
 /// The cotangent of `mean_axis(t, axis, keepdims)`: each lane's `ct` spread back over the lane it was
 /// averaged from, where `at` is the extents of `t`.
