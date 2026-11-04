@@ -519,7 +519,7 @@ gc_node_ref_t expandRuleRightSide(
     const std::function<gc_node_ref_t(size_t)> &valueOf,
     const std::vector<gc_node_ref_t> &tangents, std::string &why, size_t position,
     const std::unordered_set<gc_node_ref_t> *structurallyZero,
-    std::vector<std::string> *omitted) {
+    std::vector<std::string> *omitted, size_t *unboundOperand) {
     RuleRightSide right;
     if (!findRuleRightSide(instance, right, why)) {
         return rt::kInvalidNodeRef;
@@ -810,6 +810,14 @@ gc_node_ref_t expandRuleRightSide(
         const gc_node_ref_t value = valueOf == nullptr ? rt::kInvalidNodeRef : valueOf(argument);
         if (value == rt::kInvalidNodeRef) {
             why = "the rule's right side reads a value the caller does not carry";
+            // Which operand it was, because the two answers are told apart by it and by nothing else:
+            // an operand whose declaration states no extents is a shape to write down (the caller
+            // names that cause and its repair), and one whose type is complete is a value to carry
+            // some other way. `why` above is the same sentence for both, so a caller reading it back
+            // would have to parse the law to learn what this one slot says.
+            if (unboundOperand != nullptr) {
+                *unboundOperand = argument;
+            }
             return rt::kInvalidNodeRef;
         }
         bound[capturePorts[i]] = value;
@@ -1088,7 +1096,7 @@ gc_node_ref_t expandRuleByName(
     const std::function<gc_node_ref_t(size_t)> &valueOf,
     const std::vector<gc_node_ref_t> &tangents, size_t position,
     const std::vector<camel::core::type::Type *> &operandTypes, std::string &why,
-    bool *noInstanceAtOperands) {
+    bool *noInstanceAtOperands, size_t *unboundOperand) {
     using camel::core::type::Type;
     if (noInstanceAtOperands != nullptr) {
         *noInstanceAtOperands = false;
@@ -1137,7 +1145,8 @@ gc_node_ref_t expandRuleByName(
     // knows which captures the answer reads -- after the position has picked one component -- and a
     // capture the answer does not read is never asked for, so no operand is invented for a slot the
     // answer does not use.
-    return expandRuleRightSide(group, transaction, *instance, valueOf, tangents, why, position);
+    return expandRuleRightSide(group, transaction, *instance, valueOf, tangents, why, position,
+                               nullptr, nullptr, unboundOperand);
 }
 
 } // namespace camel::transforms

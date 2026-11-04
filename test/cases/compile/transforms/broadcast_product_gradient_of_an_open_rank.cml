@@ -14,8 +14,8 @@
 // that operand for its shape, the operand is a tangent, and `float[...]` states no extents --
 // `shapeCarrierOf` answers only a stated type (author, 2026-11-03 16:15). Measured 2026-11-04:
 //
-//     TRANSPOSE function=split_of_jvp_of_total_backward skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry
-//     transforms: transpose has no transpose for this function: a parameter holds no cotangent: nothing uses its value.
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=parameter-shape uri=tensor:multiply node=7 position=0 param=0 param-type=float[...]
+//     error[RuntimeDiag::TransposeNeedsParameterShape]: The transpose of 'split_of_jvp_of_total_backward' needs the shape of the parameter at position 1, and the type 'float[...]' does not state it.
 //
 // Why this case exists and must stay: the `known_fail` above is the honest reading, but the tempting
 // "fix" is to make each side of the law read the operand it is **not** answering for
