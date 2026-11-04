@@ -570,7 +570,13 @@ function verifyWheelTags(pypiDist, pyExe) {
         logFail(`No wheel was produced in ${pypiDist}`)
         process.exit(1)
     }
-    runCommand(`${pyCmd(pyExe)} "${checker}" --ruling ${wheels.join(' ')}`)
+    // A Linux wheel claims the host tag (`linux_x86_64`) until `auditwheel repair` replaces
+    // it, and the repair runs after this rollup (build-pypi.yml, "Repair the Linux wheels");
+    // `--repair-pending` is what says so. The release job runs the same check again after
+    // that repair, without the flag, and that run is the one that decides whether the set is
+    // publishable.
+    const pending = process.platform === 'linux' ? ' --repair-pending' : ''
+    runCommand(`${pyCmd(pyExe)} "${checker}" --ruling${pending} ${wheels.join(' ')}`)
 }
 
 function main() {
