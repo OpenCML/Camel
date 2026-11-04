@@ -35,7 +35,7 @@
 2. **五条 `mul_tensor_t` 还有第二半，是货真价实的乙。** 它的另一次展开（`pos=1`）答案写 `sum_to_stated(ct * x, shape(w))`，被回答的那一位是 `x: float[..]`——**开秩**，`ports[0]` 也只写着 `float[..]`，`statedShapeOf` 给不出 extents。这一半在任何调用点都无法陈述：`grad` 返回的切线是运行时长度的数组（`types=float, float[..], float[2,2]` 里那个 `float[..]` 就是它）。
 3. **两条 matmul 的不同在"律把形状当值用了"。** `ct_of_a` 写的是 `sum_to(matmul(ct, transpose(b)), a)`：`sum_to` 的第二个操作数按文档只被读形状，但它在答案体里是一个 **`Func` 节点**（调用 `sum_to` 的实参），而 `answerTheShapeOf` 只认 `tensor:shape` 这个读者，所以那一处**明明陈述了 extents 也答不出**。这一族的修法在**律**里，不在 C++、也不是新算子：把它写成 `sum_to_stated(matmul(ct, transpose(b)), sa)` 并把 `sa = shape(a)` 交进答案（`sum_stated`、`mean_axis_stated` 已经在用这条机制），`shape(a)` 是 `tensor:shape` 读的，`a` 的端口又陈述了 `float[2,2]` → `answerTheShapeOf` 直接给出 `[2, 2]`，不问任何值。
 
-## 4. 结论
+## 4. 结论（第 5 节是实测更正：律里那一步走不通）
 
 | 类 | 条 | 用例 | 要修哪里 |
 | --- | --- | --- | --- |
@@ -44,7 +44,20 @@
 
 **所以孪生算子（`mul_stated`/`matmul_stated`）不是这七条的第一步**：两条 matmul 走律里的 `sum_to_stated(..., shape(a))`，而五条 `mul_tensor_t` 单独补形状也关不掉（另一操作数的值仍然缺），单独补值也关不掉（形状仍然是 `float[..]`）——这与本轮更早的一次实测一致：把参数的值塞进闭包，`residuals` 涨了，七条**一条没翻**。
 
-## 5. 下一步（未做，等批）
+## 5. 律里那一步的实测：走不通（2026-11-04 01:5x）
 
-1. **便宜的那一步先跑**：改 `stdlib/rulesets/transpose.cml` 的 3 个 `ct_of_a` + 3 个 `ct_of_b` 重载，把 `sum_to` 换成 `sum_to_stated` 并把 `shape(a)`/`shape(b)` 交进来，`matmul_t` 的答案改成把这两个形状当实参传。预计关掉上表"只有甲"那两条，风险在三个形状分派重载与向量车道的两条既有 `known_fail`（`matmul_t.vector_lhs_law`/`vector_rhs_law`，不许动）。**本轮没跑**：这不是一行，六个重载都要动，且改的是律而不是 C++，我先要一句"就按这条走"。
-2. 五条 `mul_tensor_t` 的形状那一半（乙）**要等**：它要么等"切线自己的形状从哪来"（`vjp` 的零余切那一半，见 `2026-11-04-who-carries-the-shape-as-an-operand.cn.md` 第 4 节），要么等孪生算子。值那一半（甲）是 `split` 的残差问题，与上面那条独立的。
+批准的那一步（`ct_of_a`/`ct_of_b` 改陈述形状）**做过、量过、撤了**，结论是**走不通，而且走不通的原因把这一族指到了同一个地方**：
+
+1. **先把"身份归约"删掉**：四个车道（矩阵×矩阵、行×矩阵、矩阵×矩阵右、矩阵×列）里的 `sum_to(x, 操作数)` 都是身份（矩阵乘不广播），删掉之后律里不再读那个操作数——**编译不过**：`SemanticDiag::ReturnNeedsConversion`，"the value `matmul(ct, transpose(b))` has type `float[..]`, which is less exact than `float[?, ?]`"。也就是说**`sum_to(..., a)` 不是为了归约，是为了把返回类型钉成 `a` 的秩**，那个操作数在表达式里正是取它的类型。
+2. **把返回类型放宽成 `float[..]` 再试**：编译通过（这一点值得记：**律可以完全不陈述形状**），但读数没动：
+   `TRANSPOSE function=split_of_jvp_of_total_plain_backward skip=cotangent-needs-a-value uri=tensor:matmul position=0`——**还是同一句**。
+3. **为什么没动**：位置 0 的余切是 `ct · bᵀ`，它需要的是 **`b` 的值本身**，不是 `b` 的形状。删掉 `sum_to` 只去掉了"读 `a` 的形状"这一半，另一半"读 `b` 的值"还在，而 `b` 的值**没有一个端口带进来**。这就是 `cotangent-needs-a-value` 的原话：the rule's right side reads a value the caller does not carry。
+4. **所以这一族（7 条红 + 三条 `matmul_t` 基线红）的根因是同一个，而且不是形状、不是算子、不是律的写法**：**转置成员没有拿到**被转置那一步的**原值**（`dL/da = ct·bᵀ` 里的 `b`；`ct * w` 里的 `w`）。`vector_lhs_law`(`dL/dv = ct·wᵀ`)、`vector_rhs_law`(`dL/dx = ct·uᵀ`)、`matmul_t` 的矩阵车道全是这一个病；`rank_three_is_refused_by_name` 是它的下游（连律都选不出来，钉的是 `node=6`，实测已是 `node=7`）。
+5. **落点**：`split` 交给成员的闭合端口与参数（及被转置那一步的操作数）之间的对应——与本轮第 4 项同一处，见 `2026-11-04-who-carries-the-shape-as-an-operand.cn.md` 第 4 节。**律里没有便宜的那一步**；这一步要动 `split`/`transpose` 的成员端口，不是律，也不是算子。
+
+本轮对 `stdlib/rulesets/transpose.cml` 的改动**已全部撤掉**（`git checkout --`，工作区干净），宿主 `out/latest/stdlib` 也推回了提交版；试验只留下了上面这几行读数。
+
+## 6. 下一步
+
+1. **成员端口**（唯一剩下的路）：让 `split` 交给转置成员的闭合里带上"被转置那一步的操作数"的值，并让 `buildTransposeMember` 的 `forward(...)` 真的能从那里取到值。第 4 项那次的读数是"值进了 `residuals`，成员却拿不到端口"，所以这一处要从端口对应下手，而不是再从残差下手。
+2. 五条 `mul_tensor_t` 的形状那一半（乙）：等上面那条落地后重测；若仍红，再拿开秩 `float[..]`（`grad` 返回的切线是运行时长度的数组，**任何调用点都无法陈述**）去找作者裁。
