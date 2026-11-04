@@ -151,6 +151,26 @@ it, do not ask whether the difference is explainable. Re-run under the lane's ow
 then is honest and the price is one run; a reconciled number becomes a fact in the next report and
 nobody can tell afterwards that it was never measured.
 
+## A revert that covers part of a change reads as "the rest of the change is still in the tree"
+
+A control experiment is only as wide as the diff it actually reverted, and a partial revert answers a
+different question than the one it looks like it answers: it measures **what the part left in place
+still does**, never **whether the change was the cause**.
+
+2026-11-04 paid for this twice. A change made of two commits (`bb432e8ae` + `821f30c83`, five files)
+was suspected as the source of ten `cotangent-needs-a-value` failures. The probe reverted one of the
+two commits: two of the five files. It read `fail = 10` and was reported as "the change explains one
+of the ten, the other nine are pre-existing debts". A second lane reverted the change whole -- five
+files -- and read `fail = 2`: the eight names the half revert left red were that change's own
+regressions, never debts at all. The half-revert number looked exactly like a complete verdict, so it
+was cited as one, twice, by two different readers.
+
+So a control experiment states **which diff it reverted, file by file and commit by commit, and
+whether that is the whole change**; and a number from a partial revert is never compared with a number
+from a full one. If the change is made of two commits, revert both or say in the first line that the
+reading is about the remainder. **A number that answers half the question is not a small answer, it
+is an answer to another question.**
+
 ## A guard that reports and then reads on can turn a red into a green
 
 `Tuple::updateRefs` compared the value's member count with its type's and, on a disagreement, printed

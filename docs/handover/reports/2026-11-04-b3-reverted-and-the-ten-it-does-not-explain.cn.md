@@ -36,41 +36,43 @@
 
 **唯一的变化是 `docs.links.citations` 从红转绿**：它红是因为 `include/camel/core/type/composite/array.h` 等 4 处引了 `modules/transforms/transpose.cpp#statedExtentsNodeOf`，而 B3 把这个符号删了；revert 把名字带回来，这条就绿了。
 
-## 三、判词
+## 三、判词（已按整份 revert 更正）
 
-**B3 恰好解释 1 条，而且它解释的是"文档引用失效"，不是行为。** 所以"删掉唯一供给"这个说法在这一族上**不成立**——那 10 条在 B3 之前的那棵树上红得一模一样。继续在这条线上找原因，找的是不存在的东西。
+**当初的判词是"B3 恰好解释 1 条，而且它解释的是文档引用失效，不是行为"。这个判词错了，错在实验的宽度，不在读数。** 那次 revert 只回退了 `821f30c83` 一笔（5 个文件里的 2 个）；整条线是两笔（`bb432e8ae` + `821f30c83`，5 个文件）。**整份 revert 之后 `fail = 2`，那 10 条里 8 条转绿——它们是 B3 这两笔的回归，不是欠账。**
 
-这条判词不评价 B3 该不该存在。它只说明：**B3 不是那 10 条的原因**，两个事实在时间上相邻，在因果上无关。
+**一个只回退了 2/5 文件的对照，得到的是"另外 3/5 还在"的读数——而它看起来像一条完整的判决。** 这句话被当证据用了两次（协调者一次、另一条车道一次），所以它同时进了 `agents/test.md`。
+
+本页保留第一、二节的实测（它们对"`821f30c83` 单独一笔不是原因"仍然成立），第四节按整份 revert 重排，第八节记整份 revert 的读数与它当时不能用的理由。
 
 ## 四、`fail = 11` 的分类账
 
 | # | 用例 | 所在 plan | 性质 |
 | --- | --- | --- | --- |
-| 1 | `first_step.tensor_vjp_answers_the_step.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **回归**：develop 上过、train 上不过（develop 侧读数引自 `lane-packdots` 的二分，本页没有重跑） |
-| 2 | `matmul_t.law_read_through_vjp.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **回归**：同上 |
-| 3 | `matmul_t.vector_lhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | 既有欠账：**两棵树句子逐字相同**，与合并无关 |
-| 4 | `matmul_t.vector_rhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | 既有欠账：**两棵树句子逐字相同**，与合并无关 |
-| 5 | `mean_axis1_keepdims_gradient_reads_the_row_length.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
-| 6 | `erf_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
-| 7 | `erfc_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
-| 8 | `transpose_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
-| 9 | `linear_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账 |
-| 10 | `vjp_answers_abs_log_maximum_and_minimum` | `test/plans/feat/compile/transforms.plan.toml` | 既有欠账（条目在 develop 上就有） |
+| 1 | `first_step.tensor_vjp_answers_the_step.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **B3 的回归**：整份 revert 后 PASS |
+| 2 | `matmul_t.law_read_through_vjp.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **B3 的回归**：整份 revert 后 PASS |
+| 3 | `matmul_t.vector_lhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **既有欠账**：整份 revert 后仍红，两棵树句子逐字相同 |
+| 4 | `matmul_t.vector_rhs_law.nvm` | `test/plans/feat/showcase_s2.plan.toml` | **既有欠账**：整份 revert 后仍红，同上 |
+| 5 | `mean_axis1_keepdims_gradient_reads_the_row_length.nvm` | `test/plans/feat/compile/transforms.plan.toml` | **B3 的回归** |
+| 6 | `erf_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | **B3 的回归** |
+| 7 | `erfc_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | **B3 的回归** |
+| 8 | `transpose_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | **B3 的回归** |
+| 9 | `linear_gradient_both_legs.nvm` | `test/plans/feat/compile/transforms.plan.toml` | **B3 的回归** |
+| 10 | `vjp_answers_abs_log_maximum_and_minimum` | `test/plans/feat/compile/transforms.plan.toml` | **B3 的回归** |
 | 11 | `docs.links.citations` | `test/plans/feat/docs_links.plan.toml` | 文档引用：B3 删了符号没改引用，**已修**（见第六节） |
 
-**10 条是既有欠账／回归的行为欠账，1 条是文档引用。** 这 11 条里没有一条是"合并把两棵绿的树撞红了"之外的第三种东西。
+**2 条是既有欠账（就是那两条 vector 律），8 条是 B3 两笔的回归，1 条是文档引用。**「既有欠账」这个词从今天起只指那两条。
 
 **原稿曾写成本条由 `rule-ranks` 换句而来，该说法来自协调者的一次误记，已由同平台逐字比对推翻。** `skip=rule-ranks uri=tensor:matmul ranks=(3, 2)` 是 `rank_three_is_refused_by_name`（函数 `batched_sum_of_product`）的原话，不是这两条 `*_law`；而 `rank_three` 在两棵树上的差别只有 `node=6` → `node=7`。**一个错的解释写进账本，会自己长出下一份错账。** 留着那句话，下一个人会去查一个不存在的换句。
 
-## 五、门槛写 3、合并树上读出 11：不是多了 8 条债，是第一次一起看见
+## 五、门槛写 3、合并树上读出 11：那 8 条是 B3 的红，第一次被一起看见
 
 门槛那 3 条是 `matmul_t` 三兄弟（`vector_lhs_law`、`vector_rhs_law`、`rank_three_is_refused_by_name`）。在合并树上：
 
 - `rank_three_is_refused_by_name` **过**（`node=7` 是 `0dc18fa9d` 自己交代过的编号位移，不是修出来的绿，也没有再动它的 pin）；
-- `vector_lhs_law` / `vector_rhs_law` 在 develop 与 train 上**句子逐字节相同**（`skip=cotangent-needs-a-value uri=tensor:matmul position=0`），**与合并无关**。它们不是"换红法"的例子；`rule-ranks ranks=(3, 2)` 那句属于 `rank_three_is_refused_by_name`。
-- 真正"多出来"的 8 条是同一族欠账，落在 `feat/compile/transforms` 与 `feat/showcase_s2` 这两张 plan 里，而**各车道只跑自己那一角的 plan**——`lane-packdots` 记 `8803 = 8757/3` 那次是 B6 之前、且只在 `feat/compile` 上。**这 8 条从没进过任何一条车道的读数，不是合并造出来的。**
+- `vector_lhs_law` / `vector_rhs_law` 在 develop 与 train 上**句子逐字节相同**（`skip=cotangent-needs-a-value uri=tensor:matmul position=0`），**与合并无关**。它们不是"换红法"的例子；`rule-ranks ranks=(3, 2)` 那句属于 `rank_three_is_refused_by_name`。**它们是今天唯一还叫"欠账"的两条。**
+- 另外 8 条是 **B3 两笔的回归**，落在 `feat/compile/transforms` 与 `feat/showcase_s2` 这两张 plan 里，而**各车道只跑自己那一角的 plan**——`lane-packdots` 记 `8803 = 8757/3` 那次是 B6 之前、且只在 `feat/compile` 上。**这 8 条从没进过任何一条车道的读数，合并之前就已经是红的。**
 
-一句话：**门槛的 3 是"车道上看得见的那一角"，树上的 11 是"合并之后全部看得见的那一片"；两者相差的不是债的数量，是视野。**
+一句话：**门槛的 3 是"车道上看得见的那一角"，树上的 11 是"合并之后全部看得见的那一片"；差的那 8 条不是新债，是一直没人看见的回归。**
 
 ## 六、`array.h` 那条引用改到了哪里
 
@@ -100,7 +102,9 @@
 
 **如果它是真的，它比 `develop` 的 `fail = 3` 还低一条**：整条线 revert 之后，合并树不但没有回归，还少一条红。这同时说明**本页第三节的判词只对 `821f30c83` 这一笔成立**——我 revert 的只是那一笔（4 个文件：`transpose.cpp`、`transpose.cml`、两处 docs），而 `probe-b3full` 覆盖 10 个文件，多出 `modules/transforms/rule_expand.cpp`、`rule_expand.h`、`include/camel/core/type/composite/array.h`、`src/builtin/operators/struct.cpp` 与两条测试。**那 8 条不是被 B3 关掉的，是 B3 之外的那几笔关掉的**——供给是在整条线里断的，不是在这一笔里断的。
 
-**再说它为什么现在还不能用。** 量它的那次 run 和另一条 run 共用了 host 上同一个 checkout 名 `mtrain`：一条 19:47 起（`m-train`），另一条 19:54 起（`probe-b3full`），两次 run 的 checkout/patch 阶段互相改写对方 plan 阶段正在读的树。证据是 `[provenance] tip 5d3017ca2…` 出现在一条属于 `m-train` 的 run 里，而那条分支的树从来没有过这个提交；`[SUMMARY]` 本身一个字都不怪，这正是它危险的地方。**这条读数要在独占的 checkout 名下重量一次才算数。**
+**再说它为什么现在还不能用。** 量它的那次 run 和另一条 run 共用了 host 上同一个 checkout 名 `mtrain`：一条 19:47 起（`m-train`），另一条 19:54 起（`probe-b3full`），两次 run 的 checkout/patch 阶段互相改写对方 plan 阶段正在读的树。证据是 `[provenance] tip 5d3017ca2…` 出现在一条属于 `m-train` 的 run 里，而那条分支的树从来没有过这个提交；`[SUMMARY]` 本身一个字都不怪，这正是它危险的地方。
+
+**这笔账后来结清了**：两条独立车道（一条量 `5d3017ca2`，一条量 train 尖端同角）各自读到 `fail = 2`，互相印证；我自己那次撞车的读数作废，不再引用。**本页第四节因此按整份 revert 记账。**
 
 **顺带记下别人留在 `D:\Projects\Camel-wt\mtrain` 的 10 个改动**（原本打算先记后撤，撤之前它们已被提交成 `10abd59d0`，所以我没有 `checkout -- .`、也没有丢任何东西）：
 
