@@ -45,8 +45,8 @@ class ParserImpl {
 
     static constexpr uint32_t kNone     = UINT32_MAX;
     static constexpr uint8_t kEmptyNode = 1; // NodeData::flags: the node has no token
-    /// NodeData::flags: the name was written with a `..` before it, so it is a pack and not one
-    /// type (a type parameter of `::<..A>`, design principles 5.6).
+    /// NodeData::flags: the name was written with a `...` before it, so it is a pack and not one
+    /// type (a type parameter of `::<...A>`, design principles 5.6).
     static constexpr uint8_t kPackName = 2;
 
     // Layout context (see Scope). `nl_`: a line break before a token that could also start a
@@ -164,7 +164,7 @@ class ParserImpl {
     // ---- Errors ----
     void error(SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at);
     /// The same, with the second token the kind refers to (`aux`): `x as int..5` reports at the
-    /// `..` and names the `as` that put a type there.
+    /// `...` and names the `as` that put a type there.
     void
     error(SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at, uint32_t aux);
     void unexpected(std::initializer_list<uint8_t> expected) {
@@ -197,9 +197,9 @@ class ParserImpl {
     void parseFuncAnno();
     void parseFuncDecl();
     void parseFuncDeclRest(size_t m);
-    /// The type parameters a generic declaration declares at its head, `::<T, ..A>` after its name
+    /// The type parameters a generic declaration declares at its head, `::<T, ...A>` after its name
     /// (design principles 5.5, 5.6): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ... }`.
-    /// A parameter written with `..` is a pack (kPackName).
+    /// A parameter written with `...` is a pack (kPackName).
     void parseTypeParams();
     void parseAnnotatedStmt();
     /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
@@ -254,9 +254,9 @@ class ParserImpl {
     /// The clause after a function's result type (design effects plan 3.1): the resources a call
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
-    /// whenClause : 'when' ('..' dataExpr | logicalOrExpr)
+    /// whenClause : 'when' ('...' dataExpr | logicalOrExpr)
     /// A declaration's applicability condition, after its signature (design principles 4.4). A
-    /// condition written with `..` holds for every member of the pack its body names (5.6).
+    /// condition written with `...` holds for every member of the pack its body names (5.6).
     void parseWhenClause();
     void parseRetStmt();
 
@@ -407,7 +407,7 @@ class ParserImpl {
     void parseTypeArm();
     void parsePrimaryType();
     /// Marks the IdentDef just closed, if `mark` is what it was before the name was read, as one
-    /// written with `..` (kPackName).
+    /// written with `...` (kPackName).
     void markNameAsPack(size_t mark);
     void parseStructType();
     void parseFuncType();

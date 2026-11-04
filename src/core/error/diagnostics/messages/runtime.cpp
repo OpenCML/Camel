@@ -233,7 +233,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "TransposeNeedsParameterShape",
                 "The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state it.",
-                "A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[..])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.",
+                "A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[...])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.",
             },
         },
         {

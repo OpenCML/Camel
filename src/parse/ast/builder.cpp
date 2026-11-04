@@ -881,7 +881,7 @@ and gives the `Rule`, and `tile_matmul` alone does too when every parameter has 
 namespace {
 
 /// A rule's parameters as one string: the type written for each, in order, with the whitespace
-/// between the tokens squeezed out and the positions joined by `|` (`T[..]|T`). Empty for a rule
+/// between the tokens squeezed out and the positions joined by `|` (`T[...]|T`). Empty for a rule
 /// that takes none.
 ///
 /// This is the part of a rule's signature the head cannot answer -- the head is the operator, and
@@ -954,7 +954,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         std::string condition = conditionClause ? conditionClause->text() : std::string();
         // The type of each parameter, in order: the other half of what a duplicate is. A key holds
         // one rule per parameter-type list (the author's ruling of 2026-11-03 11:10), so the two
-        // laws of `T[..]` and `T` are filed under one key and the engine picks the one the
+        // laws of `T[...]` and `T` are filed under one key and the engine picks the one the
         // operand's own type enters -- the declaration is not refused for writing the same
         // `is_float::<T>()` twice.
         std::string parameterTypes = parameterTypesOf(context->get<cst::ParentParams>());
@@ -1177,7 +1177,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     // condition. A rule's head is written once, but the sides are three declarations of the
     // compiler's making, so a name the user writes on the right is absent from the left: the
     // unused-parameter check reads one declaration's own signature, and `rule
-    // mul_tensor_t::<T, X, W>(x: X, w: W) { mul_tensor(x, w) => (ct: T[..]) => … }` names `T`
+    // mul_tensor_t::<T, X, W>(x: X, w: W) { mul_tensor(x, w) => (ct: T[...]) => … }` names `T`
     // only in the right side's cotangent. What the rule uses is the union, read here from the
     // rule's own tokens, and carried to every side.
     std::vector<std::string> writtenAcrossTheRule;
@@ -2234,7 +2234,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     // The type parameters declared at the head (`func first::<T>(...)`, design principles 5.5).
     // They are the names the declaration's type variables are; the GCT builder puts them in
     // scope before it visits a parameter type, so one of them wins over a type of the same name.
-    // One written with `..` is a pack and not one type (`func zip::<..A>`, 5.6).
+    // One written with `...` is a pack and not one type (`func zip::<...A>`, 5.6).
     if (const auto typeParams = context->get<cst::TypeParams>()) {
         std::vector<TypeParam> params;
         for (const auto ident : typeParams->all<cst::IdentDef>()) {
@@ -2636,7 +2636,7 @@ Value Builder::visitRetStmt(cst::RetStmt context) {
 }
 
 /*
-restValue : '..' dataExpr ;
+restValue : '...' dataExpr ;
 The argument is a compile-time tuple whose elements are the arguments (design principles 5.5);
 GCT keeps the marker and GIR expands it at the call.
 */
@@ -2687,7 +2687,7 @@ Value Builder::visitKeyValuePair(cst::KeyValuePair context) {
 
 /*
 keyParamPair : ('var' | 'const' | 'constas')? identDef (':' typeExpr ('=' dataExpr)?)?
-    | '..' identDef (':' typeExpr)? ;
+    | '...' identDef (':' typeExpr)? ;
 A type left out is a lambda's parameter (design principles 5.9): it stands as an InferTypeLoad,
 which GCT lowers to a hole and GIR fills from the function type the position expects. A `constas`
 parameter writes its type; one left out stays a pair with no type child, so GCT can report it
@@ -2703,7 +2703,7 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         isVar = true;
     }
     const bool isConst = context->has(TK::KwConst);
-    // `..ParamsOf<F>` in a function type's parameter list has no name: the pack is its type.
+    // `...ParamsOf<F>` in a function type's parameter list has no name: the pack is its type.
     Reference ref(
         context->get<cst::IdentDef>() ? std::string(context->get<cst::IdentDef>()->text())
                                       : std::string("__pack"));
@@ -2711,7 +2711,7 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
         createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
     setNodeTokenRangeByContext(namedPairNode, context);
     if (isRest || isConstas) {
-        // `..ts` is untyped: the tuple of the arguments left over is made at the call. A type
+        // `...ts` is untyped: the tuple of the arguments left over is made at the call. A type
         // written after either is still read, so that GCT can report it (the rest parameter
         // refuses one; a `constas` needs one).
         if (context->type()) {
@@ -4153,7 +4153,7 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
 
 /*
 rangeExpr
-    : additiveExpr ('..' additiveExpr)*
+    : additiveExpr ('...' additiveExpr)*
     ;
 */
 Value Builder::visitRangeExpr(cst::RangeExpr context) {
@@ -5113,14 +5113,14 @@ Value Builder::visitEnumType(cst::EnumType context) {
 
 /*
 typeExpr
-    : arrayType ('?' | '!' | '..')*
+    : arrayType ('?' | '!' | '...')*
     ;
 */
 Value Builder::visitTypeExpr(cst::TypeExpr context) {
     ENTER("TypeExpr");
     node_ptr_t lhsNode = any2node(visitType(context->type(0)));
     // The marks, in the order they were read, innermost first: `T?!` is a fallible nullable,
-    // `T?..` is the stream of a nullable `T`, and `T..?` is the possibly absent stream. `..` is
+    // `T?..` is the stream of a nullable `T`, and `T..?` is the possibly absent stream. `...` is
     // the stream (design principles 5.4), `?`/`!` the nullable and fallible marks.
     for (size_t i = 1; i < context->childCount(); ++i) {
         const std::string mark = context->child(i)->text();
@@ -5170,7 +5170,7 @@ Value Builder::visitArrayType(cst::ArrayType context) {
 arrayDim
     : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
     ;
-arrayDimItem : '?' | '..' identDef? | dataExpr
+arrayDimItem : '?' | '...' identDef? | dataExpr
 */
 Value Builder::visitArrayDim(cst::ArrayDim context) {
     node_ptr_t res = createNodeAs<ArrayDimLoad>(dimGroupOf(context));

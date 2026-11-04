@@ -329,7 +329,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "PackExpansionNeedsOnePack",
                 "The expansion '{0}' must range over exactly one pack: {1}.",
-                "A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.",
+                "A type expression written with '...' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '...xs: ...A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.",
             },
         },
         {
@@ -497,7 +497,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "OperatorNotOverloadable",
                 "'{0}' cannot be overloaded: {1}.",
-                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '..', 'as', assignment and compound assignment are constructs of the language.",
+                "The operators that can be overloaded are the binary '+', '-', '*', '/', '%', '^', '@', '==', '<', '<=', '>', '>=', '&', '|', indexing '[]', and the unary '-', '!', '~'; '!=' follows '=='. '&&', '||', '?\?', '!!', '->', '...', 'as', assignment and compound assignment are constructs of the language.",
             },
         },
         {
@@ -953,7 +953,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StaticLoopSequenceNotKnown",
                 "The sequence of a 'static loop' must be known when the function is compiled: '{0}' is not.",
-                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '..' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the element at each position of a compile-time tuple, whose type is that position's type, all count. A run-time array or a run-time value leaves the number of rounds open.",
+                "A 'static loop' is unrolled where it stands, so how many rounds it has must be known then. Every sequence the compiler works out counts: an expression built only from compile-time constants (literals, names bound to constants, the rounds of an enclosing 'static' expansion) through operations that are pure and cannot fail. So 'a..b' (the half-open [a, b) that '...' is everywhere else, so '0..5' is 0, 1, 2, 3, 4), 'range(a, b, step)' with constant arguments, an array literal or a constant array, 'indices ts' for the positions of a compile-time tuple, 'fields T' for the fields of a type, and 'for x in ts' for the element at each position of a compile-time tuple, whose type is that position's type, all count. A run-time array or a run-time value leaves the number of rounds open.",
             },
         },
         {
@@ -968,32 +968,32 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::RestParameterNotLast,
             {
                 "RestParameterNotLast",
-                "The rest parameter '..{0}' must be the last parameter.",
-                "A rest parameter stands for every argument left over, so no parameter can follow it. Move '..{0}' after the other parameters.",
+                "The rest parameter '...{0}' must be the last parameter.",
+                "A rest parameter stands for every argument left over, so no parameter can follow it. Move '...{0}' after the other parameters.",
             },
         },
         {
             SemanticDiag::RestParameterTypeNotSupported,
             {
                 "RestParameterTypeNotSupported",
-                "The rest parameter '..{0}' cannot write a type.",
-                "A rest parameter is untyped: the tuple of the arguments left over is made at the call, so its element types are decided there. Write '..{0}'.",
+                "The rest parameter '...{0}' cannot write a type.",
+                "A rest parameter is untyped: the tuple of the arguments left over is made at the call, so its element types are decided there. Write '...{0}'.",
             },
         },
         {
             SemanticDiag::RestArgumentNotLast,
             {
                 "RestArgumentNotLast",
-                "The rest argument '..{0}' must be the last positional argument.",
-                "'..e' expands to every element of 'e', so no positional argument can follow it. Named arguments cannot follow it either: write '..e' last.",
+                "The rest argument '...{0}' must be the last positional argument.",
+                "'...e' expands to every element of 'e', so no positional argument can follow it. Named arguments cannot follow it either: write '...e' last.",
             },
         },
         {
             SemanticDiag::RestArgumentNotTuple,
             {
                 "RestArgumentNotTuple",
-                "The rest argument '..{0}' is not a compile-time tuple.",
-                "'..e' needs a tuple whose elements are known when the call is instantiated: a tuple literal, a tuple comprehension, or the rest parameter of the enclosing rest function. A runtime tuple value has no fixed arity here.",
+                "The rest argument '...{0}' is not a compile-time tuple.",
+                "'...e' needs a tuple whose elements are known when the call is instantiated: a tuple literal, a tuple comprehension, or the rest parameter of the enclosing rest function. A runtime tuple value has no fixed arity here.",
             },
         },
         {
@@ -1017,7 +1017,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "StaticTupleEscapes",
                 "The build-time tuple '{0}' is not a value.",
-                "A rest parameter's tuple stands for the arguments a call left over: read it with 'indices {0}', '{0}.[j]' or '..{0}', or write a tuple literal '(a, b)' when a runtime tuple value is wanted.",
+                "A rest parameter's tuple stands for the arguments a call left over: read it with 'indices {0}', '{0}.[j]' or '...{0}', or write a tuple literal '(a, b)' when a runtime tuple value is wanted.",
             },
         },
         {
@@ -1072,8 +1072,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::DimensionAfterAnyRank,
             {
                 "DimensionAfterAnyRank",
-                "A dimension pack ('..') must be the last item of its '[...]', and only one may be written.",
-                "A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.",
+                "A dimension pack ('...') must be the last item of its '[...]', and only one may be written.",
+                "A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ...rest]', not 'f32[...rest, 3]'.",
             },
         },
         {
@@ -1248,8 +1248,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::WithPackArgumentType,
             {
                 "WithPackArgumentType",
-                "The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.",
-                "Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.",
+                "The pack '...{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.",
+                "Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('...{0}') to take any type.",
             },
         },
         {
@@ -1520,15 +1520,15 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::CompOperandMismatch,
             {
                 "CompOperandMismatch",
-                "'..' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.",
-                "'..' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.",
+                "'...' takes two functions or two integers; the left operand is '{0}' and the right one '{1}'.",
+                "'...' has two readings (design principles 4.2). Between two functions it is the composition `f..g`, the lambda `(x) => g(f(x))`: 'f' is unary and 'g' takes what 'f' returns, so a call of `f..g` is a call of that lambda and nothing more. Between two integers it is the interval `a..b`: the integers from 'a' to 'b - 1' as the array 'int[]', left closed and right open, as the slice 't[a:b]' is. Nothing else is composed.",
             },
         },
         {
             SemanticDiag::CompOperandNotUnary,
             {
                 "CompOperandNotUnary",
-                "'..' composes a unary function on the left; '{0}' takes {1} parameters.",
+                "'...' composes a unary function on the left; '{0}' takes {1} parameters.",
                 "The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2): 'f' takes the one argument the composed function takes, and 'g' takes the result of 'f'. Write the lambda with the parameters you mean.",
             },
         },
@@ -1536,8 +1536,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::CompOperandGenericWithoutType,
             {
                 "CompOperandGenericWithoutType",
-                "'..' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.",
-                "The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `..` cannot take stays CompOperandMismatch.",
+                "'...' composes two functions, and its {0} operand, the generic function '{1}', has no instance here: write its type arguments ('{1}::<int>'), or give the whole expression an expected function type.",
+                "The name of a generic function stands for no one function until a position fixes its types (design principles 5.5). The composition `f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), and the type the whole expression is expected to have is what gives that lambda its parameter type and instantiates what it calls: `let h: (x: int) => int = ident..ident` composes `ident::<int>`, as `(x) => ident(ident(x))` does under the same type. With no expected function type, write the instance each operand is: `ident::<int>..ident::<int>`. Only a name that is generic is refused here; an operand of a type `...` cannot take stays CompOperandMismatch.",
             },
         },
         {
@@ -1793,7 +1793,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "DuplicateRuleForOperator",
                 "The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list.",
-                "A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[..]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[..]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
+                "A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[...]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[...]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.",
             },
         },
         {
@@ -1809,7 +1809,7 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             {
                 "ExtentOfNeedsStatedShape",
                 "`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.",
-                "Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.",
+                "Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[...]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.",
             },
         },
         {

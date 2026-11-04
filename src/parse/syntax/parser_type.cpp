@@ -21,7 +21,7 @@
 namespace camel::parse::syntax {
 
 /// Whether the `(` at the current token is closed by a `)` that `=>` follows: a function type whose
-/// parameter list starts with a pack written out (`(..ParamsOf<F>) => R`), not a tuple of packs.
+/// parameter list starts with a pack written out (`(...ParamsOf<F>) => R`), not a tuple of packs.
 bool ParserImpl::parenClosesBeforeArrow() const {
     int depth = 0;
     for (uint32_t n = 0; n < 512; ++n) {
@@ -55,11 +55,11 @@ bool ParserImpl::typeStartsAt(uint32_t n) const {
     }
 }
 
-/// typeExpr : '..' typeExpr | arrayType ('?' | '!' | '..')*
-/// A mark is `?` (may be null), `!` (may have failed) or `..` (the type is a stream). The marks
+/// typeExpr : '...' typeExpr | arrayType ('?' | '!' | '...')*
+/// A mark is `?` (may be null), `!` (may have failed) or `...` (the type is a stream). The marks
 /// are read left to right and each one wraps what is written before it, with no special case
 /// `T?..` is `(T?)..`, the stream of a nullable `T`, and
-/// `T..?` is the possibly absent stream. `T..` and `T[..]` are therefore two types.
+/// `T..?` is the possibly absent stream. `T..` and `T[...]` are therefore two types.
 ///
 /// A dimension written after a stream mark applies to the stream: `T..[3]` is an array of three
 /// streams (the builder of the array reports that a stream is linear and cannot be an element —
@@ -81,7 +81,7 @@ void ParserImpl::parseType() {
         // principles 5.6). It is read where a type is, and the builder says where it may stand.
         // The body is a whole type expression, so `...A[]` is the expansion of the array type
         // `A[]` and not the array of `...A`: an expansion is one type, and an array of it is
-        // written `(...A)[]` or after a parenthesised body. A `..` here is reported as the
+        // written `(...A)[]` or after a parenthesised body. A `...` here is reported as the
         // spelling `...` and read on as the expansion it was meant to be.
         if (cur_ == TK::DotDot) {
             unexpected({e(TK::Ellipsis)});
@@ -145,9 +145,9 @@ void ParserImpl::parseArrayType() {
 }
 
 /// arrayDim     : '[' (']' | arrayDimItem (',' arrayDimItem)* ','?)? ']'
-/// arrayDimItem : '?' | '..' identDef? | dataExpr
+/// arrayDimItem : '?' | '...' identDef? | dataExpr
 /// A dimension is an unknown extent (`?`, or the empty `[]`), an expression over integers and
-/// dimension names, or the trailing pack (`..`, `..rest`). The parser keeps a pack that is not
+/// dimension names, or the trailing pack (`...`, `...rest`). The parser keeps a pack that is not
 /// last (and a second pack) so the tree still holds what was written; GCT reports it.
 void ParserImpl::parseArrayDim() {
     const size_t m = mark();
@@ -160,7 +160,7 @@ void ParserImpl::parseArrayDim() {
                     bump();
                 } else if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
                     // The trailing pack of a dimension list is written `...` -- `T[...]` for any
-                    // rank, `f32[n, ...rest]` for the rest of them (design principles 5.4). A `..`
+                    // rank, `f32[n, ...rest]` for the rest of them (design principles 5.4). A `...`
                     // is reported as that spelling and read on, so one mistake is one sentence.
                     if (cur_ == TK::DotDot) {
                         unexpected({e(TK::Ellipsis)});

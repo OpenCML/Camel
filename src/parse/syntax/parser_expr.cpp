@@ -237,9 +237,9 @@ void ParserImpl::parseRelational() {
     }
 }
 
-/// rangeExpr : additiveExpr ('..' additiveExpr)*
+/// rangeExpr : additiveExpr ('...' additiveExpr)*
 /// The range of two numbers and the composition of two functions, one level: `1..n+1` is
-/// `1..(n+1)`, and `..` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
+/// `1..(n+1)`, and `...` is looser than `->`, so `x->f..g` is `(x->f)..g` (`x->f->g` is the
 /// composition).
 void ParserImpl::parseRange() {
     const size_t m = mark();
@@ -322,7 +322,7 @@ void ParserImpl::parseNullable() {
 /// (The prefix operators `-`, `!` and `~` are taken by negExpr, which stands above `->`.)
 /// The right side is always a type, and the type reads its
 /// own marks: `x as int..` is a conversion to the stream type. A number or a name written
-/// directly after the `..` is not a type, though — `x as int..5` is the interval reading of `..`
+/// directly after the `...` is not a type, though — `x as int..5` is the interval reading of `...`
 /// written where a type stands — and it is reported as such rather than as a stray token.
 void ParserImpl::parseUnary() {
     const size_t m = mark();
@@ -332,9 +332,9 @@ void ParserImpl::parseUnary() {
         const uint32_t opToken = prev_;
         parseType();
         if (prev_ != opToken && toks_[prev_].kind == TK::DotDot && adjacent() && !panic_) {
-            // What follows the `..` is an expression's far end written without a space, which
+            // What follows the `...` is an expression's far end written without a space, which
             // is the interval reading and nothing else. A `(`, a `[` or an operator after the
-            // `..` is not this: `x as f32[3]..[4]` reads its dimension in parseType, and
+            // `...` is not this: `x as f32[3]..[4]` reads its dimension in parseType, and
             // `x as int.. + 1` is the cast plus one.
             switch (cur_) {
             case TK::Integer:
@@ -524,7 +524,7 @@ bool ParserImpl::lambdaAhead() const {
     }
     // A rest parameter's head, `(...xs)` / `(...xs, ...)`, is a lambda's like any other: the reader of
     // the list that follows is the same, `=>` (or a return type's `:`) after the `)`. A tuple
-    // written `(..xs)` -- one rest argument in it -- has that `=>` too only when it is a lambda.
+    // written `(...xs)` -- one rest argument in it -- has that `=>` too only when it is a lambda.
     if (t1 == TK::DotDot || t1 == TK::Ellipsis) {
         uint32_t depth = 0;
         for (uint32_t i = 0;; ++i) {
@@ -835,7 +835,7 @@ void ParserImpl::parseLiteral() {
 
 /// indexValue : '...'? dataExpr
 /// `...e` is a rest argument: the arguments left over, as a compile-time tuple (design
-/// principles 5.5). A `..` here is reported as the spelling `...` and then read as the rest
+/// principles 5.5). A `...` here is reported as the spelling `...` and then read as the rest
 /// argument it was meant to be, so one mistake is one sentence.
 void ParserImpl::parseIndexValue() {
     if (cur_ == TK::DotDot || cur_ == TK::Ellipsis) {
@@ -1194,7 +1194,7 @@ void ParserImpl::parseFuncData() {
     lambdaParams_                = true;
     if (cur_ == TK::Lt || cur_ == TK::LAngle) {
         // A pack among the `with` parameters is the same rule on a lambda as on a declaration
-        // (design principles 5.6, and the author's ruling of 2026-11-03 13:50): `<..ws> (..xs) => ...`
+        // (design principles 5.6, and the author's ruling of 2026-11-03 13:50): `<...ws> (...xs) => ...`
         // names the `with` list the position gives the value, so the lambda's body can forward it.
         parseAngledParams(true);
     }
@@ -1203,7 +1203,7 @@ void ParserImpl::parseFuncData() {
         unexpected({e(TK::LParen)});
         return close(m, NK::FuncData);
     }
-    // A lambda's parameter list takes a rest parameter (`(..xs) => body`). It parses here and is
+    // A lambda's parameter list takes a rest parameter (`(...xs) => body`). It parses here and is
     // refused where its parameters would have to be built: a lambda's rest parameter stands for
     // parameters that come from the function type the lambda stands in, and the front end does not
     // build those yet (the semantic stage names the refusal).
@@ -1471,7 +1471,7 @@ void ParserImpl::parseStaticLoopHeader() {
 
 /// typeCasePattern : 'struct' | 'tuple' | 'func' | '#' 'leaf' | '_' | typeExpr
 /// The words are contextual: only here do they name a shape, not a type. Anything else that
-/// starts a type is an identity pattern (`case int`, `case f32[..]`, `case T`): the
+/// starts a type is an identity pattern (`case int`, `case f32[...]`, `case T`): the
 /// same clause with a type written in it (design principles 5.5).
 void ParserImpl::parseTypeCasePattern() {
     const size_t m = mark();

@@ -380,3 +380,25 @@ note point there.
 The cost of getting this wrong has been paid: a note carried "a ruling flips about 16 cases" for four
 hours after the tree changed so that flipping flipped nothing, and that sentence kept everyone from
 touching a line of code that had no consumer left.
+
+## An assertion on a spelling pins the whole sentence, never the punctuation
+
+`...` is the string most likely to appear in diagnostic output by accident: the runner truncates a
+long message and the cut lands in `(name=SyntaxDiag::MissingTo...`, an ellipsis in prose is three
+dots, and a path or a version can carry one. So `expect_output_contains = ["..."]` does not assert
+what it looks like it asserts -- it asserts that three dots appear somewhere, which a wrong
+diagnostic satisfies as readily as a right one.
+
+Pin the whole sentence instead, quotes included (`expected '...'`), and add a negative assertion for
+the sentence the change replaced, so that the old behaviour cannot come back while the case stays
+green. Both halves are needed: the positive one says the new wording is there, the negative one says
+the failure it replaced is gone.
+
+The cost of getting this wrong has been paid, twice in one evening. When a parser began reporting
+`expected '...'` for a `..` pack, four cases were written with `expect_output_contains = ["..."]`
+and four of them passed -- against a binary that reported the *old* semantic sentence instead,
+whose truncated `(name=SyntaxDiag::...)` supplied the three dots. The same evening, a migration
+script rewrote the very cases that were supposed to hold the old spelling, and the next run
+reported a regression that was really the counter-examples deleting themselves. Assertions are
+evidence only while nothing else rewrites them; a case that must keep the old spelling belongs on
+the script's exclusion list.

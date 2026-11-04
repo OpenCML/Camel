@@ -9,7 +9,7 @@ namespace camel::parse::ast {
 namespace {
 
 /// One `[extent, ...]` as it is written: `[]` for the unknown dimension, `?` for an unknown
-/// extent next to others, `..name` for a pack (design principles 5.4).
+/// extent next to others, `...name` for a pack (design principles 5.4).
 std::string dimGroupCode(const DimGroup &group) {
     if (group.empty()) {
         return "[]";

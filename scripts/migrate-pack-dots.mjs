@@ -33,15 +33,30 @@ import { readFileSync, writeFileSync } from 'node:fs';
 import { readdirSync, statSync } from 'node:fs';
 import path from 'node:path';
 
-const ROOTS = ['stdlib', 'test/cases', 'docs/language', 'docs/design'];
-const EXTENSIONS = new Set(['.cml', '.md', '.toml']);
-const LEFT = new Set(['(', '<', '[', ',', ':', '=']);
+const ROOTS = [
+    'stdlib',
+    'test/cases',
+    'docs/language',
+    'docs/design',
+    // A diagnostic quotes the spelling it is about, so the sentences move with the rule. In a
+    // message a pack is always quoted (`'..e'`), which is why a quote is a left context.
+    'src/core/error/diagnostics/messages',
+    'src/parse',
+];
+const EXTENSIONS = new Set(['.cml', '.md', '.toml', '.cpp', '.h']);
+const LEFT = new Set(['(', '<', '[', ',', ':', '=', "'", '`']);
 
 const CWD = process.cwd();
 
 function* walk(dir) {
     for (const entry of readdirSync(dir, { withFileTypes: true })) {
         const full = path.join(dir, entry.name);
+        // `test/cases/probe/` holds the cases that must keep the *old* spelling: they are the
+        // evidence that a `..` in a pack position is refused. A migration that rewrites its own
+        // counter-examples erases the thing it is measured by.
+        if (full.replaceAll('\\', '/').endsWith('test/cases/probe')) {
+            continue;
+        }
         if (entry.isDirectory()) {
             yield* walk(full);
         } else if (EXTENSIONS.has(path.extname(entry.name))) {
