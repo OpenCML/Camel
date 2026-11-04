@@ -7,16 +7,23 @@
 // `transpose(call(g, x)) = transpose(lin_g)`, so a call is differentiated through the callee's own
 // linear half.
 //
-// Today the line answers `g'(3) = 0.0` with no diagnostic and no refusal: the transposition is
-// right and the value it transposes is not. `jvp(g)` is right -- `jvp(g)(3.0, 1.0)` is `(18.0,
-// 12.0)` and `jvp(g)(3.0, 2.0)` is `(18.0, 24.0)` -- while `split(jvp(g)).1`, the `lin_g` this
-// ruling transposes, ignores its own parameter: `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`. 36 is
-// `mul_tangent(y = 6, x = 3, lin_f(3) = 6, 3)`, i.e. the *value* `x = 3` is spent as the tangent
-// `dx`. The cut's backward half carries a parameter port its body never reads and reads a residual
-// the forward half never computes; the mark's note names the site.
+// It was written as a `known_fail` on 2026-11-04 07:34, because the line answered `g'(3) = 0.0`
+// with no diagnostic and no refusal: the transposition was right and the value it transposed was
+// not. `jvp(g)` was right -- `jvp(g)(3.0, 1.0)` is `(18.0, 12.0)` and `jvp(g)(3.0, 2.0)` is `(18.0,
+// 24.0)` -- while `split(jvp(g)).1`, the `lin_g` that ruling transposes, ignored its own parameter:
+// `lin(1.0) = lin(0.5) = lin(2.0) = 36.0`. 36 was `mul_tangent(y = 6, x = 3, lin_f(3) = 6, 3)`, i.e.
+// the *value* `x = 3` spent as the tangent `dx`. The cut's backward half carried a parameter port its
+// body never read and read a residual the forward half never computed
+// (`modules/transforms/split.cpp#residualsOf`; the lane that fixed it is `lane-linres`).
 //
-// `flat` is the same arithmetic written without a call. It answers 12.0 today and must keep
-// answering it: the difference between the two lines is the call, and only the call.
+// The wall is down: `lin` reads its own parameter now and the two lines below are what the program
+// prints (measured 2026-11-04 on the cut tree, exit 0). The mark went with the wall, and this file
+// stays as the positive entry that `grad_across_a_call` reads through the other door -- that one asks
+// `grad(g)`, which is `transpose(split(jvp(f)))`, this one asks `vjp(g)` and prints the value and the
+// pullback apart. The plan row is in `test/plans/feat/compile/transforms.plan.toml`.
+//
+// `flat` is the same arithmetic written without a call. It answers 12.0 and must keep answering it:
+// the difference between the two lines is the call, and only the call.
 import rulesets.jvp
 import rulesets.transpose
 import { vjp } from vjp

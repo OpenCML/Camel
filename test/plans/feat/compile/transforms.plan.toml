@@ -2624,6 +2624,37 @@ expect_output_contains = ["grad_g_3= 12.0", "grad_g_5= 20.0", "grad_g2_3= 54.0",
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The same wall read from the `vjp` side, and kept as the *positive* entry it was always meant to
+# become. `cross_call_gradient_is_not_zero` landed on 2026-11-04 07:34 as a `known_fail` that pinned
+# the wrong line this tree printed (`known_fail_msg = "g'(3) = 0.0"`, the zero a linear half that
+# ignores its own parameter answers), and the commit that fixed the cut (`ee5eebe07`) rewrote that
+# row into `grad_across_a_call` above. The number moved and the case file stayed on disk with nothing
+# reading it -- which is exactly what `gate.case_ledger` reports: a case no code reaches cannot fail,
+# so a change that broke it would be invisible. It is not deleted. The record is the point, and the
+# rule this pair keeps is "a wall that falls turns its assertion into a number": the mark goes in the
+# same commit that pins the number, and `flat` -- the same arithmetic written flat -- must still
+# answer 12.0, because a fix that moved that number would be a fix that broke the path which was
+# already right.
+#
+# The two entries read one defect through two doors: `grad_across_a_call` asks `grad(g)` (which is
+# `transpose(split(jvp(f)))`, the whole chain), this one asks `vjp(g)` and prints the value and the
+# pullback separately (`g(3) = 18.0  g'(3) = 12.0`). Neither can drift alone.
+[[tests]]
+name = "cross_call_gradient_is_not_zero"
+desc = "The gradient across a call, read through `vjp` and pinned as the number it must answer: `f(x) = 2.0 * x`, `g(x) = f(x) * x`, so `g(3) = 18` and `g'(3) = 4x = 12`, while the same arithmetic written flat (`flat`) answers 12.0 in the same run and must keep answering it. What is guarded is that the cross-call gradient is not zero: the case landed as a `known_fail` pinning `g'(3) = 0.0` (the cut listed the lifted graph's tangent parameter as a residual, `modules/transforms/split.cpp#residualsOf`), `grad_across_a_call` replaced its row when the fix landed, and it is kept here as the positive regression beside it -- the same defect through the `vjp` door. Measured 2026-11-04 on the cut tree: `g(3) = 18.0  g'(3) = 12.0` and `flat(3) = 18.0  flat'(3) = 12.0`, exit 0."
+kind = "behavior"
+case = "../../../cases/compile/transforms/cross_call_gradient_is_not_zero.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["g(3) = 18.0", "g'(3) = 12.0", "flat(3) = 18.0", "flat'(3) = 12.0"]
+# The half that says the entry is not green by accident: the wrong number the case was created to
+# pin must not come back, in either spelling.
+expect_output_not_contains = ["g'(3) = 0.0", "flat'(3) = 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
 
 [[tests]]
 name = "extent_of_refuses_an_open_rank_type"
