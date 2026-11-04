@@ -26,7 +26,15 @@
 // `std::macro std::opt std::nvm` and the guard refuses nothing, because the arm tail a splice can end on
 // only arises on the tree that carries the chain-place batch (`benchmarks/mlp/model.cml` there stops at
 // "breaks the branch-arm invariant: OPER .. (:io/println) reads OPER .. (time:now)"). This case therefore
-// pins the half this tree can see.
+// pins the half this tree can see. "No case today" is not "no case ever": when that batch reaches a test
+// plan, the half gets its own case, pinned the way that program was measured.
+//
+// What this case does not say. A green suite on this tree -- `8766 / 8722 / 3` with the fix in -- is not
+// evidence that the guarding half works on the tree the defect was found on. It says the change broke
+// nothing here, and nothing about the program it was written for; a full green reading looks like an
+// endorsement and is not one. That evidence is two runs of `benchmarks/mlp/model.cml` on the tree that
+// carries the batch, lane-chainplace at 19e6876a6: `exit=1` and the arm-invariant sentence without the
+// fix, `exit=0` with `compile_ms=0.5404949188232422` and three `latency_ms` lines with it.
 
 func pick(x: int): int sync {
     if x > 0 then sync {

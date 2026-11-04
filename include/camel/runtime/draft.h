@@ -326,6 +326,18 @@ uint64_t nextDraftEpoch();
 /// `GraphDraft` so that a caller stating it does not name the type: the direct-connection ledger
 /// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction, and
 /// a caller that passes a value is not one of them.
+///
+/// The judgement is not read off the graph, it is declared by the caller: the graph has no quantity
+/// that separates the two cases. The draft does hold the region and its owner, so the tempting
+/// predicate is "the tail stands in an arm whose owner is still alive -- refuse". Measured, that is
+/// the wrong question: `src/passes/opt/generic/generic.cpp#pruneBranch` hands the place over while the
+/// branch it is pruning is still alive and its arm is still an arm (the probe reads
+/// `tkind=1 owner=15 ownerAlive=1 same=0`), and a predicate read that way refuses the handover that
+/// rewrite must make. Only the caller knows whether the region outlives the rewrite, so it says.
+///
+/// The default is the conservative side: a call site that does not say gets `KeepsItsBlock`, so a new
+/// caller that forgets is stricter than it needs to be, never looser. A guard whose default was the
+/// permissive side would be worse than no guard, because it would look like one.
 enum class PlaceHandover {
     /// The code the place is handed to keeps a block of its own (the body an inline splice moved in).
     /// A statement of another block does not run whenever a statement of that block runs, so it heads
