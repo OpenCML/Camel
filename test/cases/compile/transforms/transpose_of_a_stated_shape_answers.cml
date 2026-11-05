@@ -1,0 +1,31 @@
+// The transpose of a linear operator whose parameter's shape is written in the type: `sum` over
+// `float[2, 3]`, and the reverse law `rulesets/transpose.cml#sum_from_type_t`, which names one port
+// more than the operator has and is handed the extents.
+//
+// A bare `transpose(f)` is the adjoint of a linear map, and the adjoint needs the shape of the map's
+// domain. The transposed function is handed the cotangent of the result and nothing else, so that
+// shape has exactly one source: the parameter's type. `float[2, 3]` states `[2, 3]`, the walk reads
+// `extent_of` off it and offers the `int[]` to the law, and the answer is the cotangent of the one
+// number at every one of the six positions, `([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])`. The reading that
+// says the law was handed the *type's* extents and not a value's is the walk line `rhs=sum_from_type_t`.
+//
+// The same body declared with an open shape is refused by name, and that is the author's rule of
+// 2026-11-05 10:40: a bare transposition requires every parameter's shape to be given by its type.
+// The neighbouring case `transpose_of_an_open_shape_is_refused.cml` is that reading, and the two
+// together say the declaration decides -- not the compiler, and not the body.
+//
+//     camel test/cases/compile/transforms/transpose_of_a_stated_shape_answers.cml
+import { transpose } from transforms
+import rulesets.transpose
+import { sum } from tensor
+
+/// The declaration states the extents the law reads.
+func total(x: float[2, 3]): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    let back = transpose(total)
+    `total transpose={}`->format<back(1.0)>->println
+    return 0
+}
