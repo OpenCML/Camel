@@ -809,11 +809,18 @@ function parseArgs(argv) {
         // targets but follow `--tier`, so a plan whose slow cases must not run from an ordinary
         // change runs only its fast layer. `--run-changed` produces this; it is not a user knob.
         layeredPlans: new Set(),
+        // `--changed` measured an empty selection: no target travels with the run because there is
+        // no plan to run, and an absent target list must not become the whole plan tree here -- that
+        // widening is what let `changed: 0 target(s)` run 336 plan files and print a green summary.
+        // Only `test/runner.mjs` passes this flag, and it is refused beside a target.
+        selectionEmpty: false,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '--update-golden') {
             options.updateGolden = true
+        } else if (arg === '--selection-empty') {
+            options.selectionEmpty = true
         } else if (arg === '--selection-layer' && i + 1 < argv.length) {
             for (const entry of argv[++i].split(',')) {
                 if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
@@ -865,6 +872,13 @@ function parseArgs(argv) {
             throw new Error(`--tier debug runs on the Debug build; --build ${options.build} was given`)
         }
         options.build = 'debug'
+    }
+    // `--selection-empty` says this run's selection is a measured zero, so a target beside it is a
+    // contradiction: the flag means nothing was selected and the target means something was.
+    if (options.selectionEmpty && options.targets.length > 0) {
+        throw new Error(
+            `--selection-empty means no plan was selected, so it cannot travel with a target (${options.targets[0]})`
+        )
     }
     return options
 }
@@ -2859,7 +2873,7 @@ function planLineOf(planPath, needle) {
     return index === -1 ? null : index + 1
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
+function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
@@ -2878,7 +2892,11 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false)
         if (fs.statSync(resolved).isFile() && !layeredPlans.has(resolved)) namedPlans.add(resolved)
         discovered.push(...found)
     }
-    if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
+    // No target is the whole plan tree -- that is what `node scripts/test.js` with no argument means,
+    // and what `npm run test` relies on. The one caller that means the opposite says so;
+    // `emptySelection` is a selection that was measured empty (0 changed files), so widening it here
+    // is exactly the defect this flag exists to stop: 0 changed files used to start 336 plan files.
+    if (targets.length === 0 && !emptySelection) discovered.push(...walkPlans(PLANS_ROOT))
     // `--all` names the plans root and a plan may also be named explicitly; the same plan must
     // not run twice.
     const planPaths = [...new Set(discovered.map((planPath) => path.resolve(planPath)))]
@@ -3643,7 +3661,9 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
-    preflightBuild(options)
+    // An empty selection starts no plan, so no binary is consulted: refusing here for a missing
+    // install would turn "nothing to run" into a red about a build, which is a different question.
+    if (!options.selectionEmpty) preflightBuild(options)
     // Writing golden files from several tests at once would make the content depend on which
     // test finished last; update-golden is a deliberate, serial maintenance run.
     if (options.updateGolden && options.jobs !== 1) {
@@ -3658,7 +3678,13 @@ async function main() {
             return false
         }
     })
-    const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const selected = loadPlans(
+        options.targets,
+        options.tier,
+        options.layeredPlans,
+        options.compileOnly === true,
+        options.selectionEmpty === true
+    )
     const plans = selected.plans
     // A target that reached no plan file refuses the run before anything starts: nothing would run,
     // so no [SUMMARY] could say anything true about it. It gets a sentence of its own -- the layer
@@ -3823,7 +3849,16 @@ async function main() {
             `${COLORS.cyan}[INFO]${COLORS.reset} named plan target(s) run in full: ${namedPlans.length} (the tier filter leaves a named plan alone)`
         )
     }
-    if (testCount === 0 && options.tier !== 'all') {
+    if (options.selectionEmpty) {
+        // The zero below is the answer, not a layer that failed to fill: the selection was measured
+        // empty before this process started. It says which zero it is, because the summary of a run
+        // that starts nothing is the same three numbers as the summary of a green one.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} --selection-empty: ${plans.length} plan file(s) selected, ` +
+                '0 started. The plan tree was not widened to fill the selection; name a plan or --all ' +
+                'to run a layer'
+        )
+    } else if (testCount === 0 && options.tier !== 'all') {
         console.log(
             `${COLORS.cyan}[INFO]${COLORS.reset} this selection has no ${options.tier} tests: --tier all runs both layers`
         )

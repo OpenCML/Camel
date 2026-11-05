@@ -608,16 +608,30 @@ function fastLayerInventory() {
 
 /**
  * The sentence a fallback to the layer prints: why the plans the change touches are not the run,
- * and what the run is instead. `--changed` reaches the layer two ways -- a change that names no plan
- * at all, and a change no rule matches -- and both hand an empty target list to
- * `test/tools/run-tests.mjs`, whose `loadPlans` reads "no target" as the whole plan tree. The
- * reason differs between them; the fallback does not, so it is worded in one place. A selection
- * that really did select plans never reaches this, which is what makes the sentence a reading.
+ * and what the run is instead. One way of `--changed` still reaches the layer -- a change no rule
+ * matches, which is the documented policy for a class the project keeps out of `--changed` (perf,
+ * GC stress, progen) -- and it hands an empty target list to `test/tools/run-tests.mjs`, whose
+ * `loadPlans` reads "no target" as the whole plan tree. A selection that really did select plans
+ * never reaches this, which is what makes the sentence a reading.
  */
 function announceLayerFallback(reason) {
     return (
         `[WARN] --changed: ${reason}; falling back to the whole fast layer ` +
         `(${fastLayerInventory()}), which is the layer and not the change`
+    )
+}
+
+/**
+ * The line a **measured empty** selection prints: what it counted, what it selected, and that the
+ * layer is a different question. `changed: 0 target(s)` is the reading a gate can grep for, because
+ * a run that starts nothing and a run of the whole layer end the same way -- exit 0 and a
+ * `[SUMMARY]` with no failure -- so the count has to be a line of its own.
+ */
+function announceEmptySelection(against) {
+    return (
+        `changed: 0 target(s) -- no file differs from ${against}, so no plan is selected and no plan ` +
+        `starts. The whole fast layer (${fastLayerInventory()}) is a layer and not this change: name a ` +
+        `plan, or pass --all, to run it`
     )
 }
 
@@ -671,18 +685,16 @@ function selectChangedTargets(options = {}) {
     }
     if (files.length === 0) {
         // A change with no file in it selects no plan, and the listing was read, so this zero is a
-        // measured zero. It is not a run of no plan: `main` hands the empty target list to
-        // test/tools/run-tests.mjs, whose `loadPlans` reads "no target" as the whole plan tree, so
-        // this run is the whole fast layer. The line that used to stand here said that layer "is
-        // not run" while the run started 335 plans, which is the silent fallback this sentence
-        // replaces: the widening stays (a host run with an empty changed list must still run
-        // something), but it now names itself and its cause.
-        console.warn(
-            announceLayerFallback(
-                `0 changed file(s) against ${against}: there is no change to narrow the run by`
-            )
-        )
-        return { targets: [], layered: [], widened: true }
+        // measured zero -- and a measured zero runs no plan. It used to hand the empty target list
+        // to `test/tools/run-tests.mjs`, whose `loadPlans` reads "no target" as the whole plan tree:
+        // 0 changed files ran 336 plan files and 8,000-odd tests, and every reading a gate takes --
+        // exit 0, a `[SUMMARY]` with no failure -- read the same as a correct selection of one plan.
+        // Naming that widening and then doing it is not a fix; the fallback is what the number was.
+        // So an empty selection now selects nothing and starts nothing (`--selection-empty` keeps the
+        // runner from reading "no target" as a layer), and the layer is run only when it is asked
+        // for: a plan name, or `--all`.
+        console.log(`[INFO] ${announceEmptySelection(against)}`)
+        return { targets: [], layered: [], widened: false, empty: true }
     }
     loadRulesForSelection()
     let plans
@@ -793,7 +805,12 @@ export function main(argv = process.argv.slice(2)) {
     const layeredArgs = selection.layered.length > 0
         ? ['--selection-layer', selection.layered.join(',')]
         : []
-    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...selection.targets, ...layeredArgs], {
+    // A measured empty selection travels as an explicit flag, not as an absent target list: "no
+    // target" is the whole plan tree to `loadPlans`, so the two readings have to differ before they
+    // reach it. It is the only way `--changed` starts nothing, and it is a measured zero, not a
+    // failed selection -- an unreadable base still refuses with exit 2 above.
+    const emptyArgs = selection.empty === true ? ['--selection-empty'] : []
+    const proc = spawnSync(process.execPath, [RUNNER, ...options.runnerArgs, ...selection.targets, ...layeredArgs, ...emptyArgs], {
         cwd: REPO_ROOT,
         stdio: 'inherit',
         env: process.env

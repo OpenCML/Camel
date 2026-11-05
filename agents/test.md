@@ -349,6 +349,14 @@ The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS
 rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
 purpose, never neither.
 
+**`changed: 0 target(s)` is a reading, and it means nothing was tested.** `--changed` starts no plan
+when no file differs from the base, and prints that count instead of running the layer: 0 changed
+files used to widen to 336 plan files and a `[SUMMARY]` with no failure — the reading a correct
+selection of one plan gives — so the widening had no symptom. A lane that sees the line is in one of
+two situations, and neither is a green: its work is not committed or not on the branch yet, or it
+named a base the branch equals. Name the plans (`-Plan smoke,test/plans/feat/...`) or `--all` when the
+layer is the question; the layer is never run to fill a selection.
+
 ## A timeout budget is a change like any other
 
 A `timeout_ms` in a plan file is not housekeeping: it decides whether a slow machine reports a red or
