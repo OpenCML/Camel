@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：18 页
+## 现在在等作者：19 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -27,6 +27,7 @@
 | [`2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion`](2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion.cn.md) | 第二条裁定给的那条读数，在删除前就是绿的 |
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 |
+| [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 |
 
 ## 生成器不会删的行：54 行（页已不在 `questions/` 里）
 
