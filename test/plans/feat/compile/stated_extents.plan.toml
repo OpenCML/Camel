@@ -309,3 +309,48 @@ expect_output_contains = ["states extent 9 at dimension 0 and the tensor has 4"]
 expect_output_not_contains = ["stated take="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# The declaration decides, read on one linear operator whose reverse law is written: `sum`, whose
+# transpose is `stdlib/rulesets/transpose.cml#sum_from_type_t` -- the adjoint of a reduction, with the
+# extents the reduction consumed as one more port than the operator has.
+#
+# The author's ruling of 2026-11-05 10:40 splits the two readings this plan now carries: a bare
+# `transpose` requires every parameter's shape to come from its type, so the stated shape answers and
+# the open one is refused by name; a program that wants an open shape reaches the transposition
+# through `vjp`, where the jvp rule carries the shape as a residual. Both writings are measured here,
+# one case each, because a rule that only refuses teaches nobody the writing that works.
+[[tests]]
+name = "transpose_of_a_stated_shape_answers"
+desc = "`transpose(total)` with `total(x: float[2, 3]) = sum(x)`: the cotangent of the one number is that number at every one of the six positions, `([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])`, and the walk line names the law it applied (`rhs=sum_from_type_t`) -- the one that is handed the extents `extent_of` reads off the parameter's type. That line is what separates this reading from a law reading a value: no array in this program holds `[2, 3]`, so an answer that came out at the wrong rank would say the extents were guessed, and `skip=parameter-shape` appearing here would say the stated type was not read at all."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_of_a_stated_shape_answers.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["total transpose=([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]])"]
+expect_stderr_contains = ["rhs=sum_from_type_t"]
+expect_output_not_contains = ["skip=parameter-shape", "does not state it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The other half of the ruling: the same body declared `x: float[...]`, refused by name -- and the
+# repair that works measured first in the same run, so the case says both what is not allowed and
+# what to write instead. The five help needles are one per thing a reader can act on: the rule about
+# what a type states, the rule about a bare transposition, the edit, the answer that edit produces,
+# and the `vjp` route that keeps the open declaration.
+[[tests]]
+name = "transpose_of_an_open_shape_is_refused"
+desc = "`total(x: float[...]) = sum(x)` reached two ways in one program. Through `vjp` it answers -- `value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]`, with `rhs=sum_stated_t`, the law the residual's stated extents are handed -- because there the shape travels as a value the jvp rule wrote. Through a bare `transpose` it is refused, with `RuntimeDiag::TransposeNeedsParameterShape` naming `total`, the parameter `x` and the type `float[...]`: the transposed function is handed the cotangent alone, the type states neither a rank nor a length, and no residual carries the shape, so there is nowhere for it to come from. The help is the other thing pinned: it says what a type states (`float[?]` is one dimension and no length, `float[...]` neither), that a bare transposition requires the shape from the type, and the two measured writings that supply it -- the stated declaration, and the `vjp` route this program just demonstrated."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_of_an_open_shape_is_refused.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::TransposeNeedsParameterShape"
+expect_stdout_contains = ["open through vjp: value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]"]
+expect_output_contains = ["The transpose of 'total' needs the shape of the parameter 'x', and the type 'float[...]' does not state it.", "one dimension and no length", "A bare transposition requires the shape of every parameter to come from its type", "so the parameter 'x' declares no extents in the type 'float[...]'", "Write the extents the parameter's value has in its declaration", "answers ([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]) by `sum_from_type_t`", "over the same 'x: float[...]' answers value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]"]
+expect_output_not_contains = ["open through transpose answered", "Nothing is missing from the language here", "compiler defect", "not the program's fault"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
