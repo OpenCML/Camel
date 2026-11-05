@@ -46,7 +46,7 @@
   could not read (`git fetch` failed, so `refs/remotes` may be stale and would report a false "no
   branch has it"). It writes nothing; `--offline` skips the fetch and says the reading is stale.
 - **`null` is not an exit code; it is the absence of one.** A run that ends without an exit code ended in one of three ways, and the runner names which: `got signal SIGSEGV (rc=139, 0.03 s)` (the shell's `128 + n`), `got timeout after 30000 ms` (only a real timeout says this), `could not start: <message>` (the process never existed). `[SUMMARY]` separates the last two for `fail` counts: `, timed out: <n>` and `, killed by a signal: <n>`, printed only when one happened. **Read the exit line before reading a timing**: `got null` was read as a hang for two rounds while the process was dying of SIGSEGV in 0.03 s, and both directions of that diagnosis were wrong.
-- **A layer's size is two numbers, and every run prints both**: `[tier] milestone: 27 plan file(s), 3330 declared test entries, 3404 started`. Read the second one as "what this run covers" and the first as "what the files declare"; quoting either alone as "the layer" is how `3330` and `3404` were both read as the same thing. `declared > started` is a defect (an entry that neither ran nor was skipped, so it is in no summary) and fails the run; `declared < started` is normal (`backends` expands an entry, a `compare_to` companion joins). Both are counted, never computed -- `backends.length` multiplication reads `7339` for a layer that starts `3404`.
+- **A layer's size is two numbers, and every run prints both**: `[tier] milestone: <plan file(s)> plan file(s), <declared> declared test entries, <started> started` -- the numbers are the ones *that* run printed, never a figure copied from this page. Read the second one as "what this run covers" and the first as "what the files declare"; quoting either alone as "the layer" is how `3330` and `3404` were both read as the same thing. `declared > started` is a defect (an entry that neither ran nor was skipped, so it is in no summary) and fails the run; `declared < started` is normal (`backends` expands an entry, a `compare_to` companion joins). Both are counted, never computed -- `backends.length` multiplication reads `7339` for a layer that starts `3404`.
 - **"Full" is not a layer; say which one.** The same tree answers two very different numbers: the whole-tree **fast** layer (`--plan all --tier fast`) is the acceptance reading -- 8447 total, 8435 pass, 0 fail, 10 skip, 2 known failures on 2026-11-02, which is what `develop` itself reads -- while `--tier all` over the whole tree is 11874 and adds the milestone, perf and stress plans that "Run the plans your change touches" says a lane must not start. A report that says "the full suite" without naming the tier cannot be compared with another report, and the two numbers have been read as one thing. Quote the tier, the total, and the pass/fail beside it.
 - **A guard must be able to fail.** Say in its comment which change to the tree makes it red, and record that red run (a plan case, a test, or the report with the failing output). A number a verdict rests on comes from the tree — the files, the parser, the registered operators — never from a literal list inside the guard; where a literal is a pin, a plan pins it so a change is visible. A guard that examined zero things fails; it never reports a pass.
 - **Pin the words that separate the cases, not a word both of them can produce.** `bf16` contains `f16`, and the reduced-precision diagnostic prints one help paragraph for both types ("bf16 and f16 are floating types of the language"), so `expect_output_contains = ["bf16"]` stays green even when the message names `f16` — a guard that cannot fail, measured: the bf16 case swapped to `f16` still passed 44/0. Pin the phrase only one of them can print (`element type 'f16'`, `element type 'bf16'`) and record the swap that reds it (43/1). The same trap is any short word that is a substring of its sibling: a pin of `f32` is satisfied by `f32[]`, and a pin of `NaN` is satisfied by `NaN` in a legend.
@@ -86,13 +86,27 @@ p
 - **Drive the compiler with absolute paths and `cwd` at the repository root.** A case given as a relative path resolves its `import`s against the wrong directory: `camel test/cases/compile/enum/cross/use.cml` searches `.../compile/enum/cross/test/cases/compile/enum/cross` first and reports `ModuleNotFound: 'shapes'`, where the absolute path finds the module and the printer's real verdict is `cannot print shapes::area: the graph name ... is not a source identifier`. The search root is built from the case's directory joined onto the working directory, so a relative case path is joined twice. Measured on 2026-11-02 over the corpus of 3377: the same survey reads `printed=559 refused=1814 frontend=1004` with absolute paths and `printed=551 refused=1701 frontend=1125` with relative ones -- **192 of 3377 cases answer differently**, 113 of them falling from a refusal to a front-end error. `test/tools/cml-sweep.mjs` does this correctly (absolute `ROOT`, `cwd: ROOT`) and now refuses to run if it is handed a non-absolute root, so the wrong invocation cannot produce a number at all. **A reading taken with the wrong invocation is not a harder-to-read reading, it is a different reading**: the wrong path form changes the verdict on 192 cases, so the two columns are not comparable and a difference between them is not a regression.
 - **Run the plans your change touches, not the whole tree.** The full suite (`test/plans`), the GC poison sweep, the GC stress plans (`gc.collection_trees_*`, `gc_elder_*`), the progen random-program checks, the PyTorch comparisons and the perf/timeit plans are heavy: they saturate every core for minutes and are worth running only at a milestone, by the coordinator, on a quiet machine. During development a targeted plan list plus `smoke` is the expected verification. Never start a full-suite or stress run to "be safe", and do not leave one running when you stop.
   **What the milestone layer actually is, and what it looked like when it was first
-  measured (2026-11-02).** `--tier milestone` selects 27 plan files: `tier` is a
-  property of the *file*, so naming a file runs it whole and the layer is that whole batch. The
-  layer is now read off the tree rather than off a table: `plan-inventory.mjs` counts every test
-  whose own tier says `milestone` -- the batch `--tier milestone` selects -- so a plan that grows
-  one is counted the day it lands. (Those files declare 3330 entries; a run of the layer reports
-  `tests: 3404`, because back ends expand and `compare_to` companions join the run. The file count
-  and the run count are two subjects; the gate prints the first and says "test entries".) That
+  measured (2026-11-02).** `--tier milestone` selects the tests whose own layer is `milestone`,
+  and they live in plan files, so the layer is a set of plan files -- but `tier` is **not** a
+  property of the file: `test/tools/run-tests.mjs#testTier` takes a test's own `tier` first and
+  the plan's header only as the default, and a copy an unsampled `[[sweeps]]` entry generates
+  carries `tier = "milestone"` on the copy. The layer is read off the tree rather than off a
+  table: `scripts/plan-inventory.mjs#milestoneLayer` counts it through that same reading, so a
+  plan that grows one is counted the day it lands; the release gate prints the count
+  (`[gate] not run here: the milestone layer -- <n> plan file(s), <n> test entries`) and a run of
+  the layer prints `[tier] milestone: ...`. Measured 2026-11-04: 28 plan files and 3518 declared
+  entries -- 4 of the 28 hold `milestone` tests their header does not claim (three name `tier` on
+  single tests, one sweeps copies in), which is why counting the headers undercounts the layer.
+  **The same tree therefore has three numbers that are each right about something else: 24 plan
+  files whose header says `milestone`, 27 when the tree is read through `testTier` but without
+  expanding a `[[sweeps]]` entry, and 28 for the layer a run of `--tier milestone` selects -- the
+  first two count what the files declare, the third counts the plan files the selection reaches,
+  and only the third is the layer.** Quote which reading produced the number, or the number is not comparable with the next
+  one. Naming a plan file still runs all of it, whatever `--tier` says; the layer is what a
+  directory target or the whole tree selects. (On that first measurement those files declared 3330 entries;
+  a run of the layer reported `tests: 3404`, because back ends expand and `compare_to` companions
+  join the run. The file count and the run count are two subjects; the gate prints the first and
+  says "test entries".) That
   day's run gave `total: 3390, pass: 3369, fail: 20, skip: 1` -- 16 of the 20 are real reds and 4
   are budgets, below. Nobody had run this layer before, so a red here is not evidence that today's
   change broke it: two of them (`gc.remembered_set_minor_copying`, `gc.foreign_resource_lifetime`)
@@ -116,9 +130,14 @@ p
 
 (source: `test/tools/run-tests.mjs`, `expandBackends` / `__knownFail`, commit `a01fcdfdc`)
 
-**The milestone numbers carry a tip.** `--tier milestone` is 27 plan files and on the order of 3390
-tests, and `-Plan <a subdirectory>` still covers the whole layer, because `tier` is a property of the
-file. The first run of this layer, on 2026-11-02, was `total 3302 / pass 3286 / fail 16` on
+**The milestone numbers carry a tip, and the size is regenerated rather than remembered.** Quote
+what a run of the layer printed (`[tier] milestone: <plan file(s)> plan file(s), ...`) or what
+`scripts/plan-inventory.mjs#milestoneLayer` counts, with the tip beside it: the 2026-11-02 reading of
+27 plan files and some 3390 tests was 28 plan files and 3518 declared entries on 2026-11-04, so a
+figure on this page is a reading of its day, not the layer. A `-Plan <a subdirectory>` target still
+covers the whole layer, because the layer is selected test by test
+(`test/tools/run-tests.mjs#selectTier`) rather than by the directory named. The first run of this
+layer, on 2026-11-02, was `total 3302 / pass 3286 / fail 16` on
 `2c1a7b6c4`; on `37dcd074a` it is 15, and the two that left are the GC self-tests whose thresholds
 and collection counts the field could not reach. A count without a tip is not a count.
 ## Killing a stale run on the shared host

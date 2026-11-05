@@ -65,10 +65,18 @@ $env:PATH = "$env:CAMEL_HOME\bin;$env:PATH"
 - Test plans live under `test/plans/`; you may pass either a single `*.plan.toml` file or a plan directory.
 - When adding a new feature or a new test case, first run the relevant case manually from the command line and inspect the execution flow and stdout/stderr directly before relying on the plan runner. Only add or refine automated `verify_*` logic after the manual run confirms the observable behavior you actually want to lock in.
 - `npm run test` runs the **fast** layer of `smoke` plus all `feat/**` plans, in parallel (one test per core).
-- `npm run test:all` runs every plan under `test/plans/`, including `perf/**` and the slow tests.
-- `--jobs N` sets the parallel width; `--jobs 1` reproduces the serial run. `--tier fast|slow|all`
-  selects a layer (default `fast`) for a directory or the whole tree; a plan **file** named as
-  the target runs in full, whatever `--tier` says.
+- `npm run test:all` runs the `all` layer: every plan and test under `test/plans/`, including
+  `perf/**` and the slow tests, **except the `debug` layer** -- the tests whose own tier is
+  `debug` (the deliberate abort under `test/plans/debug/`), which need a Debug build and only
+  `--tier debug` selects. The plans marked `debug_tier` are not that exception: they run in
+  Release as well.
+- `--jobs N` sets the parallel width; `--jobs 1` reproduces the serial run.
+  `--tier fast|slow|milestone|all|debug` selects a layer (default `fast`) for a directory or the
+  whole tree; a plan **file** named as the target runs in full, whatever `--tier` says. Those
+  five are the whole set (`test/tools/run-tests.mjs#TIERS`) and
+  `test/tools/run-tests.mjs#selectTier` is the selection; a `tier` written on a plan is only the
+  default for its tests (`test/tools/run-tests.mjs#testTier`), and an old label such as `smoke`,
+  `feat` or `benchmark` is read as `fast`.
 - `node scripts/test.js --changed` runs the plans a change touches: directory rules in
   `test/plan-selection.json` first, file rules second; base `origin/develop`, override with
   `CAMEL_TEST_BASE`.
