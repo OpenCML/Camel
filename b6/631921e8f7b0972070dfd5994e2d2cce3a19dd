@@ -1,0 +1,32 @@
+`packeta b6631921e`（父 `0be3f0683`）——期望类型的 `with` 表来自包时，lambda 的 `<w, ...rest>` 定型。
+
+① 答出数：`(2.0, 1.0)`。程序是 `type GradientAux<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)`，
+期望类型 `<w: float> () => float` 上的 `<w, ...rest> () => (w, 1.0)`，编译器给的期望类型正是
+`'<__pack_0_0: float> () => (float, float)'`。同族三条（用例 `with_list_from_a_pack_in_the_position`）：
+`one (2.0, 1.0)` / `two (2.0, 1.0)`（包吃下第二个 `with` 参数，`two<2.0, 3.0>()` 才匹配）/ `three (24.0, 1.0)`。
+
+`LambdaParameterWithoutType` 的 `git grep -o` 命中数：`0be3f0683` = 35 → `b6631921e` = 38；+3 全在
+`test/plans/feat/compile/lambda_inference.plan.toml`（两条新负例的 `expect_diagnostic_name`、一条正例的
+`expect_output_not_contains`），`src`/`include` 的发射点一个没增没减；旧句子 "ends before the rest parameter"
+在那条程序上不再出现。
+
+② 对不上的 lambda 给出的一句原文（`<w, ...rest> (x) => (x, 1.0)`，`LambdaParameterWithoutType` 指到 `x`，
+退出码 1）：`the expected type '<__pack_0_0: float> () => (float, float)' ends before the parameter at position 3, which the lambda writes`。
+
+拦截点：`src/compile/gir/builder.cpp#Builder::completeLambdaSignature` 里
+`expectedTotal < effectiveWith + restHole->index` 那条分支——修前该程序的报文就是它自己的文案，所以是真拦下
+它的那一处。`restHole->index` 是「`with` 在前」的编号，`effectiveWith` 已经把这些数过一遍，于是把 `with`
+个数当成了普通形参个数；`with` 包没有普通位置，它要的是上面 `expectedWith < withPackAt` 那条比较。
+
+没放宽：普通侧改按普通成员计——`(a, b, ...xs)` 对 `(a: float) => float` 仍报 "from position 3 on"（新用例
+`rest_parameter_beyond_the_position` 钉住）。包之后位置上没有的形参，原来只能经那条比较拦住，填型时会读
+`normTypeAt` 越界；现在在写它的地方报 "ends before the parameter at position N"。
+
+门禁 feat/compile：`[SUMMARY] total: 2375, pass: 2357, fail: 0, known failures: 18`，无 killed / timed out，exit 0。
+门禁 feat/modules/autodiff：`[SUMMARY] total: 281, pass: 281, fail: 0`，无 killed / timed out，exit 0。
+`node scripts/check-doc-links.mjs --citations` exit 0（892/892 symbol、2391 path）；另跑
+`diagnostics-catalog.mjs --check`、`camel-for-ai.mjs --check`，均 exit 0。
+
+未做：体里读 `rest`（`<w, ...rest> () => (rest.0, 1.0)`）能编过、exit 0，但 `println` 什么都不印——
+`with` 包代表的元组在体内还没接通，不属这一件，新用例不读它。`nested_function_reads_the_pack.cml` 的
+`exit 1` 与那句话没动。日志 `D:\Projects\Camel-wt\packeta-gate{1,2}c.log`；分支 `lane-packeta`，未 push。
