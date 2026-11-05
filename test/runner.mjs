@@ -607,6 +607,21 @@ function fastLayerInventory() {
 }
 
 /**
+ * The sentence a fallback to the layer prints: why the plans the change touches are not the run,
+ * and what the run is instead. `--changed` reaches the layer two ways -- a change that names no plan
+ * at all, and a change no rule matches -- and both hand an empty target list to
+ * `test/tools/run-tests.mjs`, whose `loadPlans` reads "no target" as the whole plan tree. The
+ * reason differs between them; the fallback does not, so it is worded in one place. A selection
+ * that really did select plans never reaches this, which is what makes the sentence a reading.
+ */
+function announceLayerFallback(reason) {
+    return (
+        `[WARN] --changed: ${reason}; falling back to the whole fast layer ` +
+        `(${fastLayerInventory()}), which is the layer and not the change`
+    )
+}
+
+/**
  * Refuse a selection that could not be made. The exit code is 2, the same one the milestone stage
  * gives the same question (an unknown layer is never reported as a number), and the two readings a
  * gate cannot tell apart are both printed: what failed, and what the old fallback would have run
@@ -655,14 +670,19 @@ function selectChangedTargets(options = {}) {
         refuseChanged(changeReadFailure || `cannot read ${against}`)
     }
     if (files.length === 0) {
-        // A change with no file in it selects no plan. The listing was read, so this zero is
-        // measured: it is printed as the zero it is instead of widening to the layer. The run then
-        // starts nothing, which test/tools/run-tests.mjs reports as a no-op and not as a green.
-        console.log(
-            `[INFO] --changed: 0 changed file(s) against ${against}; 0 plan(s) selected, ` +
-            `and the whole fast layer -- ${fastLayerInventory()} -- is not run`
+        // A change with no file in it selects no plan, and the listing was read, so this zero is a
+        // measured zero. It is not a run of no plan: `main` hands the empty target list to
+        // test/tools/run-tests.mjs, whose `loadPlans` reads "no target" as the whole plan tree, so
+        // this run is the whole fast layer. The line that used to stand here said that layer "is
+        // not run" while the run started 335 plans, which is the silent fallback this sentence
+        // replaces: the widening stays (a host run with an empty changed list must still run
+        // something), but it now names itself and its cause.
+        console.warn(
+            announceLayerFallback(
+                `0 changed file(s) against ${against}: there is no change to narrow the run by`
+            )
         )
-        return { targets: [], layered: [], widened: false }
+        return { targets: [], layered: [], widened: true }
     }
     loadRulesForSelection()
     let plans
@@ -680,8 +700,9 @@ function selectChangedTargets(options = {}) {
         const shown = files.slice(0, 8).join(', ')
         const rest = files.length > 8 ? ` and ${files.length - 8} more` : ''
         console.warn(
-            `[WARN] --changed: no rule matches the ${files.length} changed file(s); widening to the ` +
-            `whole fast layer (${fastLayerInventory()}): ${shown}${rest}`
+            announceLayerFallback(
+                `no rule matches the ${files.length} changed file(s): ${shown}${rest}`
+            )
         )
         return { targets: [], layered: [], widened: true }
     }
