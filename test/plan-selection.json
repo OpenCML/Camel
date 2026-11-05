@@ -367,6 +367,11 @@
             "plans": ["feat/tools/build_stamp.plan.toml"]
         },
         {
+            "comment": "The bisect driver: feat/tools/camel_remote_entry is the only reader of `#parseArgs`' wrapper default, and the general rule below sends scripts/ to smoke, which never starts a bisect. Without this rule a change that moved the default back to the copy beside the worktrees would run a plan that cannot see it -- the reading the case pins would be selected only when the case itself was edited.",
+            "paths": ["scripts/bisect-merge.mjs"],
+            "plans": ["feat/tools/camel_remote_entry.plan.toml"]
+        },
+        {
             "comment": "The other build/dev scripts (build.js, format.js, debug.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
