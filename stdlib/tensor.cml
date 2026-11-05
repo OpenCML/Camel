@@ -179,9 +179,9 @@ export func mul_stated::<T>(x: T[...], w: T[...], ax: int[], aw: int[]): T[...] 
 export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[...]
     when is_numeric::<T>()
 
-// The lane mean with its extents stated -- `mean_axis_stated(t, at)`, `at` being `[axis, keepdims,
-// d0, ..., d(rank-1)]` -- is not declared here. Its result's extents are the operand's with the axis
-// removed, or kept as an extent of one, so they follow from the *values* in `at`, and the only type
+// The lane mean with its extents stated -- `mean_axis_stated(t, axis, keepdims, extents)` -- is not
+// declared here. Its result's extents are the operand's with the axis removed, or kept as an extent
+// of one, so they follow from the *values* it states, and the only type
 // a declaration could write is `T[...]`. That type is what put a `float[...]` on a node whose value is
 // the element itself (design principles 5.4): `numel(ct)` in
 // `stdlib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer
@@ -194,7 +194,7 @@ export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[..
 // `T[...]` are the results they have.
 
 /// The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
-/// stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum_axis(t, axis, keepdims)`.
+/// stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum<axis, keepdims>(t)`.
 ///
 /// The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
 /// accumulation in `f64`, the element type and the one rounding are the definition's own -- and
@@ -224,7 +224,7 @@ export func mean_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>(
 
 /// The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
 /// the operand's extents stated: `max_axis_stated(t, mask, axis, keepdims, extents)` is
-/// `max_axis(t, axis, keepdims)`, and `mask` holds `true` at every position that holds its lane's
+/// `max<axis, keepdims>(t)`, and `mask` holds `true` at every position that holds its lane's
 /// largest element.
 ///
 /// The mask is what an extremum's adjoint needs and what the extents cannot rebuild: an extremum
@@ -240,7 +240,7 @@ export func mean_stated::<T>(t: T[...], extents: int[]): T when is_numeric::<T>(
 export func max_axis_stated::<T>(t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]): T[...] when is_numeric::<T>()
 
 /// The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
-/// the operand's extents stated: `min_axis(t, axis, keepdims)`, laid out exactly as
+/// the operand's extents stated: `min<axis, keepdims>(t)`, laid out exactly as
 /// `max_axis_stated` is.
 /// @pure
 /// @fails fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is
@@ -329,21 +329,22 @@ export func fuse::<F>(f: F): F! when is_function::<F>()
 
 // ---- the reductions along an axis, computed rather than declared ----
 //
-// `sum_axis`, `mean_axis`, `min_axis`, `max_axis`, `argmax_axis` and `argmin_axis` are the
-// operators `tensor:sum_axis` and its five siblings (the same naming `shape` and `numel` use, and
-// the one the ONNX lowering table and the semantics declarations are keyed on), and they are not
-// declared here: their **result type** is not a signature a declaration can state. The extents of
+// The six reductions along an axis -- `sum`, `mean`, `min`, `max`, `argmax` and `argmin` with the
+// axis and the flag in angle brackets (one name per reduction, design principles 7.3) -- are the
+// operators `tensor:sum_axis` and its five siblings (that URI naming is what the ONNX lowering table
+// and the semantics declarations are keyed on), and they are not declared here: their **result
+// type** is not a signature a declaration can state. The extents of
 // an axis reduction are the operand's extents with one axis removed -- or kept as an extent of one
 // -- so they follow from the operand's type *and* from the value of `axis` and of `keepdims`, and
 // a declaration's result is a type, not a function of two values. Written here as a declaration
 // the name answered `T[...]`, which is a result that states no extent at all; the operator's own
 // inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
-// `support.cpp#reduceShape`), and a program that writes `mean_axis(x, 0, false)` now reads a
+// `support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` now reads a
 // `float[3]` where it used to read a `float[...]`.
 //
 // The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
-// takes them inside a runtime integer list, so no call site states the rank, and its result is
-// `T[...]` and honestly so. That is why it is still declared above and these six are not.
+// takes them as parameters of its own, so a call that leaves them to the run states no rank, and its
+// result is `T[...]` and honestly so. That is why it is still declared above and these six are not.
 //
 // `stdlib/signatures/tensor.cml` records the six computed signatures; `stdlib/array.cml` imports
 // the names instead of declaring a second spelling of each.
@@ -402,7 +403,7 @@ export func sum_to::<T>(t: T[...], at: int[]): T[...] when is_float::<T>()
 /// @example broadcast_like([1.0, 2.0] as float[2], [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])    // [[1.0, 2.0], [1.0, 2.0]]
 export func broadcast_like::<T, S>(t: T, like: S): S
 
-// `mean_axis`, `min_axis`, `max_axis`, `argmax_axis` and `argmin_axis` stand beside `sum_axis`
+// The axis forms of `mean`, `min`, `max`, `argmax` and `argmin` stand beside the axis form of `sum`
 // above and for the same reason: the extents of their result follow from the operand's type and
 // from the values of `axis` and `keepdims`, and their signatures are recorded in
 // `stdlib/signatures/tensor.cml`.

@@ -36,10 +36,16 @@ constexpr std::array<WrittenOperation, 6> kWrittenOperations{{
     {"pow", "^", 2},
 }};
 
-/// The two operators whose key cannot be derived, and why. They are written up in
+/// The operators whose key cannot be derived, and why. They are written up in
 /// `docs/handover/reviews/questions-2026-11-01-how-does-an-operator-without-a-token-get-a-key.md`;
 /// the reason is repeated here because this is the code a reader of the key finds first.
-const std::array<RuleKeyException, 2> kRuleKeyExceptions{{
+///
+/// The six axis reductions are the same question in one shape: their URI keeps an identity of the
+/// implementation (`tensor:mean_axis`), while the one spelling a program writes is the whole
+/// reduction's name with the axis and the flag in angle brackets -- `mean<axis, keepdims>(xs)` --
+/// so their laws are filed under `mean` at one operand, and the name inside the URI says neither
+/// (author's ruling, 2026-11-05: a reduction over an axis has one name).
+const std::array<RuleKeyException, 8> kRuleKeyExceptions{{
     {":op/idx_arr",
      "index_into",
      2,
@@ -47,11 +53,47 @@ const std::array<RuleKeyException, 2> kRuleKeyExceptions{{
      "operator has no token a rule's left side could be written with; its rule is filed under the "
      "call `index_into(x, i)`, whose body the operator is"},
 
+    {"tensor:argmax_axis",
+     "argmax",
+     1,
+     "the axis reduction is the whole form's name with the axis in `<>` (`argmax<axis, keepdims>("
+     "xs)`), so its rule is filed under `argmax` at the one operand the parentheses carry"},
+
+    {"tensor:argmin_axis",
+     "argmin",
+     1,
+     "the axis reduction is the whole form's name with the axis in `<>` (`argmin<axis, keepdims>("
+     "xs)`), so its rule is filed under `argmin` at the one operand the parentheses carry"},
+
+    {"tensor:max_axis",
+     "max",
+     1,
+     "the axis reduction is the whole form's name with the axis in `<>` (`max<axis, keepdims>(xs)`)"
+     ", so its rule is filed under `max` at the one operand the parentheses carry"},
+
+    {"tensor:mean_axis",
+     "mean",
+     1,
+     "the axis reduction is the whole form's name with the axis in `<>` (`mean<axis, keepdims>("
+     "xs)`), so its rule is filed under `mean` at the one operand the parentheses carry"},
+
+    {"tensor:min_axis",
+     "min",
+     1,
+     "the axis reduction is the whole form's name with the axis in `<>` (`min<axis, keepdims>(xs)`)"
+     ", so its rule is filed under `min` at the one operand the parentheses carry"},
+
     {"tensor:multiply",
      "mul_tensor",
      2,
      "`*/2` is already `:op/mul_d`'s key and one key holds one rule, so the array product's rule "
      "is filed under the call `mul_tensor(x, w)`"},
+
+    {"tensor:sum_axis",
+     "sum",
+     1,
+     "the axis reduction is the whole form's name with the axis in `<>` (`sum<axis, keepdims>(xs)`)"
+     ", so its rule is filed under `sum` at the one operand the parentheses carry"},
 }};
 
 /// The name inside an operator URI: `:op/add_d` gives `add_d`, `tensor:sum_axis` gives `sum_axis`.
@@ -142,7 +184,7 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
         return std::nullopt;
     }
     // A module's operator: its rule's left side is written as a call of its own name
-    // (`matmul(x, w)`, `sum_axis(xs, axis, keepdims)`), and how many operands that takes is what the
+    // (`matmul(x, w)`, `sum<axis, keepdims>(xs)`), and how many operands that takes is what the
     // family's index holds for that name.
     const std::string name = nameOf(uri);
     const auto arity       = camel::parse::ast::arityOfHead(family, name);

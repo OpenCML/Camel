@@ -73,7 +73,7 @@ func step_full(m: LoraMlp, x: f32[...]): (float, LoraMlp) {
 }
 
 /// Cross-entropy against one-hot targets, composed from primitive tensor ops
-/// (log_softmax + neg + multiply + sum_axis + mean — every differentiated node
+/// (log_softmax + neg + multiply + sum<axis> + mean — every differentiated node
 /// uses already-registered ONNX lowerings; no dedicated CE lowering needed).
 with <m: LoraMlp>
 func loss_ce(x: f32[...], target: f32[...]): float {

@@ -91,12 +91,23 @@ const WRITTEN_OPERATIONS = [
 ]
 
 // `kRuleKeyExceptions`: the operators whose key cannot be derived from the name, with the reason
-// the compiler gives them. Two rows, and the guard below refuses to run if the compiler holds a
-// third -- a rule key this script does not know how to read would make the whole comparison
+// the compiler gives them. The guard below refuses to run if the compiler holds a row this script
+// does not -- a rule key this script does not know how to read would make the whole comparison
 // quietly miss a row.
+//
+// The six axis reductions are one shape of the question: their URI keeps an identity of the
+// implementation (`tensor:sum_axis`), and the one spelling a program writes is the whole
+// reduction's name with the axis and the flag in `<>` (`sum<axis, keepdims>(xs)`), so their laws
+// are filed under `sum` at the one operand the parentheses carry (author's ruling, 2026-11-05).
 const RULE_KEY_EXCEPTIONS = [
     { uri: ':op/idx_arr', head: 'index_into', arity: 2 },
+    { uri: 'tensor:argmax_axis', head: 'argmax', arity: 1 },
+    { uri: 'tensor:argmin_axis', head: 'argmin', arity: 1 },
+    { uri: 'tensor:max_axis', head: 'max', arity: 1 },
+    { uri: 'tensor:mean_axis', head: 'mean', arity: 1 },
+    { uri: 'tensor:min_axis', head: 'min', arity: 1 },
     { uri: 'tensor:multiply', head: 'mul_tensor', arity: 2 },
+    { uri: 'tensor:sum_axis', head: 'sum', arity: 1 },
 ]
 
 // `typeCodeToString` (`src/core/type/base.cpp`) for the codes a conversion can target: the key of

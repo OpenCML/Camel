@@ -22,7 +22,7 @@
 
 import math
 import { RowsOf, is_array, is_float, is_integer, is_numeric, is_ordered, is_plain, is_same } from types
-import { sum_axis, mean_axis, min_axis, max_axis, argmax_axis, argmin_axis } from tensor
+import { argmax as tensor_argmax, argmin as tensor_argmin, max as tensor_max, mean as tensor_mean, min as tensor_min, sum as tensor_sum } from tensor
 
 // ---- rearranging ----
 
@@ -217,9 +217,9 @@ func precedes::<T>(a: T, b: T): bool {
 
 // The same names with an axis in angle brackets (`x->sum<0>`): the reduction of one axis, an
 // array of the rank below (the same rank with keepdims, the axis kept with extent 1). A negative
-// axis counts from the last. Which of the two forms a call means is decided by its angle
-// brackets. Each is a Camel function over a native kernel, for the result shape follows the
-// axis and the kernels sweep one axis of a contiguous block.
+// axis counts from the last. The axis and the flag are the call's `with` arguments, which is what
+// tells the two forms apart (design principles 7.3). Each is the `tensor` module's operator under
+// this module's name, so there is one name for the whole reduction and its axis form.
 
 /// The sum along an axis (0 along an axis of extent 0), with the rule of the whole sum: a float element type is added in f64
 /// from +0 in ascending order and rounded once, an integer one wraps around.
@@ -227,7 +227,7 @@ func precedes::<T>(a: T, b: T): bool {
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->sum<0>    // [4.0, 6.0]
 with <axis: int, keepdims: bool = false>
 export func sum::<T>(xs: T[...]): T[...] when is_integer::<T>() || is_float::<T>() {
-    return sum_axis(xs, axis, keepdims)
+    return tensor_sum<axis, keepdims>(xs)
 }
 
 /// The mean along an axis: the sum and the division both in f64, rounded once into the element
@@ -236,7 +236,7 @@ export func sum::<T>(xs: T[...]): T[...] when is_integer::<T>() || is_float::<T>
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->mean<1>    // [1.5, 3.5]
 with <axis: int, keepdims: bool = false>
 export func mean::<T>(xs: T[...]): T[...] when is_float::<T>() {
-    return mean_axis(xs, axis, keepdims)
+    return tensor_mean<axis, keepdims>(xs)
 }
 
 /// The smallest element along an axis, compared as `min` of the whole array compares.
@@ -244,7 +244,7 @@ export func mean::<T>(xs: T[...]): T[...] when is_float::<T>() {
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->min<1>    // [1.0, 3.0]
 with <axis: int, keepdims: bool = false>
 export func min::<T>(xs: T[...]): T[...] when is_integer::<T>() || is_float::<T>() {
-    return min_axis(xs, axis, keepdims)
+    return tensor_min<axis, keepdims>(xs)
 }
 
 /// The largest element along an axis, compared as `max` of the whole array compares.
@@ -252,7 +252,7 @@ export func min::<T>(xs: T[...]): T[...] when is_integer::<T>() || is_float::<T>
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->max<0>    // [3.0, 4.0]
 with <axis: int, keepdims: bool = false>
 export func max::<T>(xs: T[...]): T[...] when is_integer::<T>() || is_float::<T>() {
-    return max_axis(xs, axis, keepdims)
+    return tensor_max<axis, keepdims>(xs)
 }
 
 /// The position along an axis of the first largest element, ordered as `argmax` of the whole
@@ -261,7 +261,7 @@ export func max::<T>(xs: T[...]): T[...] when is_integer::<T>() || is_float::<T>
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmax<1>    // [1, 1]
 with <axis: int, keepdims: bool = false>
 export func argmax::<T>(xs: T[...]): int[...] when is_integer::<T>() || is_float::<T>() {
-    return argmax_axis(xs, axis, keepdims)
+    return tensor_argmax<axis, keepdims>(xs)
 }
 
 /// The position along an axis of the first smallest element, ordered as `argmin` of the whole
@@ -270,7 +270,7 @@ export func argmax::<T>(xs: T[...]): int[...] when is_integer::<T>() || is_float
 /// @example ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])->argmin<0>    // [0, 0]
 with <axis: int, keepdims: bool = false>
 export func argmin::<T>(xs: T[...]): int[...] when is_integer::<T>() || is_float::<T>() {
-    return argmin_axis(xs, axis, keepdims)
+    return tensor_argmin<axis, keepdims>(xs)
 }
 
 // ---- shape ----

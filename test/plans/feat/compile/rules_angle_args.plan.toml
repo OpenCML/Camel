@@ -1,7 +1,7 @@
 # The angle-bracket arguments of a rule's two sides (lane-rulesargs)
 #
 # `reshape<shape>(x)` and `softmax<axis>(x)` state the parameter that decides which function they
-# are in `<>` (design principles 4.4), and `mean_axis(xs, axis, keepdims)` -- the operator's other
+# are in `<>` (design principles 4.4), and `mean<axis, keepdims>(xs)` -- the operator's other
 # spelling -- states the same kind of value in parentheses. A rule names its data in parentheses
 # only, so the two operators that state it in `<>` cannot be written as rules that carry it:
 #
@@ -59,7 +59,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "rules_angle_args.mean_axis_transpose"
-desc = "`transpose` of `f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3])` at ct = 1.0, with `x: float[2, 3]`: every position of `xs` that fed lane k gets w[k] / 2, so the answer is read element by element as `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]` -- not as its sum, which is 6.0 and which the wrong law `(ct) => ct` also reaches with `[1.0, 2.0, 3.0]` (author, 2026-11-03 15:15). The parameter's shape is in the type because the transposed function is handed the cotangent and nothing else, and the lane length the law reads comes from there: 6 positions over 3 lanes is 2 (author, 2026-11-03 16:15)."
+desc = "`transpose` of `f(x) = sum(mean<0, false>(x) * [1, 2, 3])` at ct = 1.0, with `x: float[2, 3]`: every position of `xs` that fed lane k gets w[k] / 2, so the answer is read element by element as `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]` -- not as its sum, which is 6.0 and which the wrong law `(ct) => ct` also reaches with `[1.0, 2.0, 3.0]` (author, 2026-11-03 15:15). The parameter's shape is in the type because the transposed function is handed the cotangent and nothing else, and the lane length the law reads comes from there: 6 positions over 3 lanes is 2 (author, 2026-11-03 16:15)."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/rules_angle_args_mean_transpose.cml"
 args = ["${case}", "${backend}"]
