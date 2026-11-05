@@ -187,8 +187,8 @@ repository: the machine-local helpers beside it (`bisect2.ps1`, `h598-reds.ps1`,
 `.h552-verify.ps1`, ...) hardcode the same path. Deleting it would break those, and the break would read
 as "the gate is missing" rather than "you named the old one".
 
-Inside this repository every command example names the entry, and names it the way the entry's own
-header does: `internal/tools/camel-remote.ps1`, relative to the repository root. None of them points at
+Every command example in this repository names the entry, and names it the way the entry's own header
+does: `internal/tools/camel-remote.ps1`, relative to the repository root. None of them points at
 `Camel-wt\camel-remote.ps1` any more -- a page that did sent the next reader to the old readings while
 saying, in the same paragraph, that the copy was old. A page that records a past measurement may still
 say which copy *was* used there; that is history, and rewriting it would be the falsification this
