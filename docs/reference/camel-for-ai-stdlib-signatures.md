@@ -215,7 +215,7 @@ first_with_as_param: (f: F) => FirstWithAsParam<F> when is_function::<F>()
 
 ```text
 vjp: (f: F) => Vjp<F> when is_function::<F>()
-grad: (f: (x: float) => float) => (x: float) => float
+grad: (f: F) => GradientOf<F> when is_function::<F>()
 has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 

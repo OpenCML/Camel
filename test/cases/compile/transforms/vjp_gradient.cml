@@ -1,9 +1,13 @@
 // The gradient, the day the library is written: `f(x) = x*x*x` at 2, so `f(2) = 8` and
 // `f'(2) = 3*x^2 = 12`. The surface is JAX's (author's ruling of 2026-11-01), so `vjp(f)(2.0)` is
-// the pair `(8.0, pullback)` and `pullback(1.0)` is the cotangent tuple `(12.0)`; `grad(f)(2.0)` is
-// the same number read through the wrapper. All three come from the library's own composition --
-// `transpose(split(reinterp<jvp>(f)))` -- and not from the C++ autodiff; the rulesets that
-// composition needs are the library's own imports, so this file imports `vjp` and nothing else.
+// the pair `(8.0, pullback)` and `pullback(1.0)` is the cotangent tuple `(12.0)`; `grad(f_at)(2.0)`
+// is the same number read through the wrapper. All three come from the library's own composition --
+// `transpose(split(jvp(f)))` -- and not from the C++ autodiff; the rulesets that composition needs
+// are the library's own imports, so this file imports `vjp` and nothing else.
+//
+// `grad` differentiates the first `with` parameter (design principles 9.9) and a reverse transform
+// differentiates the ordinary ones, so the wrapper is reached through a `with` value: `f_at()` is
+// `f` at the number handed in, and its gradient is the slope above.
 //
 // The point is 2 and not 3 for one reason: at 3 the value, the cotangent and the gradient are all
 // 27, so a reading that only asked whether `27.0` appears could not tell the derivative from the
@@ -16,12 +20,17 @@ func f(x: float): float {
     return x * x * x
 }
 
+with <x: float>
+func f_at(): float {
+    return f(x)
+}
+
 func main(): int sync {
     let (value, pullback) = vjp(f)(2.0)
     let cotangents = pullback(1.0)
     println('vjp_gradient value={}'->format<value>)
     println(cotangents)
     println('vjp_gradient cotangent={}'->format<cotangents.0>)
-    println('vjp_gradient grad={}'->format<grad(f)(2.0)>)
+    println('vjp_gradient grad={}'->format<grad(f_at)(2.0)>)
     return 0
 }

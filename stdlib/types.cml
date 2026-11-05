@@ -84,6 +84,21 @@ export type WithOf<F>
 /// @example is_same::<FirstOf<ParamsOf<(a: int, b: string) => bool>>, int>()    // true
 export type FirstOf<P> = match type P { case (W, ...Rest) => W }
 
+/// The first member of a pack, as a primitive: the same answer `FirstOf<P>` gives, and a different
+/// place to read it. A `match type` written into the result of a generic function leaves the two
+/// names it binds as type variables of that call, and no argument binds them -- so a library
+/// function whose answer moves a pack's first member onto another list could not be called at all
+/// (`stdlib/vjp.cml#grad`). A primitive is evaluated with the pack in hand, which is what
+/// `grad`'s signature needs.
+/// @example is_same::<HeadOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
+export type HeadOf<P>
+
+/// The rest of a pack, as a primitive: every member but the first, as a pack of its own, so
+/// `...RestOf<P>` writes them where a list of types is. The empty pack when `P` has one member.
+/// @example is_same::<(...RestOf<WithOf<<w: float, k: int> (a: int) => bool>>), (int,)>()    // true
+/// @example is_same::<(...RestOf<WithOf<<w: float> (a: int) => bool>>), ()>()    // true
+export type RestOf<P>
+
 /// The result type of a function type.
 /// @example is_same::<ResultOf<(a: int) => string>, string>()    // true
 export type ResultOf<F>
@@ -129,11 +144,41 @@ export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>
 /// refusal `grad` itself gives that function.
 ///
 /// This is the type the derivative has, and the type a caller who writes `Gradient<F>` asks for:
-/// one type, not a second one that looks like it.
+/// one type, not a second one that looks like it. The weight stays a `with` argument of the
+/// derivative, so a call writes it in the angle brackets exactly where the differentiated function
+/// reads it.
 /// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => f32[2]>()    // true
 /// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => float>()    // false
 export type Gradient<F> =
     <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
+
+/// The same derivative with the weight on the ordinary list: the shape the library's `grad` has,
+/// and the one difference between it and `Gradient<F>`. A reverse transform differentiates the
+/// ordinary parameters (design principles 9.9), so the library moves the first `with` parameter onto
+/// that list -- the signature reinterpretation `first_with_as_param`, which reclassifies one port and
+/// copies the body -- and its gradient is a function of the weight first, then `F`'s parameters:
+/// `grad(weighted)(3.0, 2.0)` for `<x: float> (y: float) => float`.
+///
+/// Written out where `Gradient<F>` writes its own shape, out of the same pieces: `HeadOf<WithOf<F>>`
+/// is the weight's type and `Tangent` of it is what a gradient of it is. Both names exist because the
+/// two answers are two types: a `with` argument is written in the angle brackets of a call, an
+/// ordinary one in its parentheses, and neither spelling reaches the other.
+///
+/// **One `with` parameter, and the rest of the list is not written out**: `GradientOf<F>` answers a
+/// function whose whole `with` list is empty, so it is the type of `grad(f)` for a function with one
+/// `with` parameter and refuses a second one at the call. The reason it is not `...RestOf<WithOf<F>>`
+/// is a limit of the layer under this one and not a choice about the shape: a `with` list written as
+/// the expansion of a primitive applied to a pack comes through a generic function's body
+/// unexpanded (`<RestOf<float>>`, measured 2026-11-05 on the first spelling of this alias).
+///
+/// The head is the primitive `HeadOf` and not the `match type` a program writes (`FirstOf<P>`): a
+/// `match type` written into this alias leaves the two names it binds as type variables of every
+/// call that reads the alias, and no argument binds them -- `grad(weighted)` was refused with "the
+/// type variable(s) W, Rest cannot be determined" (measured 2026-11-05). A primitive is evaluated
+/// with the pack in hand.
+/// @example is_same::<GradientOf<<w: f32[2]> (x: float) => float>, (w: f32[2], x: float) => f32[2]>()    // true
+export type GradientOf<F> =
+    (w: HeadOf<WithOf<F>>, ...ParamsOf<F>) => Tangent<HeadOf<WithOf<F>>>
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
 /// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
