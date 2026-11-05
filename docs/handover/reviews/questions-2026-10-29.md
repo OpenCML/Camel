@@ -3169,3 +3169,19 @@ S2 改用 `grad` 等这一步落地后再做。
 **六、包模式只在类型位置的 `match type` 里有读法（`a-type-position-pattern-is-not-expressible-only-inside-match-type`）**：记成第二种说法，"包模式只在一个位置有读法"。要补的是值位置的 `match type` 也绑定包模式里的名字，规则与类型位置相同（同一类事一条规则）。库层 `grad` 不靠它，走 02:30 定的签名重解释（`first_with_as_param`），所以这件事不在 `grad` 的关键路径上。
 
 八页挪到 `reviews/` 留档。
+
+## 裁定（2026-11-05 12:30）：六页
+
+**一、毒化扫描算不算 milestone 层（`does-the-poison-sweep-belong-in-the-milestone-layer`）**：算，不拆层。11-04 21:20 已经定了：milestone 层是全量回归，扫描随用例增长是设计意图。
+
+**二、milestone 层由谁、什么时候跑（`who-runs-a-milestone-tier-plan-and-when`）**：读数说"没有人、没有时候"，这一项要补上。合并位每天固定跑一次 milestone 层，加上每次发布之前跑一次；跑出的红照常排返工。时间由协调者定，写进 `docs/test-plans.md` 那一节，一句话即可。不为它另建台账。
+
+**三、类型包怎么拆（`how-does-a-type-pack-take-apart`）**：已由 `513956ecb` 落地（`match type` 的 `case (W, ...Rest)`），不加 `GradientOf` 原语。这页过时了，挪走留档。
+
+**四、数组的数组哪个方括号在外（`which-bracket-is-outer-in-an-array-of-arrays`）**：照甲。这不是新规则：`arrays-memory/plan.cn.md` 已经写明"`T[m][n]` 外层元素类型是 `T[m]`"，即最后一个方括号在外；`extent_of::<float[2][3]>()` 答 `[3]`，与 `shape` 一致。顺带量出的那处真缺陷要修：`let xs: float[2][3] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]` 被拒，是 `statesARank` 把常数维的数组的数组当成一维平铺。改成按类型的嵌套逐层对字面量；这个字面量要被接受。
+
+**五、那六笔改写已经在 develop 里（`the-six-rewrites-the-ruling-bars-are-already-in-develop`）**：照默认，不回滚。我 09:40 那条第 4 款是按"它们还没进来"写的，前提不对，那一款作废。其余几款照旧：错修在造错图的那一处；它们带进来的、落在真实程序上的编译器内部错误，不许标 `known_fail`，就是红的，排返工；对应的 7 条分支算 B 类。
+
+**六、`mul_tensor_t` 一族律读的值由谁交（`who-carries-the-value-that-mul-tensor-t-reads`）**：页首已经写明，原默认被 `lane-capturectx` 的实测推翻，形状作为已知操作数交过去。这与 04:20 以来的规则一致，`f20562f09` 已经按这条落地。剩下 `shapeCarrierOf`（4 处）和 `shapeFromTypeOf`（1 处），继续按 07:00 那条删干净。
+
+六页挪到 `reviews/` 留档。
