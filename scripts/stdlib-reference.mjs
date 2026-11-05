@@ -494,6 +494,33 @@ function bracketed(text, open) {
     throw new Error(`unbalanced brackets in: ${text}`)
 }
 
+// How many `{` a text leaves open. A `match type` body is followed to its close with this, in a
+// declaration and in the definition of a type function alike.
+function braceDepth(text) {
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '{') depth++
+        else if (text[i] === '}') depth--
+    }
+    return depth
+}
+
+// The result type a declaration states, read from the line the declaration is on. A `match type`
+// result is written over several lines -- its case list is the part that looks like a body -- so
+// the brace group is followed to its close and the whole text is the result. Any other result is
+// the text after the colon, with a body opening (when the declaration has a body) cut off.
+function readResultType(after, lines, lineIndex) {
+    const text = after.replace(/^\s*:\s*/, '').trim()
+    if (!/^match\s+type\b/.test(text)) return text.replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+    let joined = text
+    let depth = braceDepth(joined)
+    for (let j = lineIndex + 1; depth > 0 && j < lines.length; j++) {
+        joined += ` ${lines[j].trim()}`
+        depth = braceDepth(joined)
+    }
+    return joined.trim()
+}
+
 // The index of the bracket that closes the one at `open`, or -1 when the line ends first.
 function closingBracket(text, open) {
     const pairs = { '(': ')', '[': ']', '{': '}', '<': '>' }
@@ -537,6 +564,12 @@ function isFieldList(text) {
 // Whether the text after a declaration's `)` carries a body. The old form is
 // `: R { return '<uri>' }`; a body may also open with `sync {` or on the following line.
 function declarationBody(rest, lines, lineIndex) {
+    // A `match type` result is a type, not a body: the brace group it opens holds one case per line
+    // and closes. Read as a body, every declaration that states a type function became a function
+    // with an implementation, was left out of the comparison, and the operator it declares went
+    // unchecked -- which is how a library writing type functions turned this check red 15 times
+    // without one of those reds saying "a signature I cannot read".
+    if (/^\s*(?::\s*)?match\s+type\b/.test(rest)) return false
     // A type has no statement keyword; a `sync` body marker is unambiguous.
     if (/\b(sync|return)\b/.test(rest)) return true
     const colon = rest.indexOf(':')
@@ -784,7 +817,7 @@ function readDeclarations(file, module, options = {}) {
                 pendingUri = null
                 continue
             }
-            const result = after.replace(/^\s*:\s*/, '').replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+            const result = readResultType(after, lines, i)
             const entry = {
                 module: module.name,
                 name,
@@ -1989,6 +2022,309 @@ function claimedResult(signature) {
     return arrow < 0 ? '' : signature.slice(arrow + 2)
 }
 
+// ---- reading a type function (`match type`) --------------------------------------------------
+//
+// A type function is an ordinary function on types (design principles 1: a type is a compile-time
+// value), and the library writes one as `match type`:
+//
+//   export type WithElement<A, E> = match type A {
+//       case X[...Dims] => E[...Dims]
+//       case X[...] => E[...]
+//   }
+//
+// That text reaches a signature on both sides, and it is the same function on both. A declaration
+// may write it where it writes the result; an operator declared `bf16::<A>(x: A):
+// WithElement<A, bf16>` registers the name applied -- the compiler prints what the function answers
+// with the element fixed, in the words of the definition:
+//
+//   (...) => match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }
+//
+// The checker read neither. `=>` inside the text made it say "a function type", `[{]` made the
+// result unreadable to `canonicalResult`, and two promises that are the same were listed as an
+// exception instead of being compared -- the one answer this comparison exists to give. What
+// follows reads the shape as what it is: a result that depends on the argument's shape, compared
+// case by case, and, when two of them differ, at the dimension that differs.
+
+// The type functions the library defines, by name, as `{params, body}` with `body` the `match type`
+// text. Read once, on the first comparison that needs them: a mode that renders the page, audits
+// the table or checks the examples never reads one.
+let typeFunctionTable = null
+
+function typeFunctions() {
+    if (typeFunctionTable !== null) return typeFunctionTable
+    const table = new Map()
+    const visit = (dir) => {
+        for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, item.name)
+            if (item.isDirectory()) {
+                visit(full)
+                continue
+            }
+            if (!item.name.endsWith('.cml')) continue
+            const lines = fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n').split('\n')
+            for (let i = 0; i < lines.length; i++) {
+                const found = /^\s*(?:export\s+)?type\s+([A-Z]\w*)\s*(?:<([^>]*)>)?\s*=\s*(.+)$/.exec(lines[i])
+                if (found === null || !/^match\s+type\b/.test(found[3].trim())) continue
+                let body = found[3].trim()
+                for (let j = i + 1; braceDepth(body) > 0 && j < lines.length; j++) body += ` ${lines[j].trim()}`
+                const params = found[2] === undefined ? [] : splitTopLevel(found[2]).map((one) => one.trim())
+                table.set(found[1], { params, body })
+            }
+        }
+    }
+    visit(STDLIB_DIR)
+    typeFunctionTable = table
+    return table
+}
+
+// The index of the `=>` separating a case's pattern from its result, or -1 when there is none at
+// the top level. `=>` inside a group (a function-typed result) belongs to that group.
+function topLevelArrow(text) {
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '=' && text[i + 1] === '>') {
+            if (depth === 0) return i
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) depth--
+    }
+    return -1
+}
+
+// A `match type` text as its subject and its cases, or null when the text is not one. One reader
+// serves both sides: the form the compiler prints for a registered result is the form a
+// declaration writes, and a reader that took one and not the other would compare a promise with
+// its own text.
+function parseMatchType(text) {
+    const source = (text || '').trim()
+    if (!/^match\s+type\b/.test(source)) return null
+    let depth = 0
+    let open = -1
+    for (let i = 0; i < source.length; i++) {
+        const c = source[i]
+        if (c === '=' && source[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([<'.includes(c)) depth++
+        else if (')]>'.includes(c)) depth--
+        else if (c === '{' && depth === 0) {
+            open = i
+            break
+        }
+    }
+    if (open < 0) return null
+    const close = partnerBracket(source, open)
+    if (close !== source.length - 1) return null
+    const subject = source.slice('match type'.length, open).trim()
+    if (subject === '') return null
+    const cases = matchTypeCases(source.slice(open + 1, close))
+    if (cases === null) return null
+    return { subject, cases: cases.list, elided: cases.elided }
+}
+
+// The cases of a `match type` body: `case <pattern> => <result>`, separated by `;` (the form the
+// compiler prints) or one `case` per line (the form the library writes). A lone `...` is the rest
+// of a case list not stated, so the cases it stands for are not compared and are not called a
+// difference. A case this reader cannot read makes the whole text unreadable rather than partly
+// compared: half a case list is not a promise.
+function matchTypeCases(body) {
+    const chunks = []
+    let depth = 0
+    let start = 0
+    for (let i = 0; i < body.length; i++) {
+        const c = body[i]
+        if (c === '=' && body[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([{'.includes(c)) {
+            depth++
+            continue
+        }
+        if (')]}'.includes(c)) {
+            if (--depth < 0) return null
+            continue
+        }
+        if (depth !== 0) continue
+        if (c === ';') {
+            chunks.push(body.slice(start, i))
+            start = i + 1
+            continue
+        }
+        if (/^case\b/.test(body.slice(i)) && (i === start || /[\s;]/.test(body[i - 1]))) {
+            if (i > start) chunks.push(body.slice(start, i))
+            start = i
+        }
+    }
+    chunks.push(body.slice(start))
+    const list = []
+    let elided = false
+    for (const chunk of chunks) {
+        const piece = chunk.trim()
+        if (piece === '') continue
+        if (/^\.{2,3}$/.test(piece)) {
+            elided = true
+            continue
+        }
+        if (!/^case\b/.test(piece)) return null
+        const rest = piece.slice('case'.length).trim()
+        const arrow = topLevelArrow(rest)
+        if (arrow < 0) return null
+        const pattern = rest.slice(0, arrow).trim()
+        const result = rest.slice(arrow + 2).trim()
+        if (pattern === '' || result === '') return null
+        list.push({ pattern, result })
+    }
+    if (list.length === 0) return null
+    return { list, elided }
+}
+
+// One side of a case -- its pattern or its result -- as the two sides are compared on it: its base
+// type, through the spellings the compiler holds (`int64` is `int`, `bfloat16` is `bf16`), and the
+// dimension list it writes. The dimension list keeps the names it binds: `bf16[...Dims]` says "the
+// argument's extents" and `bf16[?...]` does not, so the two are not the same promise and the name
+// is what tells them apart. null when the text is not a type this reader holds.
+function matchPiece(text) {
+    const source = (text || '').trim().replace(/\s+/g, ' ')
+    if (source === '') return null
+    const at = dimensionIndex(source)
+    const base = (at < 0 ? source : source.slice(0, at)).trim()
+    if (base === '') return null
+    let entries = []
+    if (at >= 0) {
+        const list = source.slice(at).trim()
+        if (!list.startsWith('[') || partnerBracket(list, 0) !== list.length - 1) return null
+        const inner = list.slice(1, -1).trim()
+        if (inner === '') {
+            entries = ['?']
+        } else {
+            const parts = splitTopLevel(inner)
+            if (parts === null) return null
+            entries = parts.map((part) => part.trim().replace(/\s+/g, ''))
+            if (entries.every((one) => one === '...')) entries = ['...']
+        }
+    }
+    const known = RESULT_SCALARS.get(base)
+    return { base: known === undefined ? base : known, written: base, entries }
+}
+
+// How the two sides of one part of a case stand: equal, different at a named place, or one of them
+// not a type this reader holds (null -- the caller hands that pair to the comparison it had).
+function compareMatchPieces(declared, operator, what) {
+    const mine = matchPiece(declared)
+    const theirs = matchPiece(operator)
+    if (mine === null || theirs === null) return { same: null }
+    if (mine.base !== theirs.base) {
+        return { same: false, at: `the ${what}'s type`, mine: mine.written, theirs: theirs.written }
+    }
+    const count = Math.max(mine.entries.length, theirs.entries.length)
+    for (let i = 0; i < count; i++) {
+        const a = mine.entries[i] === undefined ? '(none)' : mine.entries[i]
+        const b = theirs.entries[i] === undefined ? '(none)' : theirs.entries[i]
+        if (a !== b) return { same: false, at: `the ${what}'s dimension ${i + 1}`, mine: a, theirs: b }
+    }
+    return { same: true }
+}
+
+// The `match type` form a text stands for: the text itself, or the definition of the name it
+// applies when the library defines that name as a type function. null when the text is a name this
+// reader has no definition for, or a type function applied to a subject the type layer would have
+// evaluated: neither is a form this comparison reads, and both stay with the exception classes.
+function matchTypeForm(text) {
+    const source = withoutConditions(text)
+    const direct = parseMatchType(source)
+    if (direct !== null) return direct
+    const applied = applyTypeFunction(source)
+    return applied === null ? null : parseMatchType(applied)
+}
+
+// `Name<arguments>` with `Name` a type function, instantiated as the definition writes it. The
+// subject is the parameter the body matches on; a call still written on a type variable is the
+// form a registered signature prints, and the only one this reader compares.
+function applyTypeFunction(text) {
+    const source = (text || '').trim()
+    const found = /^([A-Z]\w*)\s*</.exec(source)
+    if (found === null) return null
+    const known = typeFunctions().get(found[1])
+    if (known === undefined) return null
+    const open = source.indexOf('<', found[1].length)
+    const close = partnerBracket(source, open)
+    if (close !== source.length - 1) return null
+    const args = splitTopLevel(source.slice(open + 1, close))
+    if (args === null || args.length !== known.params.length) return null
+    const values = new Map(known.params.map((name, i) => [name, args[i].trim()]))
+    const bodyOpen = known.body.indexOf('{')
+    if (bodyOpen < 0) return null
+    const subject = known.body.slice('match type'.length, bodyOpen).trim()
+    const given = values.get(subject)
+    if (given === undefined || !/^[A-Z]$/.test(given)) return null
+    let body = known.body
+    for (const [name, value] of values) body = body.replace(new RegExp(`\\b${name}\\b`, 'g'), value)
+    return body
+}
+
+// Whether a declaration's result and the registered result are the same type function: an answer
+// when both sides are one, and null when they are not both -- that pair belongs to the comparison
+// the caller already has (`canonicalResult` and its exception classes), and this reader does not
+// take it over.
+function matchTypeVerdict(declaredText, operatorText) {
+    const mine = matchTypeForm(declaredText)
+    const theirs = matchTypeForm(operatorText)
+    if (mine === null || theirs === null) return null
+    const subject = compareMatchPieces(mine.subject, theirs.subject, 'subject')
+    if (subject.same !== true) {
+        return {
+            same: false,
+            why: `the declaration matches on \`${mine.subject}\` and the operator on \`${theirs.subject}\``,
+        }
+    }
+    const shared = Math.min(mine.cases.length, theirs.cases.length)
+    for (let i = 0; i < shared; i++) {
+        const a = mine.cases[i]
+        const b = theirs.cases[i]
+        const pattern = compareMatchPieces(a.pattern, b.pattern, 'pattern')
+        if (pattern.same === null) {
+            return {
+                same: false,
+                why: `case ${i + 1}: the declaration's pattern \`${a.pattern}\` is not a type this checker reads`,
+            }
+        }
+        if (pattern.same === false) {
+            return {
+                same: false,
+                why: `case ${i + 1}: ${pattern.at} is \`${pattern.mine}\`, and the operator's is \`${pattern.theirs}\``,
+            }
+        }
+        const result = compareMatchPieces(a.result, b.result, 'result')
+        if (result.same === null) {
+            return {
+                same: false,
+                why: `case ${i + 1}: the declaration's result \`${a.result}\` is not a type this checker reads`,
+            }
+        }
+        if (result.same === false) {
+            return {
+                same: false,
+                why: `case ${i + 1}: ${result.at} is \`${result.mine}\`, and the operator's is \`${result.theirs}\``,
+            }
+        }
+    }
+    if (mine.cases.length !== theirs.cases.length && !mine.elided && !theirs.elided) {
+        return {
+            same: false,
+            why: `the declaration states ${mine.cases.length} case(s) and the operator ${theirs.cases.length}`,
+        }
+    }
+    return {
+        same: true,
+        why: `the declaration's type function and the operator's are the same ${shared} case(s)`,
+    }
+}
+
 // What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
 // are not types but sets of them, and `float[...]` in one is the operator's spelling for "a tensor",
 // not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
@@ -2452,6 +2788,10 @@ function resultStopClass(claimedType, claimed, promised) {
 // has a class for -- that exception is unlabelled, and the run refuses it.
 function classifyOpaque(text) {
     const source = (text || '').trim()
+    // A `match type` result is a function on the argument's shape, not a function type: the `=>`
+    // inside it separated one case's pattern from its result. Read as a function type, every
+    // signature written with a type function was an exception instead of a comparison.
+    if (/^match\s+type\b/.test(source)) return 'a match-type result'
     if (source.includes('=>')) return 'a function type'
     if (source.startsWith('(')) return 'a tuple'
     if (source.startsWith('{')) return 'a record'
@@ -2486,6 +2826,7 @@ function paramVerdict(declared, operator) {
 // classifyOpaque names. The same shape is the same class on either side: a function-typed parameter
 // is one whether the operator or the declaration writes it.
 const PARAMETER_SHAPES = new Map([
+    ['a match-type result', 'match-type parameter'],
     ['a function type', 'function-typed parameter'],
     ['a tuple', 'tuple-typed parameter'],
     ['a record', 'record-typed parameter'],
@@ -2852,8 +3193,19 @@ function verifyOps() {
                 if (promised.some((one) => one.key === key)) continue
                 promised.push({ entry, declaredText, declared: canonicalResult(entry.result), key })
             }
+            // A result written as a type function is compared by its rules, not by its text: the
+            // declaration's `WithElement<A, bf16>` and the registered `match type A { ... }` are one
+            // function, and two of them that differ differ at a case and a dimension this reader
+            // names (design principles 1: a type function is an ordinary function, so its identity
+            // is what it answers, not how it is spelled). Only a pair of two type functions takes
+            // this path: every other pair keeps the comparison below, which is the one it had.
+            const typeFunctionsCompared = promised
+                .map((one) => ({ one, reading: matchTypeVerdict(one.declaredText, claimedType) }))
+                .filter((each) => each.reading !== null)
+            const functionAgrees = typeFunctionsCompared.some((each) => each.reading.same)
             const agreed =
-                claimed !== null && promised.some((one) => one.declared !== null && one.declared.text === claimed.text)
+                functionAgrees ||
+                (claimed !== null && promised.some((one) => one.declared !== null && one.declared.text === claimed.text))
             // A claim the module writes as the element family (`float[...]`) does not say which
             // element type the result has, so a declaration that writes one of that family is not
             // a difference: the operator takes the element type from its argument and the
@@ -2873,6 +3225,16 @@ function verifyOps() {
                 promised.some((one) => one.declaredText.replace(/\s+/g, '') === claimedType.replace(/\s+/g, ''))
             if (agreed || spelledAlike) {
                 resultsCompared++
+            } else if (typeFunctionsCompared.length > 0) {
+                // Both sides are type functions and no declaration answers what the operator does:
+                // the reading names the case and the place inside it that differs, so the reader of
+                // the failure learns which dimension to look at rather than that the texts differ.
+                for (const { one, reading } of typeFunctionsCompared) {
+                    problems.push(
+                        `${one.entry.file}:${one.entry.line}: '${one.entry.name}' declares the result \`${one.declaredText}\`, ` +
+                            `and ${op.uri} registers \`${claimedText.trim()}\`: ${reading.why}`,
+                    )
+                }
             } else if (readable && !followsArgument) {
                 for (const one of promised) {
                     problems.push(
@@ -2983,10 +3345,71 @@ function verifyOps() {
     }
 }
 
+// ---- the probes that hold the type-function reader -------------------------------------------
+//
+// `--verify-ops` compares two texts a person never sees side by side: a declaration, and the
+// signature a registry prints for the operator it declares. A reader for a shape of those texts can
+// be wrong in two directions, and a run over the library is silent about both: it can call two
+// promises different because it read one of them wrong, and it can call them the same because it
+// read neither. So the shape is measured on its own, against declarations written for the
+// measurement. `test/cases/modules/stdlib/match_type_probes.decl` is read by the same reader the
+// library's declarations are read by, each probe says which answer it must get, and a probe that
+// expects a difference says which place the reading has to name -- a verdict that is right about
+// "different" and silent about the dimension is half an answer.
+function verifyMatchType(declarationFile, probeFile) {
+    const shownPath = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+    const declared = readDeclarations(declarationFile, { name: 'probe', kind: 'cpp' })
+    const probes = JSON.parse(fs.readFileSync(probeFile, 'utf8'))
+    if (!Array.isArray(probes) || probes.length === 0) {
+        console.log(`${shownPath(probeFile)}: no probe, so nothing about the type-function reader is measured`)
+        process.exit(1)
+    }
+    const problems = []
+    let asExpected = 0
+    for (const [index, probe] of probes.entries()) {
+        const entry = declared.find((one) => one.name === probe.declaration)
+        if (entry === undefined) {
+            problems.push(
+                `probe ${index + 1}: the declaration '${probe.declaration}' is not in ${shownPath(declarationFile)}`,
+            )
+            continue
+        }
+        const reading = matchTypeVerdict(entry.result, probe.operator)
+        const verdict = reading === null ? 'unreadable' : reading.same ? 'match' : 'mismatch'
+        const why =
+            reading === null
+                ? `the declaration's result \`${entry.result}\` and the operator's \`${probe.operator}\` are not both a type function this checker reads`
+                : reading.why
+        console.log(`MATCH-TYPE ${index + 1} ${verdict}: ${probe.declaration} -- ${why}`)
+        if (verdict !== probe.expect) {
+            problems.push(
+                `probe ${index + 1} (${probe.declaration}): the reader answered ${verdict}, and the probe says ${probe.expect}`,
+            )
+            continue
+        }
+        const missing = (probe.says || []).filter((piece) => !why.includes(piece))
+        if (missing.length > 0) {
+            problems.push(
+                `probe ${index + 1} (${probe.declaration}): the reading does not name ${missing
+                    .map((one) => `\`${one}\``)
+                    .join(', ')}`,
+            )
+            continue
+        }
+        asExpected++
+    }
+    for (const problem of problems) console.log(problem)
+    if (problems.length > 0) {
+        console.log(`${problems.length} probe(s) were read differently from what the probe says`)
+        process.exit(1)
+    }
+    console.log(`the type-function reader answers as the probes say: ${asExpected} probe(s), ${asExpected} as expected`)
+}
+
 // ---- main -----------------------------------------------------------------------------------
 
 const USAGE =
-    'usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile] [--camel <path>]'
+    'usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit | --verify-match-type <declarations> <probes> [--compile] [--camel <path>]'
 
 // `--camel <path>` names the install a mode that needs a compiler measures; it is taken out of the
 // arguments here so the mode stays the first word that is not a flag.
@@ -3212,6 +3635,17 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${Object.keys(EXAMPLE_STOPS).length} class(es), ${STALE_FRAGMENTS} marked a fragment that compile alone, ` +
             `${coverage.bound.length} that compile only with the name they say they need`,
     )
+} else if (mode === '--verify-match-type') {
+    // The type-function reader on its own, against declarations written for the measurement: the
+    // one mode that reads neither the library's declarations nor a compiler, so a reader that
+    // stopped reading the shape fails here and not only inside a run over 569 overloads.
+    if (flags[1] === undefined || flags[2] === undefined) {
+        console.log('--verify-match-type needs the file of declarations and the file of probes')
+        console.log(USAGE)
+        process.exit(2)
+    }
+    const resolve = (one) => (path.isAbsolute(one) ? one : path.join(REPO_ROOT, one))
+    verifyMatchType(resolve(flags[1]), resolve(flags[2]))
 } else if (mode === '--verify-ops') {
     const { problems, checked, unchecked, resultsCompared, paramsCompared, paramsUnchecked, found } = verifyOps()
     for (const problem of problems) console.log(problem)
