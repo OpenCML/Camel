@@ -241,6 +241,21 @@ function checkKnownFailMark(planPath, entry, inherited, where) {
                 `backticks, name the file#Symbol that refuses, or name the page that decides it`,
         )
     }
+    // The sentence the case is expected to print today, quoted from a run. Without it there is
+    // nothing to compare a failure against, so `executePlans` takes every failure as the expected
+    // one: a different defect can wear the mark's name and no reader can tell (`ceee7b950`'s page
+    // measured two entries printing `exported`, exiting 0 and writing nothing while their marks
+    // reported a known failure). It is read off the entry itself -- `executePlans` compares against
+    // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
+    // once for the whole file.
+    const expected = entry.known_fail_msg
+    if (typeof expected !== 'string' || expected.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg: quote the sentence this ` +
+                `case prints today on the entry itself -- without it the runner takes any failure as the ` +
+                `expected one, so another defect wears this mark's name and nothing ever re-reads it`,
+        )
+    }
 }
 
 /**

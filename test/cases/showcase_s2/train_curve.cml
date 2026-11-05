@@ -6,14 +6,19 @@
 // because the numbers of its first step are already pinned beside this case; what is new here is
 // that the weight moves.
 //
-// Two legs, one update rule, twelve rounds:
+// Two legs, one update rule, twelve rounds, and **one declaration of the loss**:
 //
-//   * the **library's** leg takes the weight as an ordinary parameter of a lambda and reads its
-//     gradient with `vjp` -- `transpose(split(reinterp<jvp>(f)))`, the composition `grad` is a
-//     reading of (`stdlib/vjp.cml`) -- then `w = w - 0.03125 * dw`;
-//   * the **engine's** leg puts the same weight in the same function's first `with` parameter, reads
-//     `with_grad(loss_with)<w>(x, t)` (which answers `(value, gradient)`), and applies the same
-//     `w = w - 0.03125 * dw`.
+//   * the **library's** leg reads its gradient with `grad` -- `vjp` of the signature
+//     reinterpretation that puts the weight on the ordinary list, its first cotangent, both from
+//     `stdlib/vjp.cml` -- then `w = w - 0.03125 * dw`;
+//   * the **engine's** leg reads `with_grad(loss)<w>(x, t)` (which answers `(value, gradient)`) and
+//     applies the same `w = w - 0.03125 * dw`.
+//
+// The weight is the first `with` parameter of `loss` on both legs, which is how a model writes its
+// weights and what design principles 9.9 differentiates: the legs differ in who computes the
+// gradient, not in the function they differentiate. The library's `grad` answers the gradient
+// alone, so the loss the curve prints on that leg is `loss` read once more at the same point; a
+// value is not a derivative, and reading it twice cannot move it.
 //
 // The step size is `1/32`, a power of two, and every literal here is exact in binary floating point,
 // so both legs' arithmetic stays exact and the two curves are compared **for equality**, not against
@@ -23,26 +28,16 @@
 // readings on one device and one configuration, and `docs/handover/batches-2026-10-31-72h.cn.md`
 // asks S2 to train "with the library's `grad`".
 //
-// Two limits are written down rather than worked around:
-//
-//   * the loop composes `vjp`, not the name `grad`. The library's `grad` is declared for
-//     `(x: float) => float` (`stdlib/vjp.cml`), and its general form -- the first `with` parameter,
-//     design principles 9.9 -- is the item still blocked on a lifted body calling a function value.
-//   * the weights are ordinary parameters, because that is the only channel `vjp` differentiates
-//     today. The engine's leg keeps them in a `with` list, which is how a model writes its weights;
-//     the two legs therefore differ in where the weight sits, exactly as the first-step cases beside
-//     this one do, and not in what they compute.
-//
 // The rounds are folded into two arrays and printed once, because an effect written inside a `loop`
 // body does not reach the output (measured here: only the line after the loop printed).
 import { matmul, sum } from tensor
-import { vjp } from vjp
+import { grad } from vjp
 import { with_grad } from autodiff
 import { abs, max } from math
 
-// The engine's leg: `with_grad` differentiates the first `with` parameter.
+// The model and its loss, with the weight where a model keeps it.
 with <w: float[2, 2]>
-func loss_with(x: float[2, 2], t: float[2, 2]): float {
+func loss(x: float[2, 2], t: float[2, 2]): float {
     let e = matmul(x, w) - t
     return 0.5 * sum(e * e)
 }
@@ -52,12 +47,8 @@ func main(): int sync {
     let t = [[0.0, 0.0], [1.0, 1.0]] as float[2, 2]
     let w0 = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
 
-    // The library's leg reads the loss through a lambda that captures the batch and the target and
-    // takes the weight as its one ordinary parameter -- the shape `vjp` differentiates.
-    let step = (ww: float[2, 2]): float => {
-        let e = matmul(x, ww) - t
-        return 0.5 * sum(e * e)
-    }
+    // The library's leg: the gradient function of the same loss, read once outside the loop.
+    let library_step = grad(loss)
 
     let (_done, _library_weight, _engine_weight, library_curve, engine_curve, worst) =
         loop round = 0,
@@ -67,9 +58,9 @@ func main(): int sync {
              engine_curve = [] as float[],
              worst = 0.0
         while round < 12 do {
-            let (library_loss, pullback) = vjp(step)(library_weight)
-            let library_gradient = pullback(1.0).0
-            let (engine_loss, engine_gradient) = with_grad(loss_with)<engine_weight>(x, t)
+            let library_gradient = library_step(library_weight, x, t)
+            let library_loss = loss<library_weight>(x, t)
+            let (engine_loss, engine_gradient) = with_grad(loss)<engine_weight>(x, t)
             (
                 round + 1,
                 library_weight - library_gradient * 0.03125,

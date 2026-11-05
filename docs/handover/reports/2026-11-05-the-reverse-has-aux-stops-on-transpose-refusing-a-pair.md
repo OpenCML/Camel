@@ -29,6 +29,22 @@
 3. `has_aux` 反向组合（上面的第四版写法，等第 0 步通了直接套）。
 4. 改写 `with_value_call_is_not_lifted`，删 `jvp` 的 `with` 提升（`withIsPromoted` 四处调用点同一次删除）。
 
+## 2026-11-05 深夜复量（`libgrad3`，`origin/develop = b74c896ca` 之上）
+
+`grad` 与提升删除落地后，把 `has_aux` 按第四版再写一遍、在宿主上再量一次：**同一句拒绝**。
+
+```
+stdlib/vjp.cml:163:26: transforms: transpose has no transpose for this function:
+this call's callee has no transpose of its own, so the call cannot be turned around
+```
+
+停在 `transpose(valueMember)(1.0)`，`valueMember = (t: float): float => lin(t).0`；`has_aux_library_plain`
+与 `has_aux_library_composition` 两个用例都停在这一行，数（`value=8.0 (12.0) grad=12.0` /
+`both 9.0 13.0 6.0`）只在正向那一版下成立。所以第 3 步仍等第 0 步（`transpose` 接受返回二元组的函数、
+并对 lambda 体里"调用一个函数值"的那条调用能转置——本页第 12 行量到的第二版就是它）。本次合并因此把
+`has_aux` 留在**正向**（`jvp(f)(w, 1.0)`，数字一个不动），并把这个拒绝写进 `stdlib/vjp.cml#has_aux`
+的注释里，等第 0 步。
+
 ## 试过的改动没有留在树里
 
 `stdlib/vjp.cml` 的四版改动**没有提交**，试完即 `git checkout --` 还原；补丁在仓库外

@@ -1,5 +1,5 @@
 // The library keeps its own promise: a program that imports `vjp` and nothing else gets a
-// derivative. `vjp` is `transpose(split(reinterp<jvp>(f)))`, so it needs the forward rules
+// derivative. `vjp` is `transpose(split(jvp(f)))`, so it needs the forward rules
 // (`rulesets.jvp`) and the backward ones (`rulesets.transpose`), and `stdlib/vjp.cml` imports both
 // -- a library that makes its callers know its insides is not a library, which is the same reading
 // as a pass's precondition: it is the library's job, and it diagnoses what it cannot do.
@@ -23,12 +23,19 @@ func f(x: float): float {
     return x * x * x
 }
 
+// `grad` differentiates the first `with` parameter (design principles 9.9), so its leg is read
+// through one; the rulesets it needs are the ones above, and this file still imports only `vjp`.
+with <x: float>
+func f_at(): float {
+    return f(x)
+}
+
 func main(): int sync {
     let (value, backward) = vjp(f)(2.0)
     let cotangents = backward(1.0)
     println('vjp_ruleset value={}'->format<value>)
     println(cotangents)
     println('vjp_ruleset cotangent={}'->format<cotangents.0>)
-    println('vjp_ruleset grad={}'->format<grad(f)(2.0)>)
+    println('vjp_ruleset grad={}'->format<grad(f_at)(2.0)>)
     return 0
 }

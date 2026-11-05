@@ -8,9 +8,9 @@
 //   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
 //     the file, the test and the key named, while a valid plan in the same directory still runs;
 //     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
-//   * the `known_fail` gate: a marked case that names no owner, no reason, a placeholder reason or
-//     a reason that names no wall is refused where its plan is loaded, by name, and an entry that
-//     carries all three loads, runs and reports `[XFAIL]` with its owner printed;
+//   * the `known_fail` gate: a marked case that names no owner, no reason, a placeholder reason, a
+//     reason that names no wall or no sentence is refused where its plan is loaded, by name, and an
+//     entry that carries all four loads, runs and reports `[XFAIL]` with its owner printed;
 //   * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
 //      the other fields docs/test-plans.md documents;
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
@@ -247,22 +247,24 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
 
-// --- the `known_fail` gate: a marked case carries an owner and a wall ---------------------------
+// --- the `known_fail` gate: a marked case carries an owner, a wall and a sentence --------------
 // The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
 // mark, who is responsible for making it green, and why it cannot pass. Two of the three used to be
 // prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
-// are fields now, and a plan that omits either is refused where it is loaded. Five plan files share
-// one directory -- four ways to be incomplete and one complete entry. The four must fail with the
-// file, the case and the missing (or unusable) field named; the complete one must load, run, and
-// report `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason
-// would make the four pass and this block red, which is the direction that matters.
+// are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the
+// sentence the case prints today, is refused the same way: without it the runner takes any failure
+// as the expected one, and another defect can wear the mark's name. Six plan files share one
+// directory -- five ways to be incomplete and one complete entry. The five must fail with the file,
+// the case and the missing (or unusable) field named; the complete one must load, run, and report
+// `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason would make
+// the five pass and this block red, which is the direction that matters.
 const knownfailDir = path.join(here, 'knownfail')
 const knownfail = runRunner([knownfailDir])
 if (knownfail.status !== 1) problems.push(`known_fail gate: runner exit ${knownfail.status}, expected 1`)
-if (!knownfail.output.includes('[SUMMARY] total: 5, pass: 0, fail: 4, known failures: 1')) {
+if (!knownfail.output.includes('[SUMMARY] total: 6, pass: 0, fail: 5, known failures: 1')) {
     problems.push(`known_fail gate: unexpected summary (${summaryLine(knownfail.output)})`)
 }
-// The four readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
+// The five readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
 // printed below is read off the output and not off this file's intentions.
 const knownfailReadings = [
     [
@@ -284,6 +286,11 @@ const knownfailReadings = [
         'reason-names-no-wall',
         "test/tools/selftest/knownfail/no_wall.plan.toml: test 'no_wall': known_fail_reason names "
             + 'no wall',
+    ],
+    [
+        'missing-msg',
+        "test/tools/selftest/knownfail/no_msg.plan.toml: test 'no_msg': known_fail needs "
+            + 'known_fail_msg',
     ],
 ]
 const knownfailVerdict = knownfailReadings.map(([what, needle]) => {
