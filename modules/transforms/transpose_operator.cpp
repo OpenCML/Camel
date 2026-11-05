@@ -93,24 +93,14 @@ class TransposeResolver final : public FuncTypeResolver {
         if (transposeSignature(const_cast<FunctionType *>(function)) != nullptr) {
             return std::nullopt;
         }
-        // The exit cause, asked of the type: the cotangent of the result *is* the result's tangent
-        // space, so a `float` result takes a `float` cotangent and an `f32` result takes an `f32` one
-        // (`Tangent<f32>` is `f32`; `stdlib/types.cml#Tangent`, `camel/core/tangent_space.h`). What
-        // the law then needs is the addition of that space -- `:op/add_d` at `float`, `:op/add_f` at
-        // `f32` (`transpose.cpp#addUriFor`) -- so those are the two widths a result can have here.
-        // This is the *reason* the law above said no and not the law: `transposeSignature` is what
-        // decides, and it is asked first, one branch up.
-        const camel::core::TangentSpaceAnswer space =
-            camel::core::tangentSpaceOf(function->exitType());
-        const bool hasCotangentWidth =
-            space.hasSpace() && space.space != nullptr &&
-            (space.space->code() == TypeCode::Float64 || space.space->code() == TypeCode::Float32);
-        if (!hasCotangentWidth) {
-            return std::string(
-                "`transpose` takes a function whose result has a cotangent: the cotangent of the "
-                "result is what goes in, it is the result's own tangent space (`Tangent<f32>` is "
-                "`f32`), and this law adds cotangents with the addition of that space -- `:op/add_d` "
-                "at `float` and `:op/add_f` at `f32`");
+        // The exit cause, asked of the law itself: `resultCotangentRefusal` is what
+        // `transposeSignature` asks one branch up, so the message here cannot drift from the answer
+        // there. It names the member that does not hold a cotangent, or the space that registers no
+        // addition -- the position, not the type, because "this result type is not supported" is
+        // true of every failure and therefore says nothing.
+        const std::string why = resultCotangentRefusal(function->exitType());
+        if (!why.empty()) {
+            return "`transpose` takes a function whose result has a cotangent: " + why;
         }
         return std::string(
             "`transpose` takes a function whose parameters are all linear: each one is what a "
@@ -120,8 +110,10 @@ class TransposeResolver final : public FuncTypeResolver {
     }
 
     std::string signature() const override {
-        return "(f: (float) => float | (float, ...) => float) => "
-               "(cotangent) => (cotangents..)";
+        // The result is any type that has a cotangent, and the parameter the transposed function
+        // takes is that cotangent -- `Tangent<result>`, not a `float` it would have to be read into
+        // (`f6ee4f5d0`; design principles 9.9).
+        return "(f: (params..) => result) => (Tangent<result>) => (cotangents..)";
     }
 
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)

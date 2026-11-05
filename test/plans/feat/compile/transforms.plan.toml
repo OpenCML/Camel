@@ -787,7 +787,7 @@ args = ["${case}", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float) => (float,) nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (float) => float | (float, ...) => float) => (cotangent) => (cotangents..)", "transposed=(float) => (float,)", "same=yes", "5.0", "20.0"]
+expect_output_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float) => (float,) nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (params..) => result) => (Tangent<result>) => (cotangents..)", "transposed=(float) => (float,)", "same=yes", "5.0", "20.0"]
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

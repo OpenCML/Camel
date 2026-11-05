@@ -3618,14 +3618,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 [[tests]]
 name = "has_aux.vjp_pair"
-desc = "A pair-returning function handed to `vjp` with no named argument is refused inside the library: `transpose` takes a function whose result has a cotangent (the cotangent of the result is what goes in), and a pair has none, so the call stops at `stdlib/vjp.cml`'s `transpose(lin)` instead of answering `(value, pullback)` with the pair's first element silently differentiated. This is the pair form of the same mistake `has_aux.vjp_named` pins as the parameter form. The sentence changed with `lane-f32trans` (2026-11-04): the old text, `takes a function that returns a `float``, is what `transpose` said while its exit-type check was written for `float` only; the check now asks the result's tangent space (`modules/transforms/transpose_operator.cpp#explainRejection`) -- quoted verbatim from the merged tree: `transpose` takes a function whose result has a cotangent: the cotangent of the result is what goes in, it is the result's own tangent space (`Tangent<f32>` is `f32`), and this law adds cotangents with the addition of that space -- `:op/add_d` at `float` and `:op/add_f` at `f32`."
-kind = "negative"
+desc = "A pair-returning function handed to `vjp`: the pullback takes the pair's cotangent, and two seeds pin the numbers. Seeding `(1.0, 0.0)` asks only the value half and answers 6.0 (`d(x*x)` at 3); seeding `(0.0, 1.0)` asks only the auxiliary half and answers 1.0 (`d(x + 10)`). Two seeds rather than one because `grad=0.0` is a legal gradient: a walk that never distributed the cotangent and a function whose derivative is zero answer the same number, and a single seed could not tell them apart. The pair's own value and auxiliary value are pinned as well (`value=9.0 aux=13.0`), so a pullback that answered the gradient where the pair belongs fails on the first line. This case used to pin the refusal `transpose takes a function whose result has a cotangent`, and that sentence was wrong -- a pair's cotangent is the pair of its members' (design principles 9.9, author `f6ee4f5d0`), and the law now asks the result's tangent space instead of listing two type codes."
+kind = "positive"
 case = "../../../cases/modules/autodiff/has_aux_vjp_pair.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["Invalid call to 'transpose'", "takes a function whose result has a cotangent"]
-expect_output_not_contains = ["UnknownInternalError", "never printed"]
+expect_exit = 0
+expect_stdout_exact = """has_aux_vjp_pair
+value=9.0 aux=13.0
+seed_value grad=6.0
+seed_aux grad=1.0
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 # The pair contract itself: the three results that break "the pair is `(value, aux)`, the first
