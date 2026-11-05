@@ -960,12 +960,12 @@ function instancesOf(rule, functions) {
         }
         if (answers.length > 0) types = types.filter((type) => answers.includes(type))
     }
-    // A parameter of a concrete type pins the instance as well (`x: f32[..]` is an f32 rule). A `const`
+    // A parameter of a concrete type pins the instance as well (`x: f32[...]` is an f32 rule). A `const`
     // parameter never does: it is a coefficient or an axis, a value the rule matches, not the element
     // type.
     for (const parameter of rule.params) {
         if (parameter.constant) continue
-        const element = parameter.type.replace(/\[\s*\.\.\s*\]$/, '').trim()
+        const element = parameter.type.replace(/\[\s*\.\.\.\s*\]$/, '').trim()
         if (!rule.typeParam || element !== rule.typeParam) {
             if (FORMATS[element]) types = types.filter((type) => type === element)
         }
@@ -1026,7 +1026,7 @@ function proveInstance(solver, rule, functions, type, valueConjuncts, timeoutMs,
     const types = new Map()
     const declarations = []
     for (const parameter of rule.params) {
-        const element = parameter.type.replace(/\[\s*\.\.\s*\]$/, '').trim()
+        const element = parameter.type.replace(/\[\s*\.\.\.\s*\]$/, '').trim()
         const elementType = FORMATS[element] ? element : type
         types.set(parameter.name, elementType)
         declarations.push(declare(parameter.name, elementType, smtModel === 'real'))

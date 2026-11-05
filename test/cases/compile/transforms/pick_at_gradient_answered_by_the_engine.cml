@@ -1,0 +1,45 @@
+// The engine's reading of a `pick_at` node: the adjoint of the read, `[0.0, 1.0, 0.0]`.
+//
+// `grad` is `autodiff:grad`, whose reverse pass asks `DerivativeRegistry` for a rule filed under the
+// node's operator (`modules/autodiff/pullback.cpp`, "no derivative rule for operator"). The read the
+// engine knew under its own spelling is `:op/idx_arr` (`src/builtin/operators/derivative.cpp`), which
+// is what `xs[i]` is; `pick_at` is the second spelling of the same read with the length stated
+// (`modules/tensor/ops/layout_ops.cpp#elementAtKernel`). This program is the one whose reading was
+// once a refusal, and it is now the reading of the number.
+//
+// ---- settled: which entry, and when ----
+//
+// `lane-pickat` answered the read in the library and left the engine's side filed as an account
+// rather than a wall: `jvp` gave the tangent `0.25`, `vjp` gave the gradient `[0.0, 1.0, 0.0]`, and
+// the two closed on the direction (`pick_at_forward_rule.cml`), while this program stopped at
+// `autodiff: no derivative rule for operator 'tensor:pick_at' of type 'float'` -- a missing row in
+// the engine's C++ table, not a missing law. The pin that recorded it named its own settlement: the
+// day someone filed a `setVjp` for `pick_at`, this file was to be turned into the positive reading
+// of the same program, `engine dL/dw=[0.0, 1.0, 0.0]`, the number the library's `vjp` answers.
+//
+// `lane-pickatvjp` filed that row (2026-11-04) -- `setVjp(defs, "pick_at", &pickAtVjp)` at the end of
+// `layoutOps` in `modules/tensor/ops/layout_ops.cpp`, beside the `take` and `idx_take` entries -- and
+// flipped this file with it. The rule is the read's own adjoint: zeros in the differentiated
+// tensor's shape with the cotangent added at `position` (`pickAtVjp`), the construction the core files
+// for `:op/idx_arr`, so the two legs of the account are one number now:
+//
+//     engine dL/dw=[0.0, 1.0, 0.0]
+//
+// The library's leg of the same read prints the same array in `pick_at_forward_rule.cml`.
+//
+//     camel test/cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml
+import { grad } from autodiff
+import { pick_at } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[]>
+func read(): float {
+    return pick_at(w, 1, 3)
+}
+
+func main(): int sync {
+    let slope = grad(read)
+    let d = slope<[1.0, 2.0, 3.0] as float[]>()
+    `engine dL/dw={}`->format<d>->println
+    return 0
+}

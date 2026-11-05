@@ -1,0 +1,27 @@
+// The second derivative written as a nest of the transform itself, not as a call to a named
+// function that computes one:
+//
+//   grad(grad(f))                    -- the inner grad is the argument of the outer one
+//   grad(<x: float>() => grad(f)<x>) -- the inner grad is a call in the lambda's body
+//
+// f(x) = x*x*x, f'(x) = 3x^2, f''(x) = 6x, and at x = 2 the answer is 12.
+//
+// Both are accepted because the graph the outer transform differentiates holds the inner gradient
+// as an OPER of this module over a static function (`pullback.cpp#ForwardRewrite::macroCallee`): the
+// function the inner `grad` computes is built while the rewrite runs, so the outer one has a graph
+// to plan for. The two shapes that are refused are in `second_order_refused_captured.cml` and
+// `second_order_refused_vjp.cml`: there the inner transform is reached as a *function value*.
+
+import { grad } from autodiff
+
+with <x: float>
+func cube(): float {
+    return x * x * x
+}
+
+func main(): int sync {
+    let nested = grad(grad(cube))<2.0>()
+    let lambda = grad(<x: float>() => grad(cube)<x>())<2.0>()
+    'second_order_nest nested={} lambda={}'->format<nested, lambda>->println
+    return 0
+}

@@ -3,19 +3,23 @@
  * and direction `dx = [0.5, 1.0, 1.5]`.
  *
  * The convention (`docs/design/program-transforms/m6-combination-numbers.cn.md` 2.3): the pullback
- * is read with its cotangent held fixed (`vjp(f)(x, v) = v*f'(x) = 2vx`), and `jvp` differentiates
+ * is read with its cotangent held fixed (`vjp(f)(x).1(v) = v*f'(x) = 2vx`), and `jvp` differentiates
  * that with respect to the primal in the direction `dx`. Its derivative in `x` is `2v`, so the
  * directional derivative is `2*v*dx`; with `v = 1` that is `2*dx`, i.e. 1, 2, 3.
  *
- * `vjp` and `jvp` are not in the tree yet (stdlib/signatures/autodiff.cml says so in as many
- * words): this file is what the day they land will be compared against, and the plan skips it
- * until then. The numbers are the contract; the spelling of the two calls is settled with M4 and
- * changing it must not change a number below.
+ * The cotangent is the pullback's argument, not the forward call's: `stdlib/vjp.cml#vjp` answers
+ * `(value, pullback)` -- JAX's order, the author's ruling of 2026-11-01 -- so the reading is
+ * `vjp(sq)(x).1(v)` and the one member a one-parameter pullback answers is read out by position
+ * (`.0`), the same shape `grad` is built on.
+ *
+ * The batch is read point by point rather than through `vmap`: `vmap` takes a function of exactly
+ * one parameter (`stdlib/array.cml#vmap`), and `jvp(f)` is the function `(x, dx) => (value,
+ * tangent)`, so `vmap(jvp(pull))` is not a call the batch pass accepts. Three points, one call
+ * each, and the three tangents are the numbers this case pins.
  */
 
 import { jvp } from transforms
 import { vjp } from vjp
-import { vmap } from transforms
 
 func sq(x: f32): f32 {
     return x * x
@@ -26,10 +30,12 @@ func main(): int sync {
     let dx: f32[] = [0.5, 1.0, 1.5]
     let v: f32 = 1.0
     // The pullback at a fixed cotangent, as a function of one number: 2*v*x.
-    let pull = (x: f32) => vjp(sq)(x, v)
-    let out = vmap(jvp(pull))(xs, dx)
-    println(out[0])
-    println(out[1])
-    println(out[2])
+    let pull = (x: f32) => vjp(sq)(x).1(v).0
+    let o0 = jvp(pull)(xs[0], dx[0])
+    let o1 = jvp(pull)(xs[1], dx[1])
+    let o2 = jvp(pull)(xs[2], dx[2])
+    println(o0.1)
+    println(o1.1)
+    println(o2.1)
     return 0
 }

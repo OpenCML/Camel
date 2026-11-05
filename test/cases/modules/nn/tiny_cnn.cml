@@ -9,30 +9,30 @@ import { reshape, shape, sum, tanh } from tensor
 import { conv2d, sgd } from nn
 
 type TinyCnn = {
-    kernel: f32[..],
-    bias: f32[..],
-    head: f32[..]
+    kernel: f32[...],
+    bias: f32[...],
+    head: f32[...]
 }
 
 with <model: TinyCnn>
-func features(x: f32[..]): f32[..] {
+func features(x: f32[...]): f32[...] {
     return tanh(conv2d(x, model.kernel, model.bias))
 }
 
 with <model: TinyCnn>
-func predict(x: f32[..]): f32[..] {
+func predict(x: f32[...]): f32[...] {
     let feat = x->features<model>
     let flat = reshape<[1, 4]>(feat)
     return flat @ model.head
 }
 
-func mse_loss(pred: f32[..], target: f32[..]): float {
+func mse_loss(pred: f32[...], target: f32[...]): float {
     let diff = pred - target
     return float(sum(diff * diff)) / float(shape(pred)[0])
 }
 
 with <model: TinyCnn>
-func model_loss(x: f32[..], target: f32[..]): float {
+func model_loss(x: f32[...], target: f32[...]): float {
     let pred = x->predict<model>
     return mse_loss(pred, target)
 }
@@ -45,7 +45,7 @@ func init(): TinyCnn {
     }
 }
 
-func train(model: TinyCnn, x: f32[..], target: f32[..], steps: int): TinyCnn {
+func train(model: TinyCnn, x: f32[...], target: f32[...], steps: int): TinyCnn {
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.2), x, target, steps - 1)
 }
 

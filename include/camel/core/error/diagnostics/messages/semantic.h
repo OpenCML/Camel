@@ -244,7 +244,7 @@ enum class SemanticDiag : uint32_t {
     PureAndUses = 0x0001A1,
     /// A resource group names itself, directly or through other groups.
     ResourceGroupCycle = 0x0001A2,
-    /// `#resource` is written before a type declaration that is not nominal.
+    /// The `#resource` tag is what makes a handle type, so a nominal declaration cannot carry one.
     HandleTypeNotNominal = 0x0001A3,
     /// A body-less declaration's clause differs from the operator's declared resources.
     NativeResourceMismatch = 0x0001A4,
@@ -289,6 +289,8 @@ enum class SemanticDiag : uint32_t {
     WithArgumentCallee = 0x0001BD,
     /// A `with` argument is given by name in a binding used as a function value.
     WithArgumentInValue = 0x0001BE,
+    /// A `with` argument of the wrong type given to a pack that writes its element type.
+    WithPackArgumentType = 0x00020A,
 
     // Predicate lookup in a `when` condition (design principles 4.4, 10.2). 0x1BF and up.
     /// A predicate another module declares, but this module does not import it.
@@ -324,7 +326,8 @@ enum class SemanticDiag : uint32_t {
     // README R3). 0x1B3 and up.
     /// The expression after `typeof` has no value, so the type it stands for cannot be taken.
     TypeOfNotAValue = 0x0001B3,
-    /// `typeof` is written inside a larger type (`typeof e[]`, `(typeof e, int)`).
+    /// `typeof` stands for a whole type, so it cannot stand inside a larger type (`typeof e[]`,
+    /// `(typeof e, int)`).
     TypeOfNotWholeType = 0x0001B4,
     /// `T { static for ... }` names a type that is not a struct or a tuple.
     SameShapeComprehensionNotComposite = 0x0001B5,
@@ -384,8 +387,8 @@ enum class SemanticDiag : uint32_t {
     CompOperandNotUnary = 0x0001E2,
     /// An operand of `..` is the name of a generic function, and nothing at this position says which instance it stands for. The refusal names the operand and both ways to settle it (design principles 5.5).
     CompOperandGenericWithoutType = 0x0001E4,
-    /// The interval of two integers is written `a..b` and nothing else: the two-parameter `range(a, b)`
-    /// the language used to have is gone (design principles 4.2).
+    /// A range over two integers is one construct, `a..b`, with no call form of its own
+    /// (design principles 4.2).
     /// `range(a, b, 0)` is no sequence at all: the step never moves (design principles 4.2,
     /// which makes a step of 0 a fault and a constant one a compile-time error).
     RangeStepZero = 0x0001E6,
@@ -393,11 +396,6 @@ enum class SemanticDiag : uint32_t {
     /// the step of a slice follows the same rule the step of a range does).
     SliceStepZero       = 0x0001E9,
     CalledFallibleValue = 0x000209,
-    /// A transform (`transpose`, `jvp`) was handed something that is not a function known at compile time:
-    /// a parameter, or a closure that captures a value. The transform builds the transformed graph at the
-    /// call, out of the graph of the function it is given, and neither of those names one until the program
-    /// runs -- so it is refused at the call, by name, rather than left to the run.
-    WithPackNeedsNativeDeclaration = 0x000191,
     // #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
     // body-less declaration f of the same module is the operator that runs it. The graph builder
     // resolves the tag when it declares the module, so no pass reads it and it names no reader.
@@ -472,10 +470,11 @@ enum class SemanticDiag : uint32_t {
     TypeFunctionNotApplicable  = 0x0001FE,
     StatementAfterReturn       = 0x000201,
     YieldRequiresStreamHead    = 0x000206,
+    LoopBodyNeedsNextState     = 0x000208,
     RuleLeftIsNotAnOperator    = 0x000204,
     DuplicateRuleForOperator   = 0x000205,
     RuleRightUsesOuterVariable = 0x000207,
-    ResidualsAreNotVisible     = 0x000208,
+    ExtentOfNeedsStatedShape   = 0x00020B,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

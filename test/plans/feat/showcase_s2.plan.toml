@@ -1,0 +1,352 @@
+id = "showcase_s2_first_step_gradient"
+order = 918
+tier = "fast"
+tags = ["feat", "showcase", "s2", "vjp", "autodiff", "gradient"]
+
+# S2 is one end-to-end training example written with the library's own derivative
+# (`docs/handover/batches-2026-10-31-72h.cn.md`). Its first step is where the library's gradient can
+# be held against the engine's, and this plan pins that step on the ONE model the library can lift
+# today. That model is SCALAR -- `pred = x * w + b`, `loss = 0.5 * (pred - t)^2`, two gradient
+# elements -- and it is not S2's tensor model: `vjp` cannot reverse a `sum` over an array, a
+# `softmax<1>`, `mean` at an axis, or a captured array operand yet
+# (`docs/handover/reports/2026-11-03-library-vjp-walls.cn.md`). The scalar numbers prove the pipe is
+# closed end to end; they are not a reading of the tensor path.
+#
+# The two Camel legs differ only in where the weight sits, which is what design principles 9.9 says
+# the two transforms mean by "differentiated": `vjp` differentiates the ordinary parameters, so the
+# library's leg writes `(w, b)` as parameters and takes `pullback(1.0)`; `grad`/`with_grad`
+# differentiate the first `with` parameter, so the engine's leg writes the weight first and moves the
+# bias to the front with a lambda. The PyTorch reading is the third leg, recorded beside the case.
+
+[[tests]]
+name = "first_step.scalar_library_vjp"
+desc = "The first step's gradient on a SCALAR model (one weight, one bias, `x = 1.5`, `t = 2.0`), by the library's `vjp(loss_plain)(0.5, 0.75)` -> `pullback(1.0)` against the engine's `with_grad(loss_with)<0.5, 0.75>(1.5, 2.0)` plus `grad` for the bias, and against the PyTorch reading recorded beside the case (torch 2.5.1+cu121, float64, cpu): loss 0.125, dL/dw -0.75, dL/db -0.5"
+kind = "behavior"
+case = "../../cases/compile/transforms/first_step_library.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = '''
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10)).map((l) => l.trim())
+const parts = (line) => Object.fromEntries(line.split(' ').slice(3).filter((p) => p.includes('='))
+    .map((p) => { const i = p.indexOf('='); return [p.slice(0, i), Number(p.slice(i + 1))] }))
+const find = (prefix) => lines.find((l) => l.startsWith(prefix))
+const libraryLine = find('first_step scalar library ')
+const engineLine = find('first_step scalar engine ')
+const diffLine = find('first_step scalar diff_library_vs_engine ')
+const valueLine = find('first_step scalar value ')
+for (const [name, line] of [['library', libraryLine], ['engine', engineLine],
+                            ['diff_library_vs_engine', diffLine], ['value', valueLine]]) {
+    assert(line !== undefined, `no line reported for ${name}`)
+}
+const library = parts(libraryLine)
+const engine = parts(engineLine)
+for (const [name, values] of [['library', library], ['engine', engine]]) {
+    assert(Number.isFinite(values.w) && Number.isFinite(values.b),
+        `${name}: the weight and the bias were not both reported`)
+}
+const diffs = parts(diffLine)
+for (const key of ['w', 'b', 'value']) {
+    assert(Number.isFinite(diffs[key]), `diff_library_vs_engine: no ${key}`)
+    assert(diffs[key] <= 1e-12, `diff_library_vs_engine: ${key} differs by ${diffs[key]}, more than 1e-12`)
+}
+const worst = parts(find('first_step scalar max_abs_diff_library_vs_engine ')).e
+assert(worst === undefined || Number.isFinite(worst), 'the largest difference is not a number')
+const values = parts(valueLine)
+assert(Number.isFinite(values.library) && Number.isFinite(values.engine),
+    'the two losses were not reported on one line')
+}
+'''
+timeout_ms = 120000
+
+# The TENSOR model's first step, and the wall that used to stand in front of it. The step captures
+# its batch and its target -- `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]` -- and moves one weight
+# `w = [[0.5, 0.25], [0.125, 1]]` through `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`.
+#
+# Until 2026-11-03 a body that captured *anything* was refused whole
+# (`transforms: jvp has no forward transform for this function`, `REINTERP jvp ... skip=body`), for a
+# captured `float` as much as for a captured `float[2, 2]`: the ports a capture arrives at were the
+# one kind `jvp` did not make, and the report of the tensor path blamed `pairTypeOf`, which hands an
+# array the pair its own type names and was never asked. The four directions of `dL/dw` are now read
+# out of the forward transform, four seeds, and they are the reverse transform's answer without the
+# reverse transform: `dL/dw = x^T (pred - t) = [[3.75, 13.5], [5.5, 19.5]]` at `loss = 10.34375`.
+#
+# Every element is exact in binary floating point, so this entry compares exactly and not to a
+# tolerance: the hand calculation, the library's forward transform and the engine's `with_grad`
+# answer the same four numbers and the same loss (PyTorch 2.5.1+cu121, float64, cpu, 2026-11-03,
+# `D:\Temp\s2-tensor-first-step-torch.py`).
+[[tests]]
+name = "first_step.tensor_forward_jvp"
+desc = "The first step's gradient on a TENSOR model read through the library's forward transform, four seeds, against the engine's `with_grad`: loss 10.34375 and dL/dw [[3.75, 13.5], [5.5, 19.5]], element by element, against the hand calculation and PyTorch's reading of the same literals"
+kind = "behavior"
+case = "../../cases/compile/transforms/first_step_tensor.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["first_step tensor loss=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "first_step tensor engine loss=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "first_step tensor max_abs_diff_library_vs_engine w=0.000000000000e+00 loss=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same step through `vjp` -- `transpose(split(jvp(f)))` -- which is the path S2's training step
+# is written on. Two walls stood in front of it, and both are down. The capture no longer stops the
+# lift (it builds the whole body, and its reading names
+# `jvp_matmul,jvp_subtract,jvp_mul_tensor,jvp_sum,jvp_mul`), and `split` no longer refuses the pair
+# of halves: the port it used to stop on read
+# `construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`,
+# and the cut reads the captured value's port now. The reverse of the product was the last piece
+# missing (`stdlib/rulesets/transpose.cml#matmul_t`, landed by `lane-withport`).
+#
+# This entry was a *negative* one until 2026-11-04, and it was written that way on purpose: it
+# pinned the two readings `split` printed and demanded exit 1, because an entry that only demanded a
+# non-zero exit would go quietly green the day the wall fell -- the program would start printing its
+# numbers and "expect 1" would be the only thing anyone had written down. The day came, so the
+# assertion is the number now, which is what the case's own comment promised it would become
+# (`test/cases/compile/transforms/first_step_tensor_vjp.cml`).
+#
+# The line is `loss=10.34375` and `dL/dw=([[3.75, 13.5], [5.5, 19.5]])`: the hand calculation of
+# this page, the forward transform's four seeds in `first_step.tensor_forward_jvp` above, and
+# PyTorch's reading of the same literals (float64, cpu, 2026-11-03). Note the parentheses -- the
+# pullback answers a one-tuple of cotangents, so `format` prints `((...))` and not `(...)`; the shape
+# is part of what is pinned, not formatting noise. Every element is exact in binary floating point,
+# so this is compared exactly and not to a tolerance.
+#
+# Measured 2026-11-04 on the cut tree (`integ3/exclude`, tree `/home/zjwei/camel-work/reds`, 1 m
+# load 14-17), exit 0:
+[[tests]]
+name = "first_step.tensor_vjp_answers_the_step"
+desc = "The tensor step through the library's `vjp`: `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w = [[0.5, 0.25], [0.125, 1.0]]`, `pred = x @ w`, `loss = 0.5 * sum((pred - t)^2)`. It answers `loss=10.34375` and `dL/dw=[[3.75, 13.5], [5.5, 19.5]]` -- the hand calculation and PyTorch's reading -- where until 2026-11-04 it stopped at `transforms: split does not build this function` (`the port is not a parameter of the graph, so neither half takes it`) with exit 1. The entry pins the number and the shape the `format` prints (a one-tuple of cotangents), and asserts that neither refusal sentence is printed any more, so the wall cannot come back unseen."
+kind = "behavior"
+case = "../../cases/compile/transforms/first_step_tensor_vjp.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_contains = ["first_step tensor vjp loss=10.34375 dL/dw=([[3.75, 13.5], [5.5, 19.5]])"]
+expect_output_not_contains = ["split does not build this function", "neither half takes it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The matrix product's transpose law (`stdlib/rulesets/transpose.cml#matmul_t`), read the way the step
+# reads it: `vjp`, both operands ordinary parameters, the same literals as the forward case above.
+#
+# This is the law that stood behind the second wall, one operator earlier than the report named it: a
+# step's `vjp` meets the product before it meets `mul_t`, because `d(a·b)` has to go backwards through
+# `matmul` first. Writing it needed three things that are not obvious from the law itself, and all
+# three are measured in the case's own comments: the forward rule had to stop calling a helper
+# (`skip=call-no-transpose` on `rulesets.jvp::matmul_tangent`), the cotangent of the subtracted target
+# needed the array subtract's adjoint (`skip=rule uri=tensor:subtract reason=unbound`), and the two
+# products the law writes were already there.
+#
+# Two legs, so that the law is the only thing under measurement in the first: a product under a sum,
+# and the whole step. Both answer the hand calculation and the engine's `with_grad` element by
+# element, `max_abs_diff = 0.0`:
+#
+#     sum(x@w) = 9.75        dL/dx = [[0.75, 1.125], [0.75, 1.125]]        dL/dw = [[4, 4], [6, 6]]
+#     step     = 10.34375    dL/dx = [[0.9375, 2.34375], [1.4375, 3.875]]
+#                            dL/dt = [[-0.75, -2.25], [-1.0, -3.75]]        dL/dw = [[3.75, 13.5], [5.5, 19.5]]
+#
+# Every element is exact in binary floating point, so these assertions are exact and not a tolerance.
+[[tests]]
+name = "matmul_t.law_read_through_vjp"
+desc = "The product's transpose law, read through `vjp`: a product under a sum and the whole step answer dL/dw [[3.75, 13.5], [5.5, 19.5]] at loss 10.34375, element by element against the hand calculation and the engine's `with_grad`, max_abs_diff 0.0. The step's values are ordinary parameters here so that the law is the only thing under measurement; the captured form is the entry above, which still stops at `split`"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_law.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t sum_prod value=9.75 dL/dx=[[0.75, 1.125], [0.75, 1.125]] dL/dw=[[4.0, 4.0], [6.0, 6.0]]", "matmul_t step value=10.34375 dL/dx=[[0.9375, 2.34375], [1.4375, 3.875]] dL/dt=[[-0.75, -2.25], [-1.0, -3.75]] dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t engine value=10.34375 dL/dw=[[3.75, 13.5], [5.5, 19.5]]", "matmul_t max_abs_diff_library_vs_engine w=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The two shapes a vector makes with a matrix, served by the same law. `matmul` reads a rank-one operand
+# as a row or as a column and drops that axis from the answer, so the cotangent of the *other* operand is
+# an outer product -- and a product of two rank-one values is a number, so the outer product is built
+# with `sum_to` in the lanes a known operand already has, not with a shape this ruleset would reconstruct
+# (`stdlib/rulesets/transpose.cml#ct_of_b`). The rank dispatch itself lives in the two cotangent helpers
+# (`ct_of_a` / `ct_of_b`), because a ruleset files one rule per operator and arity.
+#
+#     v @ w, v a row:      sum = 3.0   dL/dv = [0.75, 1.125]   dL/dw = [[1, 1], [2, 2]]
+#     x @ u, u a column:   sum = 3.5   dL/dx = [[0.5, 0.25], [0.5, 0.25]]   dL/du = [4, 6]
+#
+# Each leg is read three ways -- the hand calculation, `vjp`, and the engine's `with_grad` with the
+# *vector* moved into the `with` clause, so the rank-one cotangent is the engine's answer as well and not
+# only the library's. Every difference is exactly 0.0, because every literal here is exact in binary.
+#
+# **Two entries per shape, and they answer two different questions.** The two below declare the vector
+# `float[]` -- rank one, no length -- and they are the programs the twins exist for: the shape the law
+# reduces to is in the declaration nowhere, so it comes from the forward half, which states
+# `shape(a)` / `shape(b)` in the linear call (`stdlib/rulesets/jvp.cml#jvp_matmul`) and the cut carries
+# them to the backward half as known ports. `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
+# `sum_to_stated(..., sa)` and builds the zero carrier its helper reads for rank from that same list
+# (`zeros::<T>(sa) as A`), so an operand whose type states rank and no extent is answered (author,
+# 2026-11-04 12:40). Until 2026-11-04 it passed the operand itself, and the expansion asked the caller
+# for a value behind it: `skip=parameter-shape uri=tensor:matmul_stated ... param-type=float[]`. Nothing
+# here may be made green by writing `float[2]` in the declaration instead: a program that can write no
+# length is the only reason those operators exist.
+#
+# Each entry now pins a second leg -- the same two numbers handed to a function whose declaration *does*
+# write the extent -- and the two legs' gradients are compared element by element. That leg is the
+# control the first one is read against: a law that answered the open type by guessing, or by dropping
+# the reduction, would move one of the two readings.
+#
+# The `*_law_stated_extent` pair beside them is the same arithmetic with the extent stated, on its own.
+# It is green, and it is evidence of two things -- the law's rank-one arithmetic is right (0.0 against
+# the engine) and a stated shape can be answered from the type -- and it is **not the road**. Do not
+# delete the two `float[]` ones when they look redundant: they are the program the ruled design is for.
+[[tests]]
+name = "matmul_t.vector_lhs_law"
+desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector is declared `float[]` -- rank one, no length -- so the length the law reduces to is the `shape(v)` the forward rule states in the linear call; the reverse law reads that list and the other operand, not the answered one. The entry also pins the control leg (`float[2]` declared, same numbers, max_abs_diff 0.0 against the `float[]` leg), so a law that stopped reducing would move a reading here"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_lhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs engine value=3.0 dL/dw=[[1.0, 1.0], [2.0, 2.0]] dL/dv=[0.75, 1.125]", "matmul_t vector_lhs engine_v value=3.0", "matmul_t vector_lhs max_abs_diff_library_vs_engine v=0.000000000000e+00 w=0.000000000000e+00 value=0.000000000000e+00", "matmul_t vector_lhs declared value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs max_abs_diff_declared_vs_unstated dv=0.000000000000e+00 dw=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_t.vector_rhs_law"
+desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, built in the lanes `shape(x)` states. `u` is declared `float[]` -- rank one, no length -- so the length comes from the forward rule's `shape(u)` in the linear call, and the reverse law reads that list and the other operand. The entry also pins the control leg (`float[2]` declared, same numbers, max_abs_diff 0.0 against the `float[]` leg)"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_rhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine_u value=3.5", "matmul_t vector_rhs max_abs_diff_library_vs_engine u=0.000000000000e+00 x=0.000000000000e+00 value=0.000000000000e+00", "matmul_t vector_rhs declared value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs max_abs_diff_declared_vs_unstated du=0.000000000000e+00 dx=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same two arithmetic legs with the vector's extent stated in the declaration (`float[2]`), which is
+# what the language can answer today: `sum_to`'s target is written from `extent_of::<float[2]>()`. Green,
+# and kept for what it is worth -- it pins the rank-one arithmetic against the engine at 0.0 and shows a
+# stated shape being answered from the type. It is not the design's terminal road: see the two entries
+# above and `docs/handover/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
+[[tests]]
+name = "matmul_t.vector_lhs_law_stated_extent"
+desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead (author, 2026-11-04 12:40)"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs engine value=3.0 dL/dw=[[1.0, 1.0], [2.0, 2.0]] dL/dv=[0.75, 1.125]", "matmul_t vector_lhs engine_v value=3.0", "matmul_t vector_lhs max_abs_diff_library_vs_engine v=0.000000000000e+00 w=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_t.vector_rhs_law_stated_extent"
+desc = "The same matrix-times-column law as `matmul_t.vector_rhs_law`, with the vector declared `float[2]`: dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, every `max_abs_diff` 0.0 against the engine. Evidence rather than the fix, for the reason the left-hand entry states"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine_u value=3.5", "matmul_t vector_rhs max_abs_diff_library_vs_engine u=0.000000000000e+00 x=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The shapes the law leaves out, pinned as a reading. Rank three and above, and the vector-vector product
+# whose answer is a number, have no cotangent overload, so the law is *chosen* and its own body has nothing
+# for these operands. The walk refuses that by name, with the law, the operator and the ranks:
+#
+#     skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0
+#     ranks=(3, 2, 1, 1) operands=4
+#
+#     the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank
+#     (3, 2, 1, 1), and it serves the ranks its cotangents are written for (node <>)
+#
+# `rule-ranks` is its own word, not `rule-shape`: that one means the law's *pattern* rejected the operand
+# types and nothing was built, which is where this reading stood while the law named its ranks in the
+# pattern (commit `5a2fed990`). A rule is instantiated with three type parameters -- the cotangent's element
+# type and the two operand types -- so a head that names one shape's ranks serves that shape alone, and a
+# ruleset files one rule per operator and arity (`SemanticDiag::DuplicateRuleForOperator`). Serving all three
+# shapes from one key is what moved the ranks into the helpers, and the classification moved with them: one
+# tells a reader to widen a pattern, the other to write the missing shape's law.
+# The entry pins both sentences, not the exit code, so the day a batch axis is served it fails and names
+# what replaced this.
+[[tests]]
+name = "matmul_t.rank_three_is_refused_by_name"
+desc = "The product's linear call is `matmul_stated`, so the law that answers it is `matmul_stated_t`; it serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4`, with the sentence `the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently. The ranks list has one entry per operand -- the two tensors and the two stated lists -- and the `reason=` string is left unpinned because it names the helper's argument list rather than the law's"
+kind = "negative"
+case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 1
+expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]
+expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t"]
+# The node's number is where the compiler put it, so it is `<>` here and every other field of the
+# line stays exact: the function, the skip's own word, the operator URI, the law, the operand
+# position, the ranks and the operand count. The `reason=` string is left free, as the entry's own
+# note says (it names the helper's argument list rather than the law), so the pinned text stops at
+# `operands=4` and the line has to carry a `reason=` after it.
+# Two streams name that node: the reading does it by number and the sentence prints the same number
+# in `(node N)`. The assertion is the relation between them -- whatever number the reading names,
+# the sentence has to name the same one -- so a walk that stopped at one node while the sentence
+# reported another breaks it, and the two numbers are still tied together instead of waved through.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const head = 'TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0 ranks=(3, 2, 1, 1) operands=4'
+const hits = input.normalized.stderr.split('\n').filter((l) => new RegExp('^' + esc(head) + ' reason=').test(l))
+assert(hits.length === 1, `expected exactly one line like '${head} reason=...', found ${hits.length}`)
+const named = /\(node ([0-9]+)\)/.exec(input.normalized.stdout)
+assert(named, 'the sentence that says which law declined names the node it stopped at')
+assert(Number(named[1]) === field(hits[0], 'node'), `the reading names node ${field(hits[0], 'node')}` + ` and the sentence names node ${named[1]}: one node, one number`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The loop, which is the thing S2 is. Every row above is a first step, and a first step is not
+# training. "The loss went down" is what any wrong gradient satisfies -- a gradient off by a constant
+# factor still makes it go down -- so the criterion here is the curve itself: twelve rounds of
+# `w = w - 0.03125 * dw`, the library's leg against the engine's `with_grad` leg on the same model
+# with the same update rule, compared value by value. `1/32` is exact in binary and so is every
+# literal, so the two legs are compared for equality and not against a tolerance, and the whole curve
+# is pinned -- a future change to either leg moves a pinned value instead of only the difference.
+#
+# What this row does not claim: the loop composes `vjp`, not the name `grad`. `stdlib/vjp.cml#grad`
+# is declared for `(x: float) => float`, and its general form -- the first `with` parameter, design
+# principles 9.9 -- is the item still blocked on a lifted body calling a function value; `vjp` is the
+# function `grad` is a reading of. The weights sit on ordinary parameters because that is the only
+# channel `vjp` differentiates today, which is why the engine's leg keeps them in a `with` list and
+# the two legs differ in where the weight sits and not in what they compute.
+[[tests]]
+name = "train.twelve_rounds_library_curve_is_the_engine_curve"
+desc = "S2 trained for twelve rounds by the library's reverse transform, `vjp` -- `transpose(split(reinterp<jvp>(f)))`, the composition `grad` is a reading of -- against the engine's `with_grad` on the same tensor model (`x @ w`, `0.5 * sum(e * e)`, `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w0 = [[0.5, 0.25], [0.125, 1]]`) with the same update rule `w = w - 0.03125 * dw`. The step size is a power of two and every literal is exact in binary, so the two legs are compared for equality and not against a tolerance: the case prints both curves and their largest difference, and this row pins all twelve values of both. It is the row that decides whether S2 can train on the library layer at all, and the reason it cannot say `grad`: that name is declared for `(x: float) => float` and its general form (the first `with` parameter, design principles 9.9) is blocked on a lifted body calling a function value."
+kind = "behavior"
+case = "../../cases/showcase_s2/train_curve.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "s2 curve library=[10.34375, 0.22930908203125, 0.1827995777130127, 0.18107431195676327, 0.1795608826687385, 0.1780609732736167, 0.17657359680496876, 0.17509864468616157, 0.17363601311700427, 0.17218559918157558, 0.17074730082370665, 0.16932101683972314]\ns2 curve engine=[10.34375, 0.22930908203125, 0.1827995777130127, 0.18107431195676327, 0.1795608826687385, 0.1780609732736167, 0.17657359680496876, 0.17509864468616157, 0.17363601311700427, 0.17218559918157558, 0.17074730082370665, 0.16932101683972314]\ns2 curve_max_abs_diff=0.000000000000e+00\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+verify_script = '''
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `expected the two curves and their largest difference, found ${lines.length} line(s)`)
+const curve = (name) => {
+    const prefix = `s2 curve ${name}=`
+    const line = lines.find((l) => l.startsWith(prefix))
+    assert(line !== undefined, `no line reported for the ${name} curve`)
+    return line.slice(prefix.length + 1, -1).split(', ').map(Number)
+}
+const library = curve('library')
+const engine = curve('engine')
+assert(library.length === 12, `the library's curve is ${library.length} values long, not 12`)
+assert(engine.length === 12, `the engine's curve is ${engine.length} values long, not 12`)
+for (let i = 0; i < 12; i += 1) {
+    assert(Number.isFinite(library[i]), `round ${i}: the library's loss is not a number`)
+    assert(Number.isFinite(engine[i]), `round ${i}: the engine's loss is not a number`)
+    assert(library[i] === engine[i],
+        `round ${i}: the library's loss ${library[i]} is not the engine's ${engine[i]}`)
+}
+const worst = lines[2].slice('s2 curve_max_abs_diff='.length)
+assert(Number(worst) === 0, `the largest difference over the curve is ${worst}, not zero`)
+}
+'''

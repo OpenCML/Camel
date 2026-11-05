@@ -1,21 +1,25 @@
-// The same call transposed at two cotangents. A pullback is linear in the cotangent it is handed:
-// every answer is one primitive under the seed, so doubling the cotangent doubles every number.
-// At (x, w, dx, dw) = (3, 2, 1, 0) the four answers are (dw*ct, dx*ct, w*ct, x*ct), which is
-// (0, 1, 2, 3) at ct = 1 and (0, 2, 4, 6) at ct = 2 -- the operands' two, which the calling half
-// drops, and the tangents' two, which it keeps.
+// The same pullback at cotangent 1 and cotangent 2. A transposition is **linear in the cotangent** it
+// is handed -- every answer is one primitive under the seed -- so doubling the seed doubles every one
+// of them: `(1, 1, 1, 1)` becomes `(2, 2, 2, 2)`. One seed cannot make that distinction, because at
+// ct = 1 a pullback and a table of the derivatives themselves read the same numbers; the pair can, and
+// a graph that dropped the seed on any one of the four branches would read that branch unchanged.
 //
-// One seed would agree with a pullback that forgot the cotangent and answered the derivatives
-// themselves only because the derivative is what ct = 1 asks for; the pair does not.
+// `sum4(a, b, c, d) = a + b + c + d` is the subject because **all four answers are live**: the law
+// `add_t` reads no operand value, so nothing is captured, the member takes the cotangent alone, and
+// its four answers are `a`, `b`, `c`, `d`'s cotangents -- each `ct`. A subject whose answers include
+// zeros would leave those branches unwatched (a zero stays zero whether the seed reaches it or not).
+//
+// The function of several parameters whose laws *do* read the operands -- `mul_tangent`'s -- cannot
+// carry this reading at all: its pullback is refused, and `transpose_many_parameters` records why.
 import rulesets.transpose
 import { transpose } from transforms
-import { mul_tangent } from autodiff
 
-func mt(x: float, w: float, dx: float, dw: float): float {
-    return mul_tangent(x, w, dx, dw)
+func sum4(a: float, b: float, c: float, d: float): float {
+    return a + b + c + d
 }
-
+import rulesets.jvp
 func main(): int sync {
-    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 1.0))
-    println(transpose(mt)(3.0, 2.0, 1.0, 0.0, 2.0))
+    println(transpose(sum4)(1.0))
+    println(transpose(sum4)(2.0))
     return 0
 }

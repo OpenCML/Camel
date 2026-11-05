@@ -1,0 +1,42 @@
+// `max`'s gradient through the engine and through the library, in one program.
+//
+// A reduction to an extremum selects one position (or every position that holds the extremum) and
+// sends the whole cotangent there: `where(xs >= max(xs), ct, 0.0)`, spread over `xs`'s shape. The
+// engine writes the same thing with `strict_eq` against the broadcast output
+// (`extremumAllVjp`, `modules/tensor/ops/reduction_ops.cpp`), and the two agree wherever the
+// extremum is a number: a NaN extremum selects nothing on either side, and a tie selects every
+// tied position and gives **each** the whole cotangent rather than a share of it.
+//
+// **The tie is the reading.** `x = [1.0, 3.0, 3.0, 0.5]` has two maxima and a plain argmax law --
+// the one a reader writes first, `where(xs == max, ct, 0)` over the first position only, or `ct/2`
+// shared between the two -- answers `[0.0, 1.0, 0.0, 0.0]` or `[0.0, 0.5, 0.5, 0.0]`.
+//
+// The forward half states the mask and the sum in one line
+// (`stdlib/rulesets/jvp.cml#jvp_max`): the mask depends on `xs` alone, so the cut carries it and the
+// linear half is a `where` over the tangent and a `sum_stated`, both of which already have laws.
+//
+//     camel test/cases/compile/transforms/max_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, max, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[...]>
+func total(): float {
+    return max(x)
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[]): float {
+    return max(x)
+}
+
+func main(): int sync {
+    let engine = grad(total)<[1.0, 3.0, 3.0, 0.5] as float[]>()
+    `max engine={}`->format<engine>->println
+    let (value, pullback) = vjp(total_plain)([1.0, 3.0, 3.0, 0.5] as float[])
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `max: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

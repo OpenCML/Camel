@@ -1,0 +1,34 @@
+/**
+ * A `match` arm that binds a name and then `yield`s it. A binding is a local like any other, and a
+ * local that lives across a `yield` is part of the state of the generator (design principles 5.4),
+ * so the arm builds: the name is a cell of the body, written where the case's value is in hand and
+ * read again by the pull that resumes after the `yield`.
+ *
+ * The second `yield` is what makes that visible: it stands after the first `yield`, so it runs on
+ * the next pull, and the `v` it reads is the one the earlier pull wrote -- not a fresh one.
+ *
+ * `g(Option::Some(7))` hands out `7` and then `17`; the loop counts two elements and `main`
+ * returns 0.
+ */
+
+type Option = enum {
+    Some(int),
+    None,
+}
+
+func g(o: Option): int.. sync {
+    match o {
+        case Option::Some(v) => {
+            yield v
+            yield v + 10
+        }
+        case Option::None => {
+            yield 0
+        }
+    }
+}
+
+func main(): int sync {
+    loop acc = 0 for v in g(Option::Some(7)) do sync { println(v); acc + 1 }
+    return 0
+}

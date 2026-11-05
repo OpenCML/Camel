@@ -1,0 +1,56 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The declarations the type-function probes compare against the texts a registry prints.
+//
+// This is not a module: nothing imports it, and the operators it names are the ones the probes are
+// about, not operators of the library. `scripts/stdlib-reference.mjs --verify-match-type` reads it
+// with the reader it reads `stdlib/*.cml` with, so a declaration that states its result as a type
+// function is read here exactly as the library's are read there -- including the case list written
+// over several lines, which is the part a reader of one line would drop.
+
+// The shape the library writes (`stdlib/types.cml#WithElement`): the result keeps the argument's
+// extents and fixes its element type. The operator this declares registers the same function with
+// the element fixed, and the compiler prints it in the words of the definition.
+#op(':op/atobf')
+export func bf16::<A>(x: A): match type A {
+    case X[...Dims] => bf16[...Dims]
+    case X[...] => bf16[...]
+}
+
+// One dimension of the result changed: this declaration says an array of unknown first extent
+// before the argument's extents, and the operator says only the argument's.
+#op(':op/atobf_one_more_dimension')
+export func bf16_one_more_dimension::<A>(x: A): match type A {
+    case X[...Dims] => bf16[?, ...Dims]
+    case X[...] => bf16[...]
+}
+
+// The element type changed, so the base type of the first case's result differs.
+#op(':op/atobf_element')
+export func bf16_element::<A>(x: A): match type A {
+    case X[...Dims] => f32[...Dims]
+    case X[...] => f32[...]
+}
+
+// One dimension of the pattern changed: this declaration matches only arrays whose first extent is
+// unknown, and the operator matches every array of stated rank.
+#op(':op/atobf_pattern')
+export func bf16_pattern::<A>(x: A): match type A {
+    case X[?, ...Dims] => bf16[?, ...Dims]
+    case X[...] => bf16[...]
+}
+
+// A case the operator does not state at all.
+#op(':op/atobf_extra_case')
+export func bf16_extra_case::<A>(x: A): match type A {
+    case X[...Dims] => bf16[...Dims]
+    case X[...] => bf16[...]
+    case _ => bf16
+}
+
+// The name of a type function the library defines (`stdlib/types.cml#FirstOf`), written the way a
+// declaration writes one and compared against what that name answers: a name is read through its
+// definition, because the definition is the form the compiler prints for the operator.
+#op(':op/first_of')
+export func first_of::<P>(p: P): FirstOf<P>

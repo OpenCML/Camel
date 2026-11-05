@@ -1419,7 +1419,7 @@ GCGraph *expanded = session.commit(/*detached=*/true);
 ```camel
 import { Tensor, reshape, relu, maximum, minimum, max } from tensor
 
-func pick(mask: float[], vals: float[]): float[..] {
+func pick(mask: float[], vals: float[]): float[...] {
     let m = reshape<[len(mask)]>(mask)
     return (m / m) * reshape<[len(vals)]>(vals)      // mask 为 0 的位置是 0/0 = NaN
 }

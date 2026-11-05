@@ -45,9 +45,9 @@ func main(): int sync {
     println(a)
     println(b)
     let back = transpose(carried)
-    println(back(1.0, 1.0))
+    println(back(1.0))
     // Twice the cotangent, 20: a number no forward line above prints, so the plan's claim about the
     // transform cannot be met by the forward algebra alone.
-    println(back(1.0, 2.0))
+    println(back(2.0))
     return 0
 }

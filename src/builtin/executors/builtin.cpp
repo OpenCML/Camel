@@ -32,83 +32,106 @@ using namespace camel::core::rtdata;
 #include <string_view>
 #include <unordered_set>
 
-const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
-    static const std::unordered_map<std::string, operator_t> map = {
-        // Type conversions
-        // A type name applied to a numeric array: the elementwise conversion
-        {"op/atoi", __atoi__},
-        {"op/atol", __atol__},
-        {"op/atof", __atof__},
-        {"op/atod", __atod__},
-        {"op/atobf", __atobf__},
-        {"op/atof6", __atof6__},
-        {"op/itoi", __itoi__},
-        {"op/ltoi", __ltoi__},
-        {"op/ftoi", __ftoi__},
-        {"op/dtoi", __dtoi__},
-        {"op/stoi", __stoi__},
+namespace {
 
-        {"op/itol", __itol__},
-        {"op/ltol", __ltol__},
-        {"op/ftol", __ftol__},
-        {"op/dtol", __dtol__},
-        {"op/stol", __stol__},
+using camel::core::type::TypeCode;
 
-        {"op/itof", __itof__},
-        {"op/ltof", __ltof__},
-        {"op/ftof", __ftof__},
-        {"op/dtof", __dtof__},
-        {"op/stof", __stof__},
+/// A conversion of the language: an operator that reads a `source` and writes a `target`.
+///
+/// The two types are written here, beside the operator's implementation, because they are
+/// what the operator *is*. The registration hands them to the operator table
+/// (`OperatorTable::declareConversion`), so a reader asks there whether an operator converts
+/// and between which types, instead of decoding the letters of its URI: a conversion's rule
+/// is filed under its destination's spelling (`src/core/forward.cpp#conversionKeyOf`), and a
+/// variable read whose result is a float is not a conversion.
+struct ConversionRegistration {
+    const char *name; // the URI in the builtin namespace: `op/itod`
+    operator_t impl;
+    TypeCode source;
+    TypeCode target;
+};
 
-        {"op/itod", __itod__},
-        {"op/ltod", __ltod__},
-        {"op/ftod", __ftod__},
-        {"op/dtod", __dtod__},
-        {"op/stod", __stod__},
+constexpr ConversionRegistration kConversions[] = {
+    // A type name applied to a numeric array: the conversion of every element on its own.
+    {"op/atoi", __atoi__, TypeCode::Array, TypeCode::Int32},
+    {"op/atol", __atol__, TypeCode::Array, TypeCode::Int64},
+    {"op/atof", __atof__, TypeCode::Array, TypeCode::Float32},
+    {"op/atod", __atod__, TypeCode::Array, TypeCode::Float64},
+    {"op/atobf", __atobf__, TypeCode::Array, TypeCode::BFloat16},
+    {"op/atof6", __atof6__, TypeCode::Array, TypeCode::Float16},
 
-        {"op/itoc", __itoc__},
-        {"op/ltoc", __ltoc__},
-        {"op/ftoc", __ftoc__},
-        {"op/dtoc", __dtoc__},
-        {"op/ctoc", __ctoc__},
-        {"op/ztoc", __ztoc__},
+    {"op/itoi", __itoi__, TypeCode::Int32, TypeCode::Int32},
+    {"op/ltoi", __ltoi__, TypeCode::Int64, TypeCode::Int32},
+    {"op/ftoi", __ftoi__, TypeCode::Float32, TypeCode::Int32},
+    {"op/dtoi", __dtoi__, TypeCode::Float64, TypeCode::Int32},
+    {"op/stoi", __stoi__, TypeCode::String, TypeCode::Int32},
 
-        {"op/itoz", __itoz__},
-        {"op/ltoz", __ltoz__},
-        {"op/ftoz", __ftoz__},
-        {"op/dtoz", __dtoz__},
-        {"op/ctoz", __ctoz__},
-        {"op/ztoz", __ztoz__},
+    {"op/itol", __itol__, TypeCode::Int32, TypeCode::Int64},
+    {"op/ltol", __ltol__, TypeCode::Int64, TypeCode::Int64},
+    {"op/ftol", __ftol__, TypeCode::Float32, TypeCode::Int64},
+    {"op/dtol", __dtol__, TypeCode::Float64, TypeCode::Int64},
+    {"op/stol", __stol__, TypeCode::String, TypeCode::Int64},
 
-        // bf16 and f16 are floating types of the language with a written conversion of their own
-        // (design principles 7.3): `bf16(x)`, `f16(x)` and `x as bf16` round to nearest with ties
-        // to even once and need no numeric permission. `bf` is bf16 and `f6` is f16.
-        {"op/itobf", __itobf__},
-        {"op/ltobf", __ltobf__},
-        {"op/ftobf", __ftobf__},
-        {"op/dtobf", __dtobf__},
-        {"op/bftobf", __bftobf__},
-        {"op/stobf", __stobf__},
+    {"op/itof", __itof__, TypeCode::Int32, TypeCode::Float32},
+    {"op/ltof", __ltof__, TypeCode::Int64, TypeCode::Float32},
+    {"op/ftof", __ftof__, TypeCode::Float32, TypeCode::Float32},
+    {"op/dtof", __dtof__, TypeCode::Float64, TypeCode::Float32},
+    {"op/stof", __stof__, TypeCode::String, TypeCode::Float32},
 
-        {"op/itof6", __itof6__},
-        {"op/ltof6", __ltof6__},
-        {"op/ftof6", __ftof6__},
-        {"op/dtof6", __dtof6__},
-        {"op/f6tof6", __f6tof6__},
-        {"op/stof6", __stof6__},
+    {"op/itod", __itod__, TypeCode::Int32, TypeCode::Float64},
+    {"op/ltod", __ltod__, TypeCode::Int64, TypeCode::Float64},
+    {"op/ftod", __ftod__, TypeCode::Float32, TypeCode::Float64},
+    {"op/dtod", __dtod__, TypeCode::Float64, TypeCode::Float64},
+    {"op/stod", __stod__, TypeCode::String, TypeCode::Float64},
 
-        {"op/bftoi", __bftoi__},
-        {"op/bftol", __bftol__},
-        {"op/bftof", __bftof__},
-        {"op/bftod", __bftod__},
+    {"op/itoc", __itoc__, TypeCode::Int32, TypeCode::Complex64},
+    {"op/ltoc", __ltoc__, TypeCode::Int64, TypeCode::Complex64},
+    {"op/ftoc", __ftoc__, TypeCode::Float32, TypeCode::Complex64},
+    {"op/dtoc", __dtoc__, TypeCode::Float64, TypeCode::Complex64},
+    {"op/ctoc", __ctoc__, TypeCode::Complex64, TypeCode::Complex64},
+    {"op/ztoc", __ztoc__, TypeCode::Complex128, TypeCode::Complex64},
 
-        {"op/f6toi", __f6toi__},
-        {"op/f6tol", __f6tol__},
-        {"op/f6tof", __f6tof__},
-        {"op/f6tod", __f6tod__},
+    {"op/itoz", __itoz__, TypeCode::Int32, TypeCode::Complex128},
+    {"op/ltoz", __ltoz__, TypeCode::Int64, TypeCode::Complex128},
+    {"op/ftoz", __ftoz__, TypeCode::Float32, TypeCode::Complex128},
+    {"op/dtoz", __dtoz__, TypeCode::Float64, TypeCode::Complex128},
+    {"op/ctoz", __ctoz__, TypeCode::Complex64, TypeCode::Complex128},
+    {"op/ztoz", __ztoz__, TypeCode::Complex128, TypeCode::Complex128},
 
-        {"op/atos", __atos__},
+    // bf16 and f16 are floating types of the language with a written conversion of their
+    // own (design principles 7.3): `bf16(x)`, `f16(x)` and `x as bf16` round to nearest with
+    // ties to even once and need no numeric permission. `bf` is bf16 and `f6` is f16.
+    {"op/itobf", __itobf__, TypeCode::Int32, TypeCode::BFloat16},
+    {"op/ltobf", __ltobf__, TypeCode::Int64, TypeCode::BFloat16},
+    {"op/ftobf", __ftobf__, TypeCode::Float32, TypeCode::BFloat16},
+    {"op/dtobf", __dtobf__, TypeCode::Float64, TypeCode::BFloat16},
+    {"op/bftobf", __bftobf__, TypeCode::BFloat16, TypeCode::BFloat16},
+    {"op/stobf", __stobf__, TypeCode::String, TypeCode::BFloat16},
 
+    {"op/itof6", __itof6__, TypeCode::Int32, TypeCode::Float16},
+    {"op/ltof6", __ltof6__, TypeCode::Int64, TypeCode::Float16},
+    {"op/ftof6", __ftof6__, TypeCode::Float32, TypeCode::Float16},
+    {"op/dtof6", __dtof6__, TypeCode::Float64, TypeCode::Float16},
+    {"op/f6tof6", __f6tof6__, TypeCode::Float16, TypeCode::Float16},
+    {"op/stof6", __stof6__, TypeCode::String, TypeCode::Float16},
+
+    {"op/bftoi", __bftoi__, TypeCode::BFloat16, TypeCode::Int32},
+    {"op/bftol", __bftol__, TypeCode::BFloat16, TypeCode::Int64},
+    {"op/bftof", __bftof__, TypeCode::BFloat16, TypeCode::Float32},
+    {"op/bftod", __bftod__, TypeCode::BFloat16, TypeCode::Float64},
+
+    {"op/f6toi", __f6toi__, TypeCode::Float16, TypeCode::Int32},
+    {"op/f6tol", __f6tol__, TypeCode::Float16, TypeCode::Int64},
+    {"op/f6tof", __f6tof__, TypeCode::Float16, TypeCode::Float32},
+    {"op/f6tod", __f6tod__, TypeCode::Float16, TypeCode::Float64},
+
+    {"op/atos", __atos__, TypeCode::Array, TypeCode::String},
+};
+
+/// The operators the builtin executor implements, by URI in the builtin namespace. The
+/// conversions are added from kConversions, which is also where their types are written.
+std::unordered_map<std::string, operator_t> makeOpsImplMap() {
+    std::unordered_map<std::string, operator_t> map = {
         // The scalar operations of the two reduced-precision floating types (design principles
         // 7.3): each widens its operands to f32, computes there and rounds the result once into
         // the element type, which is what a bf16 or f16 value is a member of. `bf` is bf16 and
@@ -443,6 +466,16 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
         {"coll/set_items", __coll_keys__},
         {"coll/eq", __coll_eq__},
     };
+    for (const ConversionRegistration &conversion : kConversions) {
+        map.emplace(conversion.name, conversion.impl);
+    }
+    return map;
+}
+
+} // namespace
+
+const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
+    static const std::unordered_map<std::string, operator_t> map = makeOpsImplMap();
     return map;
 }
 
@@ -482,9 +515,14 @@ void registerBuiltinOperatorTraits() {
     // Declared never to fault, where the implementation has no fault path at all: integer
     // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
     // the strict boolean operators only read their operands. Everything else keeps the
-    // default (may fault). No pass acts on this declaration yet (operator_table.h). Each entry
-    // here is one operator of docs/handover/reports/faults-table-audit.md, which reads its
-    // implementation against this list.
+    // default (may fault). The passes do act on this list: `src/runtime/graph.cpp#nodeMayFault`
+    // reads `mayFault` beside `elementwise` to answer design principles 3.4's predicate, and
+    // `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or recompute a node
+    // -- an operator left out of this list is a running the program observes, so `std::opt`
+    // keeps it alive with `:op/keep` when a removal takes its last read
+    // (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Each entry here is one operator of
+    // docs/handover/reports/faults-table-audit.md, which reads its implementation against this
+    // list.
     static const std::unordered_set<std::string_view> kNeverFaults = {
         "op/add_i",
         "op/add_l",
@@ -596,11 +634,14 @@ void registerBuiltinOperatorTraits() {
         "struct/len_bytes",
         "op/eq_bytes",
     };
-    // The conversions of an array apply to each element on its own.
-    const auto isArrayConversion = [](std::string_view key) {
-        return key == "op/atoi" || key == "op/atol" || key == "op/atof" || key == "op/atod" ||
-               key == "op/atobf" || key == "op/atof6";
-    };
+    // The conversions of an array apply to each element on its own; every other conversion reads
+    // and writes one value. Which ones take an array is the source type kConversions states.
+    std::unordered_set<std::string_view> arrayConversions;
+    for (const ConversionRegistration &conversion : kConversions) {
+        if (conversion.source == TypeCode::Array) {
+            arrayConversions.insert(conversion.name);
+        }
+    }
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
@@ -617,7 +658,25 @@ void registerBuiltinOperatorTraits() {
         // declared to have effects, but only a declaration says that somebody looked.
         registry.set(
             ":" + name,
-            {.pure = pure, .elementwise = isArrayConversion(key), .mayFault = !kNeverFaults.contains(key)});
+            {.pure = pure, .elementwise = arrayConversions.contains(key), .mayFault = !kNeverFaults.contains(key)});
+    }
+    // `extent_of` is the one operator declared without a kernel of its own: a call it accepts is
+    // answered where it is built, so no path makes a node for a run to execute
+    // (`src/builtin/operators/struct.h`). It is still an operator a program writes and a module
+    // declares (`src/builtin/modules/globals.cpp#extentOfResolver`), so it states its purity like
+    // every other one -- the loop above registers the operators that have an implementation, and
+    // this one has none by design rather than by omission. It reads a type and nothing else, so it
+    // is pure, it is not elementwise, and a run never reaches it to fault. The three answers are
+    // one decision and not three defaults: if a kernel is ever written for this operator, `mayFault`
+    // becomes a guard that says nothing about a path that now exists unless all three are decided
+    // again together.
+    registry.set(":op/extent_of", {.pure = true, .elementwise = false, .mayFault = false});
+    // Which types each conversion reads and writes: the fact a reader asks for instead of
+    // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
+    // where the operator is registered, and at no second place.
+    for (const ConversionRegistration &conversion : kConversions) {
+        registry.declareConversion(
+            std::string(":") + conversion.name, {conversion.source, conversion.target});
     }
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at

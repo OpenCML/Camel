@@ -96,16 +96,16 @@ export func uniform::<T>(k: Key): T when is_float::<T>() {
 // `fold(k, i)`, in whatever order or partition they are made (CPU and Tiles alike).
 #op('rand:uniform_array')
 with <shape: int[]>
-func uniform_array_kernel::<T>(k: Key): T[..] when is_float::<T>()
+func uniform_array_kernel::<T>(k: Key): T[...] when is_float::<T>()
 #op('rand:normal_array')
 with <shape: int[]>
-func normal_array_kernel::<T>(k: Key): T[..] when is_float::<T>()
+func normal_array_kernel::<T>(k: Key): T[...] when is_float::<T>()
 
 /// An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
 /// @example key(42)->uniform::<f32><shape: [3, 4]>
 #impl(uniform_array_kernel)
 with <shape: int[]>
-export func uniform::<T>(k: Key): T[..] when is_float::<T>() {
+export func uniform::<T>(k: Key): T[...] when is_float::<T>() {
     let n = shape->reduce<(a: int, b: int): int => a * b, 1>
     return reshape<shape>([uniform::<T>(fold(k, i)) for i in 0..n])
 }
@@ -136,7 +136,7 @@ func below(k: Key, span: int): int {
 /// @example key(42)->normal::<f32><shape: [3, 4]>
 #impl(normal_array_kernel)
 with <shape: int[]>
-export func normal::<T>(k: Key): T[..] when is_float::<T>() {
+export func normal::<T>(k: Key): T[...] when is_float::<T>() {
     let n = shape->reduce<(a: int, b: int): int => a * b, 1>
     return reshape<shape>([normal::<T>(fold(k, i)) for i in 0..n])
 }

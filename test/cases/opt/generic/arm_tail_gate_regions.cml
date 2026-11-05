@@ -1,0 +1,34 @@
+/**
+ * The recursion of `arm_tail_gate.cml` with a body that does work of its own: the branch's answer
+ * goes through four value-neutral steps (`* 1.0`, `+ 0.0`, twice), so the program still prints
+ * `[8.0, 8.0]` while the body has values no arm reads.
+ *
+ * Why the regions tests need a body of that shape: `test::regions` puts nodes of the graph in two
+ * nested blocks, and a region reads the ports of the regions on its own chain. On
+ * `arm_tail_gate.cml` the arms read the body's ports and its condition -- the four parameters,
+ * and `t >= steps` -- so every body value is one an arm reads, and a block put around the body's
+ * values would be read from an arm, across two branches. There is no legal set of five body nodes
+ * on that graph (measured 2026-11-03: two). This file is that graph with the body work added, so
+ * the blocks can take values that nothing outside the body reads, and the answer is unchanged.
+ */
+
+import { ones, zeros, shape } from tensor
+
+func run(t: int, steps: int, x: f32[...], h: f32[...]): f32[...] {
+    let r = if t >= steps then h else run(t + 1, steps, x, h + h)
+    let a = r + 0.0
+    let b = a + 0.0
+    let c = b + 0.0
+    let d = c + 0.0
+    return d
+}
+
+func forward(x: f32[...]): f32[...] {
+    let s = shape(x)
+    return run(0, s[1], x, zeros::<f32>([s[0]]) + 1.0)
+}
+
+func main(): int sync {
+    println(forward(ones::<f32>([2, 3])))
+    return 0
+}

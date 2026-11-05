@@ -8,7 +8,7 @@
 import { reshape } from tensor
 import { export_model } from onnx
 
-func double(t: float[..]): float[..] {
+func double(t: float[...]): float[...] {
     return t * 2.0
 }
 

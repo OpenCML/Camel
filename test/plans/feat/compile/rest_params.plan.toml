@@ -2,11 +2,11 @@ id = "compile.rest_params"
 order = 340
 tier = "fast"
 tags = ["feat", "compile", "generics", "rest"]
-desc = "Rest parameters (design principles 5.5): `..ts` is the last parameter, a call expands the body in place, and `..e` passes the elements of a compile-time tuple. A rest parameter that writes its type (`..xs: ..A`) declares the pack of the head, which each call binds (5.6)."
+desc = "Rest parameters (design principles 5.5): `...ts` is the last parameter, a call expands the body in place, and `...e` passes the elements of a compile-time tuple. A rest parameter that writes its type (`...xs: ...A`) declares the pack of the head, which each call binds (5.6)."
 
 [[tests]]
 name = "rest_params"
-desc = "A rest function takes every argument left over: written out, expanded from a tuple literal, forwarded as `..ts`, with a fixed parameter before it, with no rest arguments at all, and read by position."
+desc = "A rest function takes every argument left over: written out, expanded from a tuple literal, forwarded as `...ts`, with a fixed parameter before it, with no rest arguments at all, and read by position."
 kind = "behavior"
 case = "../../../cases/compile/rest_params/rest_params.cml"
 args = ["${case}", "std::fvm"]
@@ -47,7 +47,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rest_parameter_pack"
-desc = "A rest parameter that writes its type declares the pack of the head (`func both::<..A>(..xs: ..A)`): each call binds one type per argument left over, and a type written `..A` is those types in order."
+desc = "A rest parameter that writes its type declares the pack of the head (`func both::<...A>(...xs: ...A)`): each call binds one type per argument left over, and a type written `...A` is those types in order."
 kind = "behavior"
 case = "../../../cases/compile/rest_params/pack_expand.cml"
 args = ["${case}", "std::fvm"]
@@ -63,7 +63,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pack_expansion_names_two_packs"
-desc = "An expansion ranges over one pack: `..{left: A, right: B}` names two of them, and the declaration says nothing to choose between them, so `SemanticDiag::PackExpansionNeedsOnePack` is reported where the expansion is written."
+desc = "An expansion ranges over one pack: `...{left: A, right: B}` names two of them, and the declaration says nothing to choose between them, so `SemanticDiag::PackExpansionNeedsOnePack` is reported where the expansion is written."
 kind = "negative"
 case = "../../../cases/compile/rest_params/pack_expand_two_packs.cml"
 args = ["${case}"]
@@ -71,13 +71,13 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::PackExpansionNeedsOnePack"
 expect_diagnostic_code = "0x03000058"
 expect_diagnostic_line = 3
-expect_diagnostic_column = 36
+expect_diagnostic_column = 40
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
 [[tests]]
 name = "pack_expansion_left_unbound"
-desc = "A pack whose members nothing binds stays an expansion at the use: a rest parameter that writes no type gives the pack none, so the result type `..A` has no member to write and `SemanticDiag::PackExpansionNeedsOnePack` is reported at the call."
+desc = "A pack whose members nothing binds stays an expansion at the use: a rest parameter that writes no type gives the pack none, so the result type `...A` has no member to write and `SemanticDiag::PackExpansionNeedsOnePack` is reported at the call."
 kind = "negative"
 case = "../../../cases/compile/rest_params/pack_expand_unbound.cml"
 args = ["${case}"]
@@ -113,7 +113,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "lambda_rest_parameter"
-desc = "A lambda's parameter list takes a rest parameter and the shape parses: `(..xs) => body`. What it stands for comes from the function type the lambda is in, and this position has none -- the value is bound by `let` with no declared type -- so the report is the one a lambda's unwritten parameter gets: the type is not written and nothing here expects a function type. That is 'this place cannot', not 'not done yet'."
+desc = "A lambda's parameter list takes a rest parameter and the shape parses: `(...xs) => body`. What it stands for comes from the function type the lambda is in, and this position has none -- the value is bound by `let` with no declared type -- so the report is the one a lambda's unwritten parameter gets: the type is not written and nothing here expects a function type. That is 'this place cannot', not 'not done yet'."
 kind = "negative"
 case = "../../../cases/compile/rest_params/lambda_rest_untyped.cml"
 args = ["${case}"]
@@ -126,7 +126,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "lambda_rest_parameter_typed"
-desc = "The same shape with a type after `..` (`(..xs: float[..])`) is answered the same way: a pack written there says which types the parameters have, not how many there are, and this position declares no function type to count them from."
+desc = "The same shape with a type after `...` (`(...xs: float[...])`) is answered the same way: a pack written there says which types the parameters have, not how many there are, and this position declares no function type to count them from."
 kind = "negative"
 case = "../../../cases/compile/rest_params/lambda_rest_typed.cml"
 args = ["${case}"]
@@ -139,7 +139,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "lambda_rest_parameter_expanded"
-desc = "A position that does declare a function type is where a lambda's rest parameter is expanded: `let f: (float, float) => float = (..xs) => 0.0` takes the two parameters the type has, in its types, and the program runs. Before this, the same program was a compiler error."
+desc = "A position that does declare a function type is where a lambda's rest parameter is expanded: `let f: (float, float) => float = (...xs) => 0.0` takes the two parameters the type has, in its types, and the program runs. Before this, the same program was a compiler error."
 kind = "behavior"
 case = "../../../cases/compile/rest_params/lambda_rest_annotated.cml"
 args = ["${case}", "std::fvm"]
@@ -148,7 +148,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 [[tests]]
 name = "lambda_rest_as_a_value"
-desc = "A lambda's rest parameter is a value in its body, not only a name for the parameters it stands for: the body's `xs` is the tuple of the parameters the position's function type gave the lambda, so a read of it resolves (it was `UnresolvedReference` before the binding). What comes next is the spread's own rule: `..xs` at a call spreads a compile-time tuple, and the tuple a lambda's rest parameter stands for is a runtime value, so the spread is refused and names what it wants. Pinned as it stands so the wall is not lost; the ruling that spreads it is the author's."
+desc = "A lambda's rest parameter is a value in its body, not only a name for the parameters it stands for: the body's `xs` is the tuple of the parameters the position's function type gave the lambda, so a read of it resolves (it was `UnresolvedReference` before the binding). What comes next is the spread's own rule: `...xs` at a call spreads a compile-time tuple, and the tuple a lambda's rest parameter stands for is a runtime value, so the spread is refused and names what it wants. Pinned as it stands so the wall is not lost; the ruling that spreads it is the author's."
 kind = "behavior"
 case = "../../../cases/compile/rest_params/lambda_rest_forward.cml"
 args = ["${case}", "std::fvm"]
@@ -159,7 +159,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 [[tests]]
 name = "rest_argument_not_last"
-desc = "`..e` is the last argument: what follows it cannot be told from its elements."
+desc = "`...e` is the last argument: what follows it cannot be told from its elements."
 kind = "negative"
 case = "../../../cases/compile/rest_params/rest_arg_not_last.cml"
 args = ["${case}"]
@@ -170,7 +170,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rest_argument_not_tuple"
-desc = "`..e` needs a compile-time tuple, not a runtime value."
+desc = "`...e` needs a compile-time tuple, not a runtime value."
 kind = "negative"
 case = "../../../cases/compile/rest_params/rest_arg_not_tuple.cml"
 args = ["${case}"]
@@ -192,7 +192,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rest_arguments_too_many"
-desc = "Expanding `..e` at a call to a fixed-arity function gives too many arguments: the ordinary arity check sees every element."
+desc = "Expanding `...e` at a call to a fixed-arity function gives too many arguments: the ordinary arity check sees every element."
 kind = "negative"
 case = "../../../cases/compile/rest_params/rest_too_many.cml"
 args = ["${case}"]
@@ -210,4 +210,114 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::RestArgumentsMismatch"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
+name = "with_pack_typed"
+desc = "A pack among the with parameters writes an element type (with <...ws: int>), and a call that gives the pack nothing is a call with no with argument: the typed pack and the untyped one both run, and the signature prints the type the pack takes."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_typed.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n3.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_wrong_element"
+desc = "The element type of a pack is a guard: with <...ws: int> refuses a loat argument in the angle brackets, naming the pack, the type it takes and the type it was given. Without this the type would be a decoration that never refuses anything."
+kind = "negative"
+case = "../../../cases/compile/rest_params/with_pack_wrong_element.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::WithPackArgumentType"
+expect_output_contains = ["WithPackArgumentType", "' takes 'with' arguments of type '", "has type 'float'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_body_uses_pack"
+desc = "The body reads the pack (①): `ws` is a compile-time tuple of the `with` arguments given past the fixed ones, so `scale<2.5>(4.0)` is 4.0 * 2.5 = 10.0 and `scale_typed<3.0>(4.0)` is 12.0. This is also the answer step 1 owed: the pack really receives the value, not merely compiles."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_body_uses_pack.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "10.0\n12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_forwarded"
+desc = "A pack is forwarded to another function's pack (②): `forward<1.0, 2.0, 3.0>(10.0)` expands `add3<...ws>(x, 1.0, 2.0)`, whose three fixed parameters take the three arguments, so the answer is 13.0. Without the expansion of `...ws` among the `with` arguments the name is not a value and the shape is refused."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_forwarded.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "0.0\n13.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_destructured"
+desc = "A fixed `with` parameter before the pack destructures the list (③): `combine<2.0, 3.0>(4.0)` binds `w = 2.0` and `rest = (3.0)`, so the answer is 4.0 * 2.0 + 3.0 = 11.0. The pack is what is left after the fixed ones, the same rule an ordinary rest parameter follows."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_destructured.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "11.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_argument_carried"
+desc = "The pack's own argument is carried (the case that used to pin the boundary): `g<1>(2.5)` gives `with <...ws: int>` one argument of its element type and the call runs, printing 2.5. It was a call with no matching function until the arguments reached the body."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_argument_carried.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "2.5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_reads_the_pack"
+desc = "A lambda written in an expanded body cannot name that body's rest parameter: the pack is bound to nodes of the caller's graph (`builder_rest.cpp`), and the lambda is a graph of its own. Until 2026-11-05 the program aborted the compiler -- `Camel Invariant Violation: header != nullptr`, `Live compile draft node cannot have a null header` at `src/compile/gir/graph_encode.cpp` -- because the name resolved to the expansion's tuple and the lambda's graph then held nodes of another graph. It is refused at the line and column of the use now, with the answer a lambda gets for any pack no scope holds; teaching it to receive the pack is the lambda's own `...xs` work. The guarantee stays: a link between two graphs is still an invariant violation, and this program no longer asks for one."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/nested_function_reads_the_pack.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Unresolved reference: 'xs'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "lambda_rest_read_as_a_value"
+desc = "A lambda's rest parameter read as a value, not spread: `(...xs) => xs.[0] + xs.[1]`. Until 2026-11-05 the read killed the process at run time -- `Camel Invariant Violation: !normInputs.empty()`, `FILL node must have one source input` at `src/passes/sched/nodevm/nodevm.cpp` -- because the tuple the rest parameter stands for was built by linking its members as `With` inputs alone, and a FILL reads the shape it fills through its `Norm` input. Spreading never reached the scheduler (it is answered at build time), which is why the case written for spreading was green while reading the same pack was not. Two different callers, so the answer has to come from the arguments: 3.0 and 30.0."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/lambda_rest_read_as_a_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n30.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_read_in_a_lambda"
+desc = "A lambda's `with` pack read as a value inside its own body: `<w, ...rest> () => rest.[0]` in a position typed `<...WithOf<F>> (...ParamsOf<F>) => (float, float)`. The pack takes the `with` members the position's first-named member leaves over, and reading it is what `stdlib/vjp.cml#has_aux` asks of the pack -- `w` is the weight and `rest` is what it has to hand on. The reading is the second `with` argument and not the first, so a pack wired to the wrong member answers 2.0: `rest.[0]` is 3.0 for `twice<2.0, 3.0>()`."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_read_in_a_lambda.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "read=3.0 constant=1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_reads_the_with_pack"
+desc = "A function written inside a lambda's body cannot name that body's `with` pack: the pack is a tuple of the lambda's own graph and the nested function is a graph of its own, so the name is refused where it is used, with the answer a lambda gets for any pack no scope holds -- the same answer `nested_function_reads_the_pack` records for an expanded body's rest parameter. `has_aux`'s composition would separate the weight from the remaining `with` values, and this is the writing that separation cannot use."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/nested_function_reads_the_with_pack.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Unresolved reference: 'rest'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000

@@ -1,0 +1,8 @@
+// shape 5 (older probe): a spread call, old spelling.
+func sum(..ts): int {
+    return static loop acc = 0 for j in indices ts do acc + ts.[j]
+}
+
+func main(): int sync {
+    return sum(..5)
+}

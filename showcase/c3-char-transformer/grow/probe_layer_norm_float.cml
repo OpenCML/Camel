@@ -1,0 +1,18 @@
+// Does `layer_norm` on `float[...]` answer `float[...]`, or does it answer `f32[...]`?
+//
+// `stage2_residual_ln.cml` refuses at its next `matmul` with `No matching function found for argument
+// types: <> (f32[...], float[...], float[...], float[...])`, i.e. the normalization's result reached the
+// product as `f32` while the weights are `float`.  Both `layer_norm` overloads are in
+// `stdlib/signatures/tensor.cml` (f32 first at line 305, f64 at 313), and this program asks for the
+// f64 one by naming the element type.  It prints one number: with beta = [0.1, -0.2] and each row
+// normalized to zero mean, the sum of both rows is 2*(0.1 - 0.2) = -0.2 exactly, in f64.
+import { layer_norm, sum } from tensor
+
+func main(): int sync {
+    let x = [[1.0, 0.25], [0.5, 1.0]] as float[2, 2]
+    let g = [1.0, 1.0] as float[]
+    let b = [0.1, -0.2] as float[]
+    let y = layer_norm<float>(x, g, b)
+    `probe ln sum=${sum(y):.12f}`->println
+    return 0
+}

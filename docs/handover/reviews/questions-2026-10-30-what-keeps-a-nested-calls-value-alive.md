@@ -17,7 +17,7 @@
 
 | 用例 | 实测 | 数量 |
 |---|---|---|
-| `new_values.rebinding_loop.nvm` | `Index 0 is out of range for an array of length 0`（`test/cases/consistency/new_values/rebinding_loop.cml:51`） | 13 条同级红 |
+| `new_values.rebinding_loop.nvm` | `Index 0 is out of range for an array of length 0`（`test/cases/consistency/new_values/rebinding_loop.cml#main`） | 13 条同级红 |
 | `fault.element_assigned_out_of_range` | 断言不成立，输出是运行时故障而非期望值 | 8 条 |
 | `new_values.peek_loop` | 同上，数组/单元读到未写入的值 | 5 条 |
 | `entering.arm_cell` | 分支臂里的单元读到上一轮的值 | 4 条 |

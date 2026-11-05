@@ -10,21 +10,21 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: f32[..] }
+type P = { w: f32[...] }
 
 with <m: P>
-func walk(h: f32[..], k: int): (f32[..], int) {
+func walk(h: f32[...], k: int): (f32[...], int) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let (h, k) = walk<m>(x, 0)
     return float(sum(h * h))
 }
 
 with <m: P>
-func step(x: f32[..]): (f32[..], int, float[..], f32[..]) {
+func step(x: f32[...]): (f32[...], int, float[...], f32[...]) {
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
     return (h, k, reshape<[1]>([g.0]), g.1.w)
@@ -39,7 +39,7 @@ func main(): int sync {
     save_npy(r.2, 'native_2.npy')
     save_npy(r.3, 'native_3.npy')
     let exported = if (get_env('ONNX_OUT') ?? '') != '' then sync {
-        let _ = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((x: f32[..]): (f32[..], int, float[..], f32[..]) => step<m>(x), x)
+        let _ = export_model<out: get_env('ONNX_OUT') ?? '', dynamic_axes: [0]>((x: f32[...]): (f32[...], int, float[...], f32[...]) => step<m>(x), x)
         1
     } else 0
     println(exported)

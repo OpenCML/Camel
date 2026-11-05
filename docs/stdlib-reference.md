@@ -473,8 +473,8 @@ position of the call. `return error(...)` hands it out of a function declared `T
 #### `print`
 
 ```camel
-print: <fmt: string> (x: T, ..rest) => T
-print: (x: T, ..rest) => T
+print: <fmt: string> (x: T, ...rest) => T
+print: (x: T, ...rest) => T
 print: () => void
 ```
 
@@ -488,8 +488,8 @@ also without a line end.
 #### `println`
 
 ```camel
-println: <fmt: string> (x: T, ..rest) => T
-println: (x: T, ..rest) => T
+println: <fmt: string> (x: T, ...rest) => T
+println: (x: T, ...rest) => T
 println: () => void
 ```
 
@@ -503,8 +503,8 @@ one line end.
 #### `eprintln`
 
 ```camel
-eprintln: <fmt: string> (x: T, ..rest) => T
-eprintln: (x: T, ..rest) => T
+eprintln: <fmt: string> (x: T, ...rest) => T
+eprintln: (x: T, ...rest) => T
 eprintln: () => void
 ```
 
@@ -520,7 +520,7 @@ arguments put in and one line end.
 #### `format`
 
 ```camel
-format: <..args> (fmt: string) => string
+format: <...args> (fmt: string) => string
 ```
 
 The text fmt with each `{}` placeholder replaced by the next argument; placeholders take
@@ -581,6 +581,38 @@ The number of bytes of a `Bytes`.
 - Pure.
 - Example (a fragment, not compiled): `len(encode('h€'))` gives `4`
 - Why it is not compiled: the example builds its `Bytes` with `encode` from the `bytes` module, which this page does not import
+
+#### `extent_of`
+
+```camel
+extent_of: () => int[] when is_array::<A>()
+```
+
+The extents an array type writes down, in order: `extent_of::<float[2, 3]>()` is `[2, 3]`.
+
+The answer is a fact of the type argument and of nothing else, so the call takes no argument and
+names one type: `A` is the whole array type, the way a transposition law names one (`matmul_t::<T,
+A, B>`). Every extent of `A` has to be a number written in the type; a type that leaves one open
+states no shape -- `float[]` (= `float[?]`) states one dimension and no length, and `float[...]`
+states neither the rank nor a length -- and is refused where the call is instantiated. A shape
+that is a fact of a *value* is `shape(x)`, which is a question about the value and not the type.
+
+A transposition is where this is needed: the adjoint of a map is a function of the cotangent and
+of the shape of the map's domain, and a parameter whose cotangent is what the transposed function
+takes has no value to read (`func pick(x: float[3])`). `transpose(pick)` answers
+`([0.0, 1.0, 0.0])` because the shape the law spreads its cotangent over is written in the type
+`x` is declared with, and this is the language's one spelling of "the shape a type writes down" --
+the transposition walk asks the same rule (`statedExtentsOf`).
+
+The value is settled where the call is built and where the name is used as a value, and the
+graph holds the list itself: the operator records the instantiated type of the call but not the
+type argument it was written with, so the run has nothing left to read
+(`src/builtin/operators/struct.cpp#ExtentOfResolver`, the rule's
+`valueFromTypeArgs`). The refusal names the **position** that has no number in it
+(`SemanticDiag::ExtentOfNeedsStatedShape`).
+
+- Pure.
+- Example: `extent_of::<float[2, 3]>()` gives `[2, 3]`
 
 ### Arrays
 
@@ -688,7 +720,7 @@ string.
 #### `zip`
 
 ```camel
-zip: (..xs: ..A) => (..ElementOf<A>)[] when ..is_array::<A>()
+zip: (...xs: ...A) => (...ElementOf<A>)[] when ...is_array::<A>()
 ```
 
 Two arrays combined element by element into pairs. They must have the same length.
@@ -1335,7 +1367,7 @@ runs: the fields of a type are walked while the call is compiled.
 
 `tree_leaves` is not here yet. The leaves are one flat tuple whose length is the sum of the
 leaves of every field, and Camel cannot splice a tuple value's elements into a tuple being
-built: `( ..ts )` is not written (a rest argument is only a call argument), and a function
+built: `( ...ts )` is not written (a rest argument is only a call argument), and a function
 with a rest parameter has no value to return. It stays `ckpt:tree_leaves` until value-tuple
 expansion exists.
 
@@ -1358,7 +1390,7 @@ caller leaves it out.
 #### `tree_map`
 
 ```camel
-tree_map: <f: F> (t: T, ..ts) => ?
+tree_map: <f: F> (t: T, ...ts) => ?
 ```
 
 Applies f to the leaves in the same place of the trees (one tree, or several of the same
@@ -1405,13 +1437,12 @@ Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followe
 tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 together with the derivative of `f` at 2 in the direction 1.
 
-- Example (a fragment, not compiled): `let forward = jvp(f)`
-- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+- Example: `let forward = jvp((x: float) => x * x)`
 
 #### `split`
 
 ```camel
-split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, float)
+split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (float, (float, float) => float)
 ```
 
 The step of `vjp` that separates a lifted function into the part computable now and the linear
@@ -1419,23 +1450,22 @@ residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/tran
 the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 graph too, so a body that needs a value it computed carries it instead of computing it again.
 
-The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
-parameters and answers with the result and the *residuals* -- the values the second half reads --
-and the second takes the residuals and the `with` parameters and answers with the result.
+The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
+residuals -- the values it reads -- and takes the tangents and nothing else.
 
-    type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
-                     (_, ..WithOf<F>) => ResultOf<F>)
+    split(f) = (fwd)  where  fwd(...values) = (result, lin)
+    lin      = the back half, its residuals captured rather than passed
 
-The residual position is written `_` and is not a type a program can name: the residuals are a
-property of `f`'s graph, so their number and their types are read where the graph is in hand, and
-the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
-type function doing that, and it is gone). The second half is linear in the cotangent it is given
--- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+The residuals are therefore **not a position in any type**: they are `lin`'s closure tuple, whose
+layout the run-time kernel reads off the back half's graph (the capture ports the graph declares),
+one member per residual, in the order the graph names them. At a call site `lin` is an ordinary
+function type, so no signature states a count it cannot know and no guard has to admit one
+(`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
+it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 at the top of this file.
-fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
 
-- Example (a fragment, not compiled): `let step = split`
-- Why it is not compiled: `split` takes the lifted function a `jvp` call writes, so the example is a
+- Example: `let step = split`
 
 #### `transpose`
 
@@ -1448,14 +1478,21 @@ gives the cotangent of its parameter. The data flow runs backwards -- each primi
 by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 
-The transposed function takes the parameters of `f` first and the cotangent last --
-`transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
-condition is a value, and the cotangent of an arm only means something for the arm that ran.
-The shape is the same for every `f`, so a reader writes the same call whether the body branches
-or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
+The transposed function takes one value, the cotangent of `f`'s result, and answers one cotangent
+per parameter. Both lists are `f`'s own: every parameter of `f` is a linear input, and the
+cotangent it is answered for is the one the caller hands in.
 
-- Example (a fragment, not compiled): `let back = transpose(f)`
-- Why it is not compiled: `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
+A value the transposed body needs beside the cotangent is not passed to it: it is a residual the
+function that is transposed was closed over, and the body reads it as a closure port. That is the
+same rule for a value the body computed, a value it read from outside, and a `with` value it read
+(`lin`'s residual tuple): a parameter with no tangent space is a value, and it is the one place
+the transposed graph takes a port that is not a cotangent, because the call site still fills it.
+
+**`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
+that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
+
+- Example: `let back = transpose((x: float) => 2.0 * x + 3.0 * x)`
 
 #### `vmap`
 
@@ -1476,8 +1513,7 @@ operator with no rule is refused by name at the primitive, never batched by a gu
 branch or a loop in the body is refused the same way, because the elementwise tier batches
 straight-line bodies.
 
-- Example (a fragment, not compiled): `let batched = vmap(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let batched = vmap((x: f32) => x * 2.0)`
 
 #### `remat`
 
@@ -1501,8 +1537,35 @@ the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and
 the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 declarations show, because the result of a call is the exit type its resolver gives.
 
-- Example (a fragment, not compiled): `let remembered = remat(f)`
-- Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
+- Example: `let remembered = remat((x: int) => x + 1)`
+
+#### `first_with_as_param`
+
+```camel
+first_with_as_param: (f: F) => FirstWithAsParam<F> when is_function::<F>()
+```
+
+The signature reinterpretation: `f` with its first `with` parameter moved onto the front of the
+ordinary list, and its body untouched. The design's name for this kind of step is
+`reinterp<first_with_as_param>(f)` (design principles 9.9: `reinterp<H>(f)` gives every primitive
+the meaning `H` gives it); in this tree the kind is the operator's own name, the way `jvp(f)` is
+`reinterp<jvp>(f)`, because a pass cannot answer a function value.
+
+The body is not read, rewritten or re-derived -- the one thing that differs is which list a port
+is in -- and a `with` value the body reads is read through a port like any other value, so a
+reclassification of the port is the whole of the transform
+(`modules/transforms/first_with_as_param_operator.cpp`). The transform is what makes a weight
+differentiable by the library's composition: a `with` parameter has no place to take a direction
+in from, and an ordinary one has.
+
+Three shapes have no first `with` parameter to move, and each is refused where it is written: a
+function with a `with` pack (the pack stands for however many arguments a call gives past the
+fixed ones, so it has no first member), a `var` `with` parameter (a variable is read and written
+by name, not handed in by a call), and a `constas` one (part of the signature's identity rather
+than a value).
+
+- Example (a fragment, not compiled): `let reinterpreted = first_with_as_param(weighted)`
+- Why it is not compiled: `weighted` is a function the program declares, because the example needs a `with` parameter
 
 <a id="vjp"></a>
 
@@ -1516,8 +1579,9 @@ vjp: (f: F) => Vjp<F> when is_function::<F>()
 
 The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
-member per parameter. The juxtaposed call `transpose(residuals, ct)` is the internal step, not this
-signature.
+member per parameter. The pullback is `lin`'s transpose, and that is the whole of the step: the
+two have the shape `(ct) => (cotangents)` (author's ruling of 2026-11-02 11:30), so nothing is
+wrapped around it.
 
 The pullback answers a tuple in every case, one member per parameter, so a function of one
 parameter has a one-long one -- `(27.0)` for `vjp(cube)(3.0)`'s pullback at `ct = 1.0` -- and the
@@ -1531,11 +1595,19 @@ rule for every arity, no exception for one parameter, no type function that take
 a one-long tuple).
 
 One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
-pullback's cotangents are too (stdlib/types.cml), and `(..xs)` takes the parameters the instantiated
-`Vjp<F>` has -- the ordinary rule that a lambda takes its parameters' types from the position it
-stands in, applied to a pack (author's ruling of 2026-11-01 19:10). The lambda's rest parameter is a
-value in its body: `xs` is the tuple of those parameters, and `forward(..xs)` spreads it into the
-call, which is the rule the language already had for spreading a tuple.
+pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
+instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
+stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
+body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
+`split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
+takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
+list, because the `with` value the backward half reads is a residual the cut captured in its
+closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
+`(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
+lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
+writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
+and a body that read a name from there would depend on what the caller of `vjp` called its own
+parameters.
 The whole reading in one line: the function is written where the call is, so the example is a
 program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 derivative there, one member per parameter.
@@ -1546,31 +1618,74 @@ derivative there, one member per parameter.
 #### `grad`
 
 ```camel
-grad: (f: (x: float) => float) => (x: float) => float
+grad: (f: F) => GradientOf<F> when is_function::<F>()
 ```
 
-The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
-one member a one-parameter pullback answers read out by position --
-`grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
-the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
-`vjp`, not as a second transform.
+The gradient of a function with respect to its first `with` parameter (design principles 9.9):
+`grad(f)` takes the weight first and `f`'s own parameters after it, and answers the weight's
+cotangent -- `grad(weighted)(3.0, 2.0)` for `<x: float> func weighted(y) = x*y + x`.
+
+It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
+taken. The weight is on the ordinary list because that is the list `vjp` differentiates, so the
+step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
+port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
+differentiated body reads a `with` value that would need a direction of its own.
+`GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`
 - Why it is not compiled: `f` is a function value, so the example is a fragment of a program that declares one
 
-#### `with_grad`
+#### `has_aux`
 
 ```camel
-with_grad: (f: F) => F when is_function::<F>()
+has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 
-The gradient of the first `with` parameter of `f` (design principles 9.9): the same `vjp`, taken
-with respect to a captured value instead of a parameter.
+The value, the auxiliary value and the gradient together, for a function whose result is the pair
+`(value, aux)`: `has_aux(f)` gives a function of the weight that answers `((value, aux), gradient)`
+-- the shape and the order the engine's `with_grad(f, has_aux: true)` answers, JAX's
+`value_and_grad(f, has_aux=True)`. The weight is the one ordinary parameter `f` takes, as it is
+for `grad` above: the library's names are functions of ordinary parameters, and the subject's
+`with` values are closed over where the lambda is written.
+
+The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
+function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --
+and answers the pair and the pair's tangent; the value's derivative is the tangent's first
+member, because a pair's tangent is a pair in the same order (`core/tangent_space.h`). One pass
+answers all three numbers.
+
+The transposed half is not what this is written on, and the reason is the pair: `vjp`'s second
+half turns the cotangent of what the function answers around, and a pair has no cotangent --
+`transpose` takes a function whose result has one, which is why handing a pair-returning function
+to `vjp` is refused rather than guessed at (`has_aux_vjp_pair` in
+test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
+direction needs, so the composition that reads all three numbers is the one above.
+
+The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
+the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
+member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph
+of `(t) => lin(t).0` needs a transposed graph for `lin`, `lin` is a value and not a named callee,
+and the pass stops with `transforms: transpose has no transpose for this function: this call's
+callee has no transpose of its own, so the call cannot be turned around`. The wall is
+`transpose`'s (a written body whose callee arrives as a value), not this composition's, so this
+name stays forward and the backward spelling waits for that rule.
+
+The pair is carried and the auxiliary value is not differentiated: `frozen(w) = (1.0, w*w)`
+answers a gradient of 0.0 with an auxiliary value of 9.0. The tangent's second member is the
+auxiliary value's own slope; it is built (the lift answers the whole pair's direction) and not
+read, which is what makes "carried, not differentiated" a fact about the body rather than about
+the numbers it happens to print.
+
+The shape is written once, for a weight of one `float` and a result of two, the way `grad` above
+is written once for one parameter; the declarations whose parameters and results are packs are
+what the generic form is written with when the library takes it, and this name keeps answering
+that shape until then.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
-- Example (a fragment, not compiled): `let slope_over_the_capture = with_grad(f)`
-- Why it is not compiled: `f` captures the value it differentiates against, so the example is a fragment of a program that declares one
+- Example (a fragment, not compiled): `let step = has_aux(loss)`
+- Why it is not compiled: `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
 
 <a id="tensor"></a>
 
@@ -1583,7 +1698,7 @@ The declarations written here are the operators a body-less declaration can stat
 thought that a name whose element type or shape follows its arguments could not be declared at
 all — elementwise arithmetic, the reshaping operators, the axis forms of a reduction — but
 `numel` and `shape` showed the limit is the generic parameter, not the operator: written as
-`export func numel::<T>(t: T[..]): int when is_numeric::<T>()`, a name whose result type follows
+`export func numel::<T>(t: T[...]): int when is_numeric::<T>()`, a name whose result type follows
 its argument declares fine, and the axis reductions below are written the same way. What a
 declaration still cannot state is a signature that depends on a *value* argument. The operators
 whose signature the page renders from `stdlib/signatures/tensor.cml` are the ones left in C++
@@ -1594,7 +1709,7 @@ whose signature the page renders from `stdlib/signatures/tensor.cml` are the one
 #### `zeros`
 
 ```camel
-zeros: (shape: int[]) => T[..] when is_numeric::<T>()
+zeros: (shape: int[]) => T[...] when is_numeric::<T>()
 ```
 
 An array of the given extents whose elements are all 0. The element type is written
@@ -1607,7 +1722,7 @@ zeros([2, 3])`); there is no default.
 #### `ones`
 
 ```camel
-ones: (shape: int[]) => T[..] when is_numeric::<T>()
+ones: (shape: int[]) => T[...] when is_numeric::<T>()
 ```
 
 An array of the given extents whose elements are all 1; the element type is the call's, as for
@@ -1619,7 +1734,7 @@ An array of the given extents whose elements are all 1; the element type is the 
 #### `full`
 
 ```camel
-full: (shape: int[], value: number) => float[..]
+full: (shape: int[], value: number) => float[...]
 ```
 
 A tensor of the given extents whose elements are all value; the element type is the value's.
@@ -1630,7 +1745,7 @@ A tensor of the given extents whose elements are all value; the element type is 
 #### `eye`
 
 ```camel
-eye: (n: int) => T[..] when is_numeric::<T>()
+eye: (n: int) => T[...] when is_numeric::<T>()
 ```
 
 The n by n identity matrix; the element type is the call's, as for `zeros`.
@@ -1643,7 +1758,7 @@ The n by n identity matrix; the element type is the call's, as for `zeros`.
 #### `maximum`
 
 ```camel
-maximum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
+maximum: (lhs: float[...] | number, rhs: float[...] | number) => float[...]
 ```
 
 IEEE 754-2019 maximum per element, with NumPy broadcasting: NaN on either side gives the
@@ -1655,7 +1770,7 @@ canonical quiet NaN, and -0 is below +0.
 #### `minimum`
 
 ```camel
-minimum: (lhs: float[..] | number, rhs: float[..] | number) => float[..]
+minimum: (lhs: float[...] | number, rhs: float[...] | number) => float[...]
 ```
 
 IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
@@ -1667,7 +1782,7 @@ canonical quiet NaN, and -0 is below +0.
 #### `where`
 
 ```camel
-where: (cond: bool[..], lhs: float[..] | number, rhs: float[..] | number) => float[..]
+where: (cond: bool[...], lhs: float[...] | number, rhs: float[...] | number) => float[...]
 ```
 
 lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
@@ -1679,7 +1794,7 @@ lhs and rhs.
 #### `abs`
 
 ```camel
-abs: (t: float[..]) => float[..]
+abs: (t: float[...]) => float[...]
 ```
 
 |x| per element: the sign cleared.
@@ -1690,7 +1805,7 @@ abs: (t: float[..]) => float[..]
 #### `exp`
 
 ```camel
-exp: (t: float[..]) => float[..]
+exp: (t: float[...]) => float[...]
 ```
 
 e^x per element, within 2 ulp, subnormal results included.
@@ -1701,7 +1816,7 @@ e^x per element, within 2 ulp, subnormal results included.
 #### `log`
 
 ```camel
-log: (t: float[..]) => float[..]
+log: (t: float[...]) => float[...]
 ```
 
 ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
@@ -1713,7 +1828,7 @@ NaN).
 #### `sqrt`
 
 ```camel
-sqrt: (t: float[..]) => float[..]
+sqrt: (t: float[...]) => float[...]
 ```
 
 sqrt(x) per element, rounded once in `f32`.
@@ -1724,7 +1839,7 @@ sqrt(x) per element, rounded once in `f32`.
 #### `rsqrt`
 
 ```camel
-rsqrt: (t: float[..]) => float[..]
+rsqrt: (t: float[...]) => float[...]
 ```
 
 1 / sqrt(x) per element: two steps, each rounded in `f32`.
@@ -1735,7 +1850,7 @@ rsqrt: (t: float[..]) => float[..]
 #### `sigmoid`
 
 ```camel
-sigmoid: (t: float[..]) => float[..]
+sigmoid: (t: float[...]) => float[...]
 ```
 
 The logistic function 1 / (1 + e^-x) per element.
@@ -1746,7 +1861,7 @@ The logistic function 1 / (1 + e^-x) per element.
 #### `tanh`
 
 ```camel
-tanh: (t: float[..]) => float[..]
+tanh: (t: float[...]) => float[...]
 ```
 
 The hyperbolic tangent per element.
@@ -1757,7 +1872,7 @@ The hyperbolic tangent per element.
 #### `relu`
 
 ```camel
-relu: (t: float[..]) => float[..]
+relu: (t: float[...]) => float[...]
 ```
 
 maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
@@ -1768,7 +1883,7 @@ maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 #### `gelu`
 
 ```camel
-gelu: (t: float[..]) => float[..]
+gelu: (t: float[...]) => float[...]
 ```
 
 The Gaussian error linear unit per element, computed as its normative definition in Camel.
@@ -1779,7 +1894,7 @@ The Gaussian error linear unit per element, computed as its normative definition
 #### `erf`
 
 ```camel
-erf: (t: float[..]) => float[..]
+erf: (t: float[...]) => float[...]
 ```
 
 The Gauss error function per element.
@@ -1790,7 +1905,7 @@ The Gauss error function per element.
 #### `erfc`
 
 ```camel
-erfc: (t: float[..]) => float[..]
+erfc: (t: float[...]) => float[...]
 ```
 
 The complementary error function 1 - erf(x) per element.
@@ -1803,7 +1918,7 @@ The complementary error function 1 - erf(x) per element.
 #### `reshape`
 
 ```camel
-reshape: (t: float[..] | number[], shape: int[]) => float[..]
+reshape: (t: float[...] | number[], shape: int[]) => float[...]
 ```
 
 The elements in row-major order, in a new shape; one extent may be -1, which the element
@@ -1815,7 +1930,7 @@ count fills.
 #### `unsqueeze`
 
 ```camel
-unsqueeze: (t: float[..], axis: int) => float[..]
+unsqueeze: (t: float[...], axis: int) => float[...]
 ```
 
 The elements unchanged, with an axis of extent 1 added at axis.
@@ -1826,7 +1941,7 @@ The elements unchanged, with an axis of extent 1 added at axis.
 #### `transpose`
 
 ```camel
-transpose: (t: float[..]) => float[..]
+transpose: (t: float[...]) => float[...]
 ```
 
 The last two axes swapped (a vector becomes a column, a matrix its transpose).
@@ -1837,7 +1952,7 @@ The last two axes swapped (a vector becomes a column, a matrix its transpose).
 #### `permute`
 
 ```camel
-permute: (t: float[..], perm: int[]) => float[..]
+permute: (t: float[...], perm: int[]) => float[...]
 ```
 
 The axes reordered as perm lists them.
@@ -1848,7 +1963,7 @@ The axes reordered as perm lists them.
 #### `concat`
 
 ```camel
-concat: (a: float[..] | number[], b: float[..] | number[], axis: int) => float[..]
+concat: (a: float[...] | number[], b: float[...] | number[], axis: int) => float[...]
 ```
 
 a and b joined along axis; every other extent must agree.
@@ -1859,7 +1974,7 @@ a and b joined along axis; every other extent must agree.
 #### `take`
 
 ```camel
-take: (t: float[..], indices: int64[..] | number[]) => float[..]
+take: (t: float[...], indices: int64[...] | number[]) => float[...]
 ```
 
 The entries of the first axis that indices name, in that order.
@@ -1871,7 +1986,7 @@ The entries of the first axis that indices name, in that order.
 #### `one_hot`
 
 ```camel
-one_hot: (labels: int64[..] | number[], classes: int) => f32[..]
+one_hot: (labels: int64[...] | number[], classes: int) => f32[...]
 ```
 
 Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
@@ -1884,7 +1999,7 @@ a `f32` tensor of shape [labels, classes], each row a distribution over the clas
 #### `shape`
 
 ```camel
-shape: (t: T[..]) => int[] when is_numeric::<T>()
+shape: (t: T[...]) => int[] when is_numeric::<T>()
 ```
 
 The extents of a tensor, in order.
@@ -1895,7 +2010,7 @@ The extents of a tensor, in order.
 #### `numel`
 
 ```camel
-numel: (t: T[..]) => int when is_numeric::<T>()
+numel: (t: T[...]) => int when is_numeric::<T>()
 ```
 
 The number of elements in a tensor: the product of its extents.
@@ -1906,8 +2021,8 @@ The number of elements in a tensor: the product of its extents.
 #### `dim`
 
 ```camel
-dim: <axis: int> (t: T[..]) => int when is_numeric::<T>()
-dim: <axis: i32> (t: T[..]) => int when is_numeric::<T>()
+dim: <axis: int> (t: T[...]) => int when is_numeric::<T>()
+dim: <axis: i32> (t: T[...]) => int when is_numeric::<T>()
 ```
 
 The extent of one axis; a negative axis counts from the last one (`-1` is the last axis).
@@ -1916,16 +2031,47 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 - Failure: fault `RuntimeError` when the axis is outside the rank.
 - Example: `dim<1>(zeros::<f32>([2, 2]))` gives `2`
 
+#### `pick_at`
+
+```camel
+pick_at: (t: T[...], position: int, length: int) => T when is_numeric::<T>()
+```
+
+The element at `position` of a rank-1 tensor whose length is `length`: `t[position]`, with the
+length stated by whoever holds the value.
+
+The length is a **known operand**, and it is the reason this spelling exists beside the
+language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
+and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
+cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
+to build the zeros from unless the value's length is handed to it. A forward half can state it --
+`rulesets.jvp`'s `jvp_idx_arr` passes `len(xs)`, a value of the primal -- and this operator is
+what it passes it to.
+
+The position and the length are two parameters of their own sorts and not one list. They were a
+list while this read was written, because the transpose walk was believed to answer an operator
+with one or two normal operands and two integers beside the tensor would have been three. The
+walk's refusal is about a third **tensor**, not a third parameter (`take_stated` takes two
+`int[]` operands beside its tensor), so the count was never this operator's limit: each value
+now says which it is, and a reader of a law does not count positions in a list.
+
+The stated length is checked against the tensor and the position against both, so a wrong length
+is a fault rather than an array of the wrong shape.
+
+- Pure.
+- Failure: fault `RuntimeError` when `length` disagrees with the tensor, or `position` is outside it.
+- Example: `pick_at([1.0, 2.0, 3.0] as float[], 2, 3)` gives `3.0`
+
 ### Reduction
 
 #### `sum`
 
 ```camel
-sum: (t: T[..]) => T
+sum: (t: T[...]) => T
 ```
 
 The sum of every element, in the operand's element type: the canonical form of the element
-type `T` is `sum::<T>(x: T[..]): T = T(sum(float(x)))`, so the elements are widened into an
+type `T` is `sum::<T>(x: T[...]): T = T(sum(float(x)))`, so the elements are widened into an
 `f64` accumulator (`float(x)`), the additions happen in `f64` in row-major order from +0, and
 their sum is rounded into `T` once, at the end — the same element type and the same one
 rounding as the axis form below, so the full form and the axis form agree bit for bit
@@ -1940,10 +2086,15 @@ its element type, `bool` as `int64`.
 #### `sum`
 
 ```camel
-sum: (t: T[..], axis: int, keepdims?: bool) => T[..]
+sum: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
-The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
+The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
+rounded once into the element type. The axis and the flag are the call's `with` arguments --
+`sum<0>`, `sum<1, true>` -- under the whole reduction's name (design principles 7.3), and
+`keepdims` leaves the reduced axis as an extent of one.
+The result's extents are the operand's, with that axis removed or kept as an extent of one, so
+the type a call reads states them (`float[2, 3]` along axis 0 is a `float[3]`).
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
@@ -1952,11 +2103,11 @@ The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis wit
 #### `mean`
 
 ```camel
-mean: (t: T[..]) => T
+mean: (t: T[...]) => T
 ```
 
 The mean of every element, in the operand's element type, with one rounding: the canonical
-form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
+form of the element type `T` is `mean::<T>(x: T[...]): T = T(sum(float(x)) / float(numel(x)))`.
 The sum and the division by the element count both happen in `f64`, and their result is
 rounded into `T` once — never a sum rounded to the element type and divided again, which
 would round twice. A mean of an integer or bool tensor is `f32`, as by axis; an empty tensor
@@ -1969,10 +2120,14 @@ is a fault.
 #### `mean`
 
 ```camel
-mean: (t: T[..], axis: int, keepdims?: bool) => T[..]
+mean: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
-The same mean over one axis; keepdims keeps the axis with extent 1.
+The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+the element type. An empty axis is a fault. The axis and the flag are the call's `with`
+arguments -- `mean<0>`, `mean<1, true>` -- under the whole reduction's name (design principles
+7.3). The result's extents are the operand's, with that axis removed or kept as an extent of
+one.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
@@ -1981,7 +2136,7 @@ The same mean over one axis; keepdims keeps the axis with extent 1.
 #### `max`
 
 ```camel
-max: (t: T[..]) => T
+max: (t: T[...]) => T
 ```
 
 IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
@@ -1995,7 +2150,7 @@ an answer. The axis form below is the same name, chosen by arity (design princip
 #### `min`
 
 ```camel
-min: (t: T[..]) => T
+min: (t: T[...]) => T
 ```
 
 IEEE 754-2019 minimum of every element: a NaN anywhere gives `nan`, and -0 is below +0. A tensor
@@ -2008,7 +2163,7 @@ with no element is a fault.
 #### `argmax`
 
 ```camel
-argmax: (t: T[..]) => int
+argmax: (t: T[...]) => int
 ```
 
 The position of the maximum of every element, counted in row-major order and answered as an
@@ -2022,7 +2177,7 @@ tie (design principles 7.7). A tensor with no element is a fault.
 #### `argmin`
 
 ```camel
-argmin: (t: T[..]) => int
+argmin: (t: T[...]) => int
 ```
 
 The position of the minimum of every element, counted in row-major order and answered as an
@@ -2036,59 +2191,90 @@ tie. A tensor with no element is a fault.
 #### `max`
 
 ```camel
-max: (t: T[..], axis: int, keepdims?: bool) => T[..]
+max: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
-IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
-the same bits); keepdims keeps the axis with extent 1.
+The largest element of each lane along one axis. An empty axis is a fault, as for the whole
+tensor. The axis and the flag are the call's `with` arguments -- `max<0>`, `max<1, true>` --
+under the whole reduction's name (design principles 7.3). The result's extents are the
+operand's, with that axis removed or kept.
 
 - Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
 - Example: `max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[3.0, 4.0]`
 
 #### `min`
 
 ```camel
-min: (t: T[..], axis: int, keepdims?: bool) => T[..]
+min: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
-IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
-axis with extent 1.
+The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+element has no identity to return. The axis and the flag are the call's `with` arguments --
+`min<1>`, `min<0, true>` -- under the whole reduction's name (design principles 7.3). The
+result's extents are the operand's, with that axis removed or kept.
 
 - Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
 - Example: `min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.0, 3.0]`
 
 #### `argmax`
 
 ```camel
-argmax: (t: float[..], axis: int, keepdims?: bool) => int64[..]
+argmax: <axis: int, keepdims: bool = false> (t: float[...]) => int64[...]
 ```
 
-The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
-NaN if there is one, +0 above -0, the earlier position on a tie.
+The position of the largest element of each lane along one axis, an `int` index along that
+axis. A tie keeps the earlier position. An empty axis is a fault. The axis and the flag are the
+call's `with` arguments -- `argmax<1>`, `argmax<0, true>` -- under the whole reduction's name
+(design principles 7.3). The result's extents are the operand's, with that axis removed or
+kept.
 
 - Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
 - Example: `argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1, 1]`
 
 #### `argmin`
 
 ```camel
-argmin: (t: float[..], axis: int, keepdims?: bool) => int64[..]
+argmin: <axis: int, keepdims: bool = false> (t: float[...]) => int64[...]
 ```
 
-The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
-NaN if there is one, -0 below +0, the earlier position on a tie.
+The position of the smallest element of each lane along one axis; a tie keeps the earlier
+position. An empty axis is a fault. The axis and the flag are the call's `with` arguments --
+`argmin<0>`, `argmin<1, true>` -- under the whole reduction's name (design principles 7.3). The
+result's extents are the operand's, with that axis removed or kept.
 
 - Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
 - Example: `argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[0, 0]`
+
+### The reductions with their extents stated
+
+#### `mean_axis_stated`
+
+```camel
+mean_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
+```
+
+The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
+as parameters of their own: `mean_axis_stated(t, axis, keepdims, extents)` is
+`mean<axis, keepdims>(t)`.
+
+The result is the axis mean's at the stated extents: the operand's, with the `axis` removed, or kept
+as an extent of one when `keepdims`. It is computed rather than declared because those extents
+follow from values, so a call that states all three states its own result -- `0, false, [4]` over a
+rank-1 operand is the element, not `float[...]` and a conversion -- and a call whose parameters are
+values of the run states the operand's element type at a rank nobody fixed.
+
+- Pure.
+- Failure: fault `RuntimeError` when the extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, true, [2, 2])` gives `[[2.0, 3.0]]`
 
 #### `softmax`
 
 ```camel
-softmax: (t: f32[..], axis?: int) => f32[..]
+softmax: (t: f32[...], axis?: int) => f32[...]
 ```
 
 The softmax over the axis (-1, the last axis, by default), computed as its normative
@@ -2101,7 +2287,7 @@ definition in Camel, in `f32`.
 #### `softmax`
 
 ```camel
-softmax: (t: float[..], axis?: int) => float[..]
+softmax: (t: float[...], axis?: int) => float[...]
 ```
 
 The same softmax of an `f64` tensor: the kernel takes the element type of the tensor it is
@@ -2114,7 +2300,7 @@ given, so the result is `f64` as well.
 #### `log_softmax`
 
 ```camel
-log_softmax: (t: f32[..], axis?: int) => f32[..]
+log_softmax: (t: f32[...], axis?: int) => f32[...]
 ```
 
 The log of the softmax over the axis (-1 by default), computed as its normative definition in
@@ -2127,7 +2313,7 @@ Camel, in `f32`.
 #### `log_softmax`
 
 ```camel
-log_softmax: (t: float[..], axis?: int) => float[..]
+log_softmax: (t: float[...], axis?: int) => float[...]
 ```
 
 The same log softmax of an `f64` tensor, in `f64`.
@@ -2139,7 +2325,7 @@ The same log softmax of an `f64` tensor, in `f64`.
 #### `softmax_grad`
 
 ```camel
-softmax_grad: (y: f32[..], dy: f32[..], axis?: int) => f32[..]
+softmax_grad: (y: f32[...], dy: f32[...], axis?: int) => f32[...]
 ```
 
 The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
@@ -2151,7 +2337,7 @@ The gradient of the softmax of y with the incoming gradient dy, over the axis (-
 #### `softmax_grad`
 
 ```camel
-softmax_grad: (y: float[..], dy: float[..], axis?: int) => float[..]
+softmax_grad: (y: float[...], dy: float[...], axis?: int) => float[...]
 ```
 
 The same gradient in `f64`: y and dy are `f64` tensors and the result is one too.
@@ -2163,7 +2349,7 @@ The same gradient in `f64`: y and dy are `f64` tensors and the result is one too
 #### `layer_norm`
 
 ```camel
-layer_norm: (x: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
+layer_norm: (x: f32[...], gamma: f32[...], beta: f32[...], eps?: number) => f32[...]
 ```
 
 Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
@@ -2176,7 +2362,7 @@ the trailing axes; eps is 1e-5 by default. The result is `f32`.
 #### `layer_norm`
 
 ```camel
-layer_norm: (x: float[..], gamma: float[..], beta: float[..], eps?: number) => float[..]
+layer_norm: (x: float[...], gamma: float[...], beta: float[...], eps?: number) => float[...]
 ```
 
 The same normalization of `f64` tensors, in `f64`: x, gamma and beta are `f64` and the result
@@ -2191,7 +2377,7 @@ is one too.
 #### `matmul`
 
 ```camel
-matmul: (lhs: float[..], rhs: float[..]) => float[..]
+matmul: (lhs: float[...], rhs: float[...]) => float[...]
 ```
 
 The matrix product of lhs and rhs: per output element acc = +0, then acc = fma(a[i][k],
@@ -2204,7 +2390,7 @@ b[k][j], acc) for k ascending, every fused multiply-add rounded once in `f32`.
 #### `linear`
 
 ```camel
-linear: (x: f32[..], weight: f32[..], bias?: f32[..]) => f32[..]
+linear: (x: f32[...], weight: f32[...], bias?: f32[...]) => f32[...]
 ```
 
 The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
@@ -2217,7 +2403,7 @@ a rank-1 bias [out] when given.
 #### `linear`
 
 ```camel
-linear: (x: float[..], weight: float[..], bias?: float[..]) => float[..]
+linear: (x: float[...], weight: float[...], bias?: float[...]) => float[...]
 ```
 
 The same transform of `f64` operands, in `f64`: it takes the element type of its operands
@@ -2232,7 +2418,7 @@ The same transform of `f64` operands, in `f64`: it takes the element type of its
 #### `zeros_like`
 
 ```camel
-zeros_like: (t: float[..]) => float[..]
+zeros_like: (t: float[...]) => float[...]
 ```
 
 A tensor of zeros shaped and typed like t.
@@ -2243,7 +2429,7 @@ A tensor of zeros shaped and typed like t.
 #### `ones_like`
 
 ```camel
-ones_like: (t: float[..]) => float[..]
+ones_like: (t: float[...]) => float[...]
 ```
 
 A tensor of ones shaped and typed like t.
@@ -2256,7 +2442,7 @@ A tensor of ones shaped and typed like t.
 #### `load_npy`
 
 ```camel
-load_npy: (path: string) => T[..]
+load_npy: (path: string) => T[...]
 ```
 
 The tensor a NumPy `.npy` file holds, as the element type the program declares: the extents are
@@ -2265,7 +2451,7 @@ be `T` -- a file of another element type is a fault, never a conversion (design 
 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
 (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
 the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
-(`f32[3]`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+(`f32[3]`, `f32[...]`); `T` is the one type variable no parameter mentions, so a call
 that says neither is not a use of this operator.
 
 - With effects: reads a file.
@@ -2275,10 +2461,17 @@ that says neither is not a use of this operator.
 #### `show`
 
 ```camel
-show: (t: A[..]) => void
+show: (t: A[...]) => void when is_numeric::<A>() || is_same::<A, bool>()
 ```
 
 Prints t to the console, in the module's layout.
+
+The elements are the ones a tensor stores -- the numbers and the booleans (`x * s`, a bool's
+gradient and the widths the kernels carry are all read at those, modules/tensor/dtype.cpp
+`isSupportedTensorScalar`) -- and the parameter says so, so an element type no kernel can read
+is refused at the call and not left to the runtime. The parameter takes `A[...]`, which includes
+rank 0 (design principles 5.4), so the condition is what keeps a `string` from being read as one
+element of a rank-zero array.
 
 - With effects: writes the console.
 - Example: `show([[1.0, 2.0]] as float[1, 2])`
@@ -2288,7 +2481,7 @@ Prints t to the console, in the module's layout.
 #### `from_bytes`
 
 ```camel
-from_bytes: (bytes: Bytes, shape: int[]) => T[..] when is_plain::<T>()
+from_bytes: (bytes: Bytes, shape: int[]) => T[...] when is_plain::<T>()
 ```
 
 An array of the given shape made of little-endian elements: the payload `to_bytes` wrote. The
@@ -2308,7 +2501,7 @@ needs no numeric permission.
 #### `to_bytes`
 
 ```camel
-to_bytes: (t: T[..]) => Bytes when is_plain::<T>()
+to_bytes: (t: T[...]) => Bytes when is_plain::<T>()
 ```
 
 The elements of a tensor as little-endian bytes, in row-major order: the payload `from_bytes`
@@ -2322,7 +2515,7 @@ one.
 #### `save_npy`
 
 ```camel
-save_npy: (t: T[..], path: string) => void when is_numeric::<T>()
+save_npy: (t: T[...], path: string) => void when is_numeric::<T>()
 ```
 
 Writes a tensor to a NumPy `.npy` file, replacing it.
@@ -2330,6 +2523,184 @@ Writes a tensor to a NumPy `.npy` file, replacing it.
 - With effects: writes a file.
 - Failure: fault `RuntimeError` when the file cannot be written.
 - Example: `save_npy(zeros::<f32>([2, 2]), 'x.npy')`
+
+### The same operations, with the extents the reverse law needs
+
+A reduction and a gather both forget something a pullback has to put back: `sum` forgets how many
+elements it added, `take` forgets how many rows it read from, and `mean` over an axis forgets the
+lane. The reverse of each spreads one cotangent over *that* shape, and it cannot read the shape
+off the operand: a transpose rule may read only **known** operands (author, 2026-11-03 11:10 and
+17:35), and the operand a cotangent comes back through has no value on that side -- while `T[...]`
+carries no extents in its type (design principles 5.4).
+
+So the forward half states them, and these declarations are what it states them to. Each is the
+operation above it with one more operand, an `int[]` the value does not need and the reverse law
+reads instead of the array. `pick_at` is the same arrangement for the read: `length` is the number
+`xs[i]` cannot state for itself.
+
+The extents travel in one list because that is the list the reverse law wants whole: the axis and
+the flag decide which extents are lanes and the extents decide where each lane's cotangent goes, so
+one argument holds the three facts the adjoint reads and the value spends on nothing. (The number
+of ordinary ports is not the constraint it once was: the walk used to refuse a third position before
+looking for a law, and `TransposeRefusalCause` no longer has that cause -- the two extrema below take
+a third port, their tie selection, which no extent list could carry.)
+
+#### `sum_stated`
+
+```camel
+sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
+```
+
+The sum of every element, with the operand's extents stated: `sum(t)`, and `extents` is `shape(t)`.
+
+The extents are read by `rulesets.transpose`'s `sum_stated_t` and by nothing else -- the value is
+the sum, and the accumulation, the element type and the one rounding are `sum`'s own. A list that
+disagrees with the tensor's shape is a fault, because a spread over extents nobody verified is a
+gradient of the wrong shape.
+
+- Pure.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape.
+- Example: `sum_stated([1.0, 2.0, 3.0] as float[], [3])` gives `6.0`
+
+#### `take_stated`
+
+```camel
+take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
+```
+
+The rows `take` reads, with the indices it reads **and** the operand's extents stated:
+`take_stated(t, [i0, ..., i(n-1)], [d0, ..., d(rank-1)])` is `take(t, [i0, ..., i(n-1)])`.
+
+The value is that take. `rulesets.transpose`'s `take_stated_t` reads `extents` to build the
+array the scatter-add writes into, which is the operand's shape and therefore has to come from a
+known operand. The two lists are told apart by their parameters, not by a count written into the
+first one: `indices` is what `take` reads and `extents` is the shape to spread the rows back into.
+outside the first dimension
+
+- Pure.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or an index is.
+- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1], [2, 2])` gives `[[3.0, 4.0]]`
+
+#### `mul_stated`
+
+```camel
+mul_stated: (x: T[...], w: T[...], ax: int[], aw: int[]) => T[...] when is_numeric::<T>()
+```
+
+The product of two tensors, with **both** operands' extents stated: `x * w`, where `ax` is
+`shape(x)` and `aw` is `shape(w)`.
+
+The value is the product and spends nothing on the extents: the broadcast, the element type and the
+one rounding are `multiply`'s own. `rulesets.transpose`'s `mul_stated_t` reads the two lists
+instead of the operand whose cotangent it is answering -- that operand is a tangent on the reverse
+side, and a tangent's type states no extents (design principles 5.4) -- and the forward half that
+computes them is `rulesets.jvp`'s `jvp_mul_tensor`, where both operands are values.
+
+Two lists and not one, unlike the stated reductions above: a product broadcasts, so the operands'
+shapes differ (`[2, 2, 3] * [3]`), and each cotangent comes back to its **own** operand's shape. An
+operand that is one number states no extents, and its list is empty.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `mul_stated([1.0, 2.0] as float[2], [3.0, 4.0] as float[2], [2], [2])` gives `[3.0, 8.0]`
+
+#### `matmul_stated`
+
+```camel
+matmul_stated: (a: T[...], b: T[...], sa: int[], sb: int[]) => T[...]
+```
+
+The matrix product, with **both** operands' extents stated: `a @ b`, where `sa` is `shape(a)` and
+`sb` is `shape(b)`.
+
+The value is the product (`matmul`'s own kernel, so the accumulation and the inner-extent check are
+the definition's own) and the two lists are read by `rulesets.transpose`'s `matmul_stated_t`, which
+reduces each cotangent to its own operand's shape without reading that operand. Two lists because
+the answer's shape is neither operand's: a `[3, 4] @ [4, 2]` product reduces the left cotangent to
+`[3, 4]` and the right one to `[4, 2]`.
+
+- Pure.
+- Failure: fault `RuntimeError` when either list disagrees with its operand's shape.
+- Example: `matmul_stated([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1], [1, 2], [2, 1])` gives `[[11.0]]`
+
+#### `sum_axis_stated`
+
+```camel
+sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+```
+
+The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
+stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum<axis, keepdims>(t)`.
+
+The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
+accumulation in `f64`, the element type and the one rounding are the definition's own -- and
+`extents` is checked against the tensor's shape. `rulesets.transpose`'s `sum_axis_stated_t` reads
+the three stated values and nothing of the operand: the adjoint of a lane sum spreads each lane's
+cotangent back over the lane, which is a shape of the primal. A negative axis counts from the last
+one, as it does in the axis form: the reduction normalizes it on entry and this spelling hands it
+over unchanged.
+outside the rank
+
+- Pure.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false, [2, 2])` gives `[4.0, 6.0]`
+
+#### `mean_stated`
+
+```camel
+mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
+```
+
+The mean of every element, with the operand's extents stated: `mean(t)`, and `extents` is
+`shape(t)`.
+
+The value is the mean -- the sum and the division both in `f64`, rounded into the element type
+once, which is `mean`'s own definition -- and the extents are what its adjoint needs: the reverse
+law (`rulesets.transpose`'s `mean_stated_t`) divides the cotangent by the number of elements and
+spreads it over those extents, and neither number is in the cotangent's type.
+element
+
+- Pure.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the tensor has no.
+- Example: `mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])` gives `2.5`
+
+#### `max_axis_stated`
+
+```camel
+max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+```
+
+The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
+the operand's extents stated: `max_axis_stated(t, mask, axis, keepdims, extents)` is
+`max<axis, keepdims>(t)`, and `mask` holds `true` at every position that holds its lane's
+largest element.
+
+The mask is what an extremum's adjoint needs and what the extents cannot rebuild: an extremum
+gives the whole cotangent to **every** position that holds it (a tie is not shared out), and which
+positions those are is a fact of the values. The mask and the three stated values are read by
+`rulesets.transpose`'s `max_axis_stated_t` and by nothing else -- the value is the axis form's own
+reduction -- so a mask of another shape is answered where it is used: the reverse law's `where`
+broadcasts it against the stated extents.
+outside the rank
+
+- Pure.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], 1, false, [2, 2])` gives `[2.0, 4.0]`
+
+#### `min_axis_stated`
+
+```camel
+min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
+```
+
+The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
+the operand's extents stated: `min<axis, keepdims>(t)`, laid out exactly as
+`max_axis_stated` is.
+outside the rank
+
+- Pure.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], 1, false, [2, 2])` gives `[1.0, 3.0]`
 
 ### Module state
 
@@ -2406,88 +2777,93 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 - Pure.
 - Example: `gemm_library()`
 
-### The reductions along an axis, named by the function
+### The reductions along an axis, computed rather than declared
 
-A declaration names `tensor:<function>`, so `sum_axis` below is the operator `tensor:sum_axis`
--- the same naming `shape` and `numel` use, and the one the ONNX lowering table and the
-semantics declarations are keyed on. `stdlib/array.cml` imports these instead of declaring a
-second spelling of each.
+The six reductions along an axis -- `sum`, `mean`, `min`, `max`, `argmax` and `argmin` with the
+axis and the flag in angle brackets (one name per reduction, design principles 7.3) -- are the
+operators `tensor:sum_axis` and its five siblings (that URI naming is what the ONNX lowering table
+and the semantics declarations are keyed on), and they are not declared here: their **result
+type** is not a signature a declaration can state. The extents of
+an axis reduction are the operand's extents with one axis removed -- or kept as an extent of one
+-- so they follow from the operand's type *and* from the value of `axis` and of `keepdims`, and
+a declaration's result is a type, not a function of two values. Written here as a declaration
+the name answered `T[...]`, which is a result that states no extent at all; the operator's own
+inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
+`support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` now reads a
+`float[3]` where it used to read a `float[...]`.
 
-#### `sum_axis`
+The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
+takes them as parameters of its own, so a call that leaves them to the run states no rank, and its
+result is `T[...]` and honestly so. That is why it is still declared above and these six are not.
 
-```camel
-sum_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-```
+`stdlib/signatures/tensor.cml` records the six computed signatures; `stdlib/array.cml` imports
+the names instead of declaring a second spelling of each.
 
-The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
-rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
-
-- Pure.
-- Example: `sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[4.0, 6.0]`
-
-#### `mean_axis`
-
-```camel
-mean_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
-```
-
-The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
-the element type. An empty axis is a fault.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[2.0, 3.0]`
-
-#### `min_axis`
+#### `sum_to`
 
 ```camel
-min_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+sum_to: (t: T[...], at: int[]) => T[...] when is_float::<T>()
 ```
 
-The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
-element has no identity to return.
+`t` reduced over its **leading axes** to the extents `at`: a leading-axis reduction, and nothing
+else.
+
+`at` is the target itself -- the extents the answer has, written where the call is. The length is
+therefore the caller's: it is not read off another value's shape (the older spelling passed a
+zero array whose shape stood in for the target) and not off a type, and no registry, context or
+expected result type supplies it -- the extents are the runtime shape the caller states, which is
+the layer the author's ruling of 2026-11-05 puts them on.
+
+**The contract is 甲: `at` is a suffix of `t`'s shape.** The axes `t` has in front of `at`'s are
+summed away, and an axis `at` states 1 against a longer one is summed too -- the adjoint of a
+broadcast that handed one element along that lane (design principles 5.4). Two equal shapes are
+the identity, which is the shape a gradient usually arrives in. Anything else is a fault named at
+the call: a target *longer* than `t`, or one asking for an extent `t` does not have at that
+position, is refused with both shapes in the sentence
+(`modules/tensor/kernels/gradient.cpp#requireSuffixTarget`). The operator never spreads;
+`broadcast_like` is the operator that does.
+
+The element type is `t`'s, and the answer is written at it (design principles 9.9: a gradient is
+the width of the value it belongs to). The extents are not in the result type, because they are a
+runtime value -- `T[...]` is the result, and a caller that needs a rank states it with `as`.
+
+The transposition laws reduce a product's cotangents with it (`rulesets.transpose`:
+`sum_to(ct * other, ax)` is one operand's cotangent at the extents that operand states), and the
+engine accumulates a tensor operand with it (`modules/tensor/ops/vjp.cpp#accumulateOperand`).
 
 - Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1.0, 2.0]`
+- Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [2])` gives `[3.0, 7.0]`
+- Example: `sum_to([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [])` gives `10.0`
+- Example: `sum_to([1.0, 2.0, 3.0] as float[], [3])` gives `[1.0, 2.0, 3.0]`
 
-#### `max_axis`
+#### `broadcast_like`
 
 ```camel
-max_axis: (xs: T[..], axis: int, keepdims: bool) => T[..] when is_numeric::<T>()
+broadcast_like: (t: T, like: S) => S
 ```
 
-The largest element of each lane along one axis. An empty axis is a fault, as for `min_axis`.
+`t` spread out to the shape `like` states: the **other** direction of the same adjoint, and the
+operator that owns it.
+
+The two directions used to share `sum_to`, and they are not one move: a reduction reads a target
+that is a suffix of its operand's shape and adds over the axes in front of it, while a spread
+writes an element into every lane a broadcast would have handed it out along -- the operation
+`broadcast_like` is named for. `sum_to` now takes the extents themselves (ruling 甲) and refuses
+a target *longer* than its operand by name; a law that needs a rank-one value in the lanes of a
+rank-two one says `broadcast_like(value, like)` and reads the shape off a value the cut carries.
+
+`like` is a tensor (or a value whose stated shape is the target); `t` is a tensor or a single
+number, and a number is written at `like`'s element type -- a rank-zero operand *is* an element
+(design principles 5.4), so it spreads as that value. Two tensors that are not one element type
+are refused: a broadcast is a copy of the elements, not a conversion between them
+(design principles 5.1).
+
+It is what the transpose laws of the broadcast products write where an operand has to grow
+(`stdlib/rulesets/transpose.cml`), and it is the adjoint-turned-around of `sum_to`.
 
 - Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[3.0, 4.0]`
-
-#### `argmax_axis`
-
-```camel
-argmax_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
-```
-
-The position of the largest element of each lane along one axis, an `int` index along that
-axis. A tie keeps the earlier position. An empty axis is a fault.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1, 1]`
-
-#### `argmin_axis`
-
-```camel
-argmin_axis: (xs: T[..], axis: int, keepdims: bool) => int[] when is_numeric::<T>()
-```
-
-The position of the smallest element of each lane along one axis; a tie keeps the earlier
-position. An empty axis is a fault.
-
-- Pure.
-- Failure: fault `InvalidArgument` when the axis has no element.
-- Example: `argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[0, 0]`
+- Example: `broadcast_like(2.0, [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])` gives `[[2.0, 2.0], [2.0, 2.0]]`
+- Example: `broadcast_like([1.0, 2.0] as float[2], [[0.0, 0.0], [0.0, 0.0]] as float[2, 2])` gives `[[1.0, 2.0], [1.0, 2.0]]`
 
 <a id="types"></a>
 
@@ -2633,7 +3009,7 @@ True when `T` is an array type, of any rank.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `is_array::<int[]>()` gives `true`
-- Example: `is_array::<f32[..]>()` gives `true`
+- Example: `is_array::<f32[...]>()` gives `true`
 - Example: `is_array::<int>()` gives `false`
 
 #### `is_nullable`
@@ -2743,7 +3119,7 @@ so, and a struct or tuple is asked field by field.
 Functions on arrays, written in Camel on the built-in operators (`map`, `filter`, `reduce`,
 `zip`, `len`, the subscript) and on two native atoms: `argsort`, and the flat view of an array
 of any rank. Every function returns a new value; none changes its argument. The functions of
-one dimension take `T[]`; the reductions take `T[..]` and reduce every element, in row-major
+one dimension take `T[]`; the reductions take `T[...]` and reduce every element, in row-major
 order.
 
 - The array is the ordinary argument; what configures the function (a count, a value, a
@@ -2829,7 +3205,7 @@ The elements of the inner arrays, in order.
 #### `flatten`
 
 ```camel
-flatten: (xs: T[..]) => T[] when !is_array::<T>()
+flatten: (xs: T[...]) => T[] when !is_array::<T>()
 ```
 
 The elements of an array of any rank, in row-major order, as an array of one dimension.
@@ -2925,7 +3301,7 @@ The number of elements for which pred is true.
 #### `sum`
 
 ```camel
-sum: (xs: T[..]) => T when is_numeric::<T>()
+sum: (xs: T[...]) => T when is_numeric::<T>()
 ```
 
 The sum of the elements.
@@ -2942,7 +3318,7 @@ The sum of no element is 0, the identity of addition.
 #### `mean`
 
 ```camel
-mean: (xs: T[..]) => T when is_float::<T>()
+mean: (xs: T[...]) => T when is_float::<T>()
 ```
 
 The arithmetic mean: the sum and the division both in f64, rounded once into the element
@@ -2955,7 +3331,7 @@ type, `T(sum(float(x)) / float(numel(x)))`.
 #### `min`
 
 ```camel
-min: (xs: T[..]) => T when is_ordered::<T>()
+min: (xs: T[...]) => T when is_ordered::<T>()
 ```
 
 The smallest element. Numbers are compared as `math::min` compares them: a NaN anywhere gives
@@ -2968,7 +3344,7 @@ NaN, and -0 is below +0. Strings compare by their bytes, and false is below true
 #### `max`
 
 ```camel
-max: (xs: T[..]) => T when is_ordered::<T>()
+max: (xs: T[...]) => T when is_ordered::<T>()
 ```
 
 The largest element. Numbers are compared as `math::max` compares them: a NaN anywhere gives
@@ -2981,7 +3357,7 @@ NaN, and +0 is above -0.
 #### `argmax`
 
 ```camel
-argmax: (xs: T[..]) => int when is_ordered::<T>()
+argmax: (xs: T[...]) => int when is_ordered::<T>()
 ```
 
 The row-major position of the largest element: the first NaN if there is one, +0 above -0,
@@ -2994,7 +3370,7 @@ the earlier position on a tie.
 #### `argmin`
 
 ```camel
-argmin: (xs: T[..]) => int when is_ordered::<T>()
+argmin: (xs: T[...]) => int when is_ordered::<T>()
 ```
 
 The row-major position of the smallest element: the first NaN if there is one, -0 below +0,
@@ -3009,7 +3385,7 @@ the earlier position on a tie.
 #### `sum`
 
 ```camel
-sum: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+sum: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The sum along an axis (0 along an axis of extent 0), with the rule of the whole sum: a float element type is added in f64
@@ -3022,7 +3398,7 @@ from +0 in ascending order and rounded once, an integer one wraps around.
 #### `mean`
 
 ```camel
-mean: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_float::<T>()
+mean: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_float::<T>()
 ```
 
 The mean along an axis: the sum and the division both in f64, rounded once into the element
@@ -3035,7 +3411,7 @@ type.
 #### `min`
 
 ```camel
-min: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+min: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The smallest element along an axis, compared as `min` of the whole array compares.
@@ -3047,7 +3423,7 @@ The smallest element along an axis, compared as `min` of the whole array compare
 #### `max`
 
 ```camel
-max: <axis: int, keepdims: bool = false> (xs: T[..]) => T[..] when is_integer::<T>() || is_float::<T>()
+max: <axis: int, keepdims: bool = false> (xs: T[...]) => T[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The largest element along an axis, compared as `max` of the whole array compares.
@@ -3059,7 +3435,7 @@ The largest element along an axis, compared as `max` of the whole array compares
 #### `argmax`
 
 ```camel
-argmax: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmax: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The position along an axis of the first largest element, ordered as `argmax` of the whole
@@ -3072,7 +3448,7 @@ array orders.
 #### `argmin`
 
 ```camel
-argmin: <axis: int, keepdims: bool = false> (xs: T[..]) => int[..] when is_integer::<T>() || is_float::<T>()
+argmin: <axis: int, keepdims: bool = false> (xs: T[...]) => int[...] when is_integer::<T>() || is_float::<T>()
 ```
 
 The position along an axis of the first smallest element, ordered as `argmin` of the whole
@@ -3087,7 +3463,7 @@ array orders.
 #### `shape`
 
 ```camel
-shape: (xs: T[..]) => int[]
+shape: (xs: T[...]) => int[]
 ```
 
 The extents of an array, in order.
@@ -3098,7 +3474,7 @@ The extents of an array, in order.
 #### `numel`
 
 ```camel
-numel: (xs: T[..]) => int
+numel: (xs: T[...]) => int
 ```
 
 The number of elements of an array: the product of its extents.
@@ -3109,7 +3485,7 @@ The number of elements of an array: the product of its extents.
 #### `dim`
 
 ```camel
-dim: <axis: int> (xs: T[..]) => int
+dim: <axis: int> (xs: T[...]) => int
 ```
 
 The extent of one axis; a negative axis counts from the last one.
@@ -3123,7 +3499,7 @@ The extent of one axis; a negative axis counts from the last one.
 #### `to_bytes`
 
 ```camel
-to_bytes: (xs: T[..]) => Bytes when is_plain::<T>()
+to_bytes: (xs: T[...]) => Bytes when is_plain::<T>()
 ```
 
 The elements of an array as little-endian bytes, in row-major order: the payload `from_bytes`
@@ -4132,7 +4508,7 @@ A number drawn uniformly from 0 (included) to 1 (excluded).
 #### `uniform`
 
 ```camel
-uniform: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+uniform: <shape: int[]> (k: Key) => T[...] when is_float::<T>()
 ```
 
 An array of the given shape; element i (row-major) is the scalar `uniform` of `fold(k, i)`.
@@ -4152,7 +4528,7 @@ A number drawn from the normal distribution with mean 0 and deviation 1 (Box-Mul
 #### `normal`
 
 ```camel
-normal: <shape: int[]> (k: Key) => T[..] when is_float::<T>()
+normal: <shape: int[]> (k: Key) => T[...] when is_float::<T>()
 ```
 
 An array of the given shape; element i (row-major) is the scalar `normal` of `fold(k, i)`.
@@ -5347,6 +5723,24 @@ pass may drop, move or merge away, whatever the purity of its operator.
 - Example (a fragment, not compiled): `may_fault(n)`
 - Why it is not compiled: n is a node of the surrounding pass
 
+#### `may_be_rearranged`
+
+```camel
+may_be_rearranged: (n: Node) => bool
+```
+
+Whether a pass may arrange the node anywhere: drop it, move it, merge it with an identical
+call, or leave it with no order edge after an inline. The node must be pure *and* unable to
+fault (design principles 3.4); a pure operator that must run where the program writes it, one
+that may fault, one nobody declared, a call, a loop or a gate are not free. This is the one
+predicate behind that question on both sides of the boundary: `graph::may_be_rearranged`
+(camel/runtime/graph.h) is its implementation, the C++ passes read it under its older name
+`nodeIsFreelySchedulable`, and a pass written in Camel reads this name. Ask it rather than
+writing `is_pure(n) && may_be_recomputed(n) && !may_fault(n)`: the two writings drift apart.
+
+- Example (a fragment, not compiled): `may_be_rearranged(n)`
+- Why it is not compiled: n is a node of the surrounding pass
+
 #### `is_anchor`
 
 ```camel
@@ -5458,8 +5852,7 @@ function, in the order of their names; empty for a graph that is no declaration 
 for a declaration that writes none. The declaration's facts travel with the graph, so a pass
 reads them without the module that declares the function.
 
-- Example (a fragment, not compiled): `declaration_tags(graph_of(f))`
-- Why it is not compiled: pass is the surrounding pass and f the function it received
+- Example: `declaration_tags(graph_of((x: int): int => x + 1))`
 
 #### `tag_name`
 
@@ -5495,8 +5888,7 @@ The rule the declaration of `g` writes for the transformation `name`: `jvp` is f
 Null when the declaration writes none, when it writes that tag twice, and when what the tag
 names is not a function. The name is the one the program writes, or its qualified spelling.
 
-- Example (a fragment, not compiled): `rule_of(graph_of(f), 'vjp')`
-- Why it is not compiled: pass is the surrounding pass and f the function it received
+- Example: `rule_of(graph_of((x: int): int => x + 1), 'vjp')`
 
 #### `origin`
 
@@ -5682,8 +6074,7 @@ holds it. The value is a number, a bool or a string; a string is copied into the
 space because a value a transaction creates may be live at a safepoint where its draft is not
 traced.
 
-- Example (a fragment, not compiled): `add_constant(t, g, 7)`
-- Why it is not compiled: t is an open transaction and g a graph of it
+- Example: `add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)`
 
 #### `commit`
 
@@ -5695,8 +6086,7 @@ Checks the edits and makes the changed function: the same type as the one that w
 the values it captured, sharing every graph nothing changed. The transaction is over.
 
 - Failure: error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already.
-- Example (a fragment, not compiled): `commit(t)`
-- Why it is not compiled: t is an open transaction
+- Example: `commit(open((x: int): int => x + 1))`
 
 #### `abort`
 
@@ -5706,8 +6096,7 @@ abort: (t: Txn<F>) => void uses t
 
 Drops the transaction.
 
-- Example (a fragment, not compiled): `abort(t)`
-- Why it is not compiled: t is an open transaction
+- Example: `abort(open((x: int): int => x + 1))`
 
 <a id="rewrite"></a>
 
@@ -5817,8 +6206,8 @@ either, because a `with` parameter without a default may not follow one that has
 `void`, and `F?` leaves `F` unbound). Written first, it is the argument the arrow carries:
 `rules->check<8, 1>(f)`.
 
-- Example (a fragment, not compiled): `rules->check(f)`
-- Why it is not compiled: `rules` and `f` come from the caller
+- Example (a fragment, not compiled): `rules->check((x: int) => x + 1)`
+- Why it is not compiled: `rules` comes from the caller
 
 #### `check_text`
 
@@ -5966,20 +6355,20 @@ the tests use) are in `stdlib/signatures/tiles.cml`.
 #### `upload`
 
 ```camel
-upload: (value: f32[..]) => Device<f32[..]> uses driver
+upload: (value: f32[...]) => Device<f32[...]> uses driver
 ```
 
 Uploads every leaf of the value -- an array, or a scalar of the element type it is written
 with, alone or inside a tuple or a struct -- and gives the same tree with each leaf wrapped in
 `Device<...>`. A leaf of any other type is refused when the call is compiled.
 
-- Example (a fragment, not compiled): `host->upload` gives `a Device<f32[..]>`
+- Example (a fragment, not compiled): `host->upload` gives `a Device<f32[...]>`
 - Why it is not compiled: `host` is a host tensor the caller has: the example writes the move, and a doc example has no device to move a value to
 
 #### `download`
 
 ```camel
-download: (value: Device<f32[..]>) => f32[..] uses driver
+download: (value: Device<f32[...]>) => f32[...] uses driver
 ```
 
 Downloads every device leaf of the value and gives the host value it came from. A tree with a
@@ -6257,7 +6646,7 @@ array type; nothing here needs PyTorch or a GPU.
 #### `conv2d`
 
 ```camel
-conv2d: (input: f32[..], kernel: f32[..], bias: f32[..], stride?: int, padding?: int) => f32[..]
+conv2d: (input: f32[...], kernel: f32[...], bias: f32[...], stride?: int, padding?: int) => f32[...]
 ```
 
 2-D convolution: `input` is `[N, C, H, W]` f32, `kernel` is `[O, C, KH, KW]` f32 and `bias` is
@@ -6271,7 +6660,7 @@ rank 4, or a window that does not fit, is refused when the call is compiled.
 #### `conv2d_input_grad`
 
 ```camel
-conv2d_input_grad: (input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int) => f32[..]
+conv2d_input_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
 ```
 
 The gradient of `conv2d` with respect to its input, given the upstream gradient `dy` shaped
@@ -6283,7 +6672,7 @@ like the convolution's result; the result is shaped like `input`.
 #### `conv2d_kernel_grad`
 
 ```camel
-conv2d_kernel_grad: (input: f32[..], kernel: f32[..], dy: f32[..], stride?: int, padding?: int) => f32[..]
+conv2d_kernel_grad: (input: f32[...], kernel: f32[...], dy: f32[...], stride?: int, padding?: int) => f32[...]
 ```
 
 The gradient of `conv2d` with respect to its kernel, given `dy` shaped like the convolution's
@@ -6295,7 +6684,7 @@ result; the result is shaped like `kernel`.
 #### `conv2d_bias_grad`
 
 ```camel
-conv2d_bias_grad: (bias: f32[..], dy: f32[..]) => f32[..]
+conv2d_bias_grad: (bias: f32[...], dy: f32[...]) => f32[...]
 ```
 
 The gradient of `conv2d` with respect to its bias: the sum of `dy` over the batch and the
@@ -6309,7 +6698,7 @@ spatial axes, shaped like `bias`.
 #### `max_pool2d`
 
 ```camel
-max_pool2d: (input: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
+max_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
 ```
 
 Max pooling over a square window of `kernel` on `input` `[N, C, H, W]` f32. `stride` defaults
@@ -6322,7 +6711,7 @@ the padding contributes -inf (the identity of the maximum).
 #### `avg_pool2d`
 
 ```camel
-avg_pool2d: (input: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
+avg_pool2d: (input: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
 ```
 
 Average pooling over a square window of `kernel`: the window's elements plus +0 for those in
@@ -6335,7 +6724,7 @@ to `kernel`, `padding` to 0, and the result is `[N, C, OH, OW]`.
 #### `max_pool2d_grad`
 
 ```camel
-max_pool2d_grad: (input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
+max_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
 ```
 
 The gradient of `max_pool2d` with respect to its input, given `dy` shaped like the pooling
@@ -6347,7 +6736,7 @@ result; the result is shaped like `input`.
 #### `avg_pool2d_grad`
 
 ```camel
-avg_pool2d_grad: (input: f32[..], dy: f32[..], kernel: int, stride?: int, padding?: int) => f32[..]
+avg_pool2d_grad: (input: f32[...], dy: f32[...], kernel: int, stride?: int, padding?: int) => f32[...]
 ```
 
 The gradient of `avg_pool2d` with respect to its input, given `dy` shaped like the pooling
@@ -6361,7 +6750,7 @@ result; the result is shaped like `input`.
 #### `batch_norm`
 
 ```camel
-batch_norm: (input: f32[..], mean: f32[..], var: f32[..], gamma: f32[..], beta: f32[..], eps?: number) => f32[..]
+batch_norm: (input: f32[...], mean: f32[...], var: f32[...], gamma: f32[...], beta: f32[...], eps?: number) => f32[...]
 ```
 
 Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + beta`, with
@@ -6373,7 +6762,7 @@ Inference-mode batch normalization: `(input - mean) / sqrt(var + eps) * gamma + 
 #### `batch_norm_train`
 
 ```camel
-batch_norm_train: (input: f32[..], gamma: f32[..], beta: f32[..], running_mean: f32[..], running_var: f32[..], momentum?: number, eps?: number) => (f32[..], f32[..], f32[..])
+batch_norm_train: (input: f32[...], gamma: f32[...], beta: f32[...], running_mean: f32[...], running_var: f32[...], momentum?: number, eps?: number) => (f32[...], f32[...], f32[...])
 ```
 
 Training-mode batch normalization: normalizes `input` with the batch statistics, and answers
@@ -6387,7 +6776,7 @@ to 1e-5.
 #### `batch_norm_train_grad`
 
 ```camel
-batch_norm_train_grad: (input: f32[..], gamma: f32[..], dy: f32[..], eps?: number) => (f32[..], f32[..], f32[..])
+batch_norm_train_grad: (input: f32[...], gamma: f32[...], dy: f32[...], eps?: number) => (f32[...], f32[...], f32[...])
 ```
 
 The gradients of training-mode batch normalization: `(dx, dgamma, dbeta)`, shaped like
@@ -6402,7 +6791,7 @@ differentiated, so the operator takes `dy` (the gradient of `y`) and `eps`.
 #### `embedding`
 
 ```camel
-embedding: (table: f32[..], indices: f32[..]) => f32[..]
+embedding: (table: f32[...], indices: f32[...]) => f32[...]
 ```
 
 Gathers rows of the rank-2 int-or-float table `[rows, dim]` by the rank-1 integer indices; the
@@ -6415,7 +6804,7 @@ result is `[indices.length, dim]`. An index outside `[0, rows)` is a fault.
 #### `embedding_table_grad`
 
 ```camel
-embedding_table_grad: (table: f32[..], indices: f32[..], dy: f32[..]) => f32[..]
+embedding_table_grad: (table: f32[...], indices: f32[...], dy: f32[...]) => f32[...]
 ```
 
 The gradient of `embedding` with respect to its table: unvisited rows stay zero, and the
@@ -6429,8 +6818,8 @@ result is shaped like `table`.
 #### `softmax_cross_entropy`
 
 ```camel
-softmax_cross_entropy: (logits: f32[..], target: f32[..]) => float
-softmax_cross_entropy: (logits: f32[..], target: f32[..] | number[]) => float
+softmax_cross_entropy: (logits: f32[...], target: f32[...]) => float
+softmax_cross_entropy: (logits: f32[...], target: f32[...] | number[]) => float
 ```
 
 The mean softmax cross-entropy of rank-2 `logits` `[batch, classes]` against a same-shaped
@@ -6445,8 +6834,8 @@ the same as the one-hot form's.
 #### `softmax_cross_entropy_grad`
 
 ```camel
-softmax_cross_entropy_grad: (logits: f32[..], target: f32[..], dy: number) => f32[..]
-softmax_cross_entropy_grad: (logits: f32[..], target: f32[..] | number[], dy: number) => f32[..]
+softmax_cross_entropy_grad: (logits: f32[...], target: f32[...], dy: number) => f32[...]
+softmax_cross_entropy_grad: (logits: f32[...], target: f32[...] | number[], dy: number) => f32[...]
 ```
 
 The gradient of `softmax_cross_entropy` with respect to `logits`, scaled by `dy`; the result is
@@ -7047,6 +7436,43 @@ The forward rule of `/` on two 64-bit floats.
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example: `div_jvp(6.0, 2.0, (1.0, 0.25))` gives `(3.0, 0.125)`
 
+### The forward rule of `^` (a power)
+
+#### `pow_tangent`
+
+```camel
+pow_tangent: (x: T, w: T, dx: T, dw: T) => T when is_float::<T>()
+```
+
+The tangent of `x ^ w` along `(dx, dw)`: `w * x^(w-1) * dx + x^w * log(x) * dw`.
+
+The two terms answer two different questions, and keeping them apart is what makes the negative
+base honest. The first term is the derivative with respect to the **base**, and it is defined
+wherever `x ^ w` is. The second is the derivative with respect to the **exponent**, and it is
+`x^w * log(x)`: for `x <= 0` that has no real value, because a real power of a negative number
+exists only for integer exponents and has no derivative in the exponent there.
+
+**No branch on a tangent's value.** The author's ruling of 2026-11-04 (`docs/handover/reviews/
+2026-11-04-a-guarded-tangent-cannot-be-transposed-what-does-the-power-keep.cn.md`) took the
+`if dw == T(0)` guard this helper used to carry away: the zero of a constant's tangent is
+**structurally known** -- a constant has no tangent -- and not a value a law computes and
+compares. What replaces it happens before anything runs: the rule's right side is expanded with
+the structurally-zero tangents named, and the product one of them multiplies is omitted rather
+than computed (`modules/transforms/rule_expand.cpp#expandRuleRightSide`). So `(-3.0) ^ 2.0`
+still answers `-6.0` and `log(-3.0)` is never asked for its `NaN`, while a law with no branch
+is a law the backward walk can turn around: `^`'s pullback answers the same number as `pow`'s
+(`test/cases/compile/transforms/pow_gradient_through_the_library.cml` against
+`pow_gradient_of_a_caret_through_the_library.cml`).
+
+A program that calls this helper itself hands it a real `dw`, and then the second term is a real
+term: at a negative base it answers `NaN`, because the derivative in the exponent does not exist
+there. The omission is the rule expander's, not this function's -- there is nothing here that
+could omit it, which is why the law below is written out rather than called.
+
+- Written in Camel: a subgraph, pure when the functions passed to it are.
+- Example: `pow_tangent(2.0, 3.0, 0.0, 1.0)` gives `5.545177444479562`
+- Example: `pow_tangent(-3.0, 2.0, 1.0, 0.0)` gives `nan`
+
 <a id="rulesets.vmap"></a>
 
 ## `rulesets.vmap`: how a batched transform lifts a value
@@ -7081,7 +7507,7 @@ axes the row had after it, over the rank the value itself carries (`shape`). `su
 and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
 positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
 batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
-axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
+axis, and `argmax` along that axis counts them -- see the section below `vmap_rule_min`.
 
 `reshape` and the broadcasting moves are the next tier.
 
@@ -7183,7 +7609,7 @@ instantiated at its primitive's *element* type (`ruleElementTypeOf`, modules/tra
 `f32` here, the same `T` the scalar rule gets, while the two operators are different primitives and
 a key holds one rule each.
 
-So the operand is written as the open rank `T[..]`: the batch of a row is that row's element type at
+So the operand is written as the open rank `T[...]`: the batch of a row is that row's element type at
 any rank, and the operator walks all of the ranks it is given. `mul_tensor(x, w)` is the same
 product at whatever rank the row had, and its right side multiplies the whole batch at once -- the
 primitive applied to the batch instead of to each row, which is the same operator and so the same
@@ -7202,7 +7628,7 @@ calls it with the batch -- it never binds the pattern.
 #### `vmap_mul_tensor`
 
 ```camel
-vmap_mul_tensor: (a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+vmap_mul_tensor: (a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 The product of two batches: the whole batch multiplied at once, which for an elementwise product is
@@ -7247,14 +7673,14 @@ operator states, not a second one of ours.
 #### `vmap_matmul`
 
 ```camel
-vmap_matmul: (lhs: T[..], rhs: T[..]) => T[..] when is_numeric::<T>()
+vmap_matmul: (lhs: T[...], rhs: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `matmul(lhs, rhs)` batched: the product of each row of `lhs` with the row the batch of `rhs` gives
 it. A batch of one row is that row at every index.
 
-The parameters are the open rank `T[..]` rather than `Lift<T[..]>` even though the batch is what
-they are given: the transform passes the lifted operands, and a parameter written `Lift<T[..]>`
+The parameters are the open rank `T[...]` rather than `Lift<T[...]>` even though the batch is what
+they are given: the transform passes the lifted operands, and a parameter written `Lift<T[...]>`
 says nothing about `T` to a call's inference (the element is one layer down a type computation),
 so the rule's right side could not call this function without naming the type again -- and a
 right side that names a type argument is a right side no transform can read the callee from
@@ -7276,10 +7702,10 @@ batch is an axis these operators already walk.
 #### `vmap_sum_axis`
 
 ```camel
-vmap_sum_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_sum_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`sum_axis(xs, axis, keepdims)` batched: each row's sum along the axis it was given. The parameters
+`sum<axis, keepdims>(xs)` batched: each row's sum along the axis it was given. The parameters
 are the open rank for the reason `vmap_matmul` gives: a lifted type does not name the element to a
 call's inference, and a right side may not name it either.
 
@@ -7293,10 +7719,10 @@ from (`batched_axis`).
 #### `vmap_mean_axis`
 
 ```camel
-vmap_mean_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_mean_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`mean_axis(xs, axis, keepdims)` batched: each row's mean along the axis it was given.
+`mean<axis, keepdims>(xs)` batched: each row's mean along the axis it was given.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.5, 3.5]`
@@ -7304,10 +7730,10 @@ vmap_mean_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
 #### `vmap_max_axis`
 
 ```camel
-vmap_max_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_max_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`max_axis(xs, axis, keepdims)` batched: each row's largest element along the axis it was given.
+`max<axis, keepdims>(xs)` batched: each row's largest element along the axis it was given.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_max_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[5.0, 4.0]`
@@ -7315,17 +7741,18 @@ vmap_max_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
 #### `vmap_min_axis`
 
 ```camel
-vmap_min_axis: (xs: T[..], axis: int[], keepdims: bool[]) => T[..]
+vmap_min_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`min_axis(xs, axis, keepdims)` batched: each row's smallest element along the axis it was given.
+`min<axis, keepdims>(xs)` batched: each row's smallest element along the axis it was given.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
 
 ### The positions along an axis
 
-`argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+The axis `argmax` and the axis `argmin` are the reductions whose *result* element is not the
+operand's:
 they take any numeric tensor and answer `int` positions (the operator's own signature spells that
 type `int64`). That is why their rules are the ones that show what a batching rule is generic in
 -- the element the operands are made of, read from an operand, never from the type of the node the
@@ -7335,10 +7762,10 @@ result's element type would be a rule about `int` arrays applied to floats.
 #### `vmap_argmax_axis`
 
 ```camel
-vmap_argmax_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+vmap_argmax_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
 ```
 
-`argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+`argmax<axis, keepdims>(xs)` batched: each row's position of its largest element along the
 axis it was given. The positions are `int` whatever the operand's element is, so the type this
 function is generic in is the operand's (`T`), not its result's.
     // [1, 2]
@@ -7349,10 +7776,10 @@ function is generic in is the operand's (`T`), not its result's.
 #### `vmap_argmin_axis`
 
 ```camel
-vmap_argmin_axis: (xs: T[..], axis: int[], keepdims: bool[]) => int[..]
+vmap_argmin_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
 ```
 
-`argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+`argmin<axis, keepdims>(xs)` batched: each row's position of its smallest element along the
 axis it was given, with the earlier position on a tie.
     // [0, 0]
 
@@ -7365,12 +7792,12 @@ axis it was given, with the earlier position on a tie.
 in. What they do to a batch is keep the batch axis in front and fold away the axes the row had
 after it: a batch of rows arrives as one number per row, which is the shape the batch axis
 already is. The fold is written over the value's own rank (`shape`), because the rank is a fact
-about the value and not about the type -- `T[..]` says a tensor, never how many axes.
+about the value and not about the type -- `T[...]` says a tensor, never how many axes.
 
 #### `vmap_sum`
 
 ```camel
-vmap_sum: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_sum: (xs: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `sum(xs)` batched: one sum per row. The batch axis stays in front; each of the row's axes is
@@ -7382,7 +7809,7 @@ folded away in turn, so a batch of `float[3]` rows answers one number per row.
 #### `vmap_mean`
 
 ```camel
-vmap_mean: (xs: T[..]) => T[..] when is_float::<T>()
+vmap_mean: (xs: T[...]) => T[...] when is_float::<T>()
 ```
 
 `mean(xs)` batched: one mean per row, folded the same way `sum` is. A mean is of a float: an
@@ -7394,7 +7821,7 @@ integer row's mean is `f32`, which is not the element the rule would be written 
 #### `vmap_max`
 
 ```camel
-vmap_max: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_max: (xs: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `max(xs)` batched: one maximum per row. The row's axes are flattened into one (`shape(xs)[0]`
@@ -7410,7 +7837,7 @@ number, in either shape.
 #### `vmap_min`
 
 ```camel
-vmap_min: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_min: (xs: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
@@ -7436,7 +7863,7 @@ itself states (design principles 5.4).
 #### `vmap_argmax`
 
 ```camel
-vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
+vmap_argmax: (xs: T[...]) => int[...] when is_numeric::<T>()
 ```
 
 `argmax(xs)` batched: one row-major position per row, read as a reshape of the batch to
@@ -7448,7 +7875,7 @@ vmap_argmax: (xs: T[..]) => int[..] when is_numeric::<T>()
 #### `vmap_argmin`
 
 ```camel
-vmap_argmin: (xs: T[..]) => int[..] when is_numeric::<T>()
+vmap_argmin: (xs: T[...]) => int[...] when is_numeric::<T>()
 ```
 
 `argmin(xs)` batched: the same reading of the batch as `[rows, -1]`, with the earlier position on
@@ -7474,7 +7901,7 @@ batched shape is `[the batch's rows, the written extents...]`.
 #### `vmap_reshape`
 
 ```camel
-vmap_reshape: (xs: T[..], dims: int[..]) => T[..] when is_numeric::<T>()
+vmap_reshape: (xs: T[...], dims: int[...]) => T[...] when is_numeric::<T>()
 ```
 
 `reshape<dims>(xs)` batched: each row laid out in the shape the call wrote, the batch's axis in
@@ -7491,7 +7918,7 @@ of it: the written axis moves one place in, exactly as a reduction's axis does (
 #### `vmap_unsqueeze`
 
 ```camel
-vmap_unsqueeze: (xs: T[..], axis: int[]) => T[..] when is_numeric::<T>()
+vmap_unsqueeze: (xs: T[...], axis: int[]) => T[...] when is_numeric::<T>()
 ```
 
 `unsqueeze<axis>(xs)` batched: the row's axis of extent one, one place further in.
@@ -7510,7 +7937,7 @@ operator over the batch and nothing else.
 #### `vmap_transpose`
 
 ```camel
-vmap_transpose: (xs: T[..]) => T[..] when is_numeric::<T>()
+vmap_transpose: (xs: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `transpose(xs)` batched: the operator swaps the last two axes, and a batch's last two axes are the
@@ -7522,7 +7949,7 @@ row's last two.
 #### `vmap_permute`
 
 ```camel
-vmap_permute: (xs: T[..], perm: int[..]) => T[..] when is_numeric::<T>()
+vmap_permute: (xs: T[...], perm: int[...]) => T[...] when is_numeric::<T>()
 ```
 
 `permute<perm>(xs)` batched: the row's axes in the written order, the batch's axis in front.
@@ -7533,7 +7960,7 @@ vmap_permute: (xs: T[..], perm: int[..]) => T[..] when is_numeric::<T>()
 #### `vmap_concat`
 
 ```camel
-vmap_concat: (a: T[..], b: T[..], axis: int[]) => T[..] when is_numeric::<T>()
+vmap_concat: (a: T[...], b: T[...], axis: int[]) => T[...] when is_numeric::<T>()
 ```
 
 `concat<axis>(xs, ys)` batched: the axis the row joins along is one place further in, and the two
@@ -7545,7 +7972,7 @@ operands are the batch's rows, so the join is along the row's axis of the batch.
 #### `vmap_dim`
 
 ```camel
-vmap_dim: (xs: T[..], axis: int[]) => int[] when is_numeric::<T>()
+vmap_dim: (xs: T[...], axis: int[]) => int[] when is_numeric::<T>()
 ```
 
 `dim<axis>(xs)` batched: one extent per row, each being the batch's extent one place further in.
@@ -7567,7 +7994,7 @@ condition to name the rule's `T`.
 #### `vmap_where`
 
 ```camel
-vmap_where: (cond: bool[..], a: T[..], b: T[..]) => T[..] when is_numeric::<T>()
+vmap_where: (cond: bool[...], a: T[...], b: T[...]) => T[...] when is_numeric::<T>()
 ```
 
 `where(cond, a, b)` batched: the operator over the batch, all three operands one axis in front.
@@ -7653,7 +8080,6 @@ one that runtime has (`'none'` switches the check off).
 
 - With effects: writes a file and reads the function's graph.
 - Failure: error value `ExportUnsupported` when `fn` is not a function, when the graph cannot be translated (a call that remains, an operator without an ONNX lowering, a dtype or shape the exporter cannot name), or when the target runtime rejects a node; error value `IOError` when the model cannot be written.
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx">(fn, example)`
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>(fn, example)`
-- Example (a fragment, not compiled): `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">(fn, example)`
-- Why it is not compiled: the call needs a function value and an example of the arguments that function takes, which the description introduces (the exporter reads the function's graph, so no value a fragment can write stands for it)
+- Example: `export_model<out: "/tmp/model.onnx">((x: float) => x * 2.0, 2.0)`
+- Example: `export_model<out: "/tmp/model.onnx", dynamic_axes: [0]>((xs: f32[2, 3]) => xs[0][0], [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3])`
+- Example: `export_model<out: "/tmp/model.onnx", target: "onnxruntime-cpu">((x: float) => x * 2.0, 2.0)`

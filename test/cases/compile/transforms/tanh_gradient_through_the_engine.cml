@@ -1,0 +1,43 @@
+// `tanh`'s gradient through the engine: the number the library's own rules must reproduce.
+//
+// `tanh` is a member of the deletion difference set whose slope is a function of its own output:
+// `d(tanh(x)) = (1 - tanh(x)^2) * dx`. The engine's `tanhVjp`
+// (`modules/tensor/ops/elementwise_ops.cpp`) builds `1 - y*y` out of the output it already holds, so
+// it recomputes nothing; a library law with one operand can only name `tanh(x)` by calling the
+// operator again, which is the point this pair of cases measures (`jvp_exp` / `exp_t` measured the
+// same shape for `exp`).
+//
+// The criterion is both components on one input that holds both signs, and the wrong laws are
+// separable element by element, without a tolerance and without an aggregate:
+//
+//   * `tanh_t` written as `ct` (the identity)          -> [1.0, 1.0];
+//   * `tanh_t` written as `ct * dx`, i.e. the slope
+//     factor dropped entirely                          -> [1.0, 1.0]  (the same reading as `ct`;
+//     the two are one law in this operator, and that is stated rather than hidden);
+//   * `tanh_t` written as `ct * (1 - tanh(x))`, the
+//     square dropped off the slope                     -> [0.5378828427399902, 1.7615941559557649];
+//   * `tanh_t` written as `ct * tanh(x)`, the `1 -`
+//     dropped off the slope                            -> [0.46211715726000974, -0.7615941559557649];
+//   * `tanh_t` written as `ct * tanh(x)^2`, the `1 -`
+//     dropped and the sign with it                     -> [0.21355226703407257, 0.5800256583859739];
+//   * the correct `ct * (1 - tanh(x)^2)`               -> [0.7864477329659274, 0.41997434161402614].
+//
+// Every component of the correct answer differs from every wrong one, and the second component
+// differs from the first, so neither an aggregate nor a single component could stand in for the
+// pair.
+//
+//     camel test/cases/compile/transforms/tanh_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { sum, tanh } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[...]>
+func total(): float {
+    return sum(tanh(x))
+}
+
+func main(): int sync {
+    let d = grad(total)<[0.5, -1.0] as float[]>()
+    `tanh engine d={}`->format<d>->println
+    return 0
+}

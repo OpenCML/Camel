@@ -1,0 +1,39 @@
+/**
+ * The pullback read at a cotangent, in `f32` and in `float`, in one program.
+ *
+ * The surface is the one `stdlib/vjp.cml#vjp` declares: `vjp(f)(x)` answers `(value, pullback)` and
+ * the *pullback* takes the cotangent -- `vjp(f)(x).1(ct).0`. This is the reading the two `f32`
+ * entries beside this file could not reach while `transpose` refused a function whose result was an
+ * `f32` (it required `float`); the call text they still wear -- `vjp(f)(x, ct)`, the cotangent handed
+ * to the forward call -- is not the surface, so what they pin is their own call text rather than a
+ * gap in the library.
+ *
+ * `f(x) = x * x`, so the pullback of the cotangent `ct` is `2 * ct * x`:
+ *
+ *     x = 3,    ct = 1   -> 6
+ *     x = 3,    ct = 2   -> 12
+ *     x = -1.5, ct = 0.5 -> -1.5
+ *
+ * Both widths print the same six numbers, in that order, `f32` first: the cotangent a function of
+ * `f32` takes is `f32` (`Tangent<f32>` is `f32`), the walk adds those cotangents with `:op/add_f`,
+ * and nothing is read as a `float` on the way through.
+ */
+import { vjp } from vjp
+
+func sqf(x: f32): f32 {
+    return x * x
+}
+
+func sqd(x: float): float {
+    return x * x
+}
+
+func main(): int sync {
+    'pullback f32  f(3) ct=1   -> {}'->format<vjp(sqf)(3.0).1(1.0).0>->println
+    'pullback float f(3) ct=1  -> {}'->format<vjp(sqd)(3.0).1(1.0).0>->println
+    'pullback f32  f(3) ct=2   -> {}'->format<vjp(sqf)(3.0).1(2.0).0>->println
+    'pullback float f(3) ct=2  -> {}'->format<vjp(sqd)(3.0).1(2.0).0>->println
+    'pullback f32  f(-1.5) ct=0.5 -> {}'->format<vjp(sqf)(-1.5).1(0.5).0>->println
+    'pullback float f(-1.5) ct=0.5 -> {}'->format<vjp(sqd)(-1.5).1(0.5).0>->println
+    return 0
+}

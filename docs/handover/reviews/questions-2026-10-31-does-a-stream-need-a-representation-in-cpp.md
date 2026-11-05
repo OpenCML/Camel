@@ -1,6 +1,6 @@
 # 流要不要在 `std::cpp` 里有一套表示
 
-> **流的值本来就是一个步进函数加它的状态（`include/camel/core/type/composite/stream.h:30-58`）——所以问题不是"能不能表示"，而是"用哪种表示，谁来定"。**
+> **流的值本来就是一个步进函数加它的状态（`include/camel/core/type/composite/stream.h#StreamType`）——所以问题不是"能不能表示"，而是"用哪种表示，谁来定"。**
 
 日期：2026-10-31　车道：`lane-nestedlit`（`std::cpp` 写出器）　测量树：`b3bb51280`（`origin/develop`，已合）+ 本车道三笔
 
@@ -12,14 +12,14 @@
 **`std::cpp` 今天一个流类型都不写。** 证据三处：
 
 1. 运行时里没有流：`include/camel/standalone/` 十九个头（`array.h`、`fn.h`、`record.h`、`opt.h`…）
-   没有 `stream.h`；`src/passes/trans/cpp/cpp_types.h:50-52` 那句"`std::cpp` 翻译什么"的清单里也没有流：
+   没有 `stream.h`；`src/passes/trans/cpp/cpp_types.h#kTranslatedTypes` 那句"`std::cpp` 翻译什么"的清单里也没有流：
    ```cpp
    "std::cpp translates numbers (real and complex), bool, string, enums, arrays, tuples, structs, T?, T!, "
    "functions and var variables of these, and void"
    ```
-2. 类型映射里没有 `Stream` 这一格：`src/passes/trans/cpp/cpp_types.cpp:400-437` 的 `switch (t->code())`
+2. 类型映射里没有 `Stream` 这一格：`src/passes/trans/cpp/cpp_types.cpp#ProgramValues::type` 的 `switch (t->code())`
    从 `Int32` 走到 `Never`，`default: break;` 落到注册表再返回 `std::nullopt`。
-3. 于是任何签名带流的地方在写函数头时就被拒（`src/passes/trans/cpp/function_emitter.cpp:197-209`，
+3. 于是任何签名带流的地方在写函数头时就被拒（`src/passes/trans/cpp/function_emitter.cpp#FunctionEmitter::collectParameters`，
    `add(port, "a parameter")` / `"returns a value"` → `program_.values.type(type)` 为空 → `refuse`）。
 
 两条原话（同一句话，两个位置）：

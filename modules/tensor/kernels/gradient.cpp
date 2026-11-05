@@ -256,7 +256,48 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 
 } // namespace
 
-/// Sum of `g` over the axes that `shape` broadcasts away: the backward of a broadcast.
+/// The target of a leading-axis reduction, checked: `at` is a **suffix** of `shape` (ruling 甲).
+///
+/// This is the one thing 甲 states as testable, so it is checked and named here rather than left to
+/// the stride walk: a target that is *longer* than the tensor, or that asks for an extent the
+/// tensor does not have at that position, is a fault and not a number. An axis the target states as
+/// 1 against a longer one is still a reduction -- the adjoint of a broadcast that handed one element
+/// along that lane (design principles 5.4: the extent-1 lane is a broadcast axis) -- so it is
+/// admitted; what is refused is the *other* direction, spreading `t` over lanes it never had, which
+/// is `broadcast_like`'s job and is not a reduction at all.
+///
+/// The sentence names both sides and the position, because a reader who wrote the target has to
+/// know whether the tensor or the target is the one to change.
+void requireSuffixTarget(
+    std::span<const int64_t> at, std::span<const int64_t> shape, const char *what) {
+    const std::string head =
+        std::string(what) + ": the target extents " + shapeText(at) + " are not a suffix of the " +
+        "tensor's shape " + shapeText(shape);
+    if (at.size() > shape.size()) {
+        throw ShapeError(
+            head + ": the target states " + std::to_string(at.size()) + " axes and the tensor " +
+            std::to_string(shape.size()));
+    }
+    const size_t shift = shape.size() - at.size();
+    for (size_t i = 0; i < at.size(); ++i) {
+        const int64_t want = at[i];
+        const int64_t have = shape[i + shift];
+        if (want == have || want == 1) {
+            continue;
+        }
+        throw ShapeError(
+            head + ": position " + std::to_string(i + shift) + " is " + std::to_string(want) +
+            " where the tensor has " + std::to_string(have));
+    }
+}
+
+/// Sum of `g` over its leading axes down to the extents `shape`, which must be a suffix of `g`'s.
+///
+/// The length is the caller's: since `sum_to` takes its target as an `int[]` (the twin of the
+/// tensors it reduces), the extents are a runtime value and the operator never reads a shape off
+/// another value of the program. What it still does not do is spread: 甲 is a leading-axis
+/// reduction, and the axes it removes are the ones `g` has in front of `shape`'s (plus the ones the
+/// target states as 1). `requireSuffixTarget` refuses the rest by name.
 ///
 /// Accumulation type: the input's element type, and one arm per admitted type (f32 and f64). An
 /// f32 gradient is added as f32 from +0 and answers f32, exactly as before; an f64 gradient is
@@ -267,10 +308,13 @@ Array *sumToArm(const Array *src, std::span<const int64_t> shape, mm::IAllocator
 /// no code inside either one asks what the element type is.
 Array *
 sumTo(const Array *g, std::span<const int64_t> shape, mm::IAllocator &allocator) {
-    if (g->shapeSpan().size() == shape.size() &&
-        std::equal(shape.begin(), shape.end(), g->shapeSpan().begin())) {
+    const auto big = g->shapeSpan();
+    if (big.size() == shape.size() && std::equal(shape.begin(), shape.end(), big.begin())) {
+        // Equal shapes: no leading axis to remove and no extent-1 lane, so the input is the answer
+        // (the kernel the gradient path relies on to stay bit-for-bit).
         return const_cast<Array *>(g);
     }
+    requireSuffixTarget(shape, big, "sum_to");
     const Array *src = asFloat(g, allocator);
     if (src->dtype() == TypeCode::Float64) {
         return sumToArm<TypeCode::Float64>(src, shape, allocator);
@@ -375,6 +419,62 @@ detail::GeluGradFn geluGradUnit() {
     return unit;
 }
 
+/// One arm of `geluGrad`, for the element type `Code`: `dy * gelu'(x)`, written at that width. The
+/// arm is the one value's element type, and nothing inside it asks what that type is: `Code` names
+/// it, exactly as `sumToArm` names its accumulation width. The f32 arm is the fused unit below and
+/// its bits are the ones the pinned case records (test/cases/modules/tensor/gelu_grad_bits.cml);
+/// the f64 arm is the same expression at double width with the standard tangent, because
+/// `vmath::tanh` is the f32 one and there is no per-ISA unit to choose between at that width.
+template <TypeCode Code>
+Array *geluGradArm(const Array *xs, const Array *gs, mm::IAllocator &allocator) {
+    using T         = SumElement<Code>;
+    const int64_t n = static_cast<int64_t>(xs->numel());
+    Array *out      = createTensor(Code, xs->shapeSpan(), allocator);
+    const T *px     = xs->dataAs<T>();
+    const T *pg     = gs->dataAs<T>();
+    T *po           = out->dataAs<T>();
+    if constexpr (Code == TypeCode::Float32) {
+        // One pass: the input and the incoming gradient are read once each, the result is written
+        // once, and nothing holds the polynomial or its tangent (gradient_loops.inl).
+        const detail::GeluGradFn run = geluGradUnit();
+        parallelFor(n, grainForWork(kNsPerGeluGradElement), [&](int64_t begin, int64_t end) {
+            run(px + begin, pg + begin, po + begin, end - begin);
+        });
+    } else {
+        constexpr double kScale = 0.7978845608028654; // sqrt(2 / pi)
+        constexpr double kCubic = 0.044715;
+        parallelFor(n, grainForWork(kNsPerGeluGradElement), [&](int64_t begin, int64_t end) {
+            for (int64_t i = begin; i < end; ++i) {
+                const double v     = static_cast<double>(px[i]);
+                const double u     = kScale * (v + kCubic * v * v * v);
+                const double t     = std::tanh(u);
+                const double slope = 0.5 * (1.0 + t) +
+                                     0.5 * v * (1.0 - t * t) * kScale *
+                                         (1.0 + 3.0 * kCubic * v * v);
+                po[i] = static_cast<T>(static_cast<double>(pg[i]) * slope);
+            }
+        });
+    }
+    return out;
+}
+
+/// The same shape for `erfGrad`: `dy * 2 / sqrt(pi) * exp(-x^2)` at the width `Code` names. The f32
+/// arm is unchanged bit for bit -- the same `kScale` literal, the same `float` tangent and `float`
+/// product order it had when this was one f32 loop.
+template <TypeCode Code>
+Array *erfGradArm(const Array *xs, const Array *gs, mm::IAllocator &allocator) {
+    using T            = SumElement<Code>;
+    Array *out         = createTensor(Code, xs->shapeSpan(), allocator);
+    const T *px        = xs->dataAs<T>();
+    const T *pg        = gs->dataAs<T>();
+    T *po              = out->dataAs<T>();
+    constexpr T kScale = static_cast<T>(1.1283791670955126); // 2 / sqrt(pi)
+    for (uint64_t i = 0; i < xs->numel(); ++i) {
+        po[i] = pg[i] * kScale * std::exp(-px[i] * px[i]);
+    }
+    return out;
+}
+
 } // namespace
 
 Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
@@ -383,18 +483,17 @@ Array *geluGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     if (!xs->sameShape(gs)) {
         throw ShapeError("gelu gradient: dy shape differs from the input");
     }
-    const int64_t n = static_cast<int64_t>(xs->numel());
-    Array *out      = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
-    const float *px = xs->dataAs<float>();
-    const float *pg = gs->dataAs<float>();
-    float *po       = out->dataAs<float>();
-    // One pass: the input and the incoming gradient are read once each, the result is written
-    // once, and nothing holds the polynomial or its tangent (gradient_loops.inl).
-    const detail::GeluGradFn run = geluGradUnit();
-    parallelFor(n, grainForWork(kNsPerGeluGradElement), [&](int64_t begin, int64_t end) {
-        run(px + begin, pg + begin, po + begin, end - begin);
-    });
-    return out;
+    // A gradient is the width of the value it belongs to (design principles 9.9), and the operator's
+    // signature is `::<T>(x: T[..], dy: T[..])`: a second operand at another width is refused here
+    // rather than read through the first one's width, which is what answered with a number nobody
+    // computed. This kernel and `erfGrad` used to write `f32` whatever the input was, so an `f64`
+    // model's gradient came back typed `f64` over an `f32` buffer and what was read past the written
+    // bytes was whatever held them (a denormal of order 1e-314, a different one per run).
+    if (gs->dtype() != xs->dtype()) {
+        refuseTensorElementType("gelu gradient", gs, {xs->dtype()});
+    }
+    return xs->dtype() == TypeCode::Float64 ? geluGradArm<TypeCode::Float64>(xs, gs, allocator)
+                                            : geluGradArm<TypeCode::Float32>(xs, gs, allocator);
 }
 
 Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
@@ -403,39 +502,39 @@ Array *erfGrad(const Array *x, const Array *dy, mm::IAllocator &allocator) {
     if (!xs->sameShape(gs)) {
         throw ShapeError("erf gradient: dy shape differs from the input");
     }
-    Array *out      = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
-    const float *px        = xs->dataAs<float>();
-    const float *pg        = gs->dataAs<float>();
-    float *po              = out->dataAs<float>();
-    constexpr float kScale = 1.1283791670955126f; // 2 / sqrt(pi)
-    for (uint64_t i = 0; i < xs->numel(); ++i) {
-        po[i] = pg[i] * kScale * std::exp(-px[i] * px[i]);
+    if (gs->dtype() != xs->dtype()) {
+        refuseTensorElementType("erf gradient", gs, {xs->dtype()});
     }
-    return out;
+    return xs->dtype() == TypeCode::Float64 ? erfGradArm<TypeCode::Float64>(xs, gs, allocator)
+                                            : erfGradArm<TypeCode::Float32>(xs, gs, allocator);
 }
 
-Array *layerNormGrad(
-    const Array *x, const Array *gamma, const Array *dy, double eps,
-    LayerNormGrad which, mm::IAllocator &allocator) {
-    const Array *xs = asFloat(x, allocator);
-    const Array *ws = asFloat(gamma, allocator);
-    const Array *gs = asFloat(dy, allocator);
-    if (!xs->sameShape(gs)) {
-        throw ShapeError("layer_norm gradient: dy shape differs from the input");
-    }
-    const auto width = static_cast<int64_t>(ws->numel());
-    const auto rows  = static_cast<int64_t>(xs->numel()) / std::max<int64_t>(width, 1);
-    const float *px  = xs->dataAs<float>();
-    const float *pw  = ws->dataAs<float>();
-    const float *pg  = gs->dataAs<float>();
+namespace {
+
+/// The element type the gradient is written in is the input's, not `f32`: `layerNormGrad` used to
+/// read its inputs through `asFloat` (which only validates, it does not convert) and then write
+/// `createTensor(TypeCode::Float32, ...)` whatever it was given, so the normalization gradient of an
+/// `f64` model came back `f32` and the next `matmul_grad_lhs` refused the pair `('f32' and 'f64')`.
+/// The arithmetic below already accumulates in `double`; only the element the answer is stored in
+/// follows the input, which is the same rule `sumToArm` beside it follows (`SumElement<Code>`).
+template <TypeCode Code>
+Array *layerNormGradArm(
+    const Array *xs, const Array *ws, const Array *gs, double eps, LayerNormGrad which,
+    mm::IAllocator &allocator) {
+    using Real        = SumElement<Code>;
+    const auto width  = static_cast<int64_t>(ws->numel());
+    const auto rows   = static_cast<int64_t>(xs->numel()) / std::max<int64_t>(width, 1);
+    const Real *px    = xs->dataAs<Real>();
+    const Real *pw    = ws->dataAs<Real>();
+    const Real *pg    = gs->dataAs<Real>();
 
     if (which == LayerNormGrad::Input) {
-        Array *out = createTensor(TypeCode::Float32, xs->shapeSpan(), allocator);
-        float *po         = out->dataAs<float>();
+        Array *out = createTensor(Code, xs->shapeSpan(), allocator);
+        Real *po   = out->dataAs<Real>();
         parallelFor(rows, 16, [&](int64_t begin, int64_t end) {
             for (int64_t r = begin; r < end; ++r) {
-                const float *row = px + r * width;
-                const float *g   = pg + r * width;
+                const Real *row = px + r * width;
+                const Real *g   = pg + r * width;
                 double mean = 0.0, var = 0.0;
                 for (int64_t k = 0; k < width; ++k) {
                     mean += row[k];
@@ -456,23 +555,23 @@ Array *layerNormGrad(
                 }
                 const double meanH  = sumH / static_cast<double>(width);
                 const double meanHX = sumHX / static_cast<double>(width);
-                float *o            = po + r * width;
+                Real *o             = po + r * width;
                 for (int64_t k = 0; k < width; ++k) {
                     const double h    = static_cast<double>(g[k]) * pw[k];
                     const double xhat = (row[k] - mean) * inv;
-                    o[k]              = static_cast<float>(inv * (h - meanH - xhat * meanHX));
+                    o[k]              = static_cast<Real>(inv * (h - meanH - xhat * meanHX));
                 }
             }
         });
         return out;
     }
 
-    Array *out = createTensor(TypeCode::Float32, ws->shapeSpan(), allocator, true);
-    float *po         = out->dataAs<float>();
+    Array *out = createTensor(Code, ws->shapeSpan(), allocator, true);
+    Real *po   = out->dataAs<Real>();
     std::vector<double> acc(static_cast<size_t>(width), 0.0);
     for (int64_t r = 0; r < rows; ++r) {
-        const float *row = px + r * width;
-        const float *g   = pg + r * width;
+        const Real *row = px + r * width;
+        const Real *g   = pg + r * width;
         if (which == LayerNormGrad::Beta) {
             for (int64_t k = 0; k < width; ++k) {
                 acc[static_cast<size_t>(k)] += g[k];
@@ -495,9 +594,39 @@ Array *layerNormGrad(
         }
     }
     for (int64_t k = 0; k < width; ++k) {
-        po[k] = static_cast<float>(acc[static_cast<size_t>(k)]);
+        po[k] = static_cast<Real>(acc[static_cast<size_t>(k)]);
     }
     return out;
+}
+
+} // namespace
+
+Array *layerNormGrad(
+    const Array *x, const Array *gamma, const Array *dy, double eps,
+    LayerNormGrad which, mm::IAllocator &allocator) {
+    const Array *xs = asFloat(x, allocator);
+    const Array *ws = asFloat(gamma, allocator);
+    const Array *gs = asFloat(dy, allocator);
+    if (!xs->sameShape(gs)) {
+        throw ShapeError("layer_norm gradient: dy shape differs from the input");
+    }
+    if (ws->numel() > xs->numel()) {
+        throw ShapeError("layer_norm gradient: gamma has more elements than the input");
+    }
+    // All three operands are one element type, and the arm below is that type: a `dy` or a `gamma`
+    // of another width is refused instead of being read through the input's width. The answers are
+    // written at the input's type, which is what the operator states (layerNormGradInfer); stating
+    // `f32` there while the kernel wrote the input's width is what put the gradient of an `f64` model
+    // behind a type of half its width, so reading it ran past the bytes that were written.
+    if (gs->dtype() != xs->dtype()) {
+        refuseTensorElementType("layer_norm gradient", gs, {xs->dtype()});
+    }
+    if (ws->dtype() != xs->dtype()) {
+        refuseTensorElementType("layer_norm gradient", ws, {xs->dtype()});
+    }
+    return xs->dtype() == TypeCode::Float64
+               ? layerNormGradArm<TypeCode::Float64>(xs, ws, gs, eps, which, allocator)
+               : layerNormGradArm<TypeCode::Float32>(xs, ws, gs, eps, which, allocator);
 }
 
 namespace {

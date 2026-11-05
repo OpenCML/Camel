@@ -1,0 +1,25 @@
+// The rank is stated and the value is not what is asked about: `func shape_of(t: float[4])`
+// answers `[4]` and never reads `t`.
+//
+// The type argument is the whole question, so a parameter whose value the function does not have --
+// or does not touch -- is answered from the declaration. Measured 2026-11-04 on `lane-extentof`
+// (host `88zjwei`), `std::gir` of this program:
+//
+//   subgraph cluster_F01 {            // shape_of
+//       N00 [label="t", type="PORT", param_name="t", value_type="float[4]"];
+//       N01 [label="[4]", type="DATA", value_type="int[]"];
+//       F02 -> N00 [label="0", type="NORM_PORT"];   // the port exists ...
+//       N01 -> O02 [label="0", type="EXIT"];        // ... and nothing reads it
+//   }
+//
+// so the answer is a `DATA` node of the graph and no edge leaves `t`: the value is not read, and the
+// same graph comes out of `std::opt`. `shape(t)` on the same parameter would have to read its slots.
+
+func shape_of(t: float[4]): int[] {
+    return extent_of::<float[4]>()
+}
+
+func main(): int sync {
+    println(shape_of([1.0, 2.0, 3.0, 4.0]))
+    return 0
+}

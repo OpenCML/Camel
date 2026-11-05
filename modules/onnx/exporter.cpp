@@ -4752,7 +4752,13 @@ constexpr size_t kMaxExportRounds = 4096;
 const camel::runtime::Program *simplifyFully(
     const core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::ostream &log) {
-    const OptimizeRewriteConfig config = exportRewriteConfig();
+    OptimizeRewriteConfig config = exportRewriteConfig();
+    // The runs in a row that changed one graph: this loop asks the engine again and again, so the
+    // count has to live as long as the export does. The engine requires the state and refuses a run
+    // given none (engine.cpp); with a count of its own per run it could never reach `settle_runs`,
+    // so a recursion it unrolls level by level would export instead of being reported.
+    SettleStreak settleStreak;
+    config.settleStreak = &settleStreak;
     constexpr size_t kMaxRounds        = kMaxExportRounds;
     // Macros (grad, with_grad) expand once their arguments are constants, which
     // simplification may be what makes them.
@@ -4989,7 +4995,7 @@ void refuseUnendedUnrolling(
             "changing; here every level that was unrolled gave the next call arguments more "
             "specific than the loop's own (a more precise type, or a constant), so one more "
             "level was unrolled each time. Give the values the recursion carries and the "
-            "constants it uses types that say their element type and shape (`x as f32[..]`, "
+            "constants it uses types that say their element type and shape (`x as f32[...]`, "
             "`x as f32[const [...] ]`)",
             isSourceName(name) ? std::format(" of '{}'", name) : std::string(),
             full->graph(),
@@ -5033,9 +5039,14 @@ Model translatePrepared(
     // simplification can still change are left to the check after it (defect A5).
     refuseEffectsOf(ctx, ctx.sourceContext(), root, /*beforeSimplification=*/true);
     try {
+        // One export, one count of the runs that changed a graph: the engine requires the state,
+        // and a run given none is refused (engine.cpp).
+        SettleStreak settleStreak;
+        OptimizeRewriteConfig exportConfig = exportRewriteConfig();
+        exportConfig.settleStreak          = &settleStreak;
         program =
             preparation == Preparation::ShapesOnly
-                ? simplifyGraph(context, program, exportRewriteConfig(), log, kMaxExportRounds)
+                ? simplifyGraph(context, program, exportConfig, log, kMaxExportRounds)
                 : simplifyFully(context, program, log);
         if (program == nullptr) {
             // The engine gave up without an exception: it committed its diagnostic and returned

@@ -1,0 +1,44 @@
+// Which op answers an f32 value to a pullback that expects f64?  `stage2_residual_ln.cml` now
+// compiles (the `layer_norm` inference was fixed) and stops *at run time* in `attention.pb` with
+// `matmul_grad_lhs: the two operands have different element types ('f32' and 'f64')`, so one of the
+// values inside that pullback is f32 while everything is declared f64.  This program narrows it to
+// one of three compositions.
+import { layer_norm, softmax, sum, transpose } from tensor
+import { with_grad } from autodiff
+
+func mask(): float[...] { return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2] }
+
+type Model = { g: float[...], b: float[...], wq: float[...], wk: float[...], wv: float[...] }
+
+with <m: Model>
+func normed(x: float[...]): float { return sum(layer_norm(x, m.g, m.b)) }
+
+with <m: Model>
+func attended(x: float[...]): float {
+    let q = x @ m.wq
+    let k = transpose(x @ m.wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return sum(a @ (x @ m.wv))
+}
+
+with <m: Model>
+func both(x: float[...]): float {
+    return sum(layer_norm(x, m.g, m.b) @ m.wq)
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let m = {
+        g: [1.0, 1.0] as float[], b: [0.0, 0.0] as float[],
+        wq: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2]
+    }
+    let (v1, g1) = with_grad(normed)<m>(x)
+    `probe normed value=${v1:.12f} dg=${sum(g1.g):.12f}`->println
+    let (v2, g2) = with_grad(attended)<m>(x)
+    `probe attended value=${v2:.12f} dq=${sum(g2.wq):.12f}`->println
+    let (v3, g3) = with_grad(both)<m>(x)
+    `probe both value=${v3:.12f} dq=${sum(g3.wq):.12f}`->println
+    return 0
+}

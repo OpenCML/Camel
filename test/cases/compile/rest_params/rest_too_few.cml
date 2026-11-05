@@ -1,4 +1,4 @@
-func first(a: int, ..ts): int {
+func first(a: int, ...ts): int {
     return a
 }
 

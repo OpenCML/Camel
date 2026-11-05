@@ -1,0 +1,99 @@
+id = "compile.extent_of"
+order = 1008
+tier = "fast"
+tags = ["feat", "compile", "extents", "transforms"]
+desc = "What `extent_of` is today: `dim<axis>` answers one dimension's length of a shape, from the value; a type that states every extent folds that answer at compile time, and a type that states none keeps it as a node. There is no name that answers it from a **type alone**, which is what a transpose law needs (`docs/handover/questions/2026-11-04-what-answers-a-length-from-a-type-alone.cn.md`)"
+
+# The question `extent_of` was named for, asked of the three names that exist
+# (`docs/handover/questions/2026-11-04-what-answers-a-length-from-a-type-alone.cn.md`, section one).
+#
+# Every entry here is a reading of today's tree and all of them pass. They are here so that the day a
+# type-to-length channel lands, the new name can be held to the same numbers, and so that "it folds
+# when the type states the extents" is a fact with a case rather than a sentence in a header
+# (`stdlib/tensor.cml`, `shapeFold` in `modules/tensor/ops/layout_ops.cpp`, the folder in
+# `src/passes/opt/generic/generic.cpp#foldFromTypes`).
+
+[[tests]]
+name = "extent_of.stated_shape_numbers"
+desc = "`t: f32[2, 3]` answers `shape(t) = [2, 3]`, `dim<0> = 2`, `dim<1> = 3`, `dim<-1> = 3` (a negative axis counts from the last one) and `numel = 6`. The numbers a law would build zeros from, read off a value whose type states all of them."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_stated_shape.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "shape=[2, 3] dim0=2 dim1=3 dim-1=3 numel=6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.open_rank_numbers"
+desc = "The same value behind `t: f32[...]` answers the same numbers -- `shape = [2, 3]`, `dim<0> = 2`, `dim<1> = 3`, `numel = 6` -- because they are the value's and not the type's. This is the case a law cannot have: the parameter's type states no extent, and the value is the operand the cotangent comes back through (author, 2026-11-03 11:10 and 17:35)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_open_rank.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "shape=[2, 3] dim0=2 dim1=3 numel=6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.stated_shape_folds"
+desc = "A type that states every extent makes the answer a compile-time constant: with `std::opt` in front of the graph, the `f32[2, 3]` program holds **no** `tensor:dim`, `tensor:shape` or `tensor:numel` node at all. That half of the criterion exists today -- what does not exist is a way to reach it without a value of that type."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_stated_shape.cml"
+args = ["${case}", "std::opt", "std::gir"]
+expect_exit = 0
+expect_output_not_contains = ["tensor:dim", "tensor:shape", "tensor:numel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.open_rank_keeps_its_nodes"
+desc = "The other side of the same reading: with the extents open the three operators survive `std::opt` (`tensor:dim` twice, `tensor:shape` and `tensor:numel` once each) and answer when the graph runs. A fold that answered a default here would be a silently wrong shape, so the case pins the nodes rather than the numbers."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_open_rank.cml"
+args = ["${case}", "std::opt", "std::gir"]
+expect_exit = 0
+expect_output_contains = ["tensor:dim", "tensor:shape", "tensor:numel"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.axis_outside_the_rank_faults"
+desc = "An axis outside the rank is a fault, not a default: `dim<2>` on a rank-2 value stops the run with `RuntimeDiag::RuntimeError: dim: dim axis out of range`, after `dim<0>` has printed 2. Zero, one and `-1` would each be a shape the law builds zeros from and then reads elements out of."
+kind = "negative"
+case = "../../../cases/compile/transforms/extent_of_axis_outside.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_stdout_contains = ["2", "dim: dim axis out of range"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.an_array_of_arrays_answers_its_own_extent"
+desc = "`float[2][3]` is an array of arrays -- `T[m, n]` is the rank-2 spelling (`docs/language/03_data_model.md`, 3.1; design principles 5.4) -- so it is a rank-1 array of three `float[2]` values and `extent_of::<float[2][3]>()` answers `[3]`: the type's own extent, which is the list `shape` answers for a value of that type. The two answers the number must not drift to are pinned by name: the innermost dimension `[2]` (another type) and the rank-2 shape `[2, 3]` (`float[2, 3]`, the other type). Asserted per position (`len`, `[0]`) and as a whole, in both directions."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_array_of_arrays.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[3]\n1\n3\n[3]\ntrue\nfalse\nfalse\n[2]\n[2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.three_nested_dimensions_answers_the_outermost"
+desc = "One nesting deeper: `float[2][3][4]` is four values of `float[2][3]`, so its own extent is 4, and `extent_of` answers `[4]` -- again the list `shape` answers for a value of that type, and not either inner level (`[2]`, `[3]`) and not the rank-3 list (`[2, 3, 4]`). A reader that took the first-written bracket, or that flattened the nesting, answers a number pinned here as false."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_array_of_arrays_four.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[4]\n1\n4\n[4]\ntrue\nfalse\nfalse\nfalse\n[2]\n[3]\n[2, 3, 4]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

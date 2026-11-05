@@ -1,0 +1,42 @@
+// The library's `softmax` gradient stops **before** the transposition, and that is what this case
+// pins: `split`, not a missing `softmax_t`.
+//
+// The audit's row said `softmax` was "one rule away -- `jvp_softmax` exists and only `softmax_t` is
+// missing". The measurement says otherwise. The forward half is built, with the rule named:
+//
+//     REINTERP jvp function=total graph=250 ... rules=jvp_softmax,jvp_mul_tensor,jvp_sum
+//
+// and then the cut refuses, before any `TRANSPOSE` line exists at all:
+//
+//     REINTERP split function=jvp_of_total skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit
+//     split does not build this function: a node of the backward half reads a value the forward half
+//     did not copy
+//
+// No transpose rule can help: `softmax_t` would be looked up by the walk that never starts. The
+// tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, and that call carries
+// its axis as a context input (`softmax<1>`, `sum<1, true>`); the forward half's exit does not reach
+// that input, so the copy refuses. `relu`'s mask did not hit this because `where(x > 0, 1, 0)` carries
+// no context input -- it is built from `x` alone, and `split` carries it as a residue.
+//
+// The question this opens is
+// `docs/handover/questions/docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`;
+// this case is its measurement, kept as a case so the day it is answered the refusal goes red and says
+// what replaced it. The engine's answer for the same function is the neighbouring
+// `softmax_gradient_through_the_engine.cml` -- that is the number the library will have to reproduce,
+// and it is written out element for element there.
+//
+//     camel test/cases/compile/transforms/softmax_gradient_stops_at_split.cml
+import { vjp } from vjp
+import { softmax, sum } from tensor
+
+/// The same function as the engine case, with the differentiated value as an ordinary parameter.
+func total(x: float[...]): float {
+    return sum(softmax<1>(x) * [[1.0, 2.0, 4.0, 8.0], [1.0, -1.0, 0.0, 2.0]] as float[2, 4])
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([[1.0, 2.0, 3.0, 4.0], [0.5, -1.0, 2.0, 0.0]] as float[2, 4])
+    let d = pullback(1.0).0
+    `softmax library value={} d={}`->format<value, d>->println
+    return 0
+}

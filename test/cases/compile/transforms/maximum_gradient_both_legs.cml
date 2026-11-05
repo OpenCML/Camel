@@ -1,0 +1,53 @@
+// `maximum`'s gradient through the engine and through the library, in one program.
+//
+// `maximum(x, w)` picks one operand per element, so its cotangent goes to the operand it picked and
+// zero to the other: `where(x >= w, ct, 0.0)` for `x` and `where(x >= w, 0.0, ct)` for `w`. A tie
+// belongs to the left one, and both halves must say so -- the engine's `extremumVjp`
+// (`modules/tensor/ops/elementwise_ops.cpp`) asks `tensor:ge`, so the law writes `>=` and the input
+// below carries a tie (`x = 0.0`, `w = 0.0`) to make the reading check it.
+//
+// **Both operands are measured**, because the law answers two cotangents and a reading that only
+// read one of them could not tell a swapped law from a right one (`minimum`'s reading on the same
+// input is this one's mirror: `[1.0, 1.0, 0.0, 1.0]` for `x`). Each operand's engine leg is its own
+// `with` parameter, and the library leg reads both halves of one `pullback`.
+//
+// The two operands may have different shapes -- the operator broadcasts -- so each answer is reduced
+// to the shape its own operand states with `sum_to`, the identity for these equal shapes and the sum
+// over the lanes a broadcast spread the operand over when they are not.
+//
+//     camel test/cases/compile/transforms/maximum_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, maximum, sum } from tensor
+
+/// The engine's spelling of `d/dx`: the differentiated value is the `with` parameter.
+with <x: float[...]>
+func total_x(w: float[]): float {
+    return sum(maximum(x, w))
+}
+
+/// The same for `d/dw`: the other operand is the `with` parameter.
+with <w: float[...]>
+func total_w(x: float[]): float {
+    return sum(maximum(x, w))
+}
+
+/// The library's spelling: both operands are ordinary parameters.
+func total_plain(x: float[], w: float[]): float {
+    return sum(maximum(x, w))
+}
+
+func main(): int sync {
+    let xa = [-2.0, 0.0, 3.0, -0.5] as float[]
+    let wa = [1.0, 0.0, 1.0, 2.0] as float[]
+    let engine_dx = grad(total_x)<[-2.0, 0.0, 3.0, -0.5] as float[]>([1.0, 0.0, 1.0, 2.0] as float[])
+    let engine_dw = grad(total_w)<[1.0, 0.0, 1.0, 2.0] as float[]>([-2.0, 0.0, 3.0, -0.5] as float[])
+    `maximum engine dx={} dw={}`->format<engine_dx, engine_dw>->println
+    let (_, pullback) = vjp(total_plain)(xa, wa)
+    let (library_dx, library_dw) = pullback(1.0)
+    let same_x = sum(abs(engine_dx - library_dx)) == 0.0
+    let same_w = sum(abs(engine_dw - library_dw)) == 0.0
+    `maximum: engine={} library={} same={}`->format<engine_dx, library_dx, same_x>->println
+    `maximum dw: engine={} library={} same={}`->format<engine_dw, library_dw, same_w>->println
+    return 0
+}

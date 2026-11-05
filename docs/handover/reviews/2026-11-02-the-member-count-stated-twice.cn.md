@@ -6,7 +6,7 @@
 
 ## 问句
 
-`split` 的余量元组在"没有图在手"时（operator resolver 只看到类型，`modules/transforms/split.cpp:841-843`）被写成
+`split` 的余量元组在"没有图在手"时（operator resolver 只看到类型，`modules/transforms/split.cpp#residualsOf`）被写成
 `TupleType::residuals({})`——**成员数为 0**。运行时那个槽里放的却是真的余量元组（**2 / 3 / 5 个成员**，实测）。
 类型该不该有一个"元数未知"的答案，而不是"就是 0 个"？
 
@@ -25,11 +25,11 @@
 
 ## 另有一条路：在运行期构造点修正类型（**找过了：没有**）
 
-`modules/transforms/split.cpp:1219` 已经拿到了真数（`TupleType::create(residualTypes)`），所以先要找的是"值造出来的那一刻能不能顺手把类型改正"。**找不到，而且是结构上找不到：**
+`modules/transforms/split.cpp#ArmCut` 已经拿到了真数（`TupleType::create(residualTypes)`），所以先要找的是"值造出来的那一刻能不能顺手把类型改正"。**找不到，而且是结构上找不到：**
 
-1. **`Tuple` 值不存类型**：`include/camel/core/rtdata/tuple.h:416-418` 的私有部分只有 `uint32_t size_` 与 `slot_t data_[]`；带类型指针的是紧凑视图（`ViewData::type`，只有 `isView()` 才读）。**普通元组的类型永远来自槽声明。**
-2. **运行期造这个值的两处都不带真类型**：`modules/transforms/split_operator.cpp:168` 是 `::Tuple::create(2, mm::autoSpace())`（无形参类型）；`modules/transforms/split.cpp:1498-1500` 是 `fillTuple(draft, halves.backward->normTypeAt(0), …)`——**它用的就是编译期那个类型对象**，空占位原样传下去。
-3. **`split` 是运行期算子**（`modules/transforms/split_operator.cpp:124` `splitKernel`）：图只有进了内核才拿得到，而调用点槽位上的类型**在编译期就由 operator resolver 定死**（`split_operator.cpp:59` 的空占位）。**内核里的真数改不到调用点的签名。**
+1. **`Tuple` 值不存类型**：`include/camel/core/rtdata/tuple.h#data` 的私有部分只有 `uint32_t size_` 与 `slot_t data_[]`；带类型指针的是紧凑视图（`ViewData::type`，只有 `isView()` 才读）。**普通元组的类型永远来自槽声明。**
+2. **运行期造这个值的两处都不带真类型**：`modules/transforms/split_operator.cpp#splitOperatorGroups` 是 `::Tuple::create(2, mm::autoSpace())`（无形参类型）；`modules/transforms/split.cpp#readLoopCut` 是 `fillTuple(draft, halves.backward->normTypeAt(0), …)`——**它用的就是编译期那个类型对象**，空占位原样传下去。
+3. **`split` 是运行期算子**（`modules/transforms/split_operator.cpp#splitKernel` `splitKernel`）：图只有进了内核才拿得到，而调用点槽位上的类型**在编译期就由 operator resolver 定死**（`split_operator.cpp:59` 的空占位）。**内核里的真数改不到调用点的签名。**
 
 ⇒ **运行期没有任何地方能把类型改对。** 编译期那处"有真话"的地方恰恰落在"没有图"的一侧：`split.cpp:1194-1196` 的注释自己写着，**签名从类型算不出余量个数**（`f(x) = x` 与 `f(x) = x*x` 的 lifted 类型一样）。**这就是"只能选 A 或 C"的直接证据**：要么类型能说"未知"，要么 resolver 只能拒绝。
 

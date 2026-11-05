@@ -67,9 +67,13 @@ warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects
    |
  2 |     println('hello from greet')     // 结果没人用，也不在同步块里：不执行
    |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes)
+      nothing needs does not run, and a sync block nothing needs does not run either, so the effects
+      written directly in it do not run with it. This is legal, and where the effect is written
+      decides the writing that runs it: in a loop body, make the body a sync block with
+      'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a
+      function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare
+      'sync { ... }' written as a statement of a body that is not a sync block is not run either.
 
 1
 ```
@@ -188,7 +192,7 @@ func main(): int sync {
 
 - 写入不在同步块里、且此后没有任何地方再读该变量时，这次修改不执行（按依赖求值）。
 - 不在同步块里的写仍排在它之前写着的读之后（读看到的是写在它之前的那次写的值），但它不保证执行：之后没有人读该变量时它不执行；编译器给出警告 `SemanticDiag::IgnoredSideEffect`。
-- 修改的追踪覆盖捕获：函数通过捕获写入一个 `var`，调用处记为对该变量的一次写入。通过函数值（作为实参、返回值或存起来的 lambda）进行的调用，调用处只能按它的类型（`var` 形参）识别副作用。
+- 修改的追踪覆盖捕获：函数通过捕获写入一个 `var`，调用处记为对该变量的一次写入。调用处看得见它的函数体的函数值不是例外：在同一个函数里绑定到名字的 lambda 就是这样，`f()` 与调用一个有名字的函数一样，记为对捕获的 `c` 的一次写入。只有调用处看不见它的函数体的函数值才只能按它的类型（`var` 形参）识别副作用：作为实参传入的值、作为返回值得到的值，以及存进容器或结构之后再取出来的值。
 
 副作用的管理与追踪仍在研究中（设计原则 3.5）。同一个可变对象在同步块之外被多处写入时的行为尚未决定。
 

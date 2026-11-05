@@ -21,7 +21,8 @@ import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.m
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
-import { formatIsoTime, provenanceLine } from './provenance.mjs'
+import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
+import { describeRefusals, formatRefusalSpec, matchesRefusal, parseRefusalSpec, refusals } from './reading-refusal.mjs'
 
 const __filename = fileURLToPath(import.meta.url)
 const TOOLS_ROOT = path.dirname(__filename)
@@ -72,15 +73,18 @@ const TEST_FIELDS = new Set([
     'name', 'desc', 'kind', 'case', 'args', 'envs', 'tool', 'timeout_ms', 'cpu_budget_ms', 'verify_timeout_ms',
     'skip_unless', 'skip_unless_timeout_ms', 'parallel', 'tier', 'sweep', 'cuda_devices',
     'cuda_free_device',
-    'known_fail', 'known_fail_note', 'failure_note',
+    'known_fail', 'known_fail_owner', 'known_fail_reason', 'known_fail_note', 'known_fail_msg',
+    'failure_note',
+    'silenced_warnings',
     'backends', 'backends_agree', 'compare_to', 'compare_fields',
     'golden', 'snapshot_stream', 'snapshot_compare', 'normalizers',
-    'expect_exit', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
+    'expect_exit', 'expect_signal', 'expect_stdout_contains', 'expect_stdout_exact', 'expect_stdout',
     'expect_stdout_matches',
     'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
     'expect_diagnostic_line', 'expect_diagnostic_column',
+    'expect_refusal',
     'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
     'verify_script', 'verify_script_path', 'verify_js',
 ])
@@ -150,10 +154,108 @@ function checkFieldType(planPath, entry, field, where, type) {
             ? typeof value === 'number' && Number.isFinite(value)
             : type === 'boolean'
                 ? typeof value === 'boolean'
-                : false
+                : type === 'strings'
+                    ? Array.isArray(value) && value.every((one) => typeof one === 'string')
+                    : false
     if (ok) return
-    const shown = type === 'string' ? JSON.stringify(value) : String(value)
+    const shown = type === 'number' || type === 'boolean' ? String(value) : JSON.stringify(value)
     throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${field} must be a ${type}, got ${shown}`)
+}
+
+// The three things the author's ruling of 2026-11-03 00:30 asked a `known_fail` entry to carry: the
+// mark, who is responsible for making the case green, and why it cannot pass today. The mark alone
+// says "we accept this red"; it says nothing about who ends it or where the case is stuck, and until
+// this check existed the other two lived in the prose of a note that a review had to remember to
+// read. A ruling kept by memory is kept until the next writer, so the owner and the reason are
+// fields, and a plan that leaves either one out fails when the plan is loaded -- with the plan, the
+// case and the missing one named. There is deliberately no default for either: a default turns the
+// gate into decoration.
+//
+// A field that only the gate reads is not read at all in practice, so `known_fail_owner` is also
+// printed on the `[XFAIL]` line of every run (`printResult`). That is the difference between a
+// promise in a file and a promise in front of the person reading the gate.
+const OWNER_PLACEHOLDERS = new Set([
+    '-', '--', '?', 'n/a', 'na', 'nil', 'none', 'null', 'nobody', 'anyone', 'somebody',
+    'tbd', 'todo', 'unknown', 'unassigned', '待定', '待修', '暂无', '未知', '无人',
+])
+// A reason that is one of these says the case is red without saying what stands in the way; the
+// next reader cannot act on it and cannot tell it from a stale one.
+const REASON_PLACEHOLDERS = new Set([
+    '-', '--', '?', 'n/a', 'na', 'nil', 'none', 'null',
+    'tbd', 'todo', 'fixme', 'known issue', 'not supported yet', 'see above',
+    '待定', '待修', '待补', '待查', '暂无', '暂不支持', '未实现',
+])
+// What "stuck" looks like on paper, in the three shapes this tree already writes it in: the
+// refusal or the law quoted from the compiler (`` `skip=rule uri=tensor:sum reason=unbound` ``),
+// the file and optionally the symbol in it (`test/tools/run-tests.mjs#loadPlanTests`), or the page
+// that decides the question. A reason that names none of them is a mood, not a wall.
+const WALL_SPELLINGS = [
+    /`[^`]+`/,
+    /[A-Za-z0-9_./-]+\.(?:cml|cpp|cc|h|hpp|py|mjs|js|toml|md)(?:#[A-Za-z0-9_:]+)?/,
+    /[A-Za-z0-9_./-]+#[A-Za-z0-9_:]+/,
+]
+
+function knownFailIsMarked(mark) {
+    return mark === true || (Array.isArray(mark) && mark.length > 0)
+}
+
+/**
+ * A marked case must say who owns it and where it is stuck. The mark, the owner and the reason may
+ * all be inherited from `[defaults]`: a plan whose default marks one back end and names the owner
+ * does not have to repeat itself on each entry that changes only which back end fails.
+ */
+function checkKnownFailMark(planPath, entry, inherited, where) {
+    const mark = entry.known_fail !== undefined ? entry.known_fail : inherited && inherited.known_fail
+    if (!knownFailIsMarked(mark)) return
+    const owner = entry.known_fail_owner !== undefined ? entry.known_fail_owner : inherited && inherited.known_fail_owner
+    const reason = entry.known_fail_reason !== undefined ? entry.known_fail_reason : inherited && inherited.known_fail_reason
+    if (typeof owner !== 'string' || owner.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_owner: the mark says this ` +
+                `case is red, and only an owner says who ends that -- name the lane or the person`,
+        )
+    }
+    if (OWNER_PLACEHOLDERS.has(owner.trim().toLowerCase())) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_owner is ${JSON.stringify(owner)}, which names ` +
+                `nobody: name the lane or the person who makes this case green`,
+        )
+    }
+    if (typeof reason !== 'string' || reason.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_reason: one sentence saying ` +
+                `where the case is stuck -- the refusal in backticks, the file#Symbol that refuses, or ` +
+                `the page that decides it`,
+        )
+    }
+    const stated = reason.trim()
+    if (REASON_PLACEHOLDERS.has(stated.toLowerCase()) || /^(tbd|todo|fixme|待修|待定|待补|暂不支持)\b/i.test(stated)) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_reason is ${JSON.stringify(reason)}, which says ` +
+                `nothing about the wall: name what refuses, not that the case is red`,
+        )
+    }
+    if (!WALL_SPELLINGS.some((pattern) => pattern.test(stated))) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail_reason names no wall: quote the refusal in ` +
+                `backticks, name the file#Symbol that refuses, or name the page that decides it`,
+        )
+    }
+    // The sentence the case is expected to print today, quoted from a run. Without it there is
+    // nothing to compare a failure against, so `executePlans` takes every failure as the expected
+    // one: a different defect can wear the mark's name and no reader can tell (`ceee7b950`'s page
+    // measured two entries printing `exported`, exiting 0 and writing nothing while their marks
+    // reported a known failure). It is read off the entry itself -- `executePlans` compares against
+    // `test.known_fail_msg` and never against a `[defaults]` value -- so a plan cannot supply it
+    // once for the whole file.
+    const expected = entry.known_fail_msg
+    if (typeof expected !== 'string' || expected.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${planLabel(planPath)}: ${where}: known_fail needs known_fail_msg: quote the sentence this ` +
+                `case prints today on the entry itself -- without it the runner takes any failure as the ` +
+                `expected one, so another defect wears this mark's name and nothing ever re-reads it`,
+        )
+    }
 }
 
 /**
@@ -200,6 +302,10 @@ function validatePlanSchema(doc, planPath) {
     ]
     for (const [where, entry] of entries) {
         if (!entry) continue
+        // A marked case has to carry its owner and its wall, and this is the only place that can
+        // refuse it: the runner reads a plan once, here, and a promise checked later than this is
+        // a promise kept by whoever remembered to look.
+        checkKnownFailMark(planPath, entry, where === '[defaults]' ? null : doc.defaults, where)
         checkFieldType(planPath, entry, 'expect_stdout_exact', where, 'string')
         checkFieldType(planPath, entry, 'expect_stdout', where, 'string')
         // A pattern, or a list of them, every one of which has to find a line. The shape is typed
@@ -220,6 +326,21 @@ function validatePlanSchema(doc, planPath) {
                 )
             }
         }
+        checkFieldType(planPath, entry, 'silenced_warnings', where, 'strings')
+        // A refusal is a value, and a plan names it field by field: the cause the transform's table
+        // spells and the place the refusal names, never the sentence the line prints
+        // (`test/tools/reading-refusal.mjs`). The fields are checked here, with the plan and the
+        // test named, so a misspelled field cannot compare nothing and pass.
+        if (entry.expect_refusal !== undefined) {
+            checkFieldType(planPath, entry, 'expect_refusal', where, 'strings')
+            for (const spec of entry.expect_refusal) {
+                try {
+                    parseRefusalSpec(spec)
+                } catch (error) {
+                    throw new PlanSchemaError(`${planLabel(planPath)}: ${where}: ${error.message}`)
+                }
+            }
+        }
         checkFieldType(planPath, entry, 'perf_budget_platform', where, 'string')
         checkFieldType(planPath, entry, 'cuda_devices', where, 'boolean')
         checkFieldType(planPath, entry, 'cuda_free_device', where, 'boolean')
@@ -233,6 +354,20 @@ function validatePlanSchema(doc, planPath) {
                 `${planLabel(planPath)}: ${where}: cpu_budget_ms needs timeout_ms: the budget is the ` +
                     `cost bound and the timeout is the liveness bound (a hang, not a slow run)`
             )
+        }
+        // `expect_signal` names the signal that must have killed the test's process. The shape is
+        // checked here -- a name, or a number this platform knows, and nothing else -- so a plan that
+        // writes `true` ("it dies somehow") fails with its file, its test and its key named instead
+        // of passing while asserting nothing. It and `expect_exit` are one question with one answer,
+        // so a table that writes both is a contradiction and not a preference.
+        if (entry.expect_signal !== undefined) {
+            expectedSignalNumber(entry.expect_signal, `${planLabel(planPath)}: ${where}: `)
+            if (entry.expect_exit !== undefined) {
+                throw new PlanSchemaError(
+                    `${planLabel(planPath)}: ${where}: expect_signal with expect_exit: a process ` +
+                        `ends one way, and a killed one has no exit code to compare`
+                )
+            }
         }
     }
 }
@@ -251,6 +386,41 @@ function camelBinary(options) {
 
 function camelInstall(options) {
     return path.dirname(path.dirname(camelBinary(options)))
+}
+
+// Whether this build's `std::jit` compiles a function to native code.
+//
+// The JIT has one code generator, for x86-64 (`cmake/Options.cmake`: ENABLE_FASTVM_JIT is on for
+// that processor alone), so every other build -- arm64 on any platform, and a build that switched
+// the JIT off by hand -- runs `std::jit` on the bytecode interpreter of `std::fvm` and says so on
+// every run of a pipeline that names the pass (`RuntimeDiag::JitWithoutCodeGenerator`, one warning
+// line on stderr and one diagnostic in the report). That is a fact about the build, not about the
+// program a test runs, and 240 entries compare a `.jit` entry against its `.nvm` twin on stderr and
+// diagnostics while others assert that a run says nothing. The notice is therefore silenced for
+// every entry by default (`silenced_warnings`, see runOneTest) and the entries that test the notice
+// keep it.
+//
+// The reading is the one `test/tools/have-native-jit.mjs` takes, so a test and a runner cannot
+// disagree about which build they are in. `CAMEL_TEST_NO_JIT=1|0` answers for the harness, which is
+// how the no-JIT behaviour is exercised on a build that does have a code generator.
+let noCodeGeneratorCache = null
+
+function buildHasNoCodeGenerator(options) {
+    if (noCodeGeneratorCache !== null) return noCodeGeneratorCache
+    const forced = process.env.CAMEL_TEST_NO_JIT
+    if (forced !== undefined && forced !== '') {
+        noCodeGeneratorCache = forced !== '0'
+        return noCodeGeneratorCache
+    }
+    const probe = spawnSync(camelBinary(options), ['-v', path.join(REPO_ROOT, 'hello.cml'), 'std::jit'], {
+        cwd: REPO_ROOT,
+        env: { ...process.env, CAMEL_HOME: camelInstall(options) },
+        encoding: 'utf8',
+        timeout: 60000,
+    })
+    const text = `${probe.stdout || ''}${probe.stderr || ''}`
+    noCodeGeneratorCache = text.includes('no native code generator')
+    return noCodeGeneratorCache
 }
 
 function toolExecutable(tool, build) {
@@ -654,11 +824,18 @@ function parseArgs(argv) {
         // targets but follow `--tier`, so a plan whose slow cases must not run from an ordinary
         // change runs only its fast layer. `--run-changed` produces this; it is not a user knob.
         layeredPlans: new Set(),
+        // `--changed` measured an empty selection: no target travels with the run because there is
+        // no plan to run, and an absent target list must not become the whole plan tree here -- that
+        // widening is what let `changed: 0 target(s)` run 336 plan files and print a green summary.
+        // Only `test/runner.mjs` passes this flag, and it is refused beside a target.
+        selectionEmpty: false,
     }
     for (let i = 0; i < argv.length; i++) {
         const arg = argv[i]
         if (arg === '--update-golden') {
             options.updateGolden = true
+        } else if (arg === '--selection-empty') {
+            options.selectionEmpty = true
         } else if (arg === '--selection-layer' && i + 1 < argv.length) {
             for (const entry of argv[++i].split(',')) {
                 if (entry.trim()) options.layeredPlans.add(path.resolve(process.cwd(), entry.trim()))
@@ -710,6 +887,13 @@ function parseArgs(argv) {
             throw new Error(`--tier debug runs on the Debug build; --build ${options.build} was given`)
         }
         options.build = 'debug'
+    }
+    // `--selection-empty` says this run's selection is a measured zero, so a target beside it is a
+    // contradiction: the flag means nothing was selected and the target means something was.
+    if (options.selectionEmpty && options.targets.length > 0) {
+        throw new Error(
+            `--selection-empty means no plan was selected, so it cannot travel with a target (${options.targets[0]})`
+        )
     }
     return options
 }
@@ -843,7 +1027,11 @@ function expandArgToken(token, scope) {
     })]
 }
 
-function expandArgs(args, scope) {
+// Exported because the layer report (`scripts/tier-report.mjs`) has to know what a copy actually
+// launches: two entries whose argument lists read the same can still resolve to different
+// commands (`${backend}` is a pass list from `test/vars.toml`), and a report that compared the
+// written words would call 3293 distinct runs 2233. One expansion, one answer.
+export function expandArgs(args, scope) {
     const expanded = []
     for (const token of args || []) {
         expanded.push(...expandArgToken(token, scope))
@@ -856,7 +1044,7 @@ function expandArgs(args, scope) {
  * path a program prints can name this test's scratch directory. Unknown names are errors, as in
  * `args`.
  */
-function expandTextTokens(text, scope) {
+export function expandTextTokens(text, scope) {
     return String(text).replace(/\$\{([A-Za-z0-9_.-]+)\}/g, (_, name) => {
         if (!(name in scope)) throw new Error(`unknown variable ${name}`)
         const value = scope[name]
@@ -937,6 +1125,49 @@ function describeExit(result) {
     return `exit ${result.exitCode}`
 }
 
+/** The number a signal name stands for, as this platform numbers it; undefined for no signal. */
+function signalNumberOf(name) {
+    const signals = (os.constants && os.constants.signals) || {}
+    if (typeof name !== 'string' || name.length === 0) return undefined
+    return Object.prototype.hasOwnProperty.call(signals, name) ? signals[name] : undefined
+}
+
+/**
+ * The signal a plan expects, as the number this platform numbers it by: `expect_signal = "ABRT"`,
+ * `"SIGABRT"` and `6` are one expectation written three ways.
+ *
+ * There is no default and no boolean form. `expect_exit = 0` is the ordinary end of a process, so an
+ * entry that says nothing is asserting it; a process that dies of a signal is not ordinary, and an
+ * entry that expects one has to name it -- otherwise the entry says nothing a reader could check,
+ * and a death by a *different* signal would pass it.
+ */
+function expectedSignalNumber(value, prefix = '') {
+    const signals = (os.constants && os.constants.signals) || {}
+    if (typeof value === 'number') {
+        if (!Object.values(signals).includes(value)) {
+            throw new PlanSchemaError(
+                `${prefix}expect_signal: ${value} is not a signal number on this platform`
+            )
+        }
+        return value
+    }
+    if (typeof value !== 'string' || value.trim().length === 0) {
+        throw new PlanSchemaError(
+            `${prefix}expect_signal must name a signal ("ABRT", "SIGABRT") or give its number (6), ` +
+                `got ${JSON.stringify(value)}: a plan that expects a crash has to say which signal killed it`
+        )
+    }
+    const written = value.trim().toUpperCase()
+    const name = written.startsWith('SIG') ? written : `SIG${written}`
+    const number = signalNumberOf(name)
+    if (number === undefined) {
+        throw new PlanSchemaError(
+            `${prefix}expect_signal: '${value}' is not a signal this platform knows`
+        )
+    }
+    return number
+}
+
 function formatMetric(result) {
     // A test judged on its own CPU time prints the CPU figure it was judged on, with the budget it
     // was read against and the wall clock beside it as information: on this host the wall figure is
@@ -969,7 +1200,7 @@ function printPlanHeader(plan) {
     const showPath = relativePath.split('.')[0].replace(/\//g, '.')
     const planLabel = plan.desc || plan.id || '.'
     console.log('')
-    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}`)
+    console.log(`${COLORS.cyan}[PLAN]${COLORS.reset} ${showPath}: ${planLabel}${staleAllowedMark()}`)
 }
 
 function printStatusLine(status, name, metric = '') {
@@ -1034,10 +1265,18 @@ function printMatchDiagnostics(diagnostics) {
  * integration, where the files of test/results are not at hand): with CI or
  * CAMEL_TEST_SHOW_OUTPUT set, the last lines of standard output and standard error follow the
  * failure, line ends and control characters made visible.
+ *
+ * When the tail is shorter than what the test wrote, the line that cuts it says how much it cut
+ * **and where the uncut text is** (`pointer`, the same line the caller printed above the tail). A
+ * printer that cuts evidence in silence is worse than one that prints nothing: the second sends the
+ * reader to the log, and the first lets them believe they have already read it. Measured on
+ * 2026-11-04: `runner.backend_matrix` was red because the two lines naming the defect were 75 lines
+ * above a tail that looked complete, and the elision line said `... 75 line(s) before` -- a count
+ * with no destination.
  */
 const SHOW_FAILED_OUTPUT = Boolean(process.env.CAMEL_TEST_SHOW_OUTPUT || process.env.CI)
 
-function printFailedOutput(result) {
+function printFailedOutput(result, pointer) {
     if (!SHOW_FAILED_OUTPUT) return
     const maxLines = 12
     const maxWidth = 240
@@ -1049,7 +1288,10 @@ function printFailedOutput(result) {
         const lines = text.replace(/\n$/, '').split('\n')
         const shown = lines.slice(-maxLines)
         if (lines.length > shown.length) {
-            console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} ... ${lines.length - shown.length} line(s) before`)
+            const where = pointer ? ` -- ${pointer}` : ''
+            console.log(
+                `    ${COLORS.cyan}[${name}]${COLORS.reset} omitted ${lines.length - shown.length} line(s) above${where}`,
+            )
         }
         for (const line of shown) {
             const visible = line
@@ -1118,7 +1360,7 @@ function readProvenance(options) {
 }
 
 function printProvenance(options) {
-    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}`)
+    console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}${staleAllowedMark()}`)
 }
 
 function printRunSummary(summary) {
@@ -1133,7 +1375,7 @@ function printRunSummary(summary) {
     console.log('')
     console.log(
         `${COLORS.cyan}[SUMMARY]${COLORS.reset} total: ${total}, pass: ${summary.pass}, fail: ${summary.fail}` +
-            `${skipped}${known}${timedOut}${crashed}`,
+            `${skipped}${known}${timedOut}${crashed}${staleAllowedMark()}`,
     )
 }
 
@@ -1293,13 +1535,55 @@ const fail = (message = 'verification failed') => {
 }
 const approx = (actual, expected, tolerance = 1e-9) =>
     Math.abs(Number(actual) - Number(expected)) <= tolerance
+// ---- the declared error bound, in ulps ----
+//
+// A transcendental function is not promised to answer the same bits on every device: design
+// principles 7.1 promises a written error bound instead, in ulps, declared one function at a time
+// (\`stdlib/math.cml\`: "an error of at most 2 ulp ... not the same bits on every device"). An
+// assertion on such a number therefore has to be an assertion about that bound -- a bit comparison
+// asserts something the language never promised, and registering it as a known failure would hide
+// the real errors that come later.
+//
+// The unit is the last place of the **declared** value, not of the measured one: a 2-ulp promise is
+// about the result's own grid, and reading it off the measurement would let a wrong answer move its
+// own tolerance. \`bits\` is the precision the answer is declared at -- 53 for a \`float\` (f64), 24
+// for an f32 -- because the promise is "of the type's own precision".
+const ulpStep = (value, bits = 53) => {
+    const magnitude = Math.abs(Number(value))
+    if (!Number.isFinite(magnitude) || magnitude === 0) {
+        // Not reached for a zero declared value: \`ulp\` compares that exactly, because 7.1 promises
+        // zeros (and their signs) exactly. The grid at zero is the subnormal one, whose step is the
+        // smallest representable value at this precision.
+        return bits >= 53 ? Number.MIN_VALUE : Math.pow(2, -149 + (53 - bits))
+    }
+    const exponent = Math.floor(Math.log2(magnitude))
+    return Math.pow(2, exponent - (bits - 1))
+}
+const ulpDistance = (actual, expected, bits = 53) => {
+    const a = Number(actual)
+    const e = Number(expected)
+    if (Number.isNaN(a) || Number.isNaN(e)) return Number.NaN
+    if (a === e) return 0
+    if (!Number.isFinite(a) || !Number.isFinite(e)) return Number.POSITIVE_INFINITY
+    return Math.abs(a - e) / ulpStep(e, bits)
+}
+// \`ulp(measured, declared, bound)\`: true when the two are within \`bound\` units in the last place of
+// the declared value. Exact special values (NaN, +-inf, +-0) are compared bit for bit, because 7.1
+// promises those exactly.
+const ulp = (actual, expected, bound = 2, bits = 53) => {
+    const a = Number(actual)
+    const e = Number(expected)
+    if (Number.isNaN(e)) return Number.isNaN(a)
+    if (!Number.isFinite(e) || e === 0) return Object.is(a, e)
+    return ulpDistance(a, e, bits) <= bound
+}
 const match = (pattern, text = input.normalized.output) => {
     const regex = pattern instanceof RegExp ? pattern : new RegExp(pattern)
     const found = regex.exec(text)
     if (!found) throw new Error(\`pattern not found: \${regex}\`)
     return found
 }
-const helpers = { input, assert, fail, approx, match }
+const helpers = { input, assert, fail, approx, match, ulp, ulpDistance }
 const inlineSource = ${encodedSource}
 
 try {
@@ -1617,7 +1901,19 @@ function assertionProblems(test) {
 async function validateTest(test, result, context) {
     const failures = []
     const scope = context.scope || {}
-    if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
+    // A process ends one of two ways, and a plan says which it expects: an exit code, or a signal
+    // that killed it. `expect_signal` is the second and it stands in place of the exit assertion
+    // rather than joining it, because a killed process has no exit code at all (`exitCode` is null):
+    // checking both would fail one crash twice, once for the signal that was expected and once for
+    // the exit code that cannot exist. This is the one place a signal decides a verdict, so a plan
+    // that expects a crash no longer has to be marked `known_fail` -- a mark that says the run is
+    // wrong today, which reads as "the crash is the defect" and turns the entry green again the day
+    // the process stops crashing.
+    if (test.expect_signal !== undefined) {
+        if (signalNumberOf(result.signal) !== expectedSignalNumber(test.expect_signal)) {
+            failures.push(`expected signal ${String(test.expect_signal)}, got ${describeExit(result)}`)
+        }
+    } else if (typeof test.expect_exit === 'number' && result.exitCode !== test.expect_exit) {
         failures.push(`expected exit ${test.expect_exit}, got ${describeExit(result)}`)
     }
     for (const rawNeedle of test.expect_stdout_contains || []) {
@@ -1689,6 +1985,27 @@ async function validateTest(test, result, context) {
         const needle = expandTextTokens(rawNeedle, scope)
         if (result.normalized.output.includes(needle)) {
             failures.push(`output contains '${needle}'`)
+        }
+    }
+    // The refusal, as the value the site recorded rather than the sentence it printed: each entry
+    // names fields of one `READING_REFUSAL` record, and a record has to answer all of them. Nothing
+    // here reads the `REINTERP` line -- a rename of that wording is not a change of the transform,
+    // and a plan that pinned the wording was red for the rename.
+    if (Array.isArray(test.expect_refusal) && test.expect_refusal.length > 0) {
+        let records = []
+        try {
+            records = refusals(result.normalized.stderr)
+        } catch (error) {
+            failures.push(error.message)
+        }
+        for (const rawSpec of test.expect_refusal) {
+            const spec = parseRefusalSpec(rawSpec)
+            if (!records.some((record) => matchesRefusal(record, spec))) {
+                failures.push(
+                    `no refusal record says '${formatRefusalSpec(spec)}': ` +
+                        `the run recorded ${describeRefusals(records)}`
+                )
+            }
         }
     }
     if (
@@ -1844,6 +2161,22 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         scope.backend = passes
     }
     const args = expandArgs(test.args || [], scope)
+    // The build's own notice about `std::jit` (see buildHasNoCodeGenerator) is silenced here unless
+    // the entry names it in `silenced_warnings`: an entry that compares back ends or asserts that a
+    // run says nothing is asking about the program, and the entry that tests the notice itself is
+    // the one that writes `silenced_warnings = []`. `-Wno-...` is scanned out of the whole argv by
+    // the command line (`takeWarningArguments`), so its position does not matter.
+    const silencedWarnings = test.silenced_warnings ?? ['jit-without-code-generator']
+    // Only an entry that runs the compiler takes the flag: a `tool` entry hands its arguments to
+    // another program (a script of this repository, the language server, the debugger), which knows
+    // nothing of `-Wno-...` and would read it as its own.
+    if (
+        toolName === 'camel' &&
+        silencedWarnings.includes('jit-without-code-generator') &&
+        buildHasNoCodeGenerator(logContext.options)
+    ) {
+        args.unshift('-Wno-jit-without-code-generator')
+    }
     // `--compile-only`: the same entry, the same case, the same environment and the same arguments
     // that are not passes -- but the pipeline stops once the program is built. Every word that
     // names a pass is dropped and one compile pass is appended (`std::gir` builds the program and
@@ -2178,7 +2511,17 @@ function expandBackends(test) {
                     `backends list, so no back end of that name runs here: write known_fail = true`,
             )
         }
-        return [{ ...test, __knownFail: true }]
+        // The single-run shape pins its fragment the same way the back-end shape below does: this
+        // one returned the entry before reading the field, so an entry with `known_fail = true`,
+        // no `known_fail_msg` and no `backends` was reported as `known failure changed its mind:
+        // expected "undefined"` -- a correct known failure turned into a hard failure by a pin
+        // nobody wrote. `docs/test-plans.md` says the field is legal to omit, and this is the line
+        // that makes that true for both shapes.
+        return [{
+            ...test,
+            __knownFail: true,
+            __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
+        }]
     }
     if (marked === true) {
         throw new Error(
@@ -2200,6 +2543,9 @@ function expandBackends(test) {
         __backend: backend,
         __backendReference: index === 0 ? null : `${test.name}.${test.backends[0]}`,
         __knownFail: knownFail.has(backend),
+        // Absent unless the plan pins one, so every mark written before this field existed stays
+        // legal: the mechanism grows by pinning cases one at a time, never by a migration.
+        __knownFailMsg: typeof test.known_fail_msg === 'string' ? test.known_fail_msg : null,
     }))
 }
 
@@ -2321,6 +2667,7 @@ export function expandSweeps(doc, planPath) {
             if (sampleCount > 0) {
                 const preferred = eligible.filter(
                     (test) => (test.expect_exit === undefined || test.expect_exit === 0) &&
+                        test.expect_signal === undefined &&
                         test.tier !== 'slow' && test.tier !== 'milestone'
                 )
                 for (const test of [...preferred, ...eligible]) {
@@ -2552,18 +2899,30 @@ function planLineOf(planPath, needle) {
     return index === -1 ? null : index + 1
 }
 
-function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false) {
+function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false, emptySelection = false) {
     // A plan file named on the command line (or by `--changed`'s self rule) runs in full; the
     // plans a directory reaches follow the layer. The same plan reached both ways is named,
     // unless `--changed` marked it `layer: true`: then the tier filter applies to it as well.
     const namedPlans = new Set()
     const discovered = []
+    // A target that reaches no plan file named nothing: it is neither a layer question nor a plan
+    // with a schema error. Kept apart so the callers can refuse with that sentence -- the layer
+    // one below (`none of their entries is in this layer`) would be a wrong answer for a path that
+    // holds no plan at all, and it is the answer a fixture directory gets: `test/plans/feat/docs_links`
+    // is the directory beside `docs_links.plan.toml`, not a plan directory.
+    const reachedNothing = []
     for (const target of targets) {
         const resolved = path.resolve(target)
+        const found = walkPlans(target)
+        if (found.length === 0) reachedNothing.push(target)
         if (fs.statSync(resolved).isFile() && !layeredPlans.has(resolved)) namedPlans.add(resolved)
-        discovered.push(...walkPlans(target))
+        discovered.push(...found)
     }
-    if (targets.length === 0) discovered.push(...walkPlans(PLANS_ROOT))
+    // No target is the whole plan tree -- that is what `node scripts/test.js` with no argument means,
+    // and what `npm run test` relies on. The one caller that means the opposite says so;
+    // `emptySelection` is a selection that was measured empty (0 changed files), so widening it here
+    // is exactly the defect this flag exists to stop: 0 changed files used to start 336 plan files.
+    if (targets.length === 0 && !emptySelection) discovered.push(...walkPlans(PLANS_ROOT))
     // `--all` names the plans root and a plan may also be named explicitly; the same plan must
     // not run twice.
     const planPaths = [...new Set(discovered.map((planPath) => path.resolve(planPath)))]
@@ -2586,7 +2945,16 @@ function loadPlans(targets, tier, layeredPlans = new Set(), compileOnly = false)
             if (lhsOrder !== rhsOrder) return lhsOrder - rhsOrder
             return lhs.__planPath.localeCompare(rhs.__planPath)
         })
-    return selectTier(plans, tier, namedPlans, compileOnly === true)
+    // `reachedButFiltered` is how many plan files this selection read, before the layer kept
+    // anything from them. A run that starts nothing has to say which of the two zeros it is -- no
+    // plan file at all (refused above, target by target) or plan files whose entries belong to
+    // another layer -- and the count that separates them is the one before the filter, not after
+    // it: `plans` is the post-filter list and reads 0 in that message's own case.
+    return {
+        ...selectTier(plans, tier, namedPlans, compileOnly === true),
+        reachedNothing,
+        reachedButFiltered: plans.length,
+    }
 }
 
 /** The result of a test the runner itself could not run: its failure is reported like any other. */
@@ -3089,21 +3457,32 @@ async function executePlans(plans, options, sharedVars, logDir) {
             else if (outcome.result.signal) summary.crashed++
         }
         printStatusLine(outcome.status, test.name, outcome.metric)
+        // Who ends this red, printed beside the red. An owner that exists only in the plan file is a
+        // promise the person reading the gate never sees, and the field would then be read by
+        // nothing but the load-time check -- which is the shape this project already called worse
+        // than no mark at all.
+        if (test.__knownFail && typeof test.known_fail_owner === 'string') {
+            printDetailLines([`known_fail_owner: ${test.known_fail_owner}`])
+        }
         if (outcome.failures.length > 0) {
             const note = test.__knownFail ? test.known_fail_note || test.failure_note : test.failure_note
             if (note) {
                 printDetailLines([`note: ${note}`])
             }
+            // The pointer to the whole output, computed once: it is printed before the twelve-line
+            // tail, and again on the line that cuts the tail, so a reader who stops at the tail has
+            // been told twice where the rest is.
+            const pointer = outcome.status === 'fail'
+                ? fullOutputLine(logPathOf(plan, test, outcome.status, logDir))
+                : ''
             if (outcome.status === 'fail') {
-                // The pointer comes before the twelve-line tail: a reader who stops at the tail must
-                // still have been told where the rest is.
-                printDetailLines([fullOutputLine(logPathOf(plan, test, outcome.status, logDir))])
+                printDetailLines([pointer])
             }
             printDetailLines(outcome.failures)
             // A regex that matched nothing prints its pattern and the head of what it read, before
             // the tail: the two ends of the output are two different readings.
             if (outcome.status === 'fail') printMatchDiagnostics(outcome.result && outcome.result.matchDiagnostics)
-            if (outcome.status === 'fail') printFailedOutput(outcome.result)
+            if (outcome.status === 'fail') printFailedOutput(outcome.result, pointer)
         }
         const writeStarted = performance.now()
         writeLogFiles(plan, test, outcome.result, outcome.status, logDir)
@@ -3236,7 +3615,23 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     // A known failure that fails is reported and counted apart, and does not fail
                     // the run. One that passes fails the run: the mark is out of date.
                     if (result.status === 'fail') {
-                        result.status = 'xfail'
+                        // A mark says "this case fails", not "this case fails for this reason". A
+                        // case that starts failing differently is a new defect wearing an old name,
+                        // so a plan may pin a fragment of the message it expects: one that no
+                        // longer appears turns the run red, the same way a mark that starts
+                        // passing does. Unset is legal and pins nothing.
+                        const pinned = entry.test.__knownFailMsg
+                        const seen = `${(result.failures || []).join('\n')}\n${result.stdout || ''}\n${result.stderr || ''}`
+                        if (pinned !== null && !seen.includes(pinned)) {
+                            const first = `${(result.failures || [])[0] || result.stderr || result.stdout || '(no output)'}`
+                                .split('\n')[0]
+                            result.status = 'fail'
+                            result.failures.push(
+                                `known failure changed its mind: expected "${pinned}", got "${first.trim()}"`,
+                            )
+                        } else {
+                            result.status = 'xfail'
+                        }
                     } else {
                         result.status = 'fail'
                         result.failures.push(
@@ -3296,7 +3691,9 @@ async function executePlans(plans, options, sharedVars, logDir) {
 
 async function main() {
     const options = parseArgs(process.argv.slice(2))
-    preflightBuild(options)
+    // An empty selection starts no plan, so no binary is consulted: refusing here for a missing
+    // install would turn "nothing to run" into a red about a build, which is a different question.
+    if (!options.selectionEmpty) preflightBuild(options)
     // Writing golden files from several tests at once would make the content depend on which
     // test finished last; update-golden is a deliberate, serial maintenance run.
     if (options.updateGolden && options.jobs !== 1) {
@@ -3311,8 +3708,40 @@ async function main() {
             return false
         }
     })
-    const selected = loadPlans(options.targets, options.tier, options.layeredPlans, options.compileOnly === true)
+    const selected = loadPlans(
+        options.targets,
+        options.tier,
+        options.layeredPlans,
+        options.compileOnly === true,
+        options.selectionEmpty === true
+    )
     const plans = selected.plans
+    // A target that reached no plan file refuses the run before anything starts: nothing would run,
+    // so no [SUMMARY] could say anything true about it. It gets a sentence of its own -- the layer
+    // sentence further down answers "these plans belong to another tier", a different question and
+    // the wrong answer for a path that holds no plan -- and it names the plan file beside the
+    // directory when there is one, because that is the mistake this refusal exists for:
+    // `test/plans/feat/docs_links` is the fixture directory beside `docs_links.plan.toml`.
+    // Written to stdout on purpose: the helper that runs this on the host loses the run's stderr,
+    // so a refusal written there would be a red with no reason (measured 2026-11-03 -- the old
+    // `[FAIL] this run selected no test at all` line never reached the operator from a host run).
+    if (selected.reachedNothing.length > 0) {
+        for (const target of selected.reachedNothing) {
+            const beside = `${path.resolve(target)}.plan.toml`
+            const hint = fs.existsSync(beside) ? `; the plan file beside it is ${relPath(beside)}` : ''
+            console.log(
+                `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${relPath(path.resolve(target))} holds no *.plan.toml, ` +
+                    `so this run would start nothing${hint}. A target is a *.plan.toml or a directory that ` +
+                    'contains one.',
+            )
+        }
+        console.log(
+            `${COLORS.red}[PLAN ERROR]${COLORS.reset} ${selected.reachedNothing.length} target(s) named no plan, ` +
+                'so nothing was started: a selection error, not a run of zero tests.',
+        )
+        process.exitCode = 2
+        return 2
+    }
     // A plan that names an option value the CLI does not take is a plan error, and the run refuses
     // instead of starting it: the CLI would exit 1 while parsing, and that exit code is not a
     // reading about the program under test. `plan:line` and the legal values are in the message so
@@ -3400,11 +3829,18 @@ async function main() {
     )
     if (testCount === 0 && options.targets.length > 0) {
         // A run that starts nothing is not a pass: every claim it could make is about tests it did
-        // not run. (No target at all is `scripts/test.js --changed` finding nothing to run, which is
-        // a legitimate no-op and says so, not a green run.)
+        // not run. (No target at all is not that zero: `loadPlans` reads it as the whole plan tree,
+        // so `scripts/test.js --changed` with an empty selection arrives here as the whole fast
+        // layer, and `test/runner.mjs#announceLayerFallback` is what makes that fallback a reading
+        // instead of a silent widening.) A target that reached no plan file at
+        // all was already refused above: this is the other zero -- the plan files were read and
+        // none of their entries belongs to this layer -- so the number is the count before the
+        // filter (`plans` is the post-filter list and reads 0 here) and the flag that lifts it is
+        // named. Both are counted, never inferred from each other.
         console.error(
             `${COLORS.red}[FAIL]${COLORS.reset} this run selected no test at all: ` +
-                `${plans.length} plan file(s) were reached and none of their entries is in this layer`,
+                `${selected.reachedButFiltered} plan file(s) were read and none of their entries is in the ` +
+                `'${options.tier}' layer (--tier all runs every layer)`,
         )
         process.exitCode = 1
         return 1
@@ -3443,7 +3879,16 @@ async function main() {
             `${COLORS.cyan}[INFO]${COLORS.reset} named plan target(s) run in full: ${namedPlans.length} (the tier filter leaves a named plan alone)`
         )
     }
-    if (testCount === 0 && options.tier !== 'all') {
+    if (options.selectionEmpty) {
+        // The zero below is the answer, not a layer that failed to fill: the selection was measured
+        // empty before this process started. It says which zero it is, because the summary of a run
+        // that starts nothing is the same three numbers as the summary of a green one.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} --selection-empty: ${plans.length} plan file(s) selected, ` +
+                '0 started. The plan tree was not widened to fill the selection; name a plan or --all ' +
+                'to run a layer'
+        )
+    } else if (testCount === 0 && options.tier !== 'all') {
         console.log(
             `${COLORS.cyan}[INFO]${COLORS.reset} this selection has no ${options.tier} tests: --tier all runs both layers`
         )

@@ -130,7 +130,29 @@ class OpDefResolver final : public FuncTypeResolver {
             return std::nullopt;
         }
         if (!def_->elementFromCall) {
-            return types.empty() ? resolveFor(with, norm, normStatics, std::nullopt) : std::nullopt;
+            // A call may name the element type of the tensor it works on without the operator
+            // taking a type parameter -- `sum_axis::<float>(xs, 0, false)`, which is how
+            // `stdlib/rulesets/vmap.cml` writes the bodies of its batching rules (the declaration
+            // these operators had was generic in `T`, and this is the same statement). It is a
+            // statement about the *operand*: `xs: T[..]` means the first array argument is a
+            // tensor of that element type, so a call that names another one is refused. What the
+            // call reads back is still the operator's own inference, never the stated type.
+            if (types.empty()) {
+                return resolveFor(with, norm, normStatics, std::nullopt);
+            }
+            if (types.size() != 1 || types[0] == nullptr) {
+                return std::nullopt;
+            }
+            for (const Type *argument : norm) {
+                if (const ArrayType *array =
+                        argument != nullptr ? asArrayType(argument) : nullptr;
+                    array != nullptr) {
+                    return array->elemTypeCode() == types[0]->code()
+                               ? resolveFor(with, norm, normStatics, std::nullopt)
+                               : std::nullopt;
+                }
+            }
+            return std::nullopt;
         }
         std::optional<TypeCode> element;
         if (types.size() == 1 && types[0] != nullptr) {
@@ -300,24 +322,35 @@ void OpRegistry::add(std::string_view protocol, std::vector<OpDef> defs) {
         // which is why `tensor:sum`, `tensor:tanh` and the rest of the family were refused while the
         // operators themselves were registered and ran.
         //
-        // The counts come from the definition's own parameters: `withAfterNorm` says that the
-        // parameters past `ordinaryParams` are written in `<>`. An operator whose element type is
+        // The counts come from the definition's own parameters: `withAfterNorm` marks the
+        // parameters past `ordinaryParams` as the ones a call carries in `<>`. An operator whose element type is
         // stated in the call (`zeros::<f32>([2, 2])`) is left without a shape: a call printed
         // without `::<T>` is a different program, and that fact has nowhere to be recorded yet, so
         // those keep being refused by name instead of being printed wrongly.
-        if (const auto &def = *entries_.back().def; !def.elementFromCall && !def.withAfterNorm) {
-            for (std::string_view exported : def.exports) {
+        //
+        // `withAfterNorm` alone was this test, and it stood for "some parameter is written in
+        // `<>`" -- which is not the same question. An axis reduction is registered with it because
+        // a pass hands it the axis that way (`argmin<0, true>(rows)`), while the same operator has
+        // a spelling a program writes in the parentheses (`mean_axis(xs, 0, false)`) and a node
+        // built that way is printed as it was written: leaving the name unregistered refused it by
+        // name. What the printer needs to know is whether the call's parameters all sit in the
+        // parentheses, which is `ordinary == params.size()` and nothing about how a pass writes it.
+        const auto &callable         = *entries_.back().def;
+        const size_t callableOrdinary =
+            callable.withAfterNorm ? callable.ordinaryParams : callable.params.size();
+        if (!callable.elementFromCall && callableOrdinary == callable.params.size()) {
+            for (std::string_view exported : callable.exports) {
                 // A group name (`__mat__`, `__idx__`) is not a name a program writes: those are the
                 // language's own operators, and the printer writes their sign.
                 if (exported.starts_with("__") && exported.ends_with("__")) {
                     continue;
                 }
-                const size_t ordinary = def.withAfterNorm ? def.ordinaryParams : def.params.size();
+                const size_t ordinary = callableOrdinary;
                 camel::core::OperatorTable::instance().declareCallForm(
                     entries_.back().uri,
                     {.name              = std::string(exported),
                      .minArgs           = ordinary,
-                     .withCount         = def.params.size() - ordinary,
+                     .withCount         = callable.params.size() - ordinary,
                      .declaredByModule  = true,
                      .kernelDeclaration = false,
                      .exported          = true});

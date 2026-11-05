@@ -1,0 +1,26 @@
+// `extent_of::<A>()` answers the extents a type writes down, and `float[]` writes none.
+//
+// The function is the language's one spelling of "the shape a type states": its answer is a fact of
+// its **type argument** and of nothing else, which is what a transposition needs -- the adjoint of a
+// linear map is a function of the cotangent and of the shape of the map's domain, and a parameter
+// whose cotangent is what the transposed function takes has no value to read
+// (`transpose(pick)` on `x: float[3]`).
+//
+// That the answer is a fact of the type is also why a type that writes no shape has no answer:
+// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[...]` states
+// neither the rank nor a length, so neither tells the function what to answer. Nothing here is a
+// value that was not computed or a shape nobody wrote down: the call asks a question the type does
+// not answer, and it is refused where it is instantiated, which is where the type is in hand.
+//
+// The repair the sentence names is to write the extents in the type (`float[2, 3]` answers
+// `[2, 3]`) or to ask a value for its shape (`shape(xs)`), which is a question about a value the
+// program has. This case is the refusal; the answer is what `transpose(pick)` on `x: float[3]`
+// reads, and the transposition walk asks the same rule (`statedExtentsOf`) rather than a second
+// reading of the extents.
+import rulesets.transpose
+
+func main(): int sync {
+    let extents: int[] = extent_of::<float[]>()
+    println(extents)
+    return 0
+}

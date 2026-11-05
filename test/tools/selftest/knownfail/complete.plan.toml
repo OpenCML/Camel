@@ -1,0 +1,21 @@
+# Fixture of test/tools/selftest/run.mjs: all four things -- the mark, the owner, the wall and the
+# sentence the case prints -- so this plan loads and its case reports
+# `[XFAIL]` -- and the run prints the owner beside the mark, which is what makes the field read by
+# something other than the load-time check. Every other fixture in this directory is this entry with
+# exactly one field taken out, so the field named in each refusal is the one that was removed.
+id = "selftest.knownfail.complete"
+order = 5
+tier = "fast"
+
+[[tests]]
+name = "complete"
+desc = "A marked case with an owner, a wall and the sentence it prints: loads, runs, and reports [XFAIL]."
+tool = "node"
+kind = "behavior"
+case = "fails.mjs"
+args = ["${case}"]
+expect_exit = 0
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture stops at `WALL fixture=knownfail`, so the run is red on purpose"
+known_fail_msg = "WALL fixture=knownfail"

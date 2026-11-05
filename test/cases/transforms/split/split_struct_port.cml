@@ -1,0 +1,28 @@
+// A struct parameter that the body only **passes**: `g(qq: Point) = qq`. The cut takes the first
+// half of the lifted signature for values and the second half for tangents, and a struct's tangent
+// is the struct of its members' tangents (design principles 9.9), so the two halves take one `Point`
+// port each and the cut is the same cut a `float` parameter gets.
+//
+// This case is the other side of `split_struct_field_read`: the shapes differ in one thing only --
+// whether the body names a member. Naming one is a read by **key**, which the halves do not copy;
+// passing the value whole is a port, which they do.
+//
+// The readings are the value and the linear map's answer, both structs, and `residuals=1`: the
+// parameter's value crosses because the tangent side reads the tangent that stands beside it.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+type Point = { a: float, b: float }
+
+func g(qq: Point): Point {
+    return qq
+}
+
+func main(): int sync {
+    let p = { a: 2.0, b: 3.0 }
+    let fwd = split(jvp(g))
+    let (value, lin) = fwd(p)
+    println("forward y=", value)
+    println("lin dp=", lin({ a: 1.0, b: 0.0 }))
+    return 0
+}

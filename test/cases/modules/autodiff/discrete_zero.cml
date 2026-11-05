@@ -26,15 +26,15 @@ import { argmax, one_hot, reshape, sum, where } from tensor
 import { with_grad } from autodiff
 
 type Model = {
-    weights: f32[..],
-    labels: i64[..], // the integer index array
+    weights: f32[...],
+    labels: i64[...], // the integer index array
 }
 
 // The labels are an ordinary parameter of the helper: the pullback plan for a callee returns a
 // tangent for every port that has one, so this is the shape the naive example had -- labels is
 // an active i64 index array and one_hot must return zero for it, not refuse.
 with <m: Model>
-func label_rows(labels: i64[..]): float {
+func label_rows(labels: i64[...]): float {
     let oh = one_hot(labels, 3)
     return float(sum(m.weights * oh))
 }

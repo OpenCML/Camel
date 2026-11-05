@@ -31,7 +31,10 @@ timeout_ms = 30000
 name = "compositions.grad_vmap_f"
 desc = "grad(vmap(f)) with f(x) = x*x at x = [1, 2, 3]: the gradient of sum_j x_j^2 is [2, 4, 6]."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "Wall: the pullback pass has no rule for a call of a function value -- `modules/autodiff/pullback.cpp:3759` refuses with `cannot differentiate through this call of a function value: which function it calls is not evident` -- so `grad(vmap(f))` cannot be built. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
+known_fail_owner = "lane-transforms"
+known_fail_reason = "the pullback pass has no rule for a call of a function value: `modules/autodiff/pullback.cpp` refuses with `cannot differentiate through this call of a function value`, so `grad(vmap(f))` cannot be built"
+known_fail_msg = "cannot differentiate through this call of a function value"
+known_fail_note = "Wall: the pullback pass has no rule for a call of a function value -- `modules/autodiff/pullback.cpp:3759` refuses with `cannot differentiate through this call of a function value: which function it calls is not evident` -- so `grad(vmap(f))` cannot be built. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02). Read again on 2026-11-03: the refusal is still this sentence, word for word, which is the fragment `known_fail_msg` pins."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/grad_vmap_f.cml"
 args = ["${case}", "${backend}"]
@@ -52,7 +55,10 @@ timeout_ms = 30000
 name = "compositions.vmap_grad_f"
 desc = "vmap(grad(f)) with the same f and the same batch: [2, 4, 6] again, bit for bit the same as grad(vmap(f)) -- swapping the two axes must not change the answer."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "Wall: the batch pass has no rule for a constant -- `modules/transforms/vmap_operator.cpp:136` refuses with `vmap has no rule for `a constant`` -- so `vmap(grad(f))` cannot be built. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
+known_fail_owner = "lane-transforms"
+known_fail_reason = "the batch pass has no law for a constant: `modules/transforms/vmap.cpp#liftConstant` refuses with `vmap has no rule for a constant`, so `vmap(grad(f))` cannot be built"
+known_fail_msg = "vmap has no rule for `a constant`"
+known_fail_note = "Wall: the batch pass has no rule for a constant -- `modules/transforms/vmap_operator.cpp:136` (the format is at `:143` today; the refusal is raised from `vmap.cpp`, `liftConstant`) refuses with `vmap has no rule for `a constant`` -- so `vmap(grad(f))` cannot be built. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02). Read again on 2026-11-03: the sentence is still there, with the cause appended in parentheses (`a constant of a type this transform has no batch for`), which is the fragment `known_fail_msg` pins."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/vmap_grad_f.cml"
 args = ["${case}", "${backend}"]
@@ -73,7 +79,10 @@ timeout_ms = 30000
 name = "compositions.jvp_vjp_f"
 desc = "jvp(vjp(f)) with f(x) = x*x, cotangent 1 and direction [0.5, 1.0, 1.5]: the pullback is 2vx, its derivative in x is 2v, so the directional derivative is [1, 2, 3]."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "Wall: `stdlib/vjp.cml:73` calls `transpose(linear)` on a function that returns a pair, and `transpose` takes no function whose result is a pair -- the composition of the two transforms does not assemble. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
+known_fail_owner = "lane-transforms"
+known_fail_reason = "the case's own call text is fixed, and the composition now reaches the transform layer: `jvp` refuses a call of the pullback value `stdlib/vjp.cml#vjp` answers (`jvp has no forward transform for this function`), because that value is `transpose(lin)` and the body producing it calls `split(jvp(f))`, a function value computed at run time"
+known_fail_msg = "jvp has no forward transform for this function"
+known_fail_note = "Read and corrected 2026-11-05 (lane-vjpcases), after the call text was fixed in both directions. The entry used to pin a mistake in the case twice over, and neither wall is the case any more. One: `vjp(sq)(x, v)` handed the cotangent to the forward call, while `stdlib/vjp.cml#vjp` has it on the pullback -- the case now reads `vjp(sq)(x).1(v).0`. Two: `vmap(jvp(pull))` is not a call the batch pass can accept at all, because `vmap` takes a function of exactly one parameter (`stdlib/array.cml#vmap`) and `jvp(f)` is `(x, dx) => (value, tangent)`, so the batch is three points, one `jvp` each. What the case meets now is the library layer -- `transforms: jvp has no forward transform for this function`, at its first `jvp` line, identical on `nvm` and `fvm` (measured on this tree build) -- and that is not about `f32`: the value `jvp` is asked to lift is the pullback itself, `transpose(lin)`, and the body that produces it calls `split(jvp(f))<...ws>(...xs)`, a function value computed at run time, which `jvp` lifts only when the callee is evident (`be43289aa`, `f0dfafba6`). The numbers are unchanged -- 1, 2, 3, the tangents of `2v*dx` at `v = 1` -- and they are what a flat twin of the same body answers on this tree: `jvp(x => 2.0 * x)` at (1, 0.5), (2, 1.0), (3, 1.5) prints 1.0, 2.0, 3.0 on both back ends. The mark comes off the day `jvp` can lift the pullback, not before."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/jvp_vjp_f.cml"
 args = ["${case}", "${backend}"]
@@ -94,7 +103,10 @@ timeout_ms = 30000
 name = "compositions.grad_vjp_g_zero"
 desc = "grad(vjp(g)) with g(v) = sum(v*v) at v = [1, 2, 3, 4] must be all zeros: the pullback is linear in v, so its derivative is a constant and the gradient of a constant is 0. This is the one check the three combinations cannot make."
 known_fail = ["nvm", "fvm"]
-known_fail_note = "Wall: same line as the pair-typed combination, `stdlib/vjp.cml:73`, where `transpose` takes no function whose result is an array -- the sum-of-squares gradient stops there. It used to be skipped behind `have-library-vjp.mjs`; the skip is gone and this is the red it hid (2026-11-02)."
+known_fail_owner = "lane-transforms"
+known_fail_reason = "the case's own call text is fixed, and the composition now reaches the transform layer: `grad` refuses a call of the function value `stdlib/vjp.cml#vjp` answers (`cannot differentiate through this call of a function value`), because vjp's body calls `split(jvp(f))`, a function value chosen at run time"
+known_fail_msg = "cannot differentiate through this call of a function value"
+known_fail_note = "Read and corrected 2026-11-05 (lane-vjpcases). Three things were wrong here and only the first two are the case. One: `vjp(g)(w, 1.0)` handed the cotangent to the forward call, while `stdlib/vjp.cml#vjp` answers `(value, pullback)` and the pullback takes it -- now `vjp(g)(w).1(1.0).0`. Two: `grad` differentiates the first `with` parameter of a function that returns a `float` (design principles 9.9), and a plain `(w: f32[4]) => ...` lambda has none (`SemanticDiag::NotDifferentiable`), so the weight is a `with` parameter now, read by `grad(f)<vs>()`. What the case meets after both is the library layer, identical on `nvm` and `fvm`: `autodiff: cannot differentiate through this call of a function value: which function it calls is not evident where it is called: the function is computed at run time`, located in `stdlib/vjp.cml#vjp` at `split(jvp(f))<...ws>(...xs)`, the body of the pullback. It is the sentence `grad_vmap_f` pins; the entrance is the difference (there the value the batch pass builds, here the assembly `vjp` writes). Three, left as it is rather than repaired: the four zeros below are not what this program reaches. The pullback at cotangent 1 is `2*v` -- `pullback_of_a_sum_of_squares` pins its sum at 20 for `v = [1, 2, 3, 4]` -- so the body is `F(w) = sum(2w) = 2*(w0+w1+w2+w3)` and its gradient against `w` is 2 in every entry: a constant, which is the first derivative of a linear function. The zero of the page belongs to the second derivative (`grad` of `grad(F)`), which this composition does not write. Measured beside it on this tree with the composition replaced by its flat twin (`grad(<w: f32[4]> (): f32 => 2.0 * (w[0] + w[1] + w[2] + w[3]))<vs>()`): `2.0 2.0 2.0 2.0`, both back ends. The expectation stays at the zeros of the page rather than moving to the 2s the program reaches: a number moved to match a reading whose composition is refused would let the case pass on nothing, and the day the refusal is lifted the zeros are what it is held to."
 kind = "behavior"
 case = "../../../cases/transforms/compositions/grad_vjp_g_zero.cml"
 args = ["${case}", "${backend}"]
@@ -109,4 +121,38 @@ assert(got.length === want.length, `expected ${want.length} values, got ${JSON.s
 want.forEach((w, i) => assert(Math.abs(got[i] - w) <= 1e-9, `element ${i}: got ${got[i]}, want ${w}`))
 }
 """
+timeout_ms = 30000
+
+# --- added 2026-11-04 ---------------------------------------------------------------
+#
+# The two `f32` combinations above pin their **own call text**: they write `vjp(f)(x, ct)`,
+# handing the cotangent to the forward call, while `stdlib/vjp.cml#vjp` answers
+# `(value, pullback)` and the pullback takes the cotangent. That is a fact about those two
+# case files, not a gap in the library, so the reading they *can* have is pinned separately
+# by the two entries below, written against the surface that exists. They are the reachable
+# half of the same compositions, in `f32` and in `float` in one program, so the width is
+# compared inside one run instead of across two.
+
+[[tests]]
+name = "compositions.pullback_read_at_a_cotangent"
+desc = "The pullback read at a cotangent -- `vjp(f)(x).1(ct).0` -- for `f(x) = x*x` in `f32` and in `float`, in one program: 2*ct*x, so 6, 6, 12, 12, -1.5, -1.5 for (x, ct) = (3, 1), (3, 2), (-1.5, 0.5). This is the reading the two `f32` entries in this plan cannot reach today (they hand the cotangent to the forward call), and it is the one that proves the walk carries an `f32` cotangent as an `f32`: both widths print the same numbers, and the answer's type is `(f32) => (f32,)` for the `f32` function."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/pullback_read_at_a_cotangent.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["pullback f32  f(3) ct=1   -> 6.0", "pullback float f(3) ct=1  -> 6.0", "pullback f32  f(3) ct=2   -> 12.0", "pullback float f(3) ct=2  -> 12.0", "pullback f32  f(-1.5) ct=0.5 -> -1.5", "pullback float f(-1.5) ct=0.5 -> -1.5"]
+timeout_ms = 30000
+
+[[tests]]
+name = "compositions.pullback_of_a_sum_of_squares"
+desc = "The pullback of a function whose result is one number and whose parameter is an array -- `g(v) = sum(v*v)` at `v = [1, 2, 3, 4]` -- read at cotangent 1 and at 0.5, in `f32` and in `float`, in one program: 2*ct*v, so a sum of 20 and 10. The element-wise sum is printed beside `sum(...)` because a sum is blind to a permutation: this pins that an array cotangent crosses the walk as an array of the parameter's own width."
+kind = "behavior"
+case = "../../../cases/transforms/compositions/pullback_of_a_sum_of_squares.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["pullback f32  ct=1 sum -> 20.0", "pullback float ct=1 sum -> 20.0", "pullback f32  ct=1 by hand -> 20.0", "pullback float ct=1 by hand -> 20.0", "pullback f32  ct=0.5 sum -> 10.0", "pullback float ct=0.5 sum -> 10.0"]
 timeout_ms = 30000

@@ -823,7 +823,7 @@ string Generator::generateDataLoad(const AST::node_ptr_t &node) {
         result = dataLoad->geneCode();
         break;
     case AST::DataType::SpreadArg:
-        result = ".." + generateChildren(node);
+        result = "..." + generateChildren(node);
         break;
     default:
         result = generateChildren(node);

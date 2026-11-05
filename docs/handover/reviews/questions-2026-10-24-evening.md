@@ -1159,7 +1159,7 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 ## P4 删除步的残留：返工
 
 抽查合并后的树，删除步还差这几处（"过渡不进 develop"），由 P4 那条车道接着清：
-1. **`Tensor` 这个类型名还在**：`modules/tensor/module.cpp:94` 仍然 `exportType(Reference("Tensor"), ArrayType::elementTypeOpen())`。交接说明 5.30 是负责人的原话："`Tensor`/`Tensor<T, S>` 作为类型名删除，不留别名、不留'已退役'诊断"。删掉这个导出，写 `Tensor` 就是普通的未知名字；`TensorElementTypeRequired` 这条只为它存在的诊断一起删。仓库里还写着 `Tensor<…>`、`: Tensor` 的 `.cml` 与文档全部改成 `T[维度]`。
+1. **`Tensor` 这个类型名还在**：`modules/tensor/module.cpp#TensorModule::TensorModule` 仍然 `exportType(Reference("Tensor"), ArrayType::elementTypeOpen())`。交接说明 5.30 是负责人的原话："`Tensor`/`Tensor<T, S>` 作为类型名删除，不留别名、不留'已退役'诊断"。删掉这个导出，写 `Tensor` 就是普通的未知名字；`TensorElementTypeRequired` 这条只为它存在的诊断一起删。仓库里还写着 `Tensor<…>`、`: Tensor` 的 `.cml` 与文档全部改成 `T[维度]`。
 2. **比较注册表**：`registerContentComparableType`（`equality.cpp`、`equality.h`）还在。它在 5.1a 依赖表里，标明随过渡类型删除。
 3. **模块的 `tensor:slice` 还有内部使用者**：`gradient_ops.cpp:338`、`layout_ops.cpp:666/672`（拼接的伴随用它切开梯度），以及 ONNX 的 `lowering.cpp:1177`。这些改用核心的切片节点，模块的切片算子随之整个删掉。ONNX 降低改认核心的切片。
 4. **规则库里 13 条 `tensor_f32_*`、`tensor_i64_*`**：5.1a 依赖表里列着，要随 P4 删除，标量那条律推广到数值数组。规则语言的泛型律已经能写，一起做。
@@ -1577,7 +1577,7 @@ Linux 包在 manylinux 里构建，用 auditwheel 修正标签，并在构建时
 ## 代码审查：自动微分（返工）
 
 完整报告：`docs/handover/reports/code-review-autodiff.md`。我手算过的 VJP 数学都对，问题在注册与精度：
-1. **每建一个 Context 就重新注册一遍导数**（`globals.cpp:2993`）：`setTangentSpace` 把张量的切空间清掉（`src/core/derivative.cpp:56`），核心 `:op/idx_take` 的规则又覆盖了张量的那条。导数规则在进程里注册一次。
+1. **每建一个 Context 就重新注册一遍导数**（`globals.cpp:2993`）：`setTangentSpace` 把张量的切空间清掉（`src/core/derivative.cpp#DerivativeRegistry::setTangentSpace`），核心 `:op/idx_take` 的规则又覆盖了张量的那条。导数规则在进程里注册一次。
 2. `:op/idx_take` 两个模块各注册一条，后注册的静默胜出（和下标审查第 2 条是同一件事）：只留一条。
 3. **`gelu_grad`、`erf_grad`、`layer_norm_grad` 把 f64 张量当 f32 读**（`gradient.cpp:380-417`）：f64 模型的梯度是错的，而且不报错。按元素类型读写。
 4. **沿轴 `max`/`min` 的梯度给每个并列的最值都传了完整的 `dy`**（`reduction_ops.cpp:381`），总梯度被放大。按 7.7 的 `argmax` 规则只给第一个，或者平分，二者选一并写进原则 9.x；我倾向只给第一个，与 `argmax` 一致。
@@ -1860,7 +1860,7 @@ C9 已合入（`22d03dd80` 经 `a503f6130`），`thread_count` 只在 `test_supp
 ## 2026-10-26-onnx-migration-three-measured-differences
 
 1. 18 个，收下。
-2. **`let _ = export_model<out: path>(f, x)` 是对的**：`void!` 被忽略要警告，有意丢弃就这么写。只关心导出成功的用例，更好的写法是把它作为 `main(): void!` 的结果，或用 `!!` 处理；只有确实不关心结果的才用 `let _ =`。
+2. ~~**`let _ = export_model<out: path>(f, x)` 是对的**~~：**已被 2026-10-29 的裁定推翻**——`let _ =` 是错的写法，拒绝必须看得见（`export_model` 的 `void!` 要接住，`!!` 对它也用不了：`export_model(...) !! { }` 报 `'!!' cannot be applied here: its right side has type '{  }', but the left side holds a 'void'`）。见 `docs/handover/reviews/questions-2026-10-29.md` 末尾的裁定与 `test/cases/modules/onnx/export_refusal_is_visible.cml`。
 3. **`checkExamples` 补上位置**：两种形式要报同一处，这是同一条"错误值带着被拒绝节点的位置"规则。
 
 ## 2026-10-26-our-mechanical-rename-left-two-false-sentences

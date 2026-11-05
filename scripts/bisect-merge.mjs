@@ -63,6 +63,19 @@
  */
 import { spawnSync } from 'child_process'
 import path from 'path'
+import { fileURLToPath } from 'url'
+
+/// The gate's one entry, resolved from this script's own location instead of from where the worktree
+/// sits. `<tree>/../camel-remote.ps1` is a copy left over from before the machine-specific values moved
+/// into `internal/tools/camel-gate.local.json`; it runs, it prints `[camel-remote]` lines, and the
+/// reading it gives is about an install the tree never built (see `agents/test.md`, "闸门的入口只有一个文件").
+const GATE_ENTRY = path.resolve(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '..',
+    'internal',
+    'tools',
+    'camel-remote.ps1'
+)
 
 function parseArgs(argv) {
     const args = {
@@ -77,6 +90,7 @@ function parseArgs(argv) {
         host: '88zjwei',
         hostRoot: null,
         forward: false,
+        printWrapper: false,
         merges: [],
         groups: [],
         harmless: [],
@@ -145,6 +159,12 @@ function parseArgs(argv) {
             case '--forward':
                 args.forward = true
                 break
+            case '--print-wrapper':
+                // Prints the resolved wrapper and stops, before anything is built or pushed. This is
+                // how the default is read back: a guard on the default that cannot print what it
+                // resolved would be a guard nobody can falsify (see the case in test/).
+                args.printWrapper = true
+                break
             default:
                 throw new Error(`unknown argument: ${key}`)
         }
@@ -155,7 +175,7 @@ function parseArgs(argv) {
         }
     }
     args.path = path.resolve(args.path)
-    args.wrapper ??= path.resolve(args.path, '..', 'camel-remote.ps1')
+    args.wrapper ??= GATE_ENTRY
     args.hostRoot ??= `$HOME/camel-work/${path.basename(args.path)}`
     args.branch ??= args.forward ? 'probe/bisect-forward' : 'probe/bisect-revert'
     return args
@@ -429,6 +449,10 @@ function revert(args, baseline) {
 
 function main() {
     const args = parseArgs(process.argv.slice(2))
+    if (args.printWrapper) {
+        console.log(`[bisect] wrapper ${args.wrapper}`)
+        return 0
+    }
     const status = git(['status', '--porcelain'], args.path)
     if (status.code !== 0) {
         throw new Error(`git status failed: ${status.output.trim()}`)

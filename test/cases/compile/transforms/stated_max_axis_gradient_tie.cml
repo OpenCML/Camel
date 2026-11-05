@@ -1,0 +1,49 @@
+// The gradient of a lane max with a tie, through the engine and through the library.
+//
+// `jvp_max_axis` states the selection (`stdlib/rulesets/jvp.cml`): `xs >= max<axis, true>(xs)` is
+// true exactly at the positions that hold their lane's largest element, and `max_axis_stated_t` keeps
+// the spread cotangent only there (`stdlib/rulesets/transpose.cml`). The engine's rule is
+// `extremumAxisVjp` (`modules/tensor/ops/reduction_ops.cpp`), which does the same with `strict_eq`
+// against the broadcast output.
+//
+// **The tie is the reading.** Row 0 holds its maximum twice, and an extremum gives the whole
+// cotangent to *every* position that holds it -- a tie is not shared out and it is not decided by
+// position. So:
+//
+//     x          = [[1.0, 3.0, 3.0],
+//                   [0.5, 1.0, 2.0]]
+//     lanes      = max<1, false>(x) = [3.0, 2.0]          (one lane per row)
+//     value      = sum(lanes) = 5.0
+//     dL/dx      = [[0.0, 1.0, 1.0],
+//                   [0.0, 0.0, 1.0]]                           (both 3.0s get the 1.0)
+//
+// The two laws a reader writes first answer differently, and both are wrong here: taking the first
+// position of the tie gives `[[0.0, 1.0, 0.0], [0.0, 0.0, 1.0]]`, and sharing the cotangent between
+// the tied positions gives `[[0.0, 0.5, 0.5], [0.0, 0.0, 1.0]]`. The reading above is the only one of
+// the three that the engine also answers, which is why the case runs both legs and prints `same=`.
+//
+//     camel test/cases/compile/transforms/stated_max_axis_gradient_tie.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, max, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[...]>
+func total(): float {
+    return sum(max<1, false>(w))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[...]): float {
+    return sum(max<1, false>(x))
+}
+
+func main(): int sync {
+    let x = [[1.0, 3.0, 3.0], [0.5, 1.0, 2.0]] as float[2, 3]
+    let engine = grad(total)<[[1.0, 3.0, 3.0], [0.5, 1.0, 2.0]] as float[2, 3]>()
+    let (value, pullback) = vjp(total_plain)(x)
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `max<1> tie: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

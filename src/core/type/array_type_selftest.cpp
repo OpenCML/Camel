@@ -97,10 +97,10 @@ std::string debugRunArrayTypeSelfTest() {
                 ->toString() == "f32[?, 3]",
         "an unknown extent does not print as '?' beside a constant");
     require(
-        ArrayType::create(f32, constants({3}), "rest")->toString() == "f32[3, ..rest]",
+        ArrayType::create(f32, constants({3}), "rest")->toString() == "f32[3, ...rest]",
         "an open rank prints its pack");
     require(
-        ArrayType::openRank(f32)->toString() == "f32[..]", "a bare open rank prints as f32[..]");
+        ArrayType::openRank(f32)->toString() == "f32[...]", "a bare open rank prints as f32[...]");
     require(empty->mangle() == "Array_i_1_?", "the int[] mangle changed: " + empty->mangle());
     require(
         fromInts->mangle() == "Array_f32_2_3,4",
@@ -138,6 +138,20 @@ std::string debugRunArrayTypeSelfTest() {
     ArrayType *openF32 = ArrayType::openRank(f32);
     require(openF32->assignableFrom(fromInts), "f32[..] does not accept f32[3, 4]");
     require(openF32->assignableFrom(fixed4), "f32[..] does not accept f32[4]");
+    // `assignableFrom` reads in one direction only: the receiver is the type a position *expects*
+    // and the argument is what the caller hands it. So "an open rank accepts every rank of its
+    // element" holds while "every rank accepts an open rank" does not -- the relation is not
+    // symmetric, and the two lines here and below at `open3` are its two halves, not a repetition.
+    // The receiver `f32[..]` states no extent of its own, so `f32[]` -- rank one, one dimension of
+    // unknown extent, the argument a `f32[]` parameter also takes -- enters it; `f32[3, ..]` does
+    // state one, so that same argument does not.
+    //
+    // This relation is necessary but not sufficient for one `:op/idx_arr` law to answer every
+    // rank: a law's parameter type also fixes the result type of its left side, so a law written
+    // on `T[..]` answers `T[..]` where a rank-one index answers the element (5.4). The laws stay
+    // on `T[]` today; the paired readings are
+    // `docs/handover/questions/2026-11-03-does-an-open-rank-index-law-cover-rank-one.cn.md`.
+    require(openF32->assignableFrom(anyF32), "f32[..] does not accept f32[] (one unknown extent)");
     ArrayType *open3 = ArrayType::openRank(f32, constants({3}));
     require(open3->assignableFrom(fromInts), "f32[3, ..] does not accept f32[3, 4]");
     require(!open3->assignableFrom(ArrayType::create(f32, shapeOf({4, 5}))), "f32[3, ..] accepts f32[4, 5]");
@@ -328,7 +342,7 @@ std::string debugRunArrayTypeSelfTest() {
             (numericJoin ? numericJoin->toString() : std::string("<null>")));
     Type *rankJoin = ArrayType::create(i64, shapeOf({3}))->unify(ArrayType::create(i64, shapeOf({3, 4})));
     require(
-        rankJoin != nullptr && rankJoin->toString() == "int[..]",
+        rankJoin != nullptr && rankJoin->toString() == "int[...]",
         "int[3] + int[3, 4] does not unify to an open rank: " +
             (rankJoin ? rankJoin->toString() : std::string("<null>")));
     require(ArrayType::create(i64)->unify(i64) == nullptr, "int[] unified with int");
@@ -344,7 +358,7 @@ std::string debugRunArrayTypeSelfTest() {
     require(
         namedShape->widened()->toString() == "f32[?, ?]", "widening keeps a dimension name");
     require(
-        ArrayType::openRank(f32, constants({3}))->widened()->toString() == "f32[?, ..]",
+        ArrayType::openRank(f32, constants({3}))->widened()->toString() == "f32[?, ...]",
         "widening an open rank drops it");
 
     // ---- Call-site binding: names and packs, and a name fixed by a later argument ----------

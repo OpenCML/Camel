@@ -1,0 +1,33 @@
+// Three calls deep, differentiated (the vjp/pullback side, no cut):
+//
+//   f(a) = 2*a, g(a) = f(a)*a = 2a^2, g2(a) = g(a)*a = 2a^3, g3(a) = g2(a)*a = 2a^4
+//
+// g3'(a) = 8a^3, so at a = 2: g3 = 32 and g3' = 64.
+import { grad } from autodiff
+
+with <a: float>
+func f(): float {
+    return 2.0 * a
+}
+
+with <a: float>
+func g(): float {
+    return f<a>() * a
+}
+
+with <a: float>
+func g2(): float {
+    return g<a>() * a
+}
+
+with <a: float>
+func g3(): float {
+    return g2<a>() * a
+}
+
+func main(): int sync {
+    let d = grad(g3)
+    'value={}'->format<g3<2.0>()>->println
+    'dgdx={}'->format<d<2.0>()>->println
+    return 0
+}

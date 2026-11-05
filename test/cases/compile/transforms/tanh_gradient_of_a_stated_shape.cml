@@ -1,0 +1,44 @@
+// `tanh`'s gradient through the library, with the shape written into the type.
+//
+// The open-rank twin is `tanh_gradient_through_the_library.cml`, still refusing for the same reason as
+// its neighbours: `mul_tensor_t`'s `sum_to` reads the tangent's own shape and `float[...]` states none
+// (author, 2026-11-03 16:15). With `float[2]` stated, `shapeCarrierOf` answers and so does the walk.
+//
+// Hand first, on points where the slope is neither flat nor near its maximum, so the three candidate
+// laws separate: `tanh`'s slope is `1 - tanh^2(x)`,
+//
+//     tanh(1.5)  =  0.9051482536448664   ->   1 - 0.8192933610763514 = 0.18070663892364858
+//     tanh(-2.0) = -0.9640275800758169   ->   1 - 0.9293491751468356 = 0.07065082485316443
+//     value      =  0.9051482536448664 - 0.9640275800758169 = -0.05887932643095051
+//
+// The two components differ from each other and both sit away from zero, so `ct` (`[1.0, 1.0]`) and
+// `1 - tanh(x)` (`[0.0948517463551336, 1.9640275800758169]`) are both separated without a tolerance.
+//
+//     tanh stated engine  d = [0.18070663892364858, 0.07065082485316443]
+//     tanh stated library value = -0.05887932643095051  d = [0.18070663892364858, 0.07065082485316443]
+//
+//     camel test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
+import { grad } from autodiff
+import { sum, tanh } from tensor
+import { vjp } from vjp
+
+/// The engine's route: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[2]>
+func total_of_the_parameter(): float {
+    return sum(tanh(x))
+}
+
+/// The library's route: an ordinary parameter, which is what `vjp` takes.
+func total(x: float[2]): float {
+    return sum(tanh(x))
+}
+
+func main(): int sync {
+    let slope = grad(total_of_the_parameter)
+    let de = slope<[1.5, -2.0] as float[2]>()
+    `tanh stated engine d={}`->format<de>->println
+    let (value, pullback) = vjp(total)([1.5, -2.0] as float[2])
+    let dl = pullback(1.0).0
+    `tanh stated library value={} d={}`->format<value, dl>->println
+    return 0
+}

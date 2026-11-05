@@ -1,0 +1,32 @@
+/**
+ * A loop whose state is an `f32`, transposed: the state's cotangent port is that state's own space.
+ *
+ * `f(x) = loop a = x for i in 0..3 do a * 3`, so at `x = 1`:
+ *
+ *     value  1 * 3 * 3 * 3 = 27
+ *     adjoint of `x -> 27x` at cotangent 1 -> 27
+ *
+ * The state is one value carried round to round, and the transposed body declares **one cotangent
+ * port per state** in the state's own space (`Tangent<f32>` is `f32`). Two readings in the walk below
+ * are the ones this case holds: the port and the seed are the state's space and not a `float` written
+ * where the port is made, and the answer's one slot is named from the loop's own type rather than
+ * asked of the source graph by a ref that belongs to the new one. A port typed `float` hands a
+ * four-byte `f32` cotangent to an eight-byte slot, and the `TRANSPOSE ... type=` line on stderr is
+ * what says which type the member promises: `(f32) => (f32,)`.
+ *
+ * The loop is an interval (`0..3`) and not an array of factors: the reverse walk is the rounds in
+ * reverse, and a round whose value came from a sequence is a different shape (`split` tapes those).
+ */
+import rulesets.transpose
+import { transpose } from transforms
+
+func f(x: f32): f32 {
+    return loop a = x for i in 0..3 do a * 3.0
+}
+
+func main(): int sync {
+    let back = transpose(f)
+    'loop f32 value={}'->format<f(1.0)>->println
+    'loop f32 transpose d={}'->format<back(1.0).0>->println
+    return 0
+}

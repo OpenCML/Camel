@@ -64,12 +64,40 @@ export type ValueOf<T>
 
 /// The ordinary parameters of a function type, as a type pack: `..ParamsOf<F>` writes them where a
 /// list of types is (the elements of a tuple); the `constas` parameters are not among them.
-/// @example is_same::<(..ParamsOf<(a: int, b: string) => bool>), (int, string)>()    // true
+/// @example is_same::<(...ParamsOf<(a: int, b: string) => bool>), (int, string)>()    // true
 export type ParamsOf<F>
 
 /// The `with` parameters of a function type, as a type pack, written with `..` as `ParamsOf<F>` is.
-/// @example is_same::<(..WithOf<<w: float> (a: int) => bool>), (float)>()    // true
+/// @example is_same::<(...WithOf<<w: float> (a: int) => bool>), (float)>()    // true
 export type WithOf<F>
+
+/// The first member of a type pack: `FirstOf<WithOf<F>>` is the type of `F`'s first `with`
+/// parameter, and `FirstOf<ParamsOf<F>>` the type of its first ordinary parameter. A pack is a list
+/// of types, and taking its head is the `match type` every program can write -- a type pack takes
+/// apart the same way a value pack does (design principles 5.6): the case binds the member it writes
+/// and the rest of the pack in a name of its own, and the empty pack selects no case, because it has
+/// no member to give the first name.
+///
+/// This is not a primitive: it is the language, written here because a function type computed from
+/// `F` needs it and a program that writes the pattern itself gets the same answer.
+/// @example is_same::<FirstOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
+/// @example is_same::<FirstOf<ParamsOf<(a: int, b: string) => bool>>, int>()    // true
+export type FirstOf<P> = match type P { case (W, ...Rest) => W }
+
+/// The first member of a pack, as a primitive: the same answer `FirstOf<P>` gives, and a different
+/// place to read it. A `match type` written into the result of a generic function leaves the two
+/// names it binds as type variables of that call, and no argument binds them -- so a library
+/// function whose answer moves a pack's first member onto another list could not be called at all
+/// (`stdlib/vjp.cml#grad`). A primitive is evaluated with the pack in hand, which is what
+/// `grad`'s signature needs.
+/// @example is_same::<HeadOf<WithOf<<w: float, k: int> (a: int) => bool>>, float>()    // true
+export type HeadOf<P>
+
+/// The rest of a pack, as a primitive: every member but the first, as a pack of its own, so
+/// `...RestOf<P>` writes them where a list of types is. The empty pack when `P` has one member.
+/// @example is_same::<(...RestOf<WithOf<<w: float, k: int> (a: int) => bool>>), (int,)>()    // true
+/// @example is_same::<(...RestOf<WithOf<<w: float> (a: int) => bool>>), ()>()    // true
+export type RestOf<P>
 
 /// The result type of a function type.
 /// @example is_same::<ResultOf<(a: int) => string>, string>()    // true
@@ -91,26 +119,111 @@ export type Tangent<T>
 /// of `f`'s parameters, one tuple member per parameter. A function of one parameter's pullback
 /// answers a one-long tuple -- `(27.0)` -- because the rule is one rule for every arity (author's
 /// ruling of 2026-11-01 14:30).
+///
+/// It does **not** take `f`'s `with` list (author's ruling of 2026-11-03 15:15). A `with` value the
+/// backward half reads is a residual like every other value it reads -- the rule is one rule, and it
+/// is "whatever the second half reads is a residual and goes into `lin`'s closure", `with` values
+/// included. `lin` is therefore a function of the tangents alone, and its transpose is this: one
+/// parameter, the cotangent of the result, and one answer member per parameter of `f`. The `with`
+/// values are written once, at the call that supplies them to `vjp`, and are captured there.
 /// @example is_same::<Pullback<(x: float) => float>, (ct: float) => (float,)>()    // true
-export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+/// @example is_same::<Pullback<<w: float> (x: float) => float>, (ct: float) => (float,)>()    // true
+export type Pullback<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
+
+/// The derivative of a function, as a type of its own: the parameters the function takes, and the
+/// cotangent of the one that is differentiated. `grad` differentiates the first `with` parameter
+/// (design principles 9.9), so the result is that parameter's tangent space -- for
+/// `<w: float> (x: float) => float` it is `<float> (float) => float`, one number; for a weight that
+/// is a tensor it is a tensor of the weight's shape.
+///
+/// The shape is computed from `F` and is not written once per arity: the parameters are `F`'s
+/// (`ParamsOf<F>`, `WithOf<F>`), and the result names one member of the pack of `with` parameters
+/// (`FirstOf<WithOf<F>>`), so one declaration covers every function whose first `with` parameter
+/// has a tangent space. A function with no `with` parameter has no gradient -- there is no
+/// parameter to differentiate -- and the empty pack is refused where the type is used, which is the
+/// refusal `grad` itself gives that function.
+///
+/// This is the type the derivative has, and the type a caller who writes `Gradient<F>` asks for:
+/// one type, not a second one that looks like it. The weight stays a `with` argument of the
+/// derivative, so a call writes it in the angle brackets exactly where the differentiated function
+/// reads it.
+/// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => f32[2]>()    // true
+/// @example is_same::<Gradient<<w: f32[2]> (x: float) => float>, <w: f32[2]> (x: float) => float>()    // false
+export type Gradient<F> =
+    <...WithOf<F>> (...ParamsOf<F>) => Tangent<FirstOf<WithOf<F>>>
+
+/// The same derivative with the weight on the ordinary list: the shape the library's `grad` has,
+/// and the one difference between it and `Gradient<F>`. A reverse transform differentiates the
+/// ordinary parameters (design principles 9.9), so the library moves the first `with` parameter onto
+/// that list -- the signature reinterpretation `first_with_as_param`, which reclassifies one port and
+/// copies the body -- and its gradient is a function of the weight first, then `F`'s parameters:
+/// `grad(weighted)(3.0, 2.0)` for `<x: float> (y: float) => float`.
+///
+/// Written out where `Gradient<F>` writes its own shape, out of the same pieces: `HeadOf<WithOf<F>>`
+/// is the weight's type and `Tangent` of it is what a gradient of it is. Both names exist because the
+/// two answers are two types: a `with` argument is written in the angle brackets of a call, an
+/// ordinary one in its parentheses, and neither spelling reaches the other.
+///
+/// **One `with` parameter, and the rest of the list is not written out**: `GradientOf<F>` answers a
+/// function whose whole `with` list is empty, so it is the type of `grad(f)` for a function with one
+/// `with` parameter and refuses a second one at the call. The reason it is not `...RestOf<WithOf<F>>`
+/// is a limit of the layer under this one and not a choice about the shape: a `with` list written as
+/// the expansion of a primitive applied to a pack comes through a generic function's body
+/// unexpanded (`<RestOf<float>>`, measured 2026-11-05 on the first spelling of this alias).
+///
+/// The head is the primitive `HeadOf` and not the `match type` a program writes (`FirstOf<P>`): a
+/// `match type` written into this alias leaves the two names it binds as type variables of every
+/// call that reads the alias, and no argument binds them -- `grad(weighted)` was refused with "the
+/// type variable(s) W, Rest cannot be determined" (measured 2026-11-05). A primitive is evaluated
+/// with the pack in hand.
+/// @example is_same::<GradientOf<<w: f32[2]> (x: float) => float>, (w: f32[2], x: float) => f32[2]>()    // true
+export type GradientOf<F> =
+    (w: HeadOf<WithOf<F>>, ...ParamsOf<F>) => Tangent<HeadOf<WithOf<F>>>
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
-/// function of `f`'s parameters that answers the value and the pullback.
-/// @example is_same::<Vjp<(x: float) => float>, (x: float) => (float, Pullback<(x: float) => float>)>()    // true
-export type Vjp<F> = (..ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
+/// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
+/// parameters as `f` does (author's ruling of 2026-11-03 09:50): a transform differentiates the
+/// ordinary parameters only, and a `with` value is handed on unchanged, as a constant, its tangent
+/// the zero of its type. So this is `Jvp<F>`'s shape -- the same `with` list, then the parameters.
+/// @example is_same::<Vjp<(x: float) => float>, <...WithOf<(x: float) => float>> (x: float) => (float, Pullback<(x: float) => float>)>()    // true
+export type Vjp<F> = <...WithOf<F>> (...ParamsOf<F>) => (ResultOf<F>, Pullback<F>)
 
-/// The forward transform's type: the parameters of `f`, then their tangents, then the value and its
+/// The forward transform's type: the parameters of `f` and their tangents, then the value and its
 /// tangent (`jvp(f)(2.0, 1.0)` is `f(2.0)` and `df` in the direction 1).
+///
+/// **This declaration is the contract** (author, 2026-11-03, `origin/fsh-dev` `6eceaa89d`): the build
+/// makes the declared type, and no declaration is approximate. The order written above is "all the
+/// parameters, then all their tangents"; the build today pairs each parameter with its tangent as it
+/// goes (`modules/transforms/jvp.cpp#jvpSignature`), and gives a parameter with no tangent space one
+/// place only. That difference is a **missing capability of the type-bundle splice** -- the exact shape
+/// needs an interleaving operation `(...A, ...B)` cannot express -- so the declaration is to be made
+/// exact when the splice can write it, and the gap is a defect of the declaration layer, not a
+/// licence to call the declaration approximate.
 /// @example is_same::<Jvp<(x: float) => float>, (x: float, d: float) => (float, float)>()    // true
 export type Jvp<F> =
-    (..ParamsOf<F>, ..Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
+    <...WithOf<F>> (...ParamsOf<F>, ...Tangent<ParamsOf<F>>) => (ResultOf<F>, Tangent<ResultOf<F>>)
 
-/// The transpose of a linear function: its parameters, then the cotangent of its result, then the
-/// cotangents of its parameters. The cotangent comes last because a pullback may need the value it
-/// transposes at (a branch's condition is a value).
-/// @example is_same::<Transpose<(x: float) => float>, (x: float, ct: float) => (float,)>()    // true
-export type Transpose<F> =
-    (..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)
+/// The transpose of a linear function: the cotangent of the result, and one cotangent per parameter
+/// of `f`.
+///
+/// **This declaration is the contract**: the build makes the declared type, and the build that makes
+/// it is `modules/transforms/transpose.cpp#transposeSignature`. There is no value parameter and no
+/// `with` list here, because a value the transposed body needs beside the cotangent is not one its
+/// caller passes: it is a residual the function that is transposed was closed over -- `x` in
+/// `transpose((dx: float) => 2.0 * x * dx)`, and the residue a cut captured in `lin`'s closure --
+/// and the transposed body reads it as a closure port. A `with` value the backward half reads is a
+/// residual like every other one the second half reads, so `transpose(lin)` is `(ct) => (...)`
+/// whether `lin` came from a `with` function or from a plain one.
+///
+/// A parameter **without** a tangent space (`int`, `bool`, a string) is the one place the shape above
+/// is not the one the build makes: `Tangent<int>` is `()`, so it needs no cotangent, and the call site
+/// still has to supply its value -- the transposed member takes it as one ordinary argument **before**
+/// the cotangent (`transpose(pick)` reads the index and answers the array's cotangent). Written here
+/// as `(...ValueParamsOf<F>, ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)` if the splice could
+/// state it. For a differentiable function every parameter has a tangent space, so the shape above is
+/// the exact one.
+/// @example is_same::<Transpose<(x: float) => float>, (ct: float) => (float,)>()    // true
+export type Transpose<F> = (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>)
 
 /// True when `T` and `U` are the same type. Identity, not shape: two named types with the same
 /// fields are different, `i32` and `int` are different.
@@ -192,7 +305,7 @@ export func is_function::<T>(): bool {
 
 /// True when `T` is an array type, of any rank.
 /// @example is_array::<int[]>()    // true
-/// @example is_array::<f32[..]>()    // true
+/// @example is_array::<f32[...]>()    // true
 /// @example is_array::<int>()    // false
 export func is_array::<T>(): bool {
     return match type T {

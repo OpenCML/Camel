@@ -1,0 +1,37 @@
+// A callee whose parameter has **no tangent space**: `widen(n: int, x: float)`, called from the body
+// `g(x: float) = widen(2, x) + 1.0`. `Tangent<int> = ()`, so the callee's lifted list is
+// `(int, float, (), float)` -- the value and the tangent of each parameter, with an empty tuple
+// standing where a parameter that has no direction would have one.
+//
+// The slot is a **port** of the lift, so a call fills it with `()` (jvp's argument list). What the
+// cut then does with that argument is arithmetic: it takes the second half of the call's ordinary
+// arguments as "the tangents" and hands them to the callee's backward half, which declares **no
+// port** for a slot with no tangent space -- one argument too many. Before the slot was dropped by
+// the callee's own signature the run time refused the graph by name
+// (`Runtime indirect call norm-arity mismatch: caller graph 'split_of_jvp_of_g_backward' ... has 2
+// args, target graph 'split_of_jvp_of_widen_backward' has 1 norm ports`), which is a consumer of a
+// malformed graph and not a reading of the program.
+//
+// The reading is the pair of numbers the cut answers: 7.0 for `widen(2, 2) + 1.0` and 3.0 for its
+// tangent, the same two the lift gives.
+import rulesets.jvp
+import { jvp, split } from transforms
+
+func widen(n: int, x: float): float {
+    return x * 3.0
+}
+
+func g(x: float): float {
+    return widen(2, x) + 1.0
+}
+
+func main(): int sync {
+    let lifted = jvp(g)
+    let (v, t) = lifted(2.0, 1.0)
+    println("lift value=", v, " tangent=", t)
+    let fwd = split(lifted)
+    let (y, lin) = fwd(2.0)
+    println("g y=", y)
+    println("g d=", lin(1.0))
+    return 0
+}

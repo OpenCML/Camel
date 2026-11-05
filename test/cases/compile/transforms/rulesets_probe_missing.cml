@@ -1,13 +1,17 @@
-// The negative case for the forward transform: `pow` is a primitive the ruleset has no forward rule
+// The negative case for the forward transform: `sin` is a primitive the ruleset has no forward rule
 // for, so `jvp(f)` cannot be built -- and the diagnostic has to say so *at the primitive*, standing
-// on `pow` in `f`, not at the call that asked for `jvp`. A refusal that only prints a reading leaves
+// on `sin` in `f`, not at the call that asked for `jvp`. A refusal that only prints a reading leaves
 // the reader at the call site guessing which operator it was.
-import { pow } from math
+//
+// This case used `pow` as its primitive until `math:pow_d` gained a forward rule
+// (`stdlib/rulesets/jvp.cml#jvp_pow_d`); `sin` is `math:sin_d`, which no family binds, so the shape
+// the case is about -- an operator with no rule, refused where it is written -- is the same one.
+import { sin } from math
 import rulesets.jvp
 import { jvp } from transforms
 
 func f(x: float): float {
-    return pow(x, 2.0)
+    return sin(x)
 }
 
 func main(): int sync {

@@ -1,0 +1,19 @@
+{
+  "_comment": "Copy this file to camel-gate.local.json in the same directory and fill in the placeholders. That path is git-ignored: it is the only place a machine-specific value belongs. Keys you leave out keep the defaults in camel-gate-config.ps1.",
+
+  "sshHost": "<the ssh alias or host name the gate connects to>",
+  "sshExe": "<absolute path of ssh.exe, or leave out to use ssh from PATH>",
+  "scpExe": "<absolute path of scp.exe, or leave out to use scp from PATH>",
+
+  "stateDir": "<absolute path of the directory that holds build-state.json, test-state.json and run-registry.jsonl>",
+
+  "hostWorkRoot": "camel-work",
+  "hostBareRepo": "camel-work/Camel.git",
+  "hostClangEnv": "camel-eval/conda/envs/clang",
+  "hostBuildEnv": "camel-eval/venv-build/bin",
+  "hostBenchEnv": "camel-eval/venv-bench/bin",
+  "hostLocalBin": ".local/bin",
+  "hostLibStdCxxDir": "<absolute path, on the host, of the toolchain libstdc++ directory -- only for installs built before they carried their own>",
+
+  "watchRepo": "<absolute path of the checkout watch-fsh-dev.ps1 follows>"
+}

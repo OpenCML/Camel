@@ -199,6 +199,43 @@ bool isUtf8(std::string_view text) {
 }
 
 std::string escapeString(std::string_view text, bool towardUtf8) {
+    // A value with two or more backslashes and nothing else that an escape is for (no control
+    // character, no byte outside printable ASCII) is printed as a raw string: a Windows path
+    // stays `r"C:\dir\file"` instead of becoming `'C:\\dir\\file'`, and reading the printed
+    // program costs what reading the original cost. The delimiters are `r"`, `r#"`, `r##"` ...
+    // with as many `#` as it takes for the closing `"` + `#`s not to occur inside the value, so
+    // the printed literal is always the value and nothing of it is decoded.
+    const auto rawForm = [&]() -> std::string {
+        size_t backslashes = 0;
+        for (const char ch : text) {
+            const auto c = static_cast<unsigned char>(ch);
+            if (ch == '\\') {
+                ++backslashes;
+                continue;
+            }
+            if (c < 0x20 || c == 0x7F || c >= 0x80) {
+                return {};
+            }
+        }
+        if (backslashes < 2) {
+            return {};
+        }
+        size_t hashes = 0;
+        for (;; ++hashes) {
+            const std::string closer = "\"" + std::string(hashes, '#');
+            if (text.find(closer) == std::string_view::npos) {
+                break;
+            }
+        }
+        const std::string fence(hashes, '#');
+        std::string raw = "r" + fence + "\"";
+        raw += text;
+        raw += "\"" + fence;
+        return raw;
+    };
+    if (std::string raw = rawForm(); !raw.empty()) {
+        return raw;
+    }
     std::string out = "'";
     for (const char raw : text) {
         const auto c = static_cast<unsigned char>(raw);
@@ -3336,11 +3373,11 @@ class CmlPrinter {
             fail(ref, "a range without its bounds");
         }
 
-        // An operator whose declaration is a function is written as a call of that function, and
+        // An operator whose declaration is a function is printed as a call of that function, and
         // the name and the argument count come from the declaration (`:io/println`, `tensor:sum`,
-        // `jvp`). The printer no longer spells any of them out from the shape of the URI: the
-        // three places it used to (`:io/` stripped of its prefix, `:op/*to*` read off its last
-        // letter, `:struct/range` written as `range`) are the entries of this table now.
+        // `jvp`). No name is derived from the shape of the URI: this table is the only source, so
+        // `:io/println`, the conversions of `:op/*` and `:struct/range` are printed the way their
+        // own declarations name them.
         std::string name;
         const auto callForm = camel::core::OperatorTable::instance().callFormOf(uri);
         // A name is written when the program can write it: an operator of the core (`:io/println`,
@@ -3573,7 +3610,7 @@ class CmlPrinter {
         }
         // A direct call of a function that reads module values passes those values as `with`
         // inputs. The source omits them: the callee names the top-level values itself. The
-        // function's own `with` parameters come first and are written `<...>` at the call.
+        // function's own `with` parameters come first, and a call spells them inside `<...>`.
         const std::string name = functionNameOf(callee);
         if (name.empty()) {
             fail(ref, "a call of a function whose graph has no source name (a lambda)");

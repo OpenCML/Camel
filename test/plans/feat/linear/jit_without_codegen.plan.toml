@@ -1,0 +1,48 @@
+id = "linear.jit_without_codegen"
+order = 353
+tier = "fast"
+tags = ["feat", "linear", "jit", "diagnostics"]
+
+# A build whose JIT has no code generator: `ENABLE_FASTVM_JIT` is x86-64 only, so that is every
+# arm64 build and the no-JIT build of the CI. `std::jit` is accepted there, the program runs on the
+# bytecode interpreter of `std::fvm`, and the build says so once, before the program runs, as
+# `RuntimeDiag::JitWithoutCodeGenerator` (0x04100018, stage `pass:std::jit`). The warning is one of
+# the command line's warnings, so `-Wno-...` silences it and `-Werror` promotes it.
+#
+# Both cases are skipped wherever the build has a code generator, which is the arm they are for:
+# the same two-line precondition asks the opposite question of the tests that assert a compiled
+# line (`test/tools/have-native-jit.mjs`, `--absent`).
+#
+# The first case is also the one place where this code is asserted by name: the warning is a
+# command-line warning with no source position, and the short rendering of a diagnostic ends with
+# `(name=..., code=...)`, so `expect_diagnostic_name` reads it out of the same line the message
+# needle reads. There is no other reachable shape: `src/execute/pass.cpp#jitWithoutCodeGeneratorWarning`
+# returns nullopt at compile time when ENABLE_FASTVM_JIT is on, so a build with a code generator has
+# no program, flag or environment that reaches this code.
+
+[[tests]]
+name = "without_codegen.warning"
+desc = "A build whose JIT has no code generator names RuntimeDiag::JitWithoutCodeGenerator (0x04100018) once, before the program runs, and the program still gives its result under std::jit."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["${case}", "${run_jit}"]
+silenced_warnings = []
+skip_unless = ["node", "test/tools/have-native-jit.mjs", "--absent"]
+expect_exit = 0
+expect_diagnostic_name = "RuntimeDiag::JitWithoutCodeGenerator"
+expect_stderr_contains = ["[Warn]:", "no native code generator in this build", "(name=RuntimeDiag::JitWithoutCodeGenerator, code=0x04100018)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "without_codegen.silenced"
+desc = "The same warning is silenced by -Wno-jit-without-code-generator and nothing else changes: a build without a code generator is a configuration, and the run is that of fvm."
+kind = "behavior"
+case = "../../../cases/linear/jit/native_registers.cml"
+args = ["-Wno-jit-without-code-generator", "${case}", "${run_jit}"]
+silenced_warnings = []
+skip_unless = ["node", "test/tools/have-native-jit.mjs", "--absent"]
+expect_exit = 0
+expect_output_not_contains = ["no native code generator"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000

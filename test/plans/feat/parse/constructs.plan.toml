@@ -43,7 +43,7 @@ expect_stdout_contains = ["6", "16 9", "9", "7"]
 
 [[tests]]
 name = "constructs.rest_signature"
-desc = "`..ts`, the last parameter of a signature, and `..e`, the last argument of a call: written out, expanded from a tuple literal, and forwarded as `..ts`."
+desc = "`...ts`, the last parameter of a signature, and `...e`, the last argument of a call: written out, expanded from a tuple literal, and forwarded as `...ts`."
 kind = "behavior"
 case = "../../../cases/parse/constructs/rest_signature.cml"
 args = ["${case}"]

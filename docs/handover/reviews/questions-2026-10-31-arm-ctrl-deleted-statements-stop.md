@@ -1,6 +1,6 @@
 # 删掉 BRCH→臂的 ctrl 之后，为什么 `std::opt` 之后有 6 条语句不跑了
 
-**一句话**：把 `linkArmEntries` 里 `linkNodes(LinkType::Ctrl, brchNode, node)` 那一行删掉（`src/compile/gir/builder_control.cpp:2861`，即 BRCH 与臂入口之间那条控制边，`docs/design/effects/edges.cn.md` §5.2 说" BRCH 与臂之间没有边，只靠区域归属"），**同一张图、同样的节点、同样的边数记录之外只少了这一条边**，`entering.positions.*` 的打印从 8 行掉到 2 行。
+**一句话**：把 `linkArmEntries` 里 `linkNodes(LinkType::Ctrl, brchNode, node)` 那一行删掉（`src/compile/gir/builder_control.cpp#Builder::linkArmEntries`，即 BRCH 与臂入口之间那条控制边，`docs/design/effects/edges.cn.md` §5.2 说" BRCH 与臂之间没有边，只靠区域归属"），**同一张图、同样的节点、同样的边数记录之外只少了这一条边**，`entering.positions.*` 的打印从 8 行掉到 2 行。
 
 ## ① 两串打印（`test/cases/consistency/entering/positions.cml`，`std::opt` + `std::nvm`）
 
@@ -67,8 +67,8 @@ PROBE-LIVE nodes=370 live=27 deadStatements=19 ids=99,105,112,147,160,174,188,19
 
 由构造可以确定，不需要再跑一遍：
 
-- `buildExecPlan`（`src/execute/exec_plan.cpp:781`）的 `plan->topo` 就是 `computeExecutionOrder` 的返回值，而 `topoIndexByRef`（同文件 794-797）只给 `topo` 里的节点编号，其余一律 `kNotInPlan`。
-- `BranchArmEntries`（`src/execute/graph_runtime_support.cpp:700-718`）只遍历 `topoOrder`，臂的 `[entry, tail]` 是**计划序里的下标区间**。
+- `buildExecPlan`（`src/execute/exec_plan.cpp#buildExecPlan`）的 `plan->topo` 就是 `computeExecutionOrder` 的返回值，而 `topoIndexByRef`（同文件 794-797）只给 `topo` 里的节点编号，其余一律 `kNotInPlan`。
+- `BranchArmEntries`（`src/execute/graph_runtime_support.cpp#runtimeArmEndsWithValue`）只遍历 `topoOrder`，臂的 `[entry, tail]` 是**计划序里的下标区间**。
 - 那 19 条不在 `live` 里，就不在 `topo` 里，**因此不在任何臂的 `[entry, tail]` 内，也没有任何 BRCH 的跳转目标覆盖它们**：19 条全部如此，0 条在臂内。
 
 **换句话说**：它们不是"在某条臂里而没跑到"，是**没有任何臂认领它们**——它们从计划里就不存在。"有同步前驱"这件事在 `live` 这一关就被用完了，`BranchArmEntries:707-711` 那句"臂的节点排在 BRCH 之前就跳过"根本没有机会被问到。
@@ -104,7 +104,7 @@ id=355 kind=11 idx=22
 作者按 `9bd39d649` 的清单点了第一类："同步块里那些已经有同步前驱的 `LinkType::Ctrl`，删掉不改变谁会跑，因为同步前驱已经在说同一件事"。这一类只有一个落点：
 
 ```cpp
-// src/compile/gir/builder_helpers.h:694，删 1 行
+// src/compile/gir/builder_helpers.h#writeControlLink，删 1 行
 inline void writeSyncStatement(node_handle_t from, node_handle_t to) {
     writeSyncLink(from, to);
 -   linkNodes(LinkType::Ctrl, from, to);

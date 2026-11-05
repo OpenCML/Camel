@@ -1245,7 +1245,7 @@ if (mode === '--text-coverage' || mode === '--text-coverage-check') {
             if (pins.size === 0) continue
             const needles = []
             // One level of brackets is allowed inside the list: a needle is often a fragment of a
-            // printed value, and 'f64[..]' or '[0, 3, 6, 9]' ends the match early when the list is
+            // printed value, and 'f64[...]' or '[0, 3, 6, 9]' ends the match early when the list is
             // read up to the first ']'.
             for (const m of block.matchAll(
                 /expect_(?:output|stdout|stderr)_contains\s*=\s*\[((?:[^\[\]]|\[[^\[\]]*\])*)\]/g
@@ -1391,6 +1391,12 @@ const PINNED_COVERAGE_EXCEPTIONS = [
     },
 ]
 
+// Back to 16, and this time it is a reading rather than the prediction it was two commits ago.
+// `SemanticDiag::ResidualsAreNotVisible` lost the only case that asserted it when
+// `split_residuals_destructured` moved to `SemanticDiag::TypeNotIndexable` (`3765513d5`), which put
+// the count at 17 (`149fbaa29`); `79c61958b` then deleted the diagnostic itself, 307 codes -> 306,
+// and `--pinned-coverage` now prints "289 of 306 (1 named exception(s), 16 with no assertion)". The
+// number moved because coverage moved in both directions, not because the gate was relaxed.
 const PINNED_COVERAGE_RECORDED = 16
 
 if (mode === '--pinned-coverage' || mode === '--pinned-coverage-check') {

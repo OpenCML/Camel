@@ -1,0 +1,33 @@
+id = "runtime.draft_node_owner"
+order = 381
+tier = "fast"
+tags = ["feat", "runtime", "graph", "draft", "witness"]
+desc = "The witness of a node handle's identity: a handle whose builder is gone and whose address now holds a later draft must name no draft, while a node of the draft that holds the address must still resolve to it."
+
+# `test::draft_node_owner` sets the case up on purpose -- a builder, a handle out of it, the builder
+# destroyed, a later builder on the same address -- and prints the two answers. This plan is what
+# makes the epoch in `DraftNodeRef` a checked fact instead of a comment: with the epoch removed the
+# handle answers with the graph that holds its address, `stale_is_named` becomes 1, and the lines
+# below stop matching; nothing else in the tree notices, because the wrong answer is a live object
+# of the right type. The control comes first in the pass, so a refusal that also refuses the right
+# handle is caught here too.
+#
+# The pass is in the core's test table (`src/execute/pass.cpp`, `test::`), not in a module: the
+# drafts it makes are the compile side's, and no module names `DraftGraphBuilder`.
+[[tests]]
+name = "runtime.draft_node_owner.stale_handle_is_refused"
+desc = "A node of the draft that holds the address resolves to that draft; a handle left over the destroyed draft at the same address names no draft and has no owner, although the address alone would answer yes. GCNodeKind 3 is Copy and 13 is Gate, so the node a stale read would take is visibly the wrong one."
+kind = "behavior"
+case = "../../../cases/runtime/draft_node_owner/owner_after_the_graph.cml"
+args = ["${case}", "test::draft_node_owner"]
+expect_exit = 0
+# One assertion on the stdout, and it is the one that can say "a pattern with values that move in
+# it": `same_address=1` is what makes the rest a reading rather than a vacuous miss -- the handle's
+# address is the live draft's, and the epoch is the only thing that answers no. The attempt count is
+# not pinned: the allocator's reuse is the case, not the number of tries it takes to get it.
+expect_stdout_matches = ['\[DRAFT_NODE_OWNER\] live_owner=yes', '^\[DRAFT_NODE_OWNER\] reused=1 attempt=\d+ same_address=1$', '\[DRAFT_NODE_OWNER\] kind_when_made=3 kind_at_the_address_now=13', '\[DRAFT_NODE_OWNER\] stale_is_named=0 stale_owner=none', '^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$', '\[DRAFT_NODE_OWNER\] ok']
+# The pass says MISSING when it could not set its case up or when the stale handle did resolve. The
+# second is the defect coming back and the first is a witness with nothing to show; both are red.
+expect_stdout_not_contains = ["[DRAFT_NODE_OWNER] MISSING"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

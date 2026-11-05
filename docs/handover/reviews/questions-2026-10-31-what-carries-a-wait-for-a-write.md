@@ -145,8 +145,8 @@
 
 | 位置 | 判据 | 归零后恒真吗 | 守着什么 | 恒真后的后果 | 对不对 |
 |---|---|---|---|---|---|
-| src/runtime/rules.cpp:107-108 | with.empty() && ctrlInputsOf(ref).empty() && syncPredsOf(ref).empty() | **不恒真**——第三项还在 | "只吃常量、且不是某条链或某次等待的一环"才许被规则改写 | 不多命中：sync 那一半仍拦着链上的语句 | **对**。它已经是"或"形状，ctrl 那一项可直接删 |
-| src/passes/opt/defun/defunctionalize.cpp:1492-1494 | live(base) 且 norm/with/ctrl/order/sync 五种 user 全空 | **不恒真**——是"没有用户"的合取 | 闭包把静态函数打包后，确认没人用才删节点 | 删节点判定略早成立，但只在真没人用时 | **对**。死代码判定，少查一类用户是正解 |
+| src/runtime/rules.cpp#SideReader | with.empty() && ctrlInputsOf(ref).empty() && syncPredsOf(ref).empty() | **不恒真**——第三项还在 | "只吃常量、且不是某条链或某次等待的一环"才许被规则改写 | 不多命中：sync 那一半仍拦着链上的语句 | **对**。它已经是"或"形状，ctrl 那一项可直接删 |
+| src/passes/opt/defun/defunctionalize.cpp#DefunctionalizeRewritePass::apply | live(base) 且 norm/with/ctrl/order/sync 五种 user 全空 | **不恒真**——是"没有用户"的合取 | 闭包把静态函数打包后，确认没人用才删节点 | 删节点判定略早成立，但只在真没人用时 | **对**。死代码判定，少查一类用户是正解 |
 
 结论：两条都**不需要**在裁决前改。真正要重新设计的仍只有 gates.cpp:19（使能条件，见 control-edge-readers.md 规矩二）。
 

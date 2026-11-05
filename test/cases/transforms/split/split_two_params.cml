@@ -5,10 +5,12 @@
 // twice: with (1, 0) it is df/dx = 2xy = 12, with (0, 1) it is df/dy = x^2 = 9.
 //
 // The same lifted function then goes through `split` (author, 2026-10-31 15:25): the cut is the
-// pair, not a parameter number. What crosses it is read off the graph, so the forward half answers
-// 18 with **three** residuals -- x, y, and x*x, the product the backward half's rule for the second
-// `mul` reads -- and the backward half turns a tangent direction into the tangent without
-// recomputing that product: it comes out of the tuple.
+// pair, not a parameter number. What crosses it is read off the graph, so `fwd(3.0, 2.0)` answers
+// 18 with **five** residuals -- x, y, x*x, the product the backward half's rule for the second `mul`
+// reads, and the two parameters' value ports -- and hands them on inside `lin`, the linear function
+// it builds. `lin` is closed over those values (author, 2026-11-02 08:30), so it takes the tangent
+// direction alone: `lin(1, 0)` is 12 and `lin(0, 1)` is 9, the same two numbers the lift gives,
+// computed without recomputing the product on the far side of the cut.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -18,16 +20,19 @@ func f(x: float, y: float): float {
 
 func main(): int sync {
     let lifted = jvp(f)
-    let (vx, tx) = lifted(3.0, 1.0, 2.0, 0.0)
-    let (vy, ty) = lifted(3.0, 0.0, 2.0, 1.0)
+    // The lift's parameters are `jvpSignature`'s: the value of every parameter and then the tangent of
+    // every one (`50ecaf5e3`), so the four numbers are (x, y, dx, dy) -- not the (x, dx, y, dy) this
+    // case was written with, which was the layout before that landing.
+    let (vx, tx) = lifted(3.0, 2.0, 1.0, 0.0)
+    let (vy, ty) = lifted(3.0, 2.0, 0.0, 1.0)
     println("value=", vx)
     println("dfdx=", tx)
     println("dfdy=", ty)
-    let (fwd, lin) = split(lifted)
-    let (value, res) = fwd(3.0, 2.0)
+    let fwd = split(lifted)
+    let (value, lin) = fwd(3.0, 2.0)
     println("forward y=", value)
-    println("tangent dx=", lin(res, 1.0, 0.0))
-    println("tangent dy=", lin(res, 0.0, 1.0))
+    println("lin dx=", lin(1.0, 0.0))
+    println("lin dy=", lin(0.0, 1.0))
     // The second value the lift answers is the same function read in the other direction.
     println("value from dy=", vy)
     return 0

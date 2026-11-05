@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-307 diagnostics: 286 errors, 21 warnings. 15 carry a machine-applicable edit, 292 say why they carry none.
+311 diagnostics: 290 errors, 21 warnings. 15 carry a machine-applicable edit, 296 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -24,7 +24,7 @@ prints one entry.
 | `0x01000001` | [LexicalDiag::InvalidNumberFormat](#invalidnumberformat) | Error | yes |
 | `0x01000002` | [LexicalDiag::UnclosedStringLiteral](#unclosedstringliteral) | Error | yes |
 | `0x01000003` | [LexicalDiag::UnterminatedComment](#unterminatedcomment) | Error | yes |
-| `0x01100000` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Warn | no |
+| `0x01000004` | [LexicalDiag::InvalidEscapeSequence](#invalidescapesequence) | Error | no |
 | `0x02000001` | [SyntaxDiag::MissingClosingDelimiter](#missingclosingdelimiter) | Error | yes |
 | `0x02000002` | [SyntaxDiag::UnmatchedClosingDelimiter](#unmatchedclosingdelimiter) | Error | yes |
 | `0x02000003` | [SyntaxDiag::MissingThen](#missingthen) | Error | yes |
@@ -165,7 +165,6 @@ prints one entry.
 | `0x0300018E` | [SemanticDiag::RestArgumentNotTuple](#restargumentnottuple) | Error | no |
 | `0x0300018F` | [SemanticDiag::RestFunctionNeedsExpansion](#restfunctionneedsexpansion) | Error | no |
 | `0x03000190` | [SemanticDiag::RestArgumentsMismatch](#restargumentsmismatch) | Error | no |
-| `0x03000191` | [SemanticDiag::WithPackNeedsNativeDeclaration](#withpackneedsnativedeclaration) | Error | no |
 | `0x03000193` | [SemanticDiag::ConstasTypeRequired](#constastyperequired) | Error | no |
 | `0x03000195` | [SemanticDiag::ConstasValueNotConstant](#constasvaluenotconstant) | Error | no |
 | `0x03000199` | [SemanticDiag::ConstasFunctionNeedsCall](#constasfunctionneedscall) | Error | no |
@@ -267,8 +266,10 @@ prints one entry.
 | `0x03000205` | [SemanticDiag::DuplicateRuleForOperator](#duplicateruleforoperator) | Error | no |
 | `0x03000206` | [SemanticDiag::YieldRequiresStreamHead](#yieldrequiresstreamhead) | Error | no |
 | `0x03000207` | [SemanticDiag::RuleRightUsesOuterVariable](#rulerightusesoutervariable) | Error | no |
-| `0x03000208` | [SemanticDiag::ResidualsAreNotVisible](#residualsarenotvisible) | Error | no |
+| `0x03000208` | [SemanticDiag::LoopBodyNeedsNextState](#loopbodyneedsnextstate) | Error | no |
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
+| `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
+| `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -322,10 +323,13 @@ prints one entry.
 | `0x040001AA` | [RuntimeDiag::GraphNoDeviceProgram](#graphnodeviceprogram) | Error | no |
 | `0x040001AB` | [RuntimeDiag::DeviceNotSelected](#devicenotselected) | Error | no |
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
+| `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
+| `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
 | `0x04100017` | [RuntimeDiag::DefunctionalizationIncomplete](#defunctionalizationincomplete) | Warn | no |
+| `0x04100018` | [RuntimeDiag::JitWithoutCodeGenerator](#jitwithoutcodegenerator) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -346,7 +350,7 @@ An error has occurred: {0}.
 **Help**
 
 ```text
-The compiler reached a state it has no code for, so nothing in the program is known to be wrong. Report it together with the program that reached it.
+The compiler reached a state it has no code for. This is a defect of the compiler, not an error of the program.
 ```
 
 **Example** (`test/cases/compile/collections/err_key_float.cml`, run as `camel test/cases/compile/collections/err_key_float.cml`)
@@ -494,7 +498,7 @@ func main(): int {
 
 ### InvalidEscapeSequence
 
-`0x01100000` · Warn · `LexicalDiag::InvalidEscapeSequence`
+`0x01000004` · Error · `LexicalDiag::InvalidEscapeSequence`
 
 **Fix**
 
@@ -509,23 +513,14 @@ Invalid escape sequence in string: {0}.
 **Help**
 
 ```text
-Check and correct the escape sequence.
+A string decodes '\n', '\t', '\r', '\a', '\b', '\f', '\v', '\0', '\\', '\'', '\"', '\`', '\$', '\xHH' and the braced Unicode form '\u{...}'. Any other pair is refused rather than kept: a string that silently becomes something else is dearer than one that does not build. To write a backslash itself, write '\\' or use a raw string, in which nothing is an escape: r"C:\dir".
 ```
 
-**Example** (`test/cases/compile/escapes/plain.cml`, run as `camel test/cases/compile/escapes/plain.cml`)
+**Example** (`test/cases/compile/escapes/unknown.cml`, run as `camel test/cases/compile/escapes/unknown.cml`)
 
 ```camel
 func main(): int sync {
-    println('101', len('\101'))
-    println('0', len('\0'))
-    println('x41', len('\x41'), '\x41')
-    println('u', len('\u{1F600}'))
-    println('n', len('\n'))
-    println('8', len('\8'), '\8')
-    println('0x', len('\0x'))
-    println('01', len('\01'))
-    println('012', len('\012'))
-    println('033', len('\033'))
+    println('\q')
     return 0
 }
 ```
@@ -1461,9 +1456,9 @@ Ensure the type is defined and visible in the current scope.
 ```camel
 // The old tensor name is no type at all (the arrays and memory plan, section 5.1): a program that
 // writes it writes an unknown name, and the report says so where it stands. The spellings that
-// state an element type are the array types -- `f32[..]` (any rank) and `f32[2, 3]` -- and a
+// state an element type are the array types -- `f32[...]` (any rank) and `f32[2, 3]` -- and a
 // signature that takes a tensor of any element type declares a type variable in its head
-// (`func count::<T>(t: T[..])`), whose call's argument fixes it. That positive spelling is
+// (`func count::<T>(t: T[...])`), whose call's argument fixes it. That positive spelling is
 // test/cases/loops/iterate_tensor.cml.
 
 import { ones } from tensor
@@ -1628,12 +1623,12 @@ Check the number and types of arguments to ensure they match one of the availabl
 **Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
 
 ```camel
-// The printed form of an array type is the array spelling: `f32[..]` and `f32[2, 3]`. The
+// The printed form of an array type is the array spelling: `f32[...]` and `f32[2, 3]`. The
 // candidate list of a refused call is where the text is visible.
 import tensor
 
 
-func takes(a: f32[..], b: f32[2, 3]): int {
+func takes(a: f32[...], b: f32[2, 3]): int {
     return 0
 }
 
@@ -2518,7 +2513,7 @@ The expansion '{0}' must range over exactly one pack: {1}.
 **Help**
 
 ```text
-A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
+A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ...A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
 ```
 
 **Example** (`test/cases/compile/rest_params/pack_expand_two_packs.cml`, run as `camel test/cases/compile/rest_params/pack_expand_two_packs.cml`)
@@ -2526,7 +2521,7 @@ A type expression written with '..' stands for one type per member of a pack, an
 ```camel
 // An expansion ranges over one pack: a body that names two of them writes one type per member
 // of which pack, and nothing in the declaration says which.
-func blend::<..A, ..B>(..xs: ..A): ..{left: A, right: B} {
+func blend::<...A, ...B>(...xs: ...A): ...{left: A, right: B} {
     return {left: xs.[0], right: xs.[1]}
 }
 
@@ -3982,7 +3977,7 @@ Only the first occurrence of a dimension name in the parameter types binds it; l
 // A pack name and a dimension name are separate namespaces: reusing a bound dimension name
 // for a pack says two different things with one name.
 
-func bad(x: f32[n], y: f32[..n]): int {
+func bad(x: f32[n], y: f32[...n]): int {
     return 0
 }
 
@@ -5042,7 +5037,7 @@ A rest parameter stands for every argument left over, so no parameter can follow
 **Example** (`test/cases/compile/rest_params/rest_param_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_param_not_last.cml`)
 
 ```camel
-func bad(..ts, x: int): int {
+func bad(...ts, x: int): int {
     return x
 }
 
@@ -5074,7 +5069,7 @@ A rest parameter is untyped: the tuple of the arguments left over is made at the
 **Example** (`test/cases/compile/rest_params/rest_param_typed.cml`, run as `camel test/cases/compile/rest_params/rest_param_typed.cml`)
 
 ```camel
-func bad(..ts: int): int {
+func bad(...ts: int): int {
     return 0
 }
 
@@ -5106,12 +5101,12 @@ The rest argument '..{0}' must be the last positional argument.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_last.cml`)
 
 ```camel
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
-    return sum(..(1, 2), 3)
+    return sum(...(1, 2), 3)
 }
 ```
 
@@ -5138,12 +5133,12 @@ The rest argument '..{0}' is not a compile-time tuple.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_tuple.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_tuple.cml`)
 
 ```camel
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
-    return sum(..5)
+    return sum(...5)
 }
 ```
 
@@ -5170,7 +5165,7 @@ A function with a rest parameter has no runtime arity, so it has no function val
 **Example** (`test/cases/compile/rest_params/rest_as_value.cml`, run as `camel test/cases/compile/rest_params/rest_as_value.cml`)
 
 ```camel
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
@@ -5203,46 +5198,12 @@ A rest parameter only stands for the arguments after the fixed ones. Give at lea
 **Example** (`test/cases/compile/rest_params/rest_too_few.cml`, run as `camel test/cases/compile/rest_params/rest_too_few.cml`)
 
 ```camel
-func first(a: int, ..ts): int {
+func first(a: int, ...ts): int {
     return a
 }
 
 func main(): int sync {
     return first()
-}
-```
-
-### WithPackNeedsNativeDeclaration
-
-`0x03000191` · Error · `SemanticDiag::WithPackNeedsNativeDeclaration`
-
-**Fix**
-
-None: choice: whether to name the parameters or move the pack into a function type is the writer's decision
-
-**Message**
-
-```text
-The pack '..{0}' among the 'with' parameters needs a declaration without a body.
-```
-
-**Help**
-
-```text
-A pack among the 'with' parameters stands for the arguments a call gives beyond the fixed ones, and only a declaration of a native operator, which takes them as they come, can use them. A function with a body names each 'with' parameter; write them out, or write the pack in a function type.
-```
-
-**Example** (`test/cases/compile/prelude_signatures/with_pack_with_body.cml`, run as `camel test/cases/compile/prelude_signatures/with_pack_with_body.cml`)
-
-```camel
-// A pack among the `with` parameters needs a declaration without a body.
-with <..args>
-func bad(x: int): int {
-    return x
-}
-
-func main(): int sync {
-    return 0
 }
 ```
 
@@ -5348,7 +5309,7 @@ func total(constas n: int, x: f32[n]): float {
     return float(sum(x))
 }
 
-func apply(f: (x: f32[..]) => float, x: f32[..]): float {
+func apply(f: (x: f32[...]) => float, x: f32[...]): float {
     return f(x)
 }
 
@@ -5452,7 +5413,7 @@ A rest parameter's tuple stands for the arguments a call left over: read it with
 **Example** (`test/cases/compile/static_expansion/static_tuple_escape.cml`, run as `camel test/cases/compile/static_expansion/static_tuple_escape.cml`)
 
 ```camel
-func first(..ts): int {
+func first(...ts): int {
     return ts
 }
 
@@ -5514,7 +5475,7 @@ A dimension pack ('..') must be the last item of its '[...]', and only one may b
 **Help**
 
 ```text
-A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.
+A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ...rest]', not 'f32[...rest, 3]'.
 ```
 
 **Example** (`test/cases/compile/array_shape/err_pack_not_last.cml`, run as `camel test/cases/compile/array_shape/err_pack_not_last.cml`)
@@ -5522,7 +5483,7 @@ A pack stands for the dimensions the type does not name, so nothing can follow i
 ```camel
 // A pack stands for the trailing dimensions, so nothing may follow it.
 
-func bad(x: f32[..rest, 3]): int {
+func bad(x: f32[...rest, 3]): int {
     return 0
 }
 
@@ -5903,7 +5864,7 @@ A 'when' that is false makes its declaration inapplicable, not erroneous, and th
 **Example** (`test/cases/compile/type_packs/zip_not_array.cml`, run as `camel test/cases/compile/type_packs/zip_not_array.cml`)
 
 ```camel
-/// `when ..is_array::<A>()` asks every member of the pack: an argument that is not an array makes
+/// `when ...is_array::<A>()` asks every member of the pack: an argument that is not an array makes
 /// the declaration inapplicable, and `zip` has no other.
 func main(): int sync {
     println(zip([1, 2], 3))
@@ -7377,7 +7338,7 @@ None: choice: the repair is a decision only the writer can make
 **Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
 
 ```camel
-// A text is neither a function nor an integer: `..` has no reading for it (design principles
+// A text is neither a function nor an integer: `...` has no reading for it (design principles
 // 4.2), so the compiler refuses the construct and names what it does take.
 
 func main(): int sync {
@@ -8442,12 +8403,12 @@ A type function computes a type from types at compile time (design principles 21
 **Example** (`test/cases/compile/type_packs/length_mismatch.cml`, run as `camel test/cases/compile/type_packs/length_mismatch.cml`)
 
 ```camel
-/// `..` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
+/// `...` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
 /// ordinary parameters of `F` with its `with` parameters, and `Weighted` has one of the first and
 /// two of the second.
 import { ParamsOf, WithOf } from types
 
-type Mix<F> = (..(ParamsOf<F>, WithOf<F>))
+type Mix<F> = (...(ParamsOf<F>, WithOf<F>))
 type Weighted = <w: float, k: int> (a: int) => bool
 
 func f(x: Mix<Weighted>): int {
@@ -8527,7 +8488,7 @@ The callee reads the caller's variable and writes into it, so what it writes mus
 **Example** (`test/cases/linear/byref/var_argument_shape.cml`, run as `camel test/cases/linear/byref/var_argument_shape.cml`)
 
 ```camel
-func count(var w: f32[..], v: f32): int {
+func count(var w: f32[...], v: f32): int {
     return len(w)
 }
 
@@ -8691,13 +8652,13 @@ None: choice: the repair is a decision only the writer can make
 **Message**
 
 ```text
-The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side, and one ruleset has one rule per operator.
+The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list.
 ```
 
 **Help**
 
 ```text
-A transform looks up the rules of a primitive by the operator its left side is written with and the number of operands it takes, so a second rule under the same operator with the same number of operands has no way to be chosen: which of the two applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
+A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[...]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[...]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
 ```
 
 **Example** (`test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`)
@@ -8789,51 +8750,36 @@ func main(): int sync {
 }
 ```
 
-### ResidualsAreNotVisible
+### LoopBodyNeedsNextState
 
-`0x03000208` · Error · `SemanticDiag::ResidualsAreNotVisible`
+`0x03000208` · Error · `SemanticDiag::LoopBodyNeedsNextState`
 
 **Fix**
 
-None: choice: the residuals are handed on whole, and which members the second half reads is the transform's to decide
+None: choice: the body has to end with the value the next round starts from, and which value that is the writer's
 
 **Message**
 
 ```text
-The residuals `split` collects are not visible to the program: they are handed on whole to the second half, and neither a destructuring nor an element read takes them apart.
+A loop body ends with the next value of its state, and this one ends without writing one: the round after this one has nowhere to go on from.
 ```
 
 **Help**
 
 ```text
-A `split`'s forward half answers `(result, residuals)` -- the forward values the backward half's rules multiply by. Their number is the body's: `f(x) = x` crosses with none and `f(x, y) = x*x*y*y` with four, and two bodies with one lifted type can differ (design principles 4.4, the cut between now and later). The tuple travels for one reason, as one value: `let (value, residuals) = forward(xs)` and then `backward(residuals, dx)`, or the same tuple passed to the transposed function beside the cotangent. A program that destructured it, or read `residuals.0`, would depend on a count the graph chose, so both are refused here, at the `let` or the read. Pass the tuple as it stands: which members the second half reads is the transform's decision, made while the graph is built.
+The body of a loop is cut at its yield: the pull that hands an element out stops there, and the pull after it runs the rest of the body and the condition again, so the last statement of the body has to write the loop's next state value. Writing 'yield i' and then 'i + 1' moves the loop on; a body of only 'yield i' reads a fresh i on every pull, so the loop never moves on.
 ```
 
-**Example** (`test/cases/compile/transforms/split_residuals_destructured.cml`, run as `camel test/cases/compile/transforms/split_residuals_destructured.cml`)
+**Example** (`test/cases/compile/stream/generators_loop_body_without_next_state.cml`, run as `camel test/cases/compile/stream/generators_loop_body_without_next_state.cml`)
 
 ```camel
-// The residuals of a `split`, destructured: refused.
-//
-// `f(x, y) = x*x*y*y` crosses the cut with four values (`residuals=4`), and the tuple a program gets
-// is the transform's own (`TupleType::residuals`): its members are the graph's answer, so a program
-// does not read them. `let (r0, r1) = residuals` is `SemanticDiag::ResidualsAreNotVisible` at the
-// `let`; the tuple goes to the second half whole, as the last line below does.
-import rulesets.jvp
-import rulesets.transpose
-import { jvp, split, transpose } from transforms
-
-func f(x: float, y: float): float {
-    return x * x * y * y
+func g(): int.. sync {
+    loop i = 0 while i < 3 do {
+        yield i
+    }
 }
 
 func main(): int sync {
-    let (forward, linear) = split(jvp(f))
-    let (value, residuals) = forward(3.0, 2.0)
-    let (r0, r1) = residuals
-    println("value=", value)
-    println("r0=", r0)
-    println("r1=", r1)
-    println("tangent=", transpose(linear)(residuals, 1.0))
     return 0
 }
 ```
@@ -8877,6 +8823,93 @@ func loss(x: float): float {
 func main(): int sync {
     let step = loss->cse
     println(step<2.0>(3.0))
+    return 0
+}
+```
+
+### WithPackArgumentType
+
+`0x0300020A` · Error · `SemanticDiag::WithPackArgumentType`
+
+**Fix**
+
+None: choice: which value of the wanted type to give, or whether to write the pack without one, is the writer's
+
+**Message**
+
+```text
+The pack '..{0}' of '{1}' takes 'with' arguments of type '{2}': argument {3} has type '{4}'.
+```
+
+**Help**
+
+```text
+Every 'with' argument the pack takes is of the type it writes, the rule an ordinary parameter follows one type further out. Give an argument of that type, or write the pack without one ('..{0}') to take any type.
+```
+
+**Example** (`test/cases/compile/rest_params/with_pack_wrong_element.cml`, run as `camel test/cases/compile/rest_params/with_pack_wrong_element.cml`)
+
+```camel
+// The pack's element type is a guard: `with <...ws: int>` refuses a `float` argument written in the
+// angle brackets, and says which pack, which type it takes, and which type it was given.
+with <...ws: int>
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(g<1.0>(2.5))
+    return 0
+}
+```
+
+### ExtentOfNeedsStatedShape
+
+`0x0300020B` · Error · `SemanticDiag::ExtentOfNeedsStatedShape`
+
+**Fix**
+
+None: choice: the extents the type should write, or the value whose shape stands in for them, are the writer's
+
+**Message**
+
+```text
+`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.
+```
+
+**Help**
+
+```text
+Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[...]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.
+```
+
+**Example** (`test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml`, run as `camel test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml ${backend}`)
+
+```camel
+// `extent_of::<A>()` answers the extents a type writes down, and `float[]` writes none.
+//
+// The function is the language's one spelling of "the shape a type states": its answer is a fact of
+// its **type argument** and of nothing else, which is what a transposition needs -- the adjoint of a
+// linear map is a function of the cotangent and of the shape of the map's domain, and a parameter
+// whose cotangent is what the transposed function takes has no value to read
+// (`transpose(pick)` on `x: float[3]`).
+//
+// That the answer is a fact of the type is also why a type that writes no shape has no answer:
+// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[...]` states
+// neither the rank nor a length, so neither tells the function what to answer. Nothing here is a
+// value that was not computed or a shape nobody wrote down: the call asks a question the type does
+// not answer, and it is refused where it is instantiated, which is where the type is in hand.
+//
+// The repair the sentence names is to write the extents in the type (`float[2, 3]` answers
+// `[2, 3]`) or to ask a value for its shape (`shape(xs)`), which is a question about a value the
+// program has. This case is the refusal; the answer is what `transpose(pick)` on `x: float[3]`
+// reads, and the transposition walk asks the same rule (`statedExtentsOf`) rather than a second
+// reading of the extents.
+import rulesets.transpose
+
+func main(): int sync {
+    let extents: int[] = extent_of::<float[]>()
+    println(extents)
     return 0
 }
 ```
@@ -8938,7 +8971,7 @@ None: context: an effect reachable only from a branch that never runs; the repai
 **Help**
 
 ```text
-Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
+Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
@@ -9448,7 +9481,7 @@ An error has occurred: {0}.
 **Help**
 
 ```text
-Check the runtime environment and input data for unexpected issues.
+The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.
 ```
 
 **Example** (`test/cases/compile/collections/refuse_grad.cml`, run as `camel test/cases/compile/collections/refuse_grad.cml`)
@@ -9617,11 +9650,11 @@ Check the shapes of all operands involved in the operation and ensure they are c
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
 // where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
-// parameter is written the final way, `T[..]`.
+// parameter is written the final way, `T[...]`.
 
 import { zeros, reshape } from tensor
 
-func toShape::<T>(t: T[..], s: int[]): T[..] {
+func toShape::<T>(t: T[...], s: int[]): T[...] {
     return reshape<s>(t)
 }
 
@@ -10669,7 +10702,7 @@ import { reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
 #gpu
-func product(a: f32[..], b: f32[..]): f32[..] {
+func product(a: f32[...], b: f32[...]): f32[...] {
     return a @ b
 }
 
@@ -10807,7 +10840,7 @@ The device back end has no program for this graph, so the operator that asked fo
 ```camel
 import { reshape } from tensor
 import { source } from tiles
-func noisy(x: f32[..]): f32[..] sync {
+func noisy(x: f32[...]): f32[...] sync {
     println("BODY MUST NOT EXECUTE")
     return x + x
 }
@@ -10902,6 +10935,81 @@ func main(): int sync {
     println('before')
     println(limit(-1.0))
     println('not reached')
+    return 0
+}
+```
+
+### TransposeNeedsParameterShape
+
+`0x040001AD` · Error · `RuntimeDiag::TransposeNeedsParameterShape`
+
+**Fix**
+
+None: choice: the extents are the shape of the argument, and only the writer of the declaration knows it
+
+**Message**
+
+```text
+The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state it.
+```
+
+**Help**
+
+```text
+A type states the extents its declaration writes and no others: `float[2, 3]` states `[2, 3]`, `float[]` is `float[?]` -- one dimension and no length -- and `float[...]` states neither a rank nor a length, so {1} declares no extents in the type '{2}' (design principles 5.4; the same rule is what `SemanticDiag::ExtentOfNeedsStatedShape` states where a program asks a type for extents). A bare transposition requires the shape of every parameter to come from its type, and `transpose(f)` is handed the cotangent of the result and nothing else: the cotangent does not say how many positions the parameter has, and with no residual carrying the shape the declaration is the only place left. Two writings make it readable, both measured here. Write the extents the parameter's value has in its declaration -- 'func total(x: float[...])' becomes 'func total(x: float[2, 3])' -- and 'transpose(total)(1.0)' answers ([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]) by `sum_from_type_t`, the law that reads `extent_of` off the type. Or keep the open declaration and reach the transposition through `vjp`, whose jvp rule states the shape as a residual for `sum_stated_t` to read: 'vjp(total)' over the same 'x: float[...]' answers value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]].
+```
+
+**Example** (`test/cases/modules/autodiff/transpose_needs_parameter_shape.cml`, run as `camel test/cases/modules/autodiff/transpose_needs_parameter_shape.cml ${backend}`)
+
+```camel
+import rulesets.transpose
+import { transpose } from transforms
+import { mean, sum } from tensor
+
+func loss_mean(x: float[...]): float {
+    return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
+}
+
+func main(): int sync {
+    let back = transpose(loss_mean)(1.0)
+    'transpose should have been refused, and it answered {}'->format<back.0>->println
+    return 0
+}
+```
+
+### ExitTypeMismatch
+
+`0x040001AE` · Error · `RuntimeDiag::ExitTypeMismatch`
+
+**Fix**
+
+None: choice: hand on a value of the declared type, or declare the type the value has.
+
+**Message**
+
+```text
+The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}.
+```
+
+**Help**
+
+```text
+A return is a position with an expected type: what a function hands on is of the type the function declares, and nothing is converted on the way (design principles 5.1) -- an int is not read as a float, and a float[] is not read as a float. The graph is the function, so the declaration is the type to match: hand on a value of the declared type, or declare the type the value has. A return a rewrite rule replaced takes the type of the rule's right side, so a rule whose right side is of another type than its left is the place to look. The message names the value by its node and, when it has one, by its source name: a node a rewrite built carries no source position of its own, and that is why this report can stand without a line of its own.
+```
+
+**Example** (`test/cases/runtime/exit_type/float_declared_array_returned.cml`, run as `camel test/cases/runtime/exit_type/float_declared_array_returned.cml std::nvm`)
+
+```camel
+import { rewrite } from rewrite
+
+rule retype(x: float) { x * 1.0 => [1.0, 2.0] }
+
+func target(n: float): float { n * 1.0 }
+
+func main(): int sync {
+    let rules = [retype]
+    let g     = target->rewrite<rules> !! target
+    print(g(7.0))
     return 0
 }
 ```
@@ -11052,6 +11160,60 @@ func main(): int sync {
     let zs = apply_n((x: int) => x * 2, [1, 2, 3])
     let pairs = zip([1, 2], [10, 20])
     'MAP ys={} zs={} pairs={}'->format<ys, zs, pairs>->println
+    return 0
+}
+```
+
+### JitWithoutCodeGenerator
+
+`0x04100018` · Warn · `RuntimeDiag::JitWithoutCodeGenerator`
+
+**Fix**
+
+None: choice: which processor a build targets is the build's, and a pipeline is written to run wherever it is compiled
+
+**Message**
+
+```text
+`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.
+```
+
+**Help**
+
+```text
+The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.
+```
+
+**Example** (`test/cases/linear/jit/native_registers.cml`, run as `camel test/cases/linear/jit/native_registers.cml std::jit`)
+
+```camel
+func mix(a: int, b: int, c: int, d: int, e: int, n: int): int {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 3 + (e * d) / 7
+           else mix(b, c, d, e, a + n, n - 1)
+}
+
+func cmp(a: int, b: int, c: int, d: int, n: int): int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
+                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
+           else cmp(d, a, b, c, n - 1)
+}
+
+func fmix(a: float, b: float, c: float, d: float, e: float, n: int): float {
+    return if n <= 0 then a * b + c * d - e * a + (b - c) * (d - e) + a / 4.0
+           else fmix(b, c, d, e, a + 0.5, n - 1)
+}
+
+func fcmp(a: float, b: float, c: float, d: float, n: int): int {
+    return if n <= 0 then (if a < b then 1 else 0) + (if b <= c then 10 else 0) + (if c > d then 100 else 0) +
+                          (if d >= a then 1000 else 0) + (if a == c then 10000 else 0) + (if b != d then 100000 else 0)
+           else fcmp(d, a, b, c, n - 1)
+}
+
+func main(): int sync {
+    println('mix {} {} {} {}'->format<mix(3, 5, 7, 11, 13, 0), mix(3, 5, 7, 11, 13, 4), mix(3, 5, 7, 11, 13, 9), mix(0 - 3, 5, 0 - 7, 11, 0 - 13, 6)>)
+    println('cmp {} {} {} {}'->format<cmp(1, 2, 3, 4, 0), cmp(1, 2, 3, 4, 3), cmp(4, 4, 4, 2, 5), cmp(9, 1, 9, 1, 6)>)
+    println('fmix {} {} {}'->format<fmix(1.5, 2.5, 3.5, 4.5, 5.5, 0), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 4), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 7)>)
+    println('fcmp {} {} {} {}'->format<fcmp(1.0, 2.0, 3.0, 4.0, 0), fcmp(1.0, 2.0, 3.0, 4.0, 3), fcmp(4.0, 4.0, 4.0, 2.0, 5), fcmp(9.0, 1.0, 9.0, 1.0, 6)>)
     return 0
 }
 ```

@@ -1,7 +1,7 @@
 // A pack name and a dimension name are separate namespaces: reusing a bound dimension name
 // for a pack says two different things with one name.
 
-func bad(x: f32[n], y: f32[..n]): int {
+func bad(x: f32[n], y: f32[...n]): int {
     return 0
 }
 

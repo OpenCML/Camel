@@ -1,0 +1,35 @@
+// `log_softmax`'s gradient through the engine: the number the library's own rules must reproduce.
+//
+// `log_softmax(x) = x - log(sum(exp(x)))`, so its jacobian is `I - 1 pᵀ` with `p = softmax(x)`, and the
+// gradient of `sum(log_softmax(x))` is `1 - n p` with `n = 3`. The engine builds it from its own output
+// (`logSoftmaxVjp`, `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(y) * sum<axis, true>(dy)`),
+// so the sign and the broadcast direction are the whole content of the rule.
+//
+// The array on `[1.0, 2.0, 3.0]` is `[0.7299082804888587, 0.2658145868356071, -0.9957228673244654]`.
+// Two wrong laws separate from it without a tolerance, and neither is a rounding difference:
+//
+//   * `ct` (identity)                                      -> [1.0, 1.0, 1.0];
+//   * the broadcast written the other way -- `ct - sum(p * ct)`, the *jvp* direction used as the
+//     cotangent -- answers [3.3306690738754696e-16, 3.3306690738754696e-16, 3.3306690738754696e-16]:
+//     every component collapses to zero because `sum(p) = 1`.
+//
+// The second one is the reason this case pins all three components and not their sum: both laws sum to
+// zero (`sum(1 - n p) = 3 - 3 = 0`, and the wrong one is zero everywhere), so an aggregate agrees with
+// the right answer while being entirely wrong.
+//
+//     python -c "import math; x=[1.,2.,3.]; l=math.log(sum(math.exp(v) for v in x)); p=[math.exp(v-l) for v in x]; print([1-3*q for q in p])"
+//     camel test/cases/compile/transforms/log_softmax_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { log_softmax, sum } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[...]>
+func total(): float {
+    return sum(log_softmax<0>(x))
+}
+
+func main(): int sync {
+    let d = grad(total)<[1.0, 2.0, 3.0] as float[]>()
+    `log_softmax engine d={}`->format<d>->println
+    return 0
+}

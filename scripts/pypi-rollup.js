@@ -33,11 +33,17 @@ function ensureDirSync(dir) {
 }
 
 /**
- * PyPI packaging: for each SDK under modules/python/sdks/, calls build({ rollupMm, ... }) so CMake sees
- * CAMEL_PYPI_SINGLE_SDK_MM and emits only that py_bridge + matching python.cmo for one wheel.
+ * PyPI packaging: one native build per platform, two wheels out of it (the 2026-10-25 ruling,
+ * docs/handover/README.cn.md item 7, carried out 2026-11-02):
  *
- * Default: one wheel for the **current compile-time** `python` (or `CAMEL_PYPI_PYTHON`), matching an SDK by
- * `include/patchlevel.h`. Set `CAMEL_PYPI_ALL_SDKS=1` to build one wheel per SDK folder (needs each runtime).
+ *   camel_lang-<ver>-cp310-abi3-<platform>.whl  body + interop, every CPython 3.10 and later
+ *   camel_lang-<ver>-py3-none-<platform>.whl    body only, any Python 3
+ *
+ * The build is the one `build({ rollupMm, ... })` makes for the **current compile-time** `python`
+ * (or `CAMEL_PYPI_PYTHON`), matched to an SDK by `include/patchlevel.h`; CMake sees
+ * CAMEL_PYPI_SINGLE_SDK_MM and emits only that py_bridge + matching python.cmo. One wheel set is
+ * all a platform needs now: `CAMEL_PYPI_ALL_SDKS=1` used to build one wheel per SDK folder and is
+ * obsolete, because one abi3 extension covers every version.
  *
  * Normal development: use `npm run build` only — never sets CAMEL_PYPI_SINGLE_SDK_MM, so every SDK folder
  * gets its own py_bridge* and the usual multi-bridge layout.
@@ -205,19 +211,48 @@ function nativePlatformTag(pyExe) {
 }
 
 /**
- * PEP 425 tags for native code linked against the given interpreter.
+ * The version the extension's stable ABI starts at: `Python3_add_library(... USE_SABI 3.10)` in
+ * bindings/python/CMakeLists.txt and `Py_LIMITED_API=0x030A0000` are the same number. A wheel
+ * named `cp310-abi3` is installable on every CPython 3.10 and later, so it must not be named after
+ * the interpreter that happened to compile it.
+ */
+const SABI_MAJOR = 3
+const SABI_MINOR = 10
+
+/**
+ * PEP 425 tags for the two wheels one native build produces (the 2026-10-25 ruling:
+ * docs/handover/README.cn.md item 7, review index C28).
+ *
+ * The interop wheel is `cp310-abi3-<platform>`: the extension is built against the limited API, so
+ * one file covers every CPython 3.10 and later and the compile-time interpreter no longer appears
+ * in the name. Only the platform tag still comes from this machine, through `nativePlatformTag`.
+ *
+ * The interpreter is still read: it has to be 3.10 or newer, or the build would have no extension
+ * to put in the interop wheel at all (bindings/python requires Python 3.10 development files).
+ *
  * @param {string} pyExe - absolute path or `python` / `python3`
  */
 function getWheelTagsFromPythonExe(pyExe) {
-    // `cp310`, from the interpreter that the extension is compiled and linked against. It is
-    // read from `sys.version_info` rather than from `packaging.tags` for the reason in
-    // `nativePlatformTag`.
-    const pythonTag = runPythonProbe(
+    const [major, minor] = runPythonProbe(
         pyExe,
-        'import sys;print("cp%d%d" % sys.version_info[:2])',
-        'the interpreter tag'
+        'import sys;print("%d.%d" % sys.version_info[:2])',
+        'the interpreter version'
     )
-    return { pythonTag, abiTag: pythonTag, platformTag: nativePlatformTag(pyExe) }
+        .split('.')
+        .map(Number)
+    if (major < SABI_MAJOR || (major === SABI_MAJOR && minor < SABI_MINOR)) {
+        logFail(
+            `The interop extension needs Python ${SABI_MAJOR}.${SABI_MINOR} or newer (its stable ` +
+                `ABI floor), and this wheel is rolled up from ${major}.${minor} (${pyExe}). ` +
+                `Point CAMEL_PYPI_PYTHON at a newer interpreter.`
+        )
+        process.exit(1)
+    }
+    return {
+        pythonTag: `cp${SABI_MAJOR}${SABI_MINOR}`,
+        abiTag: 'abi3',
+        platformTag: nativePlatformTag(pyExe)
+    }
 }
 
 /**
@@ -268,20 +303,6 @@ function listValidPythonSdks() {
         out.push({ name, root, mm })
     }
     return out.sort((a, b) => a.mm.localeCompare(b.mm, undefined, { numeric: true }))
-}
-
-function sdkPythonExecutable(sdkRoot) {
-    const cands = [
-        path.join(sdkRoot, 'python.exe'),
-        path.join(sdkRoot, 'bin', 'python3'),
-        path.join(sdkRoot, 'bin', 'python')
-    ]
-    for (const p of cands) {
-        if (fs.existsSync(p)) {
-            return p
-        }
-    }
-    return ''
 }
 
 /** Quote for shell if path is not a bare `python` / `python3`. */
@@ -415,12 +436,15 @@ function packageWheelBundle({
         }).status === 0
 
     process.chdir(PYPI_BASE)
-    // One native build per platform, two wheels off it (5.37 item 7): the interpreter cannot
-    // reach the binaries, so the wheel does not have to be rebuilt per Python version.
-    //   camel_lang-<ver>-<cp3XX>-<cp3XX>-<platform>.whl  the body *and* the interop extension;
-    //   camel_lang-<ver>-py3-none-<platform>.whl         the body only, any Python 3.
+    // One native build per platform, two wheels off it (5.37 item 7, carried out 2026-11-02 as the
+    // abi3 ruling): the interpreter cannot reach the binaries, so the wheel does not have to be
+    // rebuilt per Python version.
+    //   camel_lang-<ver>-cp310-abi3-<platform>.whl  the body *and* the interop extension, every
+    //                                               CPython 3.10 and later;
+    //   camel_lang-<ver>-py3-none-<platform>.whl    the body only, any Python 3.
     // `.cmlenv/python/` is the only part that is interpreter-specific, so the second wheel is
-    // the first one without it.
+    // the first one without it -- and with the extension built against the limited API, "the
+    // interpreter-specific part" is a `.abi3` file rather than one per version.
     const BUNDLES = [
         { pythonTag, abiTag, platformTag, withExtension: true },
         { pythonTag: 'py3', abiTag: 'none', platformTag, withExtension: false }
@@ -439,6 +463,20 @@ function packageWheelBundle({
                 )
                 process.exit(1)
             }
+            // The extension is named `_camel.abi3.so` (CMake `USE_SABI`), `_camel.pyd` on Windows.
+            // A directory that exists but holds no module would still produce a `cp310-abi3` wheel
+            // that promises interop and cannot import, which is what this refuses.
+            const extensionFiles = fs
+                .readdirSync(extensionDir)
+                .filter((f) => /^_camel.*\.(so|pyd|dylib)$/i.test(f))
+            if (extensionFiles.length === 0) {
+                logFail(
+                    `The interop wheel's extension directory has no _camel module: ${extensionDir} ` +
+                        `holds ${fs.readdirSync(extensionDir).join(', ') || 'nothing'}.`
+                )
+                process.exit(1)
+            }
+            logStep(`Interop extension to ship: ${extensionFiles.join(', ')}`)
         } else {
             // Moved aside rather than deleted: the next bundle needs it back.
             fs.renameSync(extensionDir, stashedExtension)
@@ -512,6 +550,35 @@ function packageWheelBundle({
     removeDir(path.join(PYPI_BASE, 'src', 'camel_lang.egg-info'))
 }
 
+/**
+ * The ruling's own check, on the set that was just produced: the interop wheel is `cp310-abi3`
+ * (one file for every CPython 3.10 and later) and the runtime-only wheel is `py3-none`, with both
+ * halves present. It is `scripts/check_wheel_tags.py --ruling`, the one definition of that rule:
+ * the release gate and the publish job run the same script, so a tag cannot drift from what a
+ * release is allowed to upload.
+ *
+ * @param {string} pypiDist
+ * @param {string} pyExe
+ */
+function verifyWheelTags(pypiDist, pyExe) {
+    const checker = path.join(BASEDIR, 'scripts', 'check_wheel_tags.py')
+    const wheels = fs
+        .readdirSync(pypiDist)
+        .filter((f) => f.endsWith('.whl'))
+        .map((f) => `"${path.join(pypiDist, f)}"`)
+    if (wheels.length === 0) {
+        logFail(`No wheel was produced in ${pypiDist}`)
+        process.exit(1)
+    }
+    // A Linux wheel claims the host tag (`linux_x86_64`) until `auditwheel repair` replaces
+    // it, and the repair runs after this rollup (build-pypi.yml, "Repair the Linux wheels");
+    // `--repair-pending` is what says so. The release job runs the same check again after
+    // that repair, without the flag, and that run is the one that decides whether the set is
+    // publishable.
+    const pending = process.platform === 'linux' ? ' --repair-pending' : ''
+    runCommand(`${pyCmd(pyExe)} "${checker}" --ruling${pending} ${wheels.join(' ')}`)
+}
+
 function main() {
     process.chdir(BASEDIR)
     const PYPI_DIST = path.join(BASEDIR, 'dist', 'pypi')
@@ -524,43 +591,21 @@ function main() {
 
     const outTag = process.env.CAMEL_PYPI_TAG || 'latest'
     const sdks = listValidPythonSdks()
-    const allSdksRollup =
-        process.env.CAMEL_PYPI_ALL_SDKS === '1' ||
-        process.env.CAMEL_PYPI_ALL_SDKS === 'true' ||
-        process.env.CAMEL_PYPI_ALL_SDKS === 'yes'
-
-    if (sdks.length > 0 && allSdksRollup) {
-        logStep(`PyPI rollup: CAMEL_PYPI_ALL_SDKS — ${sdks.length} SDK folder(s), one wheel each`)
-        for (const sdk of sdks) {
-            logStep(`--- Build + wheel for SDK python${sdk.mm} (${sdk.root}) ---`)
-            const sdkExe = sdkPythonExecutable(sdk.root)
-            let pyExe
-            try {
-                pyExe = resolveRollupPythonExecutable(sdk.root, sdk.mm, sdkExe || undefined)
-            } catch (e) {
-                logFail(e instanceof Error ? e.message : String(e))
-                process.exit(1)
-            }
-            const tags = getWheelTagsFromPythonExe(pyExe)
-            runBuild({
-                rollupMm: sdk.mm,
-                pythonRootDir: sdk.root,
-                pythonExecutable: pyExe,
-                cleanBuildDir: true
-            })
-            process.chdir(BASEDIR)
-            packageWheelBundle({
-                outTag,
-                pythonTag: tags.pythonTag,
-                abiTag: tags.abiTag,
-                platformTag: tags.platformTag,
-                buildPythonExe: pyExe,
-                pypiDist: PYPI_DIST
-            })
-        }
-        const finals = fs.readdirSync(PYPI_DIST).filter((f) => f.endsWith('.whl'))
-        logDone(`Final wheel(s) in dist/pypi/: ${finals.join(', ')}`)
-        return
+    // One interop wheel is `cp310-abi3` and covers every CPython 3.10 and later, so "one wheel per
+    // SDK folder" would now produce the same two file names once per version: the duplicate-name
+    // guard below is what such a run would trip over. The ruling leaves one round per platform --
+    // the compile interpreter's SDK, which is the default path further down.
+    if (
+        sdks.length > 0 &&
+        (process.env.CAMEL_PYPI_ALL_SDKS === '1' ||
+            process.env.CAMEL_PYPI_ALL_SDKS === 'true' ||
+            process.env.CAMEL_PYPI_ALL_SDKS === 'yes')
+    ) {
+        logWarn(
+            'CAMEL_PYPI_ALL_SDKS is obsolete since the extension is built against the stable ABI ' +
+                '(cp310-abi3): one native build per platform serves every CPython 3.10+, so this ' +
+                'run produces one wheel set from the compile interpreter instead of one per SDK.'
+        )
     }
 
     if (sdks.length > 0) {
@@ -633,6 +678,7 @@ function main() {
         })
         const finals = fs.readdirSync(PYPI_DIST).filter((f) => f.endsWith('.whl'))
         logDone(`Final wheel(s) in dist/pypi/: ${finals.join(', ')}`)
+        verifyWheelTags(PYPI_DIST, pyExe)
         return
     }
 
@@ -676,6 +722,7 @@ function main() {
     })
     const finals = fs.readdirSync(PYPI_DIST).filter((f) => f.endsWith('.whl'))
     logDone(`Final wheel(s) in dist/pypi/: ${finals.join(', ')}`)
+    verifyWheelTags(PYPI_DIST, pyExe)
 }
 
 main()

@@ -1,0 +1,40 @@
+// The callee is the **value a call answered**, applied in place: `f(x) = mk(x)(2.0)` with
+// `mk(x) = (y) => x * y`.
+//
+// On paper `f(x) = 2x`, so `f(3) = 6` and the derivative at 3 is `2`.
+//
+// **What this pins, and why it is a refusal** (author, 2026-11-04 07:15). A bare `transpose(f)` reads
+// every parameter of `f` as a linear input. The call here applies a function the body **built out of
+// `x`**, so `f` is not linear in `x` -- that is the language's rule, and the refusal says it:
+// `skip=callee-built-from-a-parameter`, `built-from=0` naming `x` by position, `callee=none` because no
+// node of this graph names the graph the call applies, then the sentence `this function is not linear
+// in the parameter at position 1: it builds the function this call applies out of that parameter`, and
+// exit 1. The forward line is answered; the transposition is silent.
+//
+// The value is read by `GCGraph::staticFunctionGraphOf` ("what graph does this *value* name"), not by
+// `calleeIdOf` ("what does this node answer as a callee", which answered `mk` -- the graph of the call
+// that *produced* the value, not the graph this call applies), and no `skip=signature` line appears:
+// no signature of `mk` is read at all. The answer this program is owed (2 at cotangent 1) is owed by
+// the library's cut, which carries such a value as a residual (`vjp`'s `lin`), and it is answered
+// there: this case is the bare `transpose`, and its verdict is the rule above, not our state.
+//
+// The two readings that separated provenance from content, and their host, are recorded in
+// `docs/handover/reports/2026-11-04-what-the-transpose-batch-measured.cn.md`, section 1; the ruling
+// behind the sentence is in `docs/handover/reviews/questions-2026-10-29.md`.
+import rulesets.transpose
+import { transpose } from transforms
+
+func mk(x: float): (y: float) => float {
+    return (y: float) => x * y
+}
+
+func f(x: float): float {
+    return mk(x)(2.0)
+}
+
+func main(): int sync {
+    println(f(3.0))
+    // The paper answer: (2.0).
+    println(transpose(f)(1.0))
+    return 0
+}

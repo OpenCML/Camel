@@ -1,0 +1,40 @@
+// The walk order of a loop's rounds, pinned by one number. The program is the one the review page
+// keeps for this:
+//
+//   f(s) = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
+//
+// Every round maps `(a, b)` to `(b, a + k*b)`, so `M_k = [[0, 1], [1, k]]`. Two rounds, k = 1 then
+// k = 10, compose to
+//   M = M_10 * M_1 = [[1, 1], [10, 11]]
+// on paper: f(1, 2) = (3, 32), which `jvp_loop.array_state_is_lifted` already pins as two columns.
+//
+// A pullback is the transpose, and the transpose of a product is the product of the transposes in
+// the other order: (M_10 * M_1)^T = M_1^T * M_10^T. Walking the rounds backwards applies M_10^T
+// first, then M_1^T, which IS that product; walking them forwards applies M_1^T first and gives
+//   (M_1 * M_10)^T = [[1, 10], [1, 11]]^T
+// instead. Take the loop's first component, `g(s) = f(s)[0]`, and one cotangent `c = 1`:
+//   backwards (correct):  first column of M^T          = (1.0, 1.0)
+//   forwards  (the bug):  first column of (M_1 M_10)^T = (1.0, 10.0)
+// -- so the numbers 1.0 and 10.0 separate the two walks (design 4.2/4.3: a loop's rounds are undone
+// in the other direction, not in the order they were written).
+//
+// `g` and not `f` as the pullback's subject, because `vjp` takes a function whose result is a
+// `float`: the cotangent of the result is the seed (`stdlib/vjp.cml`). Reading one component of the
+// loop's result keeps the same two numbers and the same loop -- what the pullback walks is still the
+// loop's rounds.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func g(s: float[]): float {
+    let y = loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]
+    return y[0]
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(g)([1.0, 2.0])
+    println("value=", value)
+    let cotangent = pullback(1.0)
+    println("grad=", cotangent.0)
+    return 0
+}

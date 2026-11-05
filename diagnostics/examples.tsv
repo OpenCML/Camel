@@ -16,6 +16,7 @@ RuntimeDiag::DivisionByZero	test/cases/consistency/attempt/fault_outside.cml
 RuntimeDiag::EntryArgumentInvalid	test/cases/compile/entry_args/scalars.cml
 RuntimeDiag::EntryArgumentMissing	test/cases/compile/entry_args/scalars.cml
 RuntimeDiag::EntryResultNotWritten	test/cases/consistency/entry/undeclared_println.cml
+RuntimeDiag::ExitTypeMismatch	test/cases/runtime/exit_type/float_declared_array_returned.cml
 RuntimeDiag::FieldNotFound	test/cases/compile/native/idx_field_missing.cml
 RuntimeDiag::GpuScopeMacroNotExpanded	test/cases/gpu/nofallback/grad_expand.cml
 RuntimeDiag::GpuScopeNoDeviceProgram	test/cases/gpu/nofallback/runtime_refusal.cml
@@ -25,6 +26,7 @@ RuntimeDiag::IndexOutOfRange	test/cases/compile/match_guard/faulting_guard.cml
 RuntimeDiag::InvalidArgument	test/cases/compile/stream/range_step_runtime.cml
 RuntimeDiag::InvalidNumberText	test/cases/consistency/faults/int_text_trailing.cml
 RuntimeDiag::InvalidPassParameter	test/cases/modules/graph_pass/tiny.cml
+RuntimeDiag::JitWithoutCodeGenerator	test/cases/linear/jit/native_registers.cml
 RuntimeDiag::MacroEvaluationFailed	test/cases/compile/collections/refuse_grad.cml
 RuntimeDiag::MaxRecursionDepthExceeded	test/cases/consistency/limits/depth_direct.cml
 RuntimeDiag::MemoryExhausted	test/cases/compile/stream/interval_loop_not_materialised.cml
@@ -43,6 +45,7 @@ RuntimeDiag::SliceOutOfRange	test/cases/consistency/faults/slice_out_of_range.cm
 RuntimeDiag::TensorDimensionMismatch	test/cases/loops/fault_tensor_rank0.cml
 RuntimeDiag::TranslationLinksRuntime	test/cases/trans/cpp/runtime_bridge.cml
 RuntimeDiag::TranslationRefused	test/cases/compile/collections/refuse_export.cml
+RuntimeDiag::TransposeNeedsParameterShape	test/cases/modules/autodiff/transpose_needs_parameter_shape.cml
 RuntimeDiag::UnhandledError	test/cases/consistency/entry/error_thrown.cml
 RuntimeDiag::UnrecognizedGraphPass	test/cases/compile/diag_json/div_zero.cml
 RuntimeDiag::ValueWithNoDerivativeRule	test/cases/modules/autodiff/value_with_refusal.cml
@@ -98,6 +101,7 @@ SemanticDiag::EnumVariantFieldCount	test/cases/compile/enum/err_field_count.cml
 SemanticDiag::EnumWrittenWhereATypeIsExpected	test/cases/compile/semantic/enum_where_type_expected.cml
 SemanticDiag::ExitInUnusedBranch	test/cases/compile/diag_json/warning_with_error.cml
 SemanticDiag::ExtentNotADimension	test/cases/compile/extents/computed_negative.cml
+SemanticDiag::ExtentOfNeedsStatedShape	test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml
 SemanticDiag::FactArgumentNotConstant	test/cases/modules/rules/fact_arg_not_constant.cml
 SemanticDiag::FactCaseBindsNoVariable	test/cases/modules/rules/fact_case_binds_nothing.cml
 SemanticDiag::FactCaseDefaultMissing	test/cases/modules/rules/fact_no_default.cml
@@ -140,6 +144,7 @@ SemanticDiag::KnownNotNull	test/cases/compile/tagged/err_plain_left.cml
 SemanticDiag::LambdaParameterWithoutType	test/cases/compile/lambda_inference/no_expected.cml
 SemanticDiag::LiteralNotRepresentable	test/cases/compile/generics/err_literal.cml
 SemanticDiag::LogicalOperandNotBool	test/cases/compile/tagged/err_optional_operand.cml
+SemanticDiag::LoopBodyNeedsNextState	test/cases/compile/stream/generators_loop_body_without_next_state.cml
 SemanticDiag::LoopBodyTypeMismatch	test/cases/compile/static_expansion/static_loop_body_type.cml
 SemanticDiag::LoopConditionNotBool	test/cases/loops/err_condition.cml
 SemanticDiag::LoopNameRepeated	test/cases/compile/static_expansion/static_loop_name_repeated.cml
@@ -185,7 +190,6 @@ SemanticDiag::PureAndUses	test/cases/effects/err_pure_and_uses.cml
 SemanticDiag::RangeStepZero	test/cases/compile/static_expansion/static_loop_sequence_range_step_zero.cml
 SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
-SemanticDiag::ResidualsAreNotVisible	test/cases/compile/transforms/split_residuals_destructured.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml
 SemanticDiag::RestArgumentNotTuple	test/cases/compile/rest_params/rest_arg_not_tuple.cml
@@ -279,7 +283,7 @@ SemanticDiag::WithArgumentMissing	test/cases/compile/with_defaults/missing.cml
 SemanticDiag::WithArgumentUnknown	test/cases/compile/with_defaults/unknown_name.cml
 SemanticDiag::WithDefaultNotConstant	test/cases/compile/with_defaults/default_not_constant.cml
 SemanticDiag::WithDefaultWrongType	test/cases/compile/with_defaults/default_wrong_type.cml
-SemanticDiag::WithPackNeedsNativeDeclaration	test/cases/compile/prelude_signatures/with_pack_with_body.cml
+SemanticDiag::WithPackArgumentType	test/cases/compile/rest_params/with_pack_wrong_element.cml
 SemanticDiag::WithParameterAfterDefault	test/cases/compile/with_defaults/after_default.cml
 SemanticDiag::YieldRequiresStreamHead	test/cases/compile/stream/yield_head_no_stream.cml
 SyntaxDiag::AngleCloseAfterSpace	test/cases/parse/syntax/angle_close_after_space.cml

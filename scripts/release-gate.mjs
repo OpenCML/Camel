@@ -26,7 +26,9 @@
 //                      one. Naming a file makes the runner run the whole plan, slow tests
 //                      included, whatever `--tier` says; that is the only honest way to reach
 //                      them, and a directory target would silently drop them again;
-//   3. static checks-- the eight tree/compiler checks a release has to pass;
+//   3. static checks-- the checks a release has to pass, tree and compiler ones along with the
+//                      wheel tags of the last `npm run pypi:rollup` (that one prints a SKIPPED
+//                      banner when no wheel was built, so no layer claims a pass it did not take);
 //   4. what the run does not cover -- the milestone layer, counted by reading the tree:
 //                      every test whose own tier says `milestone` (`--tier milestone`
 //                      selects it). The gate prints the number and that it did not run it,
@@ -113,6 +115,25 @@ const STATIC_CHECKS = [
     { name: 'stdlib reference: docs/stdlib-reference.md is up to date', args: ['scripts/stdlib-reference.mjs', '--verify-doc'] },
     { name: 'diagnostics registry: the declarations and the generated code tables agree', args: ['scripts/diagnostics-catalog.mjs', '--check'] },
     { name: 'document links: no broken relative link', args: ['scripts/check-doc-links.mjs', '--all'] },
+    // A plan's fixtures can live in a directory named after the plan, beside it: the short name
+    // still reaches `D.plan.toml`, but the full path `test/plans/.../D` reaches the fixtures and
+    // selects nothing. The runner refuses such a target now (2026-11-03); this keeps the pairing
+    // documented instead of discovered.
+    { name: 'plan directories: a fixtures directory beside its plan says it holds no plan', args: ['scripts/plan-dir-markers.mjs', '--check'] },
+    // A page the reviewer has already answered belongs in reviews/, and a copy left in questions/
+    // reads as a question nobody is working on. The author's rule of 2026-11-03 is why this is a
+    // gate check and not a habit: the answer is decided by reviews/, never by what is left behind.
+    { name: 'pending questions: no page already answered in reviews', args: ['scripts/check-doc-links.mjs', '--questions-index'] },
+    // The same rule's other half: a new question is one page under docs/handover/questions/, and
+    // every page states a default and starts on it that round. That half used to live in the skill
+    // and in whoever remembered it; a page that arrives without a default now stops the gate
+    // instead. The check names the page and which half is missing.
+    { name: 'questions: every pending page names a default and gives it', args: ['scripts/check-doc-links.mjs', '--questions-defaults'] },
+    // The other half of the same reading rule: outside docs/handover/ a source is cited by symbol
+    // (`file#Symbol`) and never by line, because a line moves with every edit. Inside handover the
+    // line numbers are that day's reading, and the index says so once for all 203 pages instead of
+    // 183 pages each saying it.
+    { name: 'citations: no source cited by line outside docs/handover', args: ['scripts/check-doc-links.mjs', '--source-line-citations'] },
     { name: 'document snippets: Camel fences compile and print what the page says', args: ['scripts/check-doc-snippets.mjs'], camel: true },
     { name: 'stdlib declarations: a migrated module stays migrated', args: ['scripts/stdlib-declarations.mjs', '--check'], camel: true },
     // The conformance matrix: every program in test/conformance/cases.json is compared with the
@@ -120,12 +141,25 @@ const STATIC_CHECKS = [
     // tree's binary, so it takes the install the gate picked like the two checkers above.
     { name: 'conformance: each recorded reading holds before and after optimization', args: ['scripts/check-conformance.mjs'], camel: true },
     { name: 'std includes: no header borrowed through another header', args: ['scripts/check-std-includes.mjs'] },
+    // The wheel tags a release may upload: `cp310-abi3-<platform>` with the interop extension and
+    // `py3-none-<platform>` without it (the 2026-10-25 ruling, carried out 2026-11-02;
+    // docs/handover/README.cn.md item 7, review index C28). It reads what `npm run pypi:rollup`
+    // left in dist/pypi/ and prints a SKIPPED banner -- naming that command -- when the gate was
+    // not run after a wheel build: this gate does not build wheels, and a fabricated pass here
+    // would be worse than the missing check. The rule itself is scripts/check_wheel_tags.py, the
+    // script the build job runs, so the two cannot disagree about which tags are allowed.
+    { name: 'wheel tags: the interop wheel is cp310-abi3 and the runtime wheel py3-none', args: ['scripts/check-wheel-tags.mjs'] },
     // The rule library decided by an SMT solver: every rule's two sides under the premise its
     // numeric licence stands for. The solver is an optional dependency, so the checker prints a
     // SKIPPED banner naming what to install and still exits zero; that banner is in this layer's
     // output, so a machine without one records that no proof was taken instead of the gate
     // reporting a proof it never took.
-    { name: 'rule library: every rule holds under its own numeric licence', args: ['scripts/rule-proofs.mjs'] },
+    // `--require-solver` is the difference between a check and a line that prints a reason and
+    // exits 0: without a solver every rule is unproved, and a gate that cannot tell that from
+    // "every rule holds" is worse than no gate (see the audit of 2026-11-03). The host that runs
+    // the gate has Z3 at $HOME/.local/bin/z3, so this is reachable where it matters, and a host
+    // without one now says so instead of passing.
+    { name: 'rule library: every rule holds under its own numeric licence', args: ['scripts/rule-proofs.mjs', '--require-solver'] },
 ]
 
 // The command line of one static check, with the install this gate found when the check reads one.

@@ -227,7 +227,7 @@ Expansion expandPack(
         return e.second == length;
     });
     if (!same) {
-        std::string text = "..";
+        std::string text = "...";
         text += pattern->toString() + "|";
         for (size_t i = 0; i < measure.seen.size(); ++i) {
             text += (i == 0 ? "" : ", ") + measure.seen[i].first + " has " +
@@ -248,6 +248,56 @@ Expansion expandPack(
 }
 
 } // namespace
+
+/// A pattern a `match type` case writes to take a type pack apart (`case (W, ...Rest)`), tried
+/// against the pack `subject`: whether it fits, and what the names it writes stand for, appended to
+/// `bindings`. The pattern is a tuple type whose members are matched against the pack's members and
+/// whose last member, `...Rest`, stands for the ones after them -- which may be none, so
+/// `(W, ...Rest)` fits every pack with a member and no pack with nothing in it (design principles
+/// 5.6: a type pack takes apart the way a value pack does, and an empty pack has no first member).
+bool takePackApart(Type *pattern, Type *subject, type_bindings_t &bindings) {
+    if (!TypeCallType::isPack(subject)) {
+        return false;
+    }
+    Type *shape = substituteTypeVars(pattern, bindings);
+    if (shape == nullptr || shape->code() != TypeCode::Tuple) {
+        return false;
+    }
+    const std::span<Type *const> written = static_cast<TupleType *>(shape)->types();
+    const std::span<Type *const> members = TypeCallType::packMembers(subject);
+    size_t fixed                         = written.size();
+    const bool hasRest = fixed > 0 && TypeCallType::isExpand(written.back());
+    if (hasRest) {
+        --fixed;
+    }
+    if (fixed > members.size()) {
+        return false;
+    }
+    type_bindings_t bound = bindings;
+    for (size_t i = 0; i < fixed; ++i) {
+        Type *entry  = substituteTypeVars(written[i], bound);
+        Type *member = members[i];
+        if (entry != nullptr && entry->code() == TypeCode::TypeVar) {
+            // A name the pattern writes binds this member; written twice, it is the same member.
+            bound.emplace_back(static_cast<TypeVarType *>(entry)->name(), member);
+            continue;
+        }
+        if (entry == nullptr || containsTypeVar(entry) || !typeEquals(entry, member)) {
+            return false;
+        }
+    }
+    if (hasRest) {
+        Type *rest = static_cast<TypeCallType *>(written.back())->paramsSpan()[0];
+        if (rest == nullptr || rest->code() != TypeCode::TypeVar) {
+            return false;
+        }
+        bound.emplace_back(
+            static_cast<TypeVarType *>(rest)->name(),
+            TypeCallType::makePack(members.subspan(fixed)));
+    }
+    bindings = std::move(bound);
+    return true;
+}
 
 /// A factory holding `func` with the variables (and, when `extents` is not null, the named
 /// extents) replaced; `changed` tells whether anything was. A `constas` parameter is part of the
@@ -697,6 +747,14 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
             for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                // A case that takes the pack apart selects it by the pattern it writes, and its
+                // names stand for the members the pattern reached (design principles 5.6).
+                for (Type *pattern : match->armPackPatterns(arm)) {
+                    type_bindings_t taken = bindings;
+                    if (takePackApart(pattern, subject, taken)) {
+                        return substituteTypeVars(match->armResult(arm), taken);
+                    }
+                }
                 bool selected = (match->armShapes(arm) & shapes) != 0;
                 for (Type *identity : match->armIdentities(arm)) {
                     Type *pattern = substituteTypeVars(identity, bindings);
@@ -883,6 +941,25 @@ bool matchParameterList(
     return ok;
 }
 
+/// The type an open-rank pattern binds from a value that is not an array: `T[..]` includes rank 0,
+/// and a rank-zero array is that element (design principles 5.4), so the element type is what the
+/// value constrains. nullptr when the pattern is not an open rank with no prefix -- `T[]` and
+/// `T[3, ..]` state dimensions a non-array value does not have, so nothing binds and the value does
+/// not enter either -- and when the actual is already an array, whose own element the array arm
+/// below pairs with.
+///
+/// One judgement for both walkers: `bindTypeVars` and `unifyTypeVars` used to answer "the codes
+/// differ, so nothing binds" separately, and that is exactly the answer design principles 5.4
+/// overrules for `T[..]`. `rankZeroType()` is where the shape is decided, so the binding and
+/// `ArrayType::assignableFrom` (array.cpp, the membership check that follows) ask one place.
+Type *rankZeroBindTarget(Type *pattern, Type *actual) {
+    if (pattern == nullptr || actual == nullptr || pattern->code() != TypeCode::Array ||
+        actual->code() == TypeCode::Array) {
+        return nullptr;
+    }
+    return static_cast<ArrayType *>(pattern)->rankZeroType();
+}
+
 } // namespace
 
 bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
@@ -908,6 +985,16 @@ bool bindTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         return true;
     }
     if (pattern->code() != actual->code()) {
+        // `T[..]` includes rank 0, and a rank-zero array is that element (design principles 5.4),
+        // so a value of some other type at an open-rank position binds the element type there and
+        // the position then holds that type at rank zero -- the same edge `ArrayType::assignableFrom`
+        // answers for the argument check, which asks `rankZeroType()` for it (array.cpp). `T[]` and
+        // `T[3, ..]` state dimensions and hold no rank-zero value, so `rankZeroType()` is the one
+        // place that decides which shapes are an open rank with no prefix, and the two answering
+        // it here and there cannot drift apart.
+        if (Type *zero = rankZeroBindTarget(pattern, actual); zero != nullptr) {
+            return bindTypeVars(zero, actual, bindings);
+        }
         return false;
     }
     switch (pattern->code()) {
@@ -1135,6 +1222,11 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         }
     }
     if (pattern->code() != actual->code()) {
+        // The same edge `bindTypeVars` takes above: `T[..]` includes rank 0 and a rank-zero array
+        // is that element (design principles 5.4).
+        if (Type *zero = rankZeroBindTarget(pattern, actual); zero != nullptr) {
+            return unifyTypeVars(zero, actual, bindings);
+        }
         return false;
     }
     switch (pattern->code()) {

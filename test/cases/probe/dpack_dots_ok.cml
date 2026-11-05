@@ -1,0 +1,17 @@
+// The three ordinary uses of `...` that the migration must not touch: an interval of two integers,
+// an interval whose far end is a name, and a composition of two functions.
+func inc(x: int): int {
+    return x + 1
+}
+
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    let n = 4
+    println("interval=", 1..n)
+    let chain = inc..twice
+    println("chain=", chain(3))
+    return 0
+}

@@ -1,7 +1,7 @@
 # What `std::opt::ctrl` actually does, item by item
 
 Written before renaming or splitting it, because the name says one thing and the body does seven.
-`reduceControlDependencies` is `src/runtime/control.cpp:135-310`; the pass that calls it is now
+`reduceControlDependencies` is `src/runtime/control.cpp#reduceControlDependencies`; the pass that calls it is now
 `std::opt::order` (`src/passes/opt/generic/generic.cpp`, twice: the pass and the simplification
 round's finish step). Both call sites also run `reduceOrderDependencies` first.
 

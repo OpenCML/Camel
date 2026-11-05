@@ -14,6 +14,11 @@
 // (`docs/handover/reviews/m2-split-call-and-branch.cn.md` §6): `d/dx (x*x) = 2x` is 4.0 at x = 2.0, and
 // `d/dx (0.5*x) = 0.5` at any x. Both arms are exercised here, because a cut that only walks one arm is
 // not a cut of a branch.
+//
+// Under the closure ABI each arm's half is its own linear map, closed over that arm's residuals --
+// including the condition, which is why the map takes the direction alone (`upBackward(1.0)`). The
+// binary-tuple ABI had the caller hold those residuals and pass them back in
+// (`backward(upResiduals, 1.0)`); the two numbers are the same.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -22,12 +27,12 @@ func leaky(x: float): float {
 }
 
 func main(): int sync {
-    let (forward, backward) = split(jvp(leaky))
-    let (up, upResiduals)   = forward(2.0)
+    let forward = split(jvp(leaky))
+    let (up, upBackward)   = forward(2.0)
     'branch x=2.0 value={}'->format<up>->println
-    'branch x=2.0 dgdx={}'->format<backward(upResiduals, 1.0)>->println
-    let (down, downResiduals) = forward(-1.0)
+    'branch x=2.0 dgdx={}'->format<upBackward(1.0)>->println
+    let (down, downBackward) = forward(-1.0)
     'branch x=-1.0 value={}'->format<down>->println
-    'branch x=-1.0 dgdx={}'->format<backward(downResiduals, 1.0)>->println
+    'branch x=-1.0 dgdx={}'->format<downBackward(1.0)>->println
     return 0
 }

@@ -10,7 +10,7 @@
 
 ### P1 DLPack 导入在失败路径泄漏生产者的内存，并把真实原因说成"没有 `__dlpack__`"
 
-- `bindings/python/module.cpp:263`：`adoptArray` 先 `PyCapsule_SetName(capsule, "used_dltensor")`（宣告"我接管了"），然后才调 `fromDLPack`（268-275）。`fromDLPack` 在设备不是 CPU、dtype 不支持、非连续、`ndim<0` 时抛异常（`src/core/array/dlpack.cpp:151-177`）；此时容器已改名，协议规定的"未被接管则由胶囊析构器调用 deleter"不再成立，Camel 又没有调用 deleter：生产者的张量（NumPy 的 base 引用、PyTorch 的存储）永远不释放。
+- `bindings/python/module.cpp:263`：`adoptArray` 先 `PyCapsule_SetName(capsule, "used_dltensor")`（宣告"我接管了"），然后才调 `fromDLPack`（268-275）。`fromDLPack` 在设备不是 CPU、dtype 不支持、非连续、`ndim<0` 时抛异常（`src/core/array/dlpack.cpp#exportContext`）；此时容器已改名，协议规定的"未被接管则由胶囊析构器调用 deleter"不再成立，Camel 又没有调用 deleter：生产者的张量（NumPy 的 base 引用、PyTorch 的存储）永远不释放。
 - 同函数 246-251：`__dlpack__()` 抛的任何异常（NumPy ≥ 2 对只读数组抛 `BufferError`、CUDA 张量要求 stream、被释放的对象）都被 `PyErr_Clear()` 吃掉，报错一律是"must offer `__dlpack__`"。用户拿到的是错误的诊断。
 - 失败场景：把一个 `float16` 数组、一个转置视图、一个 CUDA 张量传进去，得到 `ArgumentNotConvertible`，同时那块内存被泄漏；循环里反复失败即内存泄漏。
 - 修法：改名放到 `fromDLPack` 成功之后；失败时不改名，让胶囊自己的析构器处理（或由 Camel 主动 `deleter`）。`__dlpack__` 的异常原样附在 `ArgumentNotConvertible` 的 `__cause__` 里，不要吞。

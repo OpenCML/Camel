@@ -1,6 +1,6 @@
 /**
  * A declaration states its type variables and the call names them (design principles 5.9):
- * `numel`'s declaration is `func numel::<T>(t: T[..]): int when is_numeric::<T>()`, one type
+ * `numel`'s declaration is `func numel::<T>(t: T[...]): int when is_numeric::<T>()`, one type
  * variable. A call that names a type argument the declaration does not have has no candidate, and
  * the overload the refusal lists is the declaration's own signature with its type variable —
  * `stdlib/tensor.cml` is the source, not the C++ module.

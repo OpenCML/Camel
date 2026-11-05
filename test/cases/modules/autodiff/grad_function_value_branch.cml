@@ -3,10 +3,10 @@ import { grad } from autodiff
 
 // Refused: the function called is chosen by a branch at run time. It is called twice; the
 // diagnostic is located at the first call (line 10), although the gradient meets the second first.
-with <p: f64[..]>
+with <p: f64[...]>
 func loss(): float {
     let s = float(sum(p))
-    let g = if s > 0.0 then (t: f64[..]): f64[..] => tanh(t * s) else (t: f64[..]): f64[..] => t * s
+    let g = if s > 0.0 then (t: f64[...]): f64[...] => tanh(t * s) else (t: f64[...]): f64[...] => t * s
     let a = g(p)
     let b = g(a * 0.5)
     return float(sum(b))

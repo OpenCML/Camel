@@ -92,7 +92,7 @@ timeout_ms = 30000
 
 # A declaration states the type its call gives back, and the operator states its own in the
 # signature it registers; `--verify-ops` compares the two, so a declaration cannot promise a type
-# the operator does not return. Nothing compared them before: `one_hot` was declared `int64[..]`
+# the operator does not return. Nothing compared them before: `one_hot` was declared `int64[...]`
 # for months while its kernel, its inference and every test returned f32 rows, and the reference
 # run stayed green because only names, arity, parameter names and purity were read. The run names
 # both halves -- how many result types it compared and which operators it could not compare -- and
@@ -132,7 +132,7 @@ timeout_ms = 30000
 
 # The other half of the same signature: what the operator says it takes, position by position,
 # against what the declaration promises. The operator's side is ten kinds (`Tensor` is any tensor,
-# `int[]` a number array, `float[..] | number` a tensor or a number) and the declaration's is one
+# `int[]` a number array, `float[...] | number` a tensor or a number) and the declaration's is one
 # type, so the comparison is containment -- a declaration may narrow a kind, never promise a value
 # the operator refuses. `one_hot`'s neighbour: the same run that never read a result type never read
 # a parameter type either, so `axis: int` could have been written `axis: float` for months.
@@ -175,6 +175,51 @@ assert(/the exception lists are the ones EXCEPTIONS records: result [0-9]+ in [0
 }
 """
 timeout_ms = 30000
+
+# A result written as a type function (`match type`) is a promise about the shape of the argument,
+# and the two sides state it in two forms: a declaration writes `WithElement<A, bf16>`, and the
+# compiler prints what that name answers for the operator it declares. The reader is measured on its
+# own here, against declarations written for the measurement (their case lists are written over
+# several lines, which is how the library writes them), so that a reader that stopped reading the
+# shape fails with a probe and not only inside a run over 569 overloads. Two readings are the point:
+# the same function on both sides is `match`, and one dimension changed on the declaration's side is
+# a `mismatch` that names the dimension -- a verdict that says "different" and not where is half an
+# answer, and the half that gets read as "no idea, skip it".
+[[tests]]
+name = "registry.match_type_signatures_read"
+desc = "A declaration whose result is a `match type` (a type function on the argument's shape, the case list written over several lines) is read: `case X[...Dims] => bf16[...Dims]` on both sides is the same promise, the library's own name for a type function (`FirstOf<P>`) is read through its definition, a dimension changed in the declaration's result, a different element type, a dimension changed in its pattern, and a case the operator does not state are each reported as a difference that names the case and the place inside it."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/stdlib-reference.mjs"
+args = ["${case}", "--verify-match-type", "test/cases/modules/stdlib/match_type_probes.decl", "test/cases/modules/stdlib/match_type_probes.json"]
+expect_exit = 0
+expect_stdout_contains = ["the type-function reader answers as the probes say"]
+normalizers = ["normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const stdout = input.normalized.stdout
+// The reading that matters first: two spellings of one type function are one promise. Without this
+// line the run would be about exceptions only, and an exception is what this reader was added to
+// stop being the answer.
+assert(/^MATCH-TYPE 1 match: bf16 -- the declaration's type function and the operator's are the same 2 case\(s\)$/m.test(stdout),
+    'the two spellings of one type function are not read as the same promise')
+assert(/^MATCH-TYPE 2 match: first_of -- /m.test(stdout),
+    "the library's own name for a type function is not read through its definition")
+// And the reading that keeps it honest: a difference, at the dimension that differs. The declaration
+// adds an unknown extent before the argument's, and the reading has to say which dimension that is.
+const named = /^MATCH-TYPE 3 mismatch: bf16_one_more_dimension -- case 1: the result's dimension 1 is `\?`, and the operator's is `\.\.\.Dims`$/m.exec(stdout)
+assert(named !== null, "a dimension changed in the declaration's result is not reported at that dimension")
+const expected = /the type-function reader answers as the probes say: ([0-9]+) probe\(s\), ([0-9]+) as expected/.exec(stdout)
+assert(expected !== null, 'the run did not say how many probes it answered')
+assert(Number(expected[1]) >= 6, `only ${expected[1]} probe(s) were read`)
+assert(expected[1] === expected[2], `${expected[1]} probe(s) and ${expected[2]} as expected`)
+// Every probe printed its reading: a probe that is counted and not shown could be counted by
+// accident (a loop that answers `match` for everything shows as a wrong probe, not as a missing one).
+const printed = (stdout.match(/^MATCH-TYPE [0-9]+ /gm) || []).length
+assert(printed === Number(expected[1]), `${Number(expected[1])} probe(s) are counted and ${printed} printed`)
+}
+"""
+timeout_ms = 20000
 
 # A position that means the same thing carries the same name in every rule of a name: that is what
 # a named argument binds to (`len(x: xs)`), and it is why `stdlib/json.cml` and
@@ -257,7 +302,24 @@ args = ["${case}", "--verify-docs", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["every declared name has a description and an @example"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 180000
+# The bound moved with the work, and the two readings below are why (both on `88zjwei`, the same
+# tree, `--verify-docs --camel out/latest/bin/camel`):
+#
+#   * at 180000 ms, tip `ffa27bba1`, 2026-11-04 04:39 +08:00, 1m load 16.5: `used 47750 ms of CPU
+#     against a 180000 ms timeout, below the 4x margin` -- 47750 > 180000/4 = 45000, so the bound
+#     was the red, and the verdict itself passed (`every declared name has a description and an
+#     @example: 574 example(s) checked, 65 entry(ies) marked a fragment were compiled too`, exit 0).
+#   * at 240000 ms, tip `b8d944be9`, 2026-11-04 05:19 +08:00, 1m load 30.3: `User time 26.67 s +
+#     System time 20.35 s = 47.02 s of CPU` (wall 19.95 s, 235% of a core), against 240000/4 =
+#     60000 ms -- 12.98 s of margin, and the same two verdict lines: `575 example(s) checked, 65
+#     entry(ies) marked a fragment were compiled too` and `the example counts are the ones the
+#     script records: 24 that do not compile in 1 class(es), 0 marked a fragment that compile
+#     alone, 41 that compile only with the name they say they need`.
+#
+# So the count the work needs is 47 s of CPU -- the library's own arithmetic, 575 examples, each
+# its own process -- and a bound it cannot meet is a red about the bound. 240000 ms leaves 60 s of
+# margin, the case still asks for every slot, and the number is stated rather than waved at.
+timeout_ms = 240000
 # This case compiles every `@example` of the library -- several hundred programs, each its own
 # process -- and reports how many of them compile. Under a full gate that number is a reading
 # about the machine as much as about the library: on 2026-11-02 the same tree passed alone and

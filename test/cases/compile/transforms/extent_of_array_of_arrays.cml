@@ -1,0 +1,40 @@
+// `float[2][3]` is an **array of arrays**, not a rank-2 shape: the language writes a rank-2
+// array `float[2, 3]` (`docs/language/03_data_model.md`, section 3.1: "`T[][]` is a nested array,
+// rank 2 is written `T[m, n]`"; `docs/design-principles.cn.md`, section 5.4: "write `f32[m, n]`
+// and not `f32[m][n]`"). The suffix is read left to right, so `float[2][3]` is three values of
+// type `float[2]` -- a rank-1 array whose element type states its own extent
+// (`docs/design/arrays-memory/plan.cn.md`: "`T[m][n]` is an array of arrays (the outer element
+// type is `T[m]`, not rank 2)").
+//
+// So `extent_of::<A>()` answers the extents of `A` **itself**, and the element type's extents are
+// a different question with a different name:
+//
+//     extent_of::<float[2][3]>()  = [3]      the whole shape of a value of this type
+//     extent_of::<float[2]>()     = [2]      the innermost dimension: another type
+//     extent_of::<float[2, 3]>()  = [2, 3]   the rank-2 array: another type
+//
+// `[3]` is pinned here, not "anything but [2]" and not "anything but [3]": it is asserted per
+// position, and it is asserted to be the list `shape` answers for a value of the same type -- the
+// equivalence `extent_of` has with `shape` on a stated type (`extent_of_is_not_shape.cml`).
+import { shape } from array
+
+func pair(): float[2] {
+    return [1.0, 2.0]
+}
+
+func main(): int sync {
+    let xs: float[2][3] = [pair(), pair(), pair()]
+    let outside = extent_of::<float[2][3]>()
+    let innermost = extent_of::<float[2]>()
+    let rank2 = extent_of::<float[2, 3]>()
+    println(outside)
+    println(len(outside))
+    println(outside[0])
+    println(shape(xs))
+    println(outside == shape(xs))
+    println(outside == innermost)
+    println(outside == rank2)
+    println(innermost)
+    println(rank2)
+    return 0
+}

@@ -58,7 +58,7 @@ REINTERP jvp function=f graph=64 liftedFrom=55 type=(float[], float[]) => (float
 registry [FAIL] registry.signatures_match / registry.result_types_match / registry.parameter_types_match / registry.docs_complete
 ```
 
-根在这一句（算子自己写的）：`src/builtin/operators/derivative.cpp:386` ——
+根在这一句（算子自己写的）：`src/builtin/operators/derivative.cpp#scatterAddArrayVjp` ——
 `Derivative of '{}' expects 3 or 4 inputs (base, index, delta, axis)`：**这个算子取三个或四个操作数，`axis` 可选**，三参声明与注册形状对不上。
 
 **所以"想怎么用"不能决定声明怎么写**：声明必须与注册的真实形状一致，四红就是那张注册表在说"你写错了"。同一件事的另一个读数：**规则右侧能名的只有函数**（`expandRuleRightSide` 的 `Func` 分支），所以在规则集里写 `:tangent/scatter_add_arr` 也得先有一个能名的函数——"不新造库名"并不等于"不用声明"，只是把声明挪进规则集、不放进公共库面。
@@ -103,12 +103,12 @@ TRANSPOSE … skip=rule uri=:op/idx_arr reason=no-such-family   ← 规则集没
 TRANSPOSE … skip=rule uri=:op/idx_arr reason=unbound          ← 键没绑上（transposeBindings() 里没有这个 uri）
           （第三种：reason=no-rule —— 家族在、键在，索引里没有这条规则）
 ```
-三个 reason 出自 `modules/transforms/transpose.cpp:1296–1301` 的同一个三元式：
+三个 reason 出自 `modules/transforms/transpose.cpp#Escape` 的同一个三元式：
 `!rule.has_value()` → `unbound`；`NoSuchFamily` → `no-such-family`；否则 `no-rule`。
 
 **`gs6` 那天量 `transpose` 时格子全是 `no-such-family`，根因是测量程序漏了 `import rulesets.transpose`**——**"测量程序的 import 也是被测量的一部分"**。看到 `skip=rule` 先分这两类：**`no-such-family` 去看 import，`unbound` 去看绑定表**；**别去改规则名的可见性**（`export` 与否不在这条链上：`index_into` 私有与公开，`unbound` 都会是 `unbound`）。
 
-`transposeBindings()` 是 `src/core/forward.cpp:26` 的**函数内 `static`**（`static std::map<std::string, ForwardRuleBinding> table;`），所以"另一个实例"不成立——进程内只有一张表。
+`transposeBindings()` 是 `src/core/forward.cpp#WrittenOperation` 的**函数内 `static`**（`static std::map<std::string, ForwardRuleBinding> table;`），所以"另一个实例"不成立——进程内只有一张表。
 ## 「按形状展开」这一步今天撞到的是缺一个读者，不是缺一个想法
 
 `transpose.cpp:1312–1363` 先把规则名记进读数、再按名字分派：
@@ -136,12 +136,12 @@ RuleEntry{ head, arity, rule, variables }   // variables 是左侧绑定的名�
 
 四条锚：
 ```
-src/parse/ast/builder.cpp:899-916   右侧 callee / 左侧 variables / outerUses 都在这儿读，第四样加在这里
+src/parse/ast/builder.cpp#parameterTypesOf   右侧 callee / 左侧 variables / outerUses 都在这儿读，第四样加在这里
                                     （`rightCalleeOf(sides[1])`、`variableNamesOf(sides[0])`、
                                      `outerNamesUsedInRight(...)` 是现成的同族函数，新加一个 `rightParamsOf(sides[1])`）
-include/camel/parse/ast/rule_head.h:62-78   `variables` / `outerUses` 字段与 `RuleHead` 构造参数，
+include/camel/parse/ast/rule_head.h#RuleHead   `variables` / `outerUses` 字段与 `RuleHead` 构造参数，
                                             `rhsParams` 加在 `outerUses` 后面
-src/parse/ast/rule_head.cpp:280-291         构造函数的形参列表（同名同序加一项）
+src/parse/ast/rule_head.cpp#outerNamesUsedInRight         构造函数的形参列表（同名同序加一项）
 src/parse/ast/rule_head.cpp  `indexRule`     索引时记的两张表 `callees[family][rule]` / `variables[family][rule]`
                                             旁边加第三张，并加读者 `rhsParamsOf(family, rule)`
 ```

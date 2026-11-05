@@ -68,19 +68,30 @@ without deleting; `feat/tools/clean` pins the tiers, the dry run and the tracked
 | `revision`, `dirty`, `dirtyCount`, `dirtyPaths` | `git rev-parse HEAD`, whether the tree had uncommitted changes, and up to 40 of those paths. `null` when git is unavailable: the stamp then says so, and the content fingerprint still guards the run. |
 | `builtAt`, `config`, `tag` | When, which configuration, and which install directory (`latest`, `debug`, or a release mirror tag). |
 | `fingerprint` | SHA-256 over the content of every path a build reads — `src/`, `include/`, `modules/`, `tools/`, `stdlib/`, `third_party/`, `cmake/`, `CMakeLists.txt`, `conanfile.txt` — with the file count and a per-file hash map (used to name the files that moved). |
-| `schema`, `fingerprint.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. |
+| `buildOptions` | The configuration those sources were compiled with: the effective value of every `cmake/options.json` entry, the `CAMEL_TARGET_ARCH` / `CAMEL_SKIP_PYTHON` overrides `cmake/Options.cmake` honours, the platform, the compiler selection, and a hash over all of it. Two builds of the same sources with different options are two different installs, and the source fingerprint alone cannot tell them apart (`.camel-opts.json` is git-ignored). `scripts/common.js: buildOptions` says what is in and, on purpose, what is out. |
+| `schema`, `fingerprint.version`, `buildOptions.version` | The shape of the stamp, so a stamp written by an older build is refused instead of misread. A stamp from before the option record (schema 2) is untrustworthy: it cannot prove which options produced the install. |
 
 The build writes it, no runner does, so a local build, a host build and a release tarball all carry
 it; the PyPI rollup copies `out/<tag>/` whole and ships the file.
 
 `node scripts/build-info.js check --tag latest` prints nothing when the stamp matches the current
 tree, and exits 4 when it does not, naming both revisions (HEAD plus dirty state), both
-fingerprints, and the source files that changed. `show` prints the stamp. `camel-remote.ps1` runs
-`check` before a `-NoBuild` plan: an install is reused only while its fingerprint still matches, and
-`-AllowStale` is the explicit override. Changes under `docs/`, `test/`, `scripts/`, `agents/`,
-`editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the fingerprint (a test
-case is read at plan time); changes under the paths above do — including `stdlib/`, which
-`collect-out` copies verbatim into `out/<tag>/stdlib`.
+fingerprints, the source files that changed and every build option that moved. `show` prints the
+stamp. `camel-remote.ps1` runs `check` before a `-NoBuild` plan, passing `--config Debug` for the
+debug tag (out/debug holds the Debug build by construction, so an install collected as another
+configuration is refused there too; out/latest holds Release *and* RelWithDebInfo and gets no
+`--config`, which keeps `-Tier debug -NoBuild` — verifying out/debug without building — working):
+an install is reused only while its fingerprint *and* its option set still match, and `-AllowStale`
+is the explicit override. Changes under `docs/`, `test/`,
+`scripts/`, `agents/`, `editors/`, `pypi/`, `assets/`, `examples/` and `benchmarks/` do not move the
+fingerprint (a test case is read at plan time); changes under the paths above do — including
+`stdlib/`, which `collect-out` copies verbatim into `out/<tag>/stdlib`.
+
+`camel-remote.ps1 -NoBuild` refuses **before the plan starts**, so a refusal is not a red plan and not
+a build: the helper exits **4** and nothing ran. `-AllowStale` is the one override — it prints the
+same refusal, says it is continuing anyway, and exits with the plan's own code. The helper's other
+codes are 3 (the host is short of disk) and 2 (the worktree, the push or the transfer failed);
+anything else is the build's or the plan's own exit code, returned unchanged.
 
 ## Test Harness
 
@@ -124,9 +135,13 @@ It runs, in order:
    Three of them are perf plans whose tests assert counts and properties, never a duration:
    `perf.para_speedup` and the count guards `perf.step_counts` and `perf.reduce_layout_counts`
    (the measured halves of `perf.step_budget` and `perf.reduce_layout` stay in the skip list);
-3. the eight static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
+3. the static checks: `stdlib-reference --verify-ops`, `--verify-doc`, `diagnostics-catalog
    --check`, `check-doc-links --all`, `check-doc-snippets`, `stdlib-declarations --check`,
-   `check-conformance`, `check-std-includes`;
+   `check-conformance`, `check-std-includes`, `rule-proofs`, and `check-wheel-tags` -- the last one
+   reads the wheels the last `npm run pypi:rollup` left in `dist/pypi/` and requires the two forms
+   `cp310-abi3` (with the interop extension) and `py3-none` (without it), asserting through the same
+   `scripts/check_wheel_tags.py --ruling` the build job runs; with no wheel in `dist/pypi/` it prints
+   a `SKIPPED` banner naming that command, because this gate does not build wheels;
 
 then exits non-zero when any phase failed. It does not build: build once first, and it checks the
 install it measures against that build's stamp — the rule that a run must not measure another
@@ -137,6 +152,11 @@ and the same `--camel` goes to every layer: the fast and slow plan layers set ea
 An exported `CAMEL_HOME` does not choose the install — it is the install location's convention for
 the `camel` binary and for an SDK user — and a stamp travels inside the install it describes, so an
 install built by another tree is refused by that stamp whatever path it sits at.
+
+It also does not install the wheels it just read the tags of: the checklist for the interpreter
+matrix a release has to smoke those wheels on — CPython 3.10 (the stable ABI floor, interop), the
+newest CPython (interop), and 3.9 or PyPy (the `py3-none` body, `camel` runs and `import camel`
+explains itself) — is `docs/pypi-packaging.md` section 7.2, with the exact interpreter versions.
 
 The two standard-library checkers among those static checks (`stdlib-reference.mjs --verify-ops`,
 `stdlib-declarations.mjs --check`) apply the same rule themselves, before they read a registry: an
@@ -175,9 +195,11 @@ node test/tools/run-tests.mjs --update-golden test/plans/feat/parse/core.plan.to
 ```
 
 `--jobs N` sets the number of tests run at once (default: the processor count). `--tier
-fast|slow|all` selects a layer, orthogonal to the target; the default is `fast` for a directory
-target and for the whole plan tree, which is the `all` target (`all`, `--all` or `test/plans`)
-and not `.`. A plan **file** named as the target runs in full whatever `--tier` says.
+fast|slow|milestone|all|debug` selects a layer, orthogonal to the target; the default is `fast` for
+a directory target and for the whole plan tree, which is the `all` target (`all`, `--all` or
+`test/plans`) and not `.`. The five values are `test/tools/run-tests.mjs#TIERS`, and `all` is every
+plan and test except the `debug` layer, which needs a Debug build and `--tier debug`. A plan
+**file** named as the target runs in full whatever `--tier` says.
 `--changed` selects the plans the working tree touches relative to `origin/develop` (override
 with `CAMEL_TEST_BASE`): directory rules in `test/plan-selection.json` first, file rules second.
 

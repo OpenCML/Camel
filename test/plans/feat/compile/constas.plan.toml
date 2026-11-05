@@ -198,7 +198,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "constas_column"
-desc = "`column(constas n: string, ..ts)` (the acceptance case of design 3.1.1 today): the field name is a compile-time string the body reads as the key of `ts.[j].[n]`, and two values are two instances picking different fields."
+desc = "`column(constas n: string, ...ts)` (the acceptance case of design 3.1.1 today): the field name is a compile-time string the body reads as the key of `ts.[j].[n]`, and two values are two instances picking different fields."
 kind = "behavior"
 case = "../../../cases/compile/constas/constas_column.cml"
 args = ["${case}", "std::fvm"]

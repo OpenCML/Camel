@@ -4,7 +4,7 @@
  * of the values, so the transform reads the first port that is not a condition to name the rule's
  * `T`; with the first port it would instantiate a `bool` rule and refuse it:
  *
- *   No candidate of 'vmap_where' applies to (bool[?, ..], bool[?, ..], bool[?, ..])
+ *   No candidate of 'vmap_where' applies to (bool[?, ...], bool[?, ...], bool[?, ...])
  *
  * A mask that is a constant of the row's shape is the batch of one row and broadcasts, so one row of
  * `[1.0, 2.0, 3.0]` under the mask `[true, false, true]` answers `[1.0, 0.0, 3.0]`, and two rows

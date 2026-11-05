@@ -1,0 +1,22 @@
+// WALL PROBE 14 -- a call inside the differentiated function. Every model is a composition: the
+// block calls `attention`, the block and the head are calls, and the loss calls the model. If a
+// call is not lifted, nothing above a straight line can be differentiated.
+//
+//   g(x) = x * x
+//   f(x) = g(x) + g(x)   ==  2 x^2      f(3) = 18, f'(3) = 12
+import rulesets.jvp
+import { jvp } from transforms
+
+func g(x: float): float {
+    return x * x
+}
+
+func f(x: float): float {
+    return g(x) + g(x)
+}
+
+func main(): int sync {
+    let (value, tangent) = jvp(f)(3.0, 1.0)
+    println(`jvp f at 3 = ${value:.1f} and ${tangent:.1f}`)
+    return 0
+}

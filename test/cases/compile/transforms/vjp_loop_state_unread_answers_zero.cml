@@ -1,0 +1,29 @@
+// `h(x) = loop s = 0.0 for i in [1, 2, 3, 4] do s + 2.0` is 8.0 for every `x`, so `h'(x)` is 0.
+// The loop is the whole answer, and the value its state starts from answers no parameter, so the
+// cotangent of the loop's value is the zero of its cotangent space. Through `vjp` the half that is
+// transposed is `split(jvp(h))`'s backward one, and that half carries a closure (the loop's tape), so
+// this is the shape where an answer that is a constant meets a member that carries a value: the
+// answer is a constant and the closure is filled anyway (author, 2026-11-03, `origin/fsh-dev =
+// 3ab482ab2`: "a member carries its closure whatever its answer reads -- a zero answer is a constant
+// and the closure is still filled; no refusal").
+//
+// The zero must also be *linear*: the pullback of `2.0` answers `(0.0)` too, which a constant `1.0`
+// would read as `(2.0)`. `k`, transposed directly, is the same answer without the closure and is the
+// control that the zero did not arrive with the closure machinery.
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func h(x: float): float {
+    let _ = x
+    return loop s = 0.0 for i in [1, 2, 3, 4] do s + 2.0
+}
+
+func main(): int sync {
+    println('h value=', h(1.0))
+    let (value, pullback) = vjp(h)(1.0)
+    println('h vjp value=', value)
+    println('h pullback(1.0)=', pullback(1.0))
+    println('h pullback(2.0)=', pullback(2.0))
+    return 0
+}

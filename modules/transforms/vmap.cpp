@@ -3,6 +3,8 @@
 
 #include "vmap.h"
 
+#include "refusal_readings.h"
+#include "rule_expand.h"
 #include "rule_types.h"
 
 #include "camel/compile/gir/draft_graph_builder.h"
@@ -101,6 +103,59 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
         }
     }
     return 0;
+}
+
+/// The rule of `rulesets.vmap` that answers `uri` here: the key's one law, or -- when a key holds
+/// several -- the law the operands' own types pick.
+///
+/// This family is the same choice the transpose family makes (`modules/transforms/
+/// transpose.cpp#chooseTransposedRule`) with one difference in what is compared: an instance here is
+/// made at the **element** type of the operand, because that is the type a rule of this family is
+/// generic in, and its ports are then compared with the operands' *batched* types -- `vmap_rule_idx::
+/// <T>(xs: T[], i: int)` at `T = float` takes a `float[2, 3]` batch through its `float[]` port. The
+/// relation is the call's (`Type::assignableFrom`, the port takes the operand), and among the laws
+/// that take them the narrowest wins (`narrowerPortsThan`); two that both take them with neither
+/// narrower are refused by name rather than picked by filing order.
+std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
+    camel::core::context::Context &context, const camel::runtime::GCGraph &function,
+    gc_node_ref_t ref, const std::string &uri, std::string &why) {
+    const std::vector<camel::parse::ast::RuleMatch> candidates = camel::core::vmapRulesOf(uri);
+    if (candidates.empty()) {
+        // One law, or no key, or no law: `ruleOfUri` says which, in the two reasons it already
+        // spells.
+        return ruleOfUri(uri, why);
+    }
+    const Type *operand = firstOperandTypeOf(function, ref);
+    Type *elementType   = ruleElementTypeOf(
+        operand != nullptr
+                ? const_cast<Type *>(operand)
+                : (function.node(ref) != nullptr ? function.node(ref)->dataType() : nullptr));
+    std::vector<Type *> actual;
+    for (const gc_node_ref_t input : function.normInputsOf(ref)) {
+        const camel::runtime::GCNode *node = function.node(input);
+        actual.push_back(node != nullptr ? node->dataType() : nullptr);
+    }
+    // The ports past the data operands are the operator's own configuration -- `reshape`'s target
+    // shape comes in `<>` position -- and a rule names them beside the value it batches, in port
+    // order (`transpose.cpp` says the same about the pullback's list). Without them a law that names
+    // its shape would look like a law that names more ports than the operator has.
+    for (const gc_node_ref_t input : function.withInputsOf(ref)) {
+        const camel::runtime::GCNode *node = function.node(input);
+        actual.push_back(node != nullptr ? node->dataType() : nullptr);
+    }
+    // Which of the key's laws answers this batch is one question, asked in one place
+    // (`rule_expand.cpp#chooseRuleAmong`); the batching family's own part is the type an instance is
+    // made at -- the *element* of the operand, which is what makes `vmap_mul<float>` a law for a
+    // `float[]` batch -- and the operand list, which carries the `<>` configuration beside the value
+    // (so no lower bound is asked for here: `dataOperandCount` 0).
+    const RuleChoice choice = chooseRuleAmong(
+        context, candidates, std::vector<Type *>{elementType}, actual, 0,
+        RuleChoiceWords{"law", "operands"});
+    if (!choice.found()) {
+        why = choice.why;
+        return std::nullopt;
+    }
+    return camel::parse::ast::RuleMatch{camel::parse::ast::RuleLookup::Found, choice.rule};
 }
 
 // The lifting of a constant is a lambda beside the draft it writes through, not a free function:
@@ -202,7 +257,9 @@ VmapGraph buildVmapGraph(
     }
     FunctionType *signature = vmapSignature(function->funcType());
     if (signature == nullptr) {
-        os << "REINTERP vmap function=" << function->name() << " skip=signature\n";
+        os << "REINTERP vmap function=" << function->name()
+           << " skip=" << refusalCauseName(RefusalCause::Signature) << '\n';
+        noteRefusal(RefusalReading("vmap", function->name(), RefusalCause::Signature));
         return VmapGraph{};
     }
     const Type *liftedParameter = signature->normTypeAt(0);
@@ -502,7 +559,7 @@ VmapGraph buildVmapGraph(
                 const auto *body   = function->nodeBodyAs<rt::GCOperBody>(ref);
                 const std::string uri(body->uri());
                 ++refused.asked;
-                const auto match = ruleOfUri(uri, why);
+                const auto match = chooseRuleOfUri(*context, *function, ref, uri, why);
                 if (!match.has_value() || match->status != camel::parse::ast::RuleLookup::Found) {
                     refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedUri    = uri;
@@ -626,10 +683,14 @@ VmapGraph buildVmapGraph(
             // the ruleset answered up to there. `asked=0 found=0` is a body the walk never reached a
             // primitive in, and `asked=3 found=2` is a ruleset with a hole in it.
             os << "REINTERP vmap function=" << function->name()
-               << " skip=body construct="
+               << " skip=" << refusalCauseName(RefusalCause::Body) << " construct="
                << (refused.refusedConstruct.empty() ? "-" : refused.refusedConstruct)
                << " uri=" << (refused.refusedUri.empty() ? "-" : refused.refusedUri)
                << askedFoundMissing(refused) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::Body)
+                    .atUri(refused.refusedUri)
+                    .atConstruct(refused.refusedConstruct));
             return refused;
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
@@ -653,7 +714,11 @@ VmapGraph buildVmapGraph(
                                                                 : camel::source::kInvalidOriginId;
             refused.refusedConstruct = "the exit";
             refused.refusedWhy       = "the value of the body was not lifted";
-            os << "REINTERP vmap function=" << function->name() << " skip=exit\n";
+            os << "REINTERP vmap function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::Exit) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::Exit)
+                    .atConstruct("the exit"));
             return refused;
         }
         const gc_node_ref_t liftedValue = copyOf[out];
@@ -661,7 +726,11 @@ VmapGraph buildVmapGraph(
         if (header == nullptr || header->dataType == nullptr) {
             refused.refusedConstruct = "the exit";
             refused.refusedWhy       = "the lifted value has no type";
-            os << "REINTERP vmap function=" << function->name() << " skip=exit-type\n";
+            os << "REINTERP vmap function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::ExitType) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::ExitType)
+                    .atConstruct("the exit"));
             return refused;
         }
         draft.setExitNode(liftedValue);

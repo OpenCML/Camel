@@ -70,9 +70,21 @@ const Builder::RestBinding *Builder::restBindingNamed(const std::string &name) c
         return nullptr;
     }
     for (auto it = restBindings_.rbegin(); it != restBindings_.rend(); ++it) {
-        if (it->name == name) {
-            return &*it;
+        if (it->name != name) {
+            continue;
         }
+        // The binding is a tuple of nodes of the graph the call expanded into, and an expanded body
+        // is built there. A function built while the binding is still in force -- the lambda of
+        // `func outer(...xs) { return () => xs[0] }` -- is a graph of its own, so its body cannot
+        // name those nodes: answering the tuple made the encoder reach a node of another graph with
+        // no header of its own, and the compiler aborted (`graph_encode.cpp`, "Live compile draft
+        // node cannot have a null header"). From inside that function the pack is not a value any
+        // scope holds, which is what the answer says now -- the same `Unresolved reference` a lambda
+        // gets when it names a pack no enclosing function binds.
+        if (it->owner != currGraph_.get()) {
+            return nullptr;
+        }
+        return &*it;
     }
     return nullptr;
 }
@@ -105,7 +117,7 @@ std::vector<node_handle_t> Builder::expandRestArgument(
                 std::vector<node_handle_t> values;
                 values.reserve(with.size());
                 for (const auto ref : with) {
-                    values.emplace_back(nodeDraftOf(value), ref);
+                    values.push_back(nodeDraftOf(value)->ref(ref));
                 }
                 return values;
             }
@@ -126,10 +138,19 @@ node_handle_t Builder::inlineRestCall(
     // The runtime parameters: the `constas` ones are compile-time values and are dropped from
     // the arguments below (design principles 5.4); the rest parameter is always last.
     const size_t normCount  = declaredNormCount - signature->normConstasCount();
-    GUARD(signature->hasRest() && normCount > 0 && restBindings_.size() < 64,
-           "A rest signature has its rest parameter last.");
-    const size_t fixedCount = normCount - 1;
-    const std::string restName(signature->argNameAt(withCount + declaredNormCount - 1));
+    // A pack among the `with` parameters is the pack this expansion binds when the declaration has
+    // none among its ordinary parameters (`with <..ws>` on a function with a body). The fixed
+    // `with` parameters are the ones before it, and the `with` arguments past them are its own.
+    const bool withPack     = signature->hasWithRest();
+    const size_t fixedWith  = withPack ? withCount - 1 : withCount;
+    GUARD(
+        (signature->hasRest() || withPack) && normCount + (withPack ? 0 : 1) > 0 &&
+            restBindings_.size() < 64,
+        "A rest signature has its rest parameter last.");
+    const size_t fixedCount = withPack ? normCount : normCount - 1;
+    const std::string restName(
+        withPack ? signature->argNameAt(withCount - 1)
+                 : signature->argNameAt(withCount + declaredNormCount - 1));
     // The declared ordinary parameter of each runtime argument.
     std::vector<size_t> runtimeIndices;
     runtimeIndices.reserve(declaredNormCount);
@@ -139,7 +160,7 @@ node_handle_t Builder::inlineRestCall(
         }
     }
 
-    if (withInputs.size() != withCount) {
+    if (withInputs.size() < fixedWith || (!withPack && withInputs.size() != withCount)) {
         diags_->of(SemanticDiag::ArgumentsMismatch)
             .atOrigin(call->origin())
             .commit(signature->toString(), "the with-arguments given at the call");
@@ -217,7 +238,7 @@ node_handle_t Builder::inlineRestCall(
             throw BuildAbortException();
         }
     };
-    for (size_t i = 0; i < withCount; ++i) {
+    for (size_t i = 0; i < fixedWith; ++i) {
         bindOne(signature->withTypeAt(i), withInputs[i], true, i);
     }
     for (size_t i = 0; i < fixedCount; ++i) {
@@ -226,7 +247,7 @@ node_handle_t Builder::inlineRestCall(
     }
     // Every type variable of the fixed parameters must be known: the rest parameter gives no
     // types of its own, and the body cannot be built around an open `T`.
-    for (size_t i = 0; i < withCount; ++i) {
+    for (size_t i = 0; i < fixedWith; ++i) {
         if (callableName[i]) {
             continue;
         }
@@ -266,7 +287,7 @@ node_handle_t Builder::inlineRestCall(
         }
         normInputs[i].node = entered;
     }
-    for (size_t i = 0; i < withCount; ++i) {
+    for (size_t i = 0; i < fixedWith; ++i) {
         if (callableName[i]) {
             // The name is inserted into the body's scope as it is; the call of it resolves
             // the generic function or the overload set.
@@ -282,6 +303,29 @@ node_handle_t Builder::inlineRestCall(
             throw BuildAbortException();
         }
         withInputs[i].node = entered;
+    }
+    // The pack's own arguments, past the fixed ones: each is of the type the declaration wrote for
+    // the pack (`with <..ws: int>`), or of any type when it wrote none. The element type is the
+    // signature's own, so loosening it here would mean loosening it there.
+    if (withPack) {
+        Type *element = signature->withRestType();
+        for (size_t i = fixedWith; element != nullptr && i < withInputs.size(); ++i) {
+            Type *actual          = valueTypeOf(nodeTypeOf(withInputs[i].node));
+            node_handle_t entered = checkValue(withInputs[i].node, element, withInputs[i].expr);
+            if (entered == nullptr) {
+                diags_->of(SemanticDiag::WithPackArgumentType)
+                    .atOrigin(withInputs[i].expr != nullptr ? withInputs[i].expr->origin()
+                                                            : call->origin())
+                    .commit(
+                        restName,
+                        tmpl->name,
+                        element->toString(),
+                        std::to_string(i - fixedWith + 1),
+                        actual->toString());
+                throw BuildAbortException();
+            }
+            withInputs[i].node = entered;
+        }
     }
     // A `constas` value is held to the type of its parameter like a fixed argument is, with the
     // other values' extents and the type variables the fixed arguments bound (5.4).
@@ -304,12 +348,23 @@ node_handle_t Builder::inlineRestCall(
     }
 
     std::vector<node_handle_t> restValues;
-    restValues.reserve(normInputs.size() - fixedCount);
     type_vec_t restTypes;
-    restTypes.reserve(normInputs.size() - fixedCount);
-    for (size_t i = fixedCount; i < normInputs.size(); ++i) {
-        restValues.push_back(normInputs[i].node);
-        restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
+    if (withPack) {
+        // A pack among the `with` parameters takes the `with` arguments past the fixed ones, so
+        // those are the nodes it binds -- the same binding, one parameter list further in.
+        restValues.reserve(withInputs.size() - fixedWith);
+        restTypes.reserve(withInputs.size() - fixedWith);
+        for (size_t i = fixedWith; i < withInputs.size(); ++i) {
+            restValues.push_back(withInputs[i].node);
+            restTypes.push_back(valueTypeOf(nodeTypeOf(withInputs[i].node)));
+        }
+    } else {
+        restValues.reserve(normInputs.size() - fixedCount);
+        restTypes.reserve(normInputs.size() - fixedCount);
+        for (size_t i = fixedCount; i < normInputs.size(); ++i) {
+            restValues.push_back(normInputs[i].node);
+            restTypes.push_back(valueTypeOf(nodeTypeOf(normInputs[i].node)));
+        }
     }
     // A rest parameter typed `..xs: ..A` binds `A` to the pack of the types it took, the same
     // binding a call of a declaration without a body makes (DeclaredFuncTypeResolver).
@@ -322,7 +377,7 @@ node_handle_t Builder::inlineRestCall(
     // false condition makes the function inapplicable (design principles 4.4).
     if (const auto *when = GCT::Tree::of(tmpl->func)->whenOf(tmpl->func)) {
         std::unordered_map<std::string, data_ptr_t> withValues;
-        for (size_t i = 0; i < withCount; ++i) {
+        for (size_t i = 0; i < fixedWith; ++i) {
             if (data_ptr_t value = constantOfNode(withInputs[i].node); value != nullptr) {
                 withValues.emplace(std::string(signature->argNameAt(i)), value);
             }
@@ -352,6 +407,7 @@ node_handle_t Builder::inlineRestCall(
     }
     RestBinding rest;
     rest.name                 = restName;
+    rest.owner                = currGraph_.get();
     rest.tuple.type           = TupleType::create(std::move(restTypes));
     rest.tuple.elements       = std::move(restValues);
     rest.tuple.materializable = false;
@@ -496,7 +552,9 @@ node_handle_t Builder::inlineRestCall(
             {constasName, constasKeyOf(constasValue.data), constasValue.node});
     }
     try {
-        for (size_t i = 0; i < withCount; ++i) {
+        // The fixed `with` parameters enter the body's scope by name; the pack's name is bound by
+        // the binding pushed above, as a compile-time tuple of its own arguments.
+        for (size_t i = 0; i < fixedWith; ++i) {
             if (!insertNode(std::string(signature->argNameAt(i)), withInputs[i].node)) {
                 diags_->of(SemanticDiag::DuplicateParameter)
                     .atOrigin(call->origin())

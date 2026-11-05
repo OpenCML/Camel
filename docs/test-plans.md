@@ -44,6 +44,12 @@ When adding a new feature or test case, manually run the case from the command l
   serial execution, useful to reproduce a failure or to compare output.
 - `node scripts/test.js --changed` selects the plans a change touches (see "Selecting plans from
   a change").
+- `node scripts/test.js --tier-report` answers what a layer's entry count is made of instead of
+  running anything: the entries the plan files declare, the entries a `[[sweeps]]` entry derives
+  from them, and how many sweep entries do the deriving, per layer. It starts no test and needs no
+  build (`scripts/tier-report.mjs`). `--tier <name>` narrows it to one layer, `--quiet` prints the
+  totals only, and a target or `--changed` beside it is refused: a query about the plan tree has no
+  run to narrow. See "What A Layer's Entry Count Is Made Of".
 
 The runner prints one line per test and, at the end, `[SUMMARY]` counts and the wall time with
 the job count and layer, then the gate's split:
@@ -126,6 +132,11 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   `FORBIDDEN`, whose own files say `tier = "milestone"`), the copies a sweep did not sample, and
   any other test whose cost or whose measurement is a property of the machine. No ordinary run and
   no gate selects them; `--tier milestone` does.
+  **From 2026-11-05 this layer also runs on a schedule: the merge lane runs it once a day at 09:00
+  Asia/Shanghai and once before every release, as
+  `node scripts/test.js test/plans --tier milestone --jobs 8`.** A red in it is an ordinary red:
+  it is reworked and re-gated like any other, and it gets no ledger of its own -- the reading is the
+  run's `[SUMMARY]` line together with the names of the entries that failed.
 - `debug` is a test that is only meaningful with assertions compiled in: it aborts on purpose,
   or it checks something a Release build removes. It runs only under `--tier debug`, never under
   `fast`, `slow`, `milestone` or `all`, because those four run the Release binary.
@@ -153,6 +164,15 @@ above started is a defect** -- an entry the file declares for this layer that ne
 skipped appears in no summary, so the plan proves less than its file says while printing green -- and
 it names the plan and fails the run. Both numbers are counted, never computed: multiplying by
 `backends.length` reads `7339` for a layer that starts `3404`.
+
+`declared` in that line means *one per entry the runner's loader returns*, and the loader returns
+the copies a `[[sweeps]]` entry generates as well as the entries the files write. At `946b6f4d4`
+the milestone layer's 3539 entries are 246 written entries and 3293 copies of one sweep entry --
+and the same measurement read 3518 / 3272 eleven hours earlier, because the number moves with the
+plans a sweep names, not with the sweep: it is a reading of a commit, never a constant.
+`node scripts/test.js --tier-report --tier milestone` re-measures it and says which part is which.
+The two lines answer different questions about the same total: "What A Layer's Entry Count Is Made
+Of", below.
 
 Immediately before `[SUMMARY]`, every run states the artifact its numbers belong to:
 
@@ -187,9 +207,10 @@ Rules for a new test:
 - Naming a plan **file** as the target runs all its tests, whatever `--tier` says; the layer
   still filters a directory target and the whole tree. This keeps a named slow test reachable
   without `--tier all` and keeps `--tier` meaningful for a broad run.
-- A debug test that expects an abort states `expect_exit` with the abort's code and asserts the
-  message, and also asserts that the "not caught" line is **absent**: the positive form is what
-  makes a missing guard a failure instead of a pass.
+- A debug test that expects an abort states `expect_signal = "ABRT"` (the process dies of the abort,
+  and there is no exit code to compare) and asserts the message, and also asserts that the "not
+  caught" line is **absent**: the positive form is what makes a missing guard a failure instead of a
+  pass.
 
 ## The Debug Build And The Debug Layer
 
@@ -488,10 +509,26 @@ way to run them is to name the plan file deliberately. The ordinary opt selectio
 `feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
 progen plan while `--tier all` runs it.
 
-When no rule matches, or git cannot read the base branch, the whole fast layer runs. `--tier all`
-combines with `--changed` to run the slow tests of directory targets too; a layered plan then runs
-its slow cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list`
-prints the plan targets the changed files select without running them.
+Three ways the selection can come up empty are not the same answer and no longer read the same
+either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
+a change that only touches a class the project keeps out of `--changed` (perf, GC stress, progen)
+-- and the widening is printed as a widening, with the files that caused it and the size of the layer
+it runs. A change with **no file in it** selects nothing and starts nothing, and prints
+`changed: 0 target(s)` beside the size of the layer it did **not** run: an empty target list reaches
+`test/tools/run-tests.mjs#loadPlans` as "no target", and no target is the whole plan tree, so a
+measured-empty selection travels as `--selection-empty` instead of as an absent target. It used to
+widen there: 0 changed files started 336 plan files and printed a `[SUMMARY]` with no failure -- the
+reading a correct selection of one plan gives -- so the number was the only symptom. A base branch, a
+changed-file list or a rule file that cannot be **read**
+is refused with exit 2: the plans the change touches are unknown, so none is selected and no layer
+is run, and the refusal names the base (or the list, or the rules file) that failed and the layer
+it declines to run. `--tier all` combines
+with `--changed` to run the slow tests of directory targets too; a layered plan then runs its slow
+cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list` prints the
+plan targets the changed files select without running them, and `--changed-files <path>` reads the
+changed paths from a file that a caller listed where the base branch was readable: that is how
+`internal/tools/camel-remote.ps1` hands the change to a host that holds the lane's commits but not
+the base branch, and it is the same selection code either way.
 
 A non-plan file under `test/plans/` (a golden, a fixture) selects the nearest directory that
 holds a plan: editing `feat/parse/golden/ast_hashes.txt` runs `feat/parse`, and editing a golden
@@ -519,11 +556,14 @@ the rule, or add the class and its reason to the self-test.
 That check is why the file rules now cover the classes the first rule set could not have known about: the
 `stdlib/<module>.cml` declaration bodies (`feat/modules` plus `feat/compile`) and their computed
 halves in `stdlib/signatures/` (the registry plan, which runs `--verify-ops` and `--verify-doc`),
-the documentation and release-gate scripts (`feat/docs_links`), the debugger race harness
-(`feat/tools/debugger`), exemplars, root Markdown and assets, the public headers under
-`include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The plan-reachability
-check added the case directories whose plans live elsewhere: the loop, macro, JSON, unicode-path,
-print-format and compiler-benchmark cases. `test/perf-baseline.json`
+the documentation and release-gate scripts (`feat/docs_links`), the gate entry and its helpers
+under `internal/tools/` (`feat/docs_links` too, and for the reason the rule states: no plan can run
+a PowerShell gate, but the conflict-marker and citation walkers both read those `.ps1`, `.md` and
+`.json` files, so that is the plan a change there runs and the whole of the guard it gets), the
+debugger race harness (`feat/tools/debugger`), exemplars, root Markdown and assets, the public
+headers under `include/` (mirroring `src/`), the rest of `src/` and the test harnesses. The
+plan-reachability check added the case directories whose plans live elsewhere: the loop, macro,
+JSON, unicode-path, print-format and compiler-benchmark cases. `test/perf-baseline.json`
 and `scripts/perf-gate.mjs` are the one class left without a perf plan on purpose: perf is manual
 (the rule that perf is manual), so a change there must not select a perf plan.
 
@@ -588,7 +628,25 @@ Every `[[tests]]` entry may use these common fields:
 - `args`
   Required in practice. Argument vector passed to `camel`. Variable tokens like `${case}` or `${run_jit}` are expanded before execution.
 - `expect_exit`
-  Optional integer expected process exit code.
+  Optional integer expected process exit code. It and `expect_signal` are one question with one
+  answer: a table that writes both is a plan error, because a process killed by a signal has no exit
+  code to compare.
+- `expect_signal`
+  Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
+  `"SIGABRT"`) or as the number this platform numbers it by (`6`); the three are one expectation.
+  There is no default and no boolean form: an entry that expects a death has to name the signal,
+  because "it dies somehow" is not a reading a reader can check and would pass a death by any other
+  signal. It stands in place of `expect_exit`, so the entry is green when the process dies of
+  exactly that signal and red otherwise, and the failure prints what happened instead
+  (`expected signal SIGSEGV, got signal SIGABRT (rc=134, 0.03 s)`); a signal that did not arrive
+  is `expected signal SIGABRT, got exit 0`. **It is only for a guard that stops the process by
+  design** -- the always-on invariants, which abort on purpose when a precondition does not hold. A
+  crash signal has no place in an expectation: `SIGSEGV` (or a second `SIGABRT`) written here would
+  accept exactly the defect the test exists to find, and it would accept it in the build where the
+  guard is the only instrument. Before this field existed, the only way to record "this
+  run is meant to die" was `known_fail`, which says the run is wrong today and turns the entry green
+  again the day the process stops dying -- the opposite of what the entry is for. See
+  `test/tools/selftest/signal/` for the fixture that pins both directions.
 - `timeout_ms`
   Optional process timeout in milliseconds. Default is `10000`. A timeout is a pass condition, so it
   is a bound only with room under it: the runner fails a test that used more than a quarter of its
@@ -707,8 +765,45 @@ everywhere is written once:
   for the first time (2026-11-02: compiling `modules/transforms` moved `skip 43 -> 10` and
   `known failures 3 -> 6` in the same run). Read the two numbers together before calling it a
   regression.
+- `known_fail_owner`
+  Who is responsible for making a marked case green: a lane (`lane-transforms`) or a person.
+  **Required on every mark**, and the plan is refused when it is loaded if it is missing, naming the
+  plan, the case and the field (`test/tools/run-tests.mjs`, `checkKnownFailMark`). The author's
+  ruling of 2026-11-03 00:30 asks a case that cannot pass today to stay in the plan with three
+  things -- the mark, the owner and the reason -- and the other two used to be prose inside
+  `known_fail_note`, which nothing checked and a review had to remember to read. There is
+  deliberately no default: a default owner would let a case nobody owns pass the check, which is the
+  state the ruling is about. A placeholder (`unassigned`, `tbd`, `nobody`, `待定`) is refused for the
+  same reason. The owner is inherited from `[defaults]` like the mark, and it is printed as
+  `known_fail_owner: …` under every `[XFAIL]`, so it is a field the run reads and not a promise kept
+  in a file.
+- `known_fail_reason`
+  **Required on every mark**, one sentence saying where the case is stuck -- which refusal, which
+  law, which missing slot -- written in one of the three shapes this tree already records walls in:
+  - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
+  - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
+  - the page that decides the question:
+    `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
+
+  It is refused at load with the same refusal the owner gets, and three more shapes are refused with
+  it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
+  wall ("this case does not pass yet"). Each of those records that the case is red, which the mark
+  already said, and leaves the next reader nothing to act on. It is not a replacement for
+  `known_fail_note`: the reason says where the wall is, the note keeps the readings, the counts and
+  the history.
 - `known_fail_note`
   Printed with an `[XFAIL]`: why, and what will fix it.
+- `known_fail_msg`
+  A fragment of the reason a marked test fails with, so the reason is pinned and not only the
+  failure. When a marked test fails and the fragment does not appear in its output, the case stays
+  `fail` and the runner prints
+  `known failure changed its mind: expected "<pinned>", got "<first line>"` (`test/tools/run-tests.mjs`,
+  `executePlans`): a pin whose reason drifted is reported instead of staying a quiet `[XFAIL]`. A
+  fragment identifies the reason -- the words the refusal uses, not a whole message. Absent is legal
+  and pins nothing: `expandBackends` reads the field as `null`, so every mark written before it
+  existed keeps working, and the mechanism grows by pinning cases one at a time rather than by a
+  migration. A mark without this field is therefore still legal; one that carries it is the only kind
+  that can say its reason moved.
 
 `test/tools/selftest/run.mjs` checks these fields on fixture plans, together with the parallel
 ordering (the same status lines as a serial run, tests really overlapping), the serial mark (a
@@ -717,6 +812,11 @@ the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the
 plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
 layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
 path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
+The `known_fail` gate has five plan files of its own under `test/tools/selftest/knownfail/`: four
+ways to be incomplete -- no owner, no reason, a placeholder reason and a reason that names no wall --
+each refused with its file, its case and its missing field named, and one complete entry that loads,
+runs and reports `[XFAIL]` with its owner printed. A default owner or a default reason would make
+the four pass and that check red, which is the direction that matters.
 
 ## Supported Normalizers
 
@@ -806,7 +906,7 @@ virtual environment's interpreter, else `benchmarks/.venv`'s, else PATH's; also 
 
 Behavior-style tests may combine:
 
-- `expect_exit`
+- `expect_exit` (or `expect_signal` in its place: a process ends with a code or of a signal)
 - `expect_stdout_contains`
 - `expect_stdout_exact`
 - `expect_stdout`
@@ -819,6 +919,7 @@ Behavior-style tests may combine:
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
 - `expect_diagnostic_column`
+- `expect_refusal`
 - `verify_script`
 - `verify_script_path`
 - `verify_timeout_ms`
@@ -908,6 +1009,29 @@ The runner parses compiler/runtime diagnostics from merged process output and ca
 
 These fields are independent filters over the parsed diagnostic list.
 
+### `expect_refusal`
+
+A transform's refusal is a value, and this compares the value instead of the sentence:
+
+```toml
+expect_refusal = ["jvp cause=rule function=f uri=math:sin_d"]
+```
+
+The transform writes the machine-readable half of its reading beside the line a reader sees —
+`READING_REFUSAL {"transform":"jvp","function":"f","cause":"rule","uri":"math:sin_d"}` on stderr,
+from `modules/transforms/refusal_readings.h#noteRefusal` — and each entry here names the record
+fields it decides: `transform` (which may be written on its own first, as in the example above),
+`function`, `cause` (the named cause the transform's table spells,
+`refusal_readings.h#RefusalCause`) and the place the refusal names (`uri`, `rule`, `callee`,
+`construct`). A record has to answer every field an entry names; a field an entry does not name is
+not compared. A value with a space is quoted (`construct="a call"`).
+
+The `REINTERP` line is not read by the runner at all: it is what a person reads, and its wording is
+kept, but it is not the criterion. A cause renamed in the table is one edit and no case changes
+colour on the rename; what goes red is a case whose transform stops making the same decision.
+`test/tools/reading-refusal.mjs` is the reader, and `test/tools/reading_refusal/check.py` holds the
+table and the sites together (one word per cause, one site per cause, one record per printed cause).
+
 ## Verification Script Fields
 
 Use exactly one of the following:
@@ -955,6 +1079,25 @@ Available helpers:
 - `assert(condition, message?)`
 - `fail(message?)`
 - `approx(actual, expected, tolerance?)`
+- `ulp(actual, expected, bound?, bits?)` — the assertion a transcendental result is allowed to carry.
+  Design principles 7.1 promises `exp`, `log` and the rest an error of at most a written number of
+  ulps, "not the same bits on every device", so a case that pins such a number bit for bit asserts
+  something the language never promised, and a platform-limited `known_fail` around it hides the
+  real errors that come later. `ulp` answers whether `actual` is within `bound` (default 2) units in
+  the last place of the **declared** value `expected` — the declared value's grid, not the
+  measured one's, so a wrong answer cannot move its own tolerance — at `bits` of precision (default
+  53, the `float`/f64 width; `24` for an `f32` answer). A declared zero, a NaN and an infinity are
+  compared exactly, because 7.1 promises those exactly. `ulpDistance(actual, expected, bits?)`
+  answers the distance itself, for the message a failing assertion should carry.
+
+  The bound is a claim about the program, so it lives in the entry's own `desc` with its
+  derivation (how many chained transcendental steps, and what the licence adds); a number chosen to
+  make the case pass is not a bound. Two rules for using it: **a cross-back-end comparison's
+  reference is the declared value, never another back end** — "A and B agree" is never evidence that
+  a number is right, and folding a tolerance into `backends_agree` would call "both wrong the same
+  way" a pass, which is the trap this rule exists to close; and **an exact operator keeps its exact
+  assertion** — 7.1 promises bit-identity for `+ - * /` and `sqrt` under `#strict`, so a difference
+  there is a defect on any platform and must be neither loosened nor registered.
 - `match(pattern, text?)`
 
 Important payload fields:
@@ -1049,6 +1192,126 @@ sweep: it checks the handle rules of the collector (`docs/technical/36_gc_handle
 against the tests of the modules, so an operator added later is covered as soon as it has a
 test. A test that cannot run under a sweep (it asserts wall-clock time, or which graphs a back
 end compiles) says `sweep = false` with a comment.
+
+## What A Layer's Entry Count Is Made Of
+
+A layer's size is quoted as one number, and one number cannot separate the entries somebody wrote
+from the entries a sweep copies out of them. `node scripts/test.js --tier-report` answers that per
+layer. It reads the plan files through the runner's own loader
+(`test/tools/run-tests.mjs#expandSweeps`, `#loadPlanTests`, `#testTier`), so it needs no build and
+no install, and `--tier <name>` narrows it to one layer:
+
+```
+$ node scripts/test.js --tier-report --tier milestone
+[tier-report] tree <tip> | 366 plan files
+[tier-report] milestone: 246 declared test entries / 3293 derived / 1 [[sweeps]] entry = 3539 total (93% derived)
+[tier-report]   declared: 242 distinct commands (4 repeated, most launched 3 time(s))
+[tier-report]   test/plans/feat/mm/gc_poison_sweep.plan.toml#poison: 3293 copies, 3241 distinct (tool, case, args, envs) commands (52 repeated, most launched 4 time(s)), 3266 distinct command+assertion pairs (27 repeated), from 177 source plan(s)
+```
+
+The first line is the commit the numbers belong to: a tree with uncommitted edits has no tip and
+prints `(dirty: N files)` instead, because what it would read is that commit plus edits nobody
+recorded. `--quiet` prints the layer totals without the per-sweep lines.
+
+- **declared** -- entries a plan file's own `[[tests]]` name for the layer, back ends expanded, as
+  `loadPlanTests` reads them.
+- **derived** -- entries a `[[sweeps]]` entry generates out of other plans' entries.
+- **the third number** -- how many `[[sweeps]]` entries those derived entries come from.
+
+| layer | declared | derived | sweep entries | total | derived share |
+|-------|---------:|--------:|--------------:|------:|--------------:|
+| fast | 8624 | 214 | 1 | 8838 | 2% |
+| slow | 163 | 0 | 0 | 163 | 0% |
+| milestone | 246 | 3293 | 1 | 3539 | 93% |
+| debug | 2 | 0 | 0 | 2 | 0% |
+
+Measured on 2026-11-05 at `946b6f4d4`. Every number here is a reading of a commit: the same
+measurement read 3272 copies (3518 entries) earlier that night and 3273 at `eacdf5b65` eleven hours
+before this one, because a sweep's source set is *whatever the plans it names contain* -- a test
+added to `smoke`, `modules`, `compile`, `linear`, `para`, `trans` or `consistency` adds a copy the
+same day, and nothing announces it.
+
+**A sweep's entry count is a function of the plans it names, not a constant.** Add a test to one of
+those 215 plans and the milestone layer grows by one entry that day: no command reports the growth,
+the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
+split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
+than to the runner, and it is asked in
+`docs/handover/questions/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+
+### The one sweep, and what it expands to
+
+The milestone layer's whole derived part is one entry: the `[[sweeps]]` table of
+`test/plans/feat/mm/gc_poison_sweep.plan.toml#poison`. As the file writes it:
+
+```toml
+name = "poison"
+plans = ["../../smoke", "../modules", "../compile", "../linear", "../para", "../trans",
+         "../consistency/attempt.plan.toml", "../consistency/faults.plan.toml",
+         "../consistency/cleanup.plan.toml", "../consistency/values.plan.toml",
+         "../consistency/match.plan.toml"]
+exclude = ["modules/autodiff", "modules/onnx"]
+args = ["--gc-check", "poison"]
+skip_args_prefix = "--gc-"
+timeout_scale = 20
+fast_sample = 1
+risk_tags = ["collections", "closures", "iterators", "comprehension", "loops", "collect",
+             "higher_order", "rules"]
+risk_sample = 3
+```
+
+Its dimensions, measured through `test/tools/run-tests.mjs#expandSweeps`:
+
+| dimension | count |
+|-----------|------:|
+| `plans` entries (directories and plan files) | 11 |
+| plan files those entries reach | 220 |
+| left out by `exclude` (`modules/autodiff`, `modules/onnx`) | 5, leaving 215 |
+| source plans with at least one eligible test | 186 (29 contribute none) |
+| eligible source tests -- one copy each | 3507 |
+| tests those 215 plans declare, left out as ineligible | 1902 of 5409 (not `behavior`/`snapshot`, `sweep = false`, `known_fail`, own `--gc-` option, or not a run) |
+| copies sampled into the fast layer (`fast_sample = 1`; 14 of the 16 plans that carry a `risk_tags` tag keep 3, the other 172 keep 1) | 214 |
+| copies the sample did not take -- **the milestone layer** | 3293 |
+
+So the 93% is not a layer that grew by thousands of decisions: it is one decision -- "every
+eligible test of those 215 plans runs once more under `--gc-check poison`" -- priced at 3293 runs.
+
+**If that sweep were collapsed into one entry, the milestone layer would read 247 entries:**
+
+```
+3539 - 3293 + 1 = 247   (246 written entries + 1 sweep entry)
+```
+
+and the same arithmetic on the earlier reading is `3518 - 3272 + 1 = 247`, because the written part
+is 246 in both.
+
+### The copies are not thereby redundant, and this report does not decide that
+
+"All 3293 copies come from one entry" and "3293 copies are 3293 claims" can both be true, and only
+one of them being false makes a defect. A count of provenance cannot tell them apart, so the report
+also counts what the copies launch: `(tool, case, args, envs)` with the variables resolved the way
+`test/tools/run-tests.mjs#runOneTest` resolves them, and then `(command, the assertions made about
+it)`.
+
+- 3293 copies launch **3241 distinct commands**: 52 copies launch a command another copy already
+  launches.
+- of those, 27 also assert the same fields: **27 copies are one assertion paid for twice**.
+- that is the rate the written entries already repeat at, not a rate the sweep creates: the fast
+  layer's 8624 declared entries are 8469 distinct commands (155 repeated, 1.8%), and the copies
+  repeat at 1.6%. The mechanism is in the source plans -- `linear.captured_writes` names one case
+  once for `opt` and once for `simplify` -- and the sweep copies both halves. Fixing it in the
+  source plan fixes both.
+
+**The trap this reading exists in spite of**: count the argument lists *as written* and the same
+sweep reads 2233 distinct with 1060 repeats. `${backend}` is a pass list from `test/vars.toml`
+(`run_nvm`, `run_fvm`, ...), so the `.nvm`/`.fvm`/`.jit` copies of one test spell it identically
+while running different pipelines. A count of the written words is not a count of what runs, which
+is why `scripts/tier-report.mjs#commandOf` expands through `test/tools/run-tests.mjs#expandArgs`
+instead of comparing text.
+
+What the report cannot answer is whether 3293 poisoned runs of 3241 commands is the right price for
+the handle rules it checks -- that is a ruling about design, not a reading. Nothing here cuts,
+merges, re-tiers or deletes a plan entry: the layers, the plan files and every `tier` line are
+exactly as they were, and the report is a measurement of them.
 
 ## Runner environment
 

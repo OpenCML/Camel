@@ -21,11 +21,14 @@ differentiating transform reads `rulesets.jvp`, a pullback `rulesets.transpose`,
 
 **No operator is bound to a key by hand any more.** The key a rule is filed under is read off the
 operator itself (`camel/core/forward.h#ruleKeyOf`): `:op/add_d` is written `+` with two operands
-because that is what `add` means, and `tensor:sum_axis` is written `sum_axis(...)` because that is
-the operator's own name, at whatever count the family filed it under. Two operators cannot be written
-that way, and those two are the whole of `ruleKeyExceptions()`: `:op/idx_arr` (`xs[i]` is a bracket
-form with no token) and `tensor:multiply` (`*/2` is already `:op/mul_d`'s key). With
-`forward=true` the pass prints those two lines and the sentence saying how the rest is derived, so an
+because that is what `add` means, and `tensor:pick_at` is written `pick_at(...)` because that is
+the operator's own name, at whatever count the family filed it under. Eight operators cannot be written
+that way, and those eight are the whole of `ruleKeyExceptions()`: `:op/idx_arr` (`xs[i]` is a bracket
+form with no token), `tensor:multiply` (`*/2` is already `:op/mul_d`'s key), and the six axis
+reductions, whose URI keeps an identity of the implementation while the one spelling a program writes
+is the whole reduction's name with the axis and the flag in `<>` (`sum<axis, keepdims>(xs)`, author's
+ruling of 2026-11-05). With
+`forward=true` the pass prints those eight lines and the sentence saying how the rest is derived, so an
 exception is never silent -- and this case pins both the lines and the rules their keys resolve to.
 
 Nothing in this file counts rules. The two halves of the same fact are checked against each other: the
@@ -151,12 +154,29 @@ check(
 code, bound = run(["std::rulesets", "forward=true"])
 check(code == 0, f"the program exits 0 asking for the keys (got {code}):\n{bound}")
 
+# The count is eight: two whose reason is a spelling, and the six axis reductions, whose reason is
+# that a reduction over an axis has one name -- the whole reduction's -- with the axis and the flag in
+# `<>` (author's ruling, 2026-11-05). The pair went three -> two on 2026-11-03: `:op/ltod` was the
+# third earlier the same day (it was bound through the table to `float_of_int/1`, because `float` at
+# one operand is a spelling every conversion to a double shares), and it is derived now -- a
+# conversion's key is the destination's spelling the name ends in (`ltod` -> `float`, one operand),
+# and the family holds one rule per operand type under it, which the engine dispatches between.
 exceptions = [line for line in bound.splitlines() if line.startswith("RULEKEY-EXCEPTION ")]
-check(len(exceptions) == 2, f"exactly two operators have a key that cannot be derived: {exceptions}")
+check(len(exceptions) == 8, f"exactly eight operators have a key that cannot be derived: {exceptions}")
 keys = [(line.split()[1], line.split()[3]) for line in exceptions]
 check(
-    keys == [(":op/idx_arr", "index_into/2"), ("tensor:multiply", "mul_tensor/2")],
-    f"the two are the array index and the array product, at the keys their rules are filed under: {keys}",
+    keys
+    == [
+        (":op/idx_arr", "index_into/2"),
+        ("tensor:argmax_axis", "argmax/1"),
+        ("tensor:argmin_axis", "argmin/1"),
+        ("tensor:max_axis", "max/1"),
+        ("tensor:mean_axis", "mean/1"),
+        ("tensor:min_axis", "min/1"),
+        ("tensor:multiply", "mul_tensor/2"),
+        ("tensor:sum_axis", "sum/1"),
+    ],
+    f"the two spellings and the six axis reductions, at the keys their rules are filed under: {keys}",
 )
 check(
     all(" because " in line and len(line.split(" because ", 1)[1]) > 20 for line in exceptions),
@@ -169,6 +189,13 @@ check(
 check(
     any(":op/mul_d" in line and "already" in line for line in exceptions),
     f"the product's reason is that `*/2` is already the scalar product's key: {exceptions}",
+)
+check(
+    all(
+        any(f"{name}<axis, keepdims>(xs)" in line for line in exceptions)
+        for name in ("sum", "mean", "max", "min", "argmax", "argmin")
+    ),
+    f"each axis reduction's reason is the one name it is written with, in `<>`: {exceptions}",
 )
 check(
     any(line.startswith("RULEKEY derivable:") for line in bound.splitlines()),

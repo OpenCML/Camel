@@ -1,5 +1,5 @@
 /**
- * Shape diagnostic of `mean_axis`: statically known shapes conflict, so compilation fails at the
+ * Shape diagnostic of `mean<0, false>`: statically known shapes conflict, so compilation fails at the
  * call with both shapes in the reason.
  */
 

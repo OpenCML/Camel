@@ -1,5 +1,5 @@
 {
-    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads ; a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches (or whose plans cannot be found) falls back to the whole fast layer; `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too: every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
+    "comment": "Rules for `node scripts/test.js --changed`: the plans a change runs. Both kinds are applied to every changed file. A directory rule (`directoryRules`) looks the path up under test/plans/feat and names the deepest plan directory or plan file that mirrors it (modules/tensor/ops.cpp -> feat/modules/tensor, test/cases/compile/enum/x.cml -> feat/compile/enum.plan.toml). A file rule (`rules`) then adds the plans outside that mirrored tree that the same change can also break (modules/tiles -> test/plans/gpu/tiles*, modules/onnx -> the exporter in feat/trans); the first matching file rule applies to a file, so keep them from specific to general. A rule entry is a path under test/plans, { \"plan\": path, \"layer\": true } or { \"plan\": path, \"ownCases\": true }: an ownCases plan is added only when the changed file is one of the `case` paths it names, so a slow plan cannot ride a shared directory into an edit it never reads ; a layered plan stays a named target but follows `--tier` like a directory, so the slow cases an ordinary change must not run (the PyTorch comparisons of autodiff and onnx) are filtered while the fast cases still run; `\"layer\": true` on the rule is the default for all its entries. A rule with \"self\": true selects the changed plan file itself (editing a plan runs that plan), except for the paths in \"except\": those fall back to the fast layer instead of running perf, GC stress, progen or PyTorch. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. A change no rule matches widens to the whole fast layer, and says so with the files it matched and the size of the layer it runs; a change with no file in it selects no plan and runs none: `test/tools/run-tests.mjs#loadPlans` reads an empty target list as the whole plan tree, so an empty selection travels as `--selection-empty`, nothing starts and the run prints `changed: 0 target(s)`. That zero is also the only thing that names what the old fallback ran, and the old fallback did not run `the fast layer` either: measured 2026-11-05, 0 changed files started 336 plan files and 8879 test entries, where `npm run test` (the smoke and feat targets) is 330 plan files and 8858 -- the 6 extra are `test/plans/gpu`, so `widens to the whole fast layer` was a wrong name for a set larger than `npm run test`; a base branch, a changed-file list or this file that cannot be read is refused with exit 2 instead -- an unknown selection never becomes a layer. Every `--changed` reading names the base it was taken against, because a reading with no base is not a measurement: on 2026-11-05 the default base moved from 8e2159034 to 94cdfd1be (49 commits) inside one session, and the same tree then selected 36 plans against the default base and 4 against the pinned one -- the difference was other lanes' files, which is not an empty selection but a full one. `--changed --list` prints the selection without running it. The base branch is origin/develop; CAMEL_TEST_BASE overrides it. A tracked file that matches no rule is a hole, not a silent fallback: when a change also touches a file a rule matches, the unruled file contributes nothing. test/tools/selftest/run.mjs therefore fails on such a file unless it is on its allowlist, which names only the classes the project forbids (perf, GC stress, progen, PyTorch) or that no plan reads (vendored code, packaging, CI configuration). Deliberately not selectable: test/plans/perf/**, the GC-stress plans (feat/mm/gc*, gpu/tiles_regions) and progen (feat/opt/progen.plan.toml) -- the project forbids those on a shared host, so a change there runs the fast layer and the report says so instead of wiring them in. The same self-test now checks the other direction too: every plan file under test/plans must be selected by at least one of the case paths it names, so a plan --changed can never reach cannot hide behind cases that select another plan; plans the policy keeps unselectable (perf, GC stress, progen, the debug layer) and a sweep-only plan are the only exemptions. Update this file when a subsystem grows a plan of its own; see docs/test-plans.md, 'Selecting plans from a change'.",
     "directoryRules": [
         {
             "comment": "The graph-space gradient case is a fast mm case that lives in the GC directory: the generic test/cases rule below resolves that directory to feat/mm/gc.plan.toml, the slow GC-stress plan, which does not run it. This exact path comes first and names no fall-through, so the file rule for the case selects feat/mm/graph_space instead.",
@@ -49,18 +49,37 @@
     ],
     "rules": [
         {
+            "comment": "The progen seed 23 program of the splice defect `a1723fbb9` fixed (test/cases/opt/inline_cycle): one program, one plan. It is a file rule and not a directory rule for the reason the adb67e081 rule below is one -- the directory rule for test/cases mirrors the segments below test/cases and would look for `test/plans/feat/opt/inline_cycle`, which is a plan file, so nothing would reach it. The plan is fast, so the rule carries no layer.",
+            "paths": ["test/cases/opt/inline_cycle/"],
+            "plans": ["feat/opt/inline_cycle.plan.toml"]
+        },
+        {
+            "comment": "The reduced programs of the archiving result adb67e081 (test/cases/opt/adb67e081): the reductions of the finder's report, kept unedited. Two plans run them, and both are named here: `feat/opt/adb67e081` holds the programs whose defect is still open (work owed, so its `fail` count is the debt) and `feat/compile/fold_arms` holds `rc05_seed104`, the one this lane fixed. The rules come first in this list, before the general ones: the directory rule for test/cases below mirrors the segments below test/cases and would look for `test/plans/feat/opt/adb67e081`, which is a plan file, so nothing would reach it.",
+            "paths": ["test/cases/opt/adb67e081/"],
+            "plans": ["feat/opt/adb67e081.plan.toml", "feat/compile/fold_arms.plan.toml"]
+        },
+        {
             "comment": "The corpus sweep tool: its case is the tool itself, so a change there selects the plan that runs it (a slow plan, so an ordinary change filters it out under --tier fast).",
             "paths": ["test/tools/cml-sweep.mjs"],
             "plans": ["feat/trans/cml_sweep.plan.toml"]
+        },
+        {
+            "comment": "The probe cases of the canonical pack spelling (test/cases/probe): the programs that must still be refused and the accepted twins written with the canonical spelling. They are named as file rules because the three plans sit in test/plans/probe/, which no directory under test/plans/feat mirrors, and a directory rule cannot name them: its plan path is looked up by the segments below test/cases/probe/, and these cases are directly in that directory, so the lookup has no segment to add and answers with no plan. Naming the three files is the rule the self-test asks for -- every plan under test/plans must be selected by a case path it names.",
+            "paths": ["test/cases/probe/"],
+            "plans": ["probe/dpack.plan.toml", "probe/dpack5.plan.toml", "probe/dpack5ok.plan.toml"]
         },
         {
             "comment": "The `std::cml` round-trip comparator: its case is the tool itself, so a change there selects the plan that runs it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/tools/roundtrip-compare.mjs"],
             "plans": ["feat/trans/cml.plan.toml"]
         },        {
+            "comment": "The plan-normaliser guard: its case is the tool itself, so a change there selects the plan that runs it. Its two fixture trees under test/tools/selftest/plan-normalizers are read by that plan as well, which is why the selftest rule below names it too. The plan is fast, so the rule carries no layer.",
+            "paths": ["test/tools/check-plan-normalizers.mjs"],
+            "plans": ["feat/tools/plan_normalizers.plan.toml"]
+        },        {
             "comment": "The parse-check harness, the selftest fixtures and the load-class guard: a change here runs smoke, the runner plan, the load-class plan (its cases are the selftest fixtures) and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
             "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/", "test/tools/check-load-class.mjs"],
-            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", "feat/tools/plan_normalizers.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
         },
         {
             "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
@@ -86,6 +105,11 @@
             "comment": "The other test harnesses (cppexec, parsecheck, jitcov, progen, gcbench, ...): no plan tests a harness directly, and naming the plan that invokes one would mean naming most of feat/. The smallest honest check is smoke plus the runner plan, which is what a harness change can break first. The specific debugger and LSP clients above are narrower because their plans own them.",
             "paths": ["test/tools/"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml"]
+        },
+        {
+            "comment": "The gate entry and the helpers beside it (internal/tools): the tools that move a tree to the build host, build and run plans there, the local build and test helpers, the watcher, the settings loader, the example settings file and their README. No plan exercises them -- they are the harness that runs the plans, they run on the workstation under PowerShell, and the build host has no pwsh -- so there is no behavioural plan to name, and naming smoke here would be the shape of a guard that guards nothing. They are still read, though, which is why this is a rule and not a rule-less class: scripts/conflict-markers.mjs walks every tracked file whose extension it knows (.md, .ps1 and .json are all in that set) and scripts/check-doc-links.mjs --citations reads .ps1 and .md from the repository root, and both are tests of feat/docs_links. Measured on 2026-11-04: one hunk head appended to internal/tools/watch-fsh-dev.ps1 is reported as internal/tools/watch-fsh-dev.ps1:71, and one stale `*.md` citation in a .ps1 or a .md under internal/tools is reported by name. So `--changed` on a gate-script edit runs feat/docs_links, and a merge left unfinished or a citation that stops resolving in one of these files goes red there. That is the whole of what the plan sees: it does not verify what the gate does. A file added here that neither walker reads is a new hole, and must not be read as covered because this rule exists.",
+            "paths": ["internal/tools/"],
+            "plans": ["feat/docs_links.plan.toml"]
         },
         {
             "comment": "FastVM and the other schedulers.",
@@ -118,9 +142,9 @@
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
-            "comment": "GCT/GIR construction, encoding and the graph printer.",
+            "comment": "GCT/GIR construction, encoding and the graph printer. `src/compile/gir/builder_support.h` is where a node handle is turned back into the draft it names and where that identity is checked, so the witness of the identity (`feat/runtime/draft_node_owner.plan.toml`) runs with it.",
             "paths": ["src/compile/"],
-            "plans": ["smoke", "feat/compile", "feat/consistency", "feat/trans"]
+            "plans": ["smoke", "feat/compile", "feat/consistency", "feat/trans", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "The front end: lexer, parser, AST and diagnostics.",
@@ -128,9 +152,9 @@
             "plans": ["smoke", "feat/parse", "feat/compile", "feat/consistency"]
         },
         {
-            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate.",
+            "comment": "Values, types, the collector and the runtime shell. The array type's dimensions live here, so its self-test runs too. The direct-connection ledger of graph-store step 2 b is checked here as well: its three numbers count the references to `GraphDraft`, and `src/runtime/` is where both the storage and the transaction live, so this is the directory a commit can add a direct connection from. The plan is fast and cheap (one `git grep` pass), so it rides along rather than waiting for its own gate. The witness of a node handle's identity rides along for the same reason: the epoch a handle names its draft by is minted in `src/runtime/draft.cpp`.",
             "paths": ["src/core/", "src/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "Execution, entry arguments and the standalone bridge.",
@@ -148,9 +172,9 @@
             "plans": ["smoke", "feat/parse", "feat/compile"]
         },
         {
-            "comment": "The compiler and graph headers.",
+            "comment": "The compiler and graph headers. `include/camel/compile/gir/draft_graph_builder.h` is the only door from a handle to the builder that owns it, so the witness of that identity runs with it.",
             "paths": ["include/camel/compile/"],
-            "plans": ["smoke", "feat/compile", "feat/trans"]
+            "plans": ["smoke", "feat/compile", "feat/trans", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "The pass API headers: the translation, optimization and scheduler passes.",
@@ -158,9 +182,9 @@
             "plans": ["smoke", "feat/trans", "feat/opt", "feat/linear"]
         },
         {
-            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the src/ one does.",
+            "comment": "The core value/type headers and the runtime headers. The array type's dimensions live here, so its self-test runs too. The ledger's `files`/`references` count is partly a header count (`include/camel/runtime/draft.h`, `draft_session.h`, ...), so this rule names the ledger plan for the same reason the src/ one does. `include/camel/runtime/node_ref.h` is where a handle's identity is written down -- the address and the epoch -- so the witness of it runs here too.",
             "paths": ["include/camel/core/", "include/camel/runtime/"],
-            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml"]
+            "plans": ["smoke", "feat/linear", "feat/consistency", "feat/mm", "feat/compile/type_array.plan.toml", "feat/runtime/graph_draft_ledger.plan.toml", "feat/runtime/draft_node_owner.plan.toml"]
         },
         {
             "comment": "The executor and entry-argument headers.",
@@ -197,7 +221,14 @@
             "comment": "Automatic differentiation. `layer` is true because five slow cases compare gradients against PyTorch: --tier fast runs the fast autodiff cases and filters those.",
             "paths": ["modules/autodiff/", "test/cases/modules/autodiff/"],
             "layer": true,
-            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml"]
+            "plans": ["feat/modules/autodiff.plan.toml", "feat/modules/autodiff_inspection.plan.toml", { "plan": "feat/compile/rules_angle_args.plan.toml", "ownCases": true }]
+        },
+        {
+            "comment": "The showcase's first-step gradient: `feat/showcase_s2.plan.toml` reads one case under test/cases/compile/transforms/, which the directory rules mirror to feat/compile/transforms.plan.toml, and it sits beside the feat/ plans rather than in that mirrored directory, so no case path selected it and `--changed` could never reach it. `ownCases` keeps the rule from riding every edit in that directory into a plan that reads one program. This and the `feat/compile/rules_angle_args.plan.toml` entry above are the author's 2026-11-03 ruling on the red self-test carried out: the two names the self-test reports are a rule missing from this file, and the runner has nothing to do with it.",
+            "paths": ["test/cases/compile/transforms/"],
+            "plans": [
+                { "plan": "feat/showcase_s2.plan.toml", "ownCases": true }
+            ]
         },
         {
             "comment": "Tensor operators and shapes: the tensor plans, the index/operator semantics plans, the thread budget (the pool and the library GEMM share one number), the numeric licence that the library path is allowed under, and autodiff (layered, for the same PyTorch reason), because a shape or operator change shows up in gradients.",
@@ -331,7 +362,17 @@
             "plans": ["feat/gate/conformance.plan.toml"]
         },
         {
-            "comment": "The other build/dev scripts (build.js, format.js, collect-out.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
+            "comment": "The build stamp and the -NoBuild guard: build_stamp drives scripts/build-info.js on a fake checkout, and the option record it compares comes from scripts/common.js (with scripts/cmake-opts.js reading the same values for the -D flags) and is written by scripts/collect-out.js at the end of every build. The general rule below sends scripts/ to smoke, which never reads the stamp.",
+            "paths": ["scripts/build-info.js", "scripts/common.js", "scripts/cmake-opts.js", "scripts/collect-out.js"],
+            "plans": ["feat/tools/build_stamp.plan.toml"]
+        },
+        {
+            "comment": "The bisect driver: feat/tools/camel_remote_entry is the only reader of `#parseArgs`' wrapper default, and the general rule below sends scripts/ to smoke, which never starts a bisect. Without this rule a change that moved the default back to the copy beside the worktrees would run a plan that cannot see it -- the reading the case pins would be selected only when the case itself was edited.",
+            "paths": ["scripts/bisect-merge.mjs"],
+            "plans": ["feat/tools/camel_remote_entry.plan.toml"]
+        },
+        {
+            "comment": "The other build/dev scripts (build.js, format.js, debug.js, ...): every plan runs the binary they build, but no plan reads them. Smoke is the smallest check that the toolchain still produces a working camel. scripts/perf-gate.mjs is covered here too: smoke does not run a perf plan.",
             "paths": ["scripts/"],
             "plans": ["smoke"]
         },
@@ -498,6 +539,11 @@
             "comment": "The judgement programs are the corpus of open design questions: the cpp harness reads one of them through test/tools/cppexec/expect.txt, and the translation plan runs that harness. The README and the findings index are documentation of the manual progen tool and are on the self-test's rule-less allowlist.",
             "paths": ["test/cases/opt/progen/judgement/"],
             "plans": ["feat/trans/cpp.plan.toml"]
+        },
+        {
+            "comment": "The reduced seed 8 program of the branch-arm refusal (`std::opt` on the progen batch, `JOIN 113 reads GATE 217` before the reduction): it lives in the progen corpus, whose directory rule above selects nothing, so the fast plan that runs it is named here. Without this rule the plan would be one `--changed` can never reach, which is the hole the same case path is meant to close.",
+            "paths": ["test/cases/opt/progen/seed8_join_reads_gate.cml"],
+            "plans": ["feat/opt/progen8_arm.plan.toml"]
         },
         {
             "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",

@@ -1,0 +1,70 @@
+// Step 1 of growing the block into a Transformer: two attention blocks, the second one's input being
+// the first one's output.  Six parameters each, so twelve; the first block's output is a `[2, 1]`
+// value, which is exactly the shape the second block's projections take.
+//
+//     o1 = softmax(q1 k1^T / sqrt(2) + mask) · (x wv1)      [2, 1]
+//     o2 = softmax(q2 k2^T / sqrt(2) + mask) · (o1 wv2)     [2, 1]      loss = sum(o2)
+//
+// Fifty Adam steps at rate 0.002, differentiated by the engine's `with_grad`; the optimizer is the
+// library's own (`nn.adam`, `nn.adam_state`), so the loop carries the parameter tree and the state
+// it builds rather than twelve numbers and their moments.
+//
+//     camel showcase/c3-char-transformer/grow/stage1_two_blocks.cml
+//     python showcase/c3-char-transformer/baseline/grow.py --stage 1
+import { softmax, sum, transpose } from tensor
+import { adam, adam_state } from nn
+import { with_grad } from autodiff
+
+type Model = {
+    wq1: float[...],
+    wk1: float[...],
+    wv1: float[...],
+    wq2: float[...],
+    wk2: float[...],
+    wv2: float[...]
+}
+
+func mask(): float[...] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+with <m: Model>
+func block(x: float[...]): float {
+    let x1 = x
+    let q1 = x1 @ m.wq1
+    let k1 = transpose(x1 @ m.wk1)
+    let a1 = softmax<1>(q1 @ k1 * 0.70710678118654752 + mask())
+    let o1 = a1 @ (x1 @ m.wv1)
+    let q2 = o1 @ m.wq2
+    let k2 = transpose(o1 @ m.wk2)
+    let a2 = softmax<1>(q2 @ k2 * 0.70710678118654752 + mask())
+    return sum(a2 @ (o1 @ m.wv2))
+}
+
+func initial(): Model {
+    return {
+        wq1: [[1.0], [0.5]] as float[2, 1],
+        wk1: [[0.5], [1.0]] as float[2, 1],
+        wv1: [[1.0], [-1.0]] as float[2, 1],
+        wq2: [[0.5]] as float[1, 1],
+        wk2: [[1.0]] as float[1, 1],
+        wv2: [[0.75]] as float[1, 1]
+    }
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let model0 = initial()
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
+        while step < 50
+        do {
+            let (value, g) = with_grad(block)<m>(x)
+            let next = adam(m, g, opt, 0.002)
+            let nlog = log + `stage1 step=${step + 1} loss=${value:.12f}` + "\n"
+            return (next.0, next.1, step + 1, nlog)
+        }
+    log->print
+    let last = with_grad(block)<final>(x).0
+    `stage1 done steps=${steps} last=${last:.12f}`->println
+    return 0
+}

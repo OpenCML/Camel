@@ -1,0 +1,33 @@
+// A constant on a value operand of an `add` must not be mistaken for an operand that did not arrive.
+//
+// `f(x) = 5.0 + x * 7.0` and `g(x) = x * 5.0 + x * 7.0` are the same shape to every reader, and the
+// second one always worked. The first was refused by `split` with "an operand of the node is not
+// reachable from the half's exit": the backward half asks for every data input of the node it copies,
+// a constant is a `DATA` node that is never in the copied set and never crosses the cut, and so a bare
+// `5.0` feeding `:op/add_d`'s value port read as unreachable. A constant has no producer -- either half
+// can write it again -- so it is taken as available (`modules/transforms/split.cpp`).
+//
+// Both answers are the exact slopes: `d/dx (5 + 7x) = 7`, `d/dx (5x + 7x) = 12`.
+//
+// `grad` differentiates the first `with` parameter (design principles 9.9), so each function is
+// read a second time through a `with` one: `f_at()` is `f` at the value handed in, and its gradient
+// is the slope above.
+import rulesets.jvp
+import rulesets.transpose
+import { grad } from vjp
+
+func f(x: float): float { return 5.0 + x * 7.0 }
+
+func g(x: float): float { return x * 5.0 + x * 7.0 }
+
+with <x: float>
+func f_at(): float { return f(x) }
+
+with <x: float>
+func g_at(): float { return g(x) }
+
+func main(): int sync {
+    println(grad(f_at)(2.0))
+    println(grad(g_at)(2.0))
+    return 0
+}

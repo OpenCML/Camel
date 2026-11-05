@@ -1,0 +1,33 @@
+// A lambda's rest parameter read *as a value* -- not spread into a call, but indexed.
+//
+// `xs` in the body of `(...xs) => ...` is the tuple of the parameters the position's function type
+// gave the lambda, and `xs.[0]` is a read of one of them. Until 2026-11-05 that read reached the
+// scheduler and killed the process:
+//
+//     Camel Invariant Violation: !normInputs.empty()
+//     Reading   : FILL node must have one source input.
+//     Location  : ../src/passes/sched/nodevm/nodevm.cpp(519)   (NodeVMSchedPass::call)
+//
+// The tuple was built by linking its members as `With` inputs and nothing else, and a FILL reads the
+// shape it fills through its `Norm` input -- the construction `fillStaticValues` uses for every other
+// tuple it builds. Spreading never noticed: `forward(...xs)` is answered at build time, so the node
+// never reached the scheduler, which is why the case written for spreading was green while reading the
+// same pack was not.
+//
+// The two calls are the test: the answer has to come from the arguments, not from the shape of the
+// program, so `small` and `big` are the same lambda called through two different functions.
+func two(g: (a: float, b: float) => float): float {
+    return g(1.0, 2.0)
+}
+
+func twenty(g: (a: float, b: float) => float): float {
+    return g(10.0, 20.0)
+}
+
+func main(): int sync {
+    let small = two((...xs) => xs.[0] + xs.[1])
+    let big = twenty((...xs) => xs.[0] + xs.[1])
+    println(small)
+    println(big)
+    return 0
+}

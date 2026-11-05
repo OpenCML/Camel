@@ -1,0 +1,34 @@
+// `relu`'s gradient through the engine: the mask, and the number the library's own rule must match.
+//
+// `relu(x) = maximum(x, 0)` has no slope where `x <= 0` and slope one where `x > 0`, so the gr
+// gradient of `sum(relu(w))` is the mask itself -- one number per element, `1.0` or `0.0` -- and the
+// input below holds both signs and the boundary:
+//
+//     x = [-2.0, 0.0, 3.0, -0.5]   ->   d/dx = [0.0, 0.0, 1.0, 0.0]
+//
+// The engine takes this mask from its own rule (`reluVjp`, `modules/tensor/ops/elementwise_ops.cpp`,
+// registered by `modules/tensor/ops/vjp.cpp#setVjp`), which asks `y > 0` of the *output* -- the same
+// set as `x > 0`, because `relu` maps everything at or below zero to zero. The zero at `x = 0.0` in
+// the reading is therefore not an accident of this program: the engine says the slope there is zero.
+//
+// The library's side is the neighbouring `relu_gradient_through_the_library.cml`, which is what the
+// deletion audit's D1 asks for -- `relu` carrying a rule of the library's own
+// (`stdlib/rulesets/jvp.cml#jvp_relu`, `stdlib/rulesets/transpose.cml#relu_t`). The two readings are
+// compared element by element in the library case; this one only pins the engine's answer.
+//
+//     camel test/cases/compile/transforms/relu_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { relu, sum } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9): one array, masked.
+with <w: float[]>
+func total(): float {
+    return sum(relu(w))
+}
+
+func main(): int sync {
+    let slope = grad(total)
+    let d = slope<[-2.0, 0.0, 3.0, -0.5] as float[]>()
+    `relu engine dL/dw={}`->format<d>->println
+    return 0
+}

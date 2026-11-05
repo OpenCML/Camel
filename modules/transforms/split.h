@@ -50,20 +50,33 @@
 #include "camel/core/source/ids.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
 
 #include <iosfwd>
+#include <span>
 #include <string>
 #include <vector>
 
 namespace camel::transforms {
 
-/// The two graphs `split(f)` answers with, as types: `(forward, backward)`, the pair the call's
-/// result is. `why` says why there are none when the function is outside what the step takes.
+/// The two halves of a lifted function, as types. `split(f)` answers the **forward** half: calling it
+/// gives the value and the linear function `lin` closed over the residuals. So `forward` is
+/// `(values...) => (result, lin)`, `backward` is `lin`'s own type `(tangents...) => tangent` -- with no
+/// residual position in it -- and `closure` is the layout of `lin`'s closure tuple, one member per
+/// residual, which the build reads off the backward graph. `pair` is the type the call `split(f)`
+/// answers with, i.e. the forward half. `why` says why there are none when the function is outside
+/// what the step takes.
+///
+/// The **forward** half is the one that carries the source's `with` list; `backward` carries none
+/// (author, 2026-11-03 15:15). A `with` value the backward half reads is a residual, so it arrives
+/// in `lin`'s closure, and `lin` stays an ordinary function of the tangents -- which is what makes
+/// `transpose(lin)` the declared `Pullback<F>` `(ct) => (..Tangent<ParamsOf<F>>)`.
 struct SplitHalves {
-    camel::core::type::FunctionType *forward   = nullptr;
-    camel::core::type::FunctionType *backward  = nullptr;
-    const camel::core::type::TupleType *pair   = nullptr;
+    camel::core::type::FunctionType *forward    = nullptr;
+    camel::core::type::FunctionType *backward   = nullptr;
+    const camel::core::type::TupleType *closure = nullptr;
+    const camel::core::type::Type *pair         = nullptr;
     std::string why;
 };
 
@@ -72,25 +85,42 @@ struct SplitHalves {
 /// the function is not of that shape.
 SplitHalves splitHalvesOf(camel::core::type::FunctionType *function);
 
-/// The halves when the residual tuple is known -- which it is as soon as the *graph* is in hand,
+/// The halves when the residuals are known -- which they are as soon as the *graph* is in hand,
 /// because which values cross the cut is a property of the body (`residualsOf`). `split` builds its
-/// halves with this one, so the identity graph's forward half answers `(result, ())` and
-/// `f(x, y) = x*x*y`'s answers a three-member tuple. `splitHalvesOf(function)` is the same call with
-/// the placeholder a caller that has only types can know: one slot per value parameter, the shape the
-/// operator resolver checks the call site against.
+/// halves with this one, so `lin` captures the values the graph names: none for the identity graph,
+/// five for `f(x, y) = x*x*y`. `splitHalvesOf(function)` is the same call with no graph, i.e. an empty
+/// closure -- the shape the operator resolver checks the call site against, since a signature has
+/// nothing to name.
 SplitHalves splitHalvesWith(
     camel::core::type::FunctionType *function, camel::core::type::Type *residuals);
 
 /// One residual: a value the forward half computes and the backward half reads, so that the cut
-/// between the two graphs carries it instead of recomputing it.
+/// between the two graphs carries it instead of recomputing it. A `with` port the backward half reads
+/// is one of these even though nothing computes it: the forward half holds the port that receives the
+/// value, and that port is what crosses.
 struct Residual {
-    /// The node of the lifted graph that computes the value -- a parameter port, or a node the
-    /// forward half keeps.
+    /// The node of the lifted graph that computes the value -- a parameter port, a `with` port, or a
+    /// node the forward half keeps.
     camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
     camel::core::type::Type *type      = nullptr;
     /// The parameter it is the value of, when it is a parameter; `kNotAParameter` when it is a value
     /// the forward half computes.
     size_t parameter = 0;
+/// When this residual is the **linear half** of a call whose callee answers a pair: `node` is the
+    /// call, and `type` is that half's type -- the callee's own backward half, `(tangents) => tangent`,
+    /// with the values it reads in its closure. Nothing the callee computes crosses as a value: the
+    /// call site never sees the residuals of `g`'s body (author, 2026-11-03 17:55), it sees `lin_g`.
+    /// The two halves reach it differently: the forward half gets it as the second component of the
+    /// call it placed (`ACCS 1`), and the backward half **calls** it on the tangents the source call
+    /// passed, which is one indirect call where the source had one direct one.
+    bool linearHalf = false;
+    /// True when the value is computed **from the loop the cut is about to build**, so it does not
+    /// exist until that loop has run (author, 2026-11-03 11:10: 凡是由前一半循环的输出算出来的残差，
+    /// 在循环建好之后再取). The forward half takes such a residual *after* the loop it made and after
+    /// seeding the cell's projections; an unflagged residual is computed before the loop. Only the
+    /// loop's cut uses the flag, and it says where the copy goes -- not what the closure holds: a
+    /// member is one value either way, and the closure's order is invariants, then these, then the tape.
+    bool afterLoop = false;
     static constexpr size_t kNotAParameter = static_cast<size_t>(-1);
 };
 
@@ -104,7 +134,8 @@ struct Residual {
 /// the result reaches is computed before the cut, and a node the tangent reaches is computed after
 /// it. Where a walk from the tangent side arrives at a node that is already on the result side, that
 /// node's value crosses the cut -- it is a residual, and the walk stops there rather than descending
-/// into the forward half.
+/// into the forward half. A `with` port the tangent side reads crosses the same way, whether or not
+/// the result side reads it too (author, 2026-11-03 15:15: 后一半要读的东西都是残差，`with` 值也在内).
 ///
 /// Program order: parameters by their index, then computed values by their node. The answer is empty
 /// when the graph is not a lifted graph (the exit is not the pair), which is when there is nothing
@@ -112,11 +143,50 @@ struct Residual {
 std::vector<Residual> residualsOf(
     const camel::runtime::GCGraph &lifted, const camel::runtime::Program *program = nullptr);
 
+/// Whether this graph answers the pair (value, tangent) that `split` cuts -- **by its content**, not by
+/// any record of where it came from. Two questions, both of them, because either one alone names a
+/// different class of functions:
+///
+///  - the **signature** says the parameters come in two halves of equal length and the exit is a
+///    two-member tuple (`splitHalvesWith`: an even, non-zero parameter count and a `Tuple` of two);
+///  - the **graph** says the exit is that pair -- a two-member `Fill` of the tuple kind, a loop whose
+///    value is the pair, or the `Join` a branch answers with (`exitShapeOf`).
+///
+/// A hand-written graph of that content is the same function as a lifted one and is answered the same
+/// way (author, 2026-11-03 16:55): the rule a caller applies to a callee must be a function of the
+/// callee's content, or two graphs that compute the same thing are transformed differently because of
+/// where one of them was written down. `why` says which of the two questions failed.
+///
+/// What this function does **not** answer is whether the cut can be built: a graph may answer the pair
+/// and still hold a construct the cut refuses. That is `buildSplitGraph`'s answer, and a caller that
+/// reads this one must hand the refusal on by name rather than fall back to another rule.
+bool answersAPair(const camel::runtime::GCGraph *callee, std::string *why = nullptr);
+
+/// `lin`: `backwardId`'s graph as a function value closed over `residuals` -- a FILL of the
+/// `FunctionClosure` kind whose static input names the graph and whose `with` inputs are the values in
+/// the closure's order. The one writer of that shape: the cut uses it to hand the linear half out of
+/// the forward half, and a call site that transposes a pair-answering callee uses it to close the same
+/// graph over the values it stands on, so the two are the same value and neither states a count.
+camel::runtime::gc_node_ref_t buildLinearClosure(
+    camel::runtime::GraphDraft &draft, const camel::runtime::Program *program,
+    camel::runtime::GraphId backwardId, const camel::core::type::TupleType *closure,
+    camel::core::type::FunctionType *linType,
+    std::span<const camel::runtime::gc_node_ref_t> residuals);
+
 /// The two graphs of `split(f)` and the program of them.
 struct SplitGraph {
     const camel::runtime::Program *program = nullptr;
     camel::runtime::GCGraph *forward       = nullptr;
     camel::runtime::GCGraph *backward      = nullptr;
+    /// The programs of the cuts this one's value half calls: **one per direct callee cut**, in the
+    /// order the callee table took them and without repeats. A cut whose value half calls a
+    /// pair-answering callee answers the call with that callee's forward half, which is a graph the
+    /// nested build's own program holds, so this build has to adopt that program or the call names a
+    /// graph its program does not hold. Nothing deeper is listed here and nothing deeper needs to be:
+    /// `Program::adoptMissing` carries `added ∪ taken` (`Program::bindTaken`), so the nested program
+    /// already hands on the graphs of *its* callees, however far down the chain goes. Empty for a cut
+    /// none of whose callees had to be cut.
+    std::vector<const camel::runtime::Program *> nestedPrograms;
     /// Where the build stopped, when the graphs are null: the construct it could not copy, as the
     /// origin of that node in `function`.
     camel::source::origin_id_t refusedOrigin = camel::source::kInvalidOriginId;

@@ -1,0 +1,22 @@
+// WALL PROBE 02 -- the embedding table: one array parameter, read by position and multiplied.
+//
+// `w[0] * w[1] + w[2]` is the smallest thing an embedding lookup plus a linear map looks like
+// after the lookup has been done: three entries of a table, one scalar out. The tangent of
+// `float[]` is `float[]` (`rulesets/lift`'s zero_tangent says so), so the pullback owes one array
+// of three numbers: [2.0, 3.0, 1.0] at w = [3.0, 2.0, 5.0].
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+
+func read(w: float[]): float {
+    return w[0] * w[1] + w[2]
+}
+
+func main(): int sync {
+    let w = [3.0, 2.0, 5.0] as float[]
+    let (value, pullback) = vjp(read)(w)
+    let cotangents = pullback(1.0)
+    println(`value = ${value:.1f}`)
+    println(`cotangent of w = ${cotangents.0}`)
+    return 0
+}

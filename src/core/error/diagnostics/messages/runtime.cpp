@@ -17,7 +17,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "RuntimeError",
                 "An error has occurred: {0}.",
-                "Check the runtime environment and input data for unexpected issues.",
+                "The runtime has no diagnostic of its own for this fault: every fault falls back to this code, so the message is all there is.",
             },
         },
         {
@@ -98,6 +98,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "PassBoundaryNodes",
                 "Pass '{0}' returned a program whose {1} has no {2}.",
                 "A graph runs from its entry node to its exit node. A rewrite may replace either one, but what it puts there must be a node of the graph that is alive: a graph whose entry or exit is gone is a graph nothing can run, and the pass that returned it lost the program's boundary.",
+            },
+        },
+        {
+            RuntimeDiag::ExitTypeMismatch,
+            {
+                "ExitTypeMismatch",
+                "The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}.",
+                "A return is a position with an expected type: what a function hands on is of the type the function declares, and nothing is converted on the way (design principles 5.1) -- an int is not read as a float, and a float[] is not read as a float. The graph is the function, so the declaration is the type to match: hand on a value of the declared type, or declare the type the value has. A return a rewrite rule replaced takes the type of the rule's right side, so a rule whose right side is of another type than its left is the place to look. The message names the value by its node and, when it has one, by its source name: a node a rewrite built carries no source position of its own, and that is why this report can stand without a line of its own.",
             },
         },
         {
@@ -218,6 +226,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "ValueWithNoDerivativeRule",
                 "The operator '{0}' takes a differentiable value through its with parameter {1} (counting from 1), of type '{2}', but {3}.",
                 "A value that depends on a differentiated parameter must not lose its gradient (design principles 9.9). A derivative rule for '{0}' has to accumulate the value's gradient into that with parameter; a with parameter that is configuration takes no gradient, so a value is passed there only when its gradient can be returned.",
+            },
+        },
+        {
+            RuntimeDiag::TransposeNeedsParameterShape,
+            {
+                "TransposeNeedsParameterShape",
+                "The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state it.",
+                "A type states the extents its declaration writes and no others: `float[2, 3]` states `[2, 3]`, `float[]` is `float[?]` -- one dimension and no length -- and `float[...]` states neither a rank nor a length, so {1} declares no extents in the type '{2}' (design principles 5.4; the same rule is what `SemanticDiag::ExtentOfNeedsStatedShape` states where a program asks a type for extents). A bare transposition requires the shape of every parameter to come from its type, and `transpose(f)` is handed the cotangent of the result and nothing else: the cotangent does not say how many positions the parameter has, and with no residual carrying the shape the declaration is the only place left. Two writings make it readable, both measured here. Write the extents the parameter's value has in its declaration -- 'func total(x: float[...])' becomes 'func total(x: float[2, 3])' -- and 'transpose(total)(1.0)' answers ([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]) by `sum_from_type_t`, the law that reads `extent_of` off the type. Or keep the open declaration and reach the transposition through `vjp`, whose jvp rule states the shape as a residual for `sum_stated_t` to read: 'vjp(total)' over the same 'x: float[...]' answers value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]].",
             },
         },
         {
@@ -346,6 +362,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "DefunctionalizationIncomplete",
                 "Defunctionalization left {0} as written.",
                 "A function value is lowered by giving it the form the design asks for (one variant of the enum of its type, with the values it captured) and turning the call through it into a direct call of the function the tag names, or one match on the tag where only the run time knows it. A family this pass cannot see whole is left as it is, and the whole family stays on the old form: a value read by a node that is not a call (a higher-order operator such as map calls it inside the operator), a function that is called directly as well as held as a value, a call whose callee waits on something, a value handed to a parameter declared as another function type (a lambda that returns its write where the parameter says void), a type that is an argument of the entry function, or a type that holds another family this pass leaves as written. Guessing one of them would change which effects run, so nothing is guessed.",
+            },
+        },
+        {
+            RuntimeDiag::JitWithoutCodeGenerator,
+            {
+                "JitWithoutCodeGenerator",
+                "`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.",
+                "The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.",
             },
         },
     };

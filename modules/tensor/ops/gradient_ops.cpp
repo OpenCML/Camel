@@ -62,9 +62,8 @@ slot_t dimKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t sumToKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("sum_to", [&] {
-        return wrap(
-            norm.resultType(),
-            k::sumTo(tensorArg(norm, 0), likeArg(norm, 1)->shapeSpan(), resultAllocator()));
+        const Shape at = shapeArg(norm, 1);
+        return wrap(norm.resultType(), k::sumTo(tensorArg(norm, 0), at, resultAllocator()));
     });
 }
 
@@ -174,6 +173,38 @@ std::optional<Type *> sameAsFirst(const InferContext &ctx) { return tensorOf(ctx
 
 std::optional<Type *> intScalar(const InferContext &) { return Type::Int64(); }
 
+/// `sum_to(t, at)`: `t` reduced over its leading axes to the extents `at` states. The extents are
+/// the target itself and nothing else is read for them -- not another tensor's shape and not the
+/// type: the length is the caller's (author, 2026-11-05: the extents are the primal's runtime
+/// shape, and no type states them).
+std::optional<Type *> sumToInfer(const InferContext &ctx) {
+    const auto dtype = ctx.facts(0).dtype;
+    // The result's **extents** are the target list's values, and when that list is a constant they
+    // are facts of this call: nothing reads the primal's shape, the numbers are the ones the call
+    // carries (`reshape<[2, 3]>` states its result the same way). They have to be said, because a
+    // back end that emits a strided kernel needs every extent --
+    // `modules/tiles/src/compiler.cpp#lower` refuses an operator "needs a statically known f32
+    // tensor result" otherwise, which is how a rank without extents stopped every device compile of
+    // a pullback (`tiles.mean_grad.source.*` and its family).
+    if (const auto at = ctx.constInts(1)) {
+        tensor::StaticShape shape;
+        shape.reserve(at->size());
+        for (const int64_t extent : *at) {
+            shape.emplace_back(extent);
+        }
+        return tensorOf(dtype, shape);
+    }
+    // When the list is a **value** the model computes -- a dynamic-batch `shape(y)` -- only its
+    // length is a fact (an `int64[n]` argument states it: a list written in place, or a
+    // `tensor:shape` node whose operand's rank is fixed). Then only the rank is stated: the extents
+    // stay in the list, where ruling 甲 put them, and the exporter reads the rank it needs.
+    const auto length = ctx.facts(1).shape;
+    if (!length || length->size() != 1 || !(*length)[0]) {
+        return tensorOf(dtype, std::nullopt);
+    }
+    return tensorOf(dtype, PartialInts(static_cast<size_t>(*(*length)[0])));
+}
+
 /// The signature of `sum_to`, `broadcast_like`, `expand_axis`, `gelu_grad`, `erf_grad` and the
 /// two matmul gradients: `::<T>(g: T[..], like: T[..])`. The result is
 /// argument `index`'s shape and element type, and the other argument is that same element type. A
@@ -200,12 +231,24 @@ InferFn gradientLikeTyped(size_t index) {
     };
 }
 
+/// layer_norm_grad(x, gamma, dy, which, eps?): the answer is written at the input's element type --
+/// `layerNormGradArm<Code>` is chosen by `x`'s dtype and writes all three answers at it (design
+/// principles 9.9: a gradient is the width of the value it belongs to). This stated `f32` whatever
+/// the input was, which is not what the kernel does: for an `f64` input the two statements disagree,
+/// and this is the half that was wrong. Aligning it moves no value -- an `f64` model's gradient
+/// already read as `f64` through the VJP that emits this operator (`to_bytes` 48 bytes for an `f64`
+/// [2, 3], and the derivative's own numbers, measured before and after this line) -- so what changes
+/// is the answer to "what does this operator produce", not an answer anybody read. The kernels whose
+/// storage and declared width really did disagree are `#geluGrad` and `#erfGrad`.
 std::optional<Type *> layerNormGradInfer(const InferContext &ctx) {
     const auto which = ctx.constInt(3);
+    const auto dtype = ctx.facts(0).dtype;
+    const std::optional<TypeCode> code =
+        dtype && *dtype == TypeCode::Float64 ? TypeCode::Float64 : TypeCode::Float32;
     if (!which) {
-        return tensorOf(TypeCode::Float32, std::nullopt);
+        return tensorOf(code, std::nullopt);
     }
-    return tensorOf(TypeCode::Float32, ctx.facts(*which == 0 ? 0 : 1).shape);
+    return tensorOf(code, ctx.facts(*which == 0 ? 0 : 1).shape);
 }
 
 std::optional<Type *> castLikeInfer(const InferContext &ctx) {
@@ -237,7 +280,7 @@ OpDef internal(
         .name      = name,
         .exports   = {},
         .params    = std::move(params),
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = std::move(infer),
         .kernel    = kernel,
         .traits    = {}};
@@ -261,7 +304,7 @@ bool tensorIsDiscrete(const type::Type *type) {
 // ---------------------------------------------------------------- VJP rules
 // The gradient operators are differentiable too, so a gradient can be differentiated again.
 
-/// sum_to(g, like) reduces a broadcast; its gradient broadcasts back.
+/// sum_to(t, at) reduces the leading axes; its gradient broadcasts back to `t`'s shape.
 void sumToVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
     if (auto dy = b.gradientOf(call.output)) {
@@ -277,7 +320,13 @@ void broadcastLikeVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t g = call.inputs[0];
         if (isTensorNode(b, g)) {
-            b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {*dy, g}));
+            // The reduction's target is the extents, not the value: `sum_to` takes an `int[]`
+            // (ruling 甲), so the shape is computed as an operand of its own.
+            const vjp_node_t shape = b.addOper(
+                shapeListType(b, g),
+                "tensor:shape",
+                std::span<const vjp_node_t>(&g, 1));
+            b.accumulateGradient(g, addTensorOperFor(b, g, "tensor:sum_to", {*dy, shape}));
         } else if (isFloatNode(b, g)) {
             // tensor:sum answers at float64; a value of type f32 keeps the gradient at its own
             // width (see floatGradientAtWidth).
@@ -329,7 +378,7 @@ std::vector<OpDef> gradientOps() {
         .name      = "zeros_like",
         .exports   = {"zeros_like"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = sameAsFirst,
         .kernel    = &zerosLikeKernel,
         .traits    = {}});
@@ -337,7 +386,7 @@ std::vector<OpDef> gradientOps() {
         .name      = "ones_like",
         .exports   = {"ones_like"},
         .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = sameAsFirst,
         .kernel    = &onesLikeKernel,
         .traits    = {}});
@@ -388,18 +437,19 @@ std::vector<OpDef> gradientOps() {
                 static_cast<camel::core::rtdata::Int64>(*(*shape)[static_cast<size_t>(axis)]));
         }});
 
-    // sum_to(g, like) is `::<T>(g: T[..], like: T[..])`: two tensors of one element type, and its
-    // arms are the widths its kernel carries -- f32 and f64 (indexing.cpp says which, and design
-    // principles 5.1: no conversion to reach an arm). A value that carries an element type of its
-    // own is that type, so two sides that state different ones match no arm whatever is known about
-    // their shapes. The `g` side also takes a plain number, which is what a broadcast's gradient
-    // passes for an axis that has no extent of its own: a literal takes its element type from the
-    // context it is written in, so reading it at the width `like` states is that rule and not an
-    // allowance of this operator.
+    // sum_to(t, at) is `::<T>(t: T[..], at: int[])`: a tensor and the extents its leading-axis
+    // reduction answers at. The target is the list itself -- a plain `int[]`, not another tensor
+    // read for its shape -- so no value of the program stands in for a length (ruling 甲; the
+    // author's 2026-11-05 ruling puts the extents on the primal's runtime shape, which is what a
+    // list is, and not on the type, which is what a tensor operand's facts are).
+    //
+    // The kernel admits f32 and f64 and refuses int64 and bool by name (design principles 5.1: no
+    // conversion to reach an arm); the result is at the input's element type, which is also the
+    // gradient's width (design principles 9.9).
     defs.push_back(internal(
         "sum_to",
-        {{"g", ParamKind::Tensor}, {"like", ParamKind::Tensor}},
-        gradientLikeTyped(1),
+        {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
+        sumToInfer,
         &sumToKernel));
     defs.push_back(internal(
         "broadcast_like",

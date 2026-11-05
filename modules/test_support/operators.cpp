@@ -97,9 +97,17 @@ slot_t __test_support_rendezvous__(ArgsView &with, ArgsView &norm, Context &ctx)
     return toSlot(static_cast<Int64>(together));
 }
 
-// The threads of this process, the caller included: the count `/proc/self/status` reports as
+// The threads this run owns, the caller included: the count `/proc/self/status` reports as
 // `Threads:`, not the process's CPU count. A test that reads it pins how many threads a run
 // creates, which is how a second worker pool is detected without timing anything.
+//
+// Windows' own thread pool is not one of the run's threads: ntdll starts those workers for work
+// the operating system queues (an ordinary console program carries them too) and no setting of
+// the run, `-t` included, says how many there are. A thread the run starts runs in the C
+// runtime's start routine instead, so the threads whose start address lies in ntdll are left out
+// and everything the run asked for is counted. A start address that cannot be read leaves the
+// thread counted: a thread counted that the run does not own is the reading this probe exists to
+// fail on, not one to hide.
 slot_t __test_support_thread_count__(ArgsView &with, ArgsView &norm, Context &ctx) {
 #if defined(_WIN32)
     const DWORD pid = GetCurrentProcessId();
@@ -107,12 +115,42 @@ slot_t __test_support_thread_count__(ArgsView &with, ArgsView &norm, Context &ct
     if (snapshot == INVALID_HANDLE_VALUE) {
         throwRuntimeFault(RuntimeDiag::RuntimeError, "<thread_count> failed");
     }
+    HMODULE ntdll = GetModuleHandleW(L"ntdll.dll");
+    using QueryStartAddress = LONG(__stdcall *)(void *, int, void *, unsigned long, unsigned long *);
+    const auto startAddress = ntdll == nullptr
+                                ? nullptr
+                                : reinterpret_cast<QueryStartAddress>(
+                                      GetProcAddress(ntdll, "NtQueryInformationThread"));
+    // ThreadQuerySetWin32StartAddress: the address the thread was started at.
+    constexpr int threadQuerySetWin32StartAddress = 9;
     THREADENTRY32 entry;
     entry.dwSize = sizeof(entry);
     Int64 count  = 0;
     if (Thread32First(snapshot, &entry)) {
         do {
-            if (entry.th32OwnerProcessID == pid) {
+            if (entry.th32OwnerProcessID != pid) {
+                continue;
+            }
+            bool inThreadPool = false;
+            HANDLE thread     = startAddress == nullptr
+                                    ? nullptr
+                                    : OpenThread(THREAD_QUERY_INFORMATION, FALSE, entry.th32ThreadID);
+            if (thread != nullptr) {
+                void *start = nullptr;
+                const LONG status =
+                    startAddress(thread, threadQuerySetWin32StartAddress, &start, sizeof(start), nullptr);
+                CloseHandle(thread);
+                HMODULE owner = nullptr;
+                inThreadPool =
+                    status == 0 && start != nullptr &&
+                    GetModuleHandleExW(
+                        GET_MODULE_HANDLE_EX_FLAG_FROM_ADDRESS |
+                            GET_MODULE_HANDLE_EX_FLAG_UNCHANGED_REFCOUNT,
+                        reinterpret_cast<LPCWSTR>(start),
+                        &owner) != 0 &&
+                    owner == ntdll;
+            }
+            if (!inThreadPool) {
                 ++count;
             }
         } while (Thread32Next(snapshot, &entry));

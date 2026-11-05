@@ -367,7 +367,11 @@ std::vector<LoopRound> loopRoundsOf(const CompilationUnit &unit) {
                 break;
             }
             if (!instructionRunsInRound(op)) {
-                why(std::format("the round contains {} at pc={}", to_string(op), pc));
+                // Which instruction, not where it sits: the reason is read as a statement about the
+                // program, and a `GATE` or an order edge written between two statements moves every
+                // pc after it (the same reason a plan names a node by what it says rather than by
+                // its number). What keeps the round on the helpers is the kind of instruction.
+                why(std::format("the round contains {}", to_string(op)));
                 break;
             }
         }

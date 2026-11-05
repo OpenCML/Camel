@@ -1,0 +1,20 @@
+// WALL PROBE 08 -- the lookup itself. A character goes in as an index and comes out as a row of the
+// embedding table; the row is read, not computed, and a gradient has to put the row's cotangent
+// back into the row it came from. `take(table, [1])` is that read, on the smallest table with two
+// rows.
+import { ones, sum, take } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+
+func picked(table: float[...]): float {
+    let row = take(table, [1])
+    return sum(row * row)
+}
+
+func main(): int sync {
+    let table = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let (value, tangent) = jvp(picked)(table, ones::<float>([2, 2]))
+    println(`value = ${value:.6f}`)
+    println(`tangent = ${tangent:.6f}`)
+    return 0
+}

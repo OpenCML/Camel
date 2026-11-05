@@ -1,8 +1,8 @@
 import { reshape } from tensor
 import { source } from tiles
-func forbidden(x: f32[..]): f32[..] sync { println('effect must not run'); return x }
-func selected(flag: bool, x: f32[..]): string {
-    let choose = (a: f32[..]): f32[..] => if flag then a + 1.0 else forbidden(a)
+func forbidden(x: f32[...]): f32[...] sync { println('effect must not run'); return x }
+func selected(flag: bool, x: f32[...]): string {
+    let choose = (a: f32[...]): f32[...] => if flag then a + 1.0 else forbidden(a)
     return source<choose>(x)
 }
 func main(): string { return selected(false, reshape<[2]>([1.0, 2.0] as f32[])) }

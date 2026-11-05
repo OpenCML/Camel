@@ -75,7 +75,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature"
-desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[..]..` the stream of open-rank arrays, while `int[..]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
+desc = "A stream type stands where any type stands: a parameter, a result, a function type and a generic signature all take one, and the suffix is read left to right with no special case - `int?..` is the stream of a nullable int, `int..?` the possibly absent stream, `int[3]..` the stream of three-element arrays and `int[...]..` the stream of open-rank arrays, while `int[...]` keeps its own reading. None of these parsed before: `func count(s: int..)` was MissingComma at the `..`."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}"]
@@ -87,7 +87,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_signature_printed"
-desc = "One element type, one spelling: every stream type of a signature reaches `std::jgir` as the suffix that was written - `int..`, `int?..`, `int..?`, `int[3]..`, `int[..]..` - and the open-rank array `f32[..]` is still an array. The signature of the graph is where a type is read by every tool, so this is the printing the diagnostics and `std::gir` share."
+desc = "One element type, one spelling: every stream type of a signature reaches `std::jgir` as the suffix that was written - `int..`, `int?..`, `int..?`, `int[3]..`, `int[...]..` - and the open-rank array `f32[...]` is still an array. The signature of the graph is where a type is read by every tool, so this is the printing the diagnostics and `std::gir` share."
 kind = "behavior"
 case = "../../../cases/compile/stream/type_signature.cml"
 args = ["${case}", "std::jgir"]
@@ -103,13 +103,13 @@ const signature = (name) => {
 }
 assert(signature('count') === '(s: int..) => int pure', `count is ${signature('count')}`)
 assert(
-    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..) => int pure',
+    signature('shapes') === '(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[...]..) => int pure',
     `shapes is ${signature('shapes')}`,
 )
 assert(signature('teePair') === '(pair: (int.., int)) => int pure', `teePair is ${signature('teePair')}`)
-assert(signature('openRank') === '(rows: f32[..]) => int pure', `openRank is ${signature('openRank')}`)
+assert(signature('openRank') === '(rows: f32[...]) => int pure', `openRank is ${signature('openRank')}`)
 const types = [...new Set(doc.graphs.flatMap((g) => g.nodes.map((n) => n.outputType)).filter(Boolean))]
-for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[..]..', 'f32[..]', '(int.., int)']) {
+for (const wanted of ['int..', 'int?..', 'int!..', 'int..?', 'int[3]..', 'int[...]..', 'f32[...]', '(int.., int)']) {
     assert(types.includes(wanted), `${wanted} is not among ${JSON.stringify(types)}`)
 }
 }
@@ -193,7 +193,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.type_as"
-desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is always a type (the right side of `as` is always a type): `xs as int..` reads the stream type where a type stands, and the program is not a syntax error. The conversion itself has no reading yet - nothing turns an array into a stream, and producing a stream value is another slice - so it is refused with the two types printed. It used to be `Unexpected '...'; expected '}'.` at the `...`."
 kind = "negative"
 case = "../../../cases/compile/stream/type_as.cml"
 args = ["${case}"]
@@ -225,7 +225,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_operand_generic"
-desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `..` cannot take at all."
+desc = "An operand of `..` whose type is not settled: `ident` is generic, and nothing at this position says which instance it is - the composition stands in a `let` with no declared type - so it is refused by that name. The refusal is the composition's own diagnostic, and it says what the old one did not: which operand is the generic function, that the type arguments name the instance, and that an expected function type for the whole expression settles it. With such a type the same program passes - stream.comp_expected_type - and the refusal no longer prints `void` as if it were the operand's type or reaches CompOperandMismatch, which stays for operands `...` cannot take at all."
 kind = "negative"
 case = "../../../cases/compile/stream/comp_operand_generic.cml"
 args = ["${case}"]
@@ -257,7 +257,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "stream.comp_expected_type"
-desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `..`, with the operand printed as `void`."
+desc = "`f..g` is the lambda `(x) => g(f(x))` (design principles 4.2), so the function type the position expects is the type that lambda would have: it gives the composition its input - the parameter of `f` - and its output - the result of `g` - and it instantiates a generic operand where it stands, exactly as the lambda's calls are instantiated under that type. `let h: (x: int) => int = (x) => ident(ident(x))` passed before this, so the composition must too. It used to be CompOperandMismatch at the `...`, with the operand printed as `void`."
 kind = "behavior"
 case = "../../../cases/compile/stream/comp_expected_type.cml"
 args = ["${case}"]
@@ -1326,3 +1326,49 @@ expect_exit = 0
 expect_stdout_exact = "1384\n102101112202122\n88\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+[[tests]]
+name = "stream.generators_loop_computed_initialiser"
+desc = "The initial value of a generator `loop` is evaluated where the loop stands, once, before the first condition, so a value held in a local or produced by a call is the first round's state just as a literal is. Two loops read 3 4 and 5 6."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_loop_computed_initialiser.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3\n4\n5\n6\n"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+[[tests]]
+name = "stream.generators_loop_body_without_next_state"
+desc = "A generator `loop` body ends with the next value of its state, and one that ends without writing it is reported by name -- SemanticDiag::LoopBodyNeedsNextState at the `yield` -- because the pull after it runs the rest of the body and the condition again. A body of only `yield i` reads a fresh `i` on every pull, so the loop never moves on. Writing `i + 1` as the last statement runs it."
+kind = "negative"
+case = "../../../cases/compile/stream/generators_loop_body_without_next_state.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LoopBodyNeedsNextState"
+expect_diagnostic_code = "0x03000208"
+expect_diagnostic_line = 11
+expect_diagnostic_column = 9
+expect_output_contains = ["next value of its state"]
+expect_output_not_contains = ["UnknownInternalError", "GeneratorInitialValueShapeUnsupported"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_match_binding_across_yield"
+desc = "A `match` arm that binds a name and then `yield`s it builds: a binding is a local, and a local that lives across a `yield` is a cell of the generator body, registered with the declared locals and the loop binders. The name is written where the case's value is in hand, so the pull that resumes after the `yield` reads the same value: the arm hands out `7` and then `17`, and the case pins the values rather than the refusal it used to get."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_match_binding_across_yield.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "7\n17\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "stream.generators_error_binding_across_yield"
+desc = "`case error e` binds the error of a `T!` and the arm `yield`s it. The error is the one `Error` structure the prelude declares (design principles 3.9), not the payload of the tagged value, so the cell the name lives in is typed by reading that declaration -- the same registration a `case v` gets, and the same cell. The second `yield` stands after the first, so it runs on the next pull and reads `e` out of the cell: the arm hands out `!` and then `broke`."
+kind = "behavior"
+case = "../../../cases/compile/stream/generators_error_binding_across_yield.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "!\nbroke\n"
+expect_output_not_contains = ["[Error]", "UnknownInternalError", "Please report it"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]

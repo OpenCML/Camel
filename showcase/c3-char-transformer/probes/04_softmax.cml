@@ -1,0 +1,20 @@
+// WALL PROBE 04 -- softmax, which is what makes attention attention and what turns logits into a
+// distribution. `tensor:softmax` is the operator; written out it is `exp`, a reduction over an axis
+// and a division (`stdlib/tensor_definitions.cml` is the normative definition), so this probe
+// reaches whichever of the three the forward ruleset knows nothing about.
+import { ones, softmax, sum } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+
+func spread(x: float[...]): float {
+    let p = softmax<1>(x)
+    return sum(p * p)
+}
+
+func main(): int sync {
+    let x = [[0.5, -1.0, 2.0]] as float[1, 3]
+    let (value, tangent) = jvp(spread)(x, ones::<float>([1, 3]))
+    println(`value = ${value:.6f}`)
+    println(`tangent = ${tangent:.6f}`)
+    return 0
+}

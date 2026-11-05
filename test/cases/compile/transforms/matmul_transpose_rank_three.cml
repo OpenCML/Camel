@@ -1,0 +1,42 @@
+// The shapes the product's transpose law does not serve, pinned as the reading.
+//
+// The product's linear call is `matmul_stated` and not `matmul` (`stdlib/rulesets/jvp.cml#jvp_matmul`
+// states both operands' extents, so the cotangents can be reduced to them without reading a tangent),
+// and its transpose law is `matmul_stated_t` (`stdlib/rulesets/transpose.cml`). That law serves the
+// same shapes `matmul_t` does -- the two-matrix product and the two shapes a vector makes with a
+// matrix -- through the stated helpers (`ct_of_a_stated` / `ct_of_b_stated`, one overload per shape).
+// What is left out is a product with a batch axis, rank three and above, and the vector-vector product
+// whose answer is a number. The ranks are told apart by the helpers, so the law is *chosen* and its own
+// body is what has nothing for these operands. The walk refuses that by name, and the two readings say
+// which law, which operator and which ranks:
+//
+//     TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks
+//     uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4
+//
+//     transforms: transpose has no transpose for this function: the law `matmul_stated_t` has no
+//     cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1) ...
+//
+// The ranks list is one entry per operand (four: the two tensors and the two stated lists), which is
+// why it is longer here than the two entries a bare `matmul` node gave.
+//
+// `rule-ranks` and not `rule-shape`: the law's *pattern* took the operand types -- its head is type
+// variables for the four ports and the shapes live in the helpers -- and the law's body is what
+// declines. The two want different edits: a wider pattern, or the missing shape's law.
+//
+//     camel test/cases/compile/transforms/matmul_transpose_rank_three.cml
+import { matmul, sum } from tensor
+import { vjp } from vjp
+
+/// A batched product: a (3, 2, 2) operand times a matrix, which the law does not take.
+func batched_sum_of_product(a: float[3, 2, 2], b: float[2, 2]): float {
+    return sum(matmul(a, b))
+}
+
+func main(): int sync {
+    let a = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]], [[9.0, 10.0], [11.0, 12.0]]] as float[3, 2, 2]
+    let b = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
+    let (value, pullback) = vjp(batched_sum_of_product)(a, b)
+    let (da, db) = pullback(1.0)
+    `matmul_t rank_three value={} dL/da={} dL/db={}`->format<value, da, db>->println
+    return 0
+}

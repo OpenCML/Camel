@@ -43,6 +43,7 @@
 #include "camel/core/symbol.h"
 #include "camel/core/type/intern.h"
 #include "camel/runtime/graph_id.h"
+#include "camel/utils/assert.h"
 
 #include <algorithm>
 #include <atomic>
@@ -180,21 +181,36 @@ enum GCNodeFlag : uint8_t {
 /// conversion the type does not call safe checks the value (an array's shape, a number's range).
 bool castMayFault(const camel::core::type::Type *target, const camel::core::type::Type *source);
 
-/// The one question a pass asks before it drops, moves, merges or reorders a node, or before it
-/// decides that a node needs an order edge: is the node pure *and* unable to fault? Such a node
-/// can be arranged anywhere -- off the sync chain, out of a loop body or an arm, away when a rewrite
-/// drops it (design principles 3.4), and without an order edge after an inline (docs/design/effects/
-/// edges.cn.md 5.7). An operator that may fault is not free: what it does when it fails is
-/// observable, so its place is kept. An operator nobody declared is not known never to fault, so it
-/// is not free either; neither is an operator that must run where the program writes it
-/// (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
+/// `graph::may_be_rearranged` -- the one question a pass asks before it drops, moves, merges or
+/// reorders a node, or before it decides that a node needs an order edge: is the node pure *and*
+/// unable to fault? Such a node can be arranged anywhere -- off the sync chain, out of a loop body
+/// or an arm, away when a rewrite drops it (design principles 3.4), and without an order edge after
+/// an inline (docs/design/effects/edges.cn.md 5.7). An operator that may fault is not free: what it
+/// does when it fails is observable, so its place is kept. An operator nobody declared is not known
+/// never to fault, so it is not free either; neither is an operator that must run where the program
+/// writes it (`OperatorTable::mayBeRecomputed`). A CAST is free when its conversion cannot fail
 /// (`castMayFault`), and is asked with the types it converts between: without them it is not free.
 /// `oper` is `kNoOper` for every kind but OPER. An elementwise operator (tensor arithmetic) fails
 /// only when its operands' shapes do not broadcast: asked with `fixedShapes` (every operand and
 /// the result have shapes the type states in full, `shapesAreFixed`) it cannot.
-bool nodeIsFreelySchedulable(
+///
+/// This is the answer to that question and nothing else. The C++ passes and the passes written in
+/// Camel both read it -- the module `graph` exports it as `may_be_rearranged`, the builtin that
+/// `stdlib/graph.cml` declares -- so a pass on either side of the boundary asks one implementation.
+/// `nodeIsFreelySchedulable` below is the older name of this same function and forwards to it.
+namespace graph {
+bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false);
+} // namespace graph
+
+/// The older name of `graph::may_be_rearranged`, kept for the C++ passes that still read it: it
+/// forwards, so there is one implementation and the two names cannot answer differently.
+inline bool nodeIsFreelySchedulable(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool fixedShapes = false) {
+    return graph::may_be_rearranged(kind, oper, castTarget, castSource, fixedShapes);
+}
 
 /// The fault half of `nodeIsFreelySchedulable`, on its own: whether running a node of this kind
 /// can raise a fault (`castMayFault`, `OperatorTraits::mayFault`; design principles 3.9) where it
@@ -211,14 +227,58 @@ bool nodeMayFault(
 /// extents are all constants.
 bool shapesAreFixed(const camel::core::type::Type *type);
 
+/// Whether a node of this kind is a statement of a chain -- one a `sync` block's chain has to
+/// order (design principles 3.4; the author's ruling of 2026-11-03, 01:10): an operator that has an
+/// effect or may fault, a cast whose conversion may fail, a call, a branch or a loop that owns a
+/// control region, and a `GATE` -- the block's value is handed on behind one, so the wait reaches
+/// it (docs/design/effects/edges.cn.md 5.3). What is not: a `Func`, an operator or cast that is
+/// pure and cannot fault (an operator declared un-recomputable included -- "can this be moved" and
+/// "does the chain order this" are two questions, and `may_be_rearranged` answers the first), and a
+/// `Data`, `Port`, `Copy`, `Fill`, `Accs` or `Join`: the model lets a pass arrange those freely, so
+/// none of them is something the chain orders.
+///
+/// This is the answer to that question and nothing else, and there is one implementation of it: the
+/// seal check's census and the builder's sync-chain link both ask here, so "written" and "derived"
+/// cannot answer differently. `standsForRegion` is `nodeStandsForItsRegion` where the caller has a
+/// graph; without it a `Brch` or a `Loop` is not known to carry anything.
+namespace graph {
+bool is_chain_statement(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false);
+} // namespace graph
+
+/// The same question, under the name the call sites write it under.
+inline bool isChainStatement(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
+    const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false) {
+    return graph::is_chain_statement(kind, oper, castTarget, castSource, standsForRegion);
+}
+
 class GCGraph;
-/// The same question of a node of a graph; a CAST is asked with its result type and the type of
-/// its input.
-bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref);
+/// `graph::may_be_rearranged` of a node of a graph; a CAST is asked with its result type and the
+/// type of its input.
+namespace graph {
+bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref);
+} // namespace graph
+
+/// The older name of the overload above, forwarding to it.
+inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph::may_be_rearranged(graph, ref);
+}
 
 /// `nodeMayFault` of a node of a graph, read the way `nodeIsFreelySchedulable(const GCGraph &)`
 /// reads its operands and types.
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
+
+/// `isChainStatement` of a node of a graph: the operator from the node's body, a cast's types from
+/// its input, and whether it owns a region from `nodeStandsForItsRegion`.
+namespace graph {
+bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
+} // namespace graph
+
+inline bool isChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
+    return graph::is_chain_statement(graph, ref);
+}
 
 /// Whether a node owns a control region of this graph, and so stands on the outside for what runs
 /// inside it (`docs/design/effects/edges.cn.md` 4.6): a `BRCH` or a `LOOP` that carries an arm or a
@@ -263,6 +323,8 @@ enum GCGraphFlag : uint8_t {
     kGraphFlagRecomputeBackward = 1 << 4,
 };
 
+
+
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
 inline constexpr uint8_t kWritingDerived = 1 << 0;
 
@@ -282,6 +344,12 @@ static_assert(std::is_trivially_copyable_v<WritingUnion>);
 
 /// No payload: the value of GCNode::payload for a node that carries nothing beyond its record.
 inline constexpr gc_off_t kNoPayload = static_cast<gc_off_t>(-1);
+
+/// How many argument positions a FUNC node's tangent record holds (GCNode::tangentArgs): one bit
+/// per position, so the record covers the first `kTangentArgumentBits` arguments of a call. A rule
+/// whose right side calls a function with a tangent past that position is refused where it is
+/// expanded (modules/transforms/rule_expand.cpp) rather than recorded as a call of values only.
+inline constexpr size_t kTangentArgumentBits = sizeof(uint16_t) * 8;
 
 /// One order edge of a graph (docs/design/effects/edges.cn.md section 1.5): `pred` runs before
 /// `user` when both run, and nothing travels along it. Order edges are not data, so they are not
@@ -314,11 +382,14 @@ static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 struct GCNode {
     GCNodeKind kind         = GCNodeKind::Data;
     uint8_t flags           = 0;
-    /// How many of a FUNC node's trailing arguments are tangents: what a rule's expansion recorded on
-    /// the call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The
-    /// rule is the one source of which arguments are values and which are tangents; `transpose` reads
-    /// the count off the node rather than deriving it again. 0 for every other node, and for a call
-    /// that is not a rule's tangent function.
+    /// Which of a FUNC node's arguments are tangents, as one bit per argument position: bit `i` is
+    /// set when the call's i-th normal input is a tangent. What a rule's expansion recorded on the
+    /// call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The rule is
+    /// the one source of which arguments are values and which are tangents, and a rule may write a
+    /// tangent wherever its right side writes one -- `mul_tangent(x, w, dx, dw)` ends with its two,
+    /// `index_into(dxs, i)` begins with one -- so the record is a set of positions and not a count of
+    /// trailing ones. `transpose` reads the positions off the node rather than deriving them again.
+    /// 0 for every other node, and for a call that is not a rule's tangent function.
     uint16_t tangentArgs    = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
@@ -658,13 +729,50 @@ class GCGraph : public camel::core::rtdata::Object {
     const GCRegion *region(uint32_t id) const {
         return id < nativePayload_.regionCount ? nativePayload_.regionTable + id : nullptr;
     }
-    /// The region node `ref` is in: the innermost; 0 for the body.
+    /// The region node `ref` is in: the innermost; 0 for the body. A ref that names no node of
+    /// this graph has no region, and 0 would say it is in the body -- a region the graph really
+    /// has (the body's record exists even when the table holds nothing else), so the answer would
+    /// be a membership the program does not have. Fail instead of naming the body.
     uint32_t nodeRegion(gc_node_ref_t ref) const {
-        if (!containsNodeRef(ref)) {
-            return 0;
-        }
+        GUARD(
+            containsNodeRef(ref),
+            "Region of a node that is not in the graph: the ref is kInvalidNodeRef or past "
+            "nodeCount(), and region 0 is the body, not the answer for a node that is not there.");
         const GCNodeChunk &c = chunkOf(ref);
         return c.regions ? c.regions[ref & (kNodeChunkNodes - 1)] : 0;
+    }
+    /// True when `ancestor` is `region` itself or a region `region` sits in, up to the body (0,
+    /// which is every region's ancestor).
+    bool isAncestorOf(uint32_t ancestor, uint32_t region) const {
+        for (uint32_t at = region;;) {
+            if (at == ancestor) {
+                return true;
+            }
+            const GCRegion *one = this->region(at);
+            if (one == nullptr || at == 0 || one->parent == at) {
+                return false;
+            }
+            at = one->parent;
+        }
+    }
+    /// True when the node `reader` may read the port `port` of the region `portRegion`. Two readers
+    /// may: a node of a region `portRegion` contains -- the region itself and every region inside
+    /// it -- and the node that owns the region (`region(portRegion)->owner`), but that one only the
+    /// region's **exit** (`region.result`; a loop's condition region has one too).
+    ///
+    /// The owner's read is the rule's one exception and it is written on the port, not on the
+    /// reader's identity or on the exit's node kind (author ruling 2026-11-03 08:10): a `LOOP`
+    /// consumes its body's exit round by round, and a body written `do s` ends in the state port
+    /// while one written `do s + 1` ends in an Oper -- the same thing to the loop, so a rule that
+    /// told the two apart would be a special case. Any *other* port of the region is refused to the
+    /// owner as well: it is a value that region produces, and it is not there when the owner looks
+    /// at it.
+    bool regionIsVisibleFrom(uint32_t portRegion, gc_node_ref_t port, gc_node_ref_t reader) const {
+        if (isAncestorOf(portRegion, nodeRegion(reader))) {
+            return true;
+        }
+        const GCRegion *one = region(portRegion);
+        return one != nullptr && one->owner == reader && one->result == port;
     }
     /// The LoopCond or LoopBody region (`part`) of the LOOP node `ref`; 0 when it has none: a For
     /// loop has no condition, and a loop in graph form has no regions.
@@ -803,11 +911,17 @@ class GCGraph : public camel::core::rtdata::Object {
     gc_node_ref_t nodeRef(const GCNode *node) const;
     /// FUNC node `ref`: the callee (invalid when `ref` is not a FUNC node).
     GraphId calleeIdOf(gc_node_ref_t ref) const;
-    /// How many of FUNC node `ref`'s trailing arguments are tangents: the count a rule's expansion
-    /// recorded when it produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
-    /// A kernel's parameters are the values the rule bound followed by the tangents it took, so the
-    /// values are the arguments before this count.
+    /// The arguments of FUNC node `ref` that are tangents, one bit per argument position (bit `i`
+    /// set when the i-th normal input is a tangent): the record a rule's expansion wrote when it
+    /// produced the call (`GCNode::tangentArgs`), 0 when the node is not such a call.
     uint16_t callTangentArgsOf(gc_node_ref_t ref) const;
+    /// Whether argument `index` of FUNC node `ref` is a tangent: bit `index` of
+    /// `callTangentArgsOf(ref)`. The one entry a reader asks instead of counting a run of trailing
+    /// arguments -- a rule writes a tangent where its right side writes it, and `index_into(dxs, i)`
+    /// writes one first and a value last. False for a node that is not a FUNC node, and for an index
+    /// past the record's `kTangentArgumentBits` positions (a call that long is refused where the rule
+    /// is expanded).
+    bool isTangentArgument(gc_node_ref_t ref, size_t index) const;
     /// The graph a function constant of the static area names, with the reason when it names none.
     ///
     /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a
@@ -1172,10 +1286,10 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
 /// when no root, no function value and no Program that copies it names it.
 ///
 /// What roots a Program: being the installed program of the context, a detached program a back
-/// end is running (trackDetached), a pinned one (operator definitions), a program the pipeline
-/// has made and not yet settled (reserve ... settle), and a program a running call was entered
-/// through (rootForRun). Everything else is reached from those: a Program traces its graphs, a
-/// graph its static values, a function value its Program.
+/// end is running (trackDetached), a pinned one (an operator definition, a draft group while the
+/// group lives), a program the pipeline has made and not yet settled (reserve ... settle), and a
+/// program a running call was entered through (rootForRun). Everything else is reached from
+/// those: a Program traces its graphs, a graph its static values, a function value its Program.
 ///
 /// Two collections free what is unreached, and both mark through the heap, so that a function
 /// value of a Program keeps it. Between passes (nothing runs) collect() has the heap marked
@@ -1238,9 +1352,20 @@ class GCGraphManager {
     /// answers for a view of the latest program (a dump, the debugger); whoever runs or
     /// rewrites a graph has the program it was given.
     const Program *programOf(const GCGraph *graph) const;
-    /// Keeps a program that belongs to no context program alive for as long as the manager:
-    /// the definition graphs of operators (camel/runtime/definitions.h).
+    /// Keeps a program whose holder keeps it outside the heap alive: the definition graphs of
+    /// operators, for as long as the context (camel/runtime/definitions.h), and a draft group's
+    /// program, for as long as the group (draft_session.h#GraphDraftGroup). A holder that is not
+    /// in the heap is a holder the collector cannot see, so the holder says so here; unpin() is
+    /// what says it is done, and the next sweep frees the program if nothing else reaches it.
+    ///
+    /// This is not a nicety: a program the collector does not reach is a program whose graphs it
+    /// does not trace, and a collection that falls in that window moves the values their static
+    /// areas hold and leaves the old addresses in the slots. Measured under --gc-check poison on
+    /// the two `modules.nn` cases: a reserved-but-unrooted draft group is a report, not a pass.
     void pin(const Program *program);
+    /// The holder is done: the program stops being a root. Frees nothing itself -- the sweep that
+    /// follows does, so a pin/unpin pair inside one collection window never leaves a hole.
+    void unpin(const Program *program);
 
     /// Frees the Programs and graph versions nothing reaches, marking from the roots and the
     /// heap. Does nothing while a program runs.

@@ -1,7 +1,7 @@
 {
     "name": "camel-scripts",
     "private": true,
-    "version": "0.2.42",
+    "version": "0.2.44",
     "type": "module",
     "pre-commit": [
         "precommit:staged"
@@ -15,7 +15,7 @@
         "check": "node ./scripts/check.js",
         "check:invariant-owner": "node ./scripts/check-invariant-owner.mjs",
         "test": "node ./scripts/test.js --tier fast",
-    "test:milestone": "node ./scripts/test.js test/plans --tier milestone",
+        "test:milestone": "node ./scripts/test.js test/plans --tier milestone",
         "test:all": "node ./scripts/test.js --all --tier all",
         "release-gate": "node ./scripts/release-gate.mjs",
         "config": "node ./scripts/config.js",

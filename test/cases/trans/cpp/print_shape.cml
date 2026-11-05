@@ -1,7 +1,7 @@
 /**
  * Printing tells an element from an array of one.
  *
- * A value of no rank *is* the element (design principles 5.4): a struct field of type `f32[..]` holds
+ * A value of no rank *is* the element (design principles 5.4): a struct field of type `f32[...]` holds
  * such a value, and `println` of it writes `1.5`, not `[1.5]`. A value that carries a dimension is
  * written as the whole literal -- `[2.5]` -- because the bracket is the difference between an element
  * and an array of one, and a reader who cannot see it cannot tell the two apart.
@@ -14,7 +14,7 @@
  */
 import { shape } from tensor
 
-type Box = { v: f32[..] }
+type Box = { v: f32[...] }
 
 func main(): int sync {
     let first: Box = { v: 1.5 }

@@ -35,6 +35,19 @@ desc = "The relative links of the reader-facing documents point at files and hea
 # name is resolved by the symbol. A run that verified no citation fails, so a green run checked
 # something. What the check cannot know is whether the symbol still supports the sentence.
 #
+# Both whole-tree modes walk a checkout that on a developer's machine holds what a build, a Python
+# environment and a dependency download left there: `.venv`, `venv`, `.cache`, `.ccache`,
+# `__pycache__` and `vendor` are not content of the repository -- git ignores all of them -- and on
+# the machine where this was measured two of them (a `.venv` of 29,926 files and a `.cache` of
+# 15,481) made a `--citations` run take longer than ten minutes and get reported as a hang, while
+# two headers of `vendor` send the citation patterns into catastrophic backtracking (208.5 s and
+# 82.7 s in the symbol pattern, 205.7 s and 82.8 s in the line pattern, for zero matches) and the
+# vendored trees report citations of this repository that nobody made. So SKIP_DIRS names them, and
+# `--self-test` is that property as a case: it writes a miniature checkout beside one directory per
+# name that must be skipped, each holding a citation of a missing file, and fails if any of them is
+# read or if the walk stops reading the checkout. The names are written down in the case rather
+# than read from SKIP_DIRS, so it is red the moment a name leaves that set.
+#
 
 [[tests]]
 name = "docs.links.reader_facing"
@@ -145,6 +158,18 @@ normalizers = ["normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
+name = "docs.links.citations_skip_local_caches"
+desc = "A virtual environment, a tool cache and a dependency tree beside the checkout are not scanned and the checkout still is: a tree with one page, one source file and one directory per name that must be skipped -- each cache file citing a file that does not exist -- is verified whole. The three readings it pins: green it prints `1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)` and exits 0; with the set emptied it reports 30 unverified citations and exits 1; with `.venv` alone dropped it reports 2 and names `.venv/lib/ghost.ts`. So the case is red when a name leaves the skip set, and also when the walk stops reading real files (a count that is not the three the miniature checkout holds). It is the reading that failed before: 45,407 files and 1.87 GB of cache plus two backtracing vendored headers turned a four-second walk into a run that had not finished after three quarters of an hour."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/check-doc-links.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["were not scanned", "1 of 1 symbol citation(s) verified, 1 path citation(s) across 3 file(s)"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 30000
+
+[[tests]]
 name = "docs.snippets_compile"
 desc = "Every Camel fence in a reader-facing page compiles; when the fence has a command and a text block it runs and prints that text. Incomplete or deliberately wrong fences carry a marker with a reason."
 kind = "behavior"
@@ -214,5 +239,84 @@ case = "../../../scripts/diagnostics-catalog.mjs"
 args = ["${case}", "--check"]
 expect_exit = 0
 expect_stdout_contains = ["no value used twice"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.no_unfinished_merge_left_in_the_tree"
+desc = "No tracked text file carries the leftovers of an unfinished merge: a hunk head, a diff3 base block, a separator or a tail. The gate we typed by hand before this only looked for the head, and on 2026-11-02 a merge that had been aborted was committed as 407a7ee9f with test/plans/feat/trans/cml.plan.toml still holding its `||||||| bbc9b2b65` base block -- a file that parses far enough to be reported as a case. A bare `=======` is not a marker by itself (in Markdown it is a setext heading underline), so it counts only where a hunk head precedes it in the same block."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/conflict-markers.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no conflict markers", "hunk head, a base block, a separator or a tail"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.no_unfinished_merge_pattern_sees_all_four_forms"
+desc = "The marker rule's reverse reading: on a probe file carrying all four forms, this rule catches four lines and the old one-line `git grep '^<<<<<<< '` catches one, so the rule is known to catch 407a7ee9f's shape rather than merely passing on a clean tree."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/conflict-markers.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["catches 4 line(s)", "the old one-liner catches 1", "misses three of the four forms"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+# A law's cotangent port and the body written against it. Nothing compared the two sentences until
+# this case: on 2026-11-04 `lane-rank0` measured 8 of 8 runs dying in `numelKernel`, because a law
+# handed `numel` a value the port had promised as something else, and neither the index nor the
+# transform had an opinion about the pair. `scripts/law-cotangent-ports.mjs` reads the laws of
+# `stdlib/rulesets` as text -- no build, no compiler -- and states, for each port, which requirement
+# the body's uses put on it and where that requirement is written down (`stdlib/tensor.cml#numel`
+# for an array, the module's own `spread_over` for an element). The three readings below are the
+# three the change was accepted on: the tree's own laws, and the two directions of one disagreement.
+#
+# The author's ruling of 2026-11-04 04:20 (`docs/handover/reviews/questions-2026-10-29.md`, "秩 0：
+# 只有一个转换点") withdrew the allowance this check briefly carried: the ports say `T[...]` and the
+# rank-zero conversion is the compiler's, at the one place a value's type goes from `T` to `T[...]`.
+# So the pair that was allowed is now the third negative control, and the library is green because
+# its ports are written as its answers are -- not because a rule was relaxed.
+#
+# The axis the crash itself was on -- the type the transform hands a law at build time -- is not
+# reachable from a source-only check and is recorded, with its measurement, in
+# `docs/handover/reviews/2026-11-04-where-a-laws-port-disagrees-with-the-value-it-is-handed.cn.md`.
+
+[[tests]]
+name = "docs.every_laws_port_agrees_with_its_body"
+desc = "Every law of `stdlib/rulesets` states ports that the body uses at the same kind: an element port handed to a scalar helper or to `spread_over`, an array port handed to `numel` or one of the `*_cotangent` helpers that read a length. There is no allowance: the author's ruling of 2026-11-04 04:20 (`docs/handover/reviews/questions-2026-10-29.md`, \"秩 0：只有一个转换点\") has the ports say `T[...]` as the answer is and leaves the rank-zero conversion to the compiler, so a port of `T` over a body that reads an array is a finding however the two spellings might be reconciled at the run. The run prints how many laws and ports it read and how many it could not witness at all -- a port the body only returns, or only multiplies by a value of unknown shape, is counted as unwitnessed rather than passed."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["no law's port disagrees with its body or its left side", "law(s) in"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.a_port_and_its_body_disagreeing_are_caught_both_ways"
+desc = "The reverse reading, so the rule cannot be a blanket: on probe modules this script writes under the system temp directory, an element port whose body hands it to a parameter of three elements is reported with the declaration that makes it a requirement (`element_port_fixed_extent.cml#three_lanes`, `ct: T[3]` -- a fixed extent reads more than one element), an array port handed to `spread_over` is reported as the other direction, an element port handed to that same element's open rank (`ct: T[...]`) is reported too -- the pair the withdrawn allowance used to let through -- and the two laws of the library as they are written now are not reported at all, which is what says the check is not merely refusing everything."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}", "--self-test"]
+expect_exit = 0
+expect_stdout_contains = ["cotangent port is 'T' but the body hands it to 'three_lanes', which reads an array", "cotangent port is 'T[...]' but the body hands it to 'spread_over', which takes an element", "cotangent port is 'T' but the body hands it to 'lanes_of', which reads an array", "a port 'T' handed to a parameter 'T[3]' is reported", "a port 'T[...]' handed to a parameter 'T' is reported", "the rank-zero pair 'T' -> 'T[...]' is reported, and the two laws of the library as they are written are not reported", "all three disagreements are caught, in both directions and in the open rank, and the laws of the library are not"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "docs.the_stated_lane_means_port_is_its_own_open_rank"
+desc = "The ruling read on the library itself: `stdlib/rulesets/transpose.cml#mean_axis_stated_t` states its cotangent as `T[...]` -- the type its twin `sum_axis_stated_t` states, and the one the answer has whether it is a lane per number or the one number of a rank-zero answer -- and hands it to `mean_axis_cotangent(ct: T[...])`, so `--explain` reads the row as an agreement and not as a disagreement. The rank-zero answer is not this law's to state: design principles 5.4 makes it the element, and the compiler boxes a scalar entering a `T[...]` position (`camel/core/type/composite/array.h#isRankZeroEdge`, `Array::createRankZero` through `ArrayType::castSlotFrom`). The row is pinned so the day the port is narrowed again, or the body is taught to read the element, the table says so."
+kind = "behavior"
+tool = "node"
+case = "../../../scripts/law-cotangent-ports.mjs"
+args = ["${case}", "--explain"]
+expect_exit = 0
+expect_stdout_contains = ["mean_axis_stated_t", "array (stdlib/rulesets/transpose.cml#mean_axis_cotangent, parameter 1 `ct: T[...]`)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000

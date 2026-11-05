@@ -33,6 +33,9 @@ using VjpFn = camel::core::VjpRule;
 /// states when its own type leaves it out. `nullptr` when the value has no tensor tangent, and the
 /// rule falls back to its other inputs.
 type::Type *vjpTensorType(const VjpBuilder &builder, vjp_node_t value);
+/// The type of a `tensor:shape` result: an `int64[n]` list when the operand's rank is a fact (`n`
+/// is that rank), and the open `int64[]` otherwise. The numbers are the value; the length is not.
+type::Type *shapeListType(const VjpBuilder &builder, vjp_node_t value);
 bool isTensorNode(const VjpBuilder &builder, vjp_node_t node);
 /// A Camel float (float64 or float32) node.
 bool isFloatNode(const VjpBuilder &builder, vjp_node_t node);

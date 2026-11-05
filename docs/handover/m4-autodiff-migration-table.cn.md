@@ -1,6 +1,24 @@
 # M4 迁移：autodiff 用例的库层分类表
 
-对象：`test/cases/modules/autodiff/` 下全部 **127** 个 `.cml`。
+**这一页的数由 `scripts/autodiff-migration-ledger.mjs` 产出**，不是人手抄的：下面这一行是工具打印的原样，
+日期在行下，提交就是**最后一次改动本页的那个提交**
+（`git log -1 --format=%h -- docs/handover/m4-autodiff-migration-table.cn.md`）。人写的是结论，数是工具给的。
+
+追平读数（2026-11-04，分支 `lane-ledger2b`（`lane-ledger` 的 tip 之上；任务书里的分支名 `lane-ledger2` 已被另一条车道占用），宿主 `88zjwei`，`out/latest/bin/camel` 2026-11-03 构建）：
+
+```
+[LEDGER] total=132 library=123 pass=19 with=45 array=71 other=7
+```
+
+`pass` 是**跑**出来的那一列，依赖上面那个二进制（`n/a` 表示二进制起不来，工具拒绝报数）；`total`
+`library` `with` `array` `other` 只读源码，换机器不变。这一行是脚本的原样输出，逐字一致：要复核就跑
+`node scripts/autodiff-migration-ledger.mjs`。
+
+**本页下文凡是 2026-11-01 / 2026-11-02 的读数（`127`、`118`、`pass=12`、`with=54 array=46 other=6`、
+`with=44 array=67` 等）都保留为那两天的读数，不再当今天的数看**——它们记录的是那时候量到了什么，
+以及量错在哪。
+
+对象：`test/cases/modules/autodiff/` 下全部 **132** 个 `.cml`。
 问题：**只 `import vjp`/`grad` 能不能过？** 答案逐条量出来，不是估的。
 
 ## 分母（计划里实际跑的）
@@ -31,7 +49,7 @@
 
 | 类 | 分母 | 分子（只 import 库、退出码 0 且打出数） | 今天挡在哪 |
 | --- | --- | --- | --- |
-| ① `with` 函数 + `grad(f)<x>()` | 51 | **0** | `grad` 声明的参数是 `(x: float) => float`，`f` 是函数值或数组函数时匹配不上：`No matching function found for argument types: <> (<f: (x: float) => float> (x: float) => float)`；带进 `with_grad` 的走 `stdlib/vjp.cml:93`（`with_grad` 体里 `vjp(f)`） |
+| ① `with` 函数 + `grad(f)<x>()` | 51 | **0** | `grad` 声明的参数是 `(x: float) => float`，`f` 是函数值或数组函数时匹配不上：`No matching function found for argument types: <> (<f: (x: float) => float> (x: float) => float)`；带进 `with_grad` 的走 `stdlib/vjp.cml#vjp`（`with_grad` 体里 `vjp(f)`） |
 | ② 数组/张量参数 | 54 | **0** | 同一处声明面：`No matching function found for argument types: <> (<xs: float[]> () => float pure)`（`array_slice_grad.cml:63:18` 起四行同一句） |
 | ③ 库里没有的名字 | 10 | **0** | `Unresolved reference: 'stop_gradient'`（`scalar_grad.cml:22:24`）；补上名字后仍卡 `with_grad<<x: float> (y: float) => float pure>` 在 `stdlib/vjp.cml:93:15` |
 | ④ 不在这条路上（`prelude` 的 `jvp`/`vmap`/`remat`，或只测名字解析） | 11 | **4** | 不再挡：`jax_batching`、`jax_vmap`、`jax_vmap_tensor`、`jax_names/remat` 今天退出码 0 且打出数（它们的名字在 `transforms` 里，本就不经过 `vjp`）。余 7 条仍在名字解析上 |
@@ -82,6 +100,24 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 
 **库层今天能过：12 / 118**（`node scripts/autodiff-migration-ledger.mjs` 的读数：`[LEDGER] total=127 library=118 pass=12 with=54 array=46 other=6`）。12 条里 **4 条真的跑出数**（`transform_rules`、`jax_batching`、`jax_vmap`、`jax_vmap_tensor`），**8 条守住的是拒绝**（`err_vjp_annotation`、6 条 `grad_function_value_*`、`with_grad_old_name`——它们期望 exit 1，库也确实拒了）。
 
+**2026-11-04 追平：库层今天能过 19 / 123**（上面页首那一行）。19 条里 **6 条真的跑出数**（上面那 4 条
+再加上 `rules_angle_args_reshape`、`rules_angle_args_softmax`），**13 条守住的是拒绝**（上面那 8 条再加上
+`transpose_needs_parameter_shape`、`var_tensor_local`、`var_tensor_read_after_call`、
+`var_tensor_read_after_write`、`var_tensor_read_in_callee`）。
+
+这个数为什么会动，写清楚：**不是用例变了，是量它的期望第一次是它自己的。** 台账原来只从
+`test/plans/feat/modules/*.plan.toml` 读期望，而 **132 条里有 14 条的计划条目根本不在那里**
+（`feat/linear/var_reference` 8 条、`feat/compile/rules_angle_args` 4 条、`feat/mm` 2 条），于是它拿
+一条**没人写过的 `expect_exit = 0`** 去量。14 条里 **5 条钉的是 `expect_exit = 1`**——它们守的就是拒绝，
+本来就该 exit 1，台账却把"按设计 exit 1"记成"不过"。改成"扫 `test/plans` 下所有计划、按用例自己那条
+条目量"之后，同一个二进制上 `pass` 从 **14 变 19**，逐条只差 9 行：那 5 条由"不过"变"过"，另外 4 条
+（`probe_library_grad`、`vjp_lib`、`vjp_user_a`、`vjp_user_b`）从"按编的 0 量"改成 `want = none` 且**不算过**。
+**没有一条用例的退出码动过，动的是拿它跟什么比。**
+
+`12 → 14` 那两条不在这笔账里：那是宿主换了一版二进制（`pass` 依赖二进制，页首与脚本文件头都记着
+这件事；脚本文件头在 2026-11-04 之前早就写着"读数 14、记录 12"）。**数和东西要分清**：这一页记的
+是"东西动对了、数字跟着动"，不是"数字动了、东西没动"。
+
 上一版手记的 **2** 就是这么错的：手记一律按 exit 0 数"过"，把 8 条"期望被拒"的用例记成了"不过"。工具按**每条用例自己的期望**（退出码 + 计划里点名的输出串）判，所以是 12。
 
 **`--ledger-check` 是棘轮**：上面那五个数记在脚本的 `LEDGER_RECORDED` 里，`pass` 只许升、`with`/`array`/`other` 只许降、`total`/`library` 一动就红——所以这个数以后不用人手抄，它自己会拦住回退。**它记的是"库层能过几条"，不是"能求导几条"**：那 8 条守拒绝的用例算过，但它们不能求导。
@@ -96,7 +132,7 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
 
 现在的口径（`scripts/autodiff-migration-ledger.mjs` 的文件头就是契约）：
 
-- **`with`/`array`/`other` 从源码数**：`array` = 用例源码里出现 `[]`/`[..]`/`f32`/`f16`/`bf16`/`Model`/`Plain`；`with` = 出现带 `with` 形参的函数类型（`<x: float> () => float`）；其余归 `other`。三列**把 118 条分完**，与 `pass` 不再相加。规则文件按同样两个写法数，命中处带 `stdlib/rulesets/<file>:<line>` 锚印在表下面。
+- **`with`/`array`/`other` 从源码数**：`array` = 用例源码里出现 `[]`/`[..]`/`f32`/`f16`/`bf16`/`Model`/`Plain`；`with` = 出现带 `with` 形参的函数类型（`<x: float> () => float`）；其余归 `other`。三列**把 123 条分完**（2026-11-04 的分母；写这一句时是 118），与 `pass` 不再相加。规则文件按同样两个写法数，命中处带 `stdlib/rulesets/<file>:<line>` 锚印在表下面。
 - **`pass` 是运行读数，依赖宿主机上的二进制**：它跑 `out/latest/bin/camel`，**同一棵树换个二进制读数就不同**（同一棵树在 2026-11-01 13:44 的二进制下读 `pass=6`，没有二进制时读 `pass=0`），所以**它不可跨机比较**，三列源码数可以。
 - **A/B（同一棵树，2026-11-02）**：连跑两遍 `pass=12 with=44 array=67 other=7`；把 `CAMEL_HOME` 指到没有二进制的目录再跑，`pass=0` 而 **`with=44 array=67 other=7` 一位不变**——分类不随二进制动，这是这次改口径的验收本身。**并且：二进制起不来（或根本不在）时台账现在拒绝报数**（见下）。
 
@@ -166,18 +202,24 @@ camel test/cases/modules/autodiff/jax_vmap.cml std::nvm   # 退出码 0，打出
   `TRANSPOSE function=autodiff::add_tangent<float> skip=output`（lambda 形）或
   `TRANSPOSE function=split_of_jvp_of_…_backward skip=call node=5 callee=autodiff::add_tangent<float>`（具名函数形）
   → `transpose has no transpose for this function`。
-  **注意**：`skip=output` 这一族的修法在 `lane-reinterp2` 的 `e9ab3bdd9`（"answer a zero for a parameter no
-  cotangent reached"），它**不在** `origin/develop` 的 `bcf970332` 里（`git branch -a --contains e9ab3bdd9` 只列
-  `lane-reinterp2`）；所以本表按本分支的读数记。那一笔进来之后这一行要重测。
+  **注意**：`skip=output` 这一族的修法在 `e9ab3bdd9`（"answer a zero for a parameter no
+  cotangent reached"），记这一行时它**不在** `origin/develop` 的 `bcf970332` 里（`git branch -a --contains e9ab3bdd9`
+  当时只列 `lane-reinterp2`，该分支已删、tip `67509bd1a`）；所以本表按当时本分支的读数记。
+  这一笔现在已在 `origin/develop` 的历史里（`f130ac445`），**这一行要重测**。
 - 函数体里有调用（`sq(x) * sq(x)`）→ `REINTERP split … skip=forward construct=a tangent port`；
   函数体里有分支 → `skip=exit`；函数体里建张量再取 `max` → `REINTERP jvp … skip=body`。
 - 数组参数 → 声明面：`No matching function … ((xs: float[]) => float pure)`。
 
 所以"过半"的真正账不是每条用例缺一条规则，而是三件事：库的**声明面**（`Vjp<F>` 泛型，设计 6.1）、
-**`add_tangent` 的转置**（在 `lane-reinterp2` 上已修，未进 develop）、**`split`/`jvp` 对调用、分支、张量体的支持**。
+**`add_tangent` 的转置**（`e9ab3bdd9` 已修，现在已在 `develop` 里）、**`split`/`jvp` 对调用、分支、张量体的支持**。
 这三件都不在用例那边：试点 5 条里 0 条是改写法就能过的。
 
-## 逐条（127 行）
+## 逐条（127 行，2026-11-01 那一版）
+
+> 这张逐条表是 2026-11-01 按 127 个文件录的，**没有重录**：用例目录此后长到 132 个（台账 `total=132`），
+> `vjp` 的声明面也换过。要今天的逐条读数就跑 `node scripts/autodiff-migration-ledger.mjs`，它逐行打印
+> `exit`/`want`/`class`；这一节的结论（哪些类卡在声明面、哪些卡在走图）与今天一致，数按工具那一行。
+
 | # | 用例 | 库层 | 缺什么 |
 | --- | --- | --- | --- |
 | 1 | `adjoint_cast_array` | 不过 | 参数是数组/张量（库只声明 `float` 一元与二元）；且写法是 `grad(f)<x>()` |

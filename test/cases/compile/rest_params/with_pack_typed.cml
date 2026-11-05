@@ -1,0 +1,18 @@
+// A pack among the `with` parameters that writes an element type: every `with` argument the pack
+// takes is of that type, the rule an ordinary parameter follows one type further out (design
+// principles 4.4, 5.6). A call that gives the pack nothing is a call with no `with` argument.
+with <...ws: int>
+func ident(x: float): float {
+    return x
+}
+
+with <...ws>
+func ident2(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(ident(2.5))
+    println(ident2(3.5))
+    return 0
+}

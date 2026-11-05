@@ -1,0 +1,26 @@
+// **The walk's `kind` fallback speaking about a node that is not a construction.** A closure with no
+// parameters is called (`let g = () => x; g()`), and the call's callee is a value the graph carries
+// rather than a static reference: the walk reaches the call with no operand to read and no callee to
+// transpose, and refuses with the cause table's `kind` word and the node's own kind -- `kind=8`, the
+// CALL node (`GCNodeKind::Call`) -- never a number invented for it.
+//
+// This is the other half of `transpose_array_literal_member_projection` and
+// `transpose_array_literal_open_extent_refuses`: those two say an array construction is projected when
+// its type states a member count and refused when it does not, and this one says the fallback that
+// answers for a kind nobody has written a transpose for is still reached and still names the kind. A
+// feature that answered the projection by deleting the fallback's coverage would leave the entry
+// above green and this one silent -- which is why the two live in one plan and neither is pinned on
+// an exit code alone.
+import rulesets.transpose
+import { transpose } from transforms
+
+func f(x: f32): f32 {
+    let g = () => x
+    return g()
+}
+
+func main(): int sync {
+    let back = transpose(f)
+    println("f_pullback=", back(1.5))
+    return 0
+}

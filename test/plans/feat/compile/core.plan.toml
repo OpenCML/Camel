@@ -33,15 +33,17 @@ timeout_ms = 10000
 
 [[tests]]
 name = "semantic.decorator_nonfunc_return"
-desc = "Rejects decorators that return data instead of a callable compatible with the decorated function."
+desc = "Rejects decorators that return data instead of a callable compatible with the decorated function: the refusal is written at the decorator and says what it answered. It used to be `ArgumentsMismatch` at 1:1 whose sentence read 'Function of type 'decorator must return function' cannot be called with argument types: int.' -- the message's own words stood where the type belonged, so a reader was told a function type was named 'decorator must return function' and the int the decorator answered was presented as the arguments of a call."
 kind = "negative"
 case = "../../../cases/compile/semantic/decorator_nonfunc_return.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsMismatch"
-expect_diagnostic_code = "0x03000010"
-expect_diagnostic_line = 1
+expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
+expect_diagnostic_code = "0x0300001C"
+expect_diagnostic_line = 18
 expect_diagnostic_column = 1
+expect_output_contains = ["Invalid call to '@bad_decorator' with argument types <(x: int) => int pure> ()", "the value the decorator answered has type 'int', and that is not a function", "no function to be"]
+expect_output_not_contains = ["decorator must return function", "Camel Invariant Violation", "Guarantee"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

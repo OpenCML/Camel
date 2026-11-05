@@ -1,0 +1,46 @@
+// A position that discards a value does not use a name: the rows of the author's ruling of
+// 2026-11-03 that compile. `void` a body's last statement is dropped (`acceptsAsResult`), and a
+// statement whose value the block drops is dropped the same way -- so a name written there is no
+// value use, whether it is written as the whole statement (`{ len };`) or bound first
+// (`{ let s = len };`), in a `sync` block and in a block that is not one. The rule is about the
+// position, not the shape: the rows below differ only in where the dropped value is written.
+//
+// The name is not lost by being dropped: `binds_and_calls` still calls through the one it binds.
+// A position whose value IS used keeps reporting FunctionNameAsValue, at the `let`
+// (function_name_bound_at_a_used_tail.cml, function_name_at_tail.cml).
+func void_arith(): void { 1 + 2 }
+
+func void_name(): void { len }
+
+// `{ len };` written as a statement of a `sync` block.
+func stmt_name(): void sync {
+    { len };
+    println('stmt_name')
+}
+
+// The same statement with the name bound first: one rule, so the same reading.
+func stmt_bound_name(): void sync {
+    { let s = len };
+    println('stmt_bound_name')
+}
+
+// The same position one nesting deeper: the block is the tail of a body declared `: void`, so what
+// the block ends with is dropped too -- the drop does not stop at the body's own tail.
+func nested_tail_name(): void sync { { len } }
+
+// Dropped where it stands, and still the name it was: a call through it runs.
+func binds_and_calls(): int {
+    { let step = len };
+    return step([10, 20, 30])
+}
+
+func main(): int sync {
+    void_arith()
+    void_name()
+    stmt_name()
+    stmt_bound_name()
+    nested_tail_name()
+    println(binds_and_calls())
+    println('done')
+    return 0
+}

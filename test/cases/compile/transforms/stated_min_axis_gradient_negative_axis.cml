@@ -1,0 +1,45 @@
+// The gradient of a lane min along a negative axis, with a tie, through both legs.
+//
+// `jvp_min_axis` states the selection as `xs <= min<axis, true>(xs)` (`stdlib/rulesets/jvp.cml`)
+// and `min_axis_stated_t` keeps the spread cotangent only at those positions
+// (`stdlib/rulesets/transpose.cml`). The axis is written `-1`, the last one, so this is also the
+// reading that says the axis reaches the stated operator unresolved and the extents decide where the
+// lane's cotangent goes.
+//
+//     x     = [[2.0, 1.0, 1.0],
+//              [5.0, 4.0, 6.0]]
+//     lanes = min<-1, false>(x) = [1.0, 4.0]            (one lane per row)
+//     value = sum(lanes) = 5.0
+//     dL/dx = [[0.0, 1.0, 1.0],
+//              [0.0, 1.0, 0.0]]                             (row 0's minimum is tied twice)
+//
+// The first row is the tie -- two 1.0s, each of which gets the whole cotangent -- and the second row
+// is the plain case, where only the 4.0 in the middle does. A law that kept the first tied position
+// would answer `[[0.0, 1.0, 0.0], [0.0, 1.0, 0.0]]`, and one that spread the cotangent over the row
+// would answer `[[1.0, 1.0, 1.0], [0.0, 1.0, 0.0]]`.
+//
+//     camel test/cases/compile/transforms/stated_min_axis_gradient_negative_axis.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, min, sum } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[...]>
+func total(): float {
+    return sum(min<-1, false>(w))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[...]): float {
+    return sum(min<-1, false>(x))
+}
+
+func main(): int sync {
+    let x = [[2.0, 1.0, 1.0], [5.0, 4.0, 6.0]] as float[2, 3]
+    let engine = grad(total)<[[2.0, 1.0, 1.0], [5.0, 4.0, 6.0]] as float[2, 3]>()
+    let (value, pullback) = vjp(total_plain)(x)
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `min<-1>: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

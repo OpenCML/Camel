@@ -335,7 +335,9 @@ class RuntimeGraphDraftSession {
 /// transform synthesizes. Each member is reserved first: the returned GraphId is the graph's,
 /// wherever a graph is named in the drafts (FUNC callees, static Function values), and encode()
 /// builds the graphs. The members form a program with the graphs of the one the group is made
-/// over (program()).
+/// over (program()). That program is held here, in C++, so the group pins it for as long as the
+/// group lives (GCGraphManager::pin): a reserved program nothing reaches is a program whose
+/// static values the collector does not keep fresh, and a group is made inside a running call.
 class GraphDraftGroup {
   public:
     GraphDraftGroup(const camel::core::context::context_ptr_t &context, const Program *base);

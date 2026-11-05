@@ -1,0 +1,54 @@
+// A known operand does not change the question: `extent_of::<A>()` answers the type's extents
+// whether a value of that type is in the function's hands or not, and it never reads that value.
+//
+// Three spellings of one call, all of them `[2, 3]`:
+//
+//   from_type()                       nothing of the type is at hand -- the type is the only source
+//   shape_of(xs)                      `xs` is a known operand: its slots could be read
+//   takes_it(extent_of::<float[2, 3]>)  the answer is handed on as a value, so the function that
+//                                     receives it has no type argument of its own
+//   typed_binding()                   the same name where the position states a function type
+//
+// The last line of `main` is the case's control: `shape(xs)` reads the operand and answers the same
+// list, so the two sources agree here and the day they stop agreeing is a day this case says so.
+//
+// Measured 2026-11-04 on `ca464bca2` (host `88zjwei`), before the answer was settled where the name
+// is used as a value: the first two lines printed `[2, 3]`, and the third stopped the run --
+//
+//   error[RuntimeDiag::PassInternalError]: Pass 'calling `extent_of`' failed with an internal error:
+//   the extents of `A` are a fact of the type the call names, and an OPER node records the
+//   instantiated type of the call but not the type argument it was written with, ...
+//   exit=1
+//
+// and a typed binding (`func typed_binding()`) stopped it the same way on the same tree, which is
+// the compiler complaining about a program that is right: the answer exists in the type argument
+// written at that position, and only the run had nothing left to read.
+
+import { shape } from tensor
+
+func from_type(): int[] {
+    return extent_of::<float[2, 3]>()
+}
+
+func shape_of(t: float[2, 3]): int[] {
+    return extent_of::<float[2, 3]>()
+}
+
+func takes_it(f: () => int[]): int[] {
+    return f()
+}
+
+func typed_binding(): int[] {
+    let g: () => int[] = extent_of::<float[2, 3]>
+    return g()
+}
+
+func main(): int sync {
+    let xs: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    println(from_type())
+    println(shape_of(xs))
+    println(takes_it(extent_of::<float[2, 3]>))
+    println(typed_binding())
+    println(shape(xs))
+    return 0
+}

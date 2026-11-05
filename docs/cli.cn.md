@@ -55,7 +55,7 @@
 - `--graph-gc-mb <megabytes>`：图空间比上次回收后多出这么多时要求回收（默认 64）  
 - `--gc-nursery-mb <megabytes>`、`--gc-promotion-age <n>`、`--gc-large-threshold-kb <kilobytes>`、`--gc-large-budget-mb <megabytes>`、`--gc-growth-percent <n>`、`--gc-heap-limit-mb <megabytes>`：回收器的尺寸，在堆存在之前读入：初生空间（默认 4 MB）、晋升前存活的次回收次数（默认 4）、多大算大对象（generational 默认 64 KB，mark-sweep 4 KB）、两次回收之间允许的大对象字节（默认 4 MB）、该空间的增长比例（默认 100%）、堆上限（默认无）。每一项做什么见“回收器”一节  
 - `--space-segment-kb <kilobytes>`、`--meta-space-limit-mb <megabytes>`、`--graph-space-limit-mb <megabytes>`、`--perm-space-limit-mb <megabytes>`：每个可增长空间的第一个段（段小则小程序也会增长它们），以及 meta、graph、permanent 三个空间的上限；空间用尽时以 `RuntimeDiag::MemoryExhausted` 停下，并指出能抬高它的选项  
-- `--gc-stress <kind=...,alloc=...,safepoint=...>`、`--gc-check <moves,poison,verify=...,config>`：在压力下回收、读回收器：`kind=minor|major|both` 指定回收种类，`alloc=N` 每 N 次分配回收一次，`safepoint=N` 每 N 个安全点回收一次；`moves` 逐行打印移动的对象，`poison` 在每个安全点覆写 from 空间，`verify=before|after|both` 在回收前后检查不变式，`config` 启动时打印解析后的配置  
+- `--gc-stress <kind=...,alloc=...,safepoint=...>`、`--gc-check <moves,poison,verify=...,config,mark>`：在压力下回收、读回收器：`kind=minor|major|both` 指定回收种类，`alloc=N` 每 N 次分配回收一次，`safepoint=N` 每 N 个安全点回收一次；`moves` 逐行打印移动的对象，`poison` 在每个安全点覆写 from 空间，`verify=before|after|both` 在回收前后检查不变式，`config` 启动时打印解析后的配置，`mark` 把记账清掉的标记与整个图空间比对  
 - `--coll <leaf=...,fanout=...,pad=...,validate=...>`：`Map`/`Set` 树的宽度，在第一个集合建立之前读入：每个叶子的条目数（默认 64；0 表示所有集合都是一个有序数组）、每个分支的孩子数（默认 64）、`pad=off` 让根以下的表按内容分配、`validate=on` 检查每个操作返回的表  
 - `--native-stack-guard <on|off>`：嵌套调用前是否检查原生栈（默认 `on`）；`off` 只用于测量栈真正到哪里结束，不供正常使用  
 - `--devices <cpu|ordinal[,ordinal...]>`：一条流水线可以使用的设备（设计原则 13.4）：`cpu` 表示只用主机，或者按流水线可用的次序写 CUDA 序号（例如 `0`、`0,1`）。这里点名的设备必须存在：只要已加载的模块拥有设备，启动时就会在**任何图运行之前**检查一次（`--devices cpu` 永远通过；不给这个选项时，缺失只意味着程序在主机上运行）。缺失的序号是运行时诊断 `DeviceUnavailable`（`0x04000070`），报告中点出这个设备、机器上实际有多少 CUDA 设备（或为什么一台都问不到），以及其它同样缺失的序号；退出码为 1。程序即使一次都没有执行到设备操作，也照样报出（见 `modules/tiles/README.md` 的 "Tiles"）。今天一条流水线在第一个序号上执行，多卡执行是 G7。`--devices cpu` 下 `tiles:available()` 为假，需要设备的操作报错，而不是悄悄移到 GPU 上。  
@@ -134,7 +134,7 @@
 - **`--arg name=value`** 给参数 `name` 赋值；每个参数重复一次该选项。`value` 如何读取取决于参数声明的类型：
   - `int`、`i32`、`float`、`f32`、`bool`、`string`：字面量（`3`、`0.5`、`true` / `false`、任意文本），按参数声明的宽度读取。`i32` 全程是 int32，`f32` 全程是 float，声明类型装不下的值被拒绝，而不是按更宽的类型读取再收窄：`i32` 参数给 `--arg n=3000000000` 时消息说 `i32` 及其范围。数是一个完整的数字记号，由 `camel::utils::parseWholeInteger` / `parseWholeFloat` 读取：没有十六进制浮点、没有 `Infinity`、没有空白（前导 `+` 是符号，允许）。
 - `c64`、`c128`：语言里的复数文字（语言参考 2.5.3）：实部、虚部的符号与虚部，`1+2i`、`0.5-0.25i`，或只有带符号的虚部 `-2i`。每个部分按声明类型的宽度、用同一条完整数字记号规则当作浮点数读取（`c64` 的两个部分都是 float，所以超出 f32 范围的部分会指明是哪个部分与 `c64`）。实数就是实部、虚部为 0 的复数：`1.5` 读作 `1.5+0i`，与 `let z: c128 = 1.5` 相同（字面量按上下文取类型，设计原则 5.1）。
-  - `f32[..]`、`int[..]` 这类多维数值数组：一个 `.npy` 文件（扩展名可以省略）。文件按 `tensor::load_npy` 的方式读入（float64 数据以 float32 存储，即该模块的浮点存储格式），然后按声明的元素类型与各维检查这个数组；不匹配（给浮点参数一个整数文件、形状不同）是错误，不做转换。
+  - `f32[...]`、`int[...]` 这类多维数值数组：一个 `.npy` 文件（扩展名可以省略）。文件按 `tensor::load_npy` 的方式读入（float64 数据以 float32 存储，即该模块的浮点存储格式），然后按声明的元素类型与各维检查这个数组；不匹配（给浮点参数一个整数文件、形状不同）是错误，不做转换。
   - 结构体或元组（模型的权重）：一个目录，每个叶子一个文件，文件名是用点连接的叶子路径（`fc1.w.npy`、`0.npy`），也就是 `nn::save_params` 写出的布局。
   - `with` 参数的给法与普通参数相同。`var` 参数不能给值。
 - **绑定就是部分应用。** 得到值的参数在第一个遍运行之前成为入口图中的常量，因此各个遍把它当常量看待（据此折叠和特化）。其余参数仍是入口图的参数；`std::rgir` 把它们显示为与参数同名的 `PORT` 节点。
@@ -200,7 +200,7 @@
 - `std::inline`（含 `small` / `arm` / `hybrid`）：`std::opt::inline` 及其策略的别名
 - `std::defunctionalize`：让每个函数值都有设计稿要的形式，从而程序里不再留下闭包、也不再留下通过函数值的调用。程序赋予值的那个函数类型变成一个 `enum`：程序当成值用的每个函数是其中一个变体，该函数捕获的值就是这个变体的数据，于是标签就在值的类型里。通过值的调用变成对被指函数的直接调用，捕获值作为末尾的实参；只有在运行期才知道的标签变成对它的一个 `match`——`:enum/tag`、每个变体一条臂（从值里取出该变体的捕获值）、一个 `JOIN`；在构造处就知道的标签直接折掉，只有一个变体的家族也直接折掉。它不是优化遍：它改变哪些调用是直接调用，而不改变代码有多少；流水线会在 `std::opt` 之前跑它，不需要程序写出来——`camel m.cml std::opt std::fvm` 就是"想让通过函数值的调用变成直接调用"的程序的全部流水线。写出来时它只在写的位置跑，并报出它做了什么、留下了什么（`report=true`）；流水线插入的那一步什么也不写，免得报告落在程序自己的输出里。它改的是程序写出来的值：外壳自己拿着的入口函数值原样保留，所以没有哪个程序的入口点被重新编码。它看不全的家族保留原来的形式，并报出那个类型和原因（`RuntimeDiag::DefunctionalizationIncomplete`，`0x04100017`）：值被不是调用的节点读（`map` 这类高阶算子会在算子内部调用它）、函数既被直接调用又被当成值、调用的被调方还在等东西、值交给了一个声明成另一种函数类型的形参（比如 lambda 返回它写下的值，而形参说的是 `void`）、类型是入口函数的实参、或者类型里装着这一遍留下来的另一个家族。它不猜：猜一个调用到达哪个函数会改变哪些效应执行。
 - `std::fvm`：高性能字节码虚拟机调度器
-- `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致；该构建在日志里说明一次（`-v`：`std::jit: this build has no native code generator ...`）。这是一条日志而不是警告，所以同一条命令在所有平台上都能运行，`-Werror` 下也一样
+- `std::jit`：启用即时编译的字节码虚拟机调度器。即时编译器只为 x86-64 生成代码；在其他处理器的构建中（arm64 macOS、arm64 Linux；`ENABLE_FASTVM_JIT` 关闭）`std::jit` 仍被接受，程序在字节码解释器上运行，与 `std::fvm` 相同，结果一致。这种构建里写出 `std::jit` 会在程序运行之前于 stderr 报一次警告 `RuntimeDiag::JitWithoutCodeGenerator`（`0x04100018`，阶段 `pass:std::jit`），说明这个遍在这里做了什么；它不阻止运行，`-Wno-jit-without-code-generator` 可以关掉，`-Werror` 可以把它变成错误
 - `std::gir`：转储当前的图中间表示并停止
 - `tensor::fuse`、`onnx::export`：由模块贡献的遍。在命令行上写 `<module>::<pass>` 时，如果程序没有导入模块 `<module>`，就加载它，所以程序不必仅仅为了让某个模块的遍来翻译它而导入该模块。找不到模块，或模块里没有这个遍，名字就仍是未知的（`RuntimeDiag::UnrecognizedGraphPass`）
 
@@ -254,7 +254,7 @@
 
 ### 警告
 
-警告（`[Warn]` 诊断）不会让程序停下。下表是编译器关于效应的警告和流水线的警告；其余的警告（`InvalidEscapeSequence`、`ExitInUnusedBranch`、`MatchWithoutDefault`）见 [diagnostics.md](diagnostics.md)。
+警告（`[Warn]` 诊断）不会让程序停下。下表是编译器关于效应的警告和流水线的警告；其余的警告（`ExitInUnusedBranch`、`MatchWithoutDefault`）见 [diagnostics.md](diagnostics.md)。
 
 | 名字 | 代码 | 位置 | 含义 |
 |---|---|---|---|

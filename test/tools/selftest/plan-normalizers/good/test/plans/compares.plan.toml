@@ -1,0 +1,20 @@
+# The same plan as `bad/`, repaired in the one place it was wrong: the plan declares the normaliser
+# its comparison needs, so the child's `\r\n` is read as the line end it is on either platform.
+# `test/tools/check-plan-normalizers.mjs --selftest` reads this file and must find nothing to report.
+id = "selftest.plan_normalizers.good"
+desc = "A Python child's text compared byte for byte, after the newlines are normalised"
+tier = "fast"
+
+[defaults]
+normalizers = ["normalize_newlines"]
+
+[[tests]]
+name = "compares.python"
+desc = "Two lines of a Python child's output, compared exactly"
+kind = "behavior"
+tool = "python"
+case = "says.py"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = ["first\nsecond\n"]
+timeout_ms = 20000

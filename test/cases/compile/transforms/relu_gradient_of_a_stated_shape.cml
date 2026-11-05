@@ -1,0 +1,47 @@
+// `relu`'s gradient through the library, with the shape written into the type.
+//
+// The open-rank twin is `relu_gradient_through_the_library.cml`, and it still refuses: the product
+// law reads the tangent's own shape for `sum_to` and `float[...]` states no extents. Here the type is
+// `float[4]`, `shapeCarrierOf` answers it (author, 2026-11-03 16:15), and both legs answer.
+//
+// Hand first. `relu`'s slope is one where `x > 0` and zero at or below it, and `sum`'s adjoint is one
+// for every lane, so the gradient is the mask itself. The input holds one negative, the boundary
+// itself, and two positives -- so an answer that took either side at zero, or that answered `ct`
+// everywhere, is separated without a tolerance:
+//
+//     x    = [-1.5, 0.0, 2.5, 0.25]
+//     mask = [ 0.0, 0.0, 1.0, 1.0]
+//     value = relu(-1.5) + relu(0.0) + relu(2.5) + relu(0.25) = 0 + 0 + 2.5 + 0.25 = 2.75
+//
+// Both legs are printed and pinned: the engine's (`grad`, whose mask is `y > 0`) and the library's
+// (`vjp` -> `split(jvp)` -> `transpose` on the backward half, whose mask is `x > 0`). They agree at
+// zero because `relu` maps everything at or below zero to zero.
+//
+//     relu stated engine  d = [0.0, 0.0, 1.0, 1.0]
+//     relu stated library value = 2.75  d = [0.0, 0.0, 1.0, 1.0]
+//
+//     camel test/cases/compile/transforms/relu_gradient_of_a_stated_shape.cml
+import { grad } from autodiff
+import { relu, sum } from tensor
+import { vjp } from vjp
+
+/// The engine's route: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[4]>
+func total_of_the_parameter(): float {
+    return sum(relu(x))
+}
+
+/// The library's route: an ordinary parameter, which is what `vjp` takes.
+func total(x: float[4]): float {
+    return sum(relu(x))
+}
+
+func main(): int sync {
+    let slope = grad(total_of_the_parameter)
+    let de = slope<[-1.5, 0.0, 2.5, 0.25] as float[4]>()
+    `relu stated engine d={}`->format<de>->println
+    let (value, pullback) = vjp(total)([-1.5, 0.0, 2.5, 0.25] as float[4])
+    let dl = pullback(1.0).0
+    `relu stated library value={} d={}`->format<value, dl>->println
+    return 0
+}

@@ -1,0 +1,8 @@
+// The extent a position states is checked, never cut to fit: three elements in a `f32[2]` is a
+// length, and the report names it. This is the guard the rank-one build must keep -- a fix that
+// let `as float[2]` through would have removed the length check instead of the asymmetry.
+func main(): int sync {
+    let xs = [1.5, 2.5, 3.5] as float[2]
+    println(xs)
+    return 0
+}

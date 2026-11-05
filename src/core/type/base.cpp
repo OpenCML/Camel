@@ -321,18 +321,24 @@ bool Type::assignableFrom(Type *from) const {
     if (to == from)
         return true;
 
-    // Still an ASSERT, now with the measurements that settle why. Turning it on aborts 17 plan
-    // cases, not the four the ruling named: `comprehension_context.annotated` (nvm/fvm/jit) and
-    // `context.var_sibling` are where it was first seen, and `rank_zero_slot_field*`,
-    // `rank_zero_slot_tuple_element*`, `rank_zero_slot_nested_field*`, `print_and_recompile` and
-    // `ort_struct_casts` reach it too -- valid programs comparing a name with a primitive target
-    // all over the compiler, not one caller that forgot to resolve. Exempting composite targets
-    // (their own `assignableFrom` answers for them) still leaves the rank_zero family aborting,
-    // so the question is broader than any single caller: it is "which type is a name allowed to
-    // stand for, and who reads it", a question about the type system. Stays a release-time check.
-    ASSERT(
-        to->code_ != TypeCode::Ref && from->code_ != TypeCode::Ref,
-        "Ref type cannot be assigned");
+    // A `Ref` is a position whose type is not decided yet -- a name, or a composite member whose
+    // target has not been filled in -- and it is an input this judgement has to answer, not one it
+    // may abort on. The author's ruling of 2026-11-02 14:10: resolve it at the entry of every type
+    // judgement instead of asking each caller to remember.
+    //
+    // Resolution lives where the target does: the composite types fill their `Ref` members from a
+    // type list (`TupleType::resolve`, `StructType`'s refs slots, `ArrayType::resolved`), and the
+    // value side reads a name through `RefData`. A `Ref` that is still standing when a judgement is
+    // asked therefore means "undecided", and the answer here is the one the general path below
+    // already gives: it equals itself and nothing else. What it is not is a `GUARD`: this site used
+    // to abort the Debug build on seventeen plan cases, all of them valid programs
+    // (`comprehension_context.annotated`, `context.var_sibling`, the `rank_zero_slot_*` family,
+    // `print_and_recompile`, `ort_struct_casts`), and the ruling reads that as the compiler having
+    // written a legal case down as an assertion.
+    if (to->code_ == TypeCode::Ref || from->code_ == TypeCode::Ref)
+    {
+        return to->code_ == from->code_;
+    }
 
     // A type variable stands for a type that is not known yet: it only matches itself.
     if (to->code_ == TypeCode::TypeVar || from->code_ == TypeCode::TypeVar)

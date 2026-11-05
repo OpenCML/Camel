@@ -105,10 +105,10 @@
 | `:op/ne_b` | `src/builtin/operators/ops.cpp#__builtin__ne__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent`）：标量直接比：浮点按数值比（NaN 不等于自身、两个零相等），bool 比它的值 | trait | — |
 | `:op/eq_s` | `src/builtin/operators/ops.cpp#__builtin__eq__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent`）：两个字符串比字节内容 | trait | `declared_traits` |
 | `:op/ne_s` | `src/builtin/operators/ops.cpp#__builtin__ne__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent`）：两个字符串比字节内容 | trait | `declared_traits` |
-| `:op/eq_c` | `src/builtin/operators/ops.cpp#__builtin__eq__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `src/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
-| `:op/ne_c` | `src/builtin/operators/ops.cpp#__builtin__ne__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `src/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
-| `:op/eq_z` | `src/builtin/operators/ops.cpp#__builtin__eq__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `src/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
-| `:op/ne_z` | `src/builtin/operators/ops.cpp#__builtin__ne__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `src/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
+| `:op/eq_c` | `src/builtin/operators/ops.cpp#__builtin__eq__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `include/camel/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
+| `:op/ne_c` | `src/builtin/operators/ops.cpp#__builtin__ne__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `include/camel/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
+| `:op/eq_z` | `src/builtin/operators/ops.cpp#__builtin__eq__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `include/camel/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
+| `:op/ne_z` | `src/builtin/operators/ops.cpp#__builtin__ne__` | 按内容比较（`src/core/rtdata/equality.cpp#valuesEqualByContent` → `include/camel/core/rtdata/complex.h#Complex::equals`）：两个部分按数值各比一次 | trait | — |
 | `:op/add_c` | `src/builtin/operators/ops.cpp#__builtin__add_cc__` | 两个部分各做一次正确舍入的加/减（`src/builtin/operators/ops.cpp#complexBinary`），与标量浮点同样的舍入 | 记录 | `declared_records` |
 | `:op/add_z` | `src/builtin/operators/ops.cpp#__builtin__add_zz__` | 两个部分各做一次正确舍入的加/减（`src/builtin/operators/ops.cpp#complexBinary`），与标量浮点同样的舍入 | 记录 | `declared_records` |
 | `:op/sub_c` | `src/builtin/operators/ops.cpp#__builtin__sub_cc__` | 两个部分各做一次正确舍入的加/减（`src/builtin/operators/ops.cpp#complexBinary`），与标量浮点同样的舍入 | 记录 | `declared_records` |
@@ -157,7 +157,7 @@
 | `:op/pow_z_i` | `src/builtin/operators/ops.cpp#complexPowBinary` | 同上 | trait | — |
 | `:op/pow_z_l` | `src/builtin/operators/ops.cpp#complexPowBinary` | 同上 | trait | — |
 | `:struct/len_arr` | `src/builtin/operators/struct.cpp#__len_arr__` | 读数组已存的元素个数 `arr->size()`，只读一个字段 | trait | `declared_traits` |
-| `:struct/len_str` | `src/builtin/operators/struct.cpp#__len_str__` | 按码点数长度（`src/utils/utf8.h#count`），一个纯循环；输入已保证是合法 UTF-8，没有抛点 | trait | `declared_traits` |
+| `:struct/len_str` | `src/builtin/operators/struct.cpp#__len_str__` | 按码点数长度（`include/camel/utils/utf8.h#count`），一个纯循环；输入已保证是合法 UTF-8，没有抛点 | trait | `declared_traits` |
 | `:coll/len` | `src/builtin/operators/collection.cpp#__coll_len__` | 读 Map/Set 已存的条目数 `table->size()`，只读一个字段 | trait | — |
 | `:op/mul_c` | `src/builtin/operators/ops.cpp#complexBinary` | 四个部分各做一乘一加，各舍入一次；与 `add`/`sub` 同一个内核，没有抛点 | 记录 | `declared_records`、`declared_traits` |
 | `:op/mul_z` | `src/builtin/operators/ops.cpp#complexBinary` | 同上，宽度是 double | 记录 | `declared_records` |
@@ -206,7 +206,7 @@
 | `:struct/contains_str` | `src/builtin/operators/struct.cpp#__contains_str__` | `std::string_view::find`，只是扫描；空串在实现里天然命中（`find` 返回 0） | trait | `declared_traits` |
 | `:struct/len_bytes` | `src/builtin/operators/struct.cpp#__len_bytes__` | 读 `Bytes` 的视图长度 | trait | `declared_traits` |
 | `:op/eq_bytes` | `src/builtin/operators/struct.cpp#__eq_bytes__` | 两个视图按字节比较 | trait | `declared_traits`、`read_only_helpers` |
-| `:op/ne_bytes` | `src/builtin/operators/struct.cpp#__ne_bytes__` | 同一个比较取反 | trait | `declared_traits` |
+| `:op/ne_bytes` | `src/builtin/operators/struct.cpp#__eq_bytes__` | 同一个比较取反 | trait | `declared_traits` |
 
 反向验证同样是两半，一次运行同时打红：删掉 `struct/contains_arr` 与 `op/eq_bytes` 两条 trait，
 `declared_traits` 在 `xs->contains<2>` 与 `a == b` 两行变红（读到 1）；再给 `__contains_arr__`

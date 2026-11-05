@@ -18,7 +18,7 @@
 import { reshape, sum } from tensor
 import { grad } from autodiff
 
-with <x: f32[..]>
+with <x: f32[...]>
 func probe(): float {
     let a = reshape<[6]>(x)
     return float(sum(a[1:4]))

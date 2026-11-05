@@ -470,15 +470,30 @@ template <std::floating_point T> NumberTextStatus parseNumberToken(std::string_v
     return number_text_detail::realValue(text, negative, out);
 }
 
-/// Whether `f32` reads the digits of `scientific` back as the f32 they were written from, by
+/// Whether `T` reads the digits of `scientific` back as the value they were written from, by
 /// parsing them and comparing the bits: the test the text of a reduced-precision type is held to
 /// after its own rounding (below). The digits are correctly rounded by `to_chars`, so a text
 /// inside the rounding interval of the value parses to exactly that value; a text outside it
 /// parses to a neighbour and the bits differ.
-inline bool scientificParsesBack(std::string_view scientific, float &parsed) {
-    const auto [end, ec] =
-        std::from_chars(scientific.data(), scientific.data() + scientific.size(), parsed);
-    return ec == std::errc() && end == scientific.data() + scientific.size();
+///
+/// `T` is a parameter of the function so that the parse can be chosen by what the library provides
+/// (as in `realValue` above): libc++ before version 20 has no floating-point `from_chars` and
+/// declares the overload deleted, which a build of another library has to be able to compile.
+template <std::floating_point T> inline bool scientificParsesBack(std::string_view scientific, T &parsed) {
+    if constexpr (requires(const char *p, T &v) { std::from_chars(p, p, v); }) {
+        const auto [end, ec] =
+            std::from_chars(scientific.data(), scientific.data() + scientific.size(), parsed);
+        return ec == std::errc() && end == scientific.data() + scientific.size();
+    } else {
+        // The C library reads the decimal point of the C locale, which Camel never changes from
+        // "."; `to_chars` wrote the text under the same rule, so the round trip is the same one.
+        const std::string numeral(scientific);
+        char *end = nullptr;
+        parsed    = static_cast<T>(
+            sizeof(T) <= sizeof(float) ? std::strtof(numeral.c_str(), &end)
+                                       : std::strtod(numeral.c_str(), &end));
+        return end == numeral.c_str() + numeral.size();
+    }
 }
 
 /// The shortest scientific text -- `[-]d[.ddd]e[+-]dd`, correctly rounded by `to_chars` -- whose
@@ -487,6 +502,12 @@ inline bool scientificParsesBack(std::string_view scientific, float &parsed) {
 /// 2026-10-23, "reduced-precision-text"). `value` is the exact f32 widening of the element, so
 /// its own digits are a fallback that always reads back, and the loop only takes fewer of them.
 /// `roundsBack(token)` says whether one candidate is the same element of the narrow type.
+///
+/// The answer is written into `storage` and read from there, and the view points into `storage` and
+/// never into this function's own `buffer`: the caller reads the text after this call returned, so a
+/// candidate handed back as a view of `buffer` is a view of a dead frame -- the digits then come out
+/// of whatever the frames in between left there, and a digit string read as empty lays out a text
+/// with no digits in it at all. That contract is ownership, not a reading of one build.
 template <typename RoundsBack>
 std::string_view shortestHalfDigits(float value, RoundsBack roundsBack, std::string &storage) {
     char buffer[64];
@@ -518,8 +539,13 @@ std::string_view shortestHalfDigits(float value, RoundsBack roundsBack, std::str
             if (keep > 1 && mantissa[keep - 1] == '.') {
                 --keep;
             }
+            // Both returns hand out text that outlives this call, so neither may be a view of
+            // `buffer`: the caller reads it after the frame that owns the array is gone, and what
+            // it reads then is whatever the frames in between left there -- on one build an empty
+            // view, from which `halfText` laid out a text with no digits in it.
             if (keep == mantissa.size()) {
-                return candidate;
+                storage.assign(candidate);
+                return storage;
             }
             storage.assign(mantissa.substr(0, keep));
             storage += candidate.substr(ePos);

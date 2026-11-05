@@ -10,7 +10,7 @@
  *     positions and slopes, so the same four numbers separate the four readings.
  *
  * Both answer `6.0`: **every** element equal to the extremum receives the cotangent in full, and none
- * is halved between them. That is the axis form's rule as well -- `max_axis` on the same tie answers
+ * is halved between them. That is the axis form's rule as well -- `max<1>` on the same tie answers
  * the same `6.0` -- because both select with `strict_eq(x, extremum)` and hand the cotangent to what
  * the mask selected (a mask is not a number, 5.1, so the selection is converted and multiplied).
  *
@@ -20,7 +20,7 @@
  * above make the present answer visible, and the axis form's agreement makes it one rule and not two.
  */
 import { grad } from autodiff
-import { max, max_axis, min, sum } from tensor
+import { max, min, sum } from tensor
 
 with <w: float>
 func tie_max(): float {
@@ -38,7 +38,7 @@ func tie_min(): float {
 with <w: float>
 func axis_tie(): float {
     let xs: float[2, 2] = [[1.0 + 5.0 * w, 1.0 + 1.0 * w], [2.0, 3.0]]
-    return sum(max_axis(xs, 1, false))
+    return sum(max<1, false>(xs))
 }
 
 func main(): int sync {

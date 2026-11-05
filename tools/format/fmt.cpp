@@ -973,6 +973,10 @@ any Formatter::visitTypeDecl(cst::TypeDecl context) {
         result += " = " + any_cast<string>(visitType(context->type()));
     } else if (context->tokCount(TK::String) > 0) {
         result += " = " + formatStringLiteral(context->tok(TK::String)->text());
+    } else if (context->tokCount(TK::RawString) > 0) {
+        // A raw string's text is its value; re-quoting it or touching its delimiters would
+        // change what the program means, so it is kept exactly as written.
+        result += " = " + context->tok(TK::RawString)->text();
     }
     return result;
 }
@@ -1003,7 +1007,7 @@ indexValue   : '..' dataExpr ;
 The rest argument (`..(a, b)`, `..ts`), expanded at the call.
 */
 any Formatter::visitRestValue(cst::RestValue context) {
-    return ".." + any_cast<string>(visitExpr(context->expr()));
+    return "..." + any_cast<string>(visitExpr(context->expr()));
 }
 
 /*
@@ -1036,7 +1040,9 @@ keyParamPair : ('var' | 'const' | 'constas')? identDef (':' typeExpr ('=' dataEx
              | '..' identDef (':' typeExpr)? ;
 */
 any Formatter::visitKeyParamPair(cst::KeyParamPair context) {
-    string result = context->tok(TK::DotDot)      ? ".."
+    // A rest parameter is written `...` (design principles 5.6). The parser reads the old `..`
+    // too, so both tokens name the same mark here and the formatter writes the spelling.
+    string result = (context->tok(TK::DotDot) || context->tok(TK::Ellipsis)) ? "..."
                     : context->tok(TK::KwConstas) ? "constas "
                     : context->tok(TK::KwVar)     ? "var "
                     : context->tok(TK::KwConst)   ? "const "
@@ -1771,6 +1777,10 @@ literal
 any Formatter::visitLiteral(cst::Literal context) {
     if (context->tok(TK::String)) {
         return formatStringLiteral(context->tok(TK::String)->text());
+    } else if (context->tok(TK::RawString)) {
+        // Kept as written: the text between the delimiters is the value, so a `\` in it is a
+        // backslash, and choosing another delimiter or escaping a quote would change it.
+        return context->tok(TK::RawString)->text();
     } else if (context->tok(TK::MultiStr)) {
         return formatStringLiteral(context->tok(TK::MultiStr)->text(), true);
     } else if (context->tok(TK::FString)) {
@@ -1833,12 +1843,12 @@ any Formatter::visitArrayDim(cst::ArrayDim context) {
                 }
                 first = false;
                 result += "?";
-            } else if (kind == TK::DotDot) {
+            } else if (kind == TK::DotDot || kind == TK::Ellipsis) {
                 if (!first) {
                     result += ", ";
                 }
                 first    = false;
-                result += "..";
+                result += "...";
                 packName = true;
             }
             continue;
@@ -2062,7 +2072,7 @@ any Formatter::visitIdentDef(cst::IdentDef context) {
     // The text of the node, not of an Identifier token: the `_` of `let _ = e` is a token of
     // its own kind. A type parameter written with `..` is a pack (`func zip::<..A>`, design
     // principles 5.6): the mark is on the name and not a token of its own, so it is written here.
-    return (context->writtenAsPack() ? ".." : "") + context.text();
+    return (context->writtenAsPack() ? "..." : "") + context.text();
 }
 
 /*
@@ -2231,7 +2241,7 @@ any Formatter::dispatch(syn::Node context) {
     case NK::PackType:
         // `..E`, one type expression written once for each member of a pack (design principles
         // 5.6).
-        return ".." + any_cast<string>(visit(context.type()));
+        return "..." + any_cast<string>(visit(context.type()));
     case NK::TypeOfType:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {

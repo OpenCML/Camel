@@ -23,6 +23,8 @@
 #include "camel/utils/assert.h"
 #include "camel/utils/str.h"
 
+#include <format>
+
 namespace camel::compile::gir {
 
 using camel::core::type::Type;
@@ -150,6 +152,44 @@ uint64_t registerGenericRule(
     return table.size();
 }
 
+uint64_t registerMonomorphicRule(
+    camel::core::context::Context &context, void *owner, std::string name,
+    const std::shared_ptr<void> &lhs, const std::shared_ptr<void> &rhs,
+    const std::shared_ptr<void> &when) {
+    Table &table           = rulesOf(context);
+    auto entry             = std::make_shared<GenericRuleEntry>();
+    entry->name            = std::move(name);
+    entry->owner           = owner;
+    entry->lhs             = lhs;
+    entry->rhs             = rhs;
+    entry->when            = when;
+    // The one instance, made here and not on the first ask: the graphs are the declaration's own
+    // functions, so there is no tuple to wait for, and an entry with `typeParams` empty and exactly
+    // one instance is what `genericRuleInstance` answers without instantiating anything.
+    GenericRuleInstance instance;
+    instance.typeText = tupleText({});
+    publish(
+        context, std::static_pointer_cast<DraftGraphBuilder>(lhs),
+        std::static_pointer_cast<DraftGraphBuilder>(rhs),
+        std::static_pointer_cast<DraftGraphBuilder>(when), instance);
+    instance.made = instance.lhs != nullptr && instance.rhs != nullptr;
+    if (!instance.made) {
+        instance.why = "its graphs could not be published in the program it runs in";
+    } else {
+        for (camel::runtime::gc_node_ref_t ref = 1; ref <= instance.lhs->nodeCount(); ++ref) {
+            const camel::runtime::GCNode *node = instance.lhs->node(ref);
+            if (node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
+                instance.lhsOperatorUri = std::string(
+                    instance.lhs->nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri());
+                break;
+            }
+        }
+    }
+    entry->instances.push_back(std::move(instance));
+    table.push_back(std::move(entry));
+    return table.size();
+}
+
 RuleConditionAt ruleConditionAt(
     camel::core::context::Context &context, uint64_t ruleId,
     const std::vector<camel::core::type::Type *> &types, std::string &why) {
@@ -178,6 +218,13 @@ size_t genericRuleInstance(
         ruleId >= 1 && ruleId <= table.size(),
         "The id of a generic rule names a rule the context has registered.");
     GenericRuleEntry &entry = *table[static_cast<size_t>(ruleId) - 1];
+    if (entry.typeParams.empty() && entry.instances.size() == 1) {
+        // A rule whose head declares no type parameters is one law, and the instance made when it was
+        // registered is that law: there is no tuple to instantiate and no `with` value to bind, so
+        // every ask answers the same instance. (`registerMonomorphicRule`; the entry has exactly one
+        // instance from the moment it exists.)
+        return 0;
+    }
     const std::string withKey = withArgumentsKey(with);
     const std::string withText = withArgumentsText(with, entry.withParams);
     for (size_t i = 0; i < entry.instances.size(); ++i) {
@@ -195,12 +242,32 @@ size_t genericRuleInstance(
     instance.withText = withText;
     auto *owner       = static_cast<Builder *>(entry.owner);
     compile_graph_ptr_t lhs, rhs, when;
+    // The condition is asked *before* the instance is made, and its answer is what decides whether
+    // the tuple is an instance at all. A law that says `is_same::<T, int>()` is a law about `int`;
+    // building it for `float` and calling the result an instance would make the condition a lie,
+    // and a lie is worse than a refusal -- it answers with a rule nobody wrote for that type.
+    //
+    // Only `Fails` takes the tuple away: `ValueDependent` (its type-level part holds and the rest
+    // reads values) and `Unknown` (the condition cannot be asked) keep it, because a condition the
+    // compiler cannot answer must not cost an instance (the rule on
+    // `generic-rule-instantiation-set-and-predicate`).
+    std::string conditionWhy;
+    const bool conditionFails =
+        owner != nullptr &&
+        ruleConditionAt(context, ruleId, types, conditionWhy) == RuleConditionAt::Fails;
     if (owner == nullptr) {
         instance.why = "the builder that declared it is gone";
     } else if (!owner->instantiateRuleTemplates(entry, types, with, lhs, rhs, when, instance.why)) {
         // The attempt is remembered as one that did not come about, and nothing of what the
         // compiler said about it is reported (the rule on
         // generic-rule-instantiation-set-and-predicate).
+    } else if (conditionFails) {
+        // The body compiles here, and the condition does not hold: the tuple is not an instance.
+        // Nothing is published -- the condition was asked before the instance was made, which is
+        // what keeps a law about `int` from answering for `float` -- and `why` says which. The
+        // verdict is written here rather than before the body builds: a body that does not build
+        // for these types has its own reason, and that reason is the one the attempt is kept by.
+        instance.why = std::format("its condition does not hold at {}", tupleText(types));
     } else {
         publish(context, lhs, rhs, when, instance);
         instance.made = instance.lhs != nullptr && instance.rhs != nullptr;

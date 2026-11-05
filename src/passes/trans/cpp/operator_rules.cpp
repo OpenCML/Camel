@@ -1155,7 +1155,7 @@ Rules buildRules() {
                 return std::nullopt;
             }
             // The axis and the flag arrive on one of two roads: as arguments of the call
-            // (`sum_axis(xs, 1, false)`) or as the constant the callee was written with
+            // (`sum<1, false>(xs)`) or as the constant the callee was written with
             // (`sum<1>(xs)`), which the graph keeps beside the value rather than among the
             // arguments (`with`). Either road names the same two things, and the rule reads
             // whichever carried them.
@@ -1177,7 +1177,7 @@ Rules buildRules() {
             // A rank-1 value has one lane, and what it sums to *is* the answer (design principles
             // 5.4). Which shape that answer takes is the node's type, not the rule's choice: the
             // template form `sum<0>(xs)` answers the element (printed `8.0`), while
-            // `sum_axis(xs, 0, false)` -- whose signature says `T[..]` -- answers an open-rank
+            // `sum<0, false>(xs)` -- whose signature says `T[..]` -- answers an open-rank
             // array whose recorded shape is `[]` (test/cases/trans/cpp/sum_axis_rank.cml is that
             // reading). So the rule asks the node's own type: an element is `rt::sumAll` (the
             // lanes from +0 in ascending order, the same walk), an array is `rt::sumAxis`. Writing
@@ -1245,6 +1245,22 @@ Rules buildRules() {
             } else {
                 return std::nullopt;
             }
+            // A value of one dimension has one lane and nothing beside it, so what that lane's mean
+            // is *is* the answer (design principles 5.4), and the graph states that answer as the
+            // element rather than as an array of one. The lane walk answers the array that holds it
+            // and states no rank (`axisReduce` -> `Array::shapeReduced`), so the element is read out
+            // of it -- the answer, not a position in an answer. Any other element answer would mean
+            // a rank the value does not have, so the rule refuses instead of writing one.
+            if (asArrayType(c.resultType()) == nullptr && c.resultType() != nullptr) {
+                if (value->rank() != 1 || keepDims != "false" ||
+                    (axis != "0" && axis != "-1")) {
+                    return std::nullopt;
+                }
+                return std::format(
+                    "rt::meanAxis({}, 0, false, {})[0]",
+                    c.operand(0),
+                    c.site(RuntimeDiag::InvalidArgument, marks(2)));
+            }
             return std::format(
                 "rt::meanAxis({}, {}, {}, {})",
                 c.operand(0),
@@ -1269,8 +1285,13 @@ Rules buildRules() {
     // A lane with no element has no extreme and no position, and the interpreter refuses it naming
     // the operator and the axis; that refusal is the only one these four have that the sum does not.
     // A value of one dimension is a value with one axis and nothing beside it: what that one lane
-    // reduces to *is* the answer (design principles 5.4), so the answer is a value of no dimension,
-    // which the open rank of its type still writes. Only an open rank keeps no shape -- its rank is
+    // reduces to *is* the answer (design principles 5.4), so the answer is a value of no dimension --
+    // an element, not an array of one -- and the graph's own type says so: `max<0, false>(flat)`
+    // of a `f32[3]` is an `f32`, and only a *kept* dimension or an open rank leaves an array. The two
+    // answers are written differently, for the same reason `sum_axis`'s are (`rt::sumAll` against
+    // `rt::sumAxis`): an element answer is the lane walk of a value whose one lane is the whole run,
+    // read out of the array that walk answers, so the fault a lane with no element raises keeps its
+    // words; an array answer is the lane walk itself. Only an open rank keeps no shape -- its rank is
     // not known when the program is written -- and that is the one these four stay refused on.
     {
         struct AxisRule {
@@ -1297,12 +1318,26 @@ Rules buildRules() {
                         element != TypeCode::Float32 && element != TypeCode::Float64) {
                         return std::nullopt;
                     }
-                    // A position is an int64 where the operator says so; if the answer the graph
-                    // states is not that, this rule is not the one to write it.
+                    // The answer's own type says which of the two forms to write, and it also
+                    // judges the answer these four can state: an array of positions (or of
+                    // extremes) is the lane walk, while a type that is not an array is the answer
+                    // itself -- the position, or the extreme, of the whole run. A position is an
+                    // int64 and an extreme is the operand's element type; an answer of any other kind
+                    // is not one this rule writes.
+                    const ArrayType *answer = asArrayType(c.resultType());
+                    const bool answersElement = c.resultType() != nullptr && answer == nullptr;
                     if (axis.position) {
-                        const ArrayType *answer = asArrayType(c.resultType());
-                        if (answer == nullptr || answer->elemType() == nullptr ||
-                            answer->elemType()->code() != TypeCode::Int64) {
+                        const bool positions = answer != nullptr && answer->elemType() != nullptr &&
+                                               answer->elemType()->code() == TypeCode::Int64;
+                        const bool onePosition =
+                            answersElement && c.resultType()->code() == TypeCode::Int64;
+                        if (!positions && !onePosition) {
+                            return std::nullopt;
+                        }
+                    } else if (answersElement) {
+                        const TypeCode code = c.resultType()->code();
+                        if (code != TypeCode::Int64 && code != TypeCode::Int32 &&
+                            code != TypeCode::Float32 && code != TypeCode::Float64) {
                             return std::nullopt;
                         }
                     }
@@ -1320,6 +1355,28 @@ Rules buildRules() {
                         }
                     } else {
                         return std::nullopt;
+                    }
+                    // A value of one dimension reduced on its only axis, with the dimension not
+                    // kept, is the answer itself: the whole-run fold, not the lane walk. Any other
+                    // element answer would mean a rank the value does not have, so the rule refuses
+                    // instead of writing one.
+                    if (answersElement) {
+                        if (value->rank() != 1 || keepDims != "false" ||
+                            (axisText != "0" && axisText != "-1")) {
+                            return std::nullopt;
+                        }
+                        // The lane walk of a value with one lane is the whole run, and what that run
+                        // reduces to *is* the answer (design principles 5.4): the array the walk
+                        // answers holds that one value and states no rank (`axisReduce` ->
+                        // `Array::shapeReduced`), so the answer is read out of it. The axis the walk
+                        // is given is the one the rule just checked (0, whose negation is the same
+                        // lane), and the dimension is not kept, so both travel as constants.
+                        return std::format(
+                            "rt::{}({}, 0, false, {}, {})[0]",
+                            axis.name,
+                            c.operand(0),
+                            c.site(RuntimeDiag::InvalidArgument, marks(2)),
+                            c.site(RuntimeDiag::InvalidArgument, marks(2)));
                     }
                     return std::format(
                         "rt::{}({}, {}, {}, {}, {})",

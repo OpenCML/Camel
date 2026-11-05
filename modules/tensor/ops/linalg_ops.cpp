@@ -126,6 +126,25 @@ void matmulVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+// `matmul_stated(a, b, sa, sb)`: the product with both operands' extents stated beside it.
+//
+// The value is `matmul(a, b)` -- `matmulKernel` is the operator's own, so the kernel choice, the
+// accumulation and the shape check are the definition's own -- and each list is checked against the
+// shape of the operand it belongs to. Nothing at run time reads the lists to compute the value:
+// they are there for the reverse law, which reduces each cotangent to its own operand's shape and has
+// no value of that operand to read it from (`stdlib/rulesets/transpose.cml#matmul_stated_t`).
+//
+// Two lists and not one: the two operands are different shapes (the answer is neither of them), and
+// each cotangent comes back to its own. The element type of the lists is the same `int[]` the stated
+// reductions use.
+slot_t matmulStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    const std::vector<int64_t> sa = intListArg(norm, 2, "matmul_stated");
+    const std::vector<int64_t> sb = intListArg(norm, 3, "matmul_stated");
+    checkStatedExtents(tensorArg(norm, 0), sa, 0, "matmul_stated");
+    checkStatedExtents(tensorArg(norm, 1), sb, 0, "matmul_stated");
+    return matmulKernel(with, norm, ctx);
+}
+
 // linear(x, weight, bias?) = x @ weight + bias.
 void linearVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 3);
@@ -142,6 +161,20 @@ void linearVjp(VjpBuilder &b, const VjpCall &call) {
 /// so the composition's derivative rules are the matmul, add and relu rules the graph already
 /// has (see autodiff's fused_grad_check case).
 
+/// `matmul_stated`'s pullback: the product's own, because its value is the product's.
+///
+/// The two lists are operands the engine does not need: it holds both operands' **values**, which is
+/// what the lists stand in for on the library side, where the operand a cotangent is reduced to is a
+/// tangent and a tangent's type states no extents. So the engine's answer and the library's law
+/// (`stdlib/rulesets/transpose.cml#matmul_stated_t`) are the same two products and the same two
+/// reductions, and the table comparison `scripts/vjp-parity.mjs` sees a law with a rule behind it.
+void matmulStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 4, 4);
+    if (auto dy = b.gradientOf(call.output)) {
+        accumulateMatmulGradients(b, call.inputs[0], call.inputs[1], *dy, call.attrs);
+    }
+}
+
 } // namespace
 
 std::vector<OpDef> linalgOps() {
@@ -150,7 +183,7 @@ std::vector<OpDef> linalgOps() {
         .name      = "matmul",
         .exports   = {"__mat__", "matmul"},
         .params    = {{"lhs", ParamKind::Tensor}, {"rhs", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = matmulInfer,
         .kernel    = &matmulKernel,
         .traits    = {}});
@@ -161,12 +194,26 @@ std::vector<OpDef> linalgOps() {
             {{"x", ParamKind::Tensor},
              {"weight", ParamKind::Tensor},
              {"bias", ParamKind::Tensor, true}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = linearInfer,
         .kernel    = &linearKernel,
         .traits    = {}});
     setVjp(defs, "matmul", &matmulVjp);
     setVjp(defs, "linear", &linearVjp);
+    // The stated twin of the product above: the same value, with the two operands' extents as two
+    // more operands (`matmulStatedKernel`). Declared in `stdlib/tensor.cml`.
+    defs.push_back(OpDef{
+        .name      = "matmul_stated",
+        .exports   = {"matmul_stated"},
+        .params    = {{"a", ParamKind::Tensor},
+                      {"b", ParamKind::Tensor},
+                      {"sa", ParamKind::IntArray},
+                      {"sb", ParamKind::IntArray}},
+        .resultDoc = "float[...]",
+        .infer     = matmulInfer,
+        .kernel    = &matmulStatedKernel,
+        .traits    = {}});
+    setVjp(defs, "matmul_stated", &matmulStatedVjp);
     return defs;
 }
 

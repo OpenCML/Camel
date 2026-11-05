@@ -6,11 +6,11 @@
 
 import { reshape, exp, log, sum } from tensor
 
-func multiplied(x: f32[..]): f32[..] {
+func multiplied(x: f32[...]): f32[...] {
     return log(exp(x) * 2.0)
 }
 
-func mismatched(a: f32[..], b: f32[..]): f32[..] {
+func mismatched(a: f32[...], b: f32[...]): f32[...] {
     return log(exp(a) / sum<-1, true>(exp(b)))
 }
 

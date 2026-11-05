@@ -24,7 +24,7 @@ func main(): int sync {
 
 按代码读，打印 `1`，不是 `3`：
 
-- `counter = 1` 经 `Builder::recordWrite`（`src/compile/gir/builder.h:2254`）登记；读 `counter` 由 `valueVersionOf` 取最近一次登记过的写（`builder_expr.cpp:742` 的 `orderAfterLastWriter`），拿到的是 `1`。
+- `counter = 1` 经 `Builder::recordWrite`（`src/compile/gir/builder.h#recordWrite`）登记；读 `counter` 由 `valueVersionOf` 取最近一次登记过的写（`builder_expr.cpp:742` 的 `orderAfterLastWriter`），拿到的是 `1`。
 - `f(v)` 是穿过函数值的调用。调用点只看见一个参数，既不是已知函数（`targetGraph == nullptr`）也不是已知算子（`targetOperator == nullptr`），`builder_operators.cpp:4310-4326` 只把写在它**之前**的读排到它前面，**不记写**；捕获写只在 `:4328-4331`（`captured` 来自调用点认识的函数值）才记。
 - `effect_liveness.h:67` 写明了这条边界："A write the writer table does not know is left to the sync blocks and the resource order (3.3): it is not a credential of this layer."
 - 这次调用在同步块里，所以它**会执行**（`:4310` 那段把它接上链）；执行了、也确实改了 `counter`，但读的版本边已经连在 `counter = 1` 上。

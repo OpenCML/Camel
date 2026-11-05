@@ -99,10 +99,15 @@ bool sameShapeAs(const Type *head, const Type *walked) {
         !tree::isInternal(head) || !tree::isInternal(walked)) {
         return false;
     }
-    if (tree::arity(head) != tree::arity(walked)) {
+    const auto members    = tree::arity(head);
+    const auto otherShape = tree::arity(walked);
+    // The empty answer is the answer to the question this function asks: two types that are not
+    // both structs or ordinary tuples do not have the same shape. (`isInternal` above has already
+    // refused those, so the branch is the function's own "no", not a case it skips.)
+    if (!members || !otherShape || *members != *otherShape) {
         return false;
     }
-    for (size_t i = 0; i < tree::arity(head); ++i) {
+    for (size_t i = 0; i < *members; ++i) {
         if (tree::childName(head, i) != tree::childName(walked, i)) {
             return false;
         }
@@ -200,7 +205,7 @@ bool Builder::moduleSourceDeclares(const std::string &written) {
     }
     if (!unit->sourceNamesRead) {
         // Read once: every name any node of the module's source carries.
-        unit->sourceNamesRead = true;
+        unit->sourceNamesRead      = true;
         const GCT::node_ptr_t root = unit->tree->root();
         std::vector<GCT::node_ptr_t> pending{root};
         while (!pending.empty()) {
@@ -249,11 +254,13 @@ void Builder::walkStaticBodyNames(
         // its body (a lambda, a function of the body): their own parameters bind and the names
         // around them stay visible, exactly as they are when the body is built.
         locals.emplace_back();
-        if (node->size() > 0 &&
-            node->at(0)->type() == GCT::NodeKind::TYPE && node->at(0)->dataType() != nullptr &&
+        if (node->size() > 0 && node->at(0)->type() == GCT::NodeKind::TYPE &&
+            node->at(0)->dataType() != nullptr &&
             node->at(0)->dataType()->code() == TypeCode::Function) {
             insertParameterNames(
-                node, tt::as_ptr<FunctionType>(node->at(0)->dataType()), locals.back());
+                node,
+                tt::as_ptr<FunctionType>(node->at(0)->dataType()),
+                locals.back());
         }
         if (node->size() > 1) {
             walkStaticBodyNames(node->at(1), locals, true);
@@ -277,8 +284,7 @@ void Builder::walkStaticBodyNames(
         for (size_t i = 0; i < node->size(); ++i) {
             walkStaticBodyNames(node->at(i), locals, intoFunctions);
         }
-        if (!locals.empty() && !node->name().empty() &&
-            node->name() != GCT::kDiscardName) {
+        if (!locals.empty() && !node->name().empty() && node->name() != GCT::kDiscardName) {
             locals.back().insert(node->name());
         }
         return;
@@ -437,7 +443,7 @@ void Builder::walkStaticBodyNames(
 bool Builder::typeCaseMatches(Type *subject, const GCT::node_ptr_t &caseNode) const {
     const uint16_t patterns = caseNode->typeCasePatterns();
     const bool isStruct     = subject->code() == TypeCode::Struct;
-    const bool isTuple = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
+    const bool isTuple      = subject->code() == TypeCode::Tuple && tree::isInternal(subject);
     if ((patterns & typeCaseBit(GCT::TypeCaseKind::Wildcard)) != 0) {
         return true;
     }
@@ -528,9 +534,8 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             const auto &caseNode = gct->at(i + 1);
             GUARD(caseNode->type() == GCT::NodeKind::TCASE, "A case of match type is a TCASE.");
             const uint16_t patterns = caseNode->typeCasePatterns();
-            const bool catchesAll =
-                (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
-                             typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
+            const bool catchesAll   = (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
+                                                   typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
             if (catchesAll && i + 1 < caseCount) {
                 diags_->of(SemanticDiag::StaticMatchUnreachableCase)
                     .atOrigin(caseNode->origin())
@@ -572,8 +577,7 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
                     pattern->code() == TypeCode::Tuple && tree::isInternal(pattern);
                 const bool coveredByShape =
                     (earlierShapes & extraTypeShapes(pattern)) != 0 ||
-                    (isStruct &&
-                     (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
+                    (isStruct && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Struct)) != 0) ||
                     (isTuple && (earlierShapes & typeCaseBit(GCT::TypeCaseKind::Tuple)) != 0);
                 if (coveredByShape) {
                     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
@@ -594,7 +598,8 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
                         diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
                             .atOrigin(caseNode->origin())
                             .commit(
-                                pattern->toString(), "an earlier case already selects this type");
+                                pattern->toString(),
+                                "an earlier case already selects this type");
                         throw BuildAbortException();
                     }
                 }
@@ -717,8 +722,7 @@ node_handle_t Builder::staticFieldTagsNode(
     if (subject != nullptr && subject->code() == TypeCode::Struct && module_ != nullptr) {
         const StructDecl *decl = tt::as_ptr<StructType>(subject)->decl();
         if (decl != nullptr && decl->moduleName() == module_->name()) {
-            camel::core::attr::AttrSetId facts =
-                module_->fieldTags(Reference(decl->name()), index);
+            camel::core::attr::AttrSetId facts = module_->fieldTags(Reference(decl->name()), index);
             if (facts == camel::core::attr::kNoAttrs && !decl->shortName().empty() &&
                 decl->shortName() != decl->name()) {
                 facts = module_->fieldTags(Reference(decl->shortName()), index);
@@ -803,12 +807,21 @@ node_handle_t Builder::visitStaticForNode(
     const std::string typeName  = gct->staticForTypeName();
     const std::string tagsName  = gct->staticForTagsName();
     const GCT::node_ptr_t body  = gct->staticForBody();
-    const size_t count          = tree::arity(subject);
+    // `isInternal(subject)` above has already refused a subject that is not a struct or a tuple
+    // with `StaticForNotComposite`; the count is asked again here through the no-answer form, and
+    // its empty value says the same thing in the same words instead of counting zero rounds.
+    const auto count = tree::arity(subject);
+    if (!count) {
+        diags_->of(SemanticDiag::StaticForNotComposite)
+            .atOrigin(gct->origin())
+            .commit(subject->toString());
+        throw BuildAbortException();
+    }
     node_handle_t lastEffect{};
     if (shape != nullptr) {
         *shape = subject;
     }
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = 0; i < *count; ++i) {
         const std::string entryName = tree::childName(subject, i);
         // `F` is looked up from the front of the bindings (findTypeBinding scans from there),
         // and the fields are walked in declaration order. `indices` binds no `F`: the round's
@@ -910,8 +923,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // bound to one (`let xs = [1, 2, 3]`; a `var` does not count, it can be assigned another
     // array before the loop). The rounds are its elements, so walking it costs no node.
     const auto ofArrayData = [](const data_ptr_t &data) -> std::optional<StaticSequence> {
-        if (data == nullptr || data->type() == nullptr ||
-            data->type()->code() != TypeCode::Array) {
+        if (data == nullptr || data->type() == nullptr || data->type()->code() != TypeCode::Array) {
             return std::nullopt;
         }
         auto array = std::dynamic_pointer_cast<ArrayData>(data);
@@ -935,7 +947,8 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         }
         return sequence;
     };
-    const auto ofConstantArray = [&](const GCT::node_ptr_t &value) -> std::optional<StaticSequence> {
+    const auto ofConstantArray =
+        [&](const GCT::node_ptr_t &value) -> std::optional<StaticSequence> {
         if (value == nullptr) {
             return std::nullopt;
         }
@@ -986,7 +999,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         if (expr->type() != GCT::NodeKind::DREF) {
             return intOf(constantValueOrNull(expr));
         }
-        data_ptr_t data = nullptr;
+        data_ptr_t data  = nullptr;
         const auto bound = nodeAt(expr->name());
         if (bound.has_value()) {
             if (isVariable(*bound)) {
@@ -1033,11 +1046,16 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     if (subject->type() == GCT::NodeKind::DREF) {
         if (const RestBinding *rest = restBindingNamed(subject->name())) {
             Type *tupleType = boundType(rest->tuple.type);
-            if (tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
-                tree::isInternal(tupleType)) {
+            // A compile-time tuple is one that has positions to walk; asking the no-answer form is
+            // that question, and the empty value means "not a sequence" rather than a sequence of
+            // no rounds.
+            const auto members = tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
+                                         tree::isInternal(tupleType)
+                                     ? tree::arity(tupleType)
+                                     : std::nullopt;
+            if (members) {
                 StaticSequence sequence;
-                const size_t arity = tree::arity(tupleType);
-                for (size_t i = 0; i < arity && i < rest->tuple.elements.size(); ++i) {
+                for (size_t i = 0; i < *members && i < rest->tuple.elements.size(); ++i) {
                     sequence.elements.push_back(rest->tuple.elements[i]);
                 }
                 return sequence;
@@ -1055,14 +1073,13 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // all, is `RangeStepZero` here as it is there (design principles 4.2).
     if (subject->type() == GCT::NodeKind::LINK && subject->size() >= 1) {
         const GCT::node_ptr_t &callee = subject->at(0);
-        const bool namedRange = callee != nullptr && callee->type() == GCT::NodeKind::DREF &&
-                                callee->name() == "range";
+        const bool namedRange =
+            callee != nullptr && callee->type() == GCT::NodeKind::DREF && callee->name() == "range";
         if (namedRange && subject->size() - 1 == 3) {
-            const GCT::node_ptr_t &stepNode = subject->at(subject->size() - 1);
+            const GCT::node_ptr_t &stepNode   = subject->at(subject->size() - 1);
             const std::optional<int64_t> step = intBoundOf(stepNode);
             if (step.has_value() && *step == 0) {
-                const auto where =
-                    stepNode->origin() != 0 ? stepNode->origin() : subject->origin();
+                const auto where = stepNode->origin() != 0 ? stepNode->origin() : subject->origin();
                 diags_->of(SemanticDiag::RangeStepZero)
                     .atOrigin(where)
                     .commit(sourceTextOf(subject->at(1)), sourceTextOf(subject->at(2)));
@@ -1081,8 +1098,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     // bound to was read above, and a `var` may hold another array by the time the loop runs. A
     // refusal is a sequence the compiler does not know, and the caller says so by name.
     if (subject->type() != GCT::NodeKind::DREF) {
-        if (std::optional<StaticSequence> sequence =
-                ofArrayData(constantValueOrNull(subject))) {
+        if (std::optional<StaticSequence> sequence = ofArrayData(constantValueOrNull(subject))) {
             return sequence;
         }
     }
@@ -1243,7 +1259,21 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     }
     Type *stateType = k == 1 ? stateTypes.front() : TupleType::create(stateTypes);
 
-    const size_t count = bySequence ? written->rounds() : tree::arity(subject);
+    // A subject that is not walked by a sequence is walked by its members, and both entrances above
+    // (the `ts` form at `StaticIndicesNotTuple`, the value form at `StaticForNotComposite`) have
+    // already refused a subject with none with the diagnostic its own branch owns. So the empty
+    // answer cannot arrive here -- and it throws rather than running no rounds if that ever stops
+    // being true.
+    size_t count = 0;
+    if (bySequence) {
+        count = written->rounds();
+    } else {
+        const auto members = tree::arity(subject);
+        if (!members) {
+            throw std::logic_error("static loop: the guarded subject has no members");
+        }
+        count = *members;
+    }
     for (size_t i = 0; i < count; ++i) {
         // The name of the walked entry: for `fields` the field's name and for `indices` the
         // position, both as the text the compile-time value bindings carry; for a sequence of
@@ -1254,12 +1284,12 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
         node_handle_t indexNode{};
         if (bySequence && !written->byElements()) {
             const data_ptr_t elementValue = written->values[i];
-            entryName = sequenceElementName(elementValue);
-            indexNode = currGraph_->addStaticDataNode(elementValue);
+            entryName                     = sequenceElementName(elementValue);
+            indexNode                     = currGraph_->addStaticDataNode(elementValue);
             rememberConstant(indexNode, elementValue);
             registerNodeOrigin(context_, indexNode, body, "gir.static.index");
         } else if (byIndices) {
-            entryName = tree::childName(subject, i);
+            entryName                   = tree::childName(subject, i);
             const data_ptr_t indexValue = tt::as_shared<Data>(
                 std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(i)));
             indexNode = currGraph_->addStaticDataNode(indexValue);
@@ -1321,7 +1351,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                     current.front() = value;
                 } else if (bodyType != nullptr && entersImplicitly(stateTypes.front(), bodyType)) {
                     node_handle_t coerced = coerceTo(value, stateTypes.front(), body);
-                    current.front()          = coerced != nullptr ? coerced : value;
+                    current.front()       = coerced != nullptr ? coerced : value;
                 } else {
                     diags_->of(SemanticDiag::LoopBodyTypeMismatch)
                         .atOrigin(body->origin())
@@ -1339,16 +1369,16 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
             // A body that ends with `return` leaves the function; the rounds after
             // it are unreachable and keep the state as it was.
         } else if (value != nullptr) {
-            Type *bodyType = valueTypeOf(nodeTypeOf(value));
+            Type *bodyType   = valueTypeOf(nodeTypeOf(value));
             TupleType *tuple = bodyType != nullptr && tree::isInternal(bodyType) &&
                                        bodyType->code() == TypeCode::Tuple
                                    ? tt::as_ptr<TupleType>(bodyType)
                                    : nullptr;
-            bool fits = tuple != nullptr && tuple->size() == k;
+            bool fits        = tuple != nullptr && tuple->size() == k;
             for (size_t j = 0; fits && j < k; ++j) {
                 Type *componentType = tuple->typeAt(j);
-                fits = stateTypes[j]->assignableFrom(componentType) ||
-                       entersImplicitly(stateTypes[j], componentType);
+                fits                = stateTypes[j]->assignableFrom(componentType) ||
+                                      entersImplicitly(stateTypes[j], componentType);
             }
             if (!fits) {
                 diags_->of(SemanticDiag::LoopBodyTypeMismatch)
@@ -1375,7 +1405,7 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
                 node_handle_t stateValue = stateTypes[j]->assignableFrom(componentType)
                                                ? component
                                                : coerceTo(component, stateTypes[j], body);
-                current[j] = stateValue != nullptr ? stateValue : component;
+                current[j]               = stateValue != nullptr ? stateValue : component;
             }
         }
         leaveBlockScope();
@@ -1426,7 +1456,7 @@ std::any Builder::visitStaticComprehensionNode(const GCT::node_ptr_t &gct) {
         }
     }
     std::vector<node_handle_t> values;
-    Type *shape = nullptr;
+    Type *shape                     = nullptr;
     const GCT::node_ptr_t generator = gct->comprehensionGenerator();
     if (!sameShape && gct->comprehensionIsStruct() && generator->staticForIndices()) {
         // A struct comprehension names its fields from the walked type; positions have no
@@ -1512,8 +1542,7 @@ node_handle_t Builder::packStaticValues(
     return fillStaticValues(type, values, origin, originKind);
 }
 
-node_handle_t Builder::materializeStaticTuple(
-    const StaticTuple &tuple, const GCT::node_ptr_t &at) {
+node_handle_t Builder::materializeStaticTuple(const StaticTuple &tuple, const GCT::node_ptr_t &at) {
     return fillStaticValues(
         tuple.type,
         tuple.elements,
@@ -1529,9 +1558,8 @@ node_handle_t Builder::fillStaticValues(
     core::mm::NoCollectionScope guard;
     const bool tuple = type->code() == TypeCode::Tuple;
     const slot_t empty =
-        tuple
-            ? core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()))
-            : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
+        tuple ? core::rtdata::toSlot(::Tuple::create(values.size(), core::mm::autoSpace()))
+              : core::rtdata::toSlot(::Struct::create(values.size(), core::mm::autoSpace()));
     auto &draft = currGraph_->transaction().edit();
     auto base   = draft.ref(draft.materializeStaticValue(empty, type));
     std::vector<size_t> slots(values.size());
@@ -1539,7 +1567,8 @@ node_handle_t Builder::fillStaticValues(
     node_handle_t out = currGraph_->addFillNode(
         type,
         runtime::makeFillPayload(
-            tuple ? runtime::GCFillKind::Tuple : runtime::GCFillKind::Struct, slots));
+            tuple ? runtime::GCFillKind::Tuple : runtime::GCFillKind::Struct,
+            slots));
     linkNodes(LinkType::Norm, base, out);
     for (const node_handle_t &value : values) {
         linkNodes(LinkType::With, valueOf(value), out);
@@ -1608,10 +1637,9 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         diags_->of(SemanticDiag::StaticAccessNotConstant)
             .atOrigin(keyNode->origin())
             .commit(
-                keyNode->type() == GCT::NodeKind::LINK
-                    ? writtenCallName(keyNode)
-                    : keyNode->type() == GCT::NodeKind::DREF ? keyNode->name()
-                                                             : std::string("expression"));
+                keyNode->type() == GCT::NodeKind::LINK   ? writtenCallName(keyNode)
+                : keyNode->type() == GCT::NodeKind::DREF ? keyNode->name()
+                                                         : std::string("expression"));
         throw BuildAbortException();
     }
 
@@ -1654,8 +1682,8 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
     uint32_t index      = 0;
     std::string fieldId = *key;
     if (subject->code() == TypeCode::Struct) {
-        auto *structType    = tt::as_ptr<StructType>(subject);
-        const auto found    = structType->findField(*key);
+        auto *structType = tt::as_ptr<StructType>(subject);
+        const auto found = structType->findField(*key);
         if (!found.has_value()) {
             diags_->of(SemanticDiag::StaticAccessUnknownField)
                 .atOrigin(gct->origin())
@@ -1665,7 +1693,7 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         fieldType = structType->typeAt(found.value());
         fieldId   = std::string(structType->fieldName(found.value()));
     } else if (subject->code() == TypeCode::Tuple && tree::isInternal(subject)) {
-        auto *tupleType = tt::as_ptr<TupleType>(subject);
+        auto *tupleType   = tt::as_ptr<TupleType>(subject);
         const char *begin = key->data();
         const char *end   = begin + key->size();
         const auto parsed = std::from_chars(begin, end, index);
@@ -1703,9 +1731,8 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
 
     // The tuple key is the `uint32_t` index and the struct key its field name: the nodes a
     // comprehension over `fields T` builds for the same tree.
-    node_handle_t accsNode =
-        byIndex ? currGraph_->addAccsNode(fieldType, index)
-                : currGraph_->addAccsNode(fieldType, fieldId);
+    node_handle_t accsNode = byIndex ? currGraph_->addAccsNode(fieldType, index)
+                                     : currGraph_->addAccsNode(fieldType, fieldId);
     linkNodes(LinkType::Norm, target, accsNode);
     registerNodeOrigin(context_, accsNode, gct, "gir.accs.static");
     if (staticExpansionDepth_ > 0) {

@@ -1,12 +1,12 @@
 /**
- * `column(constas n: string, ..ts)`: the acceptance case of
+ * `column(constas n: string, ...ts)`: the acceptance case of
  * docs/design/generic-structure/README.cn.md 3.1.1 in the form today's features allow. The field
  * name is a compile-time string value; the body reads it as the key of `ts.[j].[n]`, over the
  * build-time tuple of the rest parameter. Two calls differing only in the string are two
  * instances, `column<"w">` and `column<"h">`, and each picks the field its value names.
  */
 
-func column(constas n: string, ..ts): (int, int) {
+func column(constas n: string, ...ts): (int, int) {
     return ( static for j in indices ts => ts.[j].[n] )
 }
 

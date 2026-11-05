@@ -1,0 +1,38 @@
+// A bare `transpose` of a declaration that states no extents, and the two things the refusal owes a
+// reader -- with the repair that does work, measured first, in the same program.
+//
+// The rule (author, 2026-11-05 10:40): a bare transposition requires the shape of every parameter to
+// come from its type. `float[...]` states neither a rank nor a length, `transpose(f)` is handed the
+// cotangent of the result and nothing else, and no residual carries the shape, so `transpose(total)`
+// has nowhere to read it and is refused by name -- the function, the parameter `x` and the type
+// `float[...]`.
+//
+// The repair is not "wait for the compiler" and not "report the program": the shape is in the
+// language, and two writings reach it. The first is the neighbouring case
+// `transpose_of_a_stated_shape_answers.cml` (`x: float[2, 3]`, the law reading `extent_of` off the
+// type). The second is the one this program opens with -- keep the open declaration and reach the
+// transposition through `vjp`, where `jvp_sum` states `shape(xs)` as a residual and `sum_stated_t`
+// reads it there: `value=21.0` and `dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]`, the same array the
+// stated shape answers. That line prints before the refusal, so one run says both: the open shape is
+// fine where the shape travels as a value, and it is refused where only the type could carry it.
+//
+//     camel test/cases/compile/transforms/transpose_of_an_open_shape_is_refused.cml
+import { transpose } from transforms
+import { vjp } from vjp
+import rulesets.transpose
+import { sum } from tensor
+
+/// The same body as the stated case, declared with a type that states no extent.
+func total(x: float[...]): float {
+    return sum(x)
+}
+
+func main(): int sync {
+    // The open declaration answers where the shape travels as a residual.
+    let (value, pullback) = vjp(total)([[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])
+    `open through vjp: value={} dL/dx={}`->format<value, pullback(1.0).0>->println
+    // The bare transposition is refused: no residual carries the shape and the type states none.
+    let back = transpose(total)
+    `open through transpose answered {}`->format<back(1.0)>->println
+    return 0
+}

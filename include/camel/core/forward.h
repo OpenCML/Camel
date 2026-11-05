@@ -11,8 +11,9 @@
  * **Nothing is registered per operator.** The key a rule is filed under is a fact about the
  * operator, so it is read off the operator: `:op/add_d` is written `+` with two operands because
  * that is what `add` means, and `tensor:matmul` is written `matmul(...)` because that is the
- * operator's own name. Two operators cannot be written that way -- `xs[i]` is a bracket form with no
- * token, and the array product's `*` key at two operands is already `:op/mul_d`'s -- and those two are
+ * operator's own name. Three operators cannot be written that way -- `xs[i]` is a bracket form with no
+ * token, the array product's `*` key at two operands is already `:op/mul_d`'s, and `ltod`'s spelling
+ * `float(x)` at one operand is a key every conversion to a double shares -- and those three are
  * the whole of `ruleKeyExceptions()`, which says so in words and is printed by the `std::rulesets`
  * pass so that an exception is never silent.
  *
@@ -72,10 +73,31 @@ std::optional<RuleKey> ruleKeyOf(const std::string &family, const std::string &u
 /// rule: the two are `NoRuleForPrimitive` and `NoSuchFamily` in the answer).
 std::optional<camel::parse::ast::RuleMatch> forwardRuleOf(const std::string &uri);
 
+/// Every forward rule `uri` could answer by, in the order the family filed them: empty when the
+/// operator has no key or the family holds none.
+///
+/// A key can hold several rules, because one spelling can name several operators (`float(x: float)`
+/// and `float(x: int)` are both `float` at one operand) and the *type* is what tells their laws
+/// apart. The index does not encode the type; this answers the candidates and the caller lets the
+/// engine decide -- it instantiates a rule at the operand's own type, and a rule whose condition
+/// does not hold there gives a named refusal instead of an answer.
+std::vector<camel::parse::ast::RuleMatch> forwardRulesOf(const std::string &uri);
+
 /// `forwardRuleOf`, for the family a linear function's pullback is written in.
 std::optional<camel::parse::ast::RuleMatch> transposeRuleOf(const std::string &uri);
 
+/// Every rule `uri` could answer by in the transpose family, in filing order: what a caller that can
+/// see the operands' types asks, so that two laws of one key are told apart by the values they meet
+/// rather than by the order they were filed in. Empty when the operator has no key or the family
+/// holds none there -- `transposeRuleOf` still tells those two apart (`NoSuchFamily`,
+/// `NoRuleForPrimitive`).
+std::vector<camel::parse::ast::RuleMatch> transposeRulesOf(const std::string &uri);
+
 /// `forwardRuleOf`, for the family a batching transform asks (`rulesets.vmap`).
 std::optional<camel::parse::ast::RuleMatch> vmapRuleOf(const std::string &uri);
+
+/// Every rule `uri` could answer by in the batching family, in filing order: `transposeRulesOf`'s
+/// question asked of `rulesets.vmap`.
+std::vector<camel::parse::ast::RuleMatch> vmapRulesOf(const std::string &uri);
 
 } // namespace camel::core

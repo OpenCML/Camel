@@ -8,6 +8,9 @@
 //   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
 //     the file, the test and the key named, while a valid plan in the same directory still runs;
 //     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
+//   * the `known_fail` gate: a marked case that names no owner, no reason, a placeholder reason, a
+//     reason that names no wall or no sentence is refused where its plan is loaded, by name, and an
+//     entry that carries all four loads, runs and reports `[XFAIL]` with its owner printed;
 //   * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
 //      the other fields docs/test-plans.md documents;
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
@@ -38,6 +41,7 @@
 //     the only plan that runs the case, or the selection file records the shared case with a
 //      reason.
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
@@ -49,6 +53,32 @@ const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
 const runner = path.join(path.dirname(here), 'run-tests.mjs')
 const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
+// The width every child run of this self-test is taken at. A runner that is not told takes
+// `availableParallelism` -- 32 on the gate host -- and then its readings move with its neighbours:
+// on 2026-11-03 the sweep fixture's 13 cases came back all FAIL with `pass: 0` while the same
+// fixture, run at 32 on a quieter host the same day, was 13/13 (`docs/handover/reviews/
+// 2026-11-03-the-self-test-is-red-on-develop-and-has-no-name.cn.md`). All thirteen failing, none
+// passing, is the shape of "squeezed out", not the shape of "one assertion chose wrongly"; and a
+// judgement that moves with the load is neither a red nor a green (author ruling 2026-11-02 16:50).
+// The checks below compare against fixed strings, so the width they are taken at has to be fixed
+// too. Four is a width this fixture's work is small enough to fill and small enough not to swamp;
+// one would make the wall time unacceptable, and it is not what the plan layer runs at either.
+const SELFTEST_JOBS = '4'
+// Printed at the end and read by nothing: how many child runs this file started, and what the
+// whole thing cost in CPU and in wall time. The three numbers belong together because the bound
+// this self-test runs under rose twice on readings that were never the same kind, and a host that
+// reports its own cost is the only thing that stops the next raise from being a guess.
+// See docs/handover/questions/2026-11-03-a-timeout-should-be-derived-from-a-measurement-not-a-constant.cn.md.
+const cost = { children: 0, cpuStart: process.cpuUsage(), wallStart: process.hrtime.bigint() }
+// What each child run was actually started with, counted at the spawn and never read back from
+// `SELFTEST_JOBS`. The distinction is the whole point of the [calibration] line: the constant says
+// what this file meant to pass, and a line that prints the constant is not a reading -- blanking the
+// constant left the line saying `jobs=4` while every child took the runner's default width, so the
+// one thing the line exists for (the width these readings were taken at) was the one thing it never
+// measured. `inherited` is the state of a child started with no width of ours and therefore with the
+// runner's own (`availableParallelism`); it is a different word on the line for exactly that reason.
+const widthTally = { fixed: 0, named: 0, inherited: 0, cli: 0 }
+const widthsPassed = new Set()
 const problems = []
 const scratchRoot = path.join(repoRoot, 'tmp', 'test')
 // When the self-test runs under the runner, this is its own scratch directory; a direct run
@@ -57,7 +87,27 @@ const probeLogDir = process.env.CAMEL_TEST_TMPDIR || path.join(repoRoot, 'tmp')
 fs.mkdirSync(probeLogDir, { recursive: true })
 
 function runRunner(args, extraEnv = {}) {
-    const proc = spawnSync(process.execPath, [runner, ...args], {
+    cost.children += 1
+    // A child run that names its own width (`--jobs 1` for the serial check, `--jobs 4` for the
+    // parallel one) keeps it: the width is the subject of those checks. Every other child run is
+    // taken at `SELFTEST_JOBS`, which is what makes its reading independent of the load it is
+    // started under. The flag goes before the target, where the runner reads it.
+    //
+    // What this call appends is recorded here, where the decision is made, because the line that
+    // reports it used to report the constant instead -- see `widthTally`. A blank `SELFTEST_JOBS`
+    // appends nothing rather than an empty `--jobs`: that is a child with no width of ours, and it
+    // is the state the control experiment puts this file in to show the line can tell the two apart.
+    const namesItsOwnWidth = args.includes('--jobs')
+    const width = namesItsOwnWidth || !SELFTEST_JOBS ? [] : ['--jobs', SELFTEST_JOBS]
+    if (namesItsOwnWidth) {
+        widthTally.named += 1
+    } else if (width.length > 0) {
+        widthTally.fixed += 1
+        widthsPassed.add(SELFTEST_JOBS)
+    } else {
+        widthTally.inherited += 1
+    }
+    const proc = spawnSync(process.execPath, [runner, ...width, ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
         env: { ...process.env, ...extraEnv },
@@ -69,6 +119,11 @@ function runRunner(args, extraEnv = {}) {
 // and `--list` live there, above the plan runner. A check of a target shorthand has to go
 // through it, not through run-tests.mjs, or it would test a different parser.
 function runTestCli(args, extraEnv = {}) {
+    cost.children += 1
+    // No width here, and none wanted: these calls only resolve a target (`--list`), so the width
+    // they would run at is not part of what they check. They are counted in their own bucket so the
+    // [calibration] line can account for every child it printed a total for.
+    widthTally.cli += 1
     const proc = spawnSync(process.execPath, [path.join(repoRoot, 'test', 'runner.mjs'), ...args], {
         encoding: 'utf8',
         cwd: repoRoot,
@@ -191,6 +246,100 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
     problems.push('strict: the failed run did not print the kept test root')
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
+
+// --- the `known_fail` gate: a marked case carries an owner, a wall and a sentence --------------
+// The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
+// mark, who is responsible for making it green, and why it cannot pass. Two of the three used to be
+// prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
+// are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the
+// sentence the case prints today, is refused the same way: without it the runner takes any failure
+// as the expected one, and another defect can wear the mark's name. Six plan files share one
+// directory -- five ways to be incomplete and one complete entry. The five must fail with the file,
+// the case and the missing (or unusable) field named; the complete one must load, run, and report
+// `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason would make
+// the five pass and this block red, which is the direction that matters.
+const knownfailDir = path.join(here, 'knownfail')
+const knownfail = runRunner([knownfailDir])
+if (knownfail.status !== 1) problems.push(`known_fail gate: runner exit ${knownfail.status}, expected 1`)
+if (!knownfail.output.includes('[SUMMARY] total: 6, pass: 0, fail: 5, known failures: 1')) {
+    problems.push(`known_fail gate: unexpected summary (${summaryLine(knownfail.output)})`)
+}
+// The five readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
+// printed below is read off the output and not off this file's intentions.
+const knownfailReadings = [
+    [
+        'missing-owner',
+        "test/tools/selftest/knownfail/no_owner.plan.toml: test 'no_owner': known_fail needs "
+            + 'known_fail_owner',
+    ],
+    [
+        'missing-reason',
+        "test/tools/selftest/knownfail/no_reason.plan.toml: test 'no_reason': known_fail needs "
+            + 'known_fail_reason',
+    ],
+    [
+        'placeholder-reason',
+        "test/tools/selftest/knownfail/vague_reason.plan.toml: test 'vague_reason': "
+            + 'known_fail_reason is "待修", which says nothing about the wall',
+    ],
+    [
+        'reason-names-no-wall',
+        "test/tools/selftest/knownfail/no_wall.plan.toml: test 'no_wall': known_fail_reason names "
+            + 'no wall',
+    ],
+    [
+        'missing-msg',
+        "test/tools/selftest/knownfail/no_msg.plan.toml: test 'no_msg': known_fail needs "
+            + 'known_fail_msg',
+    ],
+]
+const knownfailVerdict = knownfailReadings.map(([what, needle]) => {
+    const seen = knownfail.output.includes(needle)
+    if (!seen) problems.push(`known_fail gate: ${what} was not refused by name; output lacks: ${needle}`)
+    return `${what}=${seen ? 'refused' : 'MISSING'}`
+})
+// The complete entry is the control: the same mark, refused only for want of a field, must load and
+// run. Its status and its owner are two different readings -- one says the gate let it through, the
+// other says the field reaches the person reading the gate.
+if (!/^\[XFAIL\] complete\b/m.test(knownfail.output)) {
+    problems.push(`known_fail gate: the complete entry did not report [XFAIL]:\n${knownfail.output}`)
+}
+// The owner is printed through `printDetailLines`, which splits `key: value` into two padded
+// columns -- the line reads `[INFO] known_fail_owner   the runner self-test`, with no colon left.
+// The assertion is on that printed form, because that is the form the reader of a gate sees.
+if (!/\[INFO\] known_fail_owner\s+the runner self-test\b/.test(knownfail.output)) {
+    problems.push('known_fail gate: the owner was not printed on the [XFAIL] line')
+}
+knownfailVerdict.push(`all-three=${/^\[XFAIL\] complete\b/m.test(knownfail.output) ? 'accepted' : 'MISSING'}`)
+console.log(`[known_fail gate] ${knownfailVerdict.join('; ')}`)
+fs.rmSync(path.join(scratchRoot, `run-${knownfail.pid}`), { recursive: true, force: true })
+
+// --- expect_signal: a run that is meant to die of a named signal -------------------------------
+// "This process dies of SIGABRT" had no way to be written: `expect_exit` compares an exit code a
+// killed process does not have, and `known_fail` says the run is wrong today -- it turns the entry
+// red the day the process stops dying, which is the opposite of what such an entry means. The
+// fixture dies three ways, and only the first is green: of the signal the entry names, of a signal
+// it does not name, and not at all. The last two are the discrimination, and the fourth plan writes
+// no signal at all, which must be refused where the plan is read.
+const signalDir = path.join(here, 'signal')
+const signal = runRunner([signalDir])
+if (signal.status !== 1) problems.push(`expect_signal: runner exit ${signal.status}, expected 1`)
+if (!signal.output.includes('[SUMMARY] total: 4, pass: 1, fail: 3')) {
+    problems.push(`expect_signal: unexpected summary (${summaryLine(signal.output)})`)
+}
+if (!signal.output.includes('[PASS] abrt')) {
+    problems.push(`expect_signal: the expected signal did not pass:\n${signal.output}`)
+}
+if (!signal.output.includes('expected signal SEGV, got signal SIGABRT')) {
+    problems.push(`expect_signal: a death by another signal was not reported that way:\n${signal.output}`)
+}
+if (!signal.output.includes('expected signal 6, got exit 0')) {
+    problems.push(`expect_signal: a run that ended normally was not reported as not having died:\n${signal.output}`)
+}
+if (!signal.output.includes('expect_signal must name a signal')) {
+    problems.push(`expect_signal: a plan that named no signal was not refused:\n${signal.output}`)
+}
+fs.rmSync(path.join(scratchRoot, `run-${signal.pid}`), { recursive: true, force: true })
 
 //  --- the verify payload ----------------------------------------------------------------
 // The fixture's script asserts that `case_path` is the resolved case path and that the other
@@ -874,6 +1023,32 @@ if (shorthand.status !== 0 || !shorthand.output.includes('[SUMMARY] total: 5, pa
     problems.push(`target shorthand: a plan target without its suffix did not run in full (${summaryLine(shorthand.output)})`)
 }
 
+//  --- a target that names a directory holding no plan refuses ------------------------------
+// `test/plans/feat/docs_links` is the plan's fixture directory; the plan file is the sibling
+// `docs_links.plan.toml`, so the suffix-less shorthand above does not apply (the directory
+// exists). Naming it used to reach no plan, start nothing and explain that with the layer
+// sentence -- "none of their entries is in this layer", which is an answer about plans that were
+// reached. It now refuses, names the plan beside it, and prints no [SUMMARY] at all: a run that
+// started nothing must not look finished.
+const barren = runTestCli(['test/plans/feat/docs_links'])
+if (barren.status !== 2) problems.push(`target that names no plan: exit ${barren.status}, expected 2`)
+if (!/holds no \*\.plan\.toml/.test(barren.output) || !/docs_links\.plan\.toml/.test(barren.output)) {
+    problems.push(`target that names no plan: the refusal did not name the plan file beside it: ${barren.output.trim()}`)
+}
+if (/\[SUMMARY\]/.test(barren.output)) problems.push('target that names no plan: a [SUMMARY] was printed for a run that started nothing')
+// `--list` is the other entry point onto the same target and used to answer it differently: it
+// printed the directory and exited 0, so "what would this run?" was answered with a path no plan
+// is behind. Same exit code, same sentence -- the sentence is asserted equal, so a rewording in
+// one of the two places cannot leave them describing the same mistake in two ways.
+const barrenList = runTestCli(['test/plans/feat/docs_links', '--list'])
+if (barrenList.status !== 2) problems.push(`--list on a target that names no plan: exit ${barrenList.status}, expected 2`)
+const sentenceOf = (output) => (output.match(/^\[PLAN ERROR\].*$/m) || [''])[0].trim()
+if (!sentenceOf(barrenList.output)) {
+    problems.push(`--list on a target that names no plan: no [PLAN ERROR] line: ${barrenList.output.trim()}`)
+} else if (sentenceOf(barrenList.output) !== sentenceOf(barren.output)) {
+    problems.push(`--list and the run disagree about the same target: ${sentenceOf(barrenList.output)} vs ${sentenceOf(barren.output)}`)
+}
+
 // The base branch: origin/develop by default, overridden by CAMEL_TEST_BASE.
 const savedBase = process.env.CAMEL_TEST_BASE
 delete process.env.CAMEL_TEST_BASE
@@ -886,6 +1061,70 @@ if (changedBase() !== 'origin/release') {
 }
 if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
+
+//  --- a measured empty selection starts nothing, and says the count --------------------------
+// `--changed` with nothing to narrow by used to hand an empty target list to `run-tests.mjs`, whose
+// `loadPlans` reads "no target" as the whole plan tree: the run was the whole fast layer. So 0
+// changed files started 336 plan files and printed a `[SUMMARY]` with no failure -- the same three
+// numbers a correct selection of one plan prints, and the same exit code. The fallback is gone
+// (nothing is selected, so nothing starts), and the count is a line of its own: "changed: 0
+// target(s)" is the only thing that tells a zero from a layer in a log, and a selection that really
+// did select plans must not print it, or the line would mean nothing.
+const changedScratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-changed-'))
+const fallbackLine = (output) =>
+    (output.match(/^\[WARN\] --changed:.*falling back to the whole fast layer \(\d+ plan file\(s\).*$/m) || [
+        '',
+    ])[0]
+const emptyChangedList = path.join(changedScratch, 'empty.txt')
+fs.writeFileSync(emptyChangedList, '')
+const emptySelection = runTestCli(['--changed', '--changed-files', emptyChangedList, '--list'])
+if (emptySelection.status !== 0) {
+    problems.push(`--changed on an empty list: exit ${emptySelection.status}, expected 0`)
+}
+if (!/^\[INFO\] changed: 0 target\(s\)/m.test(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list did not print 'changed: 0 target(s)': ${emptySelection.output.trim()}`
+    )
+}
+if (fallbackLine(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list still widens to the layer: ${emptySelection.output.trim()}`
+    )
+}
+if (/\(the whole fast layer: smoke \+ feat\)/.test(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list says the layer is what it runs: ${emptySelection.output.trim()}`
+    )
+}
+// The run path, not only the listing: a zero has to reach the runner as a zero, or the widest
+// reading of `--changed` is the one nobody checked.
+const emptyRun = runRunner(['--selection-empty'])
+if (emptyRun.status !== 0) {
+    problems.push(`--selection-empty: exit ${emptyRun.status}, expected 0`)
+}
+if (!/discovered plans: 0/.test(emptyRun.output)) {
+    problems.push(`--selection-empty widened to the plan tree: ${summaryLine(emptyRun.output)}`)
+}
+if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(emptyRun.output)) {
+    problems.push(`--selection-empty: ${summaryLine(emptyRun.output)}`)
+}
+const matchedChangedList = path.join(changedScratch, 'matched.txt')
+fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
+const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
+if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
+    problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+}
+if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
+    problems.push(
+        `--changed printed the zero-target line for a selection that selected plans: ${matchedSelection.output.trim()}`
+    )
+}
+if (fallbackLine(matchedSelection.output)) {
+    problems.push(
+        `--changed printed the fallback sentence for a selection that selected plans: ${matchedSelection.output.trim()}`
+    )
+}
+fs.rmSync(changedScratch, { recursive: true, force: true })
 
 // --- a benchmark whose timed pass fails --------------------------------------------------------
 // gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the
@@ -1040,6 +1279,39 @@ if (!/^\[PASS\] names_its_own_card\b/m.test(busy.output)) {
     problems.push('free device: a test that named its own card was skipped or failed')
 }
 
+// A reading, printed and used by nothing: how many child runs it took, what width this file put
+// them at, and what the run cost in wall time on this host. `timeout_ms` is untouched -- that is
+// what makes this line safe to add, and why it is a reading rather than a decision.
+//
+// Printed before the verdict, and on a failing run too. The run that most needs to know the width
+// its numbers were taken at is the one that went red, and a check that only speaks when it is green
+// is the shape this project keeps calling a fake reading: on the day the sweep fixture came back
+// `pass: 0` the line was never printed, because the file exits with `problems` first.
+//
+// The CPU figure this line used to print is gone, and it is not coming back as `process.cpuUsage()`:
+// that call charges this process only, and nearly all of the work here is in children, so it read
+// close to 0 -- a number of the wrong kind, printed beside one of the right kind. The reading that
+// decides is the runner's: every test, this file included, runs under `test/tools/child-cpu.mjs`,
+// which reaps exactly one command and reports the CPU the kernel charged it and every process it
+// waited for, this file's children and their children among them. See the measurements in
+// test/plans/feat/consistency/runner.plan.toml.
+//
+// Reading the children from here instead would mean running each one through child-cpu.mjs, and that
+// wrapper is a Node process of its own: ~40 ms of CPU apiece over the ~120 child runs below, added to
+// the very figure it measures -- seconds against a bound (13.0 s of work plus a 0.5 s band) that this
+// file's own runs are judged by. A measurement that moves the thing it measures is worse than the
+// number it replaces, so the reading stays where the runner makes it.
+const spentWall = Number(process.hrtime.bigint() - cost.wallStart) / 1e9
+// `width` is what was appended, taken from the set of values actually passed at the spawn; with the
+// constant blanked the set is empty and the line says `inherited`. Four buckets that add up to the
+// child count printed beside them: `fixed` took our `--jobs`, `own` named one in the call, `cli` only
+// resolved a target, and `inherited` took the runner's default width.
+const widthTaken = widthsPassed.size > 0 ? `fixed(${[...widthsPassed].join('|')})` : 'inherited'
+console.log(
+    `[calibration] child-runs=${cost.children}; width=${widthTaken}; `
+        + `fixed=${widthTally.fixed}, own=${widthTally.named}, inherited=${widthTally.inherited}, `
+        + `cli=${widthTally.cli}; wall=${spentWall.toFixed(1)} s`
+)
 if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')

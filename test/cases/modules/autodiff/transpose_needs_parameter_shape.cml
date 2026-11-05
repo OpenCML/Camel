@@ -1,0 +1,34 @@
+/**
+ * The negative of `rules_angle_args_mean_transpose.cml`: the same function with `x: float[...]`, and
+ * the rule that refuses it.
+ *
+ * A transposition is the adjoint of a linear map, and the adjoint needs the shape of the map's
+ * domain: `transpose(loss_mean)` is handed the cotangent of the result (`float[3]`) and no argument,
+ * so nothing in the graph says how many positions `x` has. The shape is not in the type either
+ * (`float[...]` states neither a rank nor a length) and no value in the program carries it, so the
+ * pullback of `mean<axis>` cannot be built: `mean_axis_cotangent` reads `xs` for `numel(xs)` and
+ * `ones_like(xs)`.
+ *
+ * This is the language's rule and not a gap of the transform (author, 2026-11-03 16:15): the answer
+ * is a refusal that names the parameter whose type has to state its shape, and the repair is that
+ * declaration -- `x: float[2, 3]`, which is what the neighbouring case writes, and which answers
+ * `[[0.5, 1.0, 1.5], [0.5, 1.0, 1.5]]`. JAX's `linear_transpose` asks its caller for the same fact
+ * (the shape of the value it transposes), which is why the rule is about the type and not about what
+ * the compiler has got round to.
+ *
+ * The reading this file pins is the refusal: the program does not run, and the sentence a writer is
+ * handed says which parameter and what to write instead.
+ */
+import rulesets.transpose
+import { transpose } from transforms
+import { mean, sum } from tensor
+
+func loss_mean(x: float[...]): float {
+    return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
+}
+
+func main(): int sync {
+    let back = transpose(loss_mean)(1.0)
+    'transpose should have been refused, and it answered {}'->format<back.0>->println
+    return 0
+}

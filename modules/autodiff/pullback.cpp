@@ -973,8 +973,12 @@ class ForwardRewrite {
     void rewriteClosureCall(
         gc_node_ref_t call, GCGraph *graph, std::vector<gc_node_ref_t> captures,
         gc_node_ref_t calleeValue);
-    /// The function `callee` computes when it applies one of autodiff's own macros (grad,
-    /// with_grad, vjp) to static functions, else nullptr.
+    /// The function `callee` computes when it applies one of this module's own macros (`grad`,
+    /// `with_grad`, and their `has_aux` forms) to a static function, else nullptr. `vjp` is not one
+    /// of them: it is a function of `stdlib/vjp.cml`, built out of `jvp`, `split` and `transpose`,
+    /// so a call of it inside a differentiated graph has no OPER of this module to resolve and the
+    /// pullback it hands out is a value the graph cannot name (see
+    /// `docs/handover/questions/2026-11-04-what-does-the-second-derivative-need.cn.md`).
     ::Function *macroCallee(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users. A call
     /// that writes captured variables hands on their new versions after its value
@@ -1199,7 +1203,6 @@ class Backward final : public VjpBuilder {
     /// Refuses `node` when one of its inputs is active: `what` is the place a gradient cannot
     /// pass through, and `remedy` says what to do instead.
     void refuseWhenActive(gc_node_ref_t node, Type *type, const char *what, const char *remedy);
-    std::string_view operUri(gc_node_ref_t node) const;
     camel::core::OperId operId(gc_node_ref_t node) const;
     /// Why the gradient cannot pass the call `call` (a CALL, or a FUNC left alone).
     std::string refusalReason(gc_node_ref_t call) const;
@@ -3819,7 +3822,20 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         if (camel::core::oper::isVariableRead(operId(function))) {
             return "the function is read from a variable";
         }
-        return std::format("the function is the result of '{}'", operUri(function));
+        // Nothing here names the operator. Which operator computed a function value is *provenance*,
+        // and a verdict read off provenance is a verdict about where the value came from rather than
+        // about what it is: the sentence used to read "the function is the result of
+        // 'transforms:split'", which named a transform this engine knows nothing else about and told
+        // a reader to go and look at it (author, 2026-11-04 04:20: the engine's "this is the result
+        // of `transforms:split`" refusal judges by provenance, so the engine deletes it and does not
+        // learn to read provenance -- the library's `grad` covers those shapes). What this engine can
+        // say about such a value by its content is the sentence below the switch: it is computed at
+        // run time, so which function it calls is not evident where it is called.
+        // A transform's own answer to "what is this function's derivative" is the library's rule --
+        // `stdlib/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine neither
+        // repeats that rule nor guesses at it. `break`, not a fallthrough: the cases below read the
+        // node as the kind they name, and an operator node is not one of them.
+        break;
     case GCNodeKind::Func:
         // A call that returns a function value is never retargeted: its callee is a graph.
         return std::format(
@@ -3837,11 +3853,6 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         break;
     }
     return "the function is computed at run time";
-}
-
-std::string_view Backward::operUri(gc_node_ref_t node) const {
-    const auto payload = forward().payloadOf(node);
-    return reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
 }
 
 camel::core::OperId Backward::operId(gc_node_ref_t node) const {

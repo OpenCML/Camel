@@ -10,14 +10,14 @@
 
 | # | 位置 | 删掉什么 | 今天 |
 |---|---|---|---|
-| 1 | `include/camel/core/operator_table.h:153` | `inline constexpr OperId Keep = 22;` | 改过，已回退 |
-| 2 | `include/camel/core/operator_table.h:127-151` | `:op/keep` 的契约注释 | 改过，已回退 |
-| 3 | `include/camel/core/operator_table.h:187` | `kWellKnownOperatorUris` 的一项，`kWellKnownCount` 23 → 22 | 改过，已回退 |
-| 4 | `src/builtin/executors/builtin.cpp:170` | `{"op/keep", __keep__}` 登记 | 改过，已回退 |
-| 5 | `src/builtin/executors/builtin.cpp:643` | `key != "op/keep"` 的纯性豁免 | 改过，已回退 |
-| 6 | `src/builtin/operators/ops.h:19-33` | `__keep__` 的声明与注释 | 改过，已回退 |
-| 7 | `src/passes/test/semantics.cpp:151-157` | `printTraits(":op/keep")` 一段 | 改过，已回退 |
-| 8 | `test/plans/feat/modules/operator_semantics.plan.toml:33-34` | 两行 `SEMANTICS traits :op/keep …` | 改过，已回退 |
+| 1 | `include/camel/core/operator_table.h#OperId` | `inline constexpr OperId Keep = 22;` | 改过，已回退 |
+| 2 | `include/camel/core/operator_table.h#Keep` | `:op/keep` 的契约注释 | 改过，已回退 |
+| 3 | `include/camel/core/operator_table.h#kWellKnownOperatorUris` | `kWellKnownOperatorUris` 的一项，`kWellKnownCount` 23 → 22 | 改过，已回退 |
+| 4 | `src/builtin/executors/builtin.cpp#makeOpsImplMap` | `{"op/keep", __keep__}` 登记 | 改过，已回退 |
+| 5 | `src/builtin/executors/builtin.cpp#registerBuiltinOperatorTraits` | `key != "op/keep"` 的纯性豁免 | 改过，已回退 |
+| 6 | `src/builtin/operators/ops.h#__builtin__inv__` | `__keep__` 的声明与注释 | 改过，已回退 |
+| 7 | `src/passes/test/semantics.cpp#OperatorSemanticsTestPass::apply` | `printTraits(":op/keep")` 一段 | 改过，已回退 |
+| 8 | `test/plans/feat/modules/operator_semantics.plan.toml#registration_and_queries` | 两行 `SEMANTICS traits :op/keep …` | 改过，已回退 |
 
 **回退前的一次读数**（这些是"改法对不对"的证据，不是落地的读数）：全套编译 `BUILD_EXIT=0`，
 `test/plans/feat/modules/operator_semantics.plan.toml` `4/4 pass`（两行删掉后计划仍然自洽），
@@ -27,13 +27,13 @@
 
 | # | 位置 | 改成 | 今天 |
 |---|---|---|---|
-| 1 | `src/passes/opt/generic/rewrite.h:180-218` | 契约原文改成"同步前驱 + 唯一数据端口" | 改过，已回退 |
-| 2 | `src/passes/opt/generic/rewrite.cpp:292-302` | `addGateNode` + 唯一数据端口 `passed` + 同步前驱 `source` | **改过、编过、被图的不变量拒了 —— 见 §3；已回退** |
-| 3 | `src/passes/opt/generic/generic.cpp:731` | 注释改说 `GATE` | 改过，已回退 |
-| 4 | `src/passes/opt/generic/generic.cpp:1498` | 注释改说 `GATE` | 改过，已回退 |
+| 1 | `src/passes/opt/generic/rewrite.h#keepThroughValue` | 契约原文改成"同步前驱 + 唯一数据端口" | 改过，已回退 |
+| 2 | `src/passes/opt/generic/rewrite.cpp#keepThroughValue` | `addGateNode` + 唯一数据端口 `passed` + 同步前驱 `source` | **改过、编过、被图的不变量拒了 —— 见 §3；已回退** |
+| 3 | `src/passes/opt/generic/generic.cpp#pruneBranch` | 注释改说 `GATE` | 改过，已回退 |
+| 4 | `src/passes/opt/generic/generic.cpp#simplifyGraph` | 注释改说 `GATE` | 改过，已回退 |
 
 **一处原文更正**：原页 §2 第 2 行写的 `draft.setSyncPredicate(node, source)` 在树上不存在；
-做同一件事的是 `GraphDraft::setSyncPredecessor`（`include/camel/runtime/draft.h:682`，
+做同一件事的是 `GraphDraft::setSyncPredecessor`（`include/camel/runtime/draft.h#setSyncPredecessor`，
 "refuses a self edge. A node has at most one"）。这一条不影响结论，只是名字。
 
 ### 1.3 三个测试装置（原页 §3）
@@ -72,7 +72,7 @@ different question from a credential*。原页 §5.1 因此把 `graph.cpp:561` �
 
 **今天是两条互不相识的路在接这个等待**：
 
-- 值这条路（`keepThroughValue`，`src/passes/opt/generic/rewrite.cpp:288-300`）造的是 `:op/keep`，
+- 值这条路（`keepThroughValue`，`src/passes/opt/generic/rewrite.cpp#keepThroughValue`）造的是 `:op/keep`，
   `setNormInputs(node, {source, passed})` —— **它身上没有等待**：两个入边都是数据边，"谁读过它"
   是它的算子身份（`mayFault`/`externalEffect` 的保守声明），不是边。
 - 等待这条路只能由**读它的那个节点**来接：`replaceNode` 的 `inheritedWait`
@@ -82,7 +82,7 @@ different question from a credential*。原页 §5.1 因此把 `graph.cpp:561` �
 
 **换成 `GATE` 之后这两条路本该合成一条**：`GATE` 的等待是它自己的同步前驱，而
 `dissolveUnorderedGates` 的第一道门就是 `!syncInputsOf(id).empty()`
-（`src/runtime/draft.cpp:2072`）—— 有同步前驱的 `GATE` 永远不会被溶解。这正是 §3 撞墙的地方：
+（`src/runtime/draft.cpp#GraphDraft::dissolveUnorderedGates`）—— 有同步前驱的 `GATE` 永远不会被溶解。这正是 §3 撞墙的地方：
 **这条边写不进去**。
 
 ## 3. 停住的位置：`sync edge … starts at a node no sync block wrote`

@@ -1,0 +1,54 @@
+// The library's gradient of a power, through `vjp`, and the engine's number for the same arithmetic:
+// `pow(x, w)` is `math:pow_d`, and `x ^ w` on two floats is `:op/pow_d` -- two operators, one law.
+//
+// The engine's half of this anchor is `pow_cube_gradient_through_the_engine.cml` (`d(w^3)/dw = 12` at
+// `w = 2`); the engine has no rule for `math:pow_d` at all (measured: `autodiff: no derivative rule
+// for operator 'math:pow_d' of type 'float'`), so the two spellings can only be compared through
+// their numbers, and they are the same numbers.
+//
+// What is pinned, in order:
+//   - `pow(2.0, 3.0)` and its derivative in the base: `3 * 2^2 * 1 = 12.0`, the same 12.0 the engine
+//     answers for `2.0 ^ 3.0`.
+//   - A non-integer exponent: `pow(2.0, 2.5) = 5.656854249492381` and `2.5 * 2^1.5 = 7.0710678118654755`.
+//     This is the reading that tells the law apart from "multiply by the exponent" written for a
+//     constant: `2.5` is the exponent, and `2^1.5` is not a power of an integer.
+//   - The exponent's branch: `pow(2.0, n)` at `n = 3` answers `2^3 * ln(2) = 5.545177444479562` for
+//     `n`. `x <= 0` is where that branch has no real value, and the law says so with `NaN` instead of
+//     a zero (the same reading `jvp_of_a_power.cml` pins for the `^` spelling).
+//
+// The other half of the same key is the neighbouring `pow_gradient_of_a_caret_through_the_library.cml`:
+// `^`'s pullback used to stop on the guard `pow_tangent` kept for a constant exponent, and since
+// 2026-11-04 that guard is gone -- the term is omitted where the rule is expanded -- so the two
+// spellings answer the same numbers here and there. Both laws are the same arithmetic with the
+// exponent's term written as a separate product, which is what the backward walk can turn around.
+//
+//     camel test/cases/compile/transforms/pow_gradient_through_the_library.cml
+import rulesets.jvp
+import rulesets.transpose
+import { vjp } from vjp
+import { pow } from math
+
+func cube(x: float): float {
+    return pow(x, 3.0)
+}
+
+func fractional(x: float): float {
+    return pow(x, 2.5)
+}
+
+func throughExponent(n: float): float {
+    return pow(2.0, n)
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(cube)(2.0)
+    let cotangents = pullback(1.0)
+    `pow library value={} d/dx={}`->format<value, cotangents.0>->println
+    let (fracValue, fracPullback) = vjp(fractional)(2.0)
+    let fracCotangents = fracPullback(1.0)
+    `pow fractional value={} d/dx={}`->format<fracValue, fracCotangents.0>->println
+    let (expValue, expPullback) = vjp(throughExponent)(3.0)
+    let expCotangents = expPullback(1.0)
+    `pow exponent value={} d/dn={}`->format<expValue, expCotangents.0>->println
+    return 0
+}

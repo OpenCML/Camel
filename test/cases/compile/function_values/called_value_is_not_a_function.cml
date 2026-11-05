@@ -1,0 +1,19 @@
+// A call of a value whose type is not a function. `t` holds a tuple, so the call has nothing to
+// run: a call runs the function a value holds, and a tuple is a value, not a function.
+//
+// This used to be the builder's assertion in `visitLinkNode` ("Target node of LINK must be a
+// function or operator node"), and the process stopped with a `Camel Invariant Violation` for a
+// program the compiler was given -- exit 134, no position, no reading of the program. The target
+// of a LINK being a function or an operator is the builder's contract, and the call is now refused
+// where the callee's type is known, which is what keeps that contract: the assertion no longer
+// stands in front of input, and the report names the type the value has.
+//
+// `transpose(f)` reaches the same place when a transposed member takes the values its body reads
+// beside the cotangent: the value the call stands on is then the answer a transform hands back,
+// and no function value is built for it here (`two_arguments_to_a_one_port_member.cml`, the shape
+// the question page names).
+func main(): int sync {
+    let t = (1.0, 2.0)
+    println(t(1.0))
+    return 0
+}

@@ -92,14 +92,14 @@ timeout_ms = 60000
 
 [[tests]]
 name = "rulesets_keys_are_derived_and_the_exceptions_are_printed"
-desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the two operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The two lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads."
+desc = "No operator is bound to a key by hand: `std::rulesets forward=true` prints the three operators whose key cannot be derived from the operator itself, each with the reason, and the sentence saying how every other key is derived. `xs[i]` is a bracket form, which is none of `a <op> b`, `<op> a` or `f(a, b)`, so `:op/idx_arr`'s rule is filed under the call `index_into(x, i)`; `float(n)` is `float` at one operand, a spelling every conversion to a double shares, so `:op/ltod`'s rule is filed under the call `float_of_int(n)`; `*/2` is already `:op/mul_d`'s key, so `tensor:multiply`'s rule is filed under `mul_tensor(x, w)`. The three lines print on every run of the pass, not only when asked for, because an exception only visible on request is an exception nobody reads. The other half of the reading -- the key an operator's rule is looked up under -- is asked with an operator and no field (`query=:op/itod`): a conversion's key is the spelling of the destination the registration states (`float` for `:op/itod`, and `int` for `:op/dtol`, which the old letter table could not spell at all), and an operator that converts nothing has no key at all -- `:var/get` reads a variable, its result is a float, and it must not be given a conversion's key."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/rulesets_lookup.cml"
-args = ["${case}", "std::rulesets", "forward=true", "${backend}"]
+args = ["${case}", "std::rulesets", "forward=true", "query=:op/itod;:op/dtol;:var/get", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["RULEKEY-EXCEPTION :op/idx_arr -> index_into/2 because", "RULEKEY-EXCEPTION tensor:multiply -> mul_tensor/2 because", "RULEKEY derivable: an operator's key is its own spelling"]
+expect_stdout_contains = ["RULEKEY-EXCEPTION :op/idx_arr -> index_into/2 because", "RULEKEY-EXCEPTION tensor:multiply -> mul_tensor/2 because", "RULEKEY derivable: an operator's key is its own spelling", "KEY :op/itod -> float/1", "KEY :op/dtol -> int/1", "KEY :var/get -> none"]
 expect_stdout_not_contains = ["FORWARD ", "VMAP ", "-> no rule", "no such family"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
@@ -236,7 +236,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vmap_argmax_shifts_the_axis_and_agrees_with_row_by_row_map"
-desc = "The two reductions whose result element is not their operand's, batched: `argmax_axis` and `argmin_axis` take a numeric tensor and answer `int64` positions, so their rules are the ones that show what a batching rule is generic in -- the element the operands are made of, read from an operand by the transform (`firstOperandTypeOf`), not from the node, whose type is the positions. The batch is three rows of `float[2, 3]` -- `[[1, 9, 3], [4, 5, 6]]`, `[[7, 2, 5], [0, 8, 1]]`, `[[2, 2, 1], [3, 1, 3]]` -- so down the columns the largest positions are `[1, 0, 1]`, `[0, 1, 0]`, `[1, 0, 1]`, the smallest ones kept as a row are `[[0, 1, 0]]`, `[[1, 0, 1]]`, `[[0, 1, 0]]`, and along the rows the largest positions are `[1, 2]`, `[0, 1]`, `[0, 0]` (the third row ties, and a tie keeps the earlier position). Each batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs; the elements print as integers and every `f` declares `int64[..]`, so positions are compared as positions."
+desc = "The two reductions whose result element is not their operand's, batched: `argmax_axis` and `argmin_axis` take a numeric tensor and answer `int64` positions, so their rules are the ones that show what a batching rule is generic in -- the element the operands are made of, read from an operand by the transform (`firstOperandTypeOf`), not from the node, whose type is the positions. The batch is three rows of `float[2, 3]` -- `[[1, 9, 3], [4, 5, 6]]`, `[[7, 2, 5], [0, 8, 1]]`, `[[2, 2, 1], [3, 1, 3]]` -- so down the columns the largest positions are `[1, 0, 1]`, `[0, 1, 0]`, `[1, 0, 1]`, the smallest ones kept as a row are `[[0, 1, 0]]`, `[[1, 0, 1]]`, `[[0, 1, 0]]`, and along the rows the largest positions are `[1, 2]`, `[0, 1]`, `[0, 0]` (the third row ties, and a tie keeps the earlier position). Each batched result is printed beside the row-by-row `array.vmap` of the same function and the plan compares the pairs; the elements print as integers and every `f` declares `int64[...]`, so positions are compared as positions."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_argmax.cml"
 args = ["${case}", "${backend}"]
@@ -327,14 +327,15 @@ timeout_ms = 20000
 
 [[tests]]
 name = "vmap_transform_refuses_a_call_by_name"
-desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have."
+desc = "A call in the body, answered rather than walked past: `g` calls `f`, and a batched graph has no body for `f` unless the family holds a rule filed under it, so `vmap(g)` stops at that call -- `construct=a call`, `uri=f`, and the count `asked=1 found=0 missing=1`. The ask is the point: the transform builds the key a call already has (the callee's name and its argument count), asks `rulesets.vmap`, and reports the hole. `asked=0` is what this used to print and it was the wrong answer -- 'the walk never got here' is not 'the family has nothing for this call'. The row-by-row writing prints `[3.0, 5.0, 7.0]` first and keeps working, which is the answer the batched writing does not have. The refusal itself is asserted as the value `vmap cause=body function=g uri=f` (`expect_refusal`), not as the sentence: the line that prints it is for a reader, and its wording is not the criterion -- `construct` is recorded (`a call`) and not asserted, because it is the transform's prose about the construct rather than the operator the entry is about."
 kind = "behavior"
 case = "../../../cases/compile/transforms/vmap_call_refused.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 1
-expect_output_contains = ["REINTERP vmap function=g skip=body construct=a call uri=f", "asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
+expect_output_contains = ["asked=1 found=0 missing=1", "[3.0, 5.0, 7.0]"]
+expect_refusal = ["vmap cause=body function=g uri=f"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -422,7 +423,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # `where`'s first operand is a condition, not a value arm: its element is `bool` and the answer's
 # element is the arms'. The transform used to instantiate a rule on the first port, so `where` was
-# asked for a `bool` rule and refused (`No candidate of 'vmap_where' applies to (bool[?, ..], ...)`).
+# asked for a `bool` rule and refused (`No candidate of 'vmap_where' applies to (bool[?, ...], ...)`).
 # It now reads the first port that is not a condition, and the reading says which element the rule
 # was made for: `elements=float`, not `bool`. The mask and the second arm are constants of the row's
 # shape, so they are the batch of one row and broadcast -- the batch's rows are the row-wise answers.
@@ -449,34 +450,34 @@ timeout_ms = 20000
 # table as a table of twelve to anyone who reads the tail.
 [[tests]]
 name = "ruleset_index_agrees_with_the_transform"
-desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty-seven rows, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same twenty-seven keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the twenty-five primitives a body reaches. All three have to say the same thing: the table's size is the index's, every answer is the table's rule for that key, and every hit is a row of the table with the same rule name. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`) are asserted by name."
+desc = "Both doors of the batching index, compared on one program: the table `std::rulesets` prints (twenty-seven rows over twenty-one keys, `RULESET rulesets.vmap <head>/<arity> -> <rule> (rhs <callee>)`), the answers `lookupRule` gives for the same keys (`LOOKUP ... -> <rule>`), and the `asked=1 found=1 missing=0 rules=<rule>` readings the transform prints for the twenty-five primitives a body reaches. All three have to say the same thing: every answer is the table's rule for that key, and every hit is a row of the table with the same rule name -- except the six keys that hold two laws (the whole reduction and the reduction over an axis, one name, author's ruling of 2026-11-05), where the singular lookup refuses by design and the transform asks the plural one and chooses by the operands' ports. The eight keys a tail-reading of the output does not show (`*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmin/1`, `sum/1`) are asserted by name."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/rulesets/ruleset_index_agrees_with_the_transform.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "printed=27 looked=27 hit=25 six_eights=8 first=*/2 last=where/3\n"
+expect_stdout_exact = "keys=21 looked=21 hit=25 six_eights=8 first=*/2 last=where/3\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
 # The table itself, once, with nothing else in the output: twenty lines in key order. A key added or
 # dropped is red here, which is the half of the pair that the plan report cannot show on its own --
-# a long stdout is elided as `... N line(s) before`, so a reader counting the visible rows of a
+# a long stdout is elided as `omitted N line(s) above`, so a reader counting the visible rows of a
 # twenty-row table reads twelve.
 [[tests]]
 name = "ruleset_index_table_is_the_whole_index"
-desc = "The whole `rulesets.vmap` table, twenty lines in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1`, `argmax_axis/3`, `argmin/1`, `argmin_axis/3`, `index_into/2`, `matmul/2`, `max/1`, `max_axis/3`, `mean/1`, `mean_axis/3`, `min/1`, `min_axis/3`, `mul_tensor/2`, `sum/1`, `sum_axis/3`. Twenty keys, each with the rule and the callee the index holds -- a key added or dropped is red, and the first five plus the arg* family are the ones the plan report elides as `... N line(s) before` from the head of the output."
+desc = "The whole `rulesets.vmap` table, twenty-seven rows in key order, printed by a program that does nothing but import the ruleset (so no transform adds a reading of its own): `*/2`, `+/2`, `-/1`, `-/2`, `//2`, `argmax/1` twice (the whole form and the axis form of one name, told apart by the ports), `argmin/1` twice, `concat/2`, `dim/1`, `index_into/2`, `matmul/2`, `max/1` twice, `mean/1` twice, `min/1` twice, `mul_tensor/2`, `permute/1`, `reshape/1`, `sum/1` twice, `transpose/1`, `unsqueeze/1`, `where/3` -- twenty-one keys and twenty-seven rows, each with the rule and the callee the index holds. A reduction over an axis is written with the whole reduction's name and the axis in `<>` (author's ruling, 2026-11-05), so the six axis laws are filed under the six whole-reduction keys."
 kind = "behavior"
 case = "../../../cases/compile/rulesets/ruleset_index_only.cml"
 args = ["${case}", "std::rulesets"]
 expect_exit = 0
-expect_stdout_exact = "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)\nRULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)\nRULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)\nRULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)\nRULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax (rhs vmap_argmax)\nRULESET rulesets.vmap argmax_axis/3 -> vmap_rule_argmax_axis (rhs vmap_argmax_axis)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin (rhs vmap_argmin)\nRULESET rulesets.vmap argmin_axis/3 -> vmap_rule_argmin_axis (rhs vmap_argmin_axis)\nRULESET rulesets.vmap concat/2 -> vmap_rule_concat (rhs vmap_concat)\nRULESET rulesets.vmap dim/1 -> vmap_rule_dim (rhs vmap_dim)\nRULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)\nRULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)\nRULESET rulesets.vmap max/1 -> vmap_rule_max (rhs vmap_max)\nRULESET rulesets.vmap max_axis/3 -> vmap_rule_max_axis (rhs vmap_max_axis)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean (rhs vmap_mean)\nRULESET rulesets.vmap mean_axis/3 -> vmap_rule_mean_axis (rhs vmap_mean_axis)\nRULESET rulesets.vmap min/1 -> vmap_rule_min (rhs vmap_min)\nRULESET rulesets.vmap min_axis/3 -> vmap_rule_min_axis (rhs vmap_min_axis)\nRULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)\nRULESET rulesets.vmap permute/1 -> vmap_rule_permute (rhs vmap_permute)\nRULESET rulesets.vmap reshape/1 -> vmap_rule_reshape (rhs vmap_reshape)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum (rhs vmap_sum)\nRULESET rulesets.vmap sum_axis/3 -> vmap_rule_sum_axis (rhs vmap_sum_axis)\nRULESET rulesets.vmap transpose/1 -> vmap_rule_transpose (rhs vmap_transpose)\nRULESET rulesets.vmap unsqueeze/1 -> vmap_rule_unsqueeze (rhs vmap_unsqueeze)\nRULESET rulesets.vmap where/3 -> vmap_rule_where (rhs vmap_where)\n"
+expect_stdout_exact = "RULESET rulesets.vmap */2 -> vmap_rule_mul (rhs vmap_mul)\nRULESET rulesets.vmap +/2 -> vmap_rule_add (rhs vmap_add)\nRULESET rulesets.vmap -/1 -> vmap_rule_neg (rhs vmap_neg)\nRULESET rulesets.vmap -/2 -> vmap_rule_sub (rhs vmap_sub)\nRULESET rulesets.vmap //2 -> vmap_rule_div (rhs vmap_div)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax_axis (rhs vmap_argmax_axis)\nRULESET rulesets.vmap argmax/1 -> vmap_rule_argmax (rhs vmap_argmax)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin_axis (rhs vmap_argmin_axis)\nRULESET rulesets.vmap argmin/1 -> vmap_rule_argmin (rhs vmap_argmin)\nRULESET rulesets.vmap concat/2 -> vmap_rule_concat (rhs vmap_concat)\nRULESET rulesets.vmap dim/1 -> vmap_rule_dim (rhs vmap_dim)\nRULESET rulesets.vmap index_into/2 -> vmap_rule_idx (rhs idx_batch)\nRULESET rulesets.vmap matmul/2 -> vmap_rule_matmul (rhs vmap_matmul)\nRULESET rulesets.vmap max/1 -> vmap_rule_max (rhs vmap_max)\nRULESET rulesets.vmap max/1 -> vmap_rule_max_axis (rhs vmap_max_axis)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean (rhs vmap_mean)\nRULESET rulesets.vmap mean/1 -> vmap_rule_mean_axis (rhs vmap_mean_axis)\nRULESET rulesets.vmap min/1 -> vmap_rule_min (rhs vmap_min)\nRULESET rulesets.vmap min/1 -> vmap_rule_min_axis (rhs vmap_min_axis)\nRULESET rulesets.vmap mul_tensor/2 -> vmap_rule_mul_tensor (rhs vmap_mul_tensor)\nRULESET rulesets.vmap permute/1 -> vmap_rule_permute (rhs vmap_permute)\nRULESET rulesets.vmap reshape/1 -> vmap_rule_reshape (rhs vmap_reshape)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum (rhs vmap_sum)\nRULESET rulesets.vmap sum/1 -> vmap_rule_sum_axis (rhs vmap_sum_axis)\nRULESET rulesets.vmap transpose/1 -> vmap_rule_transpose (rhs vmap_transpose)\nRULESET rulesets.vmap unsqueeze/1 -> vmap_rule_unsqueeze (rhs vmap_unsqueeze)\nRULESET rulesets.vmap where/3 -> vmap_rule_where (rhs vmap_where)\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 40000
 
 [[tests]]
 name = "vmap_fold_helpers_are_gone"
-desc = "The two fold helpers the row-wise `max` and `min` used are deleted from `stdlib/rulesets/vmap.cml`, and what replaced them is the operator: `max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)` and the same with `min_axis`. The keys `max/1` and `min/1` still name `vmap_max` and `vmap_min` -- the deletion is a helper's, not a key's -- and `sum`/`mean` still fold, because a float row folded twice is two roundings and flattened once is one."
+desc = "The two fold helpers the row-wise `max` and `min` used are deleted from `stdlib/rulesets/vmap.cml`, and what replaced them is the operator: `max<1, false>(reshape<[shape(xs)[0], -1]>(xs))` and the same with `min_axis`. The keys `max/1` and `min/1` still name `vmap_max` and `vmap_min` -- the deletion is a helper's, not a key's -- and `sum`/`mean` still fold, because a float row folded twice is two roundings and flattened once is one."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/compile/rulesets/deleted_row_reduction_helpers.mjs"

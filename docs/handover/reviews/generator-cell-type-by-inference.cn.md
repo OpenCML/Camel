@@ -5,18 +5,18 @@
 裁定把单元的创建顺序写成「GIR 先建 `step`，再建创建体和状态结构体，单元类型从 `step` 里对应的
 写回填」。这一步在今天的图上办不到，三处都是实测或读码的结果：
 
-- **名字在造内层图的那一刻就要解析。** 生成器机器全在 GCT 里搭（`src/compile/gct/builder.cpp:5683-5727`
+- **名字在造内层图的那一刻就要解析。** 生成器机器全在 GCT 里搭（`src/compile/gct/builder.cpp#nameUseIn`
   建创建体与单元、`builder.cpp:5906` 把 `step` 交出去）；把单元挪到 `step` 之后（只调创建体的子节点
   顺序），`test/cases/compile/stream/generators.cml` 逐字报
   `SemanticDiag::ImportNameNotExported: Reference '__gen_pc__' is declared as imported but is not
-  exported by its module`。解析发生在 `src/compile/gir/builder_expr.cpp:698`（`visitDRefNode`）与
-  `src/compile/gir/captures.cpp:42`（`captureInto`）：内层图引用外层名字的时刻，就是它自己被造出来的
+  exported by its module`。解析发生在 `src/compile/gir/builder_expr.cpp#Builder::callValueTypeOf`（`visitDRefNode`）与
+  `src/compile/gir/captures.cpp#Builder::captureInto`（`captureInto`）：内层图引用外层名字的时刻，就是它自己被造出来的
   时刻，而 `captures.cpp:142` 那条「函数值只持有它被造出来时的那批捕获」把「事后补一条捕获」也堵住了。
-- **单元的类型就是初值的类型。** `src/compile/gir/builder_expr.cpp:1429`（`visitVariNode`）经
+- **单元的类型就是初值的类型。** `src/compile/gir/builder_expr.cpp#Builder::visitCastNode`（`visitVariNode`）经
   `builder_expr.cpp:1468`（`newVariable`）发 `:var/new` 作用于一个值；GIR 里没有「带类型、没有值」的
   单元。要的是 `T`，而 `T` 只能从值上取。
 - **`typeof` 在声明类型的位置不求值。** 唯一表达「某表达式的类型」的写法是 `typeof`，它在
-  `src/compile/gir/builder_generics.cpp:2465`（`resolveTypeNode`）里会**把表达式建出来**再取类型；
+  `src/compile/gir/builder_generics.cpp#Builder::instantiateGeneric`（`resolveTypeNode`）里会**把表达式建出来**再取类型；
   但声明里的类型不求值：`let a: typeof(f()) = g()` 逐字报
   `SemanticDiag::DeclaredTypeMismatch: ... not the declared type 'typeof'`。所以 GCT 今天拿不到
   「第一次写那个表达式的类型」而不把它建出来。

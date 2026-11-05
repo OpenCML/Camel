@@ -168,7 +168,7 @@ An unknown rank is represented by an absent shape.
 
 A program writes a tensor type as `f32[2, 3]`: the element type
 (`f32`, `f64`, `i32`, `i64`, `bool`), then the shape. Either part may be left
-out (`f32[..]`, `f32[3]`), and an extent written `?` is unknown
+out (`f32[...]`, `f32[3]`), and an extent written `?` is unknown
 (`f32[?, 3]`).
 A declared shape is checked at compile time wherever the value's type is at
 least as exact: at a call, at a `return` against the declared return type, in
@@ -212,7 +212,7 @@ What inference derives without help, besides the propagation listed above:
 
 #### When you need `as`
 
-`e as f32[..]` is a checked conversion: the compiler refuses it when the two
+`e as f32[...]` is a checked conversion: the compiler refuses it when the two
 types already contradict each other, and otherwise the element type and the
 shape are checked when the conversion runs. A failure stops the program at the
 conversion and names both sides (`conversion to 'float32[4]' failed:
@@ -560,7 +560,7 @@ rejection reason. That resolver extension is part of step 2.
     back to comparing dynamic types.
   - Struct, tuple, and array assignability is covariant in the element types
     (they are immutable), and array literals take the unified element type.
-    Precise tensor types previously made `{ w: float32[..] }` unusable
+    Precise tensor types previously made `{ w: float32[...] }` unusable
     where `{ w: Tensor }` was declared.
 
 ### Step 3 landed: graph optimization and kernel quality

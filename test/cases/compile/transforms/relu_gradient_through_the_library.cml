@@ -1,0 +1,72 @@
+// `relu`'s gradient through the library's own rules: the D1 member, and the same mask as the engine.
+//
+// The deletion audit (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`,
+// D1) asks that every operator the engine can differentiate carry a rule of the library's own, and
+// `relu` is the first one filled: `stdlib/rulesets/jvp.cml#jvp_relu` and
+// `stdlib/rulesets/transpose.cml#relu_t`. Before them this program stopped where the lift looks a
+// forward rule up, and said so:
+//
+//     REINTERP jvp function=total skip=rule uri=tensor:relu reason=the operator has no forward rule bound at all
+//     transforms: jvp has no forward rule for `tensor:relu` (the operator has ...)
+//
+// With them the same program runs and the reading names them instead:
+//
+//     REINTERP jvp function=total graph=250 ... rules=jvp_relu,jvp_sum
+//     REINTERP split function=jvp_of_total forward=269 backward=270 ... residuals=2
+//     TRANSPOSE function=split_of_jvp_of_total_backward contribution=0 node=6 type=bool[...] space=none from=7
+//     TRANSPOSE function=split_of_jvp_of_total_backward graph=271 type=(float) => (float[],) nodes=10 arms=0 rhs=sum_t,mul_tensor_t
+//
+// The two `TRANSPOSE` lines are what makes the rules work, and they are the reason the forward rule
+// is written `where(x > 0, 1, 0) * dx` rather than `where(x > 0, dx, 0)`: the mask depends on `x`
+// alone, so `split` computes it in the forward half (the `contribution=0 node=6 type=bool[...]` line
+// is the comparison being carried as a value, not transposed), and the linear half is one
+// `mul_tensor` -- `rhs=sum_t,mul_tensor_t`, two primitive transposes that already existed. The
+// three-operand form puts `where` itself in the linear half, and the walk refuses any node with three
+// normal operands before it looks a rule up (`skip=arity uri=tensor:where operands=3`, measured).
+//
+// The number is the engine's, element for element (`relu_gradient_through_the_engine.cml`):
+//
+//     x = [-2.0, 0.0, 3.0, -0.5]   ->   d/dx = [0.0, 0.0, 1.0, 0.0]
+//
+// The boundary is the point of keeping both cases: the library's mask is `x > 0` and the engine's is
+// `y > 0`, which are the same set, so the input zero has slope zero on both sides -- measured, not
+// argued.
+//
+// ---- where the walk stops now (measured 2026-11-04, with the closure-member rules) ----
+//
+// The `sum` step turns around: its forward rule states the extents (`jvp_sum` calls `sum_stated(dxs,
+// shape(xs))`) and the walk applies `sum_stated_t`, which reads that list and nothing of `dxs`. That
+// is one more residual than before -- `residuals=3`, because `shape(relu(x))` is a value the
+// backward half reads. The mask is what the backward half computes from the closure member `x`, and
+// the closure-member rules settled that step (author, 2026-11-03 19:55): a closed-over member takes
+// no cotangent, and a value computed only from members is not asked for one -- so the walk no longer
+// asks the product's law for the mask's **own** cotangent, and stops at the position the answer does
+// need, the tangent's:
+//
+//     TRANSPOSE function=split_of_jvp_of_total_backward skip=parameter-shape uri=tensor:multiply node=9 position=1 param=0 param-type=float[]
+//
+// `mul_tensor_t` names each operand's shape in its answer -- `sum_to(ct * w, x)` reads `x`, and
+// `sum_to(ct * x, w)` reads `w` -- so the answer for the tangent's cotangent reads the tangent
+// itself. A transposition is handed the cotangent and known values, `float[...]` does not state the
+// shape a carrier would need (`shapeCarrierOf` answers only for a stated shape), and `sum_to` reads
+// that operand for nothing else. The one thing missing is therefore the rule layer's:
+// `mul_tensor_t` has to state the extents the way `sum_stated_t` and `take_stated_t` do. What a rule
+// can settle today is settled and pinned on the numbers instead: `stated_sum_gradient.cml`, beside
+// this file.
+//
+//     camel test/cases/compile/transforms/relu_gradient_through_the_library.cml
+import { vjp } from vjp
+import { relu, sum } from tensor
+
+/// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
+func total(x: float[]): float {
+    return sum(relu(x))
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([-2.0, 0.0, 3.0, -0.5] as float[])
+    let cotangents = pullback(1.0)
+    let d = cotangents.0
+    `relu library value={} dL/dx={}`->format<value, d>->println
+    return 0
+}

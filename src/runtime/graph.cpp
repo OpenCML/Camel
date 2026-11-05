@@ -103,7 +103,9 @@ bool nodeMayFault(
     }
 }
 
-bool nodeIsFreelySchedulable(
+namespace graph {
+
+bool may_be_rearranged(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
     const camel::core::type::Type *castSource, bool fixedShapes) {
     switch (kind) {
@@ -132,28 +134,97 @@ bool nodeIsFreelySchedulable(
     }
 }
 
-bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
+bool may_be_rearranged(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     if (node == nullptr) {
         return false;
     }
     switch (node->kind) {
     case GCNodeKind::Oper: {
-        return nodeIsFreelySchedulable(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
+        return may_be_rearranged(node->kind, graph.nodeBodyAs<GCOperBody>(ref)->oper);
     }
     case GCNodeKind::Cast: {
         const auto inputs = graph.normInputsOf(ref);
         const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
-        return nodeIsFreelySchedulable(
+        return may_be_rearranged(
             node->kind,
             camel::core::kNoOper,
             node->dataType(),
             source != nullptr ? source->dataType() : nullptr);
     }
     default:
-        return nodeIsFreelySchedulable(node->kind, camel::core::kNoOper);
+        return may_be_rearranged(node->kind, camel::core::kNoOper);
     }
 }
+
+bool is_chain_statement(
+    GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget,
+    const camel::core::type::Type *castSource, bool standsForRegion) {
+    switch (kind) {
+    case GCNodeKind::Call:
+        // A call runs a graph: what it does is not in the operator table, and nothing says it
+        // cannot fail.
+        return true;
+    case GCNodeKind::Brch:
+    case GCNodeKind::Loop:
+        // A branch or a loop is a statement when it carries something: it stands on the outside
+        // for what runs inside it (edges.cn.md 4.6). One that carries nothing is a value the model
+        // lets a pass arrange freely.
+        return standsForRegion;
+    case GCNodeKind::Gate:
+        // A `GATE` is where a `sync` block hands its value on and where the chain's wait reaches
+        // that value (edges.cn.md 5.3, author ruling 2026-11-03 01:10): the chain orders it even
+        // though the gate computes nothing.
+        return true;
+    case GCNodeKind::Cast:
+        // A conversion is a statement exactly when running it can fail: a value check the model
+        // cannot move is one the chain has to reach (design principles 3.4, 3.9).
+        return nodeMayFault(kind, camel::core::kNoOper, castTarget, castSource);
+    case GCNodeKind::Oper: {
+        const auto &table = camel::core::OperatorTable::instance();
+        const std::optional<camel::core::OperatorTraits> traits = table.find(oper);
+        if (oper == camel::core::kNoOper) {
+            // An operator nobody named is not known never to fault.
+            return true;
+        }
+        if (!table.isPure(oper) || table.hasExternalEffect(oper)) {
+            return true;
+        }
+        return traits.has_value() && traits->mayFault;
+    }
+    default:
+        // A `Func`, a `Data`, a `Port`, a `Copy`, a `Fill`, an `Accs`, a `Join`: computed from
+        // what it reads, with nothing to fail and nothing to order.
+        return false;
+    }
+}
+
+bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr) {
+        return false;
+    }
+    const bool standsForRegion = nodeStandsForItsRegion(graph, ref);
+    switch (node->kind) {
+    case GCNodeKind::Oper: {
+        const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
+        return is_chain_statement(
+            node->kind, body != nullptr ? body->oper : camel::core::kNoOper, nullptr, nullptr,
+            standsForRegion);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = graph.normInputsOf(ref);
+        const GCNode *source = inputs.size() == 1 ? graph.node(inputs[0]) : nullptr;
+        return is_chain_statement(
+            node->kind, camel::core::kNoOper, node->dataType(),
+            source != nullptr ? source->dataType() : nullptr, standsForRegion);
+    }
+    default:
+        return is_chain_statement(node->kind, camel::core::kNoOper, nullptr, nullptr, standsForRegion);
+    }
+}
+
+} // namespace graph
 
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
@@ -964,12 +1035,35 @@ void emitDraftPayload(
 
     size_t inputCursor       = 0;
     // Appends the runtime refs of `refs` to the input table; returns where they begin.
-    auto appendInputs = [&](std::span<const gc_node_ref_t> refs) -> gc_off_t {
+    auto appendInputs = [&](gc_node_ref_t user, std::span<const gc_node_ref_t> refs,
+                            std::string_view role) -> gc_off_t {
         const auto begin = static_cast<gc_off_t>(inputCursor);
         for (gc_node_ref_t draftRef : refs) {
-            ASSERT(
-                draftRef < plan.runtimeRefsByDraftId.size(),
-                "Draft edge emission encountered a node outside the payload plan.");
+            if (CAMEL_UNLIKELY(draftRef >= plan.runtimeRefsByDraftId.size())) {
+                // A draft node's input names a node of the same draft, and the plan holds one entry
+                // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff --
+                // is a graph built with a hole in it, and read as an index it walks 16 GB past the
+                // table. This was an `ASSERT`, which `NDEBUG` makes `((void)0)`: the build that
+                // ships had no check here at all, so a hole the passes made arrived as a SIGSEGV
+                // with an empty stdout and no sentence (measured 2026-11-04, a transposed half whose
+                // answer tuple was handed an empty cotangent). A throw and not an abort: a pass that
+                // builds a graph the encoder cannot write is the pass's answer to give, and the
+                // driver reports it as one (`reportPassFailure`), by name.
+                throw std::runtime_error(
+                    std::format(
+                        "The {} input list of node {} names draft node {}, which is not one of the "
+                        "{} nodes this graph's payload plan holds (it holds {}, the reserved empty "
+                        "reference being {}). The graph was built with a hole where an input belongs, "
+                        "and no text of a program writes one: this is a shape the encoding was never "
+                        "given, so read the pass that built the graph rather than the program it was "
+                        "built from.",
+                        role,
+                        user,
+                        draftRef,
+                        plan.runtimeRefsByDraftId.size(),
+                        plan.nodes.size(),
+                        static_cast<gc_node_ref_t>(kInvalidNodeRef)));
+            }
             const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
             GUARD(
                 runtimeRef != kInvalidNodeRef,
@@ -1022,9 +1116,9 @@ void emitDraftPayload(
         record.tangentArgs = draftHeader->tangentArgs;
         record.dataIndex = slotOf(planned.draftId);
         record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
-        record.inBegin   = appendInputs(draft.normInputsOf(planned.draftId));
-        record.withBegin = appendInputs(draft.withInputsOf(planned.draftId));
-        record.ctrlBegin = appendInputs(draft.ctrlInputsOf(planned.draftId));
+        record.inBegin   = appendInputs(planned.ref, draft.normInputsOf(planned.draftId), "norm");
+        record.withBegin = appendInputs(planned.ref, draft.withInputsOf(planned.draftId), "with");
+        record.ctrlBegin = appendInputs(planned.ref, draft.ctrlInputsOf(planned.draftId), "control");
         record.payload   = planned.payload;
         // Origin ids index the origin table of the source manager, a vector of records: they
         // fit 32 bits long before memory runs out (design 3.8: a 32-bit OriginId per node).
@@ -1335,6 +1429,47 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
     }
     default:
         return nodeIsFreelySchedulable(header->kind, camel::core::kNoOper);
+    }
+}
+
+bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || !draft.alive(id)) {
+        return false;
+    }
+    // Region 0 is the body itself, so an owner is looked for above it -- the same reading
+    // `nodeStandsForItsRegion` takes of a graph.
+    bool standsForRegion = false;
+    for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+        if (draft.region(region).owner == id) {
+            standsForRegion = true;
+            break;
+        }
+    }
+    switch (header->kind) {
+    case GCNodeKind::Oper: {
+        const std::span<const std::byte> payload = draft.payloadOf(id);
+        return isChainStatement(
+            header->kind,
+            payload.size() >= sizeof(GCOperBody)
+                ? reinterpret_cast<const GCOperBody *>(payload.data())->oper
+                : camel::core::kNoOper,
+            nullptr,
+            nullptr,
+            standsForRegion);
+    }
+    case GCNodeKind::Cast: {
+        const auto inputs = draft.normInputsOf(id);
+        const DraftNodeHeader *source = inputs.size() == 1 ? draft.header(inputs[0]) : nullptr;
+        return isChainStatement(
+            header->kind,
+            camel::core::kNoOper,
+            header->dataType,
+            source != nullptr ? source->dataType : nullptr,
+            standsForRegion);
+    }
+    default:
+        return isChainStatement(header->kind, camel::core::kNoOper, nullptr, nullptr, standsForRegion);
     }
 }
 
@@ -2030,6 +2165,15 @@ void validateRuntimeGraphCalls(const Program &program, const GCGraph *graph, Gra
                     graph->name(),
                     it.ref()));
         }
+        // The two `with`-segment layouts, stated once so the next reader does not take the
+        // difference for a defect. A FUNC node names its callee statically, so its `with` segment
+        // holds exactly the callee's closure arguments and its size is `withPorts()`; a CALL node
+        // carries the callee *value* itself at slot 0, so its `with` segment is `1 + withPorts()`
+        // -- which is the one FastVM subtracts (`populateIndirectCallFrame`:
+        // `wargs.size() - 1 == withPorts().size()`, and `fillFrameForIndirectCall` reads the
+        // explicit arguments from `withInputs[i + 1]`). The check below is about FUNC only: a CALL
+        // is another node kind, and payload validation asks of it that it has a callee input, not
+        // that its arity matches (`validateRuntimeGraphPayloadImpl`).
         const size_t normArgs = graph->normInputsOf(it.ref()).size();
         const size_t withArgs = graph->withInputsOf(it.ref()).size();
         if (normArgs != callee->normPorts().size() || withArgs != callee->withPorts().size()) {
@@ -2389,6 +2533,14 @@ GraphId GCGraph::calleeIdOf(gc_node_ref_t ref) const {
 uint16_t GCGraph::callTangentArgsOf(gc_node_ref_t ref) const {
     const GCNode *n = node(ref);
     return n != nullptr && n->kind == GCNodeKind::Func ? n->tangentArgs : 0;
+}
+
+bool GCGraph::isTangentArgument(gc_node_ref_t ref, size_t index) const {
+    if (index >= kTangentArgumentBits) {
+        return false;
+    }
+    const uint16_t mask = callTangentArgsOf(ref);
+    return (mask & static_cast<uint16_t>(uint16_t{1} << index)) != 0;
 }
 
 std::string GCStaticFunctionAnswer::describe() const {

@@ -1,0 +1,47 @@
+// The gradient of a lane sum along the leading axis, through the engine and through the library.
+//
+// `jvp_sum_axis` states the axis, the flag and the extents in one list
+// (`stdlib/rulesets/jvp.cml`), and `sum_axis_stated_t` spreads each lane's cotangent back over the
+// lane it added up (`stdlib/rulesets/transpose.cml`). The two legs below are the same function
+// asked twice: the engine's own rule (`sumAxisVjp`, `modules/tensor/ops/reduction_ops.cpp`) and the
+// library's, and the reading is that their answers are the same numbers, bit for bit.
+//
+// The readout is `sum(take(lane, [1]))` -- the middle column's sum -- and not `sum(lane)`: a sum of
+// the lanes answers an all-ones gradient whatever lane the cotangent was spread along, and this
+// reading has to say which one it went back along. Reading one lane puts the whole cotangent on the
+// column that lane summed, and the two zeros in each row are as much of the answer as the one.
+//
+//     x    = [[1.0, 2.0, 3.0],
+//             [4.0, 5.0, 6.0]]
+//     lane = sum<0, false>(x) = [5.0, 7.0, 9.0]        (one lane per column)
+//     value = sum(take(lane, [1])) = 7.0
+//     dL/dx = [[0.0, 1.0, 0.0],
+//              [0.0, 1.0, 0.0]]                            (column 1, both rows)
+//
+//     camel test/cases/compile/transforms/stated_sum_axis_gradient.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, sum, take } from tensor
+
+/// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
+with <w: float[...]>
+func total(): float {
+    let lane = sum<0, false>(w)
+    return sum(take(lane, [1]))
+}
+
+/// The library's spelling: the same function with the value as an ordinary parameter.
+func total_plain(x: float[...]): float {
+    let lane = sum<0, false>(x)
+    return sum(take(lane, [1]))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]
+    let engine = grad(total)<[[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3]>()
+    let (value, pullback) = vjp(total_plain)(x)
+    let library = pullback(1.0).0
+    let same = sum(abs(engine - library)) == 0.0
+    `sum<0>: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    return 0
+}

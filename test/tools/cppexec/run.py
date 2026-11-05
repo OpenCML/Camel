@@ -188,12 +188,49 @@ def build_pch(workdir, args):
     return args.pch
 
 
+def import_reader():
+    """The tool that reads a Windows program's import table, wherever the machine keeps it.
+
+    `dumpbin` is on PATH inside a developer prompt and nowhere else, and a machine that only has
+    the compiler has it too: the Visual Studio installation does, one `VC/Tools/MSVC/<version>`
+    below the path `vswhere` names. Asking PATH alone turns the verdict into the link line's -- the
+    program says "the link line names no Camel library" and the artifact was never read -- which is
+    the shape of a pass that measured nothing. None only when the machine really has no reader."""
+    found = shutil.which("dumpbin")
+    if found:
+        return found
+    roots = [os.environ.get("ProgramFiles(x86)"), os.environ.get("ProgramFiles")]
+    for root in roots:
+        if not root:
+            continue
+        vswhere = os.path.join(root, "Microsoft Visual Studio", "Installer", "vswhere.exe")
+        if not os.path.exists(vswhere):
+            continue
+        code, out, _, _ = run([vswhere, "-latest", "-products", "*", "-property",
+                               "installationPath"], 60)
+        for installation in out.splitlines():
+            installation = installation.strip()
+            tools = os.path.join(installation, "VC", "Tools", "MSVC")
+            if not installation or not os.path.isdir(tools):
+                continue
+            for version in sorted(os.listdir(tools), reverse=True):
+                for host in ("Hostx64", "Hostx86"):
+                    for arch in ("x64", "x86"):
+                        reader = os.path.join(tools, version, "bin", host, arch, "dumpbin" + EXE)
+                        if os.path.exists(reader):
+                            return reader
+    return None
+
+
 def needs_of(target, env):
     """The shared libraries the built program needs, as the platform reports them: `ldd` on
     Linux, `otool -L` on macOS, and (on Windows, where an import is resolved when the program
     starts) the import table `dumpbin /dependents` prints. Empty when the platform has no tool."""
     if os.name == "nt":
-        cmd = ["dumpbin", "/dependents", target]
+        reader = import_reader()
+        if reader is None:
+            return None
+        cmd = [reader, "/dependents", target]
     elif sys.platform == "darwin":
         cmd = ["otool", "-L", target]
     else:

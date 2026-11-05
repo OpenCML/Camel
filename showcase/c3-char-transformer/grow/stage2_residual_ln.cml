@@ -1,0 +1,79 @@
+// Step 2 of growing the block into a Transformer: a residual connection around each attention and a
+// layer normalization (`nn.layer_norm`, the library's) between them, which is the skeleton of the
+// block the author asked for:
+//
+//     o1 = attention(x)          r1 = x + o1           n1 = layer_norm(r1)
+//     o2 = attention(n1)         r2 = r1 + o2          loss = sum(layer_norm(r2))
+//
+// Everything stays `[2, 2]`, so the residual is an addition of two values of the same shape and the
+// normalization's trailing axis is the row: gamma and beta are `[2]`.
+//
+//     camel showcase/c3-char-transformer/grow/stage2_residual_ln.cml
+//     python showcase/c3-char-transformer/baseline/grow.py --stage 2
+import { layer_norm, softmax, sum, transpose } from tensor
+import { adam, adam_state } from nn
+import { with_grad } from autodiff
+
+type Model = {
+    wq1: float[...],
+    wk1: float[...],
+    wv1: float[...],
+    g1: float[...],
+    b1: float[...],
+    wq2: float[...],
+    wk2: float[...],
+    wv2: float[...],
+    g2: float[...],
+    b2: float[...]
+}
+
+func mask(): float[...] {
+    return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
+}
+
+func attention(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
+    let q = x @ wq
+    let k = transpose(x @ wk)
+    let a = softmax<1>(q @ k * 0.70710678118654752 + mask())
+    return a @ (x @ wv)
+}
+
+with <m: Model>
+func block(x: float[...]): float {
+    let first = x + attention(x, m.wq1, m.wk1, m.wv1)
+    let normed = layer_norm(first, m.g1, m.b1)
+    let second = first + attention(normed, m.wq2, m.wk2, m.wv2)
+    return sum(layer_norm(second, m.g2, m.b2))
+}
+
+func initial(): Model {
+    return {
+        wq1: [[1.0, 0.5], [0.5, 1.0]] as float[2, 2],
+        wk1: [[0.5, 1.0], [1.0, 0.5]] as float[2, 2],
+        wv1: [[1.0, -1.0], [-1.0, 1.0]] as float[2, 2],
+        g1: [1.0, 1.0] as float[],
+        b1: [0.0, 0.0] as float[],
+        wq2: [[0.75, 0.0], [0.0, 0.75]] as float[2, 2],
+        wk2: [[0.0, 0.5], [0.5, 0.0]] as float[2, 2],
+        wv2: [[1.0, 1.0], [1.0, 1.0]] as float[2, 2],
+        g2: [1.0, 1.0] as float[],
+        b2: [0.0, 0.0] as float[]
+    }
+}
+
+func main(): int sync {
+    let x = [[1.0, 0.5], [0.5, 1.0]] as float[2, 2]
+    let model0 = initial()
+    let (final, state, steps, log) = loop m = model0, opt = adam_state(model0), step = 0, log = '' as string
+        while step < 50
+        do {
+            let (value, g) = with_grad(block)<m>(x)
+            let next = adam(m, g, opt, 0.002)
+            let nlog = log + `stage2 step=${step + 1} loss=${value:.12f}` + "\n"
+            return (next.0, next.1, step + 1, nlog)
+        }
+    log->print
+    let last = with_grad(block)<final>(x).0
+    `stage2 done steps=${steps} last=${last:.12f}`->println
+    return 0
+}

@@ -1,0 +1,45 @@
+// `exp`'s gradient through the library, with the shape written into the type.
+//
+// The open-rank twin is `exp_gradient_through_the_library.cml`, and what stops it is the product law:
+// `stdlib/rulesets/transpose.cml#mul_tensor_t` answers `sum_to(ct * w, x)`, and `sum_to`'s second
+// argument is read for its shape. `x` there is a tangent, so the walk has to answer the shape of a
+// tangent -- and `shapeCarrierOf` answers a **stated** type (`float[2]`) while `float[...]` has no
+// extents to give (author, 2026-11-03 16:15). So the same function with `float[2]` instead of
+// `float[]` answers, and this case is that reading.
+//
+// Hand first: `x = [1.0, 2.0]`, `exp(x) = [2.718281828459045, 7.38905609893065]`, so
+// `value = 10.107337927389695`, and `sum`'s adjoint is one for every lane, so `d = exp(x)`.
+//
+//     exp stated engine  d = [2.718281828459045, 7.38905609893065]
+//     exp stated library value = 10.107337927389695  d = [2.718281828459045, 7.38905609893065]
+//
+// The two legs are the engine's own pullback (`grad`, `modules/autodiff`) and the library's
+// (`vjp` -> `split(jvp)` -> `transpose` on the backward half, `stdlib/vjp.cml`). Both are printed
+// and both are pinned, so a change to either rule shows up as a difference between two lines in one
+// program rather than between two cases.
+//
+//     camel test/cases/compile/transforms/exp_gradient_of_a_stated_shape.cml
+import { grad } from autodiff
+import { exp, sum } from tensor
+import { vjp } from vjp
+
+/// The engine's route: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[2]>
+func total_of_the_parameter(): float {
+    return sum(exp(x))
+}
+
+/// The library's route: an ordinary parameter, which is what `vjp` takes.
+func total(x: float[2]): float {
+    return sum(exp(x))
+}
+
+func main(): int sync {
+    let slope = grad(total_of_the_parameter)
+    let de = slope<[1.0, 2.0] as float[2]>()
+    `exp stated engine d={}`->format<de>->println
+    let (value, pullback) = vjp(total)([1.0, 2.0] as float[2])
+    let dl = pullback(1.0).0
+    `exp stated library value={} d={}`->format<value, dl>->println
+    return 0
+}

@@ -28,11 +28,13 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/graph_exit_type.h"
 #include "camel/runtime/graph_ref_check.h"
 #include "camel/runtime/program.h"
 #include "camel/utils/assert.h"
 
 #include <algorithm>
+#include <array>
 #include <format>
 #include <stdexcept>
 #include <string>
@@ -107,6 +109,17 @@ class EdgeChecker {
         return std::move(violations_);
     }
 
+    /// The one violation that is the program's error rather than a graph written by mistake: the
+    /// value the graph hands on is not of the type its own signature declares (see
+    /// `checkReturnValueType`). It is kept out of `violations_` because the two are reported as
+    /// different diagnostics -- a graph that breaks a structural invariant is a defect of whatever
+    /// wrote it, and `validateRuntimeGraphEdges` says so, while this one is the program's own
+    /// rewrite having written a value of the wrong type, and the run says that instead. A graph can
+    /// have at most one exit, so at most one of these.
+    std::optional<camel::runtime::GraphExitTypeMismatch> takeExitTypeMismatch() {
+        return std::move(exitTypeMismatch_);
+    }
+
   private:
     /**
      * The four references a graph's numbering can break -- see camel::runtime::checkGraphCrossReferences,
@@ -147,14 +160,46 @@ class EdgeChecker {
             "path (see typeIdOf in src/runtime/graph.cpp).");
     }
 
-    /// The value a graph whose exit is a `T?` or a `T!` hands on is that tagged value. It is the
-    /// shape the value is boxed into, and it is what a second writing of the exit leaves out: the
-    /// second `return` writes its own value where the first wrote the boxed one, so the graph's
-    /// signature and its exit no longer agree, and a back end that reads the exit as the declared
-    /// type writes a slot of another shape -- the node VM crashed on exactly that. Refused here,
-    /// where the graph is frozen, so no back end is ever handed one. Any other exit type is left
-    /// to the builder: a function declared `void` hands on the value it computes, and the purity of
-    /// a function type is not a difference the value's shape shows.
+    /// The value a graph hands on is a value of the type the graph declares: that is the promise a
+    /// caller reads off the signature, and the shape a back end trusts when it writes the result
+    /// into the declared slot. "Of the type" is the relation a position holds a value to everywhere
+    /// else -- `Type::assignableFrom`, the same judgement the builder makes at a `return` and at
+    /// every argument (design principles 5.1): equality for the numbers and the texts (nothing is
+    /// converted, so an `int` value under a `float` declaration is a mismatch and not a widening),
+    /// `float[3]` where `float[]` is declared, `float[]` where `float[..]` is, and `T?` / `T!` only
+    /// from themselves -- the boxed form, which is the shape a second writing of the exit leaves
+    /// out: that is how the node VM came to write a slot of another shape.
+    ///
+    /// Three declared types are not judged, and each says why:
+    ///
+    ///   * `void`: a function that declares `void` hands on the value it computes and the caller
+    ///     reads nothing back, so the value is kept in the graph and no return is recorded
+    ///     (`setGraphReturnFromResult`). `func f(): void { 42 }` is a legal program whose exit
+    ///     names an `int` under a `void` signature -- the purity of a function type is likewise no
+    ///     difference the value's type shows -- and judging the pair would refuse it
+    ///     (`test/cases/runtime/exit_type/legal_exits.cml`, `void_hands_on_its_value`).
+    ///   * an undecided type (`Ref`, a type variable): an undecided type is not another type, and
+    ///     a committed graph holds none (design principles 5.1). `validateRuntimeGraphTypes` owns
+    ///     that question; asking it a second time here would give it two answers.
+    ///   * no declared exit type: the builder takes the exit type from the value the graph returns,
+    ///     so there is no promise to break. Camel has no `any` to stand in for one (5.10) -- an
+    ///     empty declaration is not "no type", it is "whatever the body returns".
+    ///
+    /// Everything else is judged, tagged or not. Measured 2026-11-04 on the half this check used to
+    /// leave alone, with a rule library that replaces the node a function returns by a value of
+    /// another type (`import { rewrite } from rewrite`): `func target(n: float): float` handed on a
+    /// `float[]` and the run printed `6.3956244425295e-310` -- the array's address read as a float
+    /// -- and `func target(n: int): int` handed on a `float` and printed `4612811918334230528`,
+    /// both with exit code 0 and nothing refused anywhere. Neither graph is a defect of the
+    /// compiler: the rewrite's right side is not of the type of its left side
+    /// (`test/cases/runtime/exit_type/float_declared_array_returned.cml` and
+    /// `test/cases/runtime/exit_type/int_declared_float_returned.cml`).
+    ///
+    /// The graph's name is the function the writer declared: a frozen node carries no origin
+    /// column the seal could turn into a file and a line (`GCGraph::nodeOrigin` answers an id, and
+    /// there is no source context here to resolve it), so the value it hands on is named by the
+    /// node's ref and by the source name of its value when it has one -- enough to find it under
+    /// `std::gir`.
     void checkReturnValueType() {
         const gc_node_ref_t returned = graph_.returnNodeRef();
         if (returned == kInvalidNodeRef || graph_.returnKind() == GCReturnKind::None) {
@@ -170,76 +215,38 @@ class EdgeChecker {
         if (declared == nullptr || actual == nullptr || declared->equals(actual)) {
             return;
         }
-        if (camel::core::type::asTagged(declared) == nullptr) {
+        // A `void` declaration promises nothing about the value, and an undecided type is not a
+        // different type (see the comment above).
+        if (declared->code() == TypeCode::Void || isUndecidedType(declared) ||
+            isUndecidedType(actual)) {
             return;
         }
-        violations_.push_back(
-            std::format(
-                "graph '{}': the value it hands on has type '{}', and the graph declares '{}'",
-                graph_.name(),
-                actual->toString(),
-                declared->toString()));
+        if (declared->assignableFrom(actual)) {
+            return;
+        }
+        const std::string_view name = graph_.nodeName(returned);
+        std::string where           = std::format("node {}", returned);
+        if (!name.empty()) {
+            where += std::format(", the value '{}'", name);
+        }
+        // The program's own error, with the facts its report needs (see GraphExitTypeMismatch):
+        // the graph, the value, both types and the value's origin when the node records one.
+        exitTypeMismatch_.emplace(
+            std::string(graph_.name()),
+            std::move(where),
+            actual->toString(),
+            declared->toString(),
+            graph_.nodeOrigin(returned));
     }
 
-    /// A node the builder chained inside a `sync` block: it carries the wait that block wrote.
-    /// Every check about a sync edge asks this question, so it is asked in one place -- two
-    /// copies of one condition drift, and these copies had already grown a `GATE` exception on
-    /// only one of them.
-    /// Is this node a statement of a chain: one that runs for its effect or may fault, or a
-    /// structure that contains such statements (a branch, a loop, a call)? Answered from the node
-    /// itself and the operator table, as edges.cn.md 1 and 4.6 define it, not from a marker the
-    /// builder wrote (author ruling 2026-11-02 04:50: a marker that can be derived should not be
-    /// stored).
-    bool isChainStatement(gc_node_ref_t ref) const {
-        const GCNode *node = graph_.node(ref);
-        if (node == nullptr) {
-            return false;
-        }
-        switch (node->kind) {
-        case GCNodeKind::Brch:
-        case GCNodeKind::Loop:
-        case GCNodeKind::Call:
-            return true;
-        case GCNodeKind::Oper: {
-            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
-            if (body == nullptr || body->oper == camel::core::kNoOper) {
-                return false;
-            }
-            const auto traits = camel::core::OperatorTable::instance().find(body->oper);
-            if (!traits.has_value()) {
-                return false;
-            }
-            return !camel::core::OperatorTable::instance().isPure(body->oper) ||
-                   camel::core::OperatorTable::instance().hasExternalEffect(body->oper) ||
-                   traits->mayFault;
-        }
-        default:
-            return false;
-        }
+    /// A type that is still being decided: a name whose target is not filled in, or a type
+    /// variable. Neither is a type a value of another type could fail to be (design principles
+    /// 5.1: every type on a committed graph is determined), so a judge of assignability leaves
+    /// them alone rather than reading "not assignable" out of "not known yet".
+    static bool isUndecidedType(const Type *type) {
+        return type->code() == TypeCode::Ref || type->code() == TypeCode::TypeVar;
     }
-    /// Is this node a statement of a chain, read from the node and the operator table (edges.cn.md
-    /// 1 and 4.6) rather than from the marker: a branch, a loop or a call is a statement; an
-    /// operator is one when it has an effect or may fault. Used by the census below only.
-    bool isChainStatementNode(const GCNode *node, gc_node_ref_t ref) const {
-        switch (node->kind) {
-        case GCNodeKind::Brch:
-        case GCNodeKind::Loop:
-        case GCNodeKind::Call:
-            return true;
-        case GCNodeKind::Oper: {
-            const auto *body = graph_.nodeBodyAs<GCOperBody>(ref);
-            if (body == nullptr || body->oper == camel::core::kNoOper) {
-                return true;
-            }
-            auto &table = camel::core::OperatorTable::instance();
-            const auto traits = table.find(body->oper);
-            return !table.isPure(body->oper) || table.hasExternalEffect(body->oper) ||
-                   (traits.has_value() && traits->mayFault);
-        }
-        default:
-            return false;
-        }
-    }
+
     static bool isWaitingCarrier(const GCNode *node) {
         return (node->flags & kGCNodeFlagSyncStatement) != 0;
     }
@@ -315,7 +322,7 @@ class EdgeChecker {
             // above, so a default run is unchanged; it never writes to the program's stdout, which
             // is what a case asserts.
             {
-                const bool endIsStatement = isChainStatementNode(user, edge.user);
+                const bool endIsStatement = isChainStatement(graph_, edge.user);
                 // Region 0 is the graph itself -- the block a statement sits in when nothing
                 // wraps it (control_regions.h: `0 when it is in none`) -- so an end and its tail
                 // in the same region are in one block, and the value of that block is an end the
@@ -789,6 +796,8 @@ class EdgeChecker {
     const GCGraph &graph_;
     const GraphState state_;
     std::vector<std::string> violations_;
+    /// See `takeExitTypeMismatch`.
+    std::optional<camel::runtime::GraphExitTypeMismatch> exitTypeMismatch_;
 };
 
 } // namespace
@@ -797,8 +806,18 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     if (graph == nullptr || !graph->hasNodePayload()) {
         return;
     }
-    const std::vector<std::string> violations = EdgeChecker(program, *graph, state).run();
+    EdgeChecker checker(program, *graph, state);
+    const std::vector<std::string> violations = checker.run();
     if (violations.empty()) {
+        // Nothing structural is broken. What can be left is the one violation that is the
+        // program's error rather than the graph's: the value the exit hands on is not of the type
+        // the signature declares. It travels as its own exception, so the pass boundary reports it
+        // as `RuntimeDiag::ExitTypeMismatch` and says what the program has to change, instead of
+        // `PassInternalError`, which is what a broken graph answers. A graph with a structural
+        // violation as well is reported as that: a defect first.
+        if (auto mismatch = checker.takeExitTypeMismatch()) {
+            throw std::move(*mismatch);
+        }
         return;
     }
     std::string text = std::format(
@@ -858,6 +877,32 @@ namespace camel::runtime {
 std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     std::vector<std::string> violations;
     const auto nodeCount = graph.nodeCount();
+    const auto regionKindText = [](const GCGraph &g, uint32_t id) {
+        const GCRegion *one = g.region(id);
+        if (one == nullptr) {
+            return std::string_view("none");
+        }
+        switch (one->kind) {
+        case GCRegionKind::Root:
+            return std::string_view("Root");
+        case GCRegionKind::Arm:
+            return std::string_view("Arm");
+        case GCRegionKind::LoopCond:
+            return std::string_view("LoopCond");
+        case GCRegionKind::LoopBody:
+            return std::string_view("LoopBody");
+        case GCRegionKind::Inline:
+            return std::string_view("Inline");
+        case GCRegionKind::Block:
+            return std::string_view("Block");
+        default:
+            return std::string_view("Dead");
+        }
+    };
+    const auto regionParentOf = [](const GCGraph &g, uint32_t id) {
+        const GCRegion *one = g.region(id);
+        return one == nullptr ? id : one->parent;
+    };
     const auto inRange   = [&](gc_node_ref_t ref) {
         return ref == kInvalidNodeRef || (ref >= 0 && static_cast<uint32_t>(ref) < nodeCount);
     };
@@ -943,6 +988,69 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
                     id,
                     region->result,
                     nodeCount));
+        }
+    }
+    // A port of a region may be read from that region, from a region nested in it, and by the node
+    // that owns it -- but the owner only for the region's exit. Those three are one rule with one
+    // question behind it: is the frame the port lives in there when the read happens? Inside it, in
+    // a region it contains, and in the node it is the inside of, yes; anywhere else, no.
+    //
+    // Measured over the whole fast tier on 2026-11-03: 961 cross-region port reads in 58 graphs of
+    // 63 cases, of which 647 are `Arm` -> `Root`, 155 `Arm` -> `LoopBody` where the arm sits in the
+    // body, 122 `LoopBody` -> `Root`, 10 `Inline` -> `Root`, 2 `LoopCond` -> `Root`, 1
+    // `Arm` -> `LoopCond`, and 0 across two branches -- see
+    // docs/handover/reports/2026-11-03-does-a-partial-transposition-need-the-operand-values.cn.md 9.
+    // Every one of those has the reader inside and the port outside.
+    //
+    // The author's rule (2026-11-03) is "a region reads its ancestors' ports and commit checks
+    // that", and the one shape it leaves out -- a LOOP node reading the value its own body region
+    // ends in -- is the owner's read, added on the same day with the two programs that ask for it
+    // (see docs/handover/questions/2026-11-03-may-a-region-owner-read-its-own-exit.cn.md). An
+    // earlier version allowed the whole reverse direction instead, on the reading of those 155
+    // `Arm` -> `LoopBody` reads as an arm holding a loop; they are the opposite shape (the arm sits
+    // in the body), so the widening was measuring its own misreading.
+    //
+    // The owner's read was then narrowed to the region's exit (author ruling 2026-11-03 08:10): the
+    // rule is written on the port -- is this the value the region ends in -- and not on the reader's
+    // identity or on the exit's node kind, because a body ending in `do s` and one ending in
+    // `do s + 1` are the same thing to the loop. So `regionIsVisibleFrom` is handed the port, and
+    // the owner reading any other port of its own region is refused with everything else.
+    //
+    // A region's own ports are recorded in the region itself (a port belongs to the graph and is
+    // written into the region it serves), so `regionIsVisibleFrom` answers for them by the same
+    // walk that answers for the ancestors. Constants are Data nodes and are never ports.
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const uint32_t region   = graph.nodeRegion(ref);
+        if (region == 0) {
+            continue;
+        }
+        std::array<std::span<const gc_node_ref_t>, 3> readGroups{
+            graph.normInputsOf(ref), graph.withInputsOf(ref), graph.ctrlInputsOf(ref)};
+        for (const std::span<const gc_node_ref_t> &reads : readGroups) {
+            for (gc_node_ref_t input : reads) {
+                if (!inRange(input) || input == kInvalidNodeRef || kindOf(input) != GCNodeKind::Port) {
+                    continue;
+                }
+                const uint32_t portRegion = graph.nodeRegion(input);
+                if (graph.regionIsVisibleFrom(portRegion, input, ref)) {
+                    continue;
+                }
+                violations.push_back(
+                    std::format(
+                        "graph '{}' node {} in region {} ({} parent {}): it reads port {} of region"
+                        " {} ({} parent {}), which is not the region the node runs in, nor one it"
+                        " sits in, nor the exit of a region it owns",
+                        graph.name(),
+                        ref,
+                        region,
+                        regionKindText(graph, region),
+                        regionParentOf(graph, region),
+                        input,
+                        portRegion,
+                        regionKindText(graph, portRegion),
+                        regionParentOf(graph, portRegion)));
+            }
         }
     }
     return violations;

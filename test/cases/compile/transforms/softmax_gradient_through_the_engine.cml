@@ -1,0 +1,49 @@
+// `softmax`'s gradient through the engine, written out element for element: the number the library's
+// own rules will have to reproduce, and the case that is allowed to be one-sided today.
+//
+// The deletion audit (`docs/handover/reports/2026-11-03-what-deleting-the-engine-pullback-takes.cn.md`,
+// D1) has `softmax` on its difference set. The engine answers it (`softmaxVjp`,
+// `modules/tensor/ops/reduction_ops.cpp`, registered by `setVjp(defs, "softmax", ...)`); the library
+// does not, and the neighbouring case records *where* it stops -- not at a missing `softmax_t`, but
+// one step earlier, in `split` (`skip=backward construct=a node whose input was not copied`). So this
+// case pins the engine's answer alone, whole array, and says so rather than pretending to compare.
+//
+// The function is `sum(softmax<1>(x) * w)` with a fixed `w`: a bare `sum(softmax(x))` is the constant
+// 1 and its gradient is the zero vector, which would distinguish nothing. With `w` the gradient is
+//
+//     dx_i = y_i * (w_i - sum_j w_j y_j),    y = softmax(x) along axis 1
+//
+// and both rows are written out below. The four components are the criterion, not their sum: the
+// correct gradient sums to zero on every row by construction (`sum_i y_i (w_i - sum_j w_j y_j)
+// = sum_j w_j y_j - sum_j w_j y_j`), so a case that asserted the sum would pass for a rule that
+// returns `ct` itself on a zero-mean `ct`, and would say nothing about three of the four components.
+//
+// The two wrong laws a reader is likely to write, on row 0 of the input below:
+//
+//   * `softmax_t` written as `ct` (the identity) -- answers `w` = [1.0, 2.0, 4.0, 8.0];
+//   * `softmax_t` written as `ct * y` -- answers `w*y` = [0.032058603, 0.174288638, 0.947531272,
+//     5.151314079];
+//   * the correct `y * (ct - sum(y*ct))` -- answers [-0.170077065, -0.375173075, -0.546060517,
+//     1.091310658].
+//
+// Each of the three differs from the other two in every one of the four components, and the first
+// two differ in sign from the third on all of them: this input does not need a tolerance to tell the
+// right law from either wrong one.
+//
+//     python -c "import math; ..." (the same arithmetic, row 0 printed above)
+//     camel test/cases/compile/transforms/softmax_gradient_through_the_engine.cml
+import { grad } from autodiff
+import { softmax, sum } from tensor
+
+/// The differentiated value is the `with` parameter (design principles 9.9); the fixed weights make
+/// the loss depend on the whole row rather than on its sum.
+with <x: float[...]>
+func total(): float {
+    return sum(softmax<1>(x) * [[1.0, 2.0, 4.0, 8.0], [1.0, -1.0, 0.0, 2.0]] as float[2, 4])
+}
+
+func main(): int sync {
+    let d = grad(total)<[[1.0, 2.0, 3.0, 4.0], [0.5, -1.0, 2.0, 0.0]] as float[2, 4]>()
+    `softmax engine d={}`->format<d>->println
+    return 0
+}

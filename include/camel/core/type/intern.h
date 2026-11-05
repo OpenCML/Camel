@@ -110,7 +110,6 @@ class TypeTable {
         Cell,           // TupleType::cell (a `var` cell)
         Nullable,       // TupleType::nullable (`T?`)
         Fallible,       // TupleType::fallible (`T!`)
-        Residuals,      // TupleType::residuals (the tuple a `split` hands on)
         Array,          // ArrayType::make
         Stream,         // StreamType::create
         Struct,         // StructType::fromFactoryData (anonymous: its fields are the type)

@@ -1,0 +1,47 @@
+// `sigmoid`'s gradient through the library, with the shape written into the type.
+//
+// The open-rank twin is `sigmoid_gradient_through_the_library.cml`, which still refuses: the product
+// law reads the tangent's own shape for `sum_to`, and `float[...]` states no extents -- `shapeCarrierOf`
+// answers a stated type (author, 2026-11-03 16:15). `float[2]` is stated, so this answers.
+//
+// Hand first, and the input is chosen so a wrong law cannot hide: `sigmoid`'s slope is `s(x)(1-s(x))`,
+// which is small where `|x|` is large, so two points near zero would make every candidate law look the
+// same. `x = [0.0, 2.0]` gives `s(0) = 0.5` exactly and `s(2) = 1/(1+e^-2) = 0.8807970779778823`:
+//
+//     s(x)  = [0.5, 0.8807970779778823]
+//     value = 0.5 + 0.8807970779778823 = 1.3807970779778822
+//     d     = [0.5 * 0.5, 0.8807970779778823 * 0.11920292202211755]
+//           = [0.25, 0.10499358540350662]
+//
+// The two components are unequal and both are well away from zero, so the wrong laws separate:
+// `ct` answers `[1.0, 1.0]`, and `ct * s(x)` with the `1 - s(x)` factor dropped answers
+// `[0.5, 0.8807970779778823]`.
+//
+//     sigmoid stated engine  d = [0.25, 0.10499358540350662]
+//     sigmoid stated library value = 1.3807970779778822  d = [0.25, 0.10499358540350662]
+//
+//     camel test/cases/compile/transforms/sigmoid_gradient_of_a_stated_shape.cml
+import { grad } from autodiff
+import { sigmoid, sum } from tensor
+import { vjp } from vjp
+
+/// The engine's route: the differentiated value is the `with` parameter (design principles 9.9).
+with <x: float[2]>
+func total_of_the_parameter(): float {
+    return sum(sigmoid(x))
+}
+
+/// The library's route: an ordinary parameter, which is what `vjp` takes.
+func total(x: float[2]): float {
+    return sum(sigmoid(x))
+}
+
+func main(): int sync {
+    let slope = grad(total_of_the_parameter)
+    let de = slope<[0.0, 2.0] as float[2]>()
+    `sigmoid stated engine d={}`->format<de>->println
+    let (value, pullback) = vjp(total)([0.0, 2.0] as float[2])
+    let dl = pullback(1.0).0
+    `sigmoid stated library value={} d={}`->format<value, dl>->println
+    return 0
+}

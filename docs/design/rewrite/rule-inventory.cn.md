@@ -23,7 +23,7 @@
 
 ## 3. 按许可分组，以及每条规则的触发条件与两侧
 
-「许可」是规则声明的 `#requires(...)`；它决定这条规则在什么前提下成立，也决定判据比较什么（第 4 节）。「两侧」是规则匹配的图与它改写成的图；`x`、`a`、`b`、`c` 是节点，`const c` 是常量节点的值，`T[..]` 是逐元素。
+「许可」是规则声明的 `#requires(...)`；它决定这条规则在什么前提下成立，也决定判据比较什么（第 4 节）。「两侧」是规则匹配的图与它改写成的图；`x`、`a`、`b`、`c` 是节点，`const c` 是常量节点的值，`T[...]` 是逐元素。
 
 ### 3.1 无许可：23 条（要求逐位相同）
 
@@ -44,14 +44,14 @@
 | `int_distribute` | `is_integer`，双向 `<=>` | `a * (b + c) <=> a * b + a * c` |
 | `float_add_neg_zero` | `is_float` | `x + -0.0 => x`（`+0.0` 不是单位元） |
 | `float_double` | `is_float` 且 `exact_doubling(c)`（有限整数，`1 <= |c| <= 2^(p-1)`） | `x * c + x * c => x * (c + c)` |
-| `array_mul_one` | `is_real`，`T[..]` | `x * 1 => x` |
-| `array_div_one` | `is_float`，`T[..]` | `x / 1 => x`（整数数组的商是浮点数组，所以只有浮点这一族） |
-| `array_sub_zero` | `is_real`，`T[..]` | `x - 0 => x` |
-| `array_neg_neg` | `is_real`，`T[..]` | `-(-x) => x` |
-| `array_add_self` | `is_real`，`T[..]` | `x + x => x * 2` |
-| `array_add_neg_zero` | `is_float`，`T[..]` | `x + -0.0 => x` |
-| `array_double` | `is_float` 且 `exact_doubling(c)`，`T[..]` | `x * c + x * c => x * (c + c)` |
-| `array_sigmoid_chain` | `f32[..]`，无许可 | `1.0 / (1.0 + exp(-x)) => sigmoid(x)`（定义相同、同一批 IEEE 运算，逐位不变） |
+| `array_mul_one` | `is_real`，`T[...]` | `x * 1 => x` |
+| `array_div_one` | `is_float`，`T[...]` | `x / 1 => x`（整数数组的商是浮点数组，所以只有浮点这一族） |
+| `array_sub_zero` | `is_real`，`T[...]` | `x - 0 => x` |
+| `array_neg_neg` | `is_real`，`T[...]` | `-(-x) => x` |
+| `array_add_self` | `is_real`，`T[...]` | `x + x => x * 2` |
+| `array_add_neg_zero` | `is_float`，`T[...]` | `x + -0.0 => x` |
+| `array_double` | `is_float` 且 `exact_doubling(c)`，`T[...]` | `x * c + x * c => x * (c + c)` |
+| `array_sigmoid_chain` | `f32[...]`，无许可 | `1.0 / (1.0 + exp(-x)) => sigmoid(x)`（定义相同、同一批 IEEE 运算，逐位不变） |
 
 ### 3.2 `#requires(reassociate)`：5 条（有限值上实数相等）
 
@@ -59,16 +59,16 @@
 |---|---|---|
 | `float_combine` | `combine_same_sign(c1, c2)`：有限、非零、同号、和不溢出 | `x * c1 + x * c2 => x * (c1 + c2)` |
 | `float_combine_one` | `combine_one_same_sign(c)`：`c > 0` | `x * c + x => x * (c + 1.0)` |
-| `array_combine` | 同 `float_combine`，`T[..]` | 同 `float_combine`，逐元素 |
-| `array_combine_one` | 同 `float_combine_one`，`T[..]` | 同 `float_combine_one`，逐元素 |
-| `array_distribute` | `is_integer`，双向 `<=>`，`T[..]` | `a * (b + c) <=> a * b + a * c` |
+| `array_combine` | 同 `float_combine`，`T[...]` | 同 `float_combine`，逐元素 |
+| `array_combine_one` | 同 `float_combine_one`，`T[...]` | 同 `float_combine_one`，逐元素 |
+| `array_distribute` | `is_integer`，双向 `<=>`，`T[...]` | `a * (b + c) <=> a * b + a * c` |
 
 ### 3.3 `#requires(reassociate, no_infs)`：2 条
 
 | 规则 | 触发条件 | 两侧 |
 |---|---|---|
 | `float_fold` | `fold_coefficients(c1, c2)`：有限、非零、积有限且非零 | `(x * c1) * c2 => x * (c1 * c2)` |
-| `array_fold` | 同上，`T[..]` | 同上，逐元素 |
+| `array_fold` | 同上，`T[...]` | 同上，逐元素 |
 
 ### 3.4 `#requires(reassociate, no_infs, no_signed_zeros)`：4 条
 
@@ -76,14 +76,14 @@
 |---|---|---|
 | `float_combine_mixed` | `combine_mixed_sign(c1, c2)`：有限、非零、异号、和不等于零 | `x * c1 + x * c2 => x * (c1 + c2)` |
 | `float_combine_one_mixed` | `combine_one_mixed_sign(c)`：`c < 0` 且 `c + 1 != 0` | `x * c + x => x * (c + 1.0)` |
-| `array_combine_mixed` | 同 `float_combine_mixed`，`T[..]` | 同上，逐元素 |
-| `array_combine_one_mixed` | 同 `float_combine_one_mixed`，`T[..]` | 同上，逐元素 |
+| `array_combine_mixed` | 同 `float_combine_mixed`，`T[...]` | 同上，逐元素 |
+| `array_combine_one_mixed` | 同 `float_combine_one_mixed`，`T[...]` | 同上，逐元素 |
 
 ### 3.5 `#requires(refine_accuracy)`：3 条（两侧的位不同，命题是误差界）
 
 | 规则 | 触发条件 | 两侧 |
 |---|---|---|
-| `array_log_softmax_of_softmax` | `f32[..]`，`const axis` | `log(softmax<axis>(x)) => log_softmax<axis>(x)` |
+| `array_log_softmax_of_softmax` | `f32[...]`，`const axis` | `log(softmax<axis>(x)) => log_softmax<axis>(x)` |
 | `float_log1p` | `hasScalarKernel`（`f32`、`float`） | `log(1.0 + x) => log1p(x)` |
 | `float_expm1` | `hasScalarKernel` | `exp(x) - 1.0 => expm1(x)` |
 
@@ -113,7 +113,7 @@
 
 ### 4.2 三态：31 proved / 0 refuted / 6 unknown
 
-实例集是 `int`、`i32`、`float`、`f32`（规则是泛型的，一条规则在每个实例上分别证明；`T[..]` 的规则按元素类型逐元素判，两侧的操作数形状不变）。
+实例集是 `int`、`i32`、`float`、`f32`（规则是泛型的，一条规则在每个实例上分别证明；`T[...]` 的规则按元素类型逐元素判，两侧的操作数形状不变）。
 
 - **31 条 proved**：3.1 的 23 条里 20 条（去掉 `float_double`、`array_double`、`array_sigmoid_chain`），加 3.2 的 5 条、3.3 的 2 条、3.4 的 4 条。
 - **6 条 unknown**，原因分三类：

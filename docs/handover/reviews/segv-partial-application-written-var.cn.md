@@ -56,7 +56,7 @@ camel: internal error: Runtime graph 'main' breaks its edge invariants (1 violat
 
 ## 四、坏在哪
 
-`specializeDirectFuncInDraft`（`src/runtime/draft_inline.cpp:1010`）把 `f<3.0>` 的声明 `with` 参数 `w` 绑成常量，`eraseFormalFromDraft` 调 `GraphDraft::removeWithPort` 把该 `with` 端口删掉——但**没有同时删掉图函数类型里的那条 `with` 参数类型**。于是 `f$spec0` 的 `withPorts` 只剩捕获单元（1 个），而 `funcType()->withTypesCount()` 仍是 1。
+`specializeDirectFuncInDraft`（`src/runtime/draft_inline.cpp#specializeDirectFuncInDraft`）把 `f<3.0>` 的声明 `with` 参数 `w` 绑成常量，`eraseFormalFromDraft` 调 `GraphDraft::removeWithPort` 把该 `with` 端口删掉——但**没有同时删掉图函数类型里的那条 `with` 参数类型**。于是 `f$spec0` 的 `withPorts` 只剩捕获单元（1 个），而 `funcType()->withTypesCount()` 仍是 1。
 
 约定是"声明的 `with` 参数在前，捕获紧随其后"（`callValueTypeOf`、`runtimeFuncValue` 都这么读）。类型多算一个，捕获就整体后移一格：
 

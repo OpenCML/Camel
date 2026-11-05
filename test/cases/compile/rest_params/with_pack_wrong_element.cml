@@ -1,0 +1,11 @@
+// The pack's element type is a guard: `with <...ws: int>` refuses a `float` argument written in the
+// angle brackets, and says which pack, which type it takes, and which type it was given.
+with <...ws: int>
+func g(x: float): float {
+    return x
+}
+
+func main(): int sync {
+    println(g<1.0>(2.5))
+    return 0
+}

@@ -9,16 +9,16 @@ import { ones, shape, sum, zeros } from tensor
 import { sgd } from nn
 
 type Linear = {
-    weight: f32[..]
+    weight: f32[...]
 }
 
 with <layer: Linear>
-func linear(x: f32[..]): f32[..] {
+func linear(x: f32[...]): f32[...] {
     return x @ layer.weight
 }
 
 with <layer: Linear>
-func mse_loss(x: f32[..], y: f32[..]): float {
+func mse_loss(x: f32[...], y: f32[...]): float {
     let pred = x->linear<layer>
     let errors = pred - y
     let squared = errors * errors

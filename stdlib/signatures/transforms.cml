@@ -14,9 +14,12 @@
  *   - every ordinary parameter of `F` becomes two parameters, the value and its tangent, so
  *     `jvp(f)` for `f(x, y)` takes `(x, dx, y, dy)`;
  *   - the result is the pair `(value, tangent)`, the same shape in and out;
- *   - `F` must take no `with` parameter, at least one parameter, every parameter a `float` and a
- *     `float` result, because a captured value has no port to enter the copied graph by and a
- *     tangent is a `float` direction.
+ *   - `F` keeps its `with` parameters: each is one port of the lifted function, of the declared
+ *     type, and the tangent of a captured value is the zero of its type -- a value that reaches the
+ *     body through a `with` parameter does not move in forward mode. So `jvp(f)` for `f` of `<m:
+ *     Model> (x: float)` is a function of `<m: Model> (x, dx)`.
+ *   - `F` must take at least one ordinary parameter, every ordinary parameter a `float` and a
+ *     `float` result, because a tangent is a `float` direction.
  * The tangent of an input is the seed: `jvp(f)(2.0, 1.0)` asks for the derivative in the
  * direction 1, and `jvp(f)(2.0, 2.0)` for twice it. Nothing here picks the direction for the
  * caller, so a function of several parameters is read one direction per run (`jvp(f)(3.0, 1.0, 2.0,
@@ -39,44 +42,49 @@ export type Tangent<T>
 /// Forward mode: `jvp(f)` gives a function that takes the parameters of `f` followed by their
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
-/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let forward = jvp(f)
+/// @example let forward = jvp((x: float) => x * x)
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
 /// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
 /// the halves are built from the graph, and what crosses the cut -- the residuals -- is read off the
 /// graph too, so a body that needs a value it computed carries it instead of computing it again.
 ///
-/// The cut, as the author writes it (15:25; revised 2026-11-01): the first half takes the ordinary
-/// parameters and answers with the result and the *residuals* -- the values the second half reads --
-/// and the second takes the residuals and the `with` parameters and answers with the result.
+/// The cut, as the author rules it (15:25; revised 2026-11-01 and 2026-11-02 08:30): the front half
+/// takes the ordinary parameters and answers `(result, lin)`; `lin` is the back half, closed over the
+/// residuals -- the values it reads -- and takes the tangents and nothing else.
 ///
-///     type Split<F> = ((..ParamsOf<F>) => (ResultOf<F>,  _),
-///                      (_, ..WithOf<F>) => ResultOf<F>)
+///     split(f) = (fwd)  where  fwd(...values) = (result, lin)
+///     lin      = the back half, its residuals captured rather than passed
 ///
-/// The residual position is written `_` and is not a type a program can name: the residuals are a
-/// property of `f`'s graph, so their number and their types are read where the graph is in hand, and
-/// the compiler fills the position at instantiation (`ResidualsOf<F>` was the earlier spelling of a
-/// type function doing that, and it is gone). The second half is linear in the cotangent it is given
-/// -- that is the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
+/// The residuals are therefore **not a position in any type**: they are `lin`'s closure tuple, whose
+/// layout the run-time kernel reads off the back half's graph (the capture ports the graph declares),
+/// one member per residual, in the order the graph names them. At a call site `lin` is an ordinary
+/// function type, so no signature states a count it cannot know and no guard has to admit one
+/// (`ResidualsOf<F>`, and the `_` position before it, are both gone). `lin` is linear in the tangent
+/// it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 /// at the top of this file.
-/// @example-fragment `split` takes the lifted function a `jvp` call writes, so the example is a
-/// fragment of the composition: `let (fwd, lin) = split(jvp(f))`.
 /// @example let step = split
-export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, float)
+export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, (float, float) => float)
 
 /// The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
 /// gives the cotangent of its parameter. The data flow runs backwards -- each primitive is replaced
 /// by the rule the `rulesets.transpose` family files under it, and a value used k times receives k
 /// cotangents that add. `f(x) = 2*x + 3*x` transposed at the cotangent `1.0` gives `5.0`.
 ///
-/// The transposed function takes the parameters of `f` first and the cotangent last --
-/// `transpose(f)(x, 1.0)` -- because a pullback may need the value it is transposing at: a branch's
-/// condition is a value, and the cotangent of an arm only means something for the arm that ran.
-/// The shape is the same for every `f`, so a reader writes the same call whether the body branches
-/// or not. The type is `(..ParamsOf<F>, ct: Tangent<ResultOf<F>>) => (..Tangent<ParamsOf<F>>)`.
-/// @example-fragment `f` must be a function of one `float` parameter, and that takes a declaration, so the example is a fragment of a program that declares it
-/// @example let back = transpose(f)
+/// The transposed function takes one value, the cotangent of `f`'s result, and answers one cotangent
+/// per parameter. Both lists are `f`'s own: every parameter of `f` is a linear input, and the
+/// cotangent it is answered for is the one the caller hands in.
+///
+/// A value the transposed body needs beside the cotangent is not passed to it: it is a residual the
+/// function that is transposed was closed over, and the body reads it as a closure port. That is the
+/// same rule for a value the body computed, a value it read from outside, and a `with` value it read
+/// (`lin`'s residual tuple): a parameter with no tangent space is a value, and it is the one place
+/// the transposed graph takes a port that is not a cotangent, because the call site still fills it.
+///
+/// **`stdlib/types.cml#Transpose` is the contract**: the build makes the declared type, and the build
+/// that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
+/// called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
+/// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 
 
@@ -92,8 +100,7 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// operator with no rule is refused by name at the primitive, never batched by a guess; a call, a
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
 /// straight-line bodies.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let batched = vmap(f)
+/// @example let batched = vmap((x: f32) => x * 2.0)
 export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 
 /// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
@@ -106,11 +113,45 @@ export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 /// (`modules/transforms/split.cpp`). JAX writes the same transform as `jax.checkpoint`, whose other
 /// name is `jax.remat`; in this tree "checkpoint" is the persistence module `ckpt`, so the transform
 /// takes the other word.
-/// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
-/// @example let remembered = remat(f)
+/// @example let remembered = remat((x: int) => x + 1)
 ///
 /// The type is the argument's own: a function in, the same function out, which is the whole of what
 /// the name says. `modules/transforms/remat_operator.cpp` answers `(f: F) => F` and builds the graph
 /// the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 /// declarations show, because the result of a call is the exit type its resolver gives.
 export func remat::<F>(f: F): F when is_function::<F>()
+
+/// `FirstWithAsParam<F>`, written out as a type function so that it is one law: `F`'s remaining
+/// `with` parameters keep their places, the first one becomes the first ordinary parameter, and the
+/// rest of the ordinary list and the result are `F`'s own.
+///
+/// The first ordinary position is the whole point of the order: `jvp` and `vjp` differentiate the
+/// ordinary parameters, and a pullback answers one cotangent per parameter in the order the
+/// parameters are written, so a weight moved to the front is the cotangent a library `grad` reads
+/// first. Moving it to the end would answer the same numbers for a two-parameter call and the wrong
+/// member for a gradient.
+/// @example-fragment `weighted` is a function the program declares, because the example needs a `with` parameter
+/// @example is_same::<FirstWithAsParam<<x: float> (y: float) => float>, (x: float, y: float) => float>()    // true
+export type FirstWithAsParam<F> = match type WithOf<F> { case (W, ...Rest) => <...Rest> (W, ...ParamsOf<F>) => ResultOf<F> }
+
+/// The signature reinterpretation: `f` with its first `with` parameter moved onto the front of the
+/// ordinary list, and its body untouched. The design's name for this kind of step is
+/// `reinterp<first_with_as_param>(f)` (design principles 9.9: `reinterp<H>(f)` gives every primitive
+/// the meaning `H` gives it); in this tree the kind is the operator's own name, the way `jvp(f)` is
+/// `reinterp<jvp>(f)`, because a pass cannot answer a function value.
+///
+/// The body is not read, rewritten or re-derived -- the one thing that differs is which list a port
+/// is in -- and a `with` value the body reads is read through a port like any other value, so a
+/// reclassification of the port is the whole of the transform
+/// (`modules/transforms/first_with_as_param_operator.cpp`). The transform is what makes a weight
+/// differentiable by the library's composition: a `with` parameter has no place to take a direction
+/// in from, and an ordinary one has.
+///
+/// Three shapes have no first `with` parameter to move, and each is refused where it is written: a
+/// function with a `with` pack (the pack stands for however many arguments a call gives past the
+/// fixed ones, so it has no first member), a `var` `with` parameter (a variable is read and written
+/// by name, not handed in by a call), and a `constas` one (part of the signature's identity rather
+/// than a value).
+/// @example-fragment `weighted` is a function the program declares, because the example needs a `with` parameter
+/// @example let reinterpreted = first_with_as_param(weighted)
+export func first_with_as_param::<F>(f: F): FirstWithAsParam<F> when is_function::<F>()

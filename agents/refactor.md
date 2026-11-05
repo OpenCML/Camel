@@ -118,6 +118,33 @@ answer, so a test that merely passes does not catch it.
 - **Do not hard-code an element type.** Wrong: a gradient kernel reads `dataAs<float>()` for every
   tensor, so an f64 tensor is read as f32; a shape rule answers f32 whatever the input. Right:
   instantiate per supported element type and refuse the rest.
+- **A transposition law's head states every position as a type parameter.** A law is matched against
+  a node whose operand types are known only when a program reaches it, so a concrete type in the head
+  is a type nothing can fill in. Wrong: `export rule sum_axis_stated_t::<T, X, E>(t: X, axis: int,
+  keepdims: bool, extents: E)`. It compiles, the rule is filed, and the refusal arrives at the last
+  transposition of a program already lowered, naming neither the law nor the parameter:
+  `TRANSPOSE ... skip=parameter-shape uri=tensor:sum_axis_stated node=12 param=0
+  param-type=float[...]`, followed by `The transpose of '<graph>' needs the shape of the parameter at
+  position 1, and the type 'float[...]' does not state it`. Right: `(t: X, axis: A, keepdims: K,
+  extents: E)` with the left side binding the three, which is how every neighbouring law is written.
+  The criterion: **a concrete type is the one the walk cannot hand a shape back for; a type variable
+  is filled in from the node.** Measured 2026-11-04: both `stated_sum_axis_gradient` cases are green
+  on the type-variable form and red on the concrete one, and nothing between the parser and the
+  transpose mentions the difference -- so the reading of the case, not the reading of the build, is
+  what decides it.
+- **The two legs of a rule do not count the same number, and the head must be written to the count it
+  is asked for.** A **forward** (`jvp`) rule is asked for one type parameter per *free variable in
+  the operand types* -- `(float[], int, int)` asks for 1, so `jvp_idx_arr::<T>(xs: T[], i: int)` is
+  right to spell its index concretely. A **transposition law** is asked for one per operand *plus*
+  the cotangent's element type -- `pick_at_t::<T, X, P, L>` over three operands, `sum_axis_stated_t::<T,
+  X, A, K, E>` over four. The bullet above says a transposition head must not spell a position
+  concretely; this one says the *number* is a different arithmetic on each leg, and getting either
+  wrong is refused in the same breath as a missing rule:
+  `REINTERP jvp function=read skip=rule uri=tensor:pick_at reason=it takes 4 type parameter(s), and
+  it was asked for 1` (measured 2026-11-04, writing `jvp_pick_at::<T, X, P, L>`), and
+  `jvp has no forward rule for 'tensor:pick_at'` on the surface. Criterion: **count what the matcher
+  counts.** Neither error is caught by a build: both rules compile and file; only a program that
+  reaches the rule reds.
 - **Fix the cause, in the layer that causes it.** When a fix has been prescribed and it cannot be
   written, the prescription was wrong about where the defect lives: report the measured cause and
   change the layer that holds it. Wrong: a type rule is bent so one case stops failing, or a
@@ -127,7 +154,37 @@ answer, so a test that merely passes does not catch it.
   rank that are not the same type never merge: a rule that merges them changes the language to
   make a report go away.
 
+- **Delete code by matching it, not by counting lines.** A script that says "remove lines 900..901"
+  is decided against a listing that may already be stale by the time it runs, and the damage is
+  silent: it compiles nowhere, or worse, it compiles. Wrong: `Get-Content | Select-Object -Skip 899 |
+  Select-Object -First 2` and a hand-rolled index per file. Right: the exact text of the lines being
+  removed, matched once, plus a diff read before committing. This happened on 2026-11-02: a removal
+  by line number took `Parts`' closing brace, the `open_` field, three comment lines and a
+  `halves.closure = closure;` assignment with it, in files that then still had to compile. Every one
+  of those was found by reading the diff, not by the compiler.
 ## Architecture Reporting
 - During major refactors, identify the primary structural contradiction early.
 - If a deeper dependency blocks progress, surface that blocker directly instead of only cleaning peripheral symptoms.
 - Record important decisions and rationale in both code comments and docs when the refactor changes semantics.
+- **A default argument belongs in the declaration, not in both.** `transposeSignature` was one
+  function: a definition in `transpose.cpp` and a declaration in `transpose.h`. Adding the fourth
+  parameter *with a default* to the definition only turned the two into two overloads, and the
+  three-argument call sites became `error: call to 'transposeSignature' is ambiguous` -- at
+  `transposeSignature` in `transpose.cpp`, a line the change never touched. Right: add the parameter to the
+  declaration with its default and leave the definition without one. A build that reports
+  ambiguity at a line you did not edit is telling you a declaration and a definition stopped being
+  the same function.
+
+
+## A page says first which sentence in it is already true
+
+A question page is written to be acted on, and the reader who acts on it may be repeating work that was
+already done -- three times on 2026-11-02 a page or a dispatch note carried a sentence that read like an
+instruction and was a description of what the code already does (`replaceRootIfCurrent` already rebuilds
+the root table; a "sync the root table here" would have been a second rebuild). The page now opens with
+that sentence quoted, marked "already true, do not redo", before the finding it frames.
+
+The rule: **when a page or a ruling names a place to change, its first paragraph says which part of that
+naming is already the code's behaviour**, with the file and line. A page that starts with the problem and
+only later admits "this part is fine" spends the reader's trust twice: once to send them to the wrong
+file, once to call them back.

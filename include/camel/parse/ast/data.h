@@ -260,7 +260,7 @@ class StaticForLoad : public DataLoad {
     const std::string &valueName() const { return valueName_; }
     const std::string &typeName() const { return typeName_; }
     /// The third name of `(n, F, tags)`: the field's tags. Empty when the head names two things
-    /// or one; also empty (written as `_`) when the position is the wildcard.
+    /// or one; also empty when the position is the wildcard `_`, which binds nothing.
     const std::string &tagsName() const { return tagsName_; }
     /// How many names the head writes, in all: the count the element must have parts for
     /// (`SemanticDiag::StaticHeadNameCount`). The three names above are the first three written;
@@ -399,9 +399,16 @@ class LiteralLoad : public DataLoad {
     bool fromFormattedString() const { return fromFormattedString_; }
     void setFromFormattedString() { fromFormattedString_ = true; }
 
+    /// Set on the literal of a raw string (`r"..."`, `r#"..."#`). Its text is the value: the
+    /// GCT does not run the escape table over it, and a backslash in it is an ordinary character
+    /// -- which is what makes `r"C:\dir"` the way to write such a path.
+    bool fromRawString() const { return fromRawString_; }
+    void setFromRawString() { fromRawString_ = true; }
+
   private:
     Literal value_;
     bool fromFormattedString_ = false;
+    bool fromRawString_       = false;
 };
 
 class ArrayDataLoad : public DataLoad {

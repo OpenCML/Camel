@@ -6,6 +6,8 @@
 > **H153 核对计数（135 行，含 H153）**：done 117 / partly 9 / stale 6 / open 3——stale 的 6 行（H6、H19、H38、H44、H44b、H147）已全部改正；partly 里 H51 另有一处笔误，H114 的行文也补了摘要来历（它本身是 done）。
 > **H160 后计数（138 行）**：done 120 / partly 9 / stale 6 / open 3；H160 只加一行、改 H38 行文，没有动别的判定。
 
+> **本目录下的行号是当日读数**：每页描述的是它写的那天看到的代码状态，行号随每一次编辑漂移，引用源码时以符号（`file#Symbol`）为准；本目录之外的行号一律是引文（工具输出、示例程序的位置），不得改写。
+>
 > **2026-10-19：设计原则已按主题重编**（15 节，只写当前有效的规则）。旧的编号（如 2.13、2.20）与原文见 [裁定记录](../design-principles-log.cn.md) 开头的对照表；本任务书中的引用已改为新编号。
 
 本文件写给接手开发的 AI。读完就开工，不必再问"要做什么"。每个任务完成后把结论写进约定的位置（第 3 节），由协调者（与语言作者讨论设计的 AI）检查代码；检查意见也写在约定的位置。
@@ -40,8 +42,9 @@
 
 ### 1.2 构建与测试
 
-- **不在本机构建**：本机跑构建会蓝屏。构建与测试都在 Linux 主机上，经 `D:\Projects\Camel-wt\camel-remote.ps1` 走（它把工作树送过去、排队取一个构建位、把退出码带回来）：
-  `pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\<任务> -Plan <计划文件或目录> -Jobs 8`。
+- **不在本机构建**：本机跑构建会蓝屏。构建与测试都在 Linux 主机上，经仓库里的 `internal/tools/camel-remote.ps1` 走（它把工作树送过去、排队取一个构建位、把退出码带回来）：
+  `pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\<任务> -Plan <计划文件或目录> -Jobs 8`。
+  `D:\Projects\Camel-wt\camel-remote.ps1` 是早于 `camel-gate.local.json` 的旧副本，比入口少 201 行、没有 `--config`，读它是旧读数（见 `agents/test.md`「闸门的入口只有一个文件」）。
   产物在主机 `out/latest/bin/`。不要在本机跑 `npm run build`、`cmake` 或 `node scripts/test.js`。
 - 测试分两层（H10）：日常与合入前跑 `fast` 层（`smoke` 加 `feat/**`）；慢层（PyTorch 对照、GC 压力、投毒扫描、性能基准）只在发布前，或改动确实触及 GC、内存管理、数值内核时按需跑。
 - 只跑某个目标时：**目录**目标默认只跑 `fast` 层，要看慢测试加 `--tier all`；直接点名**计划文件**则整个计划都跑（点名就是意图）。**层与目标是两件事**：目标写 `.` **不是整棵树**——前导点被剥掉后是空名，落到 `feat`，即 `test/plans/feat`（只 feat、不含 `smoke`）；整棵树写 `all`（`-Plan all`、`--all` 或 `test/plans`）。`--changed` 的基线默认 `origin/develop`，可用 `CAMEL_TEST_BASE` 覆盖。分层规则见 `docs/test-plans.md`。
@@ -852,7 +855,7 @@ CI 的触发不改（只在 `v*` 标签与手动触发时运行，不花 runner 
 
 | H167 | **perf 层的分类与一个手动性能闸门**：H154 认定 `perf/**` 被 `--changed` 与 `npm run test` 排除（这是对的：又长又重），代价是性能可以无限回归而无人发现；分类 10 个计划，只对成本允许重复的两个建闸门，其余按政策拒绝 | 无 | **已完成**（note ⟨f14c90d⟩） |
 | H168 | **声明语法缺口的盘点与提案（只盘点，不迁移）**：把 `tensor`/`rewrite`/`nn`/`onnx`/`autodiff`/`pyplot`/`python`/`tiles`/`ckpt` 九个模块的 130 个公开名字按“已声明／不加语法可声明／被语言机制挡住／被标准库规则挡住／缺执行器／计算签名”逐条归类，给出每个缺口的名字清单、文档依据（已有裁定还是只有作者能答）、解锁名字数与风险，写出最小提案集（结论并入 `docs/stdlib-conventions.cn.md` 第 8 节） | 无（引用 H141/H151/H156/H157/H140 的探针与 H148 Q1/Q3） | **已完成**（note ⟨7734c9a⟩） |
-| H169 | **`std::opt` 为什么编译 `graph`，这笔钱是多少**：H159 的红报出 `['rules','graph','math']`，但 H144 的 `("rules","math")` 在 09:05 为真、09:32 H141 把 `graph` 变成声明模块、10:12 H151 又把 `tensor` 变成声明模块，实际集合是 **`['rules','graph','math','tensor']`**——名单在一天内两次过期，H162 的三名字 tuple 在合入时也已过期。来路：`stdlib/rules.cml:11-14` 显式导入 `graph`/`math`/`tensor`；`std::opt` 的代数步走 `rules::simplify`，`rules` 作为遍的工具程序编译时，有 `.cml` 声明文件的导入模块各走一次 parse/GCT/declare；`graph` 不注册任何遍，所以不是遍依赖，是"真实 import + 声明急切加载"。成本：十行无 import 程序跑 `std::opt`，61 轮交错，`graph` 的 parse+gct+declare **中位数 0.844 ms**（p10 0.796、p90 0.931），math 1.789、tensor 0.282、rules 22.683；删掉安装里的 `graph.cml` 后 `std::jgir` 输出 SHA-256 逐字节相同（5→4 模块），但 `graph_types.cml` 会红在只在 `graph.cml` 声明的 `current`/`nodes`/`id` 上，所以省法只能是 H142 Q2 的惰性声明，不是删 `rules` 的 import | 无（H144 的名单、H142 Q2） | **已完成**（note ⟨bba7488⟩） |
+| H169 | **`std::opt` 为什么编译 `graph`，这笔钱是多少**：H159 的红报出 `['rules','graph','math']`，但 H144 的 `("rules","math")` 在 09:05 为真、09:32 H141 把 `graph` 变成声明模块、10:12 H151 又把 `tensor` 变成声明模块，实际集合是 **`['rules','graph','math','tensor']`**——名单在一天内两次过期，H162 的三名字 tuple 在合入时也已过期。来路：`stdlib/rules.cml#is_real` 显式导入 `graph`/`math`/`tensor`；`std::opt` 的代数步走 `rules::simplify`，`rules` 作为遍的工具程序编译时，有 `.cml` 声明文件的导入模块各走一次 parse/GCT/declare；`graph` 不注册任何遍，所以不是遍依赖，是"真实 import + 声明急切加载"。成本：十行无 import 程序跑 `std::opt`，61 轮交错，`graph` 的 parse+gct+declare **中位数 0.844 ms**（p10 0.796、p90 0.931），math 1.789、tensor 0.282、rules 22.683；删掉安装里的 `graph.cml` 后 `std::jgir` 输出 SHA-256 逐字节相同（5→4 模块），但 `graph_types.cml` 会红在只在 `graph.cml` 声明的 `current`/`nodes`/`id` 上，所以省法只能是 H142 Q2 的惰性声明，不是删 `rules` 的 import | 无（H144 的名单、H142 Q2） | **已完成**（note ⟨bba7488⟩） |
 | H170 | **声明化迁移的残留清查（H19 的 16 个模块作为整体审计）**：每个已迁移模块的 C++ 里是否还有“声明已经给出的签名”留下的静态解析器、`exportEntity`、只为它存在的 helper/表、旧的 `stdlib/signatures/<m>.cml` 条目；并回答整个仓库层面 `StaticFuncTypeResolver`、`foldFromTypes`、别名发布是否还需要 | 无 | **已完成**（note ⟨9897519⟩） |
 
 | H171 | **文档里的数字**：面向读者的页面里有一类断言是数字（模块/声明/算子重载/诊断码/测试/文件/计划数、版本、计时），链接、旧名字、片段三道闸门都不读；盘点可核对的数字，逐条核对真值、改错，并给有唯一来源的子集加一道闸门，接入 `feat/docs_links`；生成页不改、既有闸门不放宽、日期化快照按页允许并写理由 | 无 | **已完成**（note ⟨c6de257⟩） |

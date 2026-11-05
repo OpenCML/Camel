@@ -24,9 +24,9 @@ transforms: jvp does not reinterpret a loop that runs its rounds as calls yet
 
 ## 三处读数，指向同一个结论：这条形式今天不可达
 
-1. **编译器只建区域形式的循环**：`src/compile/gir/draft_graph_builder.cpp:245` 是唯一建 `Loop` 节点的地方，载荷是 `runtime::GCLoopBody{.kind = kind}` —— **只写 `kind`**，不写条件图/体图 id。
-2. **写条件图/体图的 API 没有调用者**：`GraphDraft::setLoopGraphs`（`src/runtime/draft.cpp:2306`）在 `src/`、`modules/` 下**没有一处调用**（`git grep setLoopGraphs` 只剩声明、定义、以及 `draft_clone`/`graph.cpp` 里读它的地方）。
-3. **执行侧对它只是防御**：`src/execute/exec_plan.cpp:258-262` 先取 `loopRegionOf(ref, LoopCond/LoopBody)`，`bodyRegion == 0` 时 `continue`，注释写的是 `a loop of two graphs: the back end calls them` —— 有后端"能"调用这种循环，但今天的编译路径不产生它。
+1. **编译器只建区域形式的循环**：`src/compile/gir/draft_graph_builder.cpp#DraftGraphBuilder::addFuncNode` 是唯一建 `Loop` 节点的地方，载荷是 `runtime::GCLoopBody{.kind = kind}` —— **只写 `kind`**，不写条件图/体图 id。
+2. **写条件图/体图的 API 没有调用者**：`GraphDraft::setLoopGraphs`（`src/runtime/draft.cpp#GraphDraft::payloadGraphAt`）在 `src/`、`modules/` 下**没有一处调用**（`git grep setLoopGraphs` 只剩声明、定义、以及 `draft_clone`/`graph.cpp` 里读它的地方）。
+3. **执行侧对它只是防御**：`src/execute/exec_plan.cpp#buildLoopTables` 先取 `loopRegionOf(ref, LoopCond/LoopBody)`，`bodyRegion == 0` 时 `continue`，注释写的是 `a loop of two graphs: the back end calls them` —— 有后端"能"调用这种循环，但今天的编译路径不产生它。
 
 于是：**从源码造不出这种循环，`test/` 里也没有直接建 `GraphDraftGroup` 的单元测试**（`test/` 下没有 `unit/`，也没有任何用例直接用 `GraphDraftGroup`）。**提升它能编译，但没有任何一条用例能证明它提升了**——这就是"半成品"与"无物可修"的区别：前者是能力不全，后者是**能力已经全了，只是没人需要它**。
 

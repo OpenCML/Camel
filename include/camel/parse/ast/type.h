@@ -37,7 +37,7 @@ class TypeParam {
 
     const std::string &name() const { return name_; }
     bool pack() const { return pack_; }
-    std::string toString() const { return (pack_ ? ".." : "") + name_; }
+    std::string toString() const { return (pack_ ? "..." : "") + name_; }
 
   private:
     std::string name_;
@@ -214,12 +214,27 @@ class FuncTypeLoad : public TypeLoad {
         }
         return names;
     }
+    /// The head parameters some other part of the same declaration writes: a `rule`'s head is
+    /// written once, but its sides are three declarations of the compiler's making (`__lhs`,
+    /// `__rhs`, `__when`), so a name the rule writes on one side is not written on the others.
+    /// Carried here, from the rule's own text, so that the unused-parameter check reads the whole
+    /// declaration and not one of its sides (`multiply`'s law names its cotangent's type only on
+    /// the right, and a check that looked at the left alone would call it unused -- and the law
+    /// cannot be written without it).
+    const std::vector<std::string> &typeParamsWrittenElsewhere() const {
+        return typeParamsWrittenElsewhere_;
+    }
+    void setTypeParamsWrittenElsewhere(std::vector<std::string> names) {
+        typeParamsWrittenElsewhere_ = std::move(names);
+    }
+
     const std::string geneCode() const override;
 
   private:
     ModifierSet modifiers_;
     std::string uri_;
     std::vector<TypeParam> typeParams_;
+    std::vector<std::string> typeParamsWrittenElsewhere_;
 };
 
 /// The resources a function type publishes (design effects plan 3.1): `pure` says a call

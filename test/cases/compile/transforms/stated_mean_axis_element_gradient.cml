@@ -1,0 +1,36 @@
+// The gradient of a lane mean whose answer is the element itself.
+//
+// One axis, `keepdims = false`, on a rank-one operand: the mean of four values answers one value,
+// and a rank-zero answer *is* its element (design principles 5.4). So the cotangent the reverse law
+// is handed has no shape -- and the law's port is `T[...]`, whose slot is an array.
+//
+// A mean of four elements divides by four, so every position gets a quarter:
+//
+//     x = [1.0, 2.0, 3.0, 4.0]   ->   value 2.5, dL/dx = [0.25, 0.25, 0.25, 0.25]
+//
+// This is the case `stated_mean_axis_gradient` cannot be: that one keeps the axis, so its cotangent
+// is an array of extent 1 and both shapes of answer agree. Here the cotangent has no extents at all,
+// and before the walk made the conversion 5.4 names, the law read it as an array: `numel(ct)`
+// answered a number's bits as a pointer and the run died on a SIGSEGV inside the numel kernel.
+//
+// The fix is the conversion, not a second law: a value's type going from `T` to `T[...]` is where the
+// run gets a rank-zero array to read (`ArrayType::castSlotFrom`, inserted by `Builder::coerceTo`
+// everywhere a value enters such a position), and a law's right side is entered by the transpose walk
+// rather than by a call, so the walk makes it (`modules/transforms/transpose.cpp`, `ruleCotangent`).
+// With it, `numel(ct)` answers 1 -- one lane, the whole product of the stated extents -- and the one
+// law of the key reads both shapes of answer.
+//
+//     camel test/cases/compile/transforms/stated_mean_axis_element_gradient.cml
+import { vjp } from vjp
+import { mean } from tensor
+
+func total(x: float[]): float {
+    return mean<0, false>(x)
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(total)([1.0, 2.0, 3.0, 4.0] as float[])
+    let d = pullback(1.0).0
+    `stated mean element value={} dL/dx={}`->format<value, d>->println
+    return 0
+}

@@ -1,8 +1,11 @@
 // The same function as split_forward_half, with only the backward half read out: g(x) = x*x,
-// f = reinterp<jvp>(g), x = 3, dx = 1. The backward half takes the residuals the forward half
-// collected (r0 = 3) and the tangent direction, and gives the tangent: 2x·dx = 6.
+// f = reinterp<jvp>(g), x = 3, dx = 1. The backward half is the linear map the forward half hands
+// back, closed over the residuals it collected (r0 = 3), so it takes the tangent direction alone and
+// gives the tangent: 2x·dx = 6.
 //
-// The case runs when `split` exists (design doc 4.2); the plan skips it until then.
+// Before the closure ABI this case asserted the binary-tuple split: `lin(r0, 1.0)` took the residual
+// value and the direction as two arguments. The number did not move; the residual is no longer the
+// caller's to hold.
 import rulesets.jvp
 import { jvp, split } from transforms
 
@@ -11,9 +14,8 @@ func g(x: float): float {
 }
 
 func main(): int sync {
-    let f = jvp(g)
-    let (fwd, lin) = split(f)
-    let (_y, r0) = fwd(3.0)
-    println("tangent dx1=", lin(r0, 1.0))
+    let fwd = split(jvp(g))
+    let (_y, lin) = fwd(3.0)
+    println("tangent dx1=", lin(1.0))
     return 0
 }

@@ -1,0 +1,43 @@
+// The gradient through a loop, read the library's way: `vjp`/`grad` from `stdlib/vjp.cml`, which is
+// `transpose(split(jvp(f)))` over the rulesets the library imports -- not the C++ autodiff
+// and not a direct `transpose` call.
+//
+// `f(x) = loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x*x*i` adds `i*x*x` once per round, so on
+// paper `f(x) = x*x*(1+2+3+4) = 10x^2`, `f(3) = 90`, `f'(x) = 20x` and `f'(3) = 60`. A pullback is
+// linear in its cotangent, so `pullback(2.0).0` is `120.0`: the same graph read twice, not a
+// coincidence of one seed.
+//
+// The weights are what makes this the pin for the tape. The forward half appends one residual tuple
+// per round -- the round's element and the state that round read -- and the backward half reads the
+// element of *that* round out of it. A pairing that handed every round the same element would add
+// `4*1*x*x` and answer `24` where the paper says `60`, which is why the array is not `[1,2,3,4]` with
+// a conversion but four weights that differ.
+//
+// What this does *not* pin is the order of the rounds: every round's map is `ds + 2x*dx*i`, a sum of
+// scalars, and a sum does not care in which order it is added. `vjp` over a loop does not walk the
+// rounds backwards yet -- that is `docs/design/program-transforms` 4.2/4.3 and the open question
+// `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md` -- so a
+// case that pinned the order would pin a number the tree cannot yet produce.
+import { grad, vjp } from vjp
+
+func f(x: float): float {
+    return loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x * x * i
+}
+
+// `grad` differentiates the first `with` parameter (design principles 9.9), so its leg is read
+// through one; the loop, and the tape it leaves, are `f`'s own.
+with <x: float>
+func f_at(): float {
+    return loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x * x * i
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp(f)(3.0)
+    let cotangents = pullback(1.0)
+    println('vjp_loop value={}'->format<value>)
+    println(cotangents)
+    println('vjp_loop cotangent={}'->format<cotangents.0>)
+    println('vjp_loop grad={}'->format<grad(f_at)(3.0)>)
+    println('vjp_loop linear-in-ct={}'->format<pullback(2.0).0>)
+    return 0
+}

@@ -12,10 +12,10 @@ import { sgd } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: float[..], b1: float[..], w2: float[..], b2: float[..] }
+type Mlp = { w1: float[...], b1: float[...], w2: float[...], b2: float[...] }
 
 with <m: Mlp>
-func loss(x: float[..]): float {
+func loss(x: float[...]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     let s = float(mean(y * y))
@@ -23,12 +23,12 @@ func loss(x: float[..]): float {
     return if c > 0.5 then s * 2.0 else s
 }
 
-func step(m: Mlp, x: float[..]): (float, Mlp) {
+func step(m: Mlp, x: float[...]): (float, Mlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func main(): int sync {
+func main(): string! sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25]),
         b1: reshape<[3]>([0.1, 0.0, -0.1]),
@@ -36,7 +36,8 @@ func main(): int sync {
         b2: reshape<[1]>([0.2])
     }
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5])
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

@@ -5,9 +5,9 @@ import { tree_paths } from tree
 import { sha256 } from hash
 import { exists } from fs
 
-type Params = { w: f32[..], odd: int[..], empty: f32[..] }
+type Params = { w: f32[...], odd: int[...], empty: f32[...] }
 type State = {
-    params: Params, m: f32[..], v: f32[..], ema: f32[..],
+    params: Params, m: f32[...], v: f32[...], ema: f32[...],
     step: int, seed: int, cursor: (int, int), note: string, raw: Bytes,
     enabled: bool, gain: f32, scale: float
 }
@@ -69,7 +69,7 @@ func main(mode: int, dir: string): int sync {
             case s => show(s)
         }
     } else if mode == 5 then sync {
-        let s = dir->load_tree::<{ params: { w: int[..] } }>
+        let s = dir->load_tree::<{ params: { w: int[...] } }>
         let _ = println(s)
         return 0
     } else if mode == 6 then sync {

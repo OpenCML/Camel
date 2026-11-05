@@ -1,0 +1,47 @@
+/**
+ * A value the differentiated lambda **captured**, of a tensor-shaped type, read through `vjp`: the cut
+ * of a graph whose body reads a closure port answers the number the engine answers for the same
+ * derivative.
+ *
+ * Until this case answered it refused, and the refusal is worth keeping in the record because it named
+ * the wrong thing twice over. The reading was (exit 1, `stdlib/vjp.cml#vjp`):
+ *
+ *     REINTERP split function=jvp_of___g_326__ skip=forward construct=a port uri=-
+ *     why=the port is not a parameter of the graph, so neither half takes it
+ *     transforms: split does not build this function (the port is not a parameter of the graph, so
+ *     neither half takes it)
+ *
+ * The port is the captured `x`: `jvp` declares a capture as a closure port of the lifted graph
+ * (`jvp.cpp`), and `split` listed its halves' ports from the ordinary parameters (`normPorts`) and
+ * from the call's `with` arguments (`addWithPorts`) -- two roads, and a capture arrives by neither. It
+ * is not a `with` port: a `with` value is an argument of the call, a capture is a member of the
+ * function value, and the operator already hands the forward half that tuple (`splitKernel` creates it
+ * with `f`'s own `tupleType()` and copies every slot), so the half declares the port and the call site
+ * fills it as it always filled a closure. That is the author's shape for a closure port
+ * (2026-11-04 02:50: 转发成成员自己的端口、调用点照常填).
+ *
+ * The numbers, computed by hand before the reading was taken: `dot(w) = sum(w * x)`.
+ *   w = [1, 2, 3], x = [4, 5, 6]  -> value = 1*4 + 2*5 + 3*6 = 32, pullback wrt w = x = [4, 5, 6]
+ *   w = [1, 2, 3], x = [-1, 2, 0.5] -> value = -1 + 4 + 1.5 = 4.5, pullback = x = [-1, 2, 0.5]
+ * The second point is the one that says the answer is read and not handed back: the same `w` with a
+ * different capture answers a different array.
+ *
+ * The extent is stated (`f64[3]`), and that is the boundary this case draws rather than a preference:
+ * with an open extent (`f64[...]`) the cut answers but the capture's shape is written nowhere the
+ * transposed half could read it, and `transpose` refuses it by name
+ * (`skip=parameter-shape uri=tensor:multiply position=0 param=0 param-type=float[...]`, the sentence
+ * being `RuntimeDiag::TransposeNeedsParameterShape`). Measured 2026-11-04, `withport`.
+ */
+import { vjp } from vjp
+import { reshape, sum } from tensor
+
+func main(): int sync {
+    let w = reshape<[3]>([1.0, 2.0, 3.0])
+    let x = reshape<[3]>([4.0, 5.0, 6.0])
+    let (y, pb) = vjp((ww: f64[3]): float => float(sum(ww * x)))(w)
+    println(`captured value={} pullback={}`->format<y, pb(1.0)>)
+    let x2 = reshape<[3]>([-1.0, 2.0, 0.5])
+    let (z, pb2) = vjp((ww: f64[3]): float => float(sum(ww * x2)))(w)
+    println(`captured value={} pullback={}`->format<z, pb2(1.0)>)
+    return 0
+}

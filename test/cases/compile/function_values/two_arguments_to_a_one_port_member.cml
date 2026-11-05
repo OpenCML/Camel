@@ -1,0 +1,31 @@
+// Two arguments given to a transposed value that promises one port. `read_outer` reads `k` from
+// outside the loop, so its transposed member takes the cotangent and nothing else today: the type
+// `transpose(read_outer)` answers is `(float) => (float,)`, one cotangent in and one cotangent per
+// parameter out, and the program writes two arguments at both call sites.
+//
+// Both writings are refused as a call the function type does not accept -- the value is a function
+// and the arguments do not fit it -- and neither is an abort. Measured before this case: the
+// builder's assertion in `visitLinkNode` fired instead for a callee whose recorded type is the
+// answer rather than the function that answers it, which is the shape a member that takes a value
+// port has (`docs/handover/questions/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`),
+// and the process stopped with a `Camel Invariant Violation`. A call of a value that is not a
+// function is now a report, so the refusal is the program's and the run ends with a diagnostic.
+//
+// The same member called with one cotangent answers 29 at x = 1
+// (`transpose_loop_escape.two_values_of_two_kinds`), through the same `CALL` a two-parameter
+// member would take: `jvp(sq)(2.0, 1.0)` builds one `CALL` with the value on a `WITH` edge and two
+// arguments on `NORM` edges (`function_values.a_two_argument_call_of_an_operator_answer`).
+import { transpose } from transforms
+import rulesets.transpose
+
+func read_outer(x: float): float {
+    let k = x * x
+    return loop s = x for i in 0..3 do 2.0 * s + k + x
+}
+
+func main(): int sync {
+    let back = transpose(read_outer)
+    println(back(1.0, 1.0))
+    println(transpose(read_outer)(1.0, 1.0))
+    return 0
+}

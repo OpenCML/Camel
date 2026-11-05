@@ -812,7 +812,7 @@ GELU_ONLY_PROGRAM = """module gelu_rate
 import {{ Tensor, random, seed, sum, gelu }} from tensor
 import {{ grad }} from autodiff
 
-with <x: f32[..]>
+with <x: f32[...]>
 func loss(): float {{ return sum(gelu(x)) }}
 
 func main(bench: bool, init_dir: string, final_dir: string): int sync {{

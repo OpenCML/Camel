@@ -15,28 +15,27 @@
 import { reshape, sum, tanh } from tensor
 import { export_model } from onnx
 
-type P = { w: f32[..] }
+type P = { w: f32[...] }
 
-func weights(): f32[..] {
+func weights(): f32[...] {
     let w: f32[] = [0.5, -0.25, 0.1, 0.3]
     return reshape<[2, 2]>(w)
 }
 
 with <m: P>
-func walk(h: f32[..], k: int): f32[..] {
+func walk(h: f32[...], k: int): f32[...] {
     return if k >= 6 | sum(h * h) < 1.0 then h else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 func mk(): P { return { w: weights() } }
 
-func model(x: f32[..]): f32[..] {
+func model(x: f32[...]): f32[...] {
     let m = mk()
     return walk<m>(x, 0)
 }
 
-func main(): int sync {
+func main(): void! sync {
     let xs: f32[] = [1.0, 2.0, 3.0, 4.0]
     let x = reshape<[2, 2]>(xs)
-    let _ = export_model<out: 'tmp/test/onnx/refusal_unended_unrolling.onnx'>(model, x)
-    return 0
+    return export_model<out: 'tmp/test/onnx/refusal_unended_unrolling.onnx'>(model, x)
 }

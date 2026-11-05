@@ -5,6 +5,7 @@ add_camel_module(
   NAME transforms
   SOURCES
     module.cpp
+    first_with_as_param_operator.cpp
     jvp.cpp
     jvp_operator.cpp
     remat_operator.cpp

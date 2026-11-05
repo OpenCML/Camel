@@ -5,10 +5,22 @@
 
 #include "camel/core/operator.h"
 #include "camel/core/type.h"
+#include "camel/core/type/resolver.h"
+
+#include <memory>
 
 slot_t __len_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __iter_str__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __len_arr__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
+/// `extent_of::<A>()`: the extents the array type `A` writes down, as an `int[]`. The value is a
+/// fact of the type argument and is settled where the call is built and where the name is used as a
+/// value (`ExtentOfResolver::valueFromTypeArgs`), so the operator has no kernel: a call it accepts is
+/// answered before a node exists, and a call it cannot answer is refused at that point.
+///
+/// A type that leaves an extent open is refused where the call is instantiated, with
+/// `SemanticDiag::ExtentOfNeedsStatedShape`, and the sentence names the position that has no number
+/// in it.
+std::shared_ptr<camel::core::type::FuncTypeResolver> extentOfResolver();
 
 slot_t __zip__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __range__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

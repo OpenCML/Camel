@@ -1,0 +1,275 @@
+// C3 -- a character-level Transformer trained through the library's own reverse transform.
+//
+// The author's S2 (2026-11-02 14:00): "a small character-level Transformer (two layers, multi-head
+// attention, softmax, layer_norm, residual connections, embedding lookup, causal mask), trained
+// with the library-level `grad`".  Library-level means `stdlib/vjp.cml` -- the `vjp`/`grad` the
+// standard library writes in Camel as `transpose(split(reinterp<jvp>(f)))`, not the engine's
+// `with_grad`/`buildGradientGraph`, which is the pipeline that is retiring.
+//
+// The model, in the order the terms are computed:
+//
+//   tokens        the corpus is a committed text file; a window of `context` characters is one
+//                 training example and the same window shifted by one is its target
+//   embedding     take(emb, window) -- the lookup as the gather it is: `emb` is [V, D] and the
+//                 window picks D numbers per position
+//   positions     + pos, one row per position in the window
+//   block (x2)    layer_norm -> multi-head attention (q, k, v per head; scores scaled by
+//                 1/sqrt(head_dim); the causal mask added; softmax along the key axis, so position
+//                 t reads positions <= t only) -> output projection -> residual
+//                 layer_norm -> two-layer MLP with relu -> residual
+//   head          layer_norm -> wout -> logits over the vocabulary
+//   loss          softmax cross-entropy of the logits at each position against the character that
+//                 follows it (nn.softmax_cross_entropy, the loss C2 uses)
+//   update        one Adam step of the parameter tree against that loss (nn.adam)
+//
+// `transpose(split(reinterp<jvp>(f)))` reads a function's *parameters*: `vjp(f)(...xs)` gives
+// `(y, pullback)` and `pullback(ct)` gives one cotangent per parameter (ruling 2026-11-02 11:30).
+// So the loss takes the model as its first parameter -- `window_loss(m, window, targets)` -- and
+// the gradient is `pullback(1.0).0`, a value of the model's own type.  The model is a struct of
+// tensors: its zero tangent is a struct of zero tensors and its cotangent a struct of tensors.
+//
+// Whether the library can answer that is what this example measures.  PREDICTION (written before
+// the first run): it cannot yet; `WALLS.cn.md` lists what it stops at and what each stop needs.
+// The program is written to the shape the author asked for and is *not* reduced to make a run
+// succeed.  `showcase/c3-char-transformer/probes/` holds the smallest program for each wall.
+//
+// Run (the corpus is committed beside this file):
+//   camel showcase/c3-char-transformer/train.cml --arg corpus=showcase/c3-char-transformer/corpus.txt \
+//         --arg mode=forward --arg steps=0
+//   camel showcase/c3-char-transformer/train.cml --arg corpus=<the same> --arg mode=train --arg steps=20
+
+import { ones, layer_norm, permute, reshape, relu, softmax, take, transpose, zeros } from tensor
+import { adam, adam_state, softmax_cross_entropy } from nn
+import { fold, key, normal } from random
+import { sqrt } from math
+import { read_text } from fs
+import { codepoints } from str
+
+// == shapes ==
+// The dimensions of the model, and the constants the shapes below are written with: `reshape` and
+// `permute` take a value here, and a literal is the one shape spelling this program needs to be
+// readable.  `context`, `width` and the rest answer the same numbers for the config line, so a
+// reader can check the two against each other.
+func context(): int {
+    return 8
+}
+
+func width(): int {
+    return 16
+}
+
+func heads(): int {
+    return 2
+}
+
+func head_width(): int {
+    return 8
+}
+
+func classes(): int {
+    return 28
+}
+
+// The alphabet the corpus is written in: space, the lowercase letters, and the period.  A
+// character's class index is its position here, so the encoding is one function and nothing else
+// in the program knows how a character becomes a number.
+func alphabet(): string {
+    return ' abcdefghijklmnopqrstuvwxyz.'
+}
+
+// The class index of one character code: its position in the alphabet, or 0 (the space) for a
+// character the corpus does not use.
+func class_of(code: int): int {
+    let letters = codepoints(alphabet())
+    let found = range(0, len(letters), 1)->filter<(i: int): bool => letters[i] == code>
+    return if len(found) == 0 then 0 else found[0]
+}
+
+// The corpus as class indices, one integer per character.
+func tokens(corpus: string): int[] {
+    return codepoints(corpus)->map<(code: int): int => class_of(code)>
+}
+
+// == model ==
+// The parameter tree: one type, so the gradient `vjp` answers and the optimizer state `adam_state`
+// builds are values of the same type and no code names a leaf.  Two layers are written out rather
+// than nested, because a struct of structs has no tangent arm in the ruleset yet (WALLS.cn.md).
+type Transformer = {
+    emb: float[...],
+    pos: float[...],
+    // layer 1: attention then MLP
+    g1a: float[...],
+    b1a: float[...],
+    wq1: float[...],
+    bq1: float[...],
+    wk1: float[...],
+    bk1: float[...],
+    wv1: float[...],
+    bv1: float[...],
+    wo1: float[...],
+    bo1: float[...],
+    g1b: float[...],
+    b1b: float[...],
+    f11: float[...],
+    fb1: float[...],
+    f12: float[...],
+    fb2: float[...],
+    // layer 2: the same, again
+    g2a: float[...],
+    b2a: float[...],
+    wq2: float[...],
+    bq2: float[...],
+    wk2: float[...],
+    bk2: float[...],
+    wv2: float[...],
+    bv2: float[...],
+    wo2: float[...],
+    bo2: float[...],
+    g2b: float[...],
+    b2b: float[...],
+    f21: float[...],
+    fb21: float[...],
+    f22: float[...],
+    fb22: float[...],
+    // the head
+    gf: float[...],
+    bf: float[...],
+    wout: float[...],
+    bout: float[...]
+}
+
+// The rows of a causal mask: `0` where position `i` may read position `j` (j <= i) and `-1000`
+// where it may not -- a constant of the program, because the mask is a fact about attention and
+// not a parameter.  Row-major over the T x T grid: element `k` is row `k / T`, column `k % T`.
+func causal_mask(): float[...] {
+    let n = 8
+    let flat = range(0, n * n, 1)->map<(k: int): float => if k % n <= k / n then 0.0 else -1000.0>
+    return reshape<[8, 8]>(flat)
+}
+
+// Multi-head attention over one window: `x` is [T, D], every weight [D, D], every bias [D], and
+// the answer [T, D].  The heads are the same tensor read at another shape, which is what
+// `reshape` and `permute` are for:
+//
+//   [T, D] -> [T, H, Dh] -> [H, T, Dh]                        the split
+//   scores = q @ transpose(k) * 1/sqrt(Dh) + the mask          [H, T, T]
+//   mixed  = softmax(scores, last) @ v                         [H, T, Dh]
+//   [H, T, Dh] -> [T, H, Dh] -> [T, D]                         the join
+func attention(
+    x: float[...], wq: float[...], bq: float[...], wk: float[...], bk: float[...],
+    wv: float[...], bv: float[...], wo: float[...], bo: float[...]
+): float[...] {
+    let q = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wq + bq))
+    let k = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wk + bk))
+    let v = permute<[1, 0, 2]>(reshape<[8, 2, 8]>(x @ wv + bv))
+    let scores = q @ transpose(k) * 0.35355339059327379 + causal_mask()
+    let mixed = softmax<2>(scores) @ v
+    let joined = reshape<[8, 16]>(permute<[1, 0, 2]>(mixed))
+    return joined @ wo + bo
+}
+
+// One post-layer-norm block: attention then a two-layer MLP, each a residual around its sublayer.
+func block(
+    x: float[...], ga: float[...], ba: float[...], wq: float[...], bq: float[...], wk: float[...],
+    bk: float[...], wv: float[...], bv: float[...], wo: float[...], bo: float[...],
+    gb: float[...], bb: float[...], f1: float[...], fb1: float[...], f2: float[...], fb2: float[...]
+): float[...] {
+    let attended = x + attention(layer_norm(x, ga, ba), wq, bq, wk, bk, wv, bv, wo, bo)
+    let hidden = relu(layer_norm(attended, gb, bb) @ f1 + fb1)
+    return attended + (hidden @ f2 + fb2)
+}
+
+// The forward pass: a window of token indices in, the logits at every position out.
+with <m: Transformer>
+func logits(window: int[...]): float[...] {
+    let embedded = take(m.emb, window) + m.pos
+    let first = block(
+        embedded, m.g1a, m.b1a, m.wq1, m.bq1, m.wk1, m.bk1, m.wv1, m.bv1, m.wo1, m.bo1,
+        m.g1b, m.b1b, m.f11, m.fb1, m.f12, m.fb2)
+    let second = block(
+        first, m.g2a, m.b2a, m.wq2, m.bq2, m.wk2, m.bk2, m.wv2, m.bv2, m.wo2, m.bo2,
+        m.g2b, m.b2b, m.f21, m.fb21, m.f22, m.fb22)
+    return layer_norm(second, m.gf, m.bf) @ m.wout + m.bout
+}
+
+// == loss ==
+// The training loss of one window: the cross-entropy of the logits at each position against the
+// character that follows it, averaged over the positions.  The model is the *first parameter*
+// because that is the parameter `vjp` differentiates.
+func window_loss(m: Transformer, window: int[...], targets: int[...]): float {
+    return float(softmax_cross_entropy(logits<m>(window), targets))
+}
+
+// == data ==
+// Initial weights from the counter-based generator, so two runs with the same seed are the same
+// numbers: every matrix is a normal draw scaled by 0.2/sqrt(fan_in), every bias starts at zero and
+// every layer-norm gain at one.
+func initial(seed: int = 7): Transformer {
+    let k = key(seed)
+    let d = 16
+    let v = 28
+    let scale = 0.2 / sqrt(16.0)
+    return {
+        emb: normal::<float><shape: [28, 16]>(fold(k, 1)) * scale,
+        pos: normal::<float><shape: [8, 16]>(fold(k, 2)) * scale,
+        g1a: ones::<float>([16]),
+        b1a: zeros::<float>([16]),
+        wq1: normal::<float><shape: [16, 16]>(fold(k, 3)) * scale,
+        bq1: zeros::<float>([16]),
+        wk1: normal::<float><shape: [16, 16]>(fold(k, 4)) * scale,
+        bk1: zeros::<float>([16]),
+        wv1: normal::<float><shape: [16, 16]>(fold(k, 5)) * scale,
+        bv1: zeros::<float>([16]),
+        wo1: normal::<float><shape: [16, 16]>(fold(k, 6)) * scale,
+        bo1: zeros::<float>([16]),
+        g1b: ones::<float>([16]),
+        b1b: zeros::<float>([16]),
+        f11: normal::<float><shape: [16, 32]>(fold(k, 7)) * scale,
+        fb1: zeros::<float>([32]),
+        f12: normal::<float><shape: [32, 16]>(fold(k, 8)) * scale,
+        fb2: zeros::<float>([16]),
+        g2a: ones::<float>([16]),
+        b2a: zeros::<float>([16]),
+        wq2: normal::<float><shape: [16, 16]>(fold(k, 9)) * scale,
+        bq2: zeros::<float>([16]),
+        wk2: normal::<float><shape: [16, 16]>(fold(k, 10)) * scale,
+        bk2: zeros::<float>([16]),
+        wv2: normal::<float><shape: [16, 16]>(fold(k, 11)) * scale,
+        bv2: zeros::<float>([16]),
+        wo2: normal::<float><shape: [16, 16]>(fold(k, 12)) * scale,
+        bo2: zeros::<float>([16]),
+        g2b: ones::<float>([16]),
+        b2b: zeros::<float>([16]),
+        f21: normal::<float><shape: [16, 32]>(fold(k, 13)) * scale,
+        fb21: zeros::<float>([32]),
+        f22: normal::<float><shape: [32, 16]>(fold(k, 14)) * scale,
+        fb22: zeros::<float>([16]),
+        gf: ones::<float>([16]),
+        bf: zeros::<float>([16]),
+        wout: normal::<float><shape: [16, 28]>(fold(k, 15)) * scale,
+        bout: zeros::<float>([28])
+    }
+}
+
+// == entry ==
+// The forward half of the same model, measured on its own: the loss of the first window at the
+// initial weights, on the committed corpus.  `--arg steps` and the training loop are not here,
+// because the loop needs `import { vjp } from vjp` and that import is what stops `train.cml` from
+// compiling at all today (WALLS.cn.md, wall 1) -- a module that fails to compile stops every
+// program that imports it, whatever the program does with it.
+//
+// The model is not reduced: same two layers, two heads, width 16, context 8, the same corpus, the
+// same weights from the same seed.  Only the transform is gone.
+//
+//   camel showcase/c3-char-transformer/forward.cml --arg corpus=showcase/c3-char-transformer/corpus.txt
+func main(corpus: string, seed: int = 7): int sync {
+    let text = corpus->read_text !! ''
+    let data = tokens(text)
+    let model = initial(seed)
+    let first = slice(data, 0, 0, 8)
+    let first_targets = slice(data, 0, 1, 9)
+    let start = window_loss(model, first, first_targets)
+    `c3 forward config chars=${len(data)} context=${context()} width=${width()} heads=${heads()} classes=${classes()} seed=${seed}`->println
+    `c3 forward init loss=${start:.6f}`->println
+    return 0
+}

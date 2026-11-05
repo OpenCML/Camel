@@ -1,0 +1,20 @@
+// WALL PROBE 05 -- the reduction. `layer_norm` is a mean and a variance along the last axis, and a
+// loss is a mean over a batch; both are `mean`/`sum` with an axis. This probe centres a row and sums
+// its squares -- one `mean` along an axis, one subtraction, one `sum` over everything.
+import { mean, ones, sum } from tensor
+import rulesets.jvp
+import { jvp } from transforms
+
+func centred_energy(x: float[...]): float {
+    let m = mean<1, true>(x)
+    let d = x - m
+    return sum(d * d)
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0, 3.0, 4.0]] as float[1, 4]
+    let (value, tangent) = jvp(centred_energy)(x, ones::<float>([1, 4]))
+    println(`value = ${value:.6f}`)
+    println(`tangent = ${tangent:.6f}`)
+    return 0
+}

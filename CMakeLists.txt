@@ -42,7 +42,10 @@ file(GLOB_RECURSE _ALL_SRC
     "${PROJECT_SOURCE_DIR}/src/*.cpp"
     "${PROJECT_SOURCE_DIR}/third_party/*.cpp"
 )
-# Older checkouts may still hold ignored ANTLR outputs. The handwritten frontend does not use them.
+# A checkout older than the handwritten front end can still carry `src/parse/antlr/` on disk: that
+# path was ignored for the ANTLR-generated sources until 2026-11-02, when the ignore rules went. This
+# filter is not a dependency on it and nothing in this tree needs it -- the glob above takes every
+# `src/**/*.cpp`, and this keeps a stale output directory out of a build that finds one.
 list(FILTER _ALL_SRC EXCLUDE REGEX "/src/parse/antlr/")
 set(LIBCAMEL_SRC ${_ALL_SRC})
 
@@ -118,6 +121,19 @@ add_dependencies(libcamel_objects camel_diagnostics_check)
 set_target_properties(libcamel PROPERTIES
     LINKER_LANGUAGE CXX
     PREFIX "")
+
+# The library carries the same two entries the tools carry (tools/libcamel_tool.cmake): the
+# directory it sits in, and `libs/` below it. A tool finds the collected install through its own
+# rpath, but a consumer that is not one of our tools -- the Python binding, anything that loads the
+# library directly -- has no entry to inherit and would then resolve libcamel's own dependencies,
+# the C++ runtime among them, against the host's libraries. With `$ORIGIN` written here, everything
+# the install puts beside libcamel (scripts/collect-out.js places the toolchain's libstdc++ there)
+# resolves from inside the install for any loader.
+if(UNIX)
+    set_target_properties(libcamel PROPERTIES
+        BUILD_RPATH "$ORIGIN;$ORIGIN/../libs"
+        INSTALL_RPATH "$ORIGIN;$ORIGIN/../libs")
+endif()
 
 # Windows: explicit exports for camel-cli, the tools and the .cmo modules.
 #

@@ -818,3 +818,126 @@ for (const r of reads)
 }
 """
 timeout_ms = 10000
+
+# The two sides of the line the author's ruling of 2026-11-04 draws (language reference 4.4): a
+# function value whose body the call site *can* see is tracked like a direct call, and only one
+# whose body it cannot see is read by type alone. A `let`-bound lambda in the same function is the
+# visible case. These two cases were measured before they were pinned: the positive prints 1 today
+# (the author measured `c=1` on v0.2.43), so it pins a behaviour that is already right, and the
+# negative prints 0 today, with the write not executed rather than merely unreported.
+
+[[tests]]
+name = "lambda_capture_write.default"
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_write.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "lambda_capture_write.fvm"
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_write.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "lambda_capture_write.jit"
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: std::jit."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_write.cml"
+args = ["${case}", "std::jit"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "lambda_capture_write.tf"
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: std::tf."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_write.cml"
+args = ["${case}", "std::tf"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "lambda_capture_ignored.default"
+desc = "The same lambda with nothing reading `c` after the call: the write does not execute. Its body prints `c` after writing it, so a body that ran would print 1; the program prints only the 0 of `main`, which is the proof and not an absence of a report. Pipeline: default (no pass)."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
+args = ["${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0', `the lambda body ran: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "lambda_capture_ignored.fvm"
+desc = "The same lambda with nothing reading `c` after the call: the write does not execute. Its body prints `c` after writing it, so a body that ran would print 1; the program prints only the 0 of `main`. Pipeline: std::fvm."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0', `the lambda body ran: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "lambda_capture_ignored.warning"
+desc = "The call through a `let`-bound lambda that nothing follows is reported once, at the call: today the warning is `SemanticDiag::EffectNotExecuted` (the call is never executed, nothing depends on it), not `IgnoredSideEffect`; the write it would make is dropped with it (proved by the output of the test above)."
+kind = "behavior"
+case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
+args = ["--output-format", "json", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const diags = JSON.parse(input.stderr)
+const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
+const seen = diags.map(d => d.data.name + ' at ' + at(d))
+assert(seen.join(' | ') === 'SemanticDiag::EffectNotExecuted at 16:5', 'diagnostics: ' + seen.join(' | '))
+assert(diags[0].message === 'The call has side effects but is never executed: nothing depends on it and it is not in a sync block.',
+    'message: ' + diags[0].message)
+}
+"""
+timeout_ms = 10000

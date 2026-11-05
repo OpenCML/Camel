@@ -1,0 +1,59 @@
+// `linear`'s gradient through the engine and through the library, in one program.
+//
+// `linear(x, w) = x @ w` with `w` laid out `[in, out]`, so its two adjoints are the matrix product's
+// two, written with the product's own operators rather than with a fused gradient:
+//
+//     d/dx = ct @ wᵀ        d/dw = xᵀ @ ct
+//
+// The engine's `linearVjp` (`modules/tensor/ops/linalg_ops.cpp`) accumulates exactly those two
+// through `tensor:matmul_grad_lhs` / `tensor:matmul_grad_rhs`, which is the pair `matmul_t`'s law is
+// already measured against (`matmul_transpose_law.cml`), so this case is the same comparison one
+// operator further out.
+//
+// **Both operands are measured**: the weight is the one a training step differentiates, and the
+// input is the one a chain differentiates, and a law that swapped `xᵀ @ ct` with `ct @ wᵀ` would
+// answer a matrix of the right shape and the wrong numbers in one of the two readings only.
+//
+// This law states two operands, which is the form a call writes when the bias is left out. A
+// three-operand call (`linear(x, w, b)`) has a third port, and a law's parameters are the node's
+// ports one for one: the bias-carrying shape needs its own law, and nothing in the tree states the
+// bias's own adjoint (`d/db = ct`, a spread the addition's law already answers) yet.
+//
+//     camel test/cases/compile/transforms/linear_gradient_both_legs.cml
+import { grad } from autodiff
+import { vjp } from vjp
+import { abs, linear, sum } from tensor
+
+/// The engine's spelling of `d/dx`: the differentiated value is the `with` parameter.
+with <x: float[2, 2]>
+func total_x(w: float[2, 2]): float {
+    return sum(linear(x, w))
+}
+
+/// The same for `d/dw`: the weight is the `with` parameter.
+with <w: float[2, 2]>
+func total_w(x: float[2, 2]): float {
+    return sum(linear(x, w))
+}
+
+/// The library's spelling: both operands are ordinary parameters.
+func total_plain(x: float[2, 2], w: float[2, 2]): float {
+    return sum(linear(x, w))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let w = [[0.5, 0.25], [0.125, 1.0]] as float[2, 2]
+    let engine_dx = grad(total_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(
+        [[0.5, 0.25], [0.125, 1.0]] as float[2, 2])
+    let engine_dw = grad(total_w)<[[0.5, 0.25], [0.125, 1.0]] as float[2, 2]>(
+        [[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
+    `linear engine dx={} dw={}`->format<engine_dx, engine_dw>->println
+    let (value, pullback) = vjp(total_plain)(x, w)
+    let (library_dx, library_dw) = pullback(1.0)
+    let same_x = sum(abs(engine_dx - library_dx)) == 0.0
+    let same_w = sum(abs(engine_dw - library_dw)) == 0.0
+    `linear: value={} engine={} library={} same={}`->format<value, engine_dx, library_dx, same_x>->println
+    `linear dw: engine={} library={} same={}`->format<engine_dw, library_dw, same_w>->println
+    return 0
+}

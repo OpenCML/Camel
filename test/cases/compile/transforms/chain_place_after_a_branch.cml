@@ -1,0 +1,55 @@
+// The statement a `sync` block writes after a call whose body ends inside a branch arm -- the case that
+// keeps the handover a *pruned* branch makes from being refused along with the one a splice must not
+// make.
+//
+// `pick` is a function whose body is nothing but a branch, and each arm's last statement is an effect
+// (`println`), so every statement of the body sits in one of the arms and nothing of it is left outside
+// them. The caller writes `let first = pick(1)` and then another statement. That second statement is a
+// statement of the caller's block; the last statement of the branch is a statement of an arm -- one the
+// other branch does not take. At the moment the arm still *is* an arm, so a judgement that compares the
+// two regions says they are two blocks.
+//
+// It is right to say so for code a splice keeps (`src/runtime/draft.cpp#handChainPlaceTo` called from the
+// inline engine), because a statement of another block does not run whenever a statement of that arm runs
+// (src/runtime/branch_arms.cpp refuses exactly that graph, docs/technical/
+// 17_graph_rewrite_api_contracts.md 4.1, and a sync edge joins one block's statements,
+// docs/design/effects/edges.cn.md 4.6). It is wrong for the place a *pruned* branch hands over
+// (`src/passes/opt/generic/generic.cpp#pruneBranch`): the branch is being erased, `eraseNode` re-parents
+// the arm's regions, and by the time the graph is committed the arm's code is the block's code. Measured:
+// with the same judgement applied to both, this program printed three of its four lines under
+// `std::macro std::opt std::nvm` -- `pick: not positive` was gone -- which is a wrong answer, not a
+// refusal. The judgement now carries that fact as an argument (`GraphDraft::PlaceHandover`), and the four
+// numbers below are the lines it pins. `pick(1)` answers 10 and `pick(-1)` answers 20, both by hand.
+//
+// The other half -- a statement *not* following an arm's chain tail -- has no case on this tree: with the
+// guard in place, all 335 cases under `test/cases/opt` and `test/cases/compile/transforms` run through
+// `std::macro std::opt std::nvm` and the guard refuses nothing, because the arm tail a splice can end on
+// only arises on the tree that carries the chain-place batch (`benchmarks/mlp/model.cml` there stops at
+// "breaks the branch-arm invariant: OPER .. (:io/println) reads OPER .. (time:now)"). This case therefore
+// pins the half this tree can see. "No case today" is not "no case ever": when that batch reaches a test
+// plan, the half gets its own case, pinned the way that program was measured.
+//
+// What this case does not say. A green suite on this tree -- `8766 / 8722 / 3` with the fix in -- is not
+// evidence that the guarding half works on the tree the defect was found on. It says the change broke
+// nothing here, and nothing about the program it was written for; a full green reading looks like an
+// endorsement and is not one. That evidence is two runs of `benchmarks/mlp/model.cml` on the tree that
+// carries the batch, lane-chainplace at 19e6876a6: `exit=1` and the arm-invariant sentence without the
+// fix, `exit=0` with `compile_ms=0.5404949188232422` and three `latency_ms` lines with it.
+
+func pick(x: int): int sync {
+    if x > 0 then sync {
+        'pick: positive'->println
+        return 10
+    } else sync {
+        'pick: not positive'->println
+        return 20
+    }
+}
+
+func main(): int sync {
+    let first = pick(1)
+    'after {}'->format<first>->println
+    let second = pick(-1)
+    'after {}'->format<second>->println
+    return 0
+}

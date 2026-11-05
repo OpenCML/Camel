@@ -1,0 +1,112 @@
+# 那两条 vector 律要的是**形状**，而声明没有写它
+
+**这页为什么存在**：`0.2.44` 全树只剩两条红（`matmul_t.vector_lhs_law.nvm`、`matmul_t.vector_rhs_law.nvm`），
+`docs/handover/reports/2026-11-04-b3-reverted-and-the-ten-it-does-not-explain.cn.md` §4 把它们记成「既有欠账」，
+`fail = 2` 一直是它们的名字。它们**不是**律写错了，也不是 B3 的回归：律要的那个东西是一**个形状**，
+形状本来可以从类型答，而两条用例的参数类型把长度留成了开放的。下面是量出来的全链，和改法。
+
+## 一、先看句子与位置
+
+实跑（宿主 `88zjwei`，`-Plan feat/showcase_s2`，tip `ca464bca2`）：
+
+```
+TRANSPOSE function=split_of_jvp_of_sum_of_product_backward skip=cotangent-needs-a-value
+  uri=tensor:matmul position=0 reason=the rule's right side reads a value the caller does not carry
+TRANSPOSE function=split_of_jvp_of_sum_of_product_backward skip=cotangent-needs-a-value
+  uri=tensor:matmul position=1 reason=the rule's right side reads a value the caller does not carry
+```
+
+`position` 是**节点端口的下标**，不是调用实参的序号（`modules/transforms/transpose.cpp#ruleCotangent` 的
+`size_t position`，由 `inputs` 的下标给出）：`matmul(a, b)` 的 `position=0` 是 `a`，`position=1` 是 `b`。
+于是 `vector_lhs` 停在 `a`（`v: float[]`），`vector_rhs` 停在 `b`（`u: float[]`）——两条都是**rank-1 的那个操作数**，
+不是「左边一条右边一条」。（`position=1` 那条此前被记成 `position=0`，是名单里的误记，本页按实测写。）
+
+## 二、那个「值」是形状
+
+- **谁在读它**：`stdlib/rulesets/transpose.cml#matmul_t` 的两个余切助手把答案读到**已知操作数**上——
+  `#ct_of_a` 的 `sum_to(matmul(ct, transpose(b)), a)`、`#ct_of_b` 的 `sum_to(matmul(transpose(a), ct), b)`。
+  `sum_to` 的第二个操作数**只被读形状**（`stdlib/tensor.cml#sum_to`：「`t` read at the shape `like` states」）。
+  所以读的是 `a`（或 `b`）的 **extents**，不是它的元素。
+- **谁该答它**：`modules/transforms/transpose.cpp#shapeFromTypeOf`——把 `extent_of` 的答案（`tensor:zeros` 的
+  一个 `int[]`）写进图里，要求类型**陈述** extents（`include/camel/core/type/composite/array.h#statedExtentsOf`：
+  `float[]` == `float[?]`，陈述「一个维度、没有长度」，所以它 `nullopt`）。规则层另有一处同名的判定
+  `modules/transforms/rule_expand.cpp#answerTheShapeOf`，但它只答「每个读者都是 `tensor:shape`」的 capture；
+  `sum_to` 的那个读者不满足，所以这条形状由 **walk 那一侧**先答，答不出来才轮到「要一个值」。
+- **转置腿为什么拿不到**：`modules/transforms/transpose.cpp#transposeSignature` 交给转置后函数的只有 cotangent，
+  被求导的那个参数**没有端口**（`#knownValue` 走到 `portOfParam` 那一支就是空的）。所以参与求导的参数的形状
+  只能来自**声明**——这正是作者 2026-11-03 16:15 的那条语言规则，`TransposeRefusalCause` 里为它留着
+  `ParameterShape`（`modules/transforms/transpose.h#TransposeRefusalCause`），句子是「把 extents 写进声明」。
+
+## 三、两条红的原因：声明把长度留空了
+
+两条用例原先写的是 `func sum_of_product(v: float[], w: float[2, 2])` / `(x: float[2, 2], u: float[])`。
+`float[]` 陈述 rank、不陈述长度，于是**形状在程序里哪都没有**：图里写不下（`shapeFromTypeOf` 交白卷），
+调用者也没有（那个参数没有端口），walk 只能按「律要一个值」拒绝。**同一个类，另一个入口给的却是另一句话**：
+直接 `transpose(f)` 在 `float[...]` 上由端口数核对给出
+`RuntimeDiag::TransposeNeedsParameterShape`（pin 在 `test/plans/feat/compile/rules_angle_args.plan.toml` 的
+`transpose_needs_parameter_shape`，「Write the extents the parameter's value has in its declaration」）；
+走 `vjp`（`split` 的 backward 那一半）时先撞上 `rule_expand` 的句子
+（`modules/transforms/rule_expand.cpp#expandRuleRightSide`，`why = "the rule's right side reads a value the caller does not carry"`），
+于是一个「改声明」的问题被读成「这条律要一个拿不到的值」。**这处没有改**：`cotangent-needs-a-value` 有
+**18 条断言**押着（110 行 / 39 个文件），把这一支改写成 `ParameterShape` 是另一笔、要先裁「一个类两个词」——
+那件事单独成了一页：`docs/handover/questions/2026-11-04-which-word-does-a-declaration-that-states-no-shape-get.cn.md`
+（默认：一个类一个词，`TransposeNeedsParameterShape` 是那个词）。
+
+## 四、树里现在有什么：两条红 + 两条证据
+
+**先说结论：`float[]` 那两条留红，`fail` 与派工时一样是 2。**
+
+- `matmul_t.vector_lhs_law.nvm` / `matmul_t.vector_rhs_law.nvm`：**原样恢复**（声明 `float[]`、数值断言、pin
+  一个字节没动），注释与 `desc` 写明它等什么——形状作为**线性调用的已知实参**带上（`mul_stated` /
+  `matmul_stated`），**不是靠在这里写 `float[2]`**。
+- `matmul_t.vector_lhs_law_stated_extent.nvm` / `..._rhs_law_stated_extent.nvm`：同一段算术、声明写 `float[2]`，
+  绿。它证两件事——秩一操作数上律的算术是对的（三个 `max_abs_diff` 全 0.0，对着引擎的 `with_grad`），
+  以及「类型陈述了形状就能答」。
+
+读数（`-Plan feat/showcase_s2 -Tier fast -Jobs 8`，tip 干净）：`[SUMMARY] total: 9, pass: 7, fail: 2`，
+两条红正是上面那两条；`expect_output_contains` 逐字过的那些数：
+`vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]`、
+`vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]`，`max_abs_diff` 三个 0.0。
+
+## 五、这一版为什么绿——以及为什么它不是终态
+
+`float[2]` 那一版绿，**不是因为修了律**（律一个字没动），而是因为**形状从「无处可写」变成了「写在声明里」**：
+`sum_to` 的 `like` 由 `tensor:zeros(extent_of::<float[2]>())` 造出来，律按原样答对。
+
+**而那不是作者要的终态。** 作者 2026-11-04 12:40 的裁定是：**形状由线性调用作为已知实参带上**，
+顺序是**先落孪生算子 `mul_stated` / `matmul_stated`**，让这两条用例走新路答数。**「作为已知实参带上」和
+「写在类型声明里」是两条不同的路**，`float[2]` 是后者。**若声明里写出长度就够了，孪生算子就没有存在的理由**——
+而 `float[]`（= `float[?]`，陈述 rank、不陈述长度）恰恰是「长度在程序里无处可写」的那种程序，
+也就是它们存在的唯一理由。
+
+**这一步被走过，也被否过一次**（协调者 2026-11-04 晚的判词，原话）：
+「把 `float[]` 改成 `float[2]` 让 `fail = 2 → 0`……等于把待修的路由删掉、再报绿；**绿本身不是验收，
+'它为什么绿'才是**。」于是本轮把它退成**两条例外证 + 两条待修的红**，并把这一句留在页面上：
+这条路被走过、被否过，别第二次走。
+
+## 六、别从这里读出的两件事
+
+1. **不要把律里的 `sum_to` 删掉换绿。** 它是这条律的归约那一半（批轴那天要用的），也是答案**类型**的来处
+   （`sum_to` 答 `S`，正是操作数的类型）；删掉它会让答案的类型对不上参数，是拿语义换颜色。
+2. **不要以为 vjp 那条路「不许 `float[]`」。** 语言拒绝的是「律要这个参数的形状、而声明没写」，
+   不是拒绝开放长度的向量本身：同一个 `v: float[]` 放进 `with <v: float[]>` 的 `with_grad` 那一腿是绿的
+   （引擎的 kernel 自己不读形状）。
+
+## 七、更正：`docs/handover/reports/2026-11-04-the-seven-reds-classified-by-what-the-port-states.cn.md` 对这两条的归类
+
+那一页是三件事上最先把这条路量清楚的（`position` 的含义、`sum_to` 的第二操作数只被读形状、
+「`sum_to(..., a)` 不是为了归约而是为了把返回类型钉成 `a` 的秩」——§5.1 的编译错误确实是这么说的），
+本页第一、二节与它一致。但它的 §3.1 与 §4 表把这两条并进「`extents=stated`、所以类型答不出」的那一族，
+而**这两条恰恰是唯一 `extents` 没有 stated 的**：`pos=0` 的操作数是 `v: float[]`，`pos=1` 的是 `u: float[]`。
+所以第 3 条给的落点（把律改写成 `sum_to_stated(..., shape(a))`）对这两条**不必走**：walk 那一侧的
+`shapeFromTypeOf` 就会把 `float[2]` 的 extents 写成 `tensor:zeros` 交给 `sum_to`，律一个字不用改。
+判据是现成的：同一棵树里 `matmul_t.law_read_through_vjp`（`x: float[2, 2]` × `w: float[2, 2]`）与
+`linear_gradient_both_legs` 都是绿的，它们走的是**同一条** `sum_to(..., 操作数)`。
+
+一处应当保留的分野：§3.2 的「乙」（`x: float[..]` 开秩，`grad` 返回的切线是运行时长度的数组）是真的答不出，
+`float[..]` 里连 rank 都没有，那是 `sum_to_at`/孪生算子那条待裁的路
+（`docs/handover/questions/2026-11-04-a-sum-to-that-takes-the-length-itself.cn.md`）；本页的两条不是它。
+
+**给下一个人的一句**：先把失败位置的**操作数类型**抄出来（`float[2]` 还是 `float[]`），再决定「补值 / 改律 / 改声明」。
+这一族的三次判断——先是「B3 删了供给」（证伪，见 `docs/handover/reports/2026-11-04-b3-reverted-and-the-ten-it-does-not-explain.cn.md`），
+后是「转置成员没拿到原值」（对这两条不成立），都是先归了类、后看类型。

@@ -1,0 +1,46 @@
+// A function value written in the **first ordinary argument position** of an ordinary function, and the
+// call it is handed to differentiated: `f(x) = apply(twice, x)` with `apply(fn, x) = fn(x) + fn(x)`.
+//
+// On paper `f(x) = 2x + 2x = 4x`, so `f(3) = 12` and the derivative at 3 is `4`. The transpose is asked
+// at cotangent 1, and it answers 4.
+//
+// This is the shape people mean by "a function as an argument", and it is answered correctly. The
+// function value stands in an ordinary argument position, so the graph gives it an ordinary argument:
+// inside `apply` the callee is a **PORT** (the parameter `fn`), and the call's other input is `x`. The
+// walk reads a value this graph *receives* as a callee it can turn around without seeing the graph
+// behind it (`transpose(v)` at run time), so nothing here has to know which function was passed:
+//
+//     TRANSPOSE function=apply type=((y: float) => float, float) => (float,) nodes=5 arms=0 rhs=add_t
+//     TRANSPOSE function=twice ... rhs=mul_t
+//     TRANSPOSE function=f type=(float) => (float,) nodes=3 arms=0 rhs=-
+//
+// The parameter of function type is part of the transposed signature and is handed through as a value;
+// it is not in the answer, because a function value has no cotangent space (the same reading
+// `transpose_no_tangent_closure.cml` records from the other side). What this case holds is the pair of
+// facts a reader needs before believing the cases beside it: a function value in an ordinary argument
+// position is *not* the shape that reads an ordinary operand as a callee -- for that the argument has to
+// be written as a **call**
+// (`transpose_call_first_argument_is_a_call.cml`).
+//
+// Measured today on `nvm`: exit 0, `(4.0)`.
+import rulesets.transpose
+import { transpose } from transforms
+
+func twice(y: float): float {
+    return y * 2.0
+}
+
+func apply(fn: (y: float) => float, x: float): float {
+    return fn(x) + fn(x)
+}
+
+func f(x: float): float {
+    return apply(twice, x)
+}
+
+func main(): int sync {
+    println(f(3.0))
+    // 4.0: the derivative of `4x`, a number no forward line prints.
+    println(transpose(f)(1.0))
+    return 0
+}

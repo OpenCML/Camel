@@ -13,22 +13,22 @@ import { OptimizerState, adam, adam_state } from nn
 import { export_model } from onnx
 import { get_env } from env
 
-type Mlp = { w1: f32[..], b1: f32[..], w2: f32[..], b2: f32[..] }
+type Mlp = { w1: f32[...], b1: f32[...], w2: f32[...], b2: f32[...] }
 
 with <m: Mlp>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return float(mean(y * y))
 }
 
-func step(m: Mlp, st: OptimizerState, x: f32[..]): (float, Mlp, OptimizerState) {
+func step(m: Mlp, st: OptimizerState, x: f32[...]): (float, Mlp, OptimizerState) {
     let vg = with_grad(loss)<m>(x)
     let next = adam(m, vg.1, st, 0.001)
     return (vg.0, next.0, next.1)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let m = {
         w1: reshape<[2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25] as f32[]),
         b1: reshape<[3]>([0.1, 0.0, -0.1] as f32[]),
@@ -37,7 +37,8 @@ func main(): int sync {
     }
     let st = adam_state(m)
     let x = reshape<[2, 2]>([1.0, 2.0, -1.0, 0.5] as f32[])
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, st, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, st, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

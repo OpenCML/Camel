@@ -27,7 +27,7 @@
 // a working transpose from a coincidence, and the answer has to be proportional to the cotangent to
 // pass. `skip=` must not appear at all: this shape answered a refusal before the rule existed, and a
 // refusal is not an answer.
-import { transpose } from transforms
+import { jvp, split, transpose } from transforms
 import rulesets.transpose
 
 func int_escape(x: float): float {
@@ -42,21 +42,21 @@ func g(x: float): float {
 func h(x: float): float {
     return x + x
 }
-
+import rulesets.jvp
 func main(): int sync {
     // The integer is really read, forward: 1 + 3 rounds of int(3) is 10.
     println(int_escape(1.0))
-    // The loop, whose escape is an integer.
-    let backI = transpose(int_escape)
-    println(backI(1.0, 1.0))
-    println(backI(1.0, 5.0))
+    // The loop, whose escape is an integer: the value is captured by the half the cut returns.
+    let (_, backI) = split(jvp(int_escape))(1.0)
+    println(transpose(backI)(1.0))
+    println(transpose(backI)(5.0))
     // The same rule without a loop: an integer branch beside a float one.
-    let backG = transpose(g)
-    println(backG(1.0, 1.0))
-    println(backG(1.0, 3.0))
+    let (_, backG) = split(jvp(g))(1.0)
+    println(transpose(backG)(1.0))
+    println(transpose(backG)(3.0))
     // The control with no integer anywhere.
-    let backH = transpose(h)
-    println(backH(1.0, 1.0))
-    println(backH(1.0, 2.0))
+    let (_, backH) = split(jvp(h))(1.0)
+    println(transpose(backH)(1.0))
+    println(transpose(backH)(2.0))
     return 0
 }

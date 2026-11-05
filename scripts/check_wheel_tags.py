@@ -25,14 +25,28 @@ one: asked for `manylinux_2_28_x86_64` on a wheel whose only requirement is glib
 the one it was asked for. Every alternative has to be publishable, and `--expect` is satisfied when
 it is one of them.
 
+`--ruling` checks the other half of a release: that the *set* of wheels is the two forms the
+2026-10-25 decision allows (docs/handover/README.cn.md item 7; review index C28), carried out on
+2026-11-02 --
+
+    cp310-abi3-<platform>   the body *and* the interop extension; every CPython 3.10 and later
+    py3-none-<platform>     the body only; any Python 3
+
+-- that both halves are present, that the file which claims to carry the extension does, and that
+the one which claims not to does not. Before that decision the interop wheel was `cp311-cp311` on
+Linux and `cp310-cp310` on Windows: an interpreter name on a file that only worked on that one.
+
 This runs in the build step, so a wrong tag fails the job that produced it instead of being
 rejected by the index after the whole matrix has been built and downloaded.
 
     python3 scripts/check_wheel_tags.py dist/pypi/*.whl
     python3 scripts/check_wheel_tags.py --expect manylinux_2_28_x86_64 dist/pypi/*.whl
+    python3 scripts/check_wheel_tags.py --ruling dist/pypi/*.whl
 """
 
 import argparse
+import os
+import re
 import sys
 import zipfile
 
@@ -40,6 +54,18 @@ import zipfile
 ALLOWED = ("manylinux_", "musllinux_", "macosx_", "win_")
 PYTHON_TAGS = ("py3", "py2.py3")
 ABI_TAGS = ("none", "abi3")
+
+# The two roles of the 2026-10-25 ruling, as (python tag, abi tag).
+INTEROP = ("cp310", "abi3")
+RUNTIME_ONLY = ("py3", "none")
+RULING = (
+    "the 2026-10-25 ruling (docs/handover/README.cn.md item 7, review index C28) allows exactly "
+    "two forms: %s-%s-<platform> with the interop extension, and %s-%s-<platform> without it"
+    % (INTEROP + RUNTIME_ONLY)
+)
+
+# The extension module the interop wheel carries: `_camel.abi3.so`, `_camel.pyd`, `_camel.dylib`.
+EXTENSION = re.compile(r"(?:^|/)_camel[^/]*\.(?:so|pyd|dylib)$", re.IGNORECASE)
 
 
 def parse_wheel_name(path):
@@ -70,12 +96,54 @@ def platform_alternatives(platform_tag):
     return set(platform_tag.split("."))
 
 
-def platform_ok(platform_tag):
-    """Every alternative has to be publishable; one `linux_x86_64` in the list is enough to refuse."""
-    return all(part.startswith(ALLOWED) for part in platform_alternatives(platform_tag))
+def platform_ok(platform_tag, pending=False):
+    """Every alternative has to be publishable; one `linux_x86_64` in the list is enough to refuse.
+
+    `pending` is the state a Linux wheel is in between the rollup and `auditwheel repair`: it
+    claims the host tag (`linux_x86_64`, `linux_aarch64`) because only auditwheel knows which
+    glibc the bundled libraries need, and the repair is what makes the claim publishable. The
+    release job runs this same check again after the repair, without `--repair-pending`, and that
+    run is the one that decides.
+    """
+    parts = platform_alternatives(platform_tag)
+    if pending:
+        parts = {part for part in parts if not part.startswith("linux_")}
+        if not parts:
+            return True
+    return all(part.startswith(ALLOWED) for part in parts)
 
 
-def check(path, expect):
+def extension_names(path):
+    """The `_camel` module inside the wheel, if it carries one."""
+    with zipfile.ZipFile(path) as archive:
+        return [name for name in archive.namelist() if EXTENSION.search(name)]
+
+
+def role(path, python_tag, abi_tag):
+    """`interop` or `runtime` under the ruling, and the problems when it is neither.
+
+    The content is checked against the name, because the name is what pip installs by: a
+    `cp310-abi3` wheel without the extension promises an import that cannot work, and a
+    `py3-none` wheel with one carries an interpreter-specific file under a name that says
+    "any Python 3".
+    """
+    tags = (python_tag, abi_tag)
+    if tags not in (INTEROP, RUNTIME_ONLY):
+        return None, ["tags %s-%s-%s: %s" % (python_tag, abi_tag, "<platform>", RULING)]
+    found = extension_names(path)
+    if tags == INTEROP and not found:
+        return "interop", [
+            "the interop wheel (%s-%s) carries no _camel extension: %s" % (python_tag, abi_tag, RULING)
+        ]
+    if tags == RUNTIME_ONLY and found:
+        return "runtime", [
+            "the runtime-only wheel (%s-%s) carries %s; it must not (it installs on any Python 3)"
+            % (python_tag, abi_tag, ", ".join(found))
+        ]
+    return ("interop" if tags == INTEROP else "runtime"), []
+
+
+def check(path, expect, ruling=False, pending=False):
     """Return a list of problems; empty means the wheel's tags are publishable."""
     problems = []
     try:
@@ -83,7 +151,7 @@ def check(path, expect):
     except ValueError as error:
         return [str(error)]
 
-    if not platform_ok(platform_tag):
+    if not platform_ok(platform_tag, pending):
         problems.append(
             "platform tag %r is not one of manylinux_*/musllinux_*/macosx_*/win_* "
             "(PyPI rejects it; see this file's docstring)" % platform_tag
@@ -107,7 +175,7 @@ def check(path, expect):
             problems.append("malformed Tag: %r" % tag)
             continue
         inner_platforms |= platform_alternatives(fields[2])
-        if not platform_ok(fields[2]):
+        if not platform_ok(fields[2], pending):
             problems.append("Tag: %r carries an unpublishable platform tag" % tag)
     # A single `Tag:` may name several platforms itself, so the two sides are compared as
     # sets. They have to be equal: the metadata left behind by an earlier tag is what the
@@ -118,6 +186,9 @@ def check(path, expect):
             "the name and the index reads both"
             % (sorted(inner_platforms), sorted(platform_alternatives(platform_tag)))
         )
+    if ruling:
+        _, ruling_problems = role(path, python_tag, abi_tag)
+        problems.extend(ruling_problems)
     return problems
 
 
@@ -129,11 +200,34 @@ def main():
         default="",
         help="the platform tag this job is supposed to produce (e.g. manylinux_2_28_x86_64)",
     )
+    parser.add_argument(
+        "--repair-pending",
+        action="store_true",
+        help="accept `linux_<arch>` as a platform tag: the rollup produces it before `auditwheel "
+        "repair` replaces it, and the release job checks the set again after that repair without "
+        "this flag",
+    )
+    parser.add_argument(
+        "--ruling",
+        action="store_true",
+        help="also require the two forms of the 2026-10-25 decision: one cp310-abi3 interop "
+        "wheel and one py3-none runtime-only wheel, each carrying (or not) _camel. Pass the "
+        "whole set of one platform, as `dist/pypi/*.whl` gives it",
+    )
     args = parser.parse_args()
 
     failed = False
+    roles = {}
     for path in args.wheels:
-        problems = check(path, args.expect)
+        if not os.path.isfile(path):
+            # A glob that matched nothing, or a typo in a release job: say which path, rather than
+            # letting `zipfile` raise a traceback in the middle of the wheel set.
+            failed = True
+            print("FAIL %s: no such file" % path, file=sys.stderr)
+            continue
+        problems = check(path, args.expect, args.ruling, args.repair_pending)
+        if not problems and args.ruling:
+            roles[role(path, *parse_wheel_name(path)[:2])[0]] = path
         if problems:
             failed = True
             for problem in problems:
@@ -141,6 +235,18 @@ def main():
                 print("FAIL %s: %s" % (path, problem), file=sys.stderr)
         else:
             print("ok   %s" % path)
+    if args.ruling and not failed:
+        # A release needs both halves: the interop wheel is what `import camel` installs from, the
+        # body-only wheel is what any other interpreter gets. One without the other is half a
+        # platform, and pip would find nothing to fall back to or nothing to import from.
+        for wanted, what in (("interop", "cp310-abi3"), ("runtime", "py3-none")):
+            if wanted not in roles:
+                failed = True
+                print(
+                    "::error::no %s wheel (%s) among the wheels checked; %s"
+                    % (what, wanted, RULING),
+                    file=sys.stderr,
+                )
     return 1 if failed else 0
 
 

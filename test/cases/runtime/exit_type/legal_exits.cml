@@ -1,0 +1,69 @@
+/**
+ * The legal side of the seal's judgement of a graph's exit value: every shape here is a program
+ * the seal must accept, and each one is a shape the old check would have had to get wrong in one
+ * direction or the other.
+ *
+ *   * `void_hands_on_its_value` -- a function declared `void` hands on the value it computes and
+ *     the caller reads nothing back, so the graph names an `int` exit under a `void` signature.
+ *     This is the one pair the seal leaves alone, and `42` must stay a legal program.
+ *   * `open_rank_from_any` -- declared `float[...]`, and the value is a `float[]`: an open rank
+ *     takes any rank of its element type (design principles 5.4).
+ *   * `any_rank_from_fixed` -- declared `float[]`, and the value is a `f32[3]`: an unknown extent
+ *     takes a known one.
+ *   * `rank_zero_read` -- a position read of a `float[...]` is a `float`, so this is an equal pair
+ *     and not a narrowing.
+ *   * `nullable_null` -- a declared `float?` handed the `null` literal: the builder boxes it, so
+ *     the exit is a `float?`.
+ *   * `fallible_value` -- a declared `int!` handed a value: the exit is the boxed `int!`.
+ *   * `named_struct_from_a_value` -- a declared named type handed an unnamed value whose fields
+ *     are its fields (design principles 5.2).
+ *   * `same_type` -- `int` for `int` and `float` for `float`, the ordinary reading, which a check
+ *     of "the same type" and a check of "assignable" must both accept.
+ *
+ * The printed line is one exact string: a shape that stopped being accepted fails as a refusal,
+ * and a shape whose value changed fails as a number.
+ *
+ * Run as `camel legal_exits.cml std::nvm`.
+ */
+
+type Point = { x: float, y: float }
+
+func void_hands_on_its_value(): void { 42 }
+
+func open_rank_from_any(xs: float[]): float[...] { xs }
+
+func any_rank_from_fixed(t: f32[3]): f32[] { t }
+
+func rank_zero_read(t: float[...]): float { t[0] }
+
+func nullable_null(): float? { null }
+
+func fallible_value(n: int): int! { n * 2 }
+
+func named_struct_from_a_value(): Point { { y: 2.0, x: 1.0 } }
+
+func same_type_int(x: int): int { x + 1 }
+
+func same_type_float(x: float): float { x * 2.0 }
+
+func main(): int sync {
+    void_hands_on_its_value()
+    let open_rank   = open_rank_from_any([1.0, 2.0]) as float[]
+    let any_rank    = any_rank_from_fixed([1.0, 2.0, 3.0])
+    let element     = rank_zero_read([4.5, 5.5])
+    let nullable    = nullable_null() ?? -1.0
+    let fallible    = fallible_value(21) !! -1
+    let point       = named_struct_from_a_value()
+    let ordinary    = same_type_int(41) + 0
+    let ordinary_f  = same_type_float(0.75)
+    'legal_exits {} {} {} {} {} {} {} {}'->format<
+        len(open_rank),
+        len(any_rank),
+        element,
+        nullable,
+        fallible,
+        point.x + point.y,
+        ordinary,
+        ordinary_f>->println
+    return 0
+}

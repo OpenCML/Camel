@@ -188,7 +188,55 @@ func main(): int sync {
 
 - When a write is not in a sync block and nothing reads the variable afterwards, the modification does not execute (evaluation by dependency).
 - A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
-- Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. For a call through a function value (an argument, a return value or a stored lambda), the call site can recognise side effects only by its type (`var` parameters).
+- Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. A call through a function value is no exception as long as the call site can see the body of the value it calls: a lambda bound to a name in the same function is such a value, and `f()` in the example below is a write of the captured `c`, exactly as the call of a named function is. Only a function value whose body the call site cannot see can be recognised by its type alone (`var` parameters): a value passed as an argument, a value obtained as a return value, and a value stored in a container or in a structure and taken out again.
+
+```cml
+func read(): int {
+    var c = 0
+    let f = (): void => sync { c += 1 }
+    f()                 // recorded as a write of the captured `c`
+    return c            // this read is what runs that write
+}
+
+func main(): int sync {
+    println(read())
+    return 0
+}
+```
+
+```text
+1
+```
+
+With nothing reading `c` afterwards, the write does not run, and the call is reported as one that is never executed. The body prints `c` after writing it, so a body that ran would print `1`; the program prints only the `0` of `main`:
+
+```cml
+func drop(): int {
+    var c = 0
+    let f = (): void => sync {
+        c += 1
+        println(c)      // would print 1 if the write ran
+    }
+    f()                 // nothing reads `c` afterwards: the write does not run
+    return 0
+}
+
+func main(): int sync {
+    println(drop())
+    return 0
+}
+```
+
+```text
+warning[SemanticDiag::EffectNotExecuted]: The call has side effects but is never executed: nothing depends on it and it is not in a sync block.
+  --> drop.cml:7:5
+   |
+ 7 |     f()                 // nothing reads `c` afterwards: the write does not run
+   |     ^^^
+help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
+
+0
+```
 
 The management and tracking of side effects is still under research (the design principles, 2.8). The behaviour when the same mutable object is written in several places outside a sync block is not yet decided.
 

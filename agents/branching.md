@@ -46,6 +46,68 @@ A lane may be red; `develop` may not. When a lane's tip is red, take its **last 
 green** and say so in the merge message, so the red's cause lands with the next commit instead of
 sitting on `develop`.
 
+### A lane squashes its own wip before it merges
+
+The author's ruling of 2026-11-02 13:30, after a whole-lane merge carried a lane's work-in-progress
+states into `develop`'s history: **"add then take back" commits are squashed by the lane into one
+complete commit before the lane merges into `develop`; force-pushing one's own lane branch is
+allowed; the merging side does not squash for the lane.**
+
+The instance on record: `796f5ae07` ("The tangent bit exists but does not yet reach the resolver: the
+closed shape is asked for and never given") and `2850834ab` ("The closed half's type answers
+`(ct) => (cotangents)`: the marker split puts on `lin`, and the red it makes") were written as
+steps inside one piece of work, and both are now on `origin/develop` (and on `fsh-dev`,
+`lane-casemig`) because the lane handed over a history that still contained them. Neither is a state
+anyone would want to bisect to or revert to.
+
+Executable form, in this order:
+
+- The **lane**, before handing over: `git log --oneline origin/develop..HEAD` and read it as a
+  history, not as a to-do list. A commit whose message describes the state *between* two finished
+  ones ("does not yet reach", "still red", "wip", "try"), or whose successor reverts part of it, is
+  folded into the commit it belongs to (`git rebase -i origin/develop`, `git reset --soft` to the
+  base, then commit once) and the lane is pushed again with
+  `git push --force-with-lease origin lane-xxx`.
+- The **merging side**, before merging: the same `git log --oneline origin/develop..origin/lane-xxx`
+  goes into the merge message, one line per commit. If a wip pair is still there, the lane is
+  returned to its owner to squash. The merger does not squash it: rewriting a lane's history is the
+  owner's act, and a merger that does it silently leaves the owner's branch and `develop` disagreeing
+  about the same work.
+
+The rule does not license rewriting history that is already on `develop`. It is about the state of
+the lane **before** the door.
+
+### A reading carries the tree, the sha, the build time and the clock
+
+A number in a report is only a number until the four facts around it are written down: **which tree**
+it was measured in (a worktree path, not "the repo"), **the sha `origin/develop` was at when it was
+fetched** (not the sha someone quoted an hour earlier), **when the binary that produced it was
+built** (the runner prints it as `binary built <timestamp>`), and **when the measurement was taken**.
+
+The instance on record: a page was priced against `95d6ab4fc` while `origin/develop` had already
+moved to `8529eb9c4`, so the "current" figure was two merges old and nobody could tell from the page
+itself. `git rev-parse --short origin/develop` **after** the fetch, pasted next to the number, is
+what settles it.
+
+### A lane's reading is not develop's number
+
+The same numbers measured on a lane tree and written as `develop`'s are wrong for every reader who
+arrives after the next merge, and they are wrong silently, because the shape of the number is
+unchanged. A lane that quotes line counts, test totals, timings or file lists says **which tree** it
+read them in; a page that needs a `develop` figure measures it on `develop` (`git show
+<develop-sha>:<path> | wc -l`, not a file in the lane's working directory) or states the lane and the
+merge base it belongs to.
+
+The instance on record: the closure page
+`docs/handover/reviews/questions-2026-11-01-closures-as-values-block-the-transposed-backward-half.md`
+carried six line counts measured in a lane tree and read as `develop`'s; they were off by up to 34
+lines, and one path named a file by a name two files share. The first repair put the sha and the
+command beside the numbers, and the author rejected that on 2026-11-02 05:30: **a design page or a
+handover page states rules and reasons, and a reading that moves with the code belongs in the commit
+message of the change that took it.** A sha and a command do not make such a number durable -- they
+only make a wrong number look checked. The page now states no counts at all and points at those
+commit messages.
+
 ### "Green" is only green on today's `develop`
 
 A lane that reports a green suite reports it about **the `develop` it last merged in**. Five times in
@@ -62,6 +124,23 @@ One exception: a commit behind by **documentation only**, with each intervening 
 file list shown in the merge message. Documents cannot make code green or red, so the reading holds.
 Being behind by a commit that touches code is not an exception — it is the thing the check exists
 to catch.
+
+### An escaped spelling does not survive a merge that rewrites it
+
+This tree spells the same operator two ways — `..` for an interval, a composition and a stream type,
+`...` for a pack — so a regular expression written `\.\.` matches only the first of them. A text
+migration cannot see that pattern (a backslash separates the dots), so **a merge that brings a
+migrated spelling together with such a pattern silently turns a check into one that finds nothing**:
+it does not throw, it answers "no problems". Measured twice on 2026-11-04: `scripts/law-cotangent-ports.mjs`
+(`kindOfType`'s `\[\s*\.\.\]`) and `test/cases/compile/rulesets/deleted_row_reduction_helpers.mjs`.
+Before reporting a merge green, run:
+
+```
+git grep -n '\\\.\\\.' -- '*.mjs' '*.ts' '*.cml' '*.toml'
+```
+
+Each hit is read as "does this pattern still mean what it meant when it was written". A check that
+quietly finds nothing is worse than one that fails loudly, because nothing about it looks wrong.
 
 ### When a ruling and a reading disagree
 
@@ -99,6 +178,8 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - A `handover/Hxx-...` branch is a **local staging branch**: do not push it to the remote, and do not create a remote branch for it. The only remote branch that represents the coordinator's development is `wzj-dev`.
 - Merge each finished handover branch into `wzj-dev` first (`git merge --no-ff`), and promote `wzj-dev` into `develop` in batches — at least every half hour, so an AI reading `develop` sees the progress quickly. Pushing `develop` and `wzj-dev` is what makes the work visible.
 - As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
+  - `git branch -d` refuses for **two different reasons** and they print almost the same. One is that the branch's **content** is not in `origin/develop` — that is the one a human must read. The other is that the branch's **configured upstream** (`origin/<same name>`) is not merged: `warning: not deleting branch '<b>' that is not yet merged to 'refs/remotes/origin/<b>', even though it is merged to HEAD`, followed by `error: the branch '<b>' is not fully merged`. The second refuses `-d` but would pass `-D`, while the content is demonstrably in `develop` (`git cherry origin/develop <b>` all `-`, `git rev-list --count origin/develop..<b>` = 0). Do not read it as "content not merged", and do not switch to `-D`; record which of the two the message was and leave the branch for its owner.
+- `git checkout -b <lane> origin/develop` makes `origin/develop` the branch's **configured upstream**, so a later `git pull` on that branch merges `develop` **into** the lane — the direction of integration reverses, and nothing reports it. Point the upstream at the lane's own remote branch right after creating it (`git branch --set-upstream-to=origin/<lane> <lane>`; `git rev-parse --abbrev-ref '@{u}'` must read `origin/<lane>`).
 - The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
 
 ## The `release` Branch: Where A Version Is Assembled
@@ -195,3 +276,70 @@ Agents should prefer explicit verification over visual guesswork from partial hi
 - Do not merge `develop` into `main` until both version confirmation and `changes.log` confirmation have been completed with the user.
 - Never write a merge commit subject that only describes the mechanical act of merging.
 - Never run `checkout`, `merge`, `rebase`, `commit`, `tag`, `reset`, or `stash` in parallel with another git write operation.
+
+## Collapsing a Lane
+A lane that must land as one commit is collapsed against the base it will land on, and the measurement
+that says "only my content is in it" is the **two-dot** diff, `git diff <base>..HEAD`.
+
+- **`...` (three dots) hides what you reverted.** `git diff <base>...HEAD` is the difference from the
+  *merge-base*, so a file the base changed after your merge-base appears as **your** change -- and if
+  your branch still holds the older copy, what it shows as "your edit" is in fact you putting someone
+  else's work back. Wrong: collapse a lane on a three-dot stat and push it. Right: `git diff <base>..HEAD`
+  after `git reset --hard <base>` and re-applying only the paths you own. This has bitten this branch:
+  a three-dot stat read "10 files, mine" while `reset --soft` revealed `agents/test.md`,
+  `src/execute/pass.cpp` and `src/passes/test/fault.cpp` staged as reverts of the base's newer work.
+- **Collapse by resetting to the base and re-taking your paths**, not by rewording history one commit at
+  a time: `git reset --hard <base>; git checkout <old-tip> -- <paths>`, then one commit. The tree is what
+  lands; the base's newer files are untouched because they were never in your paths.
+- **Force-push a shared lane with `--force-with-lease` only.** Another lane may have written to it, and
+  the lease is what turns "I am replacing what I saw" into a refusal when that is no longer true.
+
+## The Main Checkout Is A Read-Only Coordination Surface
+The checkout at the repository root is where merges are inspected and where a reader looks; it is not
+anyone's work tree. Before a lane starts work, `git -C <main checkout> rev-parse --abbrev-ref HEAD` must
+answer `develop`. A lane that finds itself editing a file inside that checkout stops, stashes what it
+wrote, and redoes the change in its own worktree -- a stash is not a rescue, it is a way to keep the
+work while the checkout goes back to being readable. Six times in one night this surface was written
+into from somewhere else: a reformatted header, a broken replacement in `graph_read.cpp`, a duplicated
+probe diagnostic, a zero-byte `cml.cpp`, and once eight files plus a branch other than `develop`. Each
+time the diff had to be recovered from the wreckage before anyone could say whether it was work or a
+repeat of work that had already landed.## The Merge Lane Is A Standing Slot
+
+One work slot is reserved for merging, always. It is not "the next free slot" — it is a slot
+that stays open so that a merge never has to wait, and so that a merge never runs inside the
+coordinator's own session.
+
+### Why it is reserved rather than scheduled
+
+A merge is the only operation that touches shared git state: `--no-ff`, conflict resolution,
+a full gate, a push. Those are long. When they run inside the coordinator's session, the session
+cannot answer anything else for their whole duration — a ruling, a new reading, a lane that
+finished, a question page that arrived. The cost is not the merge's runtime; it is everything
+that was not answered while it ran.
+
+So the merge is handed to a lane and the coordinator stays free. A lane that reports after
+twenty minutes costs nothing, because the coordinator was answering other things in the
+meantime. A merge that runs in the session costs twenty minutes of everything.
+
+### What counts as a merge-lane job
+
+- Integrating one or more finished lanes into `develop` (`--no-ff`, no rebase, no force).
+- Resolving conflicts, judged by content: docs keep both sides, code keeps both cases.
+- The full gate on the tree that will be pushed, and proof that the pushed tree is the gated
+  tree — same tree hash, not a verbal assurance.
+- Reverting something the gate proved broken, and gating the revert.
+- Pushing a lane branch, or `develop`, and verifying the remote ref afterwards.
+
+### What does not
+
+- Deciding whether a red is debt or a regression — that is a judgement on readings.
+- Writing a question page.
+- Anything that can be answered by reading an existing `[SUMMARY]`.
+
+### The rule, stated as a test
+
+> If an operation will take longer than a few minutes and it writes shared git state, it goes
+> to the merge lane. The coordinator does not hold a lock on the session to do it.
+
+A corollary that has already paid for itself: **a lane may finish its own work and then be
+re-tasked as the merge lane.** The slot is defined by the job, not by a fixed agent.

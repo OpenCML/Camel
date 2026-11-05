@@ -10,7 +10,7 @@
  * a false condition makes the declaration inapplicable rather than erroneous. A condition the
  * compiler cannot answer is reported, never taken for `true`.
  *
-* The predicates are compile-time functions: any pure function of the library, answered when the
+ * The predicates are compile-time functions: any pure function of the library, answered when the
  * declaration is instantiated. A `match type` predicate (`is_numeric::<T>()`,
  * `has_field::<T>('w')`) is the common case: its body is Camel, and it is folded over the
  * constants the condition gives. The standard predicates are written in the standard library
@@ -24,8 +24,8 @@
  */
 
 #include "builder.h"
-#include "camel/core/type/typecall.h"
 #include "builder_support.h"
+#include "camel/core/type/typecall.h"
 
 #include "camel/compile/literal.h"
 #include "camel/core/data/composite/tuple.h"
@@ -40,10 +40,10 @@
 #include <format>
 #include <functional>
 #include <optional>
+#include <stdexcept>
 #include <string_view>
 #include <unordered_map>
 #include <vector>
-#include <stdexcept>
 
 #define DEBUG_LEVEL -1
 
@@ -116,7 +116,7 @@ struct EvalComposite {
 };
 
 using EvalDataResolver = std::function<data_ptr_t(const std::string &)>;
-using EvalCallResolver  = std::function<data_ptr_t(
+using EvalCallResolver = std::function<data_ptr_t(
     const GCT::node_ptr_t &call, const GCT::node_ptr_t &callee,
     const std::vector<data_ptr_t> &arguments,
     const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
@@ -131,9 +131,7 @@ using EvalCallResolver  = std::function<data_ptr_t(
 using EvalSequenceResolver =
     std::function<std::optional<std::vector<int64_t>>(const GCT::node_ptr_t &)>;
 
-data_ptr_t makeBool(bool value) {
-    return std::make_shared<PrimaryData<bool>>(value);
-}
+data_ptr_t makeBool(bool value) { return std::make_shared<PrimaryData<bool>>(value); }
 
 bool asBool(const data_ptr_t &data, bool &value) {
     auto primary = std::dynamic_pointer_cast<PrimaryData<bool>>(data);
@@ -225,8 +223,8 @@ class GctConstantEvaluator {
         evaluator.callResolver_     = std::move(callResolver);
         evaluator.sequenceResolver_ = std::move(sequenceResolver);
         evaluator.depth_            = depth;
-        FunctionType *type       = tt::as_ptr<FunctionType>(func->at(0)->dataType());
-        const size_t withCount   = type->withTypesCount();
+        FunctionType *type          = tt::as_ptr<FunctionType>(func->at(0)->dataType());
+        const size_t withCount      = type->withTypesCount();
         for (size_t i = 0; i < withCount && i < withArgs.size(); ++i) {
             if (withArgs[i] != nullptr) {
                 evaluator.env_[std::string(type->argNameAt(i))] = withArgs[i];
@@ -256,8 +254,8 @@ class GctConstantEvaluator {
 
     /// The value of a built-in operator over constants (an arithmetic operator, a comparison, a
     /// logical operator): the same computation a body's operator expression gets.
-    static data_ptr_t runBuiltinCall(
-        const std::string &name, const std::vector<data_ptr_t> &arguments) {
+    static data_ptr_t
+    runBuiltinCall(const std::string &name, const std::vector<data_ptr_t> &arguments) {
         GctConstantEvaluator evaluator(nullptr, {});
         return evaluator.evalBuiltinCall(name, arguments);
     }
@@ -327,11 +325,12 @@ class GctConstantEvaluator {
                 }
             }
             fail(
-                EvalProblem::Effects, node->name(),
+                EvalProblem::Effects,
+                node->name(),
                 "it reads '" + node->name() + "', which is not a compile-time constant");
         }
         case Kind::NREF: {
-            data_ptr_t value = eval(node->size() > 0 ? node->at(0) : nullptr);
+            data_ptr_t value   = eval(node->size() > 0 ? node->at(0) : nullptr);
             env_[node->name()] = value;
             return value;
         }
@@ -382,11 +381,13 @@ class GctConstantEvaluator {
             return evalCall(node);
         case Kind::TAPP:
             fail(
-                EvalProblem::Construct, {},
+                EvalProblem::Construct,
+                {},
                 "it applies type arguments to a function outside a call");
         default:
             fail(
-                EvalProblem::Construct, {},
+                EvalProblem::Construct,
+                {},
                 "it uses a construct this build-time evaluation does not read (kind " +
                     std::to_string(static_cast<int>(node->type())) + ")");
         }
@@ -397,7 +398,8 @@ class GctConstantEvaluator {
         if (subject == nullptr || containsTypeVar(subject)) {
             // Not known yet: the `_` arm is not the answer for a type nobody has bound.
             fail(
-                EvalProblem::TypeNotConcrete, {},
+                EvalProblem::TypeNotConcrete,
+                {},
                 "it asks a 'match type' about " +
                     (subject != nullptr ? subject->toString() : std::string("an unknown type")) +
                     ", which still has a type variable");
@@ -418,15 +420,16 @@ class GctConstantEvaluator {
             bool selected = (arm->typeCasePatterns() & (shape | wildcard | extra)) != 0;
             for (size_t k = 0; !selected && k < arm->typeCaseTypeCount(); ++k) {
                 Type *pattern = bound(arm->typeCaseTypeAt(k));
-                selected      = pattern != nullptr && !containsTypeVar(pattern) &&
-                           typeEquals(subject, pattern);
+                selected =
+                    pattern != nullptr && !containsTypeVar(pattern) && typeEquals(subject, pattern);
             }
             if (selected) {
                 return eval(arm->size() > 0 ? arm->at(0) : nullptr);
             }
         }
         fail(
-            EvalProblem::Construct, {},
+            EvalProblem::Construct,
+            {},
             "no case of its 'match type' matches " + subject->toString());
     }
 
@@ -437,15 +440,15 @@ class GctConstantEvaluator {
     /// only for a written sequence: it is the one round value that is not a position or a name.
     void walkRounds(
         const GCT::node_ptr_t &operand, bool byIndices, bool bySequence,
-        const std::function<
-            void(const std::string &name, size_t index, Type *type, const int64_t *element)>
-            &round) {
+        const std::function<void(
+            const std::string &name, size_t index, Type *type, const int64_t *element)> &round) {
         if (bySequence) {
             const std::optional<std::vector<int64_t>> elements =
                 sequenceResolver_ ? sequenceResolver_(operand) : std::nullopt;
             if (!elements.has_value()) {
                 fail(
-                    EvalProblem::Construct, {},
+                    EvalProblem::Construct,
+                    {},
                     "the sequence of its 'static loop' is not known when it is compiled");
             }
             for (size_t i = 0; i < elements->size(); ++i) {
@@ -459,28 +462,42 @@ class GctConstantEvaluator {
             const auto tuple      = std::dynamic_pointer_cast<TupleData>(data);
             if (tuple == nullptr) {
                 fail(
-                    EvalProblem::Construct, {},
+                    EvalProblem::Construct,
+                    {},
                     "it walks 'indices' of a value that is not a tuple");
             }
             for (size_t i = 0; i < tuple->size(); ++i) {
                 const data_ptr_t element = tuple->get(i);
                 round(
-                    std::to_string(i), i, element != nullptr ? element->type() : nullptr, nullptr);
+                    std::to_string(i),
+                    i,
+                    element != nullptr ? element->type() : nullptr,
+                    nullptr);
             }
             return;
         }
         Type *subject = bound(operand->dataType());
         if (subject == nullptr || containsTypeVar(subject)) {
             fail(
-                EvalProblem::TypeNotConcrete, {},
+                EvalProblem::TypeNotConcrete,
+                {},
                 "it walks the fields of a type that still has a type variable");
         }
         if (!tree::isInternal(subject)) {
             fail(
-                EvalProblem::Construct, {},
+                EvalProblem::Construct,
+                {},
                 "it walks the fields of a type that is not a struct or a tuple");
         }
-        for (size_t i = 0; i < tree::arity(subject); ++i) {
+        // The two refusals above -- `TypeNotConcrete` above, and `Construct` for a type that is not
+        // a struct or an ordinary tuple -- have already answered this question. So the empty answer
+        // cannot arrive here, and it throws if that ever stops being true, where a count of zero
+        // would quietly walk no fields.
+        const auto fields = tree::arity(subject);
+        if (!fields) {
+            throw std::logic_error("when: the guarded subject has no members");
+        }
+        for (size_t i = 0; i < *fields; ++i) {
             round(
                 std::string(tree::childName(subject, i)),
                 i,
@@ -498,10 +515,10 @@ class GctConstantEvaluator {
             env_[valueName] = data_ptr_t(std::make_shared<PrimaryData<int64_t>>(*element));
             return;
         }
-        env_[valueName] = byIndices
-                              ? data_ptr_t(std::make_shared<PrimaryData<int64_t>>(
-                                    static_cast<int64_t>(index)))
-                              : data_ptr_t(std::make_shared<StringData>(name));
+        env_[valueName] =
+            byIndices
+                ? data_ptr_t(std::make_shared<PrimaryData<int64_t>>(static_cast<int64_t>(index)))
+                : data_ptr_t(std::make_shared<StringData>(name));
     }
 
     data_ptr_t evalStaticFor(const GCT::node_ptr_t &node) {
@@ -511,7 +528,9 @@ class GctConstantEvaluator {
         const auto saved            = env_;
         const auto savedTypes       = typeEnv_;
         walkRounds(
-            node->staticForOperand(), byIndices, false,
+            node->staticForOperand(),
+            byIndices,
+            false,
             [&](const std::string &name, size_t index, Type *type, const int64_t *) {
                 env_ = saved;
                 bindRoundValue(valueName, name, index, byIndices);
@@ -528,7 +547,8 @@ class GctConstantEvaluator {
     data_ptr_t evalStaticLoop(const GCT::node_ptr_t &node) {
         if (node->staticLoopStateCount() != 1) {
             fail(
-                EvalProblem::Construct, {},
+                EvalProblem::Construct,
+                {},
                 "a 'static loop' with several states is not evaluated here");
         }
         const std::string valueName = node->staticLoopValueName();
@@ -539,9 +559,11 @@ class GctConstantEvaluator {
         const auto savedTypes       = typeEnv_;
         data_ptr_t state            = eval(node->staticLoopInitial(0));
         walkRounds(
-            node->staticLoopOperand(), byIndices, bySequence,
+            node->staticLoopOperand(),
+            byIndices,
+            bySequence,
             [&](const std::string &name, size_t index, Type *type, const int64_t *element) {
-                env_ = saved;
+                env_                               = saved;
                 env_[node->staticLoopStateName(0)] = state;
                 bindRoundValue(valueName, name, index, byIndices, element);
                 if (!typeName.empty() && type != nullptr) {
@@ -560,7 +582,9 @@ class GctConstantEvaluator {
             bool left = false;
             if (!asBool(eval(node->at(0)), left)) {
                 throw EvalFailure{
-                    EvalProblem::Effects, {}, "the left side of a logical operator is not a bool"};
+                    EvalProblem::Effects,
+                    {},
+                    "the left side of a logical operator is not a bool"};
             }
             if (kind == GCT::BranchKind::LogicalAnd && !left) {
                 return makeBool(false);
@@ -570,14 +594,17 @@ class GctConstantEvaluator {
             }
             for (size_t i = 1; i < node->size(); ++i) {
                 const GCT::node_ptr_t &arm = node->at(i);
-                const bool wanted = kind == GCT::BranchKind::LogicalAnd
-                                        ? arm->caseType() == GCT::CaseType::True
-                                        : arm->caseType() == GCT::CaseType::Else;
+                const bool wanted          = kind == GCT::BranchKind::LogicalAnd
+                                                 ? arm->caseType() == GCT::CaseType::True
+                                                 : arm->caseType() == GCT::CaseType::Else;
                 if (wanted) {
                     return eval(arm->size() > 0 ? arm->at(0) : nullptr);
                 }
             }
-            throw EvalFailure{EvalProblem::Construct, {}, "a logical branch has no arm for the side taken"};
+            throw EvalFailure{
+                EvalProblem::Construct,
+                {},
+                "a logical branch has no arm for the side taken"};
         }
         if (kind == GCT::BranchKind::Cond) {
             bool test = false;
@@ -586,8 +613,8 @@ class GctConstantEvaluator {
             }
             for (size_t i = 1; i < node->size(); ++i) {
                 const GCT::node_ptr_t &arm = node->at(i);
-                const bool wanted = test ? arm->caseType() == GCT::CaseType::True
-                                         : arm->caseType() == GCT::CaseType::Else;
+                const bool wanted          = test ? arm->caseType() == GCT::CaseType::True
+                                                  : arm->caseType() == GCT::CaseType::Else;
                 if (wanted) {
                     return eval(arm->size() > 0 ? arm->at(0) : nullptr);
                 }
@@ -595,7 +622,8 @@ class GctConstantEvaluator {
             return nullptr;
         }
         fail(
-            EvalProblem::Construct, {},
+            EvalProblem::Construct,
+            {},
             "it branches on a value this build-time evaluation cannot compare");
     }
 
@@ -604,15 +632,15 @@ class GctConstantEvaluator {
             if (args.size() != 2) {
                 fail(EvalProblem::Construct, name, "a comparison does not have two sides");
             }
-            const bool equal =
-                args[0] != nullptr && args[1] != nullptr && args[0]->equals(args[1]);
+            const bool equal = args[0] != nullptr && args[1] != nullptr && args[0]->equals(args[1]);
             return makeBool(name == "__eq__" ? equal : !equal);
         }
         if (name == "__not__") {
             bool value = false;
             if (args.size() != 1 || !asBool(args[0], value)) {
                 fail(
-                    EvalProblem::Construct, name,
+                    EvalProblem::Construct,
+                    name,
                     "'!' is applied to something that is not a bool");
             }
             return makeBool(!value);
@@ -628,7 +656,7 @@ class GctConstantEvaluator {
             if (args.size() != 2) {
                 fail(EvalProblem::Construct, name, "a comparison does not have two sides");
             }
-            int order = 0;
+            int order        = 0;
             const auto left  = literalOf(args[0]);
             const auto right = literalOf(args[1]);
             if (left.has_value() && right.has_value()) {
@@ -638,12 +666,13 @@ class GctConstantEvaluator {
                 const auto rightText = stringOf(args[1]);
                 if (!leftText.has_value() || !rightText.has_value()) {
                     fail(
-                        EvalProblem::Construct, name,
+                        EvalProblem::Construct,
+                        name,
                         "its operands are not values this evaluation can compare");
                 }
                 order = *leftText < *rightText ? -1 : (*leftText > *rightText ? 1 : 0);
             }
-            const bool value = name == "__lt__" ? order < 0
+            const bool value = name == "__lt__"   ? order < 0
                                : name == "__le__" ? order <= 0
                                : name == "__gt__" ? order > 0
                                                   : order >= 0;
@@ -689,7 +718,8 @@ class GctConstantEvaluator {
             }
             if (!value.has_value()) {
                 fail(
-                    EvalProblem::Construct, name,
+                    EvalProblem::Construct,
+                    name,
                     "the operation has no value at build time (a division by zero, a result "
                     "that runs away)");
             }
@@ -700,13 +730,15 @@ class GctConstantEvaluator {
             const auto data = value->toData(type);
             if (!data.has_value()) {
                 fail(
-                    EvalProblem::Construct, name,
+                    EvalProblem::Construct,
+                    name,
                     "the result does not fit '" + type->toString() + "'");
             }
             return *data;
         }
         fail(
-            EvalProblem::Construct, name,
+            EvalProblem::Construct,
+            name,
             "it calls an operator this build-time evaluation does not read");
     }
 
@@ -725,12 +757,16 @@ class GctConstantEvaluator {
         }
         if (callResolver_ != nullptr) {
             return callResolver_(
-                node, callee, args,
+                node,
+                callee,
+                args,
                 [this](const GCT::node_ptr_t &expression) { return eval(expression); },
-                effectiveBindings(), depth_);
+                effectiveBindings(),
+                depth_);
         }
         fail(
-            EvalProblem::Construct, name,
+            EvalProblem::Construct,
+            name,
             "it calls '" + (name.empty() ? std::string("an expression") : name) +
                 "', which this build-time evaluation cannot read");
     }
@@ -748,7 +784,8 @@ class GctConstantEvaluator {
             const auto found = composites_.find(target);
             if (found == composites_.end()) {
                 fail(
-                    EvalProblem::Construct, {},
+                    EvalProblem::Construct,
+                    {},
                     "it reads an element of a comprehension that has no value here");
             }
             built = &found->second;
@@ -779,11 +816,11 @@ class GctConstantEvaluator {
                 }
             }
         } else if (key->type()->code() == TypeCode::Int64) {
-            index = static_cast<size_t>(
-                std::dynamic_pointer_cast<PrimaryData<int64_t>>(key)->data());
+            index =
+                static_cast<size_t>(std::dynamic_pointer_cast<PrimaryData<int64_t>>(key)->data());
         } else if (key->type()->code() == TypeCode::Int32) {
-            index = static_cast<size_t>(
-                std::dynamic_pointer_cast<PrimaryData<int32_t>>(key)->data());
+            index =
+                static_cast<size_t>(std::dynamic_pointer_cast<PrimaryData<int32_t>>(key)->data());
         }
         if (!index.has_value()) {
             fail(EvalProblem::Construct, {}, "the key of the access is not a name or an index");
@@ -797,7 +834,8 @@ class GctConstantEvaluator {
         const auto tuple = std::dynamic_pointer_cast<TupleData>(targetData);
         if (tuple == nullptr) {
             fail(
-                EvalProblem::Construct, {},
+                EvalProblem::Construct,
+                {},
                 "it reads an element of a value of type '" +
                     (targetData != nullptr && targetData->type() != nullptr
                          ? targetData->type()->toString()
@@ -816,7 +854,8 @@ class GctConstantEvaluator {
         const GCT::node_ptr_t &generator = node->comprehensionGenerator();
         if (generator == nullptr || generator->type() != GCT::NodeKind::SFOR) {
             fail(
-                EvalProblem::Construct, {},
+                EvalProblem::Construct,
+                {},
                 "it builds a comprehension this evaluation cannot fill");
         }
         EvalComposite built;
@@ -826,7 +865,9 @@ class GctConstantEvaluator {
         const auto saved            = env_;
         const auto savedTypes       = typeEnv_;
         walkRounds(
-            generator->staticForOperand(), byIndices, false,
+            generator->staticForOperand(),
+            byIndices,
+            false,
             [&](const std::string &name, size_t index, Type *type, const int64_t *) {
                 env_ = saved;
                 bindRoundValue(valueName, name, index, byIndices);
@@ -836,8 +877,8 @@ class GctConstantEvaluator {
                 built.names.push_back(name);
                 built.values.push_back(eval(generator->staticForBody()));
             });
-        env_     = saved;
-        typeEnv_ = savedTypes;
+        env_              = saved;
+        typeEnv_          = savedTypes;
         composites_[node] = std::move(built);
         return nullptr;
     }
@@ -908,8 +949,7 @@ class Builder::ConditionContext {
         } else {
             self_.namespacePath_.clear();
             self_.usingFrames_.clear();
-            if (target != nullptr && target->tree != nullptr &&
-                target->tree->root() != nullptr) {
+            if (target != nullptr && target->tree != nullptr && target->tree->root() != nullptr) {
                 if (const auto *usings = target->tree->usingsOf(target->tree->root())) {
                     self_.usingFrames_.push_back(usings);
                 }
@@ -1157,8 +1197,7 @@ bool argumentFits(Type *declared, Type *actual, type_bindings_t &bindings) {
 } // namespace
 
 WhenResult Builder::evaluateWhenCondition(
-    const GCT::node_ptr_t &condition, FunctionType *signature,
-    const type_bindings_t &bindings,
+    const GCT::node_ptr_t &condition, FunctionType *signature, const type_bindings_t &bindings,
     const std::unordered_map<std::string, data_ptr_t> &withValues,
     const generic_template_ptr_t &declaring, const ModuleUnit *contextUnit) {
     if (condition == nullptr) {
@@ -1177,7 +1216,7 @@ WhenResult Builder::whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node) 
     }
     switch (node->type()) {
     case GCT::NodeKind::DATA: {
-        bool value = false;
+        bool value             = false;
         const data_ptr_t &data = node->data();
         if (data != nullptr && asBool(data, value)) {
             return whenFromBool(value);
@@ -1193,7 +1232,9 @@ WhenResult Builder::whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node) 
             return whenOf(frame, node->at(0));
         }
         return whenResultOf(
-            WhenOutcome::NotEvaluable, {}, "the condition is more than one expression");
+            WhenOutcome::NotEvaluable,
+            {},
+            "the condition is more than one expression");
     case GCT::NodeKind::NREF:
         return node->size() == 1 ? whenOf(frame, node->at(0)) : WhenResult{};
     case GCT::NodeKind::CAST:
@@ -1208,7 +1249,9 @@ WhenResult Builder::whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node) 
         return whenOfEvery(frame, node);
     default:
         return whenResultOf(
-            WhenOutcome::NotEvaluable, {}, "the condition is not computed at compile time");
+            WhenOutcome::NotEvaluable,
+            {},
+            "the condition is not computed at compile time");
     }
 }
 
@@ -1225,11 +1268,14 @@ WhenResult Builder::whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &n
             // The pack is the types of the arguments a call gives the rest parameter: at the
             // declaration it is open, and only a call knows it.
             return whenResultOf(
-                WhenOutcome::TypeNotConcrete, {}, "the pack is bound by the arguments of a call");
+                WhenOutcome::TypeNotConcrete,
+                {},
+                "the pack is bound by the arguments of a call");
         }
         return whenResultOf(
-            WhenOutcome::NotEvaluable, {},
-            "`..` in a condition expands a type pack, and the declaration binds none");
+            WhenOutcome::NotEvaluable,
+            {},
+            "`...` in a condition expands a type pack, and the declaration binds none");
     }
     for (const auto &[name, length] : packs) {
         if (length != packs.front().second) {
@@ -1239,8 +1285,9 @@ WhenResult Builder::whenOfEvery(const WhenFrame &frame, const GCT::node_ptr_t &n
                           " member(s)";
             }
             return whenResultOf(
-                WhenOutcome::NotEvaluable, {},
-                "`..` expands packs of different lengths: " + detail);
+                WhenOutcome::NotEvaluable,
+                {},
+                "`...` expands packs of different lengths: " + detail);
         }
     }
     for (size_t i = 0; i < packs.front().second; ++i) {
@@ -1289,7 +1336,9 @@ WhenResult Builder::whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &
                                                        : arm->caseType() == GCT::CaseType::Else;
         });
         return right.value_or(whenResultOf(
-            WhenOutcome::NotEvaluable, {}, "the condition's second operand is not one expression"));
+            WhenOutcome::NotEvaluable,
+            {},
+            "the condition's second operand is not one expression"));
     }
     if (kind == GCT::BranchKind::Cond) {
         const WhenResult testResult = whenOf(frame, test);
@@ -1305,7 +1354,9 @@ WhenResult Builder::whenOfBranch(const WhenFrame &frame, const GCT::node_ptr_t &
         }
     }
     return whenResultOf(
-        WhenOutcome::NotEvaluable, {}, "the condition is not a compile-time bool expression");
+        WhenOutcome::NotEvaluable,
+        {},
+        "the condition is not a compile-time bool expression");
 }
 
 WhenResult Builder::whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &node) {
@@ -1318,7 +1369,8 @@ WhenResult Builder::whenOfCall(const WhenFrame &frame, const GCT::node_ptr_t &no
         return whenOfOperatorCall(frame, node);
     }
     return whenResultOf(
-        WhenOutcome::NotEvaluable, {},
+        WhenOutcome::NotEvaluable,
+        {},
         "the condition calls something that is not a compile-time query");
 }
 
@@ -1346,8 +1398,10 @@ generic_template_ptr_t Builder::pickPredicateOverload(
         }
         bool fit = true;
         for (size_t i = 0; fit && i < valueArguments.size(); ++i) {
-            fit = valueArguments[i] != nullptr &&
-                  argumentFits(candidate->funcType->normTypeAt(i), valueArguments[i]->type(), bindings);
+            fit = valueArguments[i] != nullptr && argumentFits(
+                                                      candidate->funcType->normTypeAt(i),
+                                                      valueArguments[i]->type(),
+                                                      bindings);
         }
         if (fit) {
             fits.push_back(candidate);
@@ -1361,7 +1415,9 @@ WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_
     const GCT::node_ptr_t &callee = node->at(0);
     if (callee->size() < 2 || callee->at(0)->type() != GCT::NodeKind::DREF) {
         return whenResultOf(
-            WhenOutcome::NotEvaluable, {}, "a type application in a condition names no function");
+            WhenOutcome::NotEvaluable,
+            {},
+            "a type application in a condition names no function");
     }
     const std::string written = callee->at(0)->name();
     // Every predicate is a function of the library, resolved where the declaration is written:
@@ -1381,21 +1437,26 @@ WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_
             return whenResultOf(WhenOutcome::NotImported, written, elsewhere);
         }
         return whenResultOf(
-            WhenOutcome::NotEvaluable, written,
+            WhenOutcome::NotEvaluable,
+            written,
             "no compile-time function of that name is visible here; a condition calls a generic "
             "function of this module or of one it imports");
     }
     std::vector<Type *> typeArguments;
     for (size_t i = 1; i < callee->size(); ++i) {
         if (callee->at(i)->type() != GCT::NodeKind::TYPE) {
-            return whenResultOf(WhenOutcome::NotEvaluable, {}, "a type argument here is not a type");
+            return whenResultOf(
+                WhenOutcome::NotEvaluable,
+                {},
+                "a type argument here is not a type");
         }
         typeArguments.push_back(substituteTypeVars(callee->at(i)->dataType(), frame.bindings));
     }
     for (Type *argument : typeArguments) {
         if (argument == nullptr || containsTypeVar(argument)) {
             return whenResultOf(
-                WhenOutcome::TypeNotConcrete, written,
+                WhenOutcome::TypeNotConcrete,
+                written,
                 argument != nullptr ? argument->toString() : std::string("?"));
         }
     }
@@ -1406,28 +1467,32 @@ WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_
         const GCT::node_ptr_t &argument = node->at(i);
         if (argument->type() != GCT::NodeKind::DATA) {
             return whenResultOf(
-                WhenOutcome::NeedsWithValue, written,
+                WhenOutcome::NeedsWithValue,
+                written,
                 "the predicate is called with a value that is not a compile-time constant");
         }
         valueArguments.push_back(argument->data());
     }
-    size_t fitting                  = 0;
+    size_t fitting = 0;
     const generic_template_ptr_t tmpl =
         pickPredicateOverload(*resolved, typeArguments, valueArguments, fitting);
     if (tmpl == nullptr) {
         if (fitting == 0) {
             return whenResultOf(
-                WhenOutcome::NotEvaluable, written,
+                WhenOutcome::NotEvaluable,
+                written,
                 "no declaration of that name takes these type arguments and values");
         }
         return whenResultOf(
-            WhenOutcome::PredicateAmbiguous, written,
+            WhenOutcome::PredicateAmbiguous,
+            written,
             "several declarations of that name fit this call");
     }
     const std::vector<std::string> parameters = typeParameterNames(tmpl);
     if (typeArguments.size() != parameters.size()) {
         return whenResultOf(
-            WhenOutcome::NotEvaluable, written,
+            WhenOutcome::NotEvaluable,
+            written,
             std::format(
                 "the condition gives {} type argument(s) and the predicate declares {}",
                 typeArguments.size(),
@@ -1449,11 +1514,12 @@ WhenResult Builder::whenOfPredicateInstance(
     compile_graph_ptr_t graph = instantiateGeneric(tmpl, callBindings, {}, {}, callee);
     if (graph == nullptr || graph->view().returnNode() == camel::runtime::kInvalidNodeRef) {
         return whenResultOf(
-            WhenOutcome::NotEvaluable, written, "the predicate's instance has no result");
+            WhenOutcome::NotEvaluable,
+            written,
+            "the predicate's instance has no result");
     }
-    const data_ptr_t result =
-        constantOfNode(graph->view().ref(graph->view().returnNode()));
-    bool value = false;
+    const data_ptr_t result = constantOfNode(graph->view().ref(graph->view().returnNode()));
+    bool value              = false;
     if (result != nullptr && asBool(result, value)) {
         return whenFromBool(value);
     }
@@ -1469,12 +1535,18 @@ WhenResult Builder::whenOfPredicateInstance(
     try {
         ConditionContext body(*this, tmpl, nullptr);
         const data_ptr_t folded = GctConstantEvaluator::runFunction(
-            tmpl->func, callBindings, valueArguments, {}, nullptr,
+            tmpl->func,
+            callBindings,
+            valueArguments,
+            {},
+            nullptr,
             [this](
-                const GCT::node_ptr_t &call, const GCT::node_ptr_t &nestedCallee,
+                const GCT::node_ptr_t &call,
+                const GCT::node_ptr_t &nestedCallee,
                 const std::vector<data_ptr_t> &arguments,
                 const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArg,
-                const type_bindings_t &vars, size_t depth) {
+                const type_bindings_t &vars,
+                size_t depth) {
                 return evaluateCallInsideBody(call, nestedCallee, arguments, evalArg, vars, depth);
             },
             [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
@@ -1487,10 +1559,12 @@ WhenResult Builder::whenOfPredicateInstance(
         return whenResultOf(
             failure.kind == EvalProblem::TypeNotConcrete ? WhenOutcome::TypeNotConcrete
                                                          : WhenOutcome::NotEvaluable,
-            written, failure.why);
+            written,
+            failure.why);
     }
     return whenResultOf(
-        WhenOutcome::NotEvaluable, written,
+        WhenOutcome::NotEvaluable,
+        written,
         "the predicate's result is not a compile-time constant; a condition can call a function "
         "only where its body reduces to one over the types");
 }
@@ -1499,7 +1573,7 @@ WhenResult Builder::whenOfOperatorCall(const WhenFrame &frame, const GCT::node_p
     const GCT::node_ptr_t &callee = node->at(0);
     const std::string written     = callee->name();
     const std::string op          = plainName(written);
-    const auto argument = [&](size_t index) -> GCT::node_ptr_t {
+    const auto argument           = [&](size_t index) -> GCT::node_ptr_t {
         return node->size() > index + 1 ? whenSoleValue(node->at(index + 1)) : nullptr;
     };
     if (op == "__not__" && node->size() == 2) {
@@ -1529,9 +1603,9 @@ WhenResult Builder::whenOfOperatorCall(const WhenFrame &frame, const GCT::node_p
         const std::optional<generic_ref_t> resolved = whenPredicateNamed(written, callee, problem);
         if (resolved.has_value()) {
             return whenResultOf(
-                WhenOutcome::NotEvaluable, written,
-                "a predicate is called with its type arguments, as '" + written +
-                    "::<...>(...)'");
+                WhenOutcome::NotEvaluable,
+                written,
+                "a predicate is called with its type arguments, as '" + written + "::<...>(...)'");
         }
         if (problem.outcome != WhenOutcome::NotEvaluable) {
             return problem;
@@ -1550,15 +1624,20 @@ WhenResult Builder::whenOfOperatorCall(const WhenFrame &frame, const GCT::node_p
         const GCT::node_ptr_t &value = whenSoleValue(node->at(i));
         if (value == nullptr || value->type() != GCT::NodeKind::DATA || value->data() == nullptr) {
             return whenResultOf(
-                WhenOutcome::NeedsWithValue, shown,
+                WhenOutcome::NeedsWithValue,
+                shown,
                 "the call gives a value that is not a compile-time constant");
         }
         callArguments.push_back(value->data());
     }
     try {
         const data_ptr_t folded = evaluateCallInsideBody(
-            node, callee, callArguments,
-            [](const GCT::node_ptr_t &) -> data_ptr_t { return nullptr; }, frame.bindings, 0);
+            node,
+            callee,
+            callArguments,
+            [](const GCT::node_ptr_t &) -> data_ptr_t { return nullptr; },
+            frame.bindings,
+            0);
         bool value = false;
         if (folded != nullptr && asBool(folded, value)) {
             return whenFromBool(value);
@@ -1568,7 +1647,8 @@ WhenResult Builder::whenOfOperatorCall(const WhenFrame &frame, const GCT::node_p
         return whenResultOf(
             failure.kind == EvalProblem::TypeNotConcrete ? WhenOutcome::TypeNotConcrete
                                                          : WhenOutcome::NotEvaluable,
-            shown, failure.why);
+            shown,
+            failure.why);
     }
 }
 
@@ -1585,7 +1665,8 @@ WhenResult Builder::whenOfParameter(const WhenFrame &frame, const GCT::node_ptr_
             const auto found = frame.withValues.find(plain);
             if (found == frame.withValues.end()) {
                 return whenResultOf(
-                    WhenOutcome::NeedsWithValue, plain,
+                    WhenOutcome::NeedsWithValue,
+                    plain,
                     "the call did not give a compile-time value for this 'with' parameter");
             }
             bool value = false;
@@ -1596,7 +1677,8 @@ WhenResult Builder::whenOfParameter(const WhenFrame &frame, const GCT::node_ptr_
         }
     }
     return whenResultOf(
-        WhenOutcome::UnknownName, node->name(),
+        WhenOutcome::UnknownName,
+        node->name(),
         "a condition sees the declaration's type parameters and 'with' parameters, not its "
         "ordinary parameters or body");
 }
@@ -1651,11 +1733,10 @@ Builder::FoldedCall Builder::foldConstantCall(const GCT::node_ptr_t &call) {
     // Resolve the name cheaply before evaluating anything: a function value, an operator of a
     // module (`println`) or a name with no declaration is not a call this evaluation reads, and
     // its arguments must not be evaluated for nothing.
-    const GCT::node_ptr_t &nameNode =
-        head->type() == GCT::NodeKind::TAPP ? head->at(0) : head;
-    const std::string name = nameNode->name();
-    const std::string plain = plainName(name);
-    const bool builtinName  = !plain.empty() && isBuiltinOperatorName(plain);
+    const GCT::node_ptr_t &nameNode = head->type() == GCT::NodeKind::TAPP ? head->at(0) : head;
+    const std::string name          = nameNode->name();
+    const std::string plain         = plainName(name);
+    const bool builtinName          = !plain.empty() && isBuiltinOperatorName(plain);
     if (builtinName) {
         bool foldable = false;
         for (size_t i = 1; i < call->size() && !foldable; ++i) {
@@ -1680,14 +1761,19 @@ Builder::FoldedCall Builder::foldConstantCall(const GCT::node_ptr_t &call) {
         for (size_t i = 1; i < call->size(); ++i) {
             arguments.push_back(evalArgument(call->at(i)));
         }
-        result =
-            evaluateCallAtBuildTime(call, call->at(0), arguments, evalArgument, typeBindings_, 0,
-                                    true);
+        result = evaluateCallAtBuildTime(
+            call,
+            call->at(0),
+            arguments,
+            evalArgument,
+            typeBindings_,
+            0,
+            true);
     } catch (const EvalFailure &failure) {
         // The refusal names the call, not the name inside it: the reason says what stands in
         // the way ("it reads 'n', which is not a compile-time constant").
-        result.refusal  = FoldRefusal::ArgumentNotConstant;
-        result.reason   = failure.why;
+        result.refusal = FoldRefusal::ArgumentNotConstant;
+        result.reason  = failure.why;
         return result;
     }
     return result;
@@ -1700,15 +1786,15 @@ bool Builder::refuseFold(FoldedCall &result, FoldRefusal refusal, std::string re
 }
 
 Builder::FoldedCall Builder::evaluateCallAtBuildTime(
-    const GCT::node_ptr_t &call, GCT::node_ptr_t callee,
-    const std::vector<data_ptr_t> &arguments,
+    const GCT::node_ptr_t &call, GCT::node_ptr_t callee, const std::vector<data_ptr_t> &arguments,
     const std::function<data_ptr_t(const GCT::node_ptr_t &)> &evalArgument,
     const type_bindings_t &vars, size_t depth, bool buildFirst) {
     FoldedCall result;
     result.call = writtenCallName(call);
     if (depth >= kMaxFoldedCallDepth) {
         refuseFold(
-            result, FoldRefusal::TooDeep,
+            result,
+            FoldRefusal::TooDeep,
             "the call nests more than " + std::to_string(kMaxFoldedCallDepth) +
                 " calls deep; a recursion that has no base case for these constants has no value "
                 "at build time");
@@ -1753,8 +1839,7 @@ Builder::FoldedCall Builder::evaluateCallAtBuildTime(
     for (size_t i = 0; i < signature.withTypesCount() && i < request.withArguments.size(); ++i) {
         withValues[std::string(signature.argNameAt(i))] = request.withArguments[i];
     }
-    if (!foldCheckCondition(target, withValues, result) ||
-        !foldCheckResultType(target, result)) {
+    if (!foldCheckCondition(target, withValues, result) || !foldCheckResultType(target, result)) {
         return result;
     }
     foldRunBody(target, request, result);
@@ -1774,7 +1859,8 @@ bool Builder::foldNameCallee(
     request.typeApplied = callee != nullptr && callee->type() == GCT::NodeKind::TAPP;
     if (callee == nullptr || (callee->type() != GCT::NodeKind::DREF && !request.typeApplied)) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall,
+            result,
+            FoldRefusal::NotAProgramCall,
             "the callee is an expression, not a name the compiler knows");
     }
     const GCT::node_ptr_t &nameNode = request.typeApplied ? callee->at(0) : callee;
@@ -1802,7 +1888,8 @@ bool Builder::foldBuiltinOperator(const FoldRequest &request, FoldedCall &result
     if (result.data == nullptr || result.data->type() == nullptr ||
         !isConstantKind(result.data->type())) {
         refuseFold(
-            result, FoldRefusal::ResultNotConstantKind,
+            result,
+            FoldRefusal::ResultNotConstantKind,
             "its value is not a kind a compile-time constant has");
         return true;
     }
@@ -1827,8 +1914,7 @@ std::optional<Builder::FoldTarget> Builder::bindFoldTemplate(
             return std::nullopt;
         }
         for (size_t i = 0; i < parameters.size(); ++i) {
-            Type *type =
-                substituteTypeVars(request.callee->at(i + 1)->dataType(), *request.vars);
+            Type *type = substituteTypeVars(request.callee->at(i + 1)->dataType(), *request.vars);
             if (type == nullptr || type->code() == TypeCode::TypeVar || containsTypeVar(type)) {
                 why = "a type argument is not concrete in this body";
                 return std::nullopt;
@@ -1901,13 +1987,16 @@ bool Builder::foldTargetOfGeneric(
     }
     if (fits.empty()) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall,
+            result,
+            FoldRefusal::NotAProgramCall,
             group.size() == 1 ? firstWhy
                               : "no declaration of that name fits this call (" + firstWhy + ")");
     }
     if (fits.size() > 1) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall, "several declarations of that name fit this call");
+            result,
+            FoldRefusal::NotAProgramCall,
+            "several declarations of that name fit this call");
     }
     target = std::move(fits.front());
     return buildFoldInstance(target, request, result);
@@ -1946,25 +2035,31 @@ bool Builder::foldTargetOfFunction(
     const FoldRequest &request, FoldTarget &target, FoldedCall &result) {
     if (request.typeApplied) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall, "the name is not a generic declaration");
+            result,
+            FoldRefusal::NotAProgramCall,
+            "the name is not a generic declaration");
     }
     const auto graphs = graphsAt(request.name);
     if (!graphs.has_value() || (*graphs)->size() != 1) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall,
+            result,
+            FoldRefusal::NotAProgramCall,
             !graphs.has_value() ? "no function of that name is declared here"
                                 : "more than one declaration of that name can be called here");
     }
     const compile_graph_ptr_t &graph = (*graphs)->front();
     if (decoratedOf_.contains(graph.get())) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall,
+            result,
+            FoldRefusal::NotAProgramCall,
             "it is decorated, and a decoration is code the call runs");
     }
     const auto declaration = topLevelFunctions_.find(graph.get());
     if (declaration == topLevelFunctions_.end() || declaration->second == nullptr) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall, "it has no body this evaluation can read");
+            result,
+            FoldRefusal::NotAProgramCall,
+            "it has no body this evaluation can read");
     }
     target.func = declaration->second->gct;
     if (target.func == nullptr || target.func->nativeDeclaration() || target.func->size() < 2) {
@@ -1973,12 +2068,16 @@ bool Builder::foldTargetOfFunction(
     target.signature = graph->funcType();
     if (target.signature == nullptr || !target.signature->hasExitType()) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall, "its signature has no result type yet");
+            result,
+            FoldRefusal::NotAProgramCall,
+            "its signature has no result type yet");
     }
     if (target.signature->withTypesCount() != request.withArguments.size() ||
         target.signature->normTypesCount() != request.arguments->size()) {
         return refuseFold(
-            result, FoldRefusal::NotAProgramCall, "the call does not give its parameters");
+            result,
+            FoldRefusal::NotAProgramCall,
+            "the call does not give its parameters");
     }
     target.declaringUnit = unitOfFunction(graph);
     if (!request.buildFirst) {
@@ -2009,14 +2108,16 @@ bool Builder::foldCheckPurity(const FunctionType &signature, FoldedCall &result)
     for (size_t i = 0; i < withCount; ++i) {
         if (signature.withIsVarAt(i)) {
             return refuseFold(
-                result, FoldRefusal::HasEffects,
+                result,
+                FoldRefusal::HasEffects,
                 "its 'with' parameter '" + std::string(signature.argNameAt(i)) + "' is a 'var'");
         }
     }
     for (size_t i = 0; i < signature.normTypesCount(); ++i) {
         if (signature.normIsVarAt(i)) {
             return refuseFold(
-                result, FoldRefusal::HasEffects,
+                result,
+                FoldRefusal::HasEffects,
                 "its parameter '" + std::string(signature.argNameAt(withCount + i)) +
                     "' is a 'var'");
         }
@@ -2025,7 +2126,8 @@ bool Builder::foldCheckPurity(const FunctionType &signature, FoldedCall &result)
     if (resources.mode == camel::core::sem::ResourceSignature::Mode::Concrete &&
         !resources.pure()) {
         return refuseFold(
-            result, FoldRefusal::HasEffects,
+            result,
+            FoldRefusal::HasEffects,
             "it declares effects: " + camel::core::sem::toString(resources));
     }
     return true;
@@ -2044,7 +2146,11 @@ bool Builder::foldCheckCondition(
     // The condition is the declaration's: its names are read in the module that wrote it, not in
     // the module that calls it.
     const WhenResult condition = evaluateWhenCondition(
-        when->condition, target.signature, target.bindings, withValues, target.declaring,
+        when->condition,
+        target.signature,
+        target.bindings,
+        withValues,
+        target.declaring,
         target.declaringUnit);
     if (condition.holds()) {
         return true;
@@ -2063,7 +2169,8 @@ bool Builder::foldCheckResultType(const FoldTarget &target, FoldedCall &result) 
     Type *resultType = substituteTypeVars(target.signature->exitType(), target.bindings);
     if (resultType == nullptr || !isConstantKind(resultType)) {
         return refuseFold(
-            result, FoldRefusal::ResultNotConstantKind,
+            result,
+            FoldRefusal::ResultNotConstantKind,
             "its result type is '" +
                 (resultType != nullptr ? resultType->toString() : std::string("unknown")) +
                 "', not a number, a bool or a string");
@@ -2082,9 +2189,15 @@ void Builder::foldRunBody(
                                   const GCT::node_ptr_t &nestedCallee,
                                   const std::vector<data_ptr_t> &nestedArguments,
                                   const std::function<data_ptr_t(const GCT::node_ptr_t &)> &eval,
-                                  const type_bindings_t &nestedVars, size_t nestedDepth) {
+                                  const type_bindings_t &nestedVars,
+                                  size_t nestedDepth) {
         return evaluateCallInsideBody(
-            nestedCall, nestedCallee, nestedArguments, eval, nestedVars, nestedDepth);
+            nestedCall,
+            nestedCallee,
+            nestedArguments,
+            eval,
+            nestedVars,
+            nestedDepth);
     };
     // The names the body calls are the declaring module's, not the module the call is written
     // in: `has_ckpt_form` calls `is_numeric`, which calls `is_real` of its own module `types`.
@@ -2110,7 +2223,11 @@ void Builder::foldRunBody(
     } declaringScope(*this, target.declaring);
     try {
         result.data = GctConstantEvaluator::runFunction(
-            target.func, target.bindings, *request.arguments, request.withArguments, nullptr,
+            target.func,
+            target.bindings,
+            *request.arguments,
+            request.withArguments,
+            nullptr,
             callResolver,
             [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
             request.depth + 1);
@@ -2134,8 +2251,8 @@ void Builder::foldRunBody(
             result.refusal = FoldRefusal::NotEvaluable;
             break;
         }
-        result.call    = failure.call.empty() ? request.name : failure.call;
-        result.reason  = failure.why;
+        result.call   = failure.call.empty() ? request.name : failure.call;
+        result.reason = failure.why;
         return;
     }
     if (result.data == nullptr) {
@@ -2144,7 +2261,8 @@ void Builder::foldRunBody(
     }
     if (result.data->type() == nullptr || !isConstantKind(result.data->type())) {
         refuseFold(
-            result, FoldRefusal::ResultNotConstantKind,
+            result,
+            FoldRefusal::ResultNotConstantKind,
             "its value is not a kind a compile-time constant has");
         return;
     }
@@ -2163,7 +2281,8 @@ data_ptr_t Builder::evaluateCallInsideBody(
         break;
     case FoldRefusal::NotAProgramCall:
         throw EvalFailure{
-            EvalProblem::Construct, folded.call,
+            EvalProblem::Construct,
+            folded.call,
             "it calls '" + (folded.call.empty() ? std::string("an expression") : folded.call) +
                 "', which this build-time evaluation cannot read" +
                 (folded.reason.empty() ? std::string{} : ": " + folded.reason)};
@@ -2180,7 +2299,9 @@ data_ptr_t Builder::evaluateCallInsideBody(
     }
     if (folded.data == nullptr) {
         throw EvalFailure{
-            EvalProblem::Construct, folded.call, "the call has no value at build time"};
+            EvalProblem::Construct,
+            folded.call,
+            "the call has no value at build time"};
     }
     return folded.data;
 }
@@ -2208,12 +2329,17 @@ data_ptr_t Builder::compileTimeExpression(const GCT::node_ptr_t &expression) {
                                   const GCT::node_ptr_t &callee,
                                   const std::vector<data_ptr_t> &arguments,
                                   const std::function<data_ptr_t(const GCT::node_ptr_t &)> &eval,
-                                  const type_bindings_t &vars, size_t depth) {
+                                  const type_bindings_t &vars,
+                                  size_t depth) {
         return evaluateCallInsideBody(call, callee, arguments, eval, vars, depth);
     };
     return GctConstantEvaluator::runExpression(
-        expression, typeBindings_, nullptr, callResolver,
-        [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); }, 0);
+        expression,
+        typeBindings_,
+        nullptr,
+        callResolver,
+        [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
+        0);
 }
 
 std::optional<int64_t> Builder::foldExtentCall(
@@ -2226,7 +2352,8 @@ std::optional<int64_t> Builder::foldExtentCall(
                                   const GCT::node_ptr_t &callee,
                                   const std::vector<data_ptr_t> &arguments,
                                   const std::function<data_ptr_t(const GCT::node_ptr_t &)> &eval,
-                                  const type_bindings_t &vars, size_t depth) {
+                                  const type_bindings_t &vars,
+                                  size_t depth) {
         return evaluateCallInsideBody(site, callee, arguments, eval, vars, depth);
     };
     const auto dataResolver = [&values](const std::string &name) -> data_ptr_t {
@@ -2238,7 +2365,10 @@ std::optional<int64_t> Builder::foldExtentCall(
     };
     try {
         const data_ptr_t result = GctConstantEvaluator::runExpression(
-            call, typeBindings_, dataResolver, callResolver,
+            call,
+            typeBindings_,
+            dataResolver,
+            callResolver,
             [this](const GCT::node_ptr_t &subject) { return staticLoopIntSequenceOf(subject); },
             0);
         if (const auto integer = std::dynamic_pointer_cast<LongData>(result)) {
@@ -2252,8 +2382,8 @@ std::optional<int64_t> Builder::foldExtentCall(
     return std::nullopt;
 }
 
-[[noreturn]] void Builder::reportFoldRefusal(
-    const FoldedCall &folded, const GCT::node_ptr_t &origin) {
+[[noreturn]] void
+Builder::reportFoldRefusal(const FoldedCall &folded, const GCT::node_ptr_t &origin) {
     const auto at = origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId;
     switch (folded.refusal) {
     case FoldRefusal::ArgumentNotConstant:
@@ -2267,9 +2397,7 @@ std::optional<int64_t> Builder::foldExtentCall(
             .commit(folded.call, folded.reason);
         break;
     case FoldRefusal::TooDeep:
-        diags_->of(SemanticDiag::FoldCallTooDeep)
-            .atOrigin(at)
-            .commit(folded.call, folded.reason);
+        diags_->of(SemanticDiag::FoldCallTooDeep).atOrigin(at).commit(folded.call, folded.reason);
         break;
     case FoldRefusal::ResultNotConstantKind:
         diags_->of(SemanticDiag::FoldCallResultNotConstant)
@@ -2294,14 +2422,10 @@ void Builder::reportWhenProblem(
     const auto at = origin != nullptr ? origin->origin() : camel::source::kInvalidOriginId;
     switch (result.outcome) {
     case WhenOutcome::NotBool:
-        diags_->of(SemanticDiag::WhenConditionNotBool)
-            .atOrigin(at)
-            .commit(name, result.subject);
+        diags_->of(SemanticDiag::WhenConditionNotBool).atOrigin(at).commit(name, result.subject);
         break;
     case WhenOutcome::UnknownName:
-        diags_->of(SemanticDiag::WhenUnknownName)
-            .atOrigin(at)
-            .commit(result.subject, name);
+        diags_->of(SemanticDiag::WhenUnknownName).atOrigin(at).commit(result.subject, name);
         break;
     case WhenOutcome::TypeNotConcrete:
         diags_->of(SemanticDiag::WhenTypeQueryNotConcrete)
@@ -2310,9 +2434,7 @@ void Builder::reportWhenProblem(
         break;
     case WhenOutcome::NeedsWithValue:
     case WhenOutcome::NotEvaluable:
-        diags_->of(SemanticDiag::WhenConditionNotConstant)
-            .atOrigin(at)
-            .commit(name, result.detail);
+        diags_->of(SemanticDiag::WhenConditionNotConstant).atOrigin(at).commit(name, result.detail);
         break;
     case WhenOutcome::NotImported:
         diags_->of(SemanticDiag::WhenPredicateNotImported)

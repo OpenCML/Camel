@@ -309,9 +309,9 @@ Stage `transpose` (modules/transforms/transpose.cpp), reached through `vjp` (E2/
 [stdout] (vjp)…/stdlib/vjp.cml:72:47: [Error]: transforms: transpose has no transpose for …
 ```
 
-The rule exists and is declared (`stdlib/rulesets/transpose.cml:73`, `idx_arr_t`:
+The rule exists and is declared (`stdlib/rulesets/transpose.cml#dtod_t`, `idx_arr_t`:
 `index_into(xs, i) => (ct: T) => scatter_into(zeros_like(xs), i, ct)`), and the pullback already emits the same
-`:tangent/scatter_add_arr` (modules/autodiff/pullback.cpp:2146-2161). The transposer's catch-all `else`
+`:tangent/scatter_add_arr` (modules/autodiff/pullback.cpp#buildReverseBody). The transposer's catch-all `else`
 (transpose.cpp:1354) knows only the arithmetic laws, so the array element read gets no cotangent at all.
 
 ```camel

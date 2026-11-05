@@ -155,6 +155,25 @@ class FuncTypeResolver {
     }
 
     /**
+     * The value a call has whenever its answer is a fact of the type arguments the call names and
+     * the call reads no operand: `extent_of::<float[2, 3]>()` is `[2, 3]` and there is no value it
+     * could have read them from. A rule that answers here is not a run-time operator at all -- the
+     * answer is made where the type arguments are still readable, and the graph holds it -- so a
+     * call of it is that value, and a *name* of it is a function that gives that value
+     * (`Builder::visitLinkNode`, `Builder::functionValueOf`). The value's type is the exit type
+     * `resolveForCall` answers for the same type arguments. nullopt (the default) means this call
+     * is an ordinary operator node.
+     *
+     * Nothing else may be answered here: a rule that needs an operand, a `with` argument or a
+     * static argument is a call, and only a call whose whole question is its type argument belongs
+     * to this hook (design principles 2.3: a value nothing in the graph produces).
+     */
+    virtual std::optional<slot_t> valueFromTypeArgs(const type_vec_t &types) const {
+        (void)types;
+        return std::nullopt;
+    }
+
+    /**
      * Why resolveWith() rejects these arguments, when the resolver can tell something more
      * precise than "no match": for example, the argument kinds fit but statically known tensor
      * shapes conflict. Returns nullopt when the arguments simply do not fit this overload.

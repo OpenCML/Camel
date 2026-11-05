@@ -10,10 +10,10 @@
 （`docs/handover/reviews/questions-2026-10-30.md` §1）。查下来，**今天没有任何东西能证这一句**：
 
 - 读一个单元时，若还没人写过它，GIR 就把读直接接在单元自己身上
-  （`src/compile/gir/builder_expr.cpp:1483-1487`："Before any write the version is the cell
+  （`src/compile/gir/builder_expr.cpp#Builder::visitCastNode`："Before any write the version is the cell
   `:var/new` made"）。也就是说，"读在写前"和"读在写后"在图上长得一样。
 - 跨臂读/写正是生成器现在赖以工作的方式：`readCell`/`writeCell` 在每条臂里各写一遍，
-  单元在 `step` 里被读一次以便闭包捕获（`src/compile/gct/builder.cpp:5912-5916` 的那排 touch）。
+  单元在 `step` 里被读一次以便闭包捕获（`src/compile/gct/builder.cpp#Builder::visitGeneratorBody` 的那排 touch）。
   图里没有一个"这张图执行时这个单元已经有值"的事实。
 - 更麻烦的是：**A 落地之后，用户源码里写不出"写之前读"**。声明必须带值
   （`diagnostics/registry.tsv:18` 的 `MissingInitializer`），而"读一个还没声明的名字"是作用域错误，

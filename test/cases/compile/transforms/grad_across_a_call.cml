@@ -1,0 +1,56 @@
+// The derivative of a function that *calls* another one, read through `grad` --
+// `transpose(split(jvp(f)))` -- at one level and at two.
+//
+// `f(x) = 2.0 * x`, `g(x) = f(x) * x`: g = 2x², so g'(x) = 4x, and the two readings are 12 at x = 3
+// and 20 at x = 5. `g2(x) = g(x) * x` is the second level: g2 = 2x³, g2'(x) = 6x², 54 at x = 3.
+// `h(x) = 2.0 * x * x` is the same function as `g` written flat, and its 12 is here as the guard:
+// the flat spelling never went through the cut's residual list, so a fix that moved this number
+// would be a fix that broke the path that was already right.
+//
+// Measured 2026-11-04, before this case: `grad(g)` answered **0.0** and answered it silently -- the
+// linear half the cut handed out was a constant function of the direction (see
+// split_linear_across_a_call, which reads `lin` itself), so the pullback found no cotangent to send
+// and assembled the answer from nothing. The two-level reading was worse than wrong: it stopped the
+// run with `a direct call names a function whose graph is not in the program's graph table`, because
+// a cut adopts its callee's program and not the cuts *that* program adopted
+// (`include/camel/runtime/program.h#Program::adoptMissing` carried only the graphs a program added
+// itself; the page `docs/handover/questions/2026-11-04-does-a-program-own-what-it-adopted.cn.md` is
+// that defect's record and the ruling that closed it).
+import rulesets.jvp
+import rulesets.transpose
+import { grad } from vjp
+
+func f(x: float): float {
+    return 2.0 * x
+}
+
+func g(x: float): float {
+    return f(x) * x
+}
+
+func g2(x: float): float {
+    return g(x) * x
+}
+
+func h(x: float): float {
+    return 2.0 * x * x
+}
+
+// `grad` differentiates the first `with` parameter (design principles 9.9), so each function above
+// is read through a `with` one; the calls, and the cut they cross, are the ones the case is about.
+with <x: float>
+func g_at(): float { return g(x) }
+
+with <x: float>
+func g2_at(): float { return g2(x) }
+
+with <x: float>
+func h_at(): float { return h(x) }
+
+func main(): int sync {
+    println("grad_g_3=", grad(g_at)(3.0))
+    println("grad_g_5=", grad(g_at)(5.0))
+    println("grad_g2_3=", grad(g2_at)(3.0))
+    println("grad_h_3=", grad(h_at)(3.0))
+    return 0
+}

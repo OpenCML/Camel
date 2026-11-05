@@ -1,0 +1,23 @@
+// WALL PROBE 15 -- the causal mask, in the dtype the operators actually return.  Attention's mask
+// is a constant: 0 where position i may read position j (j <= i) and -1000 where it may not.  It is
+// the one tensor in the model that is not a parameter, and it is the tensor no operator manufactures.
+//
+// This probe writes it the way a reader would: a boolean grid, `zeros` below the diagonal,
+// `full(-1000)` above it, and `where` to choose.  It then adds it to a score tensor, which is what
+// the mask is for.
+import { full, ones, sum, where, zeros } from tensor
+
+func mask(): f32[...] {
+    let keep = [[true, false], [true, true]] as bool[2, 2]
+    return where(keep, zeros::<f32>([2, 2]), full::<f32>([2, 2], -1000.0))
+}
+
+func masked_score(x: f32[...]): float {
+    return float(sum(x + mask()))
+}
+
+func main(): int sync {
+    let scores = ones::<f32>([2, 2])
+    println(`masked score = ${masked_score(scores):.4f}`)
+    return 0
+}

@@ -126,6 +126,10 @@ const RULES = [
         path: /\.sh$/,
         member: false,
         reason: 'a shell helper; the policy names four script languages, and this is not one of them',
+    },    {
+        path: /\.ps1(?:\.example)?$/,
+        member: false,
+        reason: 'a PowerShell helper of the internal tooling; like the shell helpers, it is not one of the script languages the policy names',
     },
 
     // Allow: C/C++ that ships in the product.

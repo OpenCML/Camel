@@ -549,6 +549,13 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     // read are ordered after it, and that holds whether the write is a statement of a `sync`
     // block or not: where a read is written is what decides the value it sees, and a body that is
     // not synchronised does not move a read past a write written below it.
+    //
+    // This is where the rule is written and it is the whole of it (docs/design/effects/edges.cn.md
+    // 5.6, the author's 2026-11-03 ruling): for one cell, a write is ordered after every read since
+    // the write before it. A chain place is not the carrier of that order -- a read is not a
+    // statement of the chain, and the pure node a read stands beside may leave the chain -- so the
+    // order is written here, once, by the write. Rewrites and inlining keep the edge: it is an
+    // order edge of the pair, and replacing either end hands it to the replacement (4.6).
     auto &uses = pendingUsesOf(variable);
     {
         // A read is not on a sync chain, so the write is ordered after it by an order edge: the
@@ -573,12 +580,16 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         const bool regionExit = exitKind == camel::runtime::GCNodeKind::Join ||
                                 exitKind == camel::runtime::GCNodeKind::Loop;
         for (const VariableUse &use : uses) {
-            if (!use.isRead || !sameGraph(use.node, currGraph_)) {
-                // An operation that used the variable itself -- a call that captured it and wrote
-                // nothing, the JOIN of a branch that touched it -- is not ordered by a write: it
-                // stays pending so that the next write meets it, and a region merges it around
-                // its own (pendingUsesOf, mergeArmVariables). A `sync` block orders it with the
-                // chain already, which is why it is not kept there.
+            // A read of the cell is the `:var/get` and the call that read a captured variable
+            // (docs/design/effects/edges.cn.md 5.6: both are reads). The write written after
+            // either of them is ordered after it, so the read sees the cell as it was before the
+            // write changed it.
+            const bool read = use.isRead || nodeKindOf(use.node) == camel::runtime::GCNodeKind::Call;
+            if (!read || !sameGraph(use.node, currGraph_)) {
+                // An operation that used the variable itself and is not a read -- the JOIN of a
+                // branch that touched it -- is not ordered by a write: it stays pending so that
+                // the next write meets it, and a region merges it around its own (pendingUsesOf,
+                // mergeArmVariables).
                 if (!synced_) {
                     pending.push_back(use);
                 }
@@ -1776,11 +1787,12 @@ void Builder::collapseNonEscapingVariableReads() {
             // A read is recorded while this builder is in the graph that made it, and the table
             // outlives that graph: the graph is handed over and released, and the builder with it.
             // Asking `sameGraph` about such a read asserts that it has an owner (builder_support.h,
-            // `nodeGraphOf`), which is exactly what is gone here, so the graph is compared by the
-            // draft the handle already carries. A read of another graph is not this graph's read;
-            // it is skipped here and dropped at the border by `forgetNodesOfOtherGraphs`, because
-            // an outer graph's reads are still needed by the outer graph's own turn.
-            if (nodeDraftOf(read) != &graphDraft) {
+            // `nodeGraphOf`), which is exactly what is gone here, so the read asks the draft
+            // whether it names it at all -- by address and by epoch, which is what a handle names
+            // a draft by. A read of another graph is not this graph's read; it is skipped here and
+            // dropped at the border by `forgetNodesOfOtherGraphs`, because an outer graph's reads
+            // are still needed by the outer graph's own turn.
+            if (!graphDraft.isNamedBy(read)) {
                 continue;
             }
             if (graphDraft.header(nodeIdOf(read)) == nullptr || !graphDraft.alive(nodeIdOf(read))) {
@@ -1811,9 +1823,9 @@ void Builder::collapseNonEscapingVariableReads() {
     std::unordered_map<node_handle_t, std::vector<std::pair<node_handle_t, node_handle_t>>> byCell;
     auto &draft = currGraph_->transaction().edit();
     for (const auto &[read, info] : variableReadSource_) {
-        // Same reason as above: the cell is asked about by the draft its handle names, because a
+        // Same reason as above: the draft is asked whether it is the one the cell names, because a
         // cell of a graph that has been released has no builder left to answer `sameGraph`.
-        if (info.cell == nullptr || nodeDraftOf(info.cell) != &draft) {
+        if (!draft.isNamedBy(info.cell)) {
             continue;
         }
         byCell[info.cell].push_back({read, info.source});
@@ -2064,6 +2076,29 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
         const std::optional<std::string> name =
             withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1]
                                                               : std::nullopt;
+        if (gct->at(i)->type() == GCT::NodeKind::SPRD) {
+            // `..ws` among the `with` arguments: the pack's elements are `with` arguments of their
+            // own, exactly as `..e` gives the ordinary arguments of a call. `f<..ws>(..xs)` is how a
+            // pack is forwarded to another function's pack, so the elements stand where they stand.
+            if (i + 1 != gct->size()) {
+                const GCT::node_ptr_t operand = gct->at(i)->at(0);
+                diags_->of(SemanticDiag::RestArgumentNotLast)
+                    .atOrigin(operand->origin() != 0 ? operand->origin() : gct->origin())
+                    .commit(
+                        operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                               : std::string("expression"));
+                throw BuildAbortException();
+            }
+            const GCT::node_ptr_t operand = gct->at(i)->at(0);
+            for (const node_handle_t &element : expandRestArgument(
+                     operand,
+                     operand->type() == GCT::NodeKind::DREF ? operand->name()
+                                                            : std::string("expression"),
+                     gct)) {
+                inputs.push_back({element, operand, std::nullopt});
+            }
+            continue;
+        }
         if (!restCall) {
             const GCT::NodeKind kind = gct->at(i)->type();
             // A literal whose type the signature still leaves open takes its type from the
@@ -2185,17 +2220,6 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
         const auto *gctTree     = GCT::Tree::of(gct);
         const size_t names      = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
-        // The tuple a `split` hands on beside its result is the transform's own: its members are the
-        // graph's answer -- how many forward values the backward half reads is a property of the body,
-        // not of the type -- so a program neither destructures it nor reads an element of it, and
-        // hands it on whole instead (design principles 4.4, the cut between now and later). Refused
-        // where the program would have read it: at the `let` for a destructuring, at the read for
-        // `residuals.0`. One answer per declaration, the rule the count below follows: every name of
-        // the destructuring carries it, and the first reports.
-        if (tupleType->isResiduals() && (names == 0 || gct->accessIndex() == 0)) {
-            diags_->of(SemanticDiag::ResidualsAreNotVisible).atOrigin(gct->origin()).commit();
-            throw BuildAbortException();
-        }
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
         // declaration, and not as an element read past the end -- a name too few used to drop the
@@ -2251,7 +2275,17 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     default:
-        throw std::runtime_error("Unexpected target type in ACCS node.");
+        // A composite that is none of the three above has no element to read: a function value is the
+        // case that reaches here, and it is not a corner -- `split` answers the forward half, so
+        // `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type whose
+        // members are parameters, not elements (`(float, float) => float`). This used to be a
+        // `runtime_error`, which the driver reports as a defect of the compiler; a program that asks
+        // a function for its element is a program with a mistake in it, and it is told which type it
+        // asked (2026-11-02, the split ABI: sixteen cases in test/cases/transforms reached it).
+        diags_->of(SemanticDiag::TypeNotIndexable)
+            .atOrigin(gct->origin())
+            .commit(tgtType->toString());
+        throw BuildAbortException();
     }
 
     // A member read of a compile-time struct value is that field's value, known here as well: the

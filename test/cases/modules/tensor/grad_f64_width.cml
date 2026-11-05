@@ -1,0 +1,81 @@
+/**
+ * The fused gradients of an f64 tensor are f64, element for element.
+ *
+ * The storage's width and the type's width used to disagree. `gelu_grad` and `erf_grad` built their
+ * answer with `createTensor(TypeCode::Float32, ...)` whatever the input was, and read their operands
+ * through `dataAs<float>()` -- `asFloat` only validates f32/f64, it does not convert -- while the
+ * operator states the input's element type (`gradientLikeTyped(0)`). An f64 `x` therefore came back
+ * as an f64-typed value over an f32 buffer: an f64 [3] is 24 bytes and the kernel wrote 12, so the
+ * low half of every element was an f32 the kernel wrote and the high half was not part of what it
+ * wrote. What was read is a denormal of order 1e-314, and it is **deterministic** for a given input
+ * -- it moves with the input, not with the allocator: x = [-1, 0, 1] reads 1.5769529523e-314 and
+ * x = [1, 0, 0] reads 5.30626085e-315. A run-twice comparison cannot see this class at all; the
+ * width comparison below can. The forward is not in question: it answers at 8 bytes per element,
+ * and so must its gradient (design principles 9.9).
+ *
+ * `to_bytes` writes `numel * sizeof(element)` bytes by the storage's own dtype, so the printed
+ * length is the width the storage really has: 8 per element is f64, 4 is f32. Both are printed,
+ * because the width is what was wrong, not only the numbers. (`layer_norm_grad` was in the same
+ * class of *statement* -- `layerNormGradInfer` said f32 while the kernel already wrote the input's
+ * width -- so its three answers are here too, as the guard that a re-narrowed buffer fails.)
+ *
+ * The numbers are the derivative's, checked element for element against a central difference of the
+ * forward ((f(x+h) - f(x-h)) / 2h, h = 1e-3 and 1e-6, agreeing to 1e-9) and then pinned:
+ *   gelu'(v)  = 0.5 (1 + t) + 0.5 v (1 - t^2) sqrt(2/pi) (1 + 3 * 0.044715 v^2),
+ *               t = tanh(sqrt(2/pi) (v + 0.044715 v^3))
+ *   erf'(v)   = 2/sqrt(pi) exp(-v^2), and erfc' = -erf' -- `sum(erfc(x))`'s gradient is
+ *               `erf_grad` with dy negated, so the same kernel answers it
+ *   layer_norm: the three answers of `layer_norm_grad`'s selectors, x = [[1,2,3],[4,5,6]],
+ *               gamma = [1, 0.5, 2], beta = [0.1, 0.2, 0.3], eps = 1e-5
+ * The tangent is f64's `std::tanh` here (the f32 arm keeps `vmath::tanh`, which is the unary
+ * kernel's and is pinned by `gelu_grad_bits.cml`), so the gelu values are pinned to 1e-12 and not
+ * bit for bit: a libm's last ulp is not this case's subject.
+ */
+
+import { reshape, sum, gelu, erf, erfc, layer_norm, to_bytes } from tensor
+import { grad } from autodiff
+import { to_array } from bytes
+
+type N = { x: float[2, 3], g: float[3], b: float[3] }
+
+with <x: float[3]>
+func lossGelu(): float sync {
+    return float(sum(gelu(x)))
+}
+
+with <x: float[3]>
+func lossErf(): float sync {
+    return float(sum(erf(x)))
+}
+
+with <x: float[3]>
+func lossErfc(): float sync {
+    return float(sum(erfc(x)))
+}
+
+with <m: N>
+func lossNorm(): float sync {
+    return float(sum(layer_norm(m.x, m.g, m.b)))
+}
+
+func line(label: string, t: float[...]) {
+    println("{} bytes={} d={}"->format<label, len(to_array(to_bytes(t))), t>)
+}
+
+func main(): int sync {
+    let x = reshape<[3]>([-1.0, 0.0, 1.0] as float[])
+    line("f64.gelu", grad(lossGelu)<x>())
+    line("f64.erf", grad(lossErf)<x>())
+    line("f64.erfc", grad(lossErfc)<x>())
+
+    let m = {
+        x: reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as float[]),
+        g: reshape<[3]>([1.0, 0.5, 2.0] as float[]),
+        b: reshape<[3]>([0.1, 0.2, 0.3] as float[]),
+    }
+    let gn = grad(lossNorm)<m>()
+    line("f64.lnorm.dx", gn.x)
+    line("f64.lnorm.dgamma", gn.g)
+    line("f64.lnorm.dbeta", gn.b)
+    return 0
+}

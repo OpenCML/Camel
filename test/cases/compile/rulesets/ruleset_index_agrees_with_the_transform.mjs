@@ -45,12 +45,19 @@ function run(args) {
 }
 
 // ---- the table: one row per key, in key order ----
+// A key may hold more than one law: a reduction over an axis is written with the whole reduction's
+// name and the axis in `<>` (author's ruling, 2026-11-05), so `sum/1` holds the law of `sum(xs)` and
+// the law of `sum<axis, keepdims>(xs)` and the ports say which is which
+// (`modules/transforms/rule_expand.cpp#chooseRuleAmong`).
 const table = new Map()
 const tableText = run([bodies, 'std::rulesets']).stdout
 for (const line of tableText.split('\n')) {
     const row = /^RULESET rulesets\.vmap (\S+)\/(\d+) -> (\S+)/.exec(line.trim())
     if (!row) continue
-    table.set(`${row[1]}/${row[2]}`, row[3])
+    const key = `${row[1]}/${row[2]}`
+    const rules = table.get(key) ?? []
+    rules.push(row[3])
+    table.set(key, rules)
 }
 if (table.size === 0) throw new Error('the table printed no rulesets.vmap row at all')
 
@@ -69,10 +76,19 @@ for (const line of lookupText.split('\n')) {
 if (looked.size !== table.size) {
     throw new Error(`the table printed ${table.size} keys and the index answered ${looked.size}`)
 }
-for (const [key, rule] of table) {
+for (const [key, rules] of table) {
     const answer = looked.get(key)
-    if (answer !== rule) {
-        throw new Error(`${key}: the table says ${rule}, the index answers ${answer ?? 'nothing'}`)
+    if (rules.length === 1) {
+        if (answer !== rules[0]) {
+            throw new Error(`${key}: the table says ${rules[0]}, the index answers ${answer ?? 'nothing'}`)
+        }
+    } else if (answer !== 'no') {
+        // The singular lookup refuses a key that holds two laws ("a caller that has only the
+        // spelling must not guess which"), and the transform asks the plural one and chooses by
+        // the operands' ports -- so the table's two rows and the refusal are the same fact.
+        throw new Error(
+            `${key}: the table holds ${rules.length} laws, and the singular lookup answered ${answer ?? 'nothing'}`
+        )
     }
 }
 
@@ -91,13 +107,14 @@ const expected = new Map([
     ['row_min', 'min/1'],
     ['row_argmax', 'argmax/1'],
     ['row_argmin', 'argmin/1'],
-    // the same six with an axis word
-    ['plane_sum_axis', 'sum_axis/3'],
-    ['plane_mean_axis', 'mean_axis/3'],
-    ['plane_max_axis', 'max_axis/3'],
-    ['plane_min_axis', 'min_axis/3'],
-    ['plane_argmax_axis', 'argmax_axis/3'],
-    ['plane_argmin_axis', 'argmin_axis/3'],
+    // the same six with an axis word: the same key as the whole form, because a reduction over an
+    // axis is written with the whole reduction's name (`sum<0>(xs)`)
+    ['plane_sum_axis', 'sum/1'],
+    ['plane_mean_axis', 'mean/1'],
+    ['plane_max_axis', 'max/1'],
+    ['plane_min_axis', 'min/1'],
+    ['plane_argmax_axis', 'argmax/1'],
+    ['plane_argmin_axis', 'argmin/1'],
     // a row's matrix product
     ['flat_mul', 'matmul/2'],
     // the layout tier: the shape, axis and permutation written in angle brackets
@@ -135,7 +152,9 @@ for (const [fn, key] of expected) {
         continue
     }
     const printed = table.get(key)
-    if (printed !== rule) wrong.push(`${fn} hit ${rule} through ${key}, the table says ${printed ?? 'nothing'}`)
+    if (printed === undefined || !printed.includes(rule)) {
+        wrong.push(`${fn} hit ${rule} through ${key}, the table says ${printed?.join(' and ') ?? 'nothing'}`)
+    }
 }
 if (wrong.length > 0) throw new Error(wrong.join('\n'))
 if (hits.size !== expected.size) {
@@ -146,11 +165,11 @@ if (hits.size !== expected.size) {
 // The ones a reader of the *tail* of the table's output does not see (the plan report elides the
 // head of a long stdout as `... N line(s) before`, which is what made a complete table look like a
 // table of twelve): the five arithmetic tokens and three of the arg* family. Each must be a row.
-const head = ['*/2', '+/2', '-/1', '-/2', '//2', 'argmax/1', 'argmax_axis/3', 'argmin/1']
+const head = ['*/2', '+/2', '-/1', '-/2', '//2', 'argmax/1', 'argmin/1', 'sum/1']
 const missing = head.filter((key) => !table.has(key))
 if (missing.length > 0) throw new Error(`the table does not hold ${missing.join(', ')}`)
 
 console.log(
-    `printed=${table.size} looked=${looked.size} hit=${hits.size} ` +
+    `keys=${table.size} looked=${looked.size} hit=${hits.size} ` +
         `six_eights=${head.length} first=${[...table.keys()][0]} last=${[...table.keys()].at(-1)}`
 )

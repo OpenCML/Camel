@@ -1,7 +1,7 @@
 /**
  * A direct call of the whole-array draws is one kernel operator: `uniform` and `normal` are Camel
  * functions with a kernel (`#impl`), and the kernel's variable `T` is stated by the call's type
- * argument alone (it only appears in the result `T[..]`).
+ * argument alone (it only appears in the result `T[...]`).
  */
 import { key, uniform, normal } from random
 

@@ -1,0 +1,42 @@
+// The cotangent of a read, answered from the **type**.
+//
+// `pick` reads one element of its parameter, so the cotangent of that parameter is a zero array of
+// its shape with one slot filled. `transpose` answers one cotangent per parameter and passes nothing
+// else -- every parameter is a linear input (design principles 9.9) -- so the transposed function is
+// handed the cotangent and *no* value of `x`.
+//
+// The shape that zero array needs is not a value: it is a fact `x: float[3]` states, and the walk
+// fills the port `rulesets/transpose.cml#idx_arr_t` names with the shape it reads off that type
+// (`modules/transforms/transpose.cpp#shapeFromTypeOf`, the one reading of
+// `camel::core::type::statedExtentsOf`), so the law builds its zeros with `zeros_of(ct,
+// extent_product(at))` and the answer is `([0.0, 1.0, 0.0])` on both back ends -- the adjoint of
+// `x[1]` at ct = 1 fills slot 1 and every other slot is zero.
+//
+// Before this case's change the difference reached the run as a count, and a count is not a report:
+//
+//   error[...]: Pass 'std::nvm' failed with an internal error: Runtime indirect call norm-arity
+//   mismatch: caller graph 'main' node 3 has 1 args, target graph 'transpose_of_pick' has 2 norm
+//   ports.
+//   help: ... which is a defect of the compiler rather than of the program. ... report the program
+//   together with the pass list.
+//
+// on `std::nvm`, whose help asked a reader to report their own program as a defect of the compiler,
+// and an abort on the fast VM (`FastVM indirect call norm-arity mismatch for graph
+// 'transpose_of_pick': expected 2, got 1`, exit 134). None of those sentences may come back, and
+// this case pins the answer above instead of a count.
+//
+// A parameter whose type states **no** extents (`float[...]`) is the other side of the same rule: no
+// law can state the length, so the build refuses by name
+// (`RuntimeDiag::TransposeNeedsParameterShape`, pinned by `transpose_needs_parameter_shape`).
+import { transpose } from transforms
+import rulesets.transpose
+
+func pick(x: float[3]): float {
+    return x[1]
+}
+
+func main(): int sync {
+    let back = transpose(pick)
+    println(back(1.0))
+    return 0
+}

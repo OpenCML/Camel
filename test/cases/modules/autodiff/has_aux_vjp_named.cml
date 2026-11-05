@@ -1,0 +1,36 @@
+/**
+ * `has_aux` named at a `vjp` call: the library has no such parameter, and the refusal says so
+ * by name.
+ *
+ * `has_aux` is a parameter of the engine's `grad` and `with_grad` (`stdlib/signatures/autodiff.cml`,
+ * the operators `autodiff:grad_aux` and `autodiff:with_grad_aux`). The library's `vjp` takes the
+ * function and gives the pair `(value, pullback)`; a function whose result is a pair is split
+ * where the pair is written, because `vjp` differentiates a `float` result and the cotangent of
+ * a pair is not a cotangent the seed can be. So a call that names `has_aux` names a parameter
+ * this declaration does not have, and it is refused as exactly that: `'has_aux' is not a
+ * parameter of ...`, with the resolved type of `vjp` printed where the callee's name would
+ * stand (it is a generic declaration, so what the argument list was checked against is the
+ * instantiated signature `(f: F) => <__pack_0: ...WithOf<F>> (__pack_0: ...ParamsOf<F>) =>
+ * (ResultOf<F>, (ct: Tangent<ResultOf<F>>) => (...Tangent<ParamsOf<F>>,))`). It is not refused by
+ * silently differentiating the pair's first element, and not by answering a shape the writer did
+ * not ask for.
+ *
+ * A pair-returning function handed to `vjp` with no named argument -- the other spelling of the
+ * same mistake -- is refused one step later, at `stdlib/vjp.cml`'s `transpose(lin)` call:
+ * `transpose` takes a function whose result has a cotangent, and the cotangent of a pair is what
+ * would have to go in.
+ *
+ * That the three numbers are still reached, by composition, is
+ * test/cases/modules/autodiff/has_aux_library.cml.
+ */
+import { vjp } from vjp
+
+func loss(x: float): (float, float) {
+    return (x * x, x + 10.0)
+}
+
+func main(): int sync {
+    let g = vjp(loss, has_aux: true)<3.0>()
+    let _ = g
+    return 0
+}

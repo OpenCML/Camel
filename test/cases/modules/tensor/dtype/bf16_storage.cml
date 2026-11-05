@@ -1,5 +1,5 @@
 /**
- * `bf16[..]` and `f16[..]` store their own element type, two bytes per element, and are
+ * `bf16[...]` and `f16[...]` store their own element type, two bytes per element, and are
  * not an f32 tensor with a label (design principles 7.3):
  *
  *   - 0.1 rounds to bf16 0x3DCD (bytes [205, 61]) and to f16 0x2E66 (bytes [102, 46]);
@@ -20,12 +20,12 @@ import { sum, to_bytes } from tensor
 import { to_array } from bytes
 
 #[change_precision]
-func narrow(x: f32[..]): bf16[..] {
+func narrow(x: f32[...]): bf16[...] {
     return bf16(x)
 }
 
 #[change_precision]
-func narrowHalf(x: f32[..]): f16[..] {
+func narrowHalf(x: f32[...]): f16[...] {
     return f16(x)
 }
 
@@ -34,7 +34,7 @@ func main(): int sync {
     let tenth = narrow(tenthValue)
     println(len(to_bytes(tenth)))
     println(to_array(to_bytes(tenth)))
-    let wide: f32[..] = f32(tenth)
+    let wide: f32[...] = f32(tenth)
     println(to_array(to_bytes(wide)))
     println(to_array(to_bytes(tenthValue)))
     let half = narrowHalf(tenthValue)

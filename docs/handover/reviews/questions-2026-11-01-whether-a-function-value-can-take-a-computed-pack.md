@@ -1,6 +1,6 @@
 # 参数表是"计算出的 pack"的函数值，要不要给一个拼写？
 
-**状态**：待裁（2026-11-01，`lane-m4-assembly`）
+**状态**：待裁（2026-11-01，`c2181c95f`，原 `lane-m4-assembly`，该分支已删）
 
 **问句**：`vjp` 要并成一条泛型 `vjp::<F>`（作者 14:30 裁定的方向），函数体得返回一个**参数表是计算出的 pack** 的函数值。今天这个形状没有拼写。要不要给一个？还是"两条按元数分写的声明"就是答案？
 
@@ -30,7 +30,7 @@ help: A rest parameter is untyped: the tuple of the arguments left over is made 
                                                       （改用嵌套具名函数绕也不行）
 ```
 
-**一句话**：一个"参数表是计算出的 pack"的函数值**没有拼写**——`func` 的声明与定义可以写 `..xs: ..A`（`stdlib/prelude.cml:515` 的 `zip`，用例 `firsts`/`both`），但那里的 pack 由**调用点**定（`help` 说得很清楚）；要让它由**外层泛型**定（`..ParamsOf<F>`），今天没有写法。
+**一句话**：一个"参数表是计算出的 pack"的函数值**没有拼写**——`func` 的声明与定义可以写 `..xs: ..A`（`stdlib/prelude.cml#operator` 的 `zip`，用例 `firsts`/`both`），但那里的 pack 由**调用点**定（`help` 说得很清楚）；要让它由**外层泛型**定（`..ParamsOf<F>`），今天没有写法。
 
 ## 三条路
 

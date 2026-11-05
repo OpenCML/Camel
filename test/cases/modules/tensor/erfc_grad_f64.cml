@@ -1,0 +1,46 @@
+/**
+ * `erfc`'s gradient on an `f64[...]` input, element by element, beside the value it is the
+ * derivative of.
+ *
+ * erfc(v) = 1 - erf(v), so erfc'(v) = -2 / sqrt(pi) * exp(-v^2): the erf gradient with the sign
+ * turned. The three numbers below are what a central difference of the printed forward agrees with,
+ * (f(x + h) - f(x - h)) / 2h at h = 1e-3: [-0.41510764, -1.1283788, -0.41510764], within 3.8e-7 of
+ * them. The last line is `erfc`'s gradient plus `erf`'s, element by element, and it is the identity
+ * that decides whether this rule runs the right kernel at all: `erfc = 1 - erf` makes the two
+ * gradients exact negatives, so every element of their sum is 0.0 and no magnitude can cancel a
+ * sign that was written wrong.
+ *
+ * What this case read before the operator was fixed: `erfc`'s rule is `erf_grad` with the incoming
+ * gradient negated (elementwise_ops.cpp, `erfcVjp`), and that operator wrote its answer at f32
+ * whatever its input's element type was, while its declared result is the arguments' own element
+ * type (gradient_ops.cpp, `gradientLikeTyped`). On an `f64[...]` input the value was a 12-byte f32
+ * array behind an `f64[...]` type, so each element read back was an f32 answer's bits in the low half
+ * of a double: [0.0, 1.570800649e-314, 0.0] at x = [-1.0, 0.0, 1.0] -- the erf reading with its sign
+ * turned, which is the same wrong number twice. Nothing refused it and nothing was uninitialized:
+ * the storage was too narrow for the number of elements the type promised.
+ *
+ * The f32 line is the same gradient at f32's width and must keep its numbers.
+ */
+
+import { erf, erfc, sum } from tensor
+import { grad } from autodiff
+
+with <x: f64[...]>
+func lossErfc(): float { return float(sum(erfc(x))) }
+
+with <x: f64[...]>
+func lossErf(): float { return float(sum(erf(x))) }
+
+with <x: f32[...]>
+func loss32(): float { return float(sum(erfc(x))) }
+
+func main(): int sync {
+    let x = [-1.0, 0.0, 1.0] as f64[]
+    let dc = grad(lossErfc)<x>()
+    println('erfc_grad_f64 forward={}'->format<erfc(x)>)
+    println('erfc_grad_f64 grad={}'->format<dc>)
+    println('erfc_grad_f64 neg_erf={}'->format<dc + grad(lossErf)<x>()>)
+    let y = [-1.0, 0.0, 1.0] as f32[]
+    println('erfc_grad_f32 grad={}'->format<grad(loss32)<y>()>)
+    return 0
+}

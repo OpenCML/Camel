@@ -2,7 +2,7 @@ id = "parse.rulings"
 order = 306
 tier = "fast"
 tags = ["feat", "parse", "syntax"]
-desc = "The syntax rules of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `..`, read left to right). The right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
+desc = "The syntax rules of design principles 4.2: the precedence of `^`, literals with an exponent, renamed imports, documentation comments, an `if` statement without a block, and the postfix marks of a type (`?`, `!` and the stream's `...`, read left to right). The right side of `as` is a type, and a lambda's parameters are written in parentheses (5.9). The head of `static for` is read here too: it is the `for ... in ...` of `static loop`, without parentheses."
 
 [[tests]]
 name = "rulings.power"
@@ -249,7 +249,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_marks"
-desc = "`..` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case: `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[..]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[..]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
+desc = "`...` is a postfix mark of a type beside `?` and `!`, and the marks are read left to right with no special case: `T..` is the stream of T, `T?..` the stream of a nullable T, `T!..` the stream of a fallible T, `T..?` the possibly absent stream, `T[3]..` the stream of three-element arrays, `T[...]..` the stream of open-rank arrays, and an item of a tuple takes one. `T[...]` keeps its own reading: an array whose extents are a prefix, which is not a stream. The tree is locked by feat/parse/frontend's snapshot; this test runs the program."
 kind = "behavior"
 case = "../../../cases/parse/rulings/stream_type_marks.cml"
 args = ["${case}"]
@@ -261,7 +261,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rulings.stream_type_as_interval"
-desc = "The right side of `as` is a type: `..` after a type there is the stream suffix. A number written directly after the `..` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `..`, with the operator of the `as` quoted. It used to be `Unexpected '..'; expected '}'.` at the `..`."
+desc = "The right side of `as` is a type: `...` after a type there is the stream suffix. A number written directly after the `...` is the interval reading in a place where a type stands, and the refusal is named and says how to write it - the message the ruling asked for, at the `...`, with the operator of the `as` quoted. It used to be `Unexpected '...'; expected '}'.` at the `...`."
 kind = "negative"
 case = "../../../cases/parse/rulings/stream_type_as_interval.cml"
 args = ["${case}"]

@@ -9,7 +9,7 @@
 ## 文档与代码怎么说
 
 - 设计稿 `docs/design/program-transforms/README.cn.md` 4.1：`reinterp<F,H>` 把 `f` 的图里每个原语换成规则集 `H` 给它的含义，`H` 带一个类型函数 `Lift<T>`。`vmap` 的 `Lift<T>` 是 `RowsOf<T>`（`stdlib/types.cml`：值前面多一个未知长度维）。
-- 机器：`modules/transforms/jvp.cpp:97-128` 是唯一一份"把规则变成节点"的代码。它 `lookupRule` 拿到规则名，`genericRuleInstance` 实例化，然后**先**调外那层（实参是原语的取值节点），**再**用返回的函数值调内那层（实参是切线）。
+- 机器：`modules/transforms/jvp.cpp#buildRuleTangent` 是唯一一份"把规则变成节点"的代码。它 `lookupRule` 拿到规则名，`genericRuleInstance` 实例化，然后**先**调外那层（实参是原语的取值节点），**再**用返回的函数值调内那层（实参是切线）。
 - 规则右边点名的函数读得出来：`include/camel/parse/ast/rule_head.h` 的 `rhsCalleeOf(family, rule)`（`add_tangent` 就是这么被读到的）。
 
 ## 为什么 `jvp` 能过、`vmap` 过不去

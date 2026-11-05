@@ -1,0 +1,46 @@
+// The zero of a parameter whose type states no extent answers an array of **no elements**, and this
+// case is the reading that says what that array does when it meets a real one: it is refused by
+// shape, it does not become a number.
+//
+//   f(x) = 1.0 for every x  =>  f'(x) = 0, and for `x` a `float[...]` the answer is the zero the type
+//                                states -- a zero with no extents, i.e. 1 dimension of length 0.
+//
+// Why the answer has no length: the transposed function is handed the cotangent and nothing else
+// (author's ruling of 2026-11-02 11:30), `split` hands out `residuals=0`, and the parameter's value is
+// not a port of the member, so nothing in that graph carries `[1.0, 2.0, 3.0]`'s length. The full
+// argument, the three roads and the default are in
+// docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md.
+//
+// The three readings, in the order the program prints them:
+//   * `shape(dx)= [0]` -- 1 dimension, 0 elements. Not a rank-zero array, which would be *the element
+//     itself* and would print and act as the scalar `0.0` (a wrong number instead of a wrong shape).
+//   * `sum(dx * x)` -- refused: `Array shape mismatch in 'multiply': cannot broadcast [0] with [3].`
+//     The same for `dx + x`. This is the reading that matters: an answer whose width was not stated
+//     makes the *consumer* say so, at the line that asked for it.
+//   * `sum(dx)= 0.0` -- the sum of zero elements, which is addition's identity and not a claim about
+//     the three elements of `x`. It is printed last, after the refusal, so a reader sees that the one
+//     place that answers a number is the empty reduction and not the array product.
+//
+// The control is the case next door (`vjp_const_function_answers_zero`): a parameter whose type states
+// `float[3]` answers `[0.0, 0.0, 0.0]`, and `sum(dx + x)` there is `6.0` -- `[0,0,0] + [1,2,3]`.
+import rulesets.jvp
+import rulesets.transpose
+import { shape, sum } from tensor
+import { vjp } from vjp
+
+func const_open(x: float[...]): float {
+    let _ = x
+    return 1.0
+}
+
+func main(): int sync {
+    let x = [1.0, 2.0, 3.0] as float[...]
+    let (value, pull) = vjp(const_open)(x)
+    let dx = pull(1.0).0
+    println('value=', value)
+    println('dx=', dx)
+    println('shape(dx)=', shape(dx))
+    println('sum(dx)=', sum(dx))
+    println('sum(dx * x)=', sum(dx * x))
+    return 0
+}

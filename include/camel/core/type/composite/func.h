@@ -100,12 +100,15 @@ class FunctionTypeFactory {
     ///
     /// The `with` parameters end in a pack (`with <..args>`): it stands for the `with` arguments
     /// a call gives beyond the fixed ones, of any types, and is added after every other `with`
-    /// parameter as a `void` parameter no call passes a value for. Only a declaration without a
-    /// body (the rule of a native operator, which takes its arguments as they come) and a
-    /// function type write one.
-    void addWithRest(const std::string &ident) {
+    /// parameter as a `void` parameter no call passes a value for. A declaration with a body
+    /// writes one like a declaration without one (language author, 2026-11-03), and so does a
+    /// function type.
+    ///
+    /// A pack that writes an element type (`with <..args: T>`) keeps it in that slot, and the
+    /// signature's `withRestType()` answers it.
+    void addWithRest(const std::string &ident, Type *elementType = nullptr) {
         hasWithRest_ = true;
-        withTypes_.emplace_back(Type::Void(), false);
+        withTypes_.emplace_back(elementType != nullptr ? elementType : Type::Void(), false);
         argNames_.push_back(ident);
     }
 
@@ -224,6 +227,17 @@ class FunctionType : public CompositeType {
     /// Whether the last `with` parameter is a pack (`with <..args>`); its type here is `void`.
     bool hasWithRest() const { return hasWithRest_; }
 
+    /// The type the pack's own arguments have (`with <..args: T>`), or `nullptr` when the pack
+    /// writes none and takes any type. An ordinary parameter's rule, one type further out: every
+    /// argument the pack takes is of `T` (design principles 4.4, 5.6).
+    Type *withRestType() const {
+        if (!hasWithRest_ || withCount_ == 0) {
+            return nullptr;
+        }
+        Type *slot = withTypeAt(withCount_ - 1);
+        return slot == nullptr || slot->code() == TypeCode::Void ? nullptr : slot;
+    }
+
     /// Whether the signature has a `constas n: T` parameter, which ones they are (indices over
     /// all parameters, `with` parameters first), and whether a given parameter is one.
     bool hasConstas() const { return !constasIndices_.empty(); }
@@ -303,6 +317,9 @@ class FunctionType : public CompositeType {
         std::vector<uint16_t> withConstIndices;
         std::vector<SymId> names;
         sem::ResourceSignature resources;
+        /// The signature is `split`'s backward half: its parameters are the tangents, and the values it
+        /// reads are in its closure. Nothing on the type says so -- `transpose` treats every parameter
+        /// as linear (author's ruling of 2026-11-02 11:30).
     };
 
     FunctionType(const Parts &parts, bool open);

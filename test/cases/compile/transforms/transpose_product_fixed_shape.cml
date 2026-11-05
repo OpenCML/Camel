@@ -1,0 +1,35 @@
+// The check that only takes a law written for the shape it meets must not refuse the shape the law
+// *was* written for. Here the operands are two arrays of a concrete extent (`float[3]`, not
+// `float[...]`), and the law `mul_tensor_t` names `T[...]` -- an open rank -- so this is the reading
+// that says an open rank takes a fixed extent while a `T[...]` port still refuses a number.
+//
+// Hand arithmetic at xs = (1, 2, 3), w = (2, 3, 4), the output summed so the pullback is a number:
+//
+//   value  = 1*2 + 2*3 + 3*4 = 20
+//   d/dxs  = w              = (2, 3, 4)
+//   d/dw   = xs             = (1, 2, 3)
+//
+// A wrong reading here would be a refusal (a diagnostic instead of 20.0), which is why the value is
+// read before the cotangents: a refused transpose produces no stdout at all, and the plan records
+// the exit code beside the lines.
+import rulesets.jvp
+import rulesets.transpose
+import { numel, sum } from tensor
+import { vjp } from vjp
+
+func energy(xs: float[3], w: float[3]): float {
+    return sum(xs * w)
+}
+
+func main(): int sync {
+    let xs: float[3] = [1.0, 2.0, 3.0]
+    let w: float[3] = [2.0, 3.0, 4.0]
+    let (value, pullback) = vjp(energy)(xs, w)
+    let (dxs, dw) = pullback(1.0)
+    println(`value = ${value:.1f}`)
+    println(`d/dxs numel = ${numel(dxs)}`)
+    println(`d/dxs = ${dxs[0]:.1f} ${dxs[1]:.1f} ${dxs[2]:.1f}`)
+    println(`d/dw numel = ${numel(dw)}`)
+    println(`d/dw = ${dw[0]:.1f} ${dw[1]:.1f} ${dw[2]:.1f}`)
+    return 0
+}

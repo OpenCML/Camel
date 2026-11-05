@@ -137,3 +137,122 @@ assert(input.diagnostics.length === 1, JSON.stringify(input.diagnostics))
 assert(input.diagnostics[0].name === 'SemanticDiag::CalledFallibleValue', input.diagnostics[0].name)
 assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, JSON.stringify(input.diagnostics[0]))
 """
+
+# ---- The help of EffectNotExecuted, per position (author's ruling of 2026-11-05, `080778522`) ----
+#
+# The help used to give two remedies that are not writings: a `sync { ... }` block put in a function
+# body (as a statement it is itself not needed, so it does not run) and a sync block bound to a name
+# (`let u = sync { ... }` -- `sync` modifies a block, it is not an expression a `let` binds). In a
+# `loop` body neither is a program that prints, and the one writing that works there, `do sync { ... }`
+# (`docs/language/06_expressions.md` 6.8.6, design principles 3.2 and 3.4), was not named at all.
+#
+# The four entries below are the four writings the help now lists, one per line of the help, plus the
+# three shapes the question page measured. Each entry writes the remedy where the effect is and reads
+# its output, so a help that named a spelling the language does not have would be caught by the case
+# that follows it rather than by a reader. The page is
+# `docs/handover/questions/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
+
+[[tests]]
+name = "unused_values.help_loop_body_names_do_sync"
+desc = "An effect written as a statement of a `loop` body that is not a sync block does not run: the loop's value `3` is what prints, the call is reported as EffectNotExecuted, and the help names the writing that works at that position -- `do sync { ... }` -- instead of a sync block inside the body or a sync block bound to a name. The two writings the help used to give are not in it: one is measured not to run (`unused_values.help_sync_statement_in_a_loop_body_does_not_run`) and one does not parse (`unused_values.help_let_sync_is_not_a_program`)."
+kind = "negative"
+case = "../../../cases/compile/unused_values/effect_loop_body_dropped.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+const text = input.normalized.stderr.replace(/\\s+/g, ' ')
+assert(text.includes('SemanticDiag::EffectNotExecuted'), `the dropped call is not reported: ${text}`)
+assert(text.includes("'do sync { ... }'"), `the help does not name 'do sync': ${text}`)
+assert(!text.includes('let u = sync'), `the help names a writing that does not parse: ${text}`)
+}
+"""
+
+[[tests]]
+name = "unused_values.help_loop_body_do_sync_runs"
+desc = "The remedy the help gives for a loop body, written: `do sync { ... }` declares the body a sync block, so the three calls run and the loop's value is unchanged (`total=3`). The one word is the whole difference from `effect_loop_body_dropped.cml`, and nothing is reported."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/effect_loop_body_do_sync.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "unused_values.help_sync_statement_in_a_loop_body_does_not_run"
+desc = "The writing the old help invited, measured where it was offered: a `sync { ... }` block written as a statement of a loop body is itself not needed, so it does not run and the call inside it is still reported as EffectNotExecuted. Only `total=3` prints, which is why the help names `do sync` for a loop body and not a sync block written inside it."
+kind = "negative"
+case = "../../../cases/compile/unused_values/effect_sync_statement_in_a_loop_body.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === 'total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+const text = input.normalized.stderr.replace(/\\s+/g, ' ')
+assert(text.includes('SemanticDiag::EffectNotExecuted'), `the block is not reported: ${text}`)
+assert(text.includes("'do sync { ... }'"), `the help does not name 'do sync': ${text}`)
+}
+"""
+
+[[tests]]
+name = "unused_values.help_let_sync_is_not_a_program"
+desc = "The second writing the old help invited is refused by the parser: a sync block cannot be bound to a name (`let u = sync { ... }`), because `sync` modifies a block and is not an expression. The help no longer offers it, and this case keeps the reason: the writing is not a worse remedy, it is not a program."
+kind = "negative"
+case = "../../../cases/compile/unused_values/effect_let_sync_is_not_a_program.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_stdout_contains = ["Unexpected 'sync'", "expected an expression"]
+
+[[tests]]
+name = "unused_values.help_if_arm_then_sync_runs"
+desc = "The remedy the help gives for an effect written in an `if`'s arm, written as `then sync { ... }`: both statements of the arm run although the `if` is a statement whose value nobody takes, and nothing is reported. A plain arm would run only its value (`println('then=2')`), which is the reading the help replaces."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/effect_if_then_sync.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === 'then=1|then=2', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "unused_values.help_if_arm_else_sync_runs"
+desc = "The other half of the same remedy: `else sync { ... }`. The same program with the condition the other way, so the arm that prints is the one the help names for it, and the arm not taken prints nothing."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/effect_if_else_sync.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === 'else=1', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+}
+"""
+
+[[tests]]
+name = "unused_values.help_function_body_sync_runs"
+desc = "The remedy the help gives for an effect written in a function body, written as `func f(): T sync { ... }`: the body is a sync block, so the call written there runs when the function runs, and nothing is reported. The declaration is the whole difference from a body that is not `sync`, where the same call does not run."
+kind = "behavior"
+case = "../../../cases/compile/unused_values/effect_function_body_sync.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === 'hello from greet', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.stderr)
+}
+"""
