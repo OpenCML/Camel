@@ -2911,12 +2911,15 @@ alone. A single type (`i32`, `f32`, `int`) is asked with `is_same`.
 
 Types are also computed from types, in the one language (design principles 5.6, 21): a type
 function is declared with `type`, takes its arguments in the angle brackets of a type position
-and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
-of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
-key and value types of a map) take a type apart where `match type` cannot, and `RowsOf<T>` (the
-array whose first-dimension elements are `T`) puts one back together the same way; they are
-declared below without a body: the compiler provides them. They are evaluated when the instance that
-binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
+and has a type expression for its body, a `match type` among them. Those that take a type apart
+or put one back together are written that way: `ElementOf<T>` (the element of an array or a set),
+`WithElement<A, E>` (A with the element `E`) and `RowsOf<T>` (the array whose first-dimension
+elements are `T`) are `match type` cases over the array's dimensions, which a case binds as a
+dims pack (`case E[...Dims]`). `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and
+`ValueOf<T>` (the key and value types of a map, and the keys of a set) are declared below without
+a body: the compiler provides them, because what they answer is a field of the type that a
+`match type` case cannot name. A type function is evaluated when the instance that binds `T` is
+made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
 
 `match type` compares a type's identity as well as its shape (design principles 5.5): the
 cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,

@@ -16,12 +16,15 @@
  *
  * Types are also computed from types, in the one language (design principles 5.6, 21): a type
  * function is declared with `type`, takes its arguments in the angle brackets of a type position
- * and has a type expression for its body, a `match type` among them. `ElementOf<T>` (the element
- * of an array or a set), `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and `ValueOf<T>` (the
- * key and value types of a map) take a type apart where `match type` cannot, and `RowsOf<T>` (the
- * array whose first-dimension elements are `T`) puts one back together the same way; they are
- * declared below without a body: the compiler provides them. They are evaluated when the instance that
- * binds `T` is made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
+ * and has a type expression for its body, a `match type` among them. Those that take a type apart
+ * or put one back together are written that way: `ElementOf<T>` (the element of an array or a set),
+ * `WithElement<A, E>` (A with the element `E`) and `RowsOf<T>` (the array whose first-dimension
+ * elements are `T`) are `match type` cases over the array's dimensions, which a case binds as a
+ * dims pack (`case E[...Dims]`). `PayloadOf<T>` (the `U` of `U?` or `U!`), `KeyOf<T>` and
+ * `ValueOf<T>` (the key and value types of a map, and the keys of a set) are declared below without
+ * a body: the compiler provides them, because what they answer is a field of the type that a
+ * `match type` case cannot name. A type function is evaluated when the instance that binds `T` is
+ * made, so `is_integer::<ElementOf<T>>()` asks the element type of `T`.
  *
  * `match type` compares a type's identity as well as its shape (design principles 5.5): the
  * cases below name the types the language spells (`int`, `i32`, `float`, `f32`, `bf16`, `f16`,
@@ -30,32 +33,15 @@
  * `is_float` and inherit `is_numeric` and `is_ordered` from it.
  */
 
-/// The element type of an array or a set type; any other type is refused.
-/// @example is_same::<ElementOf<int[]>, int>()    // true
-/// @example is_same::<ElementOf<Set<i32>>, i32>()    // true
-export type ElementOf<T>
-
 /// The `U` of `U?` or `U!`; any other type is refused.
 /// @example is_same::<PayloadOf<float?>, float>()    // true
 /// @example is_same::<PayloadOf<int!>, int>()    // true
 export type PayloadOf<T>
 
-/// The array type A with the element type E in place of its own, extents and rank kept; a type that
-/// is not an array is refused.
-/// @example is_same::<WithElement<int[2, 3], float>, float[2, 3]>()    // true
-export type WithElement<A, E>
-
-/// The array type whose first-dimension elements are `T`: one dimension more than `T` has, of
-/// unknown length, the dimensions `T` states kept. The inverse of the element `x[i]` and `for x in
-/// xs` take (design principles 5.4), so a value of this type indexed at `i` gives a `T`. A type
-/// with no dimension is one element of the batch: `RowsOf<f32>` is `f32[?]`, the array of floats
-/// `vmap` applies a one-parameter function to.
-/// @example is_same::<RowsOf<f32[3]>, f32[?, 3]>()    // true
-/// @example is_same::<RowsOf<f32>, f32[]>()    // true
-export type RowsOf<T>
-
-/// The key type of a map type; any other type is refused.
+/// The keys of a map or a set type: the key type of a map, the element type of a set (a set's
+/// elements are its keys); any other type is refused.
 /// @example is_same::<KeyOf<Map<string, int>>, string>()    // true
+/// @example is_same::<KeyOf<Set<i32>>, i32>()    // true
 export type KeyOf<T>
 
 /// The value type of a map type; any other type is refused.
@@ -84,6 +70,40 @@ export type ShapeOf<T> = match type T {
     case E[...Dims] => int[Dims]
     case E[...] => int[]
     case _ => int[0]
+}
+
+/// The element type of an array or a set type; any other type is refused.
+///
+/// The three ways a container says what its elements are: an array whose rank is stated gives its
+/// element and its dimensions (`case E[...Dims]`), an array of open rank gives its element (`case
+/// E[...]`), and a set's elements are its keys. A type that is none of these selects no case.
+/// @example is_same::<ElementOf<int[]>, int>()    // true
+/// @example is_same::<ElementOf<Set<i32>>, i32>()    // true
+export type ElementOf<T> = match type T {
+    case E[...Dims] => E
+    case E[...] => E
+    case set => KeyOf<T>
+}
+
+/// The array type A with the element type E in place of its own, extents and rank kept; a type that
+/// is not an array is refused.
+/// @example is_same::<WithElement<int[2, 3], float>, float[2, 3]>()    // true
+export type WithElement<A, E> = match type A {
+    case X[...Dims] => E[...Dims]
+    case X[...] => E[...]
+}
+
+/// The array type whose first-dimension elements are `T`: one dimension more than `T` has, of
+/// unknown length, the dimensions `T` states kept. The inverse of the element `x[i]` and `for x in
+/// xs` take (design principles 5.4), so a value of this type indexed at `i` gives a `T`. A type
+/// with no dimension is one element of the batch: `RowsOf<f32>` is `f32[?]`, the array of floats
+/// `vmap` applies a one-parameter function to.
+/// @example is_same::<RowsOf<f32[3]>, f32[?, 3]>()    // true
+/// @example is_same::<RowsOf<f32>, f32[]>()    // true
+export type RowsOf<T> = match type T {
+    case E[...Dims] => E[?, ...Dims]
+    case E[...] => E[?, ...]
+    case _ => T[?]
 }
 
 /// The ordinary parameters of a function type, as a type pack: `..ParamsOf<F>` writes them where a

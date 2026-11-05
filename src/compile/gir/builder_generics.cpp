@@ -2650,6 +2650,30 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             if (held->code() == TypeCode::TypeOf) {
                 return resolveTypeNode(held, at);
             }
+            if (held->code() == MatchTypeType::typeCode()) {
+                // A `match type` finds its subject where a type stands, so a `typeof` written
+                // there is resolved the same way (`ElementOf<typeof xs>` is a `match type` whose
+                // subject is the `typeof`). The subject is also what a case may name in its
+                // result (`case set => KeyOf<T>` holds the `typeof` too), so every part of the
+                // type is resolved; once the subject is the type `typeof` stood for, the case
+                // that selects it is the one the `match type` is (typevar.cpp
+                // `substituteTypeVars`).
+                auto *match = tt::as_ptr<MatchTypeType>(held);
+                std::vector<Type *> params;
+                bool changed = false;
+                for (Type *param : match->paramsSpan()) {
+                    Type *resolved = resolveTypeOfs(param);
+                    changed        = changed || resolved != param;
+                    params.push_back(resolved);
+                }
+                if (!changed) {
+                    return held;
+                }
+                // No binding is in play here: `expandTypePacks` is the substitution that asks a
+                // type to evaluate with nothing bound, which is what the subject being the type
+                // `typeof` stood for makes possible.
+                return expandTypePacks(match->cloneWithParams(params));
+            }
             if (held->code() != TypeCallType::typeCode()) {
                 return held;
             }

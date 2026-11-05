@@ -29,12 +29,9 @@ TypeCode TypeCallType::typeCode() {
 namespace {
 
 constexpr std::string_view kTypeFunctions[] = {
-    "ElementOf",
     "PayloadOf",
     "KeyOf",
     "ValueOf",
-    "WithElement",
-    "RowsOf",
     "ParamsOf",
     "WithOf",
     "ResultOf",
@@ -89,17 +86,6 @@ bool TypeCallType::isTypeFunction(std::string_view name) {
 
 Type *TypeCallType::evaluate(
     std::string_view name, std::span<Type *const> arguments, std::string &error) {
-    if (name == "WithElement") {
-        if (arguments.size() != 2 || arguments[0] == nullptr || arguments[1] == nullptr) {
-            error = "it takes an array type and an element type";
-            return nullptr;
-        }
-        if (arguments[0]->code() != TypeCode::Array) {
-            error = arguments[0]->toString() + " is not an array";
-            return nullptr;
-        }
-        return static_cast<ArrayType *>(arguments[0])->withElementType(arguments[1]);
-    }
     // A pack is a list of types, and taking it apart is the `match type` case the language writes
     // (design principles 5.6: `case (W, ...Rest)` in a type position binds the member at the head of
     // the pack and the rest of it). No primitive of this file does it: a type function that takes a
@@ -167,36 +153,6 @@ Type *TypeCallType::evaluate(
         }
         return makePack(members);
     }
-    if (name == "ElementOf") {
-        if (type->code() == TypeCode::Array) {
-            return static_cast<ArrayType *>(type)->elemType();
-        }
-        if (const CollectionType *collection = asCollectionType(type);
-            collection != nullptr && !collection->isMap()) {
-            return collection->keyType();
-        }
-        error = type->toString() + " is neither an array nor a set";
-        return nullptr;
-    }
-    if (name == "RowsOf") {
-        // The array whose first-dimension elements are `type`: one dimension more, its length not
-        // known (a batch), the dimensions the argument states kept as they are. This is the
-        // inverse of ArrayType::firstDimensionElement(), which is the rule `x[i]` and `for x in
-        // xs` follow (design principles 5.4), so `x[i]` on `RowsOf<T>` is a `T` again. A type with
-        // no dimension (`f32`, a struct) is one element of the batch: `f32[?]`.
-        const ArrayType *array = asArrayType(type);
-        if (array == nullptr) {
-            return ArrayType::create(type);
-        }
-        std::vector<ExtentForm> forms;
-        forms.reserve(array->rank() + 1);
-        forms.push_back(ExtentForm::unknown());
-        forms.insert(forms.end(), array->extents().begin(), array->extents().end());
-        if (array->anyRank()) {
-            return ArrayType::openRank(array->elemType(), forms);
-        }
-        return ArrayType::create(array->elemType(), forms, array->packName());
-    }
     if (name == "PayloadOf") {
         if (TupleType *tagged = asTagged(type)) {
             return tagged->payloadType();
@@ -206,8 +162,15 @@ Type *TypeCallType::evaluate(
     }
     if (name == "KeyOf" || name == "ValueOf") {
         const CollectionType *collection = asCollectionType(type);
-        if (collection == nullptr || !collection->isMap()) {
-            error = type->toString() + " is not a map";
+        // A map has keys and values; a set has keys and nothing else -- its elements are its keys
+        // (`CollectionType::keyType` is the element type of either). So `KeyOf` answers the element
+        // type of a set, and `ValueOf` has nothing to answer for one.
+        const bool answers = collection != nullptr && collection->complete() &&
+                             (name == "KeyOf" || collection->isMap());
+        if (!answers) {
+            const bool isSet = collection != nullptr && collection->complete();
+            error            = type->toString() +
+                    (isSet ? " is a set, which has keys and no values" : " is not a map");
             return nullptr;
         }
         return name == "KeyOf" ? collection->keyType() : collection->valueType();
