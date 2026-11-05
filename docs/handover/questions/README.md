@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：19 页
+## 现在在等作者：22 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -15,7 +15,9 @@
 | [`2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join`](2026-11-03-a-structural-nodes-chain-position-belongs-to-its-join.cn.md) | 结构节点的链位在它的 JOIN 之后，不在它自己身上 |
 | [`2026-11-03-does-a-mark-encode-shape-or-history`](2026-11-03-does-a-mark-encode-shape-or-history.cn.md) | 一处标记编码的是"形状"还是"已发生过的事件"？ |
 | [`2026-11-03-the-mean-axis-transpose-waits-for-two-upstreams`](2026-11-03-the-mean-axis-transpose-waits-for-two-upstreams.cn.md) | `mean_axis` 的转置：一条律改不动这道墙，它等的是两个上游 |
+| [`2026-11-03-whether-a-rank-one-rule-has-to-answer-an-open-rank-operand`](2026-11-03-whether-a-rank-one-rule-has-to-answer-an-open-rank-operand.cn.md) | `T[]` 形参的规则要不要也覆盖 `T[..]` 的实参？ |
 | [`2026-11-04-a-refusal-removed-is-a-defect-hidden`](2026-11-04-a-refusal-removed-is-a-defect-hidden.cn.md) | 一个拒绝被拿掉之后，它挡住的缺陷就只剩读数了 |
+| [`2026-11-04-does-a-graph-version-outside-the-roots-keep-its-static-values`](2026-11-04-does-a-graph-version-outside-the-roots-keep-its-static-values.cn.md) | 不在根里的图版本，谁来更新它的静态区？ |
 | [`2026-11-04-does-the-poison-sweep-belong-in-the-milestone-layer`](2026-11-04-does-the-poison-sweep-belong-in-the-milestone-layer.cn.md) | 扫描派生的 3272 条副本，该和其余 246 条一起被当作「一层」吗？ |
 | [`2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement`](2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement.cn.md) | 同步边的封口判据：问标记，还是问"这个节点是不是语句" |
 | [`2026-11-04-how-does-a-type-pack-take-apart`](2026-11-04-how-does-a-type-pack-take-apart.cn.md) | 类型层的包怎么拆：`match type` 的元组模式，还是声明处的拆包？ |
@@ -24,6 +26,7 @@
 | [`2026-11-04-who-runs-a-milestone-tier-plan-and-when`](2026-11-04-who-runs-a-milestone-tier-plan-and-when.cn.md) | `tier = "milestone"` 的计划该由谁、在什么时候跑？ |
 | [`2026-11-05-a-type-position-pattern-is-not-expressible-only-inside-match-type`](2026-11-05-a-type-position-pattern-is-not-expressible-only-inside-match-type.cn.md) | 包模式只在一个位置有读法：类型位置的 `match type` 的 case |
 | [`2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent`](2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent.cn.md) | 构造元组（`FILL`）的转置，有没有把余切逐成员交给两个操作数 |
+| [`2026-11-05-firstof-hands-over-the-head-and-the-rest-has-no-generic-spelling`](2026-11-05-firstof-hands-over-the-head-and-the-rest-has-no-generic-spelling.cn.md) | `FirstOf` 交出一个成员，`(W, ...Rest)` 要交出两个：泛型里「其余」那半没有写法 |
 | [`2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion`](2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion.cn.md) | 第二条裁定给的那条读数，在删除前就是绿的 |
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 |
