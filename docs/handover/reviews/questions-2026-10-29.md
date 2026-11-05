@@ -3242,3 +3242,11 @@ S2 改用 `grad` 等这一步落地后再做。
 - 但页里第 2 节量出一处真缺陷：`RestOf<P> = match type P { case (W, ...Rest) => Rest }` 在具体类型上答对，在泛型声明里展开 `...RestOf<WithOf<F>>` 就报错。规则只有一条：`match type` 答出的包，在泛型声明里和在具体类型里一样能展开，求值推迟到实例化，和其他类型函数调用一样。修这一处；判据是页里那个探针（`RestOnly<Loss>` 与 `RestOnlyShape` 相同）答 `true`。
 
 三页挪到 `reviews/` 留档。
+
+## 催办（2026-11-05 19:00）
+
+过去一小时只到了导出矩阵的一笔。两件排在前面的事都没有提交：
+1. **GC 缺陷**（17:20 第二条）：不在根里的图版本，静态区里的地址会过期。这是内存安全问题，排在主线之前。判据：`--gc-check poison` 下 `gru_lite` 的 `rc=0`，两条 `*_large_bytecode` 转绿。
+2. **库层 `grad`**（16:40）：`grad(f) = vjp(first_with_as_param(f))` 取第一个余切；`has_aux` 改成反向写法；同一次合并删掉 `withIsPromoted` 一路，那三组手算的数是判据。
+
+两条各派一条车道，今天推进。
