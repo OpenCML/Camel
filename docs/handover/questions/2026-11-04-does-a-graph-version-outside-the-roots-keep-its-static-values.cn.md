@@ -51,3 +51,9 @@ camel --gc-check poison test/cases/modules/nn/gru_lite.cml \
 2. **标记前是否允许补跟**：图空间是 mark-only（不搬动），所以「mark 前对所有可达 Program 的图版本做一次 relocate」也能挡住，但那等于把 mark 变成 mark+relocate，代价与不变量都要重新说清——不建议。
 
 **默认建议**：把「session 造出、尚未 bind 进被跟踪程序」的图版本统一交给一个根，覆盖 commit 的 encode→install 窗口（`committed` 自己也算一个根），并在 `docs/technical/36_gc_handle_rules.md` 的审计表里补一条；另加一条**不依赖 poison** 的可观测用例，否则这一类问题只能等 poison 层去发现。
+
+## 默认建议（按作者裁定 486c203e1：按 2026-11-06 那页的 B 继续，本页是前史）
+
+后一半在同目录的 [2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md](2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md)。
+
+按该页 §「默认建议」执行（按 B 继续，逐个持有者 `pin`/`unpin`）；本页只是它的前史，不再单独推进。作者的裁定原文：「这不是待裁的问题，是内存安全缺陷，优先级排在主线之前。规则只有一条：**一个图版本从它造出来的那一刻起，只要静态区里有对象，就必须能从某个根到达，或者被一个已登记的外根跟踪。**」

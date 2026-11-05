@@ -91,3 +91,7 @@ REINTERP jvp function=first skip=rule uri=:op/idx_arr
 未做的一件小事：`array_type_selftest.cpp` 有 `!open3->assignableFrom(anyF32)`（`:144`），却没有
 `openF32->assignableFrom(anyF32)` 这一条——正是报告里那一对的另一半；这一行没有断言，所以它只能靠本次实测钉住。
 若走默认建议，顺手补这一行（一行，不改行为）。
+
+## 默认建议（按作者裁定 486c203e1：一条 rank-one 的律保持 rank-one）
+
+按此裁定执行——rank-one 的律只答 rank-one 的操作数，遇到开放秩操作数就拒答，并点名位置；不为了答开放秩而把律放宽成 rank-N。作者的裁定原文：「不接，照路 A。`T[..]` 的值可能是 2 秩，`T[]` 的形参不能接；可赋值性只有 `assignableFrom` 这一条规则，不为规则匹配另开口子。要对任意秩成立的律，就在 `rulesets` 里写 `T[..]` 的那一条。页里说的那一行顺手补上。」
