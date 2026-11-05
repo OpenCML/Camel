@@ -533,12 +533,12 @@ std::string resultCotangentRefusalImpl(const Type *result) {
         code == camel::core::type::TypeCode::Struct) {
         // Member by member, because that is how the addition of an aggregate is defined
         // (`accumulate`), and the member that fails is named with its index.
-        size_t count = 0;
-        if (!camel::core::type::tree::arityOf(result, count)) {
+        const auto count = camel::core::type::tree::arity(result);
+        if (!count) {
             return "`" + result->toString() + "` is not a type with members, and the cotangent of an " +
                    "aggregate is defined member by member";
         }
-        for (size_t i = 0; i < count; ++i) {
+        for (size_t i = 0; i < *count; ++i) {
             const Type *const memberType = camel::core::type::tree::childType(result, i);
             const std::string inner        = resultCotangentRefusalImpl(memberType);
             if (!inner.empty()) {
@@ -1544,15 +1544,15 @@ bool buildTransposeMember(
             if (space != nullptr &&
                 (space->code() == camel::core::type::TypeCode::Tuple ||
                  space->code() == camel::core::type::TypeCode::Struct)) {
-                size_t count = 0;
-                if (!camel::core::type::tree::arityOf(space, count)) {
+                const auto count = camel::core::type::tree::arity(space);
+                if (!count) {
                     // Not a type with members: the aggregate branch of this sum cannot run, and a
                     // count read out of another type's bytes would have made it run on nothing.
                     return rt::kInvalidNodeRef;
                 }
                 std::vector<gc_node_ref_t> parts;
-                parts.reserve(count);
-                for (size_t i = 0; i < count; ++i) {
+                parts.reserve(*count);
+                for (size_t i = 0; i < *count; ++i) {
                     Type *const memberType = camel::core::type::tree::childType(space, i);
                     const camel::core::TangentSpaceAnswer memberSpace =
                         memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
@@ -1768,7 +1768,8 @@ bool buildTransposeMember(
         // How many places a value of aggregate type has: a Fill knows its components, anything else
         // has to be asked its type -- a tuple's arity and a struct's field count are the same
         // question to `tree::arity`, and a struct parameter read by name is exactly the value that
-        // has no Fill of its own.
+        // has no Fill of its own. The condition is `arity`'s own domain, so `.value()` cannot throw
+        // here; a `0` fallback would have sized nothing and said nothing.
         const auto aggregateSlots = [&](gc_node_ref_t ref) -> size_t {
             const camel::runtime::GCNode *node = function->node(ref);
             if (node == nullptr) {
@@ -1781,7 +1782,7 @@ bool buildTransposeMember(
             return type != nullptr &&
                            (type->code() == camel::core::type::TypeCode::Tuple ||
                             type->code() == camel::core::type::TypeCode::Struct)
-                       ? camel::core::type::tree::arity(type)
+                       ? camel::core::type::tree::arity(type).value()
                        : 0;
         };
         // Whether a value can hold a cotangent at all. The type answers, through the same query `jvp`
@@ -3173,21 +3174,21 @@ bool buildTransposeMember(
                        << " why=no-tangent-space-for-the-parameter\n";
                     return false;
                 }
-                size_t arity = 0;
-                if (!camel::core::type::tree::arityOf(joinPrimal, arity)) {
+                const auto memberCount = camel::core::type::tree::arity(joinPrimal);
+                if (!memberCount) {
                     refuse(TransposeRefusalCause::Component);
                     os << " node=" << ref << " type=" << joinPrimal->toString()
                        << " why=not-a-type-with-members\n";
                     return false;
                 }
-                if (slots->second.size() > arity) {
+                if (slots->second.size() > *memberCount) {
                     refuse(TransposeRefusalCause::Component);
                     os << " node=" << ref << " slots=" << slots->second.size()
-                       << " arity=" << arity << '\n';
+                       << " arity=" << *memberCount << '\n';
                     return false;
                 }
                 std::vector<gc_node_ref_t> parts;
-                for (size_t i = 0; i < arity; ++i) {
+                for (size_t i = 0; i < *memberCount; ++i) {
                     Type *const memberType = camel::core::type::tree::childType(joinPrimal, i);
                     const camel::core::TangentSpaceAnswer memberSpace =
                         memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
@@ -3360,7 +3361,7 @@ bool buildTransposeMember(
                            holderType != nullptr &&
                            (holderType->code() == camel::core::type::TypeCode::Tuple ||
                             holderType->code() == camel::core::type::TypeCode::Struct) &&
-                           member < camel::core::type::tree::arity(holderType)) {
+                           member < camel::core::type::tree::arity(holderType).value()) {
                     slotSpace =
                         cotangentTypeOfType(camel::core::type::tree::childType(holderType, member));
                 }
@@ -3391,28 +3392,109 @@ bool buildTransposeMember(
                     // The fallback below still stands for anything this projection cannot place: a
                     // kind that reaches here with a cotangent and has no transpose is refused by
                     // name, never dropped.
-                    const auto parts           = function->withInputsOf(ref);
-                    const gc_node_ref_t whole  = cotangent[ref];
-                    Type *const wholeType      = cotangentTypeOf(ref);
+                    //
+                    // **How many members, and how one of them is read back.** A tuple or a struct
+                    // states both in its type: the count is `tree::arity`'s and member `i` is
+                    // `tree::childType(wholeType, i)`, taken at a place by an `Accs`
+                    // (`GCAccsKind::TupleIndex`/`StructKey`). An array states neither that way --
+                    // `tree::arity` answers nothing for it, and answered a count read out of another
+                    // object's bytes (`f32[3]` as 131961841501032) before the ruling `a2cc57100` -- so
+                    // its count is the extent the type states (`statedExtentsOf`, rank one) and its
+                    // member is the element
+                    // the array's own index operator, `:op/idx_arr`, takes. **A member by place and
+                    // an element by index are two different reads and not one spelled twice**: the
+                    // `Accs` names a slot of an aggregate's layout and the array has no such slot
+                    // (`transpose.cpp#buildTransposeMember` projects an array state with
+                    // `:op/idx_arr` for the same reason). A type that states neither count is still
+                    // refused here, by name.
+                    const auto parts          = function->withInputsOf(ref);
+                    const gc_node_ref_t whole = cotangent[ref];
+                    Type *const wholeType     = cotangentTypeOf(ref);
+                    // **The arity ruling lands here** (`a2cc57100`): one name answers the count, and a
+                    // type the question does not apply to gets no answer rather than a number read out
+                    // of its bytes. "No member count" is not "zero members" -- the branch below asks the
+                    // type what extent it states instead, and a type that states neither is refused by
+                    // name below.
+                    const std::optional<size_t> memberCountByLayout =
+                        camel::core::type::tree::arity(wholeType);
+                    size_t memberCount  = memberCountByLayout.value_or(0);
+                    bool membersByIndex = false;
+                    if (!memberCountByLayout && wholeType != nullptr) {
+                        const std::optional<std::vector<int64_t>> extents =
+                            camel::core::type::statedExtentsOf(wholeType);
+                        if (extents.has_value() && extents->size() == 1) {
+                            memberCount    = static_cast<size_t>((*extents)[0]);
+                            membersByIndex = true;
+                        }
+                    }
+                    // The count has to be **known** as well as matched: a type that states neither
+                    // a tuple's arity nor a rank-one extent is the refusal, even where it hands out
+                    // no operand at all (an empty construction of an unstated shape would otherwise
+                    // pass a `0 == 0` and place nothing, silently).
                     if (whole == rt::kInvalidNodeRef || wholeType == nullptr ||
-                        camel::core::type::tree::arity(wholeType) != parts.size()) {
+                        !(memberCountByLayout.has_value() || membersByIndex) ||
+                        memberCount != parts.size()) {
                         refuse(TransposeRefusalCause::Kind);
-                        os << " node=" << ref << " kind=fill whole-cotangent node=" << ref << '\n';
+                        // The two numbers the guard compared, so the line says *which* fact failed:
+                        // `members=-` is a type that states no member count at all (the repair is a
+                        // declaration), and a number that is not `parts=` is a construction whose
+                        // operands are not its members. A line without them says only that some
+                        // count disagreed, which is not a reading.
+                        os << " node=" << ref << " kind=fill whole-cotangent node=" << ref
+                           << " type="
+                           << (wholeType != nullptr ? wholeType->toString() : std::string("?"))
+                           << " members=";
+                        if (memberCountByLayout || membersByIndex) {
+                            os << memberCount;
+                        } else {
+                            os << '-';
+                        }
+                        os << " parts=" << parts.size() << '\n';
                         return false;
                     }
+                    Type *const indexedElement =
+                        membersByIndex
+                            ? tt::as_ptr<camel::core::type::ArrayType>(wholeType)->elemType()
+                            : nullptr;
                     bool placedEveryMember = true;
                     for (size_t i = 0; i < parts.size(); ++i) {
                         if (isConstant(parts[i])) {
                             continue;
                         }
-                        Type *const memberType = camel::core::type::tree::childType(wholeType, i);
-                        if (memberType == nullptr) {
+                        gc_node_ref_t member = rt::kInvalidNodeRef;
+                        if (membersByIndex) {
+                            if (indexedElement == nullptr) {
+                                placedEveryMember = false;
+                                break;
+                            }
+                            // The element the position names, taken from the array by the index
+                            // the operand's own place states. Two operands: the array and the
+                            // position; the axis word stays the declaration's default, the first
+                            // dimension, which is the only one a rank-one value has.
+                            const gc_node_ref_t at = draft.materializeStaticValue(
+                                camel::core::rtdata::toSlot<camel::core::rtdata::Int64>(
+                                    static_cast<int64_t>(i)),
+                                Type::Int64(),
+                                rt::kGCNodeFlagConstant);
+                            const std::array<gc_node_ref_t, 2> indexed{whole, at};
+                            member = draft.addOperNode(indexedElement, nullptr, ":op/idx_arr");
+                            draft.setNormInputs(
+                                member,
+                                std::span<const gc_node_ref_t>(indexed.data(), indexed.size()));
+                        } else {
+                            Type *const memberType =
+                                camel::core::type::tree::childType(wholeType, i);
+                            if (memberType == nullptr) {
+                                placedEveryMember = false;
+                                break;
+                            }
+                            member = draft.addAccsNode(memberType, static_cast<uint32_t>(i));
+                            draft.setNormInputs(member, std::span<const gc_node_ref_t>(&whole, 1));
+                        }
+                        if (member == rt::kInvalidNodeRef) {
                             placedEveryMember = false;
                             break;
                         }
-                        const gc_node_ref_t member =
-                            draft.addAccsNode(memberType, static_cast<uint32_t>(i));
-                        draft.setNormInputs(member, std::span<const gc_node_ref_t>(&whole, 1));
                         addCotangent(parts[i], member);
                     }
                     if (!placedEveryMember) {
