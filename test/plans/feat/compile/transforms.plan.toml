@@ -1438,6 +1438,60 @@ expect_output_contains = ["TRANSPOSE function=autodiff::add_tangent<float> graph
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The transpose of an **array** construction. The projection is the statement a tuple's is -- member
+# `i` of the cotangent goes to operand `i` -- and the read is not the tuple's: an element is taken out
+# of an array by index (`:op/idx_arr`), a tuple's member at a place (`Accs`). The first was built for
+# an array and the run died in the VM; the second answers here.
+[[tests]]
+name = "transpose_array_literal_member_projection"
+desc = "`transpose(identity3)` for `identity3(a, b, c) = [a, b, c]`: the constructed value is an `f32[3]` and its cotangent `[1.5, 2.5, 7.25]` projects member by member, so the answer is `a = 1.5`, `b = 2.5`, `c = 7.25` and nothing else. The three numbers are **pairwise different**, and each is read by its own place (`g.0`, `g.1`, `g.2`) rather than off a tuple printed as a whole, because that is the difference this entry exists to keep: a projection that read the cotangent as one scalar and broadcast it, summed it, or zeroed it would still print three numbers, and every one of those readings is one of 11.25 (the sum), 4.0/8.75/10.0 (a pair) or 3.0/5.0/14.5 (a doubled component) -- the plan refuses all seven beside the exact three, so a green run cannot be a coincidence of one number. What makes it a projection and not a sum is that the numbers are the **elements in their own places**, and what makes it a *transpose* is that the seed is the cotangent rather than a constant: the whole tuple is printed before the members so a length or an ordering shows up as a second reading. The construction's own type is what the projection counts -- `f32[3]` states three -- where `tree::arity` reads an array's payload as a tuple's layout and answered 131961841501032, which is why this shape refused with `skip=kind` before and why the count is `tree::arityOf`'s no-answer followed by the stated extent rather than a second reading of the same bytes."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_array_literal_member_projection.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_output_contains = ["identity3_pullback="]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const at = (label) => {
+const hits = out.split('\n').filter((l) => l.startsWith(label + '='))
+assert(hits.length === 1, `expected exactly one '${label}=' line, found ${hits.length} in: ${out}`)
+return Number(hits[0].slice(label.length + 1).trim())
+}
+const a = at('a')
+const b = at('b')
+const c = at('c')
+assert(a === 1.5, `a=${a}, and the first element of the cotangent is 1.5: ${out}`)
+assert(b === 2.5, `b=${b}, and the second element of the cotangent is 2.5: ${out}`)
+assert(c === 7.25, `c=${c}, and the third element of the cotangent is 7.25: ${out}`)
+assert(a !== b && b !== c && a !== c, `the three answers are not pairwise distinct (${a}, ${b}, ${c}): a filled slot cannot read another's: ${out}`)
+for (const other of [11.25, 4.0, 8.75, 10.0, 3.0, 5.0, 14.5]) {
+assert(a !== other && b !== other && c !== other, `a member reads ${other}, which is a broadcast or a sum of the cotangent and not an element of it (${a}, ${b}, ${c}): ${out}`)
+}
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The guard the array projection did not delete: a construction whose member count its type does not
+# state is still refused by name. A guard removed to make the entry above green would leave this one
+# reading a number instead of a refusal.
+[[tests]]
+name = "transpose_array_literal_open_extent_refuses"
+desc = "`transpose(pair)` for `pair(a, b) = [a, b]` declared to return `f32[]`: the value is an array whose extent the type does not state, so the number of members the construction hands out is written down nowhere and the projection cannot place member `i`. It is refused with the construction's own cause -- `skip=kind` and the line `kind=fill whole-cotangent ... members=- parts=2`, the `-` being the count the type does not state -- and the run exits 1 rather than printing a number it does not have (`pair_pullback=` never reaches stdout). Read beside `transpose_array_literal_member_projection`, the two entries are the guard's coverage: the stated rank-one extent is a projection, and a construction the walk cannot place is a refusal. **A guard deleted in the name of the feature would be invisible in the entry above** -- a projection that answered anyway would print three numbers there -- which is why the refusal has an entry of its own, pinned on the cause word, the kind word and the count the type does not state, and not on an exit code alone."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_array_literal_open_extent_refuses.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["TRANSPOSE function=pair skip=kind", "kind=fill whole-cotangent", "members=- parts=2", "transpose has no transpose for this function"]
+expect_stdout_not_contains = ["pair_pullback="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The same missing cotangent, seen from the library: `grad` is
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
