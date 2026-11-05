@@ -3200,3 +3200,14 @@ S2 改用 `grad` 等这一步落地后再做。
 - `c2b807bad`/`e23eed44d`：`--changed` 选不出时什么也不跑，并打印计数。每日审查 R8 的第一半做完了，对。剩下两半：环境变量 `CAMEL_TEST_BASE` 改成命令行参数；选择改为由计划的 `case` 字段推出。
 - `ceee7b950`：又为两条"打印 exported、不写文件"的用例记账，方向不对。这正是每日审查 R3：`let _ = export_model(…)` 是故意丢弃，程序自己选的。要改的是用例写法，用 `match`/`!!` 处理拒绝，改完后它们会如实打印拒绝句，`known_fail` 的理由就钉那句话。不要再给 `let _ =` 的用例加记账。
 - 页里还量出一个规矩上的漏洞："没写 `known_fail_msg` 的标记，运行器把任何失败都当作预期失败"。要堵上：每一个 `known_fail` 都必须带它预期的那句诊断，运行器只在失败的原因与那句话一致时才算预期失败，不一致就算真红。判据：去掉一条标记的 `known_fail_msg`，运行器拒绝加载这份计划。
+
+## 催办（2026-11-05 14:40）：主线第七节第 3 项
+
+02:30 定下的下一步是给 `reinterp` 加一种只改签名的重解释，把第一个 `with` 参数改成普通参数（`first_with_as_param`）；03:20 又补了"`transpose` 收一切有切空间的结果"。第二件已在 `d08bc5f63` 落地，第一件到现在十二个小时，develop 上和车道上都没有提交。这一串是第七节第 3 项的关键路径，后面的库层 `grad`、反向 `has_aux`、删 `with` 提升、S2 改用 `grad`、删引擎都在等它。
+
+请今天派一条车道专门做这件事：
+1. `reinterp<first_with_as_param>(f)`：只改签名里第一个 `with` 端口的种类，函数体不动；类型由 `Gradient<F>` 那一套算出。判据：对 `weighted`（`with <x: float> func weighted(y) = x*y + x`）做 `vjp(reinterp<first_with_as_param>(weighted))`，答出 `grad=3.0`，不经过 `with` 提升。
+2. 库层 `grad(f) = vjp(reinterp<first_with_as_param>(f))` 再取第一个余切；`has_aux` 按 02:30 的反向写法改。
+3. 同一次合并删掉 `withIsPromoted` 一路和它旁边的注记，那三组手算的数照旧是判据。
+
+另外，远端仍有 93 个分支，C 类那 15 条还没关。
