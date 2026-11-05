@@ -277,3 +277,14 @@ expect_exit = 0
 expect_stdout_exact = "2.5\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_reads_the_pack"
+desc = "A lambda written in an expanded body cannot name that body's rest parameter: the pack is bound to nodes of the caller's graph (`builder_rest.cpp`), and the lambda is a graph of its own. Until 2026-11-05 the program aborted the compiler -- `Camel Invariant Violation: header != nullptr`, `Live compile draft node cannot have a null header` at `src/compile/gir/graph_encode.cpp` -- because the name resolved to the expansion's tuple and the lambda's graph then held nodes of another graph. It is refused at the line and column of the use now, with the answer a lambda gets for any pack no scope holds; teaching it to receive the pack is the lambda's own `...xs` work. The guarantee stays: a link between two graphs is still an invariant violation, and this program no longer asks for one."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/nested_function_reads_the_pack.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Unresolved reference: 'xs'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

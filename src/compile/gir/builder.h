@@ -1660,6 +1660,11 @@ class Builder {
     struct RestBinding {
         std::string name;
         StaticTuple tuple; // the build-time tuple `ts`; not a value
+        /// The graph the expansion was built into. Its members are nodes of that graph, so a
+        /// function built while this binding is still in force -- a lambda in the expanded body --
+        /// cannot name them: `Builder::restBindingNamed` answers nothing there rather than a tuple
+        /// whose elements belong to another graph.
+        const void *owner = nullptr;
     };
     struct RestBody {
         Type *exitType            = nullptr;
