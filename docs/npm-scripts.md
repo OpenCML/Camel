@@ -195,9 +195,11 @@ node test/tools/run-tests.mjs --update-golden test/plans/feat/parse/core.plan.to
 ```
 
 `--jobs N` sets the number of tests run at once (default: the processor count). `--tier
-fast|slow|all` selects a layer, orthogonal to the target; the default is `fast` for a directory
-target and for the whole plan tree, which is the `all` target (`all`, `--all` or `test/plans`)
-and not `.`. A plan **file** named as the target runs in full whatever `--tier` says.
+fast|slow|milestone|all|debug` selects a layer, orthogonal to the target; the default is `fast` for
+a directory target and for the whole plan tree, which is the `all` target (`all`, `--all` or
+`test/plans`) and not `.`. The five values are `test/tools/run-tests.mjs#TIERS`, and `all` is every
+plan and test except the `debug` layer, which needs a Debug build and `--tier debug`. A plan
+**file** named as the target runs in full whatever `--tier` says.
 `--changed` selects the plans the working tree touches relative to `origin/develop` (override
 with `CAMEL_TEST_BASE`): directory rules in `test/plan-selection.json` first, file rules second.
 
