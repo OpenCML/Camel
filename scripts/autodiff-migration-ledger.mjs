@@ -202,11 +202,18 @@ let loaderFailure = ''
 // (`test/plans/feat/modules/autodiff.plan.toml`), added by the second-derivative lane: they ask what a
 // nested `jvp`/`vjp` can and cannot be handed, and each is written with a `with` parameter, which is
 // the class they land in. `pass` does not move: the record holds 23 and the host reads 23.
+// **2026-11-05, one case arrived and it is `with`. ** `total` 143 -> 144, `library` 134 -> 135,
+// `with` 53 -> 54; `array` and `other` do not move. The one is
+// `test/cases/modules/autodiff/has_aux_library_composition.cml`: it names `vjp` (the library's
+// `has_aux` it is about) and `with_grad` (the engine leg it is compared against), which is `library`,
+// and it is written with `with` parameters for that comparison -- `with <w: float> func loss_engine()`
+// is the engine's shape, and comparing the two legs is the whole point of the case, so the `with`
+// class rising here is arithmetic and not a case falling back. `pass` is a floor and does not move.
 const LEDGER_RECORDED = {
-    total: 143,
-    library: 134,
+    total: 144,
+    library: 135,
     pass: 22,
-    with: 53,
+    with: 54,
     array: 72,
     other: 9,
 }
