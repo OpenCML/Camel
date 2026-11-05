@@ -1,0 +1,25 @@
+// A function written inside a lambda's body cannot name that body's `with` pack.
+//
+// `has_aux`'s composition would separate the weight from the remaining `with` values and hand the
+// remainder on, and the natural writing of that is a nested function naming the outer body's pack.
+// The pack belongs to the outer lambda's graph and the nested function is a graph of its own, so the
+// name is refused where it is used -- the same answer `nested_function_reads_the_pack.cml` gets for
+// an expanded body's rest parameter.
+import { WithOf, ParamsOf } from types
+
+type PairOf<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+
+with <w: float, k: float>
+func twice(): float {
+    return w * k
+}
+
+func main(): int sync {
+    let g: PairOf<<w: float, k: float> () => float> = <w, ...rest> () => {
+        let second = () => rest.[0]
+        (second(), 1.0)
+    }
+    let (read, constant) = g<2.0, 3.0>()
+    println('read={} constant={}'->format<read, constant>)
+    return 0
+}

@@ -104,3 +104,42 @@ export func grad(f: (x: float) => float): (x: float) => float {
         cotangents.0
     }
 }
+/// The value, the auxiliary value and the gradient together, for a function whose result is the pair
+/// `(value, aux)`: `has_aux(f)` gives a function of the weight that answers `((value, aux), gradient)`
+/// -- the shape and the order the engine's `with_grad(f, has_aux: true)` answers, JAX's
+/// `value_and_grad(f, has_aux=True)`. The weight is the one ordinary parameter `f` takes, as it is
+/// for `grad` above: the library's names are functions of ordinary parameters, and the subject's
+/// `with` values are closed over where the lambda is written.
+///
+/// The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
+/// function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --
+/// and answers the pair and the pair's tangent; the value's derivative is the tangent's first
+/// member, because a pair's tangent is a pair in the same order (`core/tangent_space.h`). One pass
+/// answers all three numbers.
+///
+/// The transposed half is not what this is written on, and the reason is the pair: `vjp`'s second
+/// half turns the cotangent of what the function answers around, and a pair has no cotangent --
+/// `transpose` takes a function whose result has one, which is why handing a pair-returning function
+/// to `vjp` is refused rather than guessed at (`has_aux_vjp_pair` in
+/// test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
+/// direction needs, so the composition that reads all three numbers is the one above.
+///
+/// The pair is carried and the auxiliary value is not differentiated: `frozen(w) = (1.0, w*w)`
+/// answers a gradient of 0.0 with an auxiliary value of 9.0. The tangent's second member is the
+/// auxiliary value's own slope; it is built (the lift answers the whole pair's direction) and not
+/// read, which is what makes "carried, not differentiated" a fact about the body rather than about
+/// the numbers it happens to print.
+///
+/// The shape is written once, for a weight of one `float` and a result of two, the way `grad` above
+/// is written once for one parameter; the declarations whose parameters and results are packs
+/// (`Gradient<F>`, `stdlib/types.cml`) are what the generic form is written with when the library
+/// takes it, and this name keeps answering that shape until then.
+/// @example-fragment `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let step = has_aux(loss)
+export func has_aux(f: (w: float) => (float, float)): (w: float) => ((float, float), float) {
+    let lifted = jvp(f)
+    return (w: float) => {
+        let (pair, tangent) = lifted(w, 1.0)
+        (pair, tangent.0)
+    }
+}
