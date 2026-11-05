@@ -378,7 +378,7 @@ S1 ──┬─► S2 ───────────────────�
 计划形式（主机 `88zjwei`，工作树 `D:\Projects\Camel-wt\h397-h247-plan`）：
 
 ```powershell
-pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h397-h247-plan -Plan test/plans/feat/modules/rules.plan.toml -Tier fast -Jobs 8
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\h397-h247-plan -Plan test/plans/feat/modules/rules.plan.toml -Tier fast -Jobs 8
 ```
 
 尾行（`18c98b856`，2026-10-24）：

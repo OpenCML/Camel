@@ -345,8 +345,8 @@ std::string indexRule(const std::string &family, const RuleHead &rule) {
         // `stdlib/rulesets/jvp.cml`) or one law that branches on the type.
         //
         // Anything else is two laws of one key, which is what a family is for. Two rules whose
-        // parameter types differ (`(T[..], T[..])` and `(T[..], T)`, `(x: S)` and `(x: int)`) answer
-        // for different operands -- `T[..]`'s `t[0]` is the open-rank array and `T[]`'s is the
+        // parameter types differ (`(T[...], T[...])` and `(T[...], T)`, `(x: S)` and `(x: int)`) answer
+        // for different operands -- `T[...]`'s `t[0]` is the open-rank array and `T[]`'s is the
         // element (design principles 5.4), and an `int` source is not a float one -- and this text
         // used to call them a duplicate because both wrote `is_float::<T>()`.
         //

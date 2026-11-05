@@ -15,21 +15,21 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { a: float[..], b: float[..], v: float[..] }
+type P = { a: float[...], b: float[...], v: float[...] }
 
 with <m: P>
-func loss(x: float[..]): float {
+func loss(x: float[...]): float {
     let p = m.a @ m.b      // [2, 2, 3] @ [2, 3, 2] -> [2, 2, 2]
     let q = m.a @ m.v      // [2, 2, 3] @ [3]       -> [2, 2]
     return float(sum(p * x)) + float(sum(q * q))
 }
 
-func step(m: P, x: float[..]): (float, P) {
+func step(m: P, x: float[...]): (float, P) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, vg.1)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let m = {
         a: reshape<[2, 2, 3]>([0.5, -0.25, 0.75, 1.0, -0.5, 0.25, 0.125, -0.375, 0.625, -0.125, 0.875, -0.75]),
         b: reshape<[2, 3, 2]>([1.0, -1.0, 0.5, 0.25, -0.75, 0.125, 0.375, -0.5, 1.25, 0.75, -0.25, 0.5]),
@@ -41,7 +41,8 @@ func main(): int sync {
     println(r.1.a)
     println(r.1.b)
     println(r.1.v)
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

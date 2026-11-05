@@ -22,8 +22,8 @@ import { adam, cosine_decay, init, update } from optim
 // optimizers leave alone. The nesting, the `int` and the written element type are what `nn`'s
 // computed signatures take (see docs/technical/optim.md); the leaf kinds and the values are c2's.
 type Linear = {
-    weight: f32[..],
-    bias: f32[..]
+    weight: f32[...],
+    bias: f32[...]
 }
 
 type Mlp = {
@@ -33,13 +33,13 @@ type Mlp = {
 
 // x: [4, 3] -> hidden: [4, 4] -> logits: [4, 4], one row per sample and four class ids.
 with <m: Mlp>
-func logits(x: f32[..]): f32[..] {
+func logits(x: f32[...]): f32[...] {
     let hidden = relu(x @ m.l0.weight + m.l0.bias)
     return hidden @ m.l1.weight + m.l1.bias
 }
 
 with <m: Mlp>
-func loss(x: f32[..], labels: i64[..]): float {
+func loss(x: f32[...], labels: i64[...]): float {
     return softmax_cross_entropy(logits<m>(x), int(labels))
 }
 

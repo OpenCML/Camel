@@ -1,0 +1,3 @@
+// The old spelling in a dimension list: `f32[..]` (any rank).
+func total(x: f32[..]): float { return 0.0 }
+func main(): int sync { return 0 }

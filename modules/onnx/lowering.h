@@ -88,6 +88,10 @@ class LowerContext {
     bool constBool(size_t index, bool fallback) const;
     std::string constString(size_t index) const;
     std::vector<int64_t> constInts(size_t index) const;
+    /// The int array at `index` when it is an export-time constant, and nothing when it is a value
+    /// the model computes. No refusal: a list's *values* may be a model input while its length
+    /// stays a fact the type states.
+    std::optional<std::vector<int64_t>> tryConstInts(size_t index) const;
 
     /// Emits a single-output node and returns it as a value carrying the result facts.
     Value emit(

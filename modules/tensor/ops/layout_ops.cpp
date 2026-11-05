@@ -17,8 +17,8 @@
 #include "catalog.h"
 #include "support.h"
 
-#include <format>
 #include <array>
+#include <format>
 #include <span>
 #include <vector>
 
@@ -50,7 +50,10 @@ int64_t normalizeAxisOrThrow(int64_t axis, size_t rank) {
     }
     if (axis < 0 || axis >= r) {
         throw ShapeError(
-            std::format("axis {} is out of range for a rank-{} tensor", axis < 0 ? axis - r : axis, rank));
+            std::format(
+                "axis {} is out of range for a rank-{} tensor",
+                axis < 0 ? axis - r : axis,
+                rank));
     }
     return axis;
 }
@@ -58,7 +61,8 @@ int64_t normalizeAxisOrThrow(int64_t axis, size_t rank) {
 // shape(t) -> int[]
 slot_t shapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("shape", [&] {
-        return camel::core::rtdata::toSlot(makeShapeArray(tensorArg(norm, 0, true), resultAllocator()));
+        return camel::core::rtdata::toSlot(
+            makeShapeArray(tensorArg(norm, 0, true), resultAllocator()));
     });
 }
 
@@ -73,8 +77,7 @@ std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocat
     if (!shape || std::ranges::any_of(*shape, [](const std::optional<int64_t> &d) { return !d; })) {
         return std::nullopt;
     }
-    ::Array *array =
-        ::Array::create(allocator, ArrayType::create(Type::Int64()), shape->size());
+    ::Array *array = ::Array::create(allocator, ArrayType::create(Type::Int64()), shape->size());
     for (size_t i = 0; i < shape->size(); ++i) {
         array->set(i, static_cast<camel::core::rtdata::Int64>(*(*shape)[i]));
     }
@@ -85,9 +88,10 @@ std::optional<slot_t> shapeFold(const InferContext &ctx, mm::IAllocator &allocat
 slot_t reshapeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reshape", [&] {
         const std::vector<int64_t> target = parseIntArray(norm.get<::Array *>(1), norm.type(1));
-        Array *t = tensorArg(norm, 0, true);
+        Array *t                          = tensorArg(norm, 0, true);
         if (target.empty()) {
-            // No dimension at all: the value with no dimension is the element it holds, and `resolveReshape` refuses a value that is not one element.
+            // No dimension at all: the value with no dimension is the element it holds, and
+            // `resolveReshape` refuses a value that is not one element.
             (void)k::resolveReshape(t->shapeSpan(), target);
             return t->getSlot(0);
         }
@@ -119,7 +123,8 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         if (open == 1 && fullyKnown(in.shape)) {
             try {
                 return tensorOf(
-                    in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), probe)));
+                    in.dtype,
+                    knownShape(k::resolveReshape(kernelExtents(*in.shape), probe)));
             } catch (const std::exception &) {
                 // No value fits: left to reshape to report when it runs.
             }
@@ -127,8 +132,7 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
         return tensorOf(in.dtype, shape);
     }
     if (fullyKnown(in.shape)) {
-        return tensorOf(
-            in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), *target)));
+        return tensorOf(in.dtype, knownShape(k::resolveReshape(kernelExtents(*in.shape), *target)));
     }
     StaticShape shape;
     shape.reserve(target->size());
@@ -143,7 +147,7 @@ std::optional<Type *> reshapeInfer(const InferContext &ctx) {
 // unsqueeze(t, axis)
 slot_t unsqueezeKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("unsqueeze", [&] {
-        Array *t = tensorArg(norm, 0);
+        Array *t        = tensorArg(norm, 0);
         Shape shape     = t->shapeVector();
         const int64_t a = normalizeAxisOrThrow(intArg(norm, 1), shape.size() + 1);
         shape.insert(shape.begin() + a, 1);
@@ -176,9 +180,10 @@ std::optional<Type *> transposeInfer(const InferContext &ctx) {
     TensorFacts in = ctx.facts(0);
     if (in.shape) {
         if (in.shape->size() < 2) {
-            throw ShapeError(std::format(
-                "transpose swaps the last two axes and needs a rank >= 2 tensor, got {}",
-                formatShape(*in.shape)));
+            throw ShapeError(
+                std::format(
+                    "transpose swaps the last two axes and needs a rank >= 2 tensor, got {}",
+                    formatShape(*in.shape)));
         }
         std::swap((*in.shape)[in.shape->size() - 1], (*in.shape)[in.shape->size() - 2]);
     }
@@ -197,8 +202,7 @@ std::optional<Type *> permuteInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     auto perm            = ctx.constInts(1);
     if (in.shape && perm) {
-        return tensorOf(
-            in.dtype, knownShape(k::permuteShape(kernelExtents(*in.shape), *perm)));
+        return tensorOf(in.dtype, knownShape(k::permuteShape(kernelExtents(*in.shape), *perm)));
     }
     return tensorOf(
         in.dtype,
@@ -223,10 +227,11 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
             a.shape ? std::optional(StaticShape(a.shape->size(), std::nullopt)) : std::nullopt);
     }
     if (a.shape->size() != b.shape->size()) {
-        throw ShapeError(std::format(
-            "concat requires tensors of the same rank: {} and {}",
-            formatShape(*a.shape),
-            formatShape(*b.shape)));
+        throw ShapeError(
+            std::format(
+                "concat requires tensors of the same rank: {} and {}",
+                formatShape(*a.shape),
+                formatShape(*b.shape)));
     }
     const auto ax = static_cast<size_t>(normalizeAxisOrThrow(*axis, a.shape->size()));
     StaticShape out(a.shape->size());
@@ -235,12 +240,13 @@ std::optional<Type *> concatInfer(const InferContext &ctx) {
         if (d == ax) {
             out[d] = (!x || !y) ? std::nullopt : std::optional<int64_t>(*x + *y);
         } else if (x && y && x != y) {
-            throw ShapeError(std::format(
-                "concat along axis {}: {} and {} differ in dimension {}",
-                ax,
-                formatShape(*a.shape),
-                formatShape(*b.shape),
-                d));
+            throw ShapeError(
+                std::format(
+                    "concat along axis {}: {} and {} differ in dimension {}",
+                    ax,
+                    formatShape(*a.shape),
+                    formatShape(*b.shape),
+                    d));
         } else {
             out[d] = x ? x : y;
         }
@@ -296,10 +302,11 @@ std::optional<Type *> takeInfer(const InferContext &ctx) {
         if (extent.has_value()) {
             for (const int64_t index : *constant) {
                 if (index < 0 || index >= *extent) {
-                    throw ShapeError(std::format(
-                        "index {} is out of range for the first dimension of extent {}",
-                        index,
-                        *extent));
+                    throw ShapeError(
+                        std::format(
+                            "index {} is out of range for the first dimension of extent {}",
+                            index,
+                            *extent));
                 }
             }
         }
@@ -390,11 +397,13 @@ std::optional<Type *> rowAddAtInfer(const InferContext &ctx) {
 
 // one_hot(labels, classes): [len(labels), classes] float32 rows.
 slot_t oneHotKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const int64_t classes              = intArg(norm, 1);
+    const int64_t classes             = intArg(norm, 1);
     const std::vector<int64_t> labels = intListArg(norm, 0, "one_hot");
     if (classes < 0) {
         throwRuntimeFault(
-            RuntimeDiag::InvalidArgument, "one_hot", std::string("classes must be non-negative"));
+            RuntimeDiag::InvalidArgument,
+            "one_hot",
+            std::string("classes must be non-negative"));
     }
     for (const int64_t label : labels) {
         if (label < 0 || label >= classes) {
@@ -460,7 +469,7 @@ void reshapeLikeVjp(VjpBuilder &b, const VjpCall &call) {
             return;
         }
         const vjp_node_t shape = b.addOper(
-            ArrayType::create(Type::Int64()),
+            shapeListType(b, call.inputs[0]),
             "tensor:shape",
             std::span<const vjp_node_t>(call.inputs.data(), 1));
         // The adjoint is shaped like the input, and `addTensorOperFor` is what says so: the node
@@ -527,7 +536,7 @@ void concatVjp(VjpBuilder &b, const VjpCall &call) {
     }
     if (rhsTensor) {
         const std::array<vjp_node_t, 2> dyAxis{*dy, axis};
-        const vjp_node_t total   = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
+        const vjp_node_t total = b.addOper(Type::Int64(), "tensor:dim", dyAxis);
         b.accumulateGradient(
             rhs,
             addTensorOper(
@@ -552,17 +561,16 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
         // zero array, design principles 9.9), and the core's rule for `:op/idx_take` builds
         // exactly this node, so the three-word call is answered with it and the axis has one
         // reading in every program.
-        type::Type *const tangent =
-            camel::core::machineryTangentTypeOf(b.nodeType(call.inputs[0]));
+        type::Type *const tangent = camel::core::machineryTangentTypeOf(b.nodeType(call.inputs[0]));
         if (tangent == nullptr) {
             return; // an array whose elements have no tangent: the take has none either
         }
         const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
         const vjp_node_t zero = b.addOper(tangent, ":tangent/zeros_arr", zeroInputs);
-        const std::array<vjp_node_t, 4> scatter{
-            zero, call.inputs[1], *dy, call.inputs[2]};
+        const std::array<vjp_node_t, 4> scatter{zero, call.inputs[1], *dy, call.inputs[2]};
         b.accumulateGradient(
-            call.inputs[0], b.addOper(tangent, ":tangent/scatter_take_arr", scatter));
+            call.inputs[0],
+            b.addOper(tangent, ":tangent/scatter_take_arr", scatter));
         return;
     }
     b.accumulateGradient(
@@ -574,26 +582,24 @@ void takeVjp(VjpBuilder &b, const VjpCall &call) {
             {call.inputs[0], call.inputs[1], *dy}));
 }
 
-// pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states
-// (`elementAtKernel` below). A read moves no element, so its adjoint is the read's own: the
+// pick_at(t, position, length): the element at `position` of a rank-1 tensor whose length `length`
+// states (`elementAtKernel` below). A read moves no element, so its adjoint is the read's own: the
 // cotangent of the element goes back to the position that was read, and every other position keeps
 // a zero (design principles 9.9: the reverse of a gather is a scatter-add). That is the adjoint the
 // core files for the same read under its own spelling
-// (`src/builtin/operators/derivative.cpp#idxArrayVjp`), written here with the position taken out of
-// the list.
+// (`src/builtin/operators/derivative.cpp#idxArrayVjp`), and the position is the node's own operand.
 //
-// The zeros are `:tangent/zeros_arr` of `t` and not an array built from `at[1]`: a pullback rule is
-// handed the operand, and the length that operand holds is the one `elementAtKernel` checked the
+// The zeros are `:tangent/zeros_arr` of `t` and not an array built from `length`: a pullback rule
+// is handed the operand, and the length that operand holds is the one `elementAtKernel` checked the
 // stated length against -- a length that disagrees is a fault there, never a silently reshaped
-// read -- so the zeros are as long as `at[1]` says. `at[1]` is therefore read nowhere; the list is
-// read only at `at[0]` (`:op/idx_arr(at, 0)`), the position the cotangent lands on. That is the one
-// difference from the library's law for this read
+// read -- so the zeros are as long as `length` says. `length` is therefore read nowhere here; the
+// adjoint scatters into `position`. That is the one difference from the library's law for this read
 // (`stdlib/rulesets/transpose.cml#pick_at_t`): a transpose law reads only known operands and has no
-// array to take a length from, so it builds the same zeros from `at[1]`. Both scatter into `at[0]`,
-// so both answer the same array
+// array to take a length from, so it builds the same zeros from `length`. Both scatter into
+// `position`, so both answer the same array
 // (`test/cases/compile/transforms/pick_at_gradient_answered_by_the_engine.cml`).
 void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+    requireVjpInputs(call, 3, 3);
     const auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
@@ -604,21 +610,20 @@ void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
     }
     const std::array<vjp_node_t, 1> zeroInputs{call.inputs[0]};
     const vjp_node_t zero = b.addOper(tangent, ":tangent/zeros_arr", zeroInputs);
-    const std::array<vjp_node_t, 2> positionInputs{call.inputs[1], staticInt(b, 0)};
-    const vjp_node_t position = b.addOper(Type::Int64(), ":op/idx_arr", positionInputs);
-    const std::array<vjp_node_t, 3> scatter{zero, position, *dy};
+    const std::array<vjp_node_t, 3> scatter{zero, call.inputs[1], *dy};
     b.accumulateGradient(call.inputs[0], b.addOper(tangent, ":tangent/scatter_add_arr", scatter));
 }
 
-// pick_at(t, at): the element at `at[0]` of a rank-1 tensor whose length `at[1]` states.
+// pick_at(t, position, length): the element at `position` of a rank-1 tensor whose length `length`
+// states.
 //
 // The length is not a convenience and not a hint: it is the operand that makes the read's pullback
 // writable at all. `xs[i]`'s transpose is a scatter into an array of zeros with `xs`'s length
 // (design principles 9.9), `T[]` carries no length in its type (5.4), and a transpose law may read
 // only known operands -- the array itself is the operand the cotangent comes back through, so on
 // that side it has no value (author, 2026-11-03 11:10 and 17:35). So the linear half of the read
-// states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value the forward side
-// computes, and `rulesets.transpose`'s `pick_at_t` builds its zeros from `at[1]` and reads
+// states the length: `rulesets.jvp`'s `jvp_idx_arr` passes `len(xs)`, a value the forward side
+// computes, and `rulesets.transpose`'s `pick_at_t` builds its zeros from `length` and reads
 // nothing of the array.
 //
 // It is a second spelling of `:op/idx_arr` rather than a third operand of it, because that
@@ -626,9 +631,11 @@ void pickAtVjp(VjpBuilder &b, const VjpCall &call) {
 // `kRuleKeyExceptions`) and a law's parameters are bound one per operand: a law filed under it
 // cannot receive a third value (measured -- `skip=rule uri=:op/idx_arr reason=no-rule`).
 //
-// The position and the length are one integer list because the transpose walk answers an operator
-// with one or two normal operands (the guard `tensor:mean_axis`'s three ports are held by); two
-// integer operands beside the tensor would be three.
+// The position and the length are two parameters of their own. They used to travel in one integer
+// list, on the reading that the transpose walk answers an operator with one or two normal operands
+// and two integers beside the tensor would be three. Measured 2026-11-04: the walk refuses a third
+// *tensor*, not a third parameter -- `tensor:take_stated` takes two `int[]` operands beside its
+// tensor and its law is reached on both legs -- so the packing had no constraint behind it.
 //
 // The stated length is checked against the tensor and the position against both: a length that
 // disagrees is a fault, not a silently reshaped answer. An answer sized by a number nobody verified
@@ -638,24 +645,19 @@ slot_t elementAtKernel(ArgsView &, ArgsView &norm, context::Context &) {
     if (t->rank() != 1) {
         reportShapeError("pick_at", "expects a tensor with exactly one dimension");
     }
-    const std::vector<int64_t> at = intListArg(norm, 1, "pick_at");
-    if (at.size() != 2) {
-        reportShapeError(
-            "pick_at",
-            "expects a two-entry integer list: the position and the length of the tensor");
-    }
-    const int64_t length = at[1];
+    const int64_t length = intArg(norm, 2);
     if (length < 0 || static_cast<uint64_t>(length) != t->numel()) {
         throwRuntimeFault(
             RuntimeDiag::InvalidArgument,
             std::string("pick_at"),
             std::format(
-                "the stated length {} does not agree with the tensor's {}", length, t->numel()));
+                "the stated length {} does not agree with the tensor's {}",
+                length,
+                t->numel()));
     }
-    const int64_t index = at[0];
+    const int64_t index = intArg(norm, 1);
     if (index < 0 || index >= length) {
-        throwRuntimeFault(
-            RuntimeDiag::IndexOutOfRange, index, std::string("the tensor"), length);
+        throwRuntimeFault(RuntimeDiag::IndexOutOfRange, index, std::string("the tensor"), length);
     }
     // The element is the array's own slot: the type the read declares is the element type the
     // tensor states (`elementAtInfer`), so nothing is converted and no kernel is needed.
@@ -672,60 +674,43 @@ std::optional<Type *> elementAtInfer(const InferContext &ctx) {
     return Type::create(t.dtype.value_or(TypeCode::Float64));
 }
 
-// The stated take's adjoint, `take_stated(t, at)`.
+// The stated take's adjoint, `take_stated(t, indices, extents)`.
 //
-// It is `take`'s adjoint with the indices taken out of the list: `at[0]` is how many indices the
-// list holds, so the indices are `at[1 : 1 + at[0]]` -- the same split `takeStatedKernel` below
-// reads -- and the rest is the extents. The extents are read nowhere here: a pullback rule is
-// handed the operand, so `tensor:take_grad(t, indices, dy)` takes the array's shape from `t` and
-// the row count from the indices. That is the one difference from the library's law for this
-// operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which builds the zeros from the
-// extents because a transpose law reads only known operands and the tensor a cotangent comes back
-// through has no value there (author, 2026-11-03 11:10 and 17:35). Both answer the same array:
+// It is `take`'s adjoint: `tensor:take_grad(t, indices, dy)` takes the array's shape from `t` and
+// the row count from the indices. The extents are read nowhere here, and since the indices became
+// a parameter of their own the slice that used to cut them out of a packed list is gone -- the node
+// this rule walks to `take_grad` is the caller's own `indices`. That is the one difference from
+// the library's law for this operator (`stdlib/rulesets/transpose.cml#take_stated_t`), which
+// builds the zeros from the extents because a transpose law reads only known operands and the
+// tensor a cotangent comes back through has no value there (author, 2026-11-03 11:10 and 17:35).
+// Both answer the same array:
 // `test/cases/compile/transforms/stated_take_answered_by_the_engine.cml` prints the two together.
-//
-// The bound of the slice is `1 + at[0]`, a value of the run, which is why it is written as an
-// `:op/add_l` node rather than as a constant. A mask of 3 says both bounds are written and the
-// step is 1, the same six words `concatVjp` writes for its slice.
 void takeStatedVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+    requireVjpInputs(call, 3, 3);
     const auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
     }
-    const vjp_node_t t  = call.inputs[0];
-    const vjp_node_t at = call.inputs[1];
-    const std::array<vjp_node_t, 2> countWords{at, staticInt(b, 0)};
-    const vjp_node_t count = b.addOper(Type::Int64(), ":op/idx_arr", countWords);
-    const std::array<vjp_node_t, 2> endWords{count, staticInt(b, 1)};
-    const vjp_node_t end = b.addOper(Type::Int64(), ":op/add_l", endWords);
-    const std::array<vjp_node_t, 6> slice{
-        at,
-        staticInt(b, 0),
-        staticInt(b, 1),
-        end,
-        staticInt(b, 1),
-        staticInt(b, 3),
-    };
-    const vjp_node_t indices = b.addOper(b.nodeType(at), ":op/slice_sub", slice);
+    const vjp_node_t t       = call.inputs[0];
+    const vjp_node_t indices = call.inputs[1];
     b.accumulateGradient(t, addTensorOperFor(b, t, "tensor:take_grad", {t, indices, *dy}));
 }
 
-// take_stated(t, at): the rows `take` reads, with the indices it reads **and** the operand's extents
-// stated in one integer list, `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`.
+// take_stated(t, indices, extents): the rows `take` reads, with the indices it reads **and** the
+// operand's extents stated beside them.
 //
 // A take's adjoint puts each row's cotangent back where that row came from, in an array of zeros
 // with the *operand's* shape -- and the operand is the one thing the reverse side does not have: a
 // transpose law reads only known operands, and `t` is the operand the cotangent comes back through
 // (author, 2026-11-03 11:10, 17:35). The indices do not supply the row count and the cotangent
 // supplies only the columns, so the extents have to be stated by the forward half
-// (`rulesets.jvp`'s `jvp_take` passes `[len(indices), the indices, shape(t)]`).
+// (`rulesets.jvp`'s `jvp_take` passes `shape(t)` beside the indices).
 //
-// The indices and the extents are one list for the reason `pick_at`'s position and length are:
-// the transpose walk answers an operator with one or two normal operands, so a third one would be
-// refused before any law was looked up. The first entry is the number of indices, which is what
-// tells the two halves of the list apart -- the indices are as long as the list says, and the
-// extents are everything after them.
+// The two arrays are separate parameters: `indices` is what `take` reads and `extents` is the
+// shape the adjoint spreads the rows back into. They used to travel in one list with a leading
+// count, because the transpose walk was believed to answer an operator with one or two normal
+// operands; the walk takes two `int[]` operands beside the tensor, which is what the take_stated
+// law reads today.
 //
 // Both are checked: the extents against the tensor's shape (`support.h#checkStatedExtents`) and
 // every index against the first extent, so a gradient is never built over a shape nobody verified.
@@ -734,15 +719,9 @@ slot_t takeStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     if (input->rank() < 1) {
         reportShapeError("take_stated", "expects a tensor with at least one dimension");
     }
-    const std::vector<int64_t> at = intListArg(norm, 1, "take_stated");
-    if (at.empty() || at[0] < 0 || static_cast<size_t>(at[0]) + 1 > at.size()) {
-        reportShapeError(
-            "take_stated",
-            "expects an integer list whose first entry is the number of indices it holds");
-    }
-    const size_t count = static_cast<size_t>(at[0]);
-    checkStatedExtents(input, at, count + 1, "take_stated");
-    const std::vector<int64_t> indices(at.begin() + 1, at.begin() + 1 + count);
+    const std::vector<int64_t> indices = intListArg(norm, 1, "take_stated");
+    const std::vector<int64_t> extents = intListArg(norm, 2, "take_stated");
+    checkStatedExtents(input, extents, 0, "take_stated");
     const int64_t extent = input->dim(0);
     for (const int64_t index : indices) {
         if (index < 0 || index >= extent) {
@@ -758,10 +737,10 @@ slot_t takeStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-/// The stated take's result type. Both the index count and the extents are values of the run in this
-/// spelling, so the type keeps the rank open (`T[..]`, which `take`'s own open-rank spelling also
-/// answers) and states the operand's element type: the answer is `take`'s, at the shape the value
-/// has, and the reverse law is what the extents are for.
+/// The stated take's result type. Both the index count and the extents are values of the run in
+/// this spelling, so the type keeps the rank open (`T[..]`, which `take`'s own open-rank spelling
+/// also answers) and states the operand's element type: the answer is `take`'s, at the shape the
+/// value has, and the reverse law is what the extents are for.
 std::optional<Type *> takeStatedInfer(const InferContext &ctx) {
     const TensorFacts input = ctx.facts(0);
     if (input.shape && input.shape->empty()) {
@@ -774,134 +753,157 @@ std::optional<Type *> takeStatedInfer(const InferContext &ctx) {
 
 std::vector<OpDef> layoutOps() {
     std::vector<OpDef> defs;
-    defs.push_back(OpDef{
-        .name      = "shape",
-        .exports   = {"shape"},
-        .params    = {{"t", ParamKind::TensorLike}},
-        .resultDoc = "int[]",
-        .infer         = shapeInfer,
-        .kernel        = &shapeKernel,
-        .traits        = {},
-        .foldFromTypes = shapeFold});
-    defs.push_back(OpDef{
-        .name      = "reshape",
-        .exports   = {"reshape"},
-        .params    = {{"t", ParamKind::TensorLike}, {"shape", ParamKind::IntArray}},
-        .resultDoc = "float[..]",
-        .infer          = reshapeInfer,
-        .kernel         = &positionally<reshapeKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1});
-    defs.push_back(OpDef{
-        .name      = "unsqueeze",
-        .exports   = {"unsqueeze"},
-        .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
-        .resultDoc = "float[..]",
-        .infer          = unsqueezeInfer,
-        .kernel         = &positionally<unsqueezeKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1});
-    defs.push_back(OpDef{
-        .name      = "transpose",
-        .exports   = {"transpose"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
-        .infer     = transposeInfer,
-        .kernel    = &transposeKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "permute",
-        .exports   = {"permute"},
-        .params    = {{"t", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
-        .resultDoc = "float[..]",
-        .infer          = permuteInfer,
-        .kernel         = &positionally<permuteKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1});
-    defs.push_back(OpDef{
-        .name    = "concat",
-        .exports = {"concat"},
-        .params =
-            {{"a", ParamKind::TensorLike}, {"b", ParamKind::TensorLike}, {"axis", ParamKind::Int}},
-        .resultDoc = "float[..]",
-        .infer          = concatInfer,
-        .kernel         = &positionally<concatKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 2});
-    defs.push_back(OpDef{
-        .name      = "take",
-        .exports   = {"take"},
-        .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
-        .resultDoc = "float[..]",
-        .infer     = takeInfer,
-        .kernel    = &takeKernel,
-        .traits    = {}});
-    // The read with a stated length: `t[at[0]]` of a rank-1 tensor whose length `at[1]` states.
+    defs.push_back(
+        OpDef{
+            .name          = "shape",
+            .exports       = {"shape"},
+            .params        = {{"t", ParamKind::TensorLike}},
+            .resultDoc     = "int[]",
+            .infer         = shapeInfer,
+            .kernel        = &shapeKernel,
+            .traits        = {},
+            .foldFromTypes = shapeFold});
+    defs.push_back(
+        OpDef{
+            .name           = "reshape",
+            .exports        = {"reshape"},
+            .params         = {{"t", ParamKind::TensorLike}, {"shape", ParamKind::IntArray}},
+            .resultDoc      = "float[...]",
+            .infer          = reshapeInfer,
+            .kernel         = &positionally<reshapeKernel>,
+            .traits         = {},
+            .withAfterNorm  = true,
+            .ordinaryParams = 1});
+    defs.push_back(
+        OpDef{
+            .name           = "unsqueeze",
+            .exports        = {"unsqueeze"},
+            .params         = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int}},
+            .resultDoc      = "float[...]",
+            .infer          = unsqueezeInfer,
+            .kernel         = &positionally<unsqueezeKernel>,
+            .traits         = {},
+            .withAfterNorm  = true,
+            .ordinaryParams = 1});
+    defs.push_back(
+        OpDef{
+            .name      = "transpose",
+            .exports   = {"transpose"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "float[...]",
+            .infer     = transposeInfer,
+            .kernel    = &transposeKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name           = "permute",
+            .exports        = {"permute"},
+            .params         = {{"t", ParamKind::Tensor}, {"perm", ParamKind::IntArray}},
+            .resultDoc      = "float[...]",
+            .infer          = permuteInfer,
+            .kernel         = &positionally<permuteKernel>,
+            .traits         = {},
+            .withAfterNorm  = true,
+            .ordinaryParams = 1});
+    defs.push_back(
+        OpDef{
+            .name    = "concat",
+            .exports = {"concat"},
+            .params =
+                {{"a", ParamKind::TensorLike},
+                 {"b", ParamKind::TensorLike},
+                 {"axis", ParamKind::Int}},
+            .resultDoc      = "float[...]",
+            .infer          = concatInfer,
+            .kernel         = &positionally<concatKernel>,
+            .traits         = {},
+            .withAfterNorm  = true,
+            .ordinaryParams = 2});
+    defs.push_back(
+        OpDef{
+            .name      = "take",
+            .exports   = {"take"},
+            .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
+            .resultDoc = "float[...]",
+            .infer     = takeInfer,
+            .kernel    = &takeKernel,
+            .traits    = {}});
+    // The read with a stated length: `t[position]` of a rank-1 tensor whose length `length` states.
     // Both are the element type's own answer (see `elementAtKernel` and `stdlib/tensor.cml`).
-    defs.push_back(OpDef{
-        .name      = "pick_at",
-        .exports   = {"pick_at"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T",
-        .infer     = elementAtInfer,
-        .kernel    = &elementAtKernel,
-        .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "pick_at",
+            .exports = {"pick_at"},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"position", ParamKind::Int},
+                 {"length", ParamKind::Int}},
+            .resultDoc = "T",
+            .infer     = elementAtInfer,
+            .kernel    = &elementAtKernel,
+            .traits    = {}});
     // The take with its indices and its extents stated (`takeStatedKernel` above): the second
     // spelling a `take`'s reverse law needs, one ordinary operand beside the list.
-    defs.push_back(OpDef{
-        .name      = "take_stated",
-        .exports   = {"take_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
-        .infer     = takeStatedInfer,
-        .kernel    = &takeStatedKernel,
-        .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "take_stated",
+            .exports = {"take_stated"},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"indices", ParamKind::IntArray},
+                 {"extents", ParamKind::IntArray}},
+            .resultDoc = "T[...]",
+            .infer     = takeStatedInfer,
+            .kernel    = &takeStatedKernel,
+            .traits    = {}});
     // The subscript forms of design principles 5.4: `t[a:b]` and `t[idx]` on a tensor. Both are
     // the core's own operators (`t[a:b]` is `:op/slice_sub`), so only the index form needs a
     // declaration of its own; a call that names the dimension it takes on (three words) is the
     // core's declaration's, and this one answers the first dimension's two-word call.
-    defs.push_back(OpDef{
-        .name      = "idx_take",
-        .exports   = {"__idx__"},
-        .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
-        .resultDoc = "float[..]",
-        .infer     = subscriptTakeInfer,
-        .kernel    = &subscriptTakeKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "take_grad",
-        .exports   = {},
-        .params    = {{"t", ParamKind::Tensor},
-                      {"indices", ParamKind::TensorLike},
-                      {"dy", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
-        .infer     = takeGradInfer,
-        .kernel    = &takeGradKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "row_add_at",
-        .exports   = {},
-        .params    = {{"acc", ParamKind::Tensor}, {"index", ParamKind::Int}, {"row", ParamKind::Tensor}},
-        .resultDoc = "float[..]",
-        .infer     = rowAddAtInfer,
-        .kernel    = &rowAddAtKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "one_hot",
-        .exports   = {"one_hot"},
-        .params    = {{"labels", ParamKind::TensorLike}, {"classes", ParamKind::Int}},
-        // The rows are `f32` whatever the labels are (`oneHotInfer`, and the kernel's
-        // `createTensor(TypeCode::Float32, ...)`), so this is the one element type to state: the
-        // family word `float[..]` would say the element type follows an argument, and this operator
-        // has no such argument.
-        .resultDoc = "f32[..]",
-        .infer     = oneHotInfer,
-        .kernel    = &oneHotKernel,
-        .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "idx_take",
+            .exports   = {"__idx__"},
+            .params    = {{"t", ParamKind::Tensor}, {"indices", ParamKind::TensorLike}},
+            .resultDoc = "float[...]",
+            .infer     = subscriptTakeInfer,
+            .kernel    = &subscriptTakeKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "take_grad",
+            .exports = {},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"indices", ParamKind::TensorLike},
+                 {"dy", ParamKind::Tensor}},
+            .resultDoc = "float[...]",
+            .infer     = takeGradInfer,
+            .kernel    = &takeGradKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "row_add_at",
+            .exports = {},
+            .params =
+                {{"acc", ParamKind::Tensor}, {"index", ParamKind::Int}, {"row", ParamKind::Tensor}},
+            .resultDoc = "float[...]",
+            .infer     = rowAddAtInfer,
+            .kernel    = &rowAddAtKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "one_hot",
+            .exports = {"one_hot"},
+            .params  = {{"labels", ParamKind::TensorLike}, {"classes", ParamKind::Int}},
+            // The rows are `f32` whatever the labels are (`oneHotInfer`, and the kernel's
+            // `createTensor(TypeCode::Float32, ...)`), so this is the one element type to state:
+            // the family word `float[..]` would say the element type follows an argument, and this
+            // operator has no such argument.
+            .resultDoc = "f32[...]",
+            .infer     = oneHotInfer,
+            .kernel    = &oneHotKernel,
+            .traits    = {}});
     setVjp(defs, "transpose", &transposeVjp);
     setVjp(defs, "reshape", &reshapeLikeVjp);
     setVjp(defs, "unsqueeze", &reshapeLikeVjp);
@@ -912,9 +914,9 @@ std::vector<OpDef> layoutOps() {
     // The subscript forms are differentiated by the same rule as the calls they name: the
     // indices of `t[idx]` take no gradient, and t's receives the scatter-add (takeVjp).
     setVjp(defs, "idx_take", &takeVjp);
-    // The read with a stated length is differentiated by the read's own adjoint (`pickAtVjp` above):
-    // `pick_at` is `xs[i]` with the length stated, so its pullback is `:op/idx_arr`'s, with the
-    // position read out of the list.
+    // The read with a stated length is differentiated by the read's own adjoint (`pickAtVjp`
+    // above): `pick_at` is `xs[i]` with the length stated, so its pullback is `:op/idx_arr`'s, with
+    // the position read out of the list.
     setVjp(defs, "pick_at", &pickAtVjp);
     // one_hot's input is discrete (an integer array or a rank-1 integer tensor): its derivative
     // is zero by definition (design principles 9.9), and the float one-hot rows are locally

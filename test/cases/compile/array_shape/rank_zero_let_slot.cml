@@ -1,4 +1,4 @@
-// A name declared `f32[..]` and given the element: the declaration is a slot too, so the value is
+// A name declared `f32[...]` and given the element: the declaration is a slot too, so the value is
 // the rank-zero array that holds the element (design principles 5.4), and it prints as the element
 // it is -- one value, one rule, at a declaration and at a parameter alike.
 //
@@ -7,9 +7,9 @@
 // rule instead of two.
 
 func main(): int sync {
-    let one: f32[..] = 1.0
+    let one: f32[...] = 1.0
     println(one)
-    let two: f32[..] = 2.5
+    let two: f32[...] = 2.5
     println(two)
     return 0
 }

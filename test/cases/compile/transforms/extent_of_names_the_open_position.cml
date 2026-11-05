@@ -1,0 +1,40 @@
+// `extent_of` refuses a type whose shape is not written down -- and the sentence names the
+// **position** that is open, because that position is where the repair is written.
+//
+//   `float[...]`    the rank is open: `..` states no dimension, so position 0 is open and no
+//                   position after it has a length
+//   `float[2, ?]`   the rank is stated (two positions) and the second of them has no number
+//   `float[]`, i.e. `float[?]`: one position, no length, so position 0 is open
+//
+// An answer that was a default would be worse than the refusal -- `[]` is the rank-zero shape and
+// `sum_to` reads it as one element -- so the refusal is what has to stay, and what is new here is
+// that it says *which* position to write: "an extent it writes is not a number" named no position,
+// and a reader who wrote `float[2, ?]` had to find the second one themselves.
+//
+// Measured 2026-11-04 on `ca464bca2` (host `88zjwei`), before the sentence named a position:
+//
+//   error[SemanticDiag::ExtentOfNeedsStatedShape]: `extent_of::<A>()` answers the extents the type
+//   `A` writes down, and this call's type writes none: the type it is instantiated at is
+//   'float[2, ?]', and an extent it writes is not a number.
+//   exit=1
+//
+// The three refusals are reported together, each at its own call.
+
+func rank_is_open(): int[] {
+    return extent_of::<float[...]>()
+}
+
+func second_position_is_open(): int[] {
+    return extent_of::<float[2, ?]>()
+}
+
+func only_position_is_open(): int[] {
+    return extent_of::<float[?]>()
+}
+
+func main(): int sync {
+    println(rank_is_open())
+    println(second_position_is_open())
+    println(only_position_is_open())
+    return 0
+}

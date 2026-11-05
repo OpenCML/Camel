@@ -1456,9 +1456,9 @@ Ensure the type is defined and visible in the current scope.
 ```camel
 // The old tensor name is no type at all (the arrays and memory plan, section 5.1): a program that
 // writes it writes an unknown name, and the report says so where it stands. The spellings that
-// state an element type are the array types -- `f32[..]` (any rank) and `f32[2, 3]` -- and a
+// state an element type are the array types -- `f32[...]` (any rank) and `f32[2, 3]` -- and a
 // signature that takes a tensor of any element type declares a type variable in its head
-// (`func count::<T>(t: T[..])`), whose call's argument fixes it. That positive spelling is
+// (`func count::<T>(t: T[...])`), whose call's argument fixes it. That positive spelling is
 // test/cases/loops/iterate_tensor.cml.
 
 import { ones } from tensor
@@ -1623,12 +1623,12 @@ Check the number and types of arguments to ensure they match one of the availabl
 **Example** (`test/cases/compile/array_alias/type_text.cml`, run as `camel test/cases/compile/array_alias/type_text.cml ${backend}`)
 
 ```camel
-// The printed form of an array type is the array spelling: `f32[..]` and `f32[2, 3]`. The
+// The printed form of an array type is the array spelling: `f32[...]` and `f32[2, 3]`. The
 // candidate list of a refused call is where the text is visible.
 import tensor
 
 
-func takes(a: f32[..], b: f32[2, 3]): int {
+func takes(a: f32[...], b: f32[2, 3]): int {
     return 0
 }
 
@@ -2513,7 +2513,7 @@ The expansion '{0}' must range over exactly one pack: {1}.
 **Help**
 
 ```text
-A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ..A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
+A type expression written with '..' stands for one type per member of a pack, and the members come from one place: the rest parameter of the declaration, written '..xs: ...A', binds the pack 'A' to the types of the arguments a call leaves over (design principles 5.6). So the body of an expansion names that one pack, and the expansion is used where a call binds it.
 ```
 
 **Example** (`test/cases/compile/rest_params/pack_expand_two_packs.cml`, run as `camel test/cases/compile/rest_params/pack_expand_two_packs.cml`)
@@ -2521,7 +2521,7 @@ A type expression written with '..' stands for one type per member of a pack, an
 ```camel
 // An expansion ranges over one pack: a body that names two of them writes one type per member
 // of which pack, and nothing in the declaration says which.
-func blend::<..A, ..B>(..xs: ..A): ..{left: A, right: B} {
+func blend::<...A, ...B>(...xs: ...A): ...{left: A, right: B} {
     return {left: xs.[0], right: xs.[1]}
 }
 
@@ -3977,7 +3977,7 @@ Only the first occurrence of a dimension name in the parameter types binds it; l
 // A pack name and a dimension name are separate namespaces: reusing a bound dimension name
 // for a pack says two different things with one name.
 
-func bad(x: f32[n], y: f32[..n]): int {
+func bad(x: f32[n], y: f32[...n]): int {
     return 0
 }
 
@@ -5037,7 +5037,7 @@ A rest parameter stands for every argument left over, so no parameter can follow
 **Example** (`test/cases/compile/rest_params/rest_param_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_param_not_last.cml`)
 
 ```camel
-func bad(..ts, x: int): int {
+func bad(...ts, x: int): int {
     return x
 }
 
@@ -5069,7 +5069,7 @@ A rest parameter is untyped: the tuple of the arguments left over is made at the
 **Example** (`test/cases/compile/rest_params/rest_param_typed.cml`, run as `camel test/cases/compile/rest_params/rest_param_typed.cml`)
 
 ```camel
-func bad(..ts: int): int {
+func bad(...ts: int): int {
     return 0
 }
 
@@ -5101,12 +5101,12 @@ The rest argument '..{0}' must be the last positional argument.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_last.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_last.cml`)
 
 ```camel
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
-    return sum(..(1, 2), 3)
+    return sum(...(1, 2), 3)
 }
 ```
 
@@ -5133,12 +5133,12 @@ The rest argument '..{0}' is not a compile-time tuple.
 **Example** (`test/cases/compile/rest_params/rest_arg_not_tuple.cml`, run as `camel test/cases/compile/rest_params/rest_arg_not_tuple.cml`)
 
 ```camel
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
 func main(): int sync {
-    return sum(..5)
+    return sum(...5)
 }
 ```
 
@@ -5165,7 +5165,7 @@ A function with a rest parameter has no runtime arity, so it has no function val
 **Example** (`test/cases/compile/rest_params/rest_as_value.cml`, run as `camel test/cases/compile/rest_params/rest_as_value.cml`)
 
 ```camel
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
@@ -5198,7 +5198,7 @@ A rest parameter only stands for the arguments after the fixed ones. Give at lea
 **Example** (`test/cases/compile/rest_params/rest_too_few.cml`, run as `camel test/cases/compile/rest_params/rest_too_few.cml`)
 
 ```camel
-func first(a: int, ..ts): int {
+func first(a: int, ...ts): int {
     return a
 }
 
@@ -5309,7 +5309,7 @@ func total(constas n: int, x: f32[n]): float {
     return float(sum(x))
 }
 
-func apply(f: (x: f32[..]) => float, x: f32[..]): float {
+func apply(f: (x: f32[...]) => float, x: f32[...]): float {
     return f(x)
 }
 
@@ -5413,7 +5413,7 @@ A rest parameter's tuple stands for the arguments a call left over: read it with
 **Example** (`test/cases/compile/static_expansion/static_tuple_escape.cml`, run as `camel test/cases/compile/static_expansion/static_tuple_escape.cml`)
 
 ```camel
-func first(..ts): int {
+func first(...ts): int {
     return ts
 }
 
@@ -5475,7 +5475,7 @@ A dimension pack ('..') must be the last item of its '[...]', and only one may b
 **Help**
 
 ```text
-A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ..rest]', not 'f32[..rest, 3]'.
+A pack stands for the dimensions the type does not name, so nothing can follow it. Write it after the extents: 'f32[3, ...rest]', not 'f32[...rest, 3]'.
 ```
 
 **Example** (`test/cases/compile/array_shape/err_pack_not_last.cml`, run as `camel test/cases/compile/array_shape/err_pack_not_last.cml`)
@@ -5483,7 +5483,7 @@ A pack stands for the dimensions the type does not name, so nothing can follow i
 ```camel
 // A pack stands for the trailing dimensions, so nothing may follow it.
 
-func bad(x: f32[..rest, 3]): int {
+func bad(x: f32[...rest, 3]): int {
     return 0
 }
 
@@ -5864,7 +5864,7 @@ A 'when' that is false makes its declaration inapplicable, not erroneous, and th
 **Example** (`test/cases/compile/type_packs/zip_not_array.cml`, run as `camel test/cases/compile/type_packs/zip_not_array.cml`)
 
 ```camel
-/// `when ..is_array::<A>()` asks every member of the pack: an argument that is not an array makes
+/// `when ...is_array::<A>()` asks every member of the pack: an argument that is not an array makes
 /// the declaration inapplicable, and `zip` has no other.
 func main(): int sync {
     println(zip([1, 2], 3))
@@ -7338,7 +7338,7 @@ None: choice: the repair is a decision only the writer can make
 **Example** (`test/cases/compile/stream/comp_operand_mismatch.cml`, run as `camel test/cases/compile/stream/comp_operand_mismatch.cml`)
 
 ```camel
-// A text is neither a function nor an integer: `..` has no reading for it (design principles
+// A text is neither a function nor an integer: `...` has no reading for it (design principles
 // 4.2), so the compiler refuses the construct and names what it does take.
 
 func main(): int sync {
@@ -8403,12 +8403,12 @@ A type function computes a type from types at compile time (design principles 21
 **Example** (`test/cases/compile/type_packs/length_mismatch.cml`, run as `camel test/cases/compile/type_packs/length_mismatch.cml`)
 
 ```camel
-/// `..` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
+/// `...` expands the packs it uses together, so they must have the same length: `Mix<F>` pairs the
 /// ordinary parameters of `F` with its `with` parameters, and `Weighted` has one of the first and
 /// two of the second.
 import { ParamsOf, WithOf } from types
 
-type Mix<F> = (..(ParamsOf<F>, WithOf<F>))
+type Mix<F> = (...(ParamsOf<F>, WithOf<F>))
 type Weighted = <w: float, k: int> (a: int) => bool
 
 func f(x: Mix<Weighted>): int {
@@ -8488,7 +8488,7 @@ The callee reads the caller's variable and writes into it, so what it writes mus
 **Example** (`test/cases/linear/byref/var_argument_shape.cml`, run as `camel test/cases/linear/byref/var_argument_shape.cml`)
 
 ```camel
-func count(var w: f32[..], v: f32): int {
+func count(var w: f32[...], v: f32): int {
     return len(w)
 }
 
@@ -8658,7 +8658,7 @@ The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the hea
 **Help**
 
 ```text
-A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[..]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[..]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
+A transform finds a rule for a primitive by the operator its left side is written with, the number of operands it takes, and then by the types its parameters are written with: two laws of one operator that name different parameter types are two laws -- `T[]`'s `t[0]` is the element and `T[...]`'s `t[0]` is the open-rank array (design principles 5.4) -- and the engine answers with the one the operand's own type enters. Two laws that write the same parameter types have nothing left to be told apart by: which of them applies would be decided by the order they are written in, and the program would mean different things depending on where a rule sits. Merge the two into one rule whose right side covers both cases, write one of them with a parameter type the other does not write (`T[...]` in place of `T`), or give one of them a left side with a different operator -- and remember that `-x` and `x - w` are two primitives, not one.
 ```
 
 **Example** (`test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`, run as `camel test/cases/compile/rulesets/rulesets.err_duplicate_head.cml`)
@@ -8850,9 +8850,9 @@ Every 'with' argument the pack takes is of the type it writes, the rule an ordin
 **Example** (`test/cases/compile/rest_params/with_pack_wrong_element.cml`, run as `camel test/cases/compile/rest_params/with_pack_wrong_element.cml`)
 
 ```camel
-// The pack's element type is a guard: `with <..ws: int>` refuses a `float` argument written in the
+// The pack's element type is a guard: `with <...ws: int>` refuses a `float` argument written in the
 // angle brackets, and says which pack, which type it takes, and which type it was given.
-with <..ws: int>
+with <...ws: int>
 func g(x: float): float {
     return x
 }
@@ -8880,7 +8880,7 @@ None: choice: the extents the type should write, or the value whose shape stands
 **Help**
 
 ```text
-Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[..]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.
+Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[...]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.
 ```
 
 **Example** (`test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml`, run as `camel test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml ${backend}`)
@@ -8895,7 +8895,7 @@ Every extent of the type has to be a number written in it: `float[2, 3]` answers
 // (`transpose(pick)` on `x: float[3]`).
 //
 // That the answer is a fact of the type is also why a type that writes no shape has no answer:
-// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[..]` states
+// `float[]` (= `float[?]`) states one dimension and leaves its length open, and `float[...]` states
 // neither the rank nor a length, so neither tells the function what to answer. Nothing here is a
 // value that was not computed or a shape nobody wrote down: the call asks a question the type does
 // not answer, and it is refused where it is instantiated, which is where the type is in hand.
@@ -8971,7 +8971,7 @@ None: context: an effect reachable only from a branch that never runs; the repai
 **Help**
 
 ```text
-Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal. To run it, put it on a sync chain ('sync { ... }' in a function body, or use the block's value), or use its result.
+Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
@@ -9650,11 +9650,11 @@ Check the shapes of all operands involved in the operation and ensure they are c
 // has no value to become, and the count is checked when the shape runs (the shape arrives through a
 // parameter). The loop below is never reached: `for` over a value with no dimension is refused
 // where it is written (loops.err_tensor_rank0), and rank 0 is decided at the instantiation, so the
-// parameter is written the final way, `T[..]`.
+// parameter is written the final way, `T[...]`.
 
 import { zeros, reshape } from tensor
 
-func toShape::<T>(t: T[..], s: int[]): T[..] {
+func toShape::<T>(t: T[...], s: int[]): T[...] {
     return reshape<s>(t)
 }
 
@@ -10702,7 +10702,7 @@ import { reshape } from tensor
 import { run_preferred_resident, download } from tiles
 
 #gpu
-func product(a: f32[..], b: f32[..]): f32[..] {
+func product(a: f32[...], b: f32[...]): f32[...] {
     return a @ b
 }
 
@@ -10840,7 +10840,7 @@ The device back end has no program for this graph, so the operator that asked fo
 ```camel
 import { reshape } from tensor
 import { source } from tiles
-func noisy(x: f32[..]): f32[..] sync {
+func noisy(x: f32[...]): f32[...] sync {
     println("BODY MUST NOT EXECUTE")
     return x + x
 }
@@ -10956,7 +10956,7 @@ The transpose of '{0}' needs the shape of {1}, and the type '{2}' does not state
 **Help**
 
 ```text
-A transposition turns the cotangent of the result into the cotangent of the parameter, and the adjoint of a linear map is a function of that cotangent and of the shape of the map's domain: the cotangent alone does not say how many positions the parameter has. So the type has to state the shape. Write the extents the parameter's value has in its declaration -- 'func loss_mean(x: float[..])' becomes 'func loss_mean(x: float[2, 3])' -- and 'transpose' builds the graph from them. Nothing is missing from the language here: a parameter whose type states its shape has a transpose.
+A type states the extents its declaration writes and no others: `float[2, 3]` states `[2, 3]`, `float[]` is `float[?]` -- one dimension and no length -- and `float[...]` states neither a rank nor a length, so {1} declares no extents in the type '{2}' (design principles 5.4; the same rule is what `SemanticDiag::ExtentOfNeedsStatedShape` states where a program asks a type for extents). A bare transposition requires the shape of every parameter to come from its type, and `transpose(f)` is handed the cotangent of the result and nothing else: the cotangent does not say how many positions the parameter has, and with no residual carrying the shape the declaration is the only place left. Two writings make it readable, both measured here. Write the extents the parameter's value has in its declaration -- 'func total(x: float[...])' becomes 'func total(x: float[2, 3])' -- and 'transpose(total)(1.0)' answers ([[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]]) by `sum_from_type_t`, the law that reads `extent_of` off the type. Or keep the open declaration and reach the transposition through `vjp`, whose jvp rule states the shape as a residual for `sum_stated_t` to read: 'vjp(total)' over the same 'x: float[...]' answers value=21.0 dL/dx=[[1.0, 1.0, 1.0], [1.0, 1.0, 1.0]].
 ```
 
 **Example** (`test/cases/modules/autodiff/transpose_needs_parameter_shape.cml`, run as `camel test/cases/modules/autodiff/transpose_needs_parameter_shape.cml ${backend}`)
@@ -10964,10 +10964,10 @@ A transposition turns the cotangent of the result into the cotangent of the para
 ```camel
 import rulesets.transpose
 import { transpose } from transforms
-import { mean_axis, sum } from tensor
+import { mean, sum } from tensor
 
-func loss_mean(x: float[..]): float {
-    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+func loss_mean(x: float[...]): float {
+    return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
 func main(): int sync {

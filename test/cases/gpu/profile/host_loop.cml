@@ -9,7 +9,7 @@
 
 import { sum, zeros } from tensor
 
-func loss(w: f32[..], x: f32[..]): float {
+func loss(w: f32[...], x: f32[...]): float {
     return loop s = 0.0 for v in x do s + float(sum(v * w + 0.5))
 }
 

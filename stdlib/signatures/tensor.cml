@@ -17,23 +17,23 @@
 /// zeros([2, 3])`); there is no default.
 /// @pure
 /// @example zeros::<f32>([2, 3])
-export func zeros::<T>(shape: int[]): T[..] when is_numeric::<T>()
+export func zeros::<T>(shape: int[]): T[...] when is_numeric::<T>()
 
 /// An array of the given extents whose elements are all 1; the element type is the call's, as for
 /// `zeros`.
 /// @pure
 /// @example ones::<f32>([2, 3])
-export func ones::<T>(shape: int[]): T[..] when is_numeric::<T>()
+export func ones::<T>(shape: int[]): T[...] when is_numeric::<T>()
 
 /// A tensor of the given extents whose elements are all value; the element type is the value's.
 /// @pure
 /// @example full([2, 2], -1.0)
-export func full(shape: int[], value: number): float[..]
+export func full(shape: int[], value: number): float[...]
 
 /// The n by n identity matrix; the element type is the call's, as for `zeros`.
 /// @pure
 /// @example eye::<f32>(2)
-export func eye::<T>(n: int): T[..] when is_numeric::<T>()
+export func eye::<T>(n: int): T[...] when is_numeric::<T>()
 
 // ---- elementwise ----
 
@@ -41,75 +41,75 @@ export func eye::<T>(n: int): T[..] when is_numeric::<T>()
 /// canonical quiet NaN, and -0 is below +0.
 /// @pure
 /// @example maximum([1.0, -0.0] as float[], 0.0)    // [1.0, 0.0]
-export func maximum(lhs: float[..] | number, rhs: float[..] | number): float[..]
+export func maximum(lhs: float[...] | number, rhs: float[...] | number): float[...]
 
 /// IEEE 754-2019 minimum per element, with NumPy broadcasting: NaN on either side gives the
 /// canonical quiet NaN, and -0 is below +0.
 /// @pure
 /// @example minimum([1.0, -0.0] as float[], 0.0)    // [0.0, -0.0]
-export func minimum(lhs: float[..] | number, rhs: float[..] | number): float[..]
+export func minimum(lhs: float[...] | number, rhs: float[...] | number): float[...]
 
 /// lhs where cond holds, rhs elsewhere, broadcast to one shape; the element type is the wider of
 /// lhs and rhs.
 /// @pure
 /// @example where([true, false] as bool[], [1.0, 2.0] as float[], 0.0)    // [1.0, 0.0]
-export func where(cond: bool[..], lhs: float[..] | number, rhs: float[..] | number): float[..]
+export func where(cond: bool[...], lhs: float[...] | number, rhs: float[...] | number): float[...]
 
 /// |x| per element: the sign cleared.
 /// @pure
 /// @example abs([-1.5, 2.0] as float[])    // [1.5, 2.0]
-export func abs(t: float[..]): float[..]
+export func abs(t: float[...]): float[...]
 
 /// e^x per element, within 2 ulp, subnormal results included.
 /// @pure
 /// @example exp([0.0, 1.0] as float[])    // [1.0, 2.7182817]
-export func exp(t: float[..]): float[..]
+export func exp(t: float[...]): float[...]
 
 /// ln x per element, within 2 ulp; NaN, +-inf, +-0 and negative x are exact (negative x gives
 /// NaN).
 /// @pure
 /// @example log([1.0, 2.7182817] as float[])    // [0.0, 1.0]
-export func log(t: float[..]): float[..]
+export func log(t: float[...]): float[...]
 
 /// sqrt(x) per element, rounded once in `f32`.
 /// @pure
 /// @example sqrt([4.0, 9.0] as float[])    // [2.0, 3.0]
-export func sqrt(t: float[..]): float[..]
+export func sqrt(t: float[...]): float[...]
 
 /// 1 / sqrt(x) per element: two steps, each rounded in `f32`.
 /// @pure
 /// @example rsqrt([4.0] as float[])    // [0.5]
-export func rsqrt(t: float[..]): float[..]
+export func rsqrt(t: float[...]): float[...]
 
 /// The logistic function 1 / (1 + e^-x) per element.
 /// @pure
 /// @example sigmoid([0.0] as float[])    // [0.5]
-export func sigmoid(t: float[..]): float[..]
+export func sigmoid(t: float[...]): float[...]
 
 /// The hyperbolic tangent per element.
 /// @pure
 /// @example tanh([0.0] as float[])    // [0.0]
-export func tanh(t: float[..]): float[..]
+export func tanh(t: float[...]): float[...]
 
 /// maximum(x, +0) per element: NaN gives the canonical NaN, and -0 gives +0.
 /// @pure
 /// @example relu([-1.0, 2.0] as float[])    // [0.0, 2.0]
-export func relu(t: float[..]): float[..]
+export func relu(t: float[...]): float[...]
 
 /// The Gaussian error linear unit per element, computed as its normative definition in Camel.
 /// @pure
 /// @example gelu([0.0] as float[])    // [0.0]
-export func gelu(t: float[..]): float[..]
+export func gelu(t: float[...]): float[...]
 
 /// The Gauss error function per element.
 /// @pure
 /// @example erf([0.0] as float[])    // [0.0]
-export func erf(t: float[..]): float[..]
+export func erf(t: float[...]): float[...]
 
 /// The complementary error function 1 - erf(x) per element.
 /// @pure
 /// @example erfc([0.0] as float[])    // [1.0]
-export func erfc(t: float[..]): float[..]
+export func erfc(t: float[...]): float[...]
 
 // ---- shape and reshaping ----
 
@@ -117,45 +117,45 @@ export func erfc(t: float[..]): float[..]
 /// count fills.
 /// @pure
 /// @example reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as float[])
-export func reshape(t: float[..] | number[], shape: int[]): float[..]
+export func reshape(t: float[...] | number[], shape: int[]): float[...]
 
 /// The elements unchanged, with an axis of extent 1 added at axis.
 /// @pure
 /// @example unsqueeze<0>([1.0, 2.0] as float[])    // shape [1, 2]
-export func unsqueeze(t: float[..], axis: int): float[..]
+export func unsqueeze(t: float[...], axis: int): float[...]
 
 /// The last two axes swapped (a vector becomes a column, a matrix its transpose).
 /// @pure
 /// @example transpose([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
-export func transpose(t: float[..]): float[..]
+export func transpose(t: float[...]): float[...]
 
 /// The axes reordered as perm lists them.
 /// @pure
 /// @example permute<[1, 0]>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])
-export func permute(t: float[..], perm: int[]): float[..]
+export func permute(t: float[...], perm: int[]): float[...]
 
 /// a and b joined along axis; every other extent must agree.
 /// @pure
 /// @example concat<0>([[1.0]] as float[1, 1], [[2.0]] as float[1, 1])    // shape [2, 1]
-export func concat(a: float[..] | number[], b: float[..] | number[], axis: int): float[..]
+export func concat(a: float[...] | number[], b: float[...] | number[], axis: int): float[...]
 
 /// The entries of the first axis that indices name, in that order.
 /// @pure
 /// @fails fault `RuntimeError` when an index is outside the first axis
 /// @example take([[1.0], [2.0], [3.0]] as float[3, 1], [2, 0])    // [[3.0], [1.0]]
-export func take(t: float[..], indices: int64[..] | number[]): float[..]
+export func take(t: float[...], indices: int64[...] | number[]): float[...]
 
 /// Each label (an integer below classes) expanded to a row of classes with a 1 at its position:
 /// a `f32` tensor of shape [labels, classes], each row a distribution over the classes.
 /// @pure
 /// @fails fault `IndexOutOfRange` when a label is outside [0, classes), and fault `InvalidArgument` when classes is negative
 /// @example one_hot([0, 2] as int[], 3)    // [[1.0, 0.0, 0.0], [0.0, 0.0, 1.0]]
-export func one_hot(labels: int64[..] | number[], classes: int): f32[..]
+export func one_hot(labels: int64[...] | number[], classes: int): f32[...]
 
 // ---- reduction ----
 
 /// The sum of every element, in the operand's element type: the canonical form of the element
-/// type `T` is `sum::<T>(x: T[..]): T = T(sum(float(x)))`, so the elements are widened into an
+/// type `T` is `sum::<T>(x: T[...]): T = T(sum(float(x)))`, so the elements are widened into an
 /// `f64` accumulator (`float(x)`), the additions happen in `f64` in row-major order from +0, and
 /// their sum is rounded into `T` once, at the end — the same element type and the same one
 /// rounding as the axis form below, so the full form and the axis form agree bit for bit
@@ -165,26 +165,23 @@ export func one_hot(labels: int64[..] | number[], classes: int): f32[..]
 /// its element type, `bool` as `int64`.
 /// @pure
 /// @example sum([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 10.0
-export func sum::<T>(t: T[..]): T
-
-/// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [4.0, 6.0]
-#op('tensor:sum_axis')
-export func sum::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
+export func sum::<T>(t: T[...]): T
 
 /// The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
-/// rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+/// rounded once into the element type. The axis and the flag are the call's `with` arguments --
+/// `sum<0>`, `sum<1, true>` -- under the whole reduction's name (design principles 7.3), and
+/// `keepdims` leaves the reduced axis as an extent of one.
 /// The result's extents are the operand's, with that axis removed or kept as an extent of one, so
 /// the type a call reads states them (`float[2, 3]` along axis 0 is a `float[3]`).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
-export func sum_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
+/// @example sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [4.0, 6.0]
+#op('tensor:sum_axis')
+with <axis: int, keepdims: bool = false>
+export func sum::<T>(t: T[...]): T[...]
 
 /// The mean of every element, in the operand's element type, with one rounding: the canonical
-/// form of the element type `T` is `mean::<T>(x: T[..]): T = T(sum(float(x)) / float(numel(x)))`.
+/// form of the element type `T` is `mean::<T>(x: T[...]): T = T(sum(float(x)) / float(numel(x)))`.
 /// The sum and the division by the element count both happen in `f64`, and their result is
 /// rounded into `T` once — never a sum rounded to the element type and divided again, which
 /// would round twice. A mean of an integer or bool tensor is `f32`, as by axis; an empty tensor
@@ -192,22 +189,19 @@ export func sum_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
 /// @pure
 /// @fails fault `DivisionByZero` when the tensor has no element
 /// @example mean([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 2.5
-export func mean::<T>(t: T[..]): T
+export func mean::<T>(t: T[...]): T
 
-/// The same mean over one axis; keepdims keeps the axis with extent 1.
+/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+/// the element type. An empty axis is a fault. The axis and the flag are the call's `with`
+/// arguments -- `mean<0>`, `mean<1, true>` -- under the whole reduction's name (design principles
+/// 7.3). The result's extents are the operand's, with that axis removed or kept as an extent of
+/// one.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
 /// @example mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.5, 3.5]
 #op('tensor:mean_axis')
-export func mean::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
-
-/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
-/// the element type. An empty axis is a fault. The result's extents are the operand's, with that
-/// axis removed or kept as an extent of one.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [2.0, 3.0]
-export func mean_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
+with <axis: int, keepdims: bool = false>
+export func mean::<T>(t: T[...]): T[...]
 
 /// IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
 /// -0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
@@ -215,14 +209,14 @@ export func mean_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
 /// @pure
 /// @fails fault `InvalidArgument` when the tensor has no element
 /// @example max([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 4.0
-export func max::<T>(t: T[..]): T
+export func max::<T>(t: T[...]): T
 
 /// IEEE 754-2019 minimum of every element: a NaN anywhere gives `nan`, and -0 is below +0. A tensor
 /// with no element is a fault.
 /// @pure
 /// @fails fault `InvalidArgument` when the tensor has no element
 /// @example min([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 1.0
-export func min::<T>(t: T[..]): T
+export func min::<T>(t: T[...]): T
 
 /// The position of the maximum of every element, counted in row-major order and answered as an
 /// `int`: the first NaN's position if there is one, +0 above -0, and the earliest position on a
@@ -230,7 +224,7 @@ export func min::<T>(t: T[..]): T
 /// @pure
 /// @fails fault `InvalidArgument` when the tensor has no element
 /// @example argmax([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 3
-export func argmax::<T>(t: T[..]): int
+export func argmax::<T>(t: T[...]): int
 
 /// The position of the minimum of every element, counted in row-major order and answered as an
 /// `int`: the first NaN's position if there is one, -0 below +0, and the earliest position on a
@@ -238,93 +232,75 @@ export func argmax::<T>(t: T[..]): int
 /// @pure
 /// @fails fault `InvalidArgument` when the tensor has no element
 /// @example argmin([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 0
-export func argmin::<T>(t: T[..]): int
-
-/// IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
-/// the same bits); keepdims keeps the axis with extent 1.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [3.0, 4.0]
-#op('tensor:max_axis')
-export func max::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
+export func argmin::<T>(t: T[...]): int
 
 /// The largest element of each lane along one axis. An empty axis is a fault, as for the whole
-/// tensor. The result's extents are the operand's, with that axis removed or kept.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [3.0, 4.0]
-export func max_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
-
-/// IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
-/// axis with extent 1.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.0, 3.0]
-#op('tensor:min_axis')
-export func min::<T>(t: T[..], axis: int, keepdims?: bool): T[..]
-
-/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
-/// element has no identity to return. The result's extents are the operand's, with that axis
-/// removed or kept.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1.0, 2.0]
-export func min_axis::<T>(t: T[..], axis: int, keepdims: bool): T[..]
-
-/// The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
-/// NaN if there is one, +0 above -0, the earlier position on a tie.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1, 1]
-#op('tensor:argmax_axis')
-export func argmax(t: float[..], axis: int, keepdims?: bool): int64[..]
-
-/// The position of the largest element of each lane along one axis, an `int` index along that
-/// axis. A tie keeps the earlier position. An empty axis is a fault. The result's extents are the
+/// tensor. The axis and the flag are the call's `with` arguments -- `max<0>`, `max<1, true>` --
+/// under the whole reduction's name (design principles 7.3). The result's extents are the
 /// operand's, with that axis removed or kept.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1, 1]
-export func argmax_axis::<T>(t: T[..], axis: int, keepdims: bool): int[..]
+/// @example max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [3.0, 4.0]
+#op('tensor:max_axis')
+with <axis: int, keepdims: bool = false>
+export func max::<T>(t: T[...]): T[...]
 
-/// The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
-/// NaN if there is one, -0 below +0, the earlier position on a tie.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [0, 0]
-#op('tensor:argmin_axis')
-export func argmin(t: float[..], axis: int, keepdims?: bool): int64[..]
-
-/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
-/// position. An empty axis is a fault. The result's extents are the operand's, with that axis
-/// removed or kept.
+/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+/// element has no identity to return. The axis and the flag are the call's `with` arguments --
+/// `min<1>`, `min<0, true>` -- under the whole reduction's name (design principles 7.3). The
+/// result's extents are the operand's, with that axis removed or kept.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [0, 0]
-export func argmin_axis::<T>(t: T[..], axis: int, keepdims: bool): int[..]
+/// @example min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.0, 3.0]
+#op('tensor:min_axis')
+with <axis: int, keepdims: bool = false>
+export func min::<T>(t: T[...]): T[...]
+
+/// The position of the largest element of each lane along one axis, an `int` index along that
+/// axis. A tie keeps the earlier position. An empty axis is a fault. The axis and the flag are the
+/// call's `with` arguments -- `argmax<1>`, `argmax<0, true>` -- under the whole reduction's name
+/// (design principles 7.3). The result's extents are the operand's, with that axis removed or
+/// kept.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
+/// @example argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1, 1]
+#op('tensor:argmax_axis')
+with <axis: int, keepdims: bool = false>
+export func argmax(t: float[...]): int64[...]
+
+/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
+/// position. An empty axis is a fault. The axis and the flag are the call's `with` arguments --
+/// `argmin<0>`, `argmin<1, true>` -- under the whole reduction's name (design principles 7.3). The
+/// result's extents are the operand's, with that axis removed or kept.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
+/// @example argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [0, 0]
+#op('tensor:argmin_axis')
+with <axis: int, keepdims: bool = false>
+export func argmin(t: float[...]): int64[...]
 
 // ---- the reductions with their extents stated ----
 
 /// The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
-/// in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
+/// as parameters of their own: `mean_axis_stated(t, axis, keepdims, extents)` is
+/// `mean<axis, keepdims>(t)`.
 ///
-/// The result is `mean_axis`'s at the extents `at` states: the operand's, with the axis at `at[0]`
-/// removed, or kept as an extent of one when `at[1]` is not zero. It is computed rather than
-/// declared because those extents follow from values, so a call that writes `at` states its own
-/// result -- `[0, 0, 4]` over a rank-1 operand is the element, not `float[..]` and a conversion --
-/// and a call whose list is a value of the run states the operand's element type at a rank nobody
-/// fixed.
+/// The result is the axis mean's at the stated extents: the operand's, with the `axis` removed, or kept
+/// as an extent of one when `keepdims`. It is computed rather than declared because those extents
+/// follow from values, so a call that states all three states its own result -- `0, false, [4]` over a
+/// rank-1 operand is the element, not `float[...]` and a conversion -- and a call whose parameters are
+/// values of the run states the operand's element type at a rank nobody fixed.
 /// @pure
-/// @fails fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank
-/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])    // [[2.0, 3.0]]
-export func mean_axis_stated::<T>(t: T[..], at: int[]): T[..]
+/// @fails fault `RuntimeError` when the extents disagree with the tensor's shape, or the axis is outside the rank
+/// @example mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, true, [2, 2])    // [[2.0, 3.0]]
+export func mean_axis_stated::<T>(t: T[...], axis: int, keepdims: bool, extents: int[]): T[...]
 
 /// The softmax over the axis (-1, the last axis, by default), computed as its normative
 /// definition in Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example softmax([1.0, 1.0] as f32[])    // [0.5, 0.5]
-export func softmax(t: f32[..], axis?: int): f32[..]
+export func softmax(t: f32[...], axis?: int): f32[...]
 
 /// The same softmax of an `f64` tensor: the kernel takes the element type of the tensor it is
 /// given, so the result is `f64` as well.
@@ -332,41 +308,41 @@ export func softmax(t: f32[..], axis?: int): f32[..]
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example softmax([[1.0, 1.0]] as float[1, 2])    // [[0.5, 0.5]]
 #op('tensor:softmax')
-export func softmax(t: float[..], axis?: int): float[..]
+export func softmax(t: float[...], axis?: int): float[...]
 
 /// The log of the softmax over the axis (-1 by default), computed as its normative definition in
 /// Camel, in `f32`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example log_softmax([1.0, 1.0] as f32[])    // [-0.6931472, -0.6931472]
-export func log_softmax(t: f32[..], axis?: int): f32[..]
+export func log_softmax(t: f32[...], axis?: int): f32[...]
 
 /// The same log softmax of an `f64` tensor, in `f64`.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example log_softmax([[1.0, 1.0]] as float[1, 2])    // [[-0.6931472, -0.6931472]]
 #op('tensor:log_softmax')
-export func log_softmax(t: float[..], axis?: int): float[..]
+export func log_softmax(t: float[...], axis?: int): float[...]
 
 /// The gradient of the softmax of y with the incoming gradient dy, over the axis (-1 by default).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example softmax_grad(y, dy)
-export func softmax_grad(y: f32[..], dy: f32[..], axis?: int): f32[..]
+export func softmax_grad(y: f32[...], dy: f32[...], axis?: int): f32[...]
 
 /// The same gradient in `f64`: y and dy are `f64` tensors and the result is one too.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
 /// @example softmax_grad(y, dy)
 #op('tensor:softmax_grad')
-export func softmax_grad(y: float[..], dy: float[..], axis?: int): float[..]
+export func softmax_grad(y: float[...], dy: float[...], axis?: int): float[...]
 
 /// Layer normalization of x with gamma and beta, whose extents are the trailing ones of x, over
 /// the trailing axes; eps is 1e-5 by default. The result is `f32`.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x
 /// @example layer_norm(x, gamma, beta)
-export func layer_norm(x: f32[..], gamma: f32[..], beta: f32[..], eps?: number): f32[..]
+export func layer_norm(x: f32[...], gamma: f32[...], beta: f32[...], eps?: number): f32[...]
 
 /// The same normalization of `f64` tensors, in `f64`: x, gamma and beta are `f64` and the result
 /// is one too.
@@ -374,7 +350,7 @@ export func layer_norm(x: f32[..], gamma: f32[..], beta: f32[..], eps?: number):
 /// @fails fault `TensorDimensionMismatch` when gamma or beta does not match the trailing extents of x
 /// @example layer_norm(x, gamma, beta)
 #op('tensor:layer_norm')
-export func layer_norm(x: float[..], gamma: float[..], beta: float[..], eps?: number): float[..]
+export func layer_norm(x: float[...], gamma: float[...], beta: float[...], eps?: number): float[...]
 
 // ---- linear algebra ----
 
@@ -383,14 +359,14 @@ export func layer_norm(x: float[..], gamma: float[..], beta: float[..], eps?: nu
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the inner extents do not agree
 /// @example matmul([[1.0, 2.0]] as float[1, 2], [[3.0], [4.0]] as float[2, 1])    // [[11.0]]
-export func matmul(lhs: float[..], rhs: float[..]): float[..]
+export func matmul(lhs: float[...], rhs: float[...]): float[...]
 
 /// The affine transform of x by a rank-2 weight [in, out] whose rows are the features of x, plus
 /// a rank-1 bias [out] when given.
 /// @pure
 /// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent
 /// @example linear(x, weight, bias)
-export func linear(x: f32[..], weight: f32[..], bias?: f32[..]): f32[..]
+export func linear(x: f32[...], weight: f32[...], bias?: f32[...]): f32[...]
 
 /// The same transform of `f64` operands, in `f64`: it takes the element type of its operands
 /// (the `f32` path is the fused one, the other element types go through `matmul` and the addition).
@@ -398,19 +374,19 @@ export func linear(x: f32[..], weight: f32[..], bias?: f32[..]): f32[..]
 /// @fails fault `TensorDimensionMismatch` when the features of x are not the rows of weight, or bias is not rank 1 of the output extent
 /// @example linear(x, weight, bias)
 #op('tensor:linear')
-export func linear(x: float[..], weight: float[..], bias?: float[..]): float[..]
+export func linear(x: float[...], weight: float[...], bias?: float[...]): float[...]
 
 // ---- gradient ----
 
 /// A tensor of zeros shaped and typed like t.
 /// @pure
 /// @example zeros_like([[1.0, 2.0]] as float[1, 2])
-export func zeros_like(t: float[..]): float[..]
+export func zeros_like(t: float[...]): float[...]
 
 /// A tensor of ones shaped and typed like t.
 /// @pure
 /// @example ones_like([[1.0, 2.0]] as float[1, 2])
-export func ones_like(t: float[..]): float[..]
+export func ones_like(t: float[...]): float[...]
 
 // ---- conversion and display ----
 
@@ -428,13 +404,13 @@ export func ones_like(t: float[..]): float[..]
 /// 5.5). `T` is `f32`, `f64`, `i32`, `i64` or `bool`, the element types the format's storage types
 /// (`'<f4'`, `'<f8'`, `'<i4'`, `'<i8'`, `'|b1'`) map to, exactly the type given. It is written at
 /// the call (`load_npy::<f32>(p)`) or taken from the type of the position the call stands in
-/// (`f32[3]`, `f32[..]`); `T` is the one type variable no parameter mentions, so a call
+/// (`f32[3]`, `f32[...]`); `T` is the one type variable no parameter mentions, so a call
 /// that says neither is not a use of this operator.
 /// @effect reads a file
 /// @fails fault `RuntimeError` when the file is missing, is not a NumPy file, holds a storage type the module does not read, or holds another element type than `T`
 /// @example load_npy::<f32>('x.npy')
 #op('tensor:load_npy_*')
-export func load_npy::<T>(path: string): T[..]
+export func load_npy::<T>(path: string): T[...]
 
 // ---- binary form ----
 
@@ -451,4 +427,4 @@ export func load_npy::<T>(path: string): T[..]
 /// @fails fault `TensorDimensionMismatch` when the number of bytes does not fit the shape and the element type
 /// @example from_bytes::<f32>(to_bytes([1.0, 2.0] as float[]), [2])
 #op('tensor:from_bytes_*')
-export func from_bytes::<T>(bytes: Bytes, shape: int[]): T[..] when is_plain::<T>()
+export func from_bytes::<T>(bytes: Bytes, shape: int[]): T[...] when is_plain::<T>()

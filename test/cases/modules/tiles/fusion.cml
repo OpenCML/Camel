@@ -1,10 +1,10 @@
 import { reshape, exp, relu, sum, abs } from tensor
 import { next_key, seed, uniform } from random
 import { inspect, run_preferred_resident, download } from tiles
-func pipeline(x: f32[..], b: f32[..]): f32[..] {
+func pipeline(x: f32[...], b: f32[...]): f32[...] {
     return exp(relu((x + b) * 0.5 - 0.25))
 }
-func fork(x: f32[..], b: f32[..]): f32[..] {
+func fork(x: f32[...], b: f32[...]): f32[...] {
     let y = x + b
     return exp(y) + y * 2.0
 }

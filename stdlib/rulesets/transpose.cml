@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -119,18 +119,17 @@ export rule stop_gradient_t::<T>(x: T) when is_float::<T>() {
 // summed back to the shape the operand states". That second half is not a detail. The operator is
 // called with an array and a *number* as well as with two arrays, and the number's cotangent is a
 // reduction: the number fed every lane the broadcast spread it over, so its cotangent is the sum
-// of what it fed. One law covers both shapes because it names the shape instead of assuming it --
-// `sum_to_stated(ct * other, shape(operand))` is the identity when the shapes are equal, and `T[..]`
+// of what it fed. One law covers both shapes because it names the extents instead of assuming them --
+// `sum_to(ct * other, shape(operand))` is the identity when the shapes are equal, and `T[...]`
 // includes rank 0, a rank-zero array being that element and nothing else (design principles 5.4), so
 // the number's shape is a shape like any other and its reduction is the total sum.
 //
-// The shape is `shape(operand)` and not the operand itself: a transposition has no value for the
-// operand it differentiates, so what it can be given is the extents its port states
-// (`sum_to_stated` above, and `modules/transforms/rule_expand.cpp#expandRuleRightSide` for who hands
-// them over).
+// The list is `shape(operand)` and not the operand itself: `sum_to` takes the extents (ruling 甲),
+// and a value is only needed where the walk holds one. Where the forward rule states the list
+// instead, `mul_stated_t` below is the same law with that port in place of the call.
 //
 // This is one rule and cannot be two: the index tells two rules of one key apart by their `when`
-// condition, so a second rule `(T[..], T)` -- no position of which overlaps the shapes above --
+// condition, so a second rule `(T[...], T)` -- no position of which overlaps the shapes above --
 // was refused where it was written:
 //
 //     The rule 'mul_tensor_t' and the rule 'mul_tensor_scalar_t' both have 'mul_tensor' with 2
@@ -144,7 +143,7 @@ export rule stop_gradient_t::<T>(x: T) when is_float::<T>() {
 // one gets `tensor:sum`) -- read here as one expression rather than as a branch on the type.
 
 /// `x + w` on two arrays: what `tensor:add` means, and the left side this rule is filed under.
-func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+func add::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x + w
 }
 
@@ -157,46 +156,54 @@ func add::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// the walk refused there -- `TRANSPOSE ... skip=rule uri=tensor:add reason=unbound` -- before this
 /// rule existed. Filed under the call `add(x, w)` for the same reason `mul_tensor` is: the key is
 /// the operator's own name, and `+` at two operands is `:op/add_d`'s.
-export rule add_tensor_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
-    add(x, w) => (ct: T[..]) => (ct, ct)
+export rule add_tensor_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
+    add(x, w) => (ct: T[...]) => (ct, ct)
 }
 
 /// `x * w` on two arrays: what `tensor:multiply` means, and the left side this rule is filed under.
-func mul_tensor::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+func mul_tensor::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x * w
 }
 
-/// `t` read at the shape whose extents are `at` -- `sum_to` with the target shape as a list, which is
-/// what a transpose law can state and a value it cannot.
-///
-/// `sum_to(t, like)` reads the shape off **another value**, and the one value a transposition never
-/// has is the operand it differentiates. So when the shape is the thing a law needs, the law is
-/// handed the extents and this is the move that turns them into the operand `sum_to` is written
-/// against. The zeros are `sum_to`'s own way of naming a shape -- its second operand is read for its
-/// shape and for nothing else (`stdlib/tensor.cml#sum_to`, whose second example is a zero array) --
-/// built here from extents the law was given, and never substituted for an operand of the operator
-/// being differentiated (author, 2026-11-03 17:35: a shape arrives as a known operand, never read
-/// off an operand's value, and not as a zero standing in for one).
-///
-/// It reads `at` and nothing else of the operand, which is why a law that names it can answer a
-/// position whose value the walk does not carry.
-func sum_to_stated::<T>(t: T[..], at: int[]): T[..] when is_float::<T>() {
-    return sum_to(t, zeros::<T>(at))
-}
+// The shape a law needs arrives as `at` and goes straight into `sum_to`, which takes the extents
+// themselves (`stdlib/tensor.cml#sum_to`): `sum_to(t, shape(x))` is the reduction, and there is no
+// helper between the list and the call any more. The `sum_to_stated(t, at)` that built
+// `zeros::<T>(at)` was a second spelling of one call, and two spellings of one move is what this
+// lane removes.
 
 /// The transpose of `x * w`: `ct * w` reduced to `x`'s shape for `x`, `ct * x` reduced to `w`'s
-/// shape for `w`. The reduction is the one `sum_to_stated` names, so the law is written once for both
+/// shape for `w`. The reduction is `sum_to` with the extents, so the law is written once for both
 /// shapes the operator is called with -- two arrays, and an array and a number.
 ///
-/// The second operand of each `sum_to_stated` is `shape(x)` / `shape(w)`, and it is answered from the
-/// law's **own port** when the walk carries no value for that operand
-/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`): the ports are `X` and `W`, the instance
-/// is made at the node's operand types, and a stated extent is a fact about a type. That is what makes
-/// the broadcast shape `w`'s own and not `x`'s -- reading the other operand was measured to answer
-/// `[6.0]` where the engine answers a `[2, 2, 2]` tensor, and reading a zero carrier for it answered
-/// zeros -- and it is the difference between a law that names a shape and one that guesses at it.
+/// The second operand of each `sum_to` is `shape(x)` / `shape(w)` -- the extents **computed from the
+/// value**, which is the layer the extents belong to (author, 2026-11-05: from the primal's runtime
+/// shape, not from the type). It is answered where the walk carries that value
+/// (`modules/transforms/rule_expand.cpp#expandRuleRightSide`); where it does not, the step is
+/// refused by name rather than guessed at, and the stated pair of rules below is the spelling for a
+/// law whose forward half writes the lists into the call. That is what makes the broadcast shape
+/// `w`'s own and not `x`'s -- reading the other operand was measured to answer `[6.0]` where the
+/// engine answers a `[2, 2, 2]` tensor, and reading a zero carrier for it answered zeros -- and it
+/// is the difference between a law that names a shape and one that guesses at it.
 export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
-    mul_tensor(x, w) => (ct: T[..]) => (sum_to_stated(ct * w, shape(x)), sum_to_stated(ct * x, shape(w)))
+    mul_tensor(x, w) => (ct: T[...]) => (sum_to(ct * w, shape(x)), sum_to(ct * x, shape(w)))
+}
+
+/// The transpose of `mul_stated(x, w, ax, aw)`: `ct * w` reduced to `ax` for `x`, and `ct * x`
+/// reduced to `aw` for `w` -- `mul_tensor_t`'s two answers with the two shapes **handed over**.
+///
+/// The law reads the other operand's value (`ct * w` is a product with a value the cut carries) and
+/// the answered operand's shape as a value of the primal (`ax` / `aw`), and nothing of the position
+/// it answers. That is the difference from `mul_tensor_t` above, and it is the difference a
+/// transposition needs: the operand whose cotangent this is has no value on this side (design
+/// principles 4.3), and its type is `float[...]`, which states no extents. The forward half computes
+/// both lists, where both operands are values (`stdlib/rulesets/jvp.cml#jvp_mul_tensor`).
+///
+/// Two lists and not one: a product broadcasts, so the two cotangents come back to two different
+/// shapes, and one list would answer the wrong one of them (`mul_tensor_t` records the measurement:
+/// `sum_to(ct * w, shape(w))` answers `[6.0]` where the engine answers a `[2, 2, 2]` tensor).
+export rule mul_stated_t::<T, X, W, AX, AW>(x: X, w: W, ax: AX, aw: AW) {
+    mul_stated(x, w, ax, aw) => (ct: T[...]) =>
+        (sum_to(ct * w, ax), sum_to(ct * x, aw))
 }
 
 /// `relu(x) = maximum(x, 0)` per element: the cotangent is `ct` where the input was positive and
@@ -204,7 +211,8 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// `where`, a registered operator, and not with a function of this rule's making: a helper named on a
 /// rule's right side becomes a call in the graph the backward walk has to transpose, and a call with
 /// no transpose of its own stops the walk (`skip=call-no-transpose`, measured on
-/// `rulesets.jvp::pow_tangent` 2026-11-03). A rule's right side is the answer, so a three-operand
+/// `rulesets.jvp::pow_tangent` 2026-11-03; `jvp_pow` writes its law out in place for that reason). A
+/// rule's right side is the answer, so a three-operand
 /// `where` is allowed here; the forward rule cannot write it that way, and `jvp_relu` records the
 /// measurement (`skip=arity uri=tensor:where operands=3`).
 ///
@@ -212,13 +220,13 @@ export rule mul_tensor_t::<T, X, W>(x: X, w: W) {
 /// `jvp_relu` (`stdlib/rulesets/jvp.cml`) kills the tangent with the same comparison, so the forward
 /// and the reverse reading of the boundary cannot drift apart.
 export rule relu_t::<T, A>(x: A) when is_float::<T>() {
-    relu(x) => (ct: T[..]) => (where(x > 0.0, ct, 0.0))
+    relu(x) => (ct: T[...]) => (where(x > 0.0, ct, 0.0))
 }
 /// The transpose of `tanh`: `ct * (1 - y * y)` with `y = tanh(x)`, the adjoint of `jvp_tanh` and the
 /// same slope the engine's `tanhVjp` builds from its own output. The right side recomputes `tanh(x)`,
 /// an x-only value -- the shape the cut carries (`exp`, `sigmoid`).
-export rule tanh_t::<T>(x: T[..]) when is_float::<T>() {
-    tanh(x) => (ct: T[..]) => (ct * (1.0 - tanh(x) * tanh(x)))
+export rule tanh_t::<T>(x: T[...]) when is_float::<T>() {
+    tanh(x) => (ct: T[...]) => (ct * (1.0 - tanh(x) * tanh(x)))
 }
 
 /// The transpose of `exp`: `ct * y` with `y = exp(x)` -- the cotangent scaled by the output, which is
@@ -226,8 +234,8 @@ export rule tanh_t::<T>(x: T[..]) when is_float::<T>() {
 /// cotangent. The right side recomputes the forward value from `x`, which is the only way a law with
 /// one operand can name it; that recomputation is the point the question below asks about, so this
 /// rule and `jvp_exp` (`stdlib/rulesets/jvp.cml`) are a measurement as well as a law.
-export rule exp_t::<T>(x: T[..]) when is_float::<T>() {
-    exp(x) => (ct: T[..]) => ct * exp(x)
+export rule exp_t::<T>(x: T[...]) when is_float::<T>() {
+    exp(x) => (ct: T[...]) => ct * exp(x)
 }
 
 /// The transpose of `sigmoid`: `ct * y * (1 - y)` with `y = sigmoid(x)`, the cotangent scaled by the
@@ -237,16 +245,16 @@ export rule exp_t::<T>(x: T[..]) when is_float::<T>() {
 /// `exp` measured the cut carrying as a residue (`jvp_exp`, `exp_t`). What stays in the linear half
 /// is `ct * <residual> * <residual>`, two `mul_tensor` nodes, each of which already has a transpose
 /// (`mul_tensor_t`), so the walk needs nothing new by name.
-export rule sigmoid_t::<T>(x: T[..]) when is_float::<T>() {
-    sigmoid(x) => (ct: T[..]) => (ct * sigmoid(x) * (1.0 - sigmoid(x)))
+export rule sigmoid_t::<T>(x: T[...]) when is_float::<T>() {
+    sigmoid(x) => (ct: T[...]) => (ct * sigmoid(x) * (1.0 - sigmoid(x)))
 }
 /// The transpose of `log_softmax`: `ct - exp(y) * sum(ct)` with `y = log_softmax(x)` and the axis summed
 /// with `keepdims` -- the expression the engine's own rule writes (`logSoftmaxVjp`,
-/// `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(output) * sum_axis(dy, axis, true)`), not the
+/// `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(output) * sum<axis, true>(dy)`), not the
 /// transposed direction of `jvp_log_softmax`, which is `ct - sum(exp(y) * ct)`. The two differ by a
 /// broadcast: for `ct = 1` the wrong one answers zero everywhere, because `sum(p) = 1`.
-export rule log_softmax_t::<T>(x: T[..]) when is_float::<T>() {
-    log_softmax<0>(x) => (ct: T[..]) => (ct - exp(log_softmax<0>(x)) * sum<0, true>(ct))
+export rule log_softmax_t::<T>(x: T[...]) when is_float::<T>() {
+    log_softmax<0>(x) => (ct: T[...]) => (ct - exp(log_softmax<0>(x)) * sum<0, true>(ct))
 }
 
 // ---- the transpose laws of the eight basic elementwise operators ----
@@ -267,74 +275,34 @@ export rule log_softmax_t::<T>(x: T[..]) when is_float::<T>() {
 
 /// `-x` on an array: the left side `tensor:neg`'s law is filed under, the way `mul_tensor` above
 /// stands for `tensor:multiply`. `tensor:neg`'s exported spelling is `__neg__`, which is not a call.
-func neg::<T>(x: T[..]): T[..] when is_float::<T>() {
+func neg::<T>(x: T[...]): T[...] when is_float::<T>() {
     return -x
 }
 
 /// The transpose of `-x`: `-ct`. A sign flip is its own adjoint, and the law reads the cotangent and
 /// nothing else -- the cheapest shape a law has.
-export rule neg_tensor_t::<T>(x: T[..]) when is_float::<T>() {
-    neg(x) => (ct: T[..]) => -ct
-}
-
-/// The transpose of `abs`: `ct` where the operand is not negative, `-ct` where it is.
-///
-/// `abs` has no derivative at `0`, so the law has to choose a side there, and it chooses the one the
-/// engine's `absVjp` chooses: that rule asks `tensor:ge` (`x >= 0`), so the zero keeps its
-/// cotangent's sign. `>` would answer `0.0` at the zero where the engine answers `ct`, and the two
-/// legs would disagree at the one input where the maths cannot say which is right.
-///
-/// The mask is `x`'s alone, so it is a residue and not a linear value: the walk carries it and the
-/// law's answer is one `where` over the cotangent and its negation.
-export rule abs_t::<T>(x: T[..]) when is_float::<T>() {
-    abs(x) => (ct: T[..]) => (where(x >= 0.0, ct, -ct))
+export rule neg_tensor_t::<T>(x: T[...]) when is_float::<T>() {
+    neg(x) => (ct: T[...]) => -ct
 }
 
 /// The transpose of `sqrt`: `(ct * 0.5) / sqrt(x)` -- one over twice the root, written as the
 /// engine's `sqrtVjp` writes it (`ct * 0.5` first, then the division, so the two legs round the same
 /// way). The root is recomputed from the operand; it is a function of `x` alone, the channel
 /// `exp_t` above established.
-export rule sqrt_t::<T>(x: T[..]) when is_float::<T>() {
-    sqrt(x) => (ct: T[..]) => (ct * 0.5) / sqrt(x)
-}
-
-/// The transpose of `log`: `ct / x`. The slope is the reciprocal of the operand, so nothing is
-/// recomputed and nothing is carried: this is the member of the tranche that shows a law need not
-/// invent a value at all.
-export rule log_t::<T>(x: T[..]) when is_float::<T>() {
-    log(x) => (ct: T[..]) => ct / x
+export rule sqrt_t::<T>(x: T[...]) when is_float::<T>() {
+    sqrt(x) => (ct: T[...]) => (ct * 0.5) / sqrt(x)
 }
 
 /// The transpose of `rsqrt`: `(ct * -0.5) * (y * (y * y))` with `y = rsqrt(x)`, which is the grouping
 /// the engine's `rsqrtVjp` builds (`cube = y * (y * y)`, `scaled = ct * -0.5`, `scaled * cube`).
-export rule rsqrt_t::<T>(x: T[..]) when is_float::<T>() {
-    rsqrt(x) => (ct: T[..]) => (ct * (-0.5)) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))
-}
-
-/// The transpose of `maximum`: `ct` to the operand the value was taken from, `0` to the other, the
-/// tie going to the left one -- the engine's `extremumVjp` asks `tensor:ge` for `maximum`, so at
-/// `x == w` the left operand takes the cotangent and the right one takes zero.
-///
-/// Both operands are answered, and each answer is reduced to its own shape with `sum_to`: the identity
-/// when the two shapes are equal, the sum over the lanes a broadcast spread the operand over when
-/// they are not -- the same reduction `mul_tensor_t` above writes, for the same reason.
-export rule maximum_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    maximum(x, w) => (ct: T[..]) =>
-        (sum_to(where(x >= w, ct, 0.0), x), sum_to(where(x >= w, 0.0, ct), w))
-}
-
-/// The transpose of `minimum`: the mirror of `maximum_t`, and its own law because the comparison is
-/// the law. `tensor:le` is the engine's choice (`extremumVjp`), so a tie again goes to the left
-/// operand.
-export rule minimum_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    minimum(x, w) => (ct: T[..]) =>
-        (sum_to(where(x <= w, ct, 0.0), x), sum_to(where(x <= w, 0.0, ct), w))
+export rule rsqrt_t::<T>(x: T[...]) when is_float::<T>() {
+    rsqrt(x) => (ct: T[...]) => (ct * (-0.5)) * (rsqrt(x) * (rsqrt(x) * rsqrt(x)))
 }
 
 /// `x / w` on two arrays: the left side `tensor:divide`'s law is filed under. `tensor:divide`'s
 /// exported spellings are `__div__` and the infix form, and neither is a call -- the same stand-in
 /// `subtract` below is.
-func divide::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+func divide::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x / w
 }
 
@@ -342,12 +310,12 @@ func divide::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// the engine's `divideVjp` builds, in its order (`dlhs = ct / w`, then `dlhs * (x / w)`, then the
 /// negation), so the quotients that produce the two cotangents are the same quotients.
 export rule divide_t::<T, X, W>(x: X, w: W) when is_float::<T>() {
-    divide(x, w) => (ct: T[..]) =>
-        (sum_to(ct / w, x), sum_to(-((ct / w) * (x / w)), w))
+    divide(x, w) => (ct: T[...]) =>
+        (sum_to(ct / w, shape(x)), sum_to(-((ct / w) * (x / w)), shape(w)))
 }
 
 /// `x - w` on two arrays: what `tensor:subtract` means, and the left side this rule is filed under.
-func subtract::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
+func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
     return x - w
 }
 
@@ -355,8 +323,8 @@ func subtract::<T>(x: T[..], w: T[..]): T[..] when is_float::<T>() {
 /// `add_tensor_t` above and the adjoint of `jvp_subtract` (`stdlib/rulesets/jvp.cml`), and it is here
 /// because a loss written `pred - target` -- the one line every training step has -- puts this
 /// operator in the backward graph between the product's law and the sum's.
-export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
-    subtract(x, w) => (ct: T[..]) => (ct, -ct)
+export rule subtract_t::<T>(x: T[...], w: T[...]) when is_float::<T>() {
+    subtract(x, w) => (ct: T[...]) => (ct, -ct)
 }
 
 // ---- the transpose rule of the matrix product ----
@@ -380,21 +348,29 @@ export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 // as a row or a column and drops that axis from the answer (`modules/tensor/kernels/gemm.cpp#planMatmul`),
 // so the cotangent that comes back is a rank-one value where the operand is rank one, and the cotangent
 // that goes to the *other* operand is an outer product the matmul cannot write -- the product of a
-// rank-one value with a rank-one value is a number. That outer product is what `sum_to` is for, and it
-// is written in the two lane orderings the shapes allow:
+// rank-one value with a rank-one value is a number. That outer product is a **spread**, so it is
+// `broadcast_like`'s, and it is written in the two lane orderings the shapes allow:
 //
 //   * `a` a vector, `b` a matrix: `bᵀ` is (n, k) and both the cotangent of the answer (n) and `a` (k)
-//     spread into that shape from the right -- `sum_to(ct, bᵀ) * sum_to(a, bᵀ)` is (n, k) with
-//     `ct[i] * a[j]` in it, and the transpose of it is the (k, n) outer product `a ⊗ ct` that goes
-//     back to `b`. The shape is `bᵀ`'s own, read from a known operand; no extent is reconstructed.
+//     spread into that shape from the right -- `broadcast_like(ct, bᵀ) * broadcast_like(a, bᵀ)` is
+//     (n, k) with `ct[i] * a[j]` in it, and the transpose of it is the (k, n) outer product `a ⊗ ct`
+//     that goes back to `b`. The shape is `bᵀ`'s own, read from a known operand; no extent is
+//     reconstructed.
 //   * `a` a matrix, `b` a vector: `a` is (m, k) and the cotangent of the answer (m) spreads along its
-//     leading axis while `b` (k) spreads along its last -- `sum_to(ct, a) * sum_to(b, a)` is `ct ⊗ b`.
+//     leading axis while `b` (k) spreads along its last -- `broadcast_like(ct, a) * broadcast_like(b, a)`
+//     is `ct ⊗ b`.
+//
+// The spread is a different operator and not a direction of `sum_to` since ruling 甲: a reduction
+// removes leading axes from a target that is a suffix of its operand's shape, and `sum_to` refuses a
+// target longer than its operand by name (`stdlib/tensor.cml#sum_to`). Using it for the spread was
+// the wrong operator, and the two rules read better apart: the reduction names extents, the spread
+// names the value whose lanes are wanted.
 //
 // Both are the same law `matmul` states, read at the rank the operands have; nothing here reads a
 // linear operand's value or asks for a count. What the matrix form needs is the reduction
-// `sum_to(matmul(ct, bᵀ), a)`: the identity when the shapes agree, and the sum over a batch axis the
-// day an operand carries one -- the reduction half of this law, written where it belongs rather than
-// left to the day a batch appears.
+// `sum_to(matmul(ct, bᵀ), shape(a))`: the identity when the shapes agree, and the sum over a batch
+// axis the day an operand carries one -- the reduction half of this law, written where it belongs
+// rather than left to the day a batch appears.
 //
 // **The rank dispatch lives in the helpers, because a ruleset files one rule per operator and arity.**
 // A second `matmul(a, b)` rule is refused by name (`SemanticDiag::DuplicateRuleForOperator`, 0x03000205:
@@ -406,12 +382,14 @@ export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 // `<T, X, W>` for the same reason. The shapes are therefore stated by the two cotangent helpers,
 // overloaded on the operands' ranks.
 //
-// What a helper must not do is build a shape: every one of them ends by reading its answer at the
-// *known* operand -- `sum_to(..., a)` or `sum_to(..., b)` -- so the extents come from a value the cut
-// already carries and a shape is never reconstructed from a count (design principles 5.4, and the
-// author's 11:10 note: a shape may be taken from an operand, never read off the linear operand).
-// `sum_to` is also where the reduction half of this law lives: for two matrices the call is the
-// identity, and it becomes the sum over a batch axis the day an operand has one.
+// What a helper must not do is build a shape: every one of them ends by naming the extents of the
+// *known* operand -- `sum_to(..., shape(a))` or `sum_to(..., shape(b))` -- so the extents are
+// computed from a value the cut already carries and a shape is never reconstructed from a count
+// (design principles 5.4, and the author's 11:10 note: a shape may be taken from an operand, never
+// read off the linear operand). `shape(x)` is the extents of a runtime value, which is the layer
+// the author's 2026-11-05 ruling puts them on; the operator that reduces reads the list and never
+// the operand's type. `sum_to` is also where the reduction half of this law lives: for two matrices
+// the call is the identity, and it becomes the sum over a batch axis the day an operand has one.
 //
 // **What is outside the law stops in the helpers, and the walk has a word for it.** Rank three and
 // above, and the vector-vector product whose answer is a number, have no overload; the law is chosen,
@@ -419,7 +397,7 @@ export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 // operator and the ranks:
 //
 //     skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
-//     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+//     reason=No matching function found for argument types: <> (float[...], float[3, 2, 2], float[2, 2]).
 //
 // `rule-ranks` is not `rule-shape`, and the two must not be merged: `rule-shape` means the law's
 // *pattern* rejected the operand types and nothing was built, which is where this reading stood while
@@ -436,36 +414,123 @@ export rule subtract_t::<T>(x: T[..], w: T[..]) when is_float::<T>() {
 // and the vector lanes are read in `matmul_transpose_vector_lhs.cml` and
 // `matmul_transpose_vector_rhs.cml`.
 
-/// The cotangent of the left operand, both operands matrices: `ct · bᵀ`, read at `a`'s shape.
-func ct_of_a(ct: float[..], a: float[?, ?], b: float[?, ?]): float[?, ?] {
-    return sum_to(matmul(ct, transpose(b)), a)
+/// The cotangent of the left operand, both operands matrices: `ct · bᵀ`, reduced to `a`'s extents.
+func ct_of_a(ct: float[...], a: float[?, ?], b: float[?, ?]): float[?, ?] {
+    return sum_to(matmul(ct, transpose(b)), shape(a)) as float[?, ?]
 }
 
 /// The cotangent of the left operand when it is a row: `ct · bᵀ` is already its own shape.
-func ct_of_a(ct: float[..], a: float[?], b: float[?, ?]): float[?] {
-    return sum_to(matmul(ct, transpose(b)), a)
+func ct_of_a(ct: float[...], a: float[?], b: float[?, ?]): float[?] {
+    return sum_to(matmul(ct, transpose(b)), shape(a)) as float[?]
 }
 
 /// The cotangent of the left operand when the right one is a column: the outer product `ct ⊗ b`,
-/// which is `a`'s shape, read off `a` itself.
-func ct_of_a(ct: float[..], a: float[?, ?], b: float[?]): float[?, ?] {
-    return sum_to(ct, a) * sum_to(b, a)
+/// spread into `a`'s lanes from the two values that have the elements.
+func ct_of_a(ct: float[...], a: float[?, ?], b: float[?]): float[?, ?] {
+    return broadcast_like(ct, a) * broadcast_like(b, a)
 }
 
-/// The cotangent of the right operand, both matrices: `aᵀ · ct`, read at `b`'s shape.
-func ct_of_b(ct: float[..], a: float[?, ?], b: float[?, ?]): float[?, ?] {
-    return sum_to(matmul(transpose(a), ct), b)
+/// The cotangent of the right operand, both matrices: `aᵀ · ct`, reduced to `b`'s extents.
+func ct_of_b(ct: float[...], a: float[?, ?], b: float[?, ?]): float[?, ?] {
+    return sum_to(matmul(transpose(a), ct), shape(b)) as float[?, ?]
 }
 
 /// The cotangent of the right operand when the left one is a row: the outer product `a ⊗ ct`, built
 /// in `bᵀ`'s lanes and turned round, because a row's cotangent is where the missing axis is.
-func ct_of_b(ct: float[..], a: float[?], b: float[?, ?]): float[?, ?] {
-    return sum_to(transpose(sum_to(ct, transpose(b)) * sum_to(a, transpose(b))), b)
+func ct_of_b(ct: float[...], a: float[?], b: float[?, ?]): float[?, ?] {
+    return sum_to(
+        transpose(broadcast_like(ct, transpose(b)) * broadcast_like(a, transpose(b))),
+        shape(b)) as float[?, ?]
 }
 
 /// The cotangent of the right operand when it is a column: `aᵀ · ct` is already its own shape.
-func ct_of_b(ct: float[..], a: float[?, ?], b: float[?]): float[?] {
-    return sum_to(matmul(transpose(a), ct), b)
+func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
+    return sum_to(matmul(transpose(a), ct), shape(b)) as float[?]
+}
+
+// ---- the same six answers, with the extents handed over instead of computed ----
+//
+// `matmul_stated_t` below answers a node whose two operands' shapes are ports (`sa`, `sb`) rather
+// than values in the cut: `stdlib/rulesets/jvp.cml#jvp_matmul` states `shape(a)` and `shape(b)` in
+// the linear call, where both operands are values. So each helper here is its `ct_of_a` / `ct_of_b`
+// counterpart with `shape(a)` replaced by `sa` -- and that is the whole difference, which is why the
+// six are written out rather than folded into the six above: what changes is where the list comes
+// from, and the reduction itself is the same reduction. Both spellings pass a list into `sum_to`,
+// which is the one signature (`stdlib/tensor.cml#sum_to`): one operator, one spelling of the call.
+//
+// **What the six still need of the answered operand is its rank, and what they may not ask the
+// caller for is its value.** The rank picks the helper (`matmul` reads a row operand as a row and
+// contracts its extent against the matrix's first axis), and the walk never holds a value for the
+// position it is answering (`buildTransposeMember`: the transposition is handed the cotangent and the
+// *other* operand). The plain helpers above therefore reach `float[]` and stop: `ct_of_a(ct, a, b)`
+// names `a`, the expansion asks for a value behind it, the type states no extents, and the walk builds
+// no zero array to stand in for it (`modules/transforms/transpose.cpp#buildTransposeMember`, deleted
+// 2026-11-05), so the step is refused by name.
+// Measured 2026-11-04 on the two vector cases of `test/plans/feat/showcase_s2.plan.toml`:
+//
+//     skip=parameter-shape uri=tensor:matmul_stated node=11 position=0 param=0 param-type=float[]
+//
+// So the law builds the carrier itself, from the list, and hands it over in the answered operand's
+// place -- the move the walk used to make on its own (a zero array read for its shape and never for
+// its elements: the author's 2026-11-03 16:15 ruling, whose *walk-side* form was deleted 2026-11-05),
+// with the extents taken from `sa` / `sb` instead of from the type.
+//
+// **The carrier is not where the length comes from; `sa` is, and it goes straight into `sum_to`.**
+// Since ruling 甲 the reduction reads `at`, and here that is `sa`: the known argument of the linear
+// call, written by the forward half (`matmul_stated(da, b, shape(a), shape(b))`) where `a` is a
+// value, and carried to the backward half as a port. The carrier's extents agree with it -- `sa`
+// *is* `shape(a)` -- but nothing reads the length off the carrier or off the type; what the carrier
+// is read for is the **rank**, which is the part of the declaration the type does state. The cast
+// keeps that rank: `float[]` says rank one and no extent, and `float[3, 2, 2]` still matches no
+// helper, so a batched product is refused exactly as before (`skip=rule-ranks`). Where an answer is
+// a spread instead of a reduction, the carrier's extents are the lanes it spreads into and
+// `broadcast_like` reads them -- the same value, read for its shape, in the one operator that owns
+// that direction.
+//
+// The alternative -- dropping the answered operand from the helpers and dispatching on the cotangent's
+// rank -- was measured and does not exist: the law's closure types the cotangent `T[...]`, so a helper
+// over `float[?]` / `float[?, ?]` never takes it (2026-11-04, `No matching function found for argument
+// types: <> (float[...], ...)`).
+//
+// The law's domain is unchanged: `mul_stated_t` and `matmul_stated_t` answer a product reached
+// through a forward rule that states `shape(...)` in the half where both operands are values
+// (`stdlib/rulesets/jvp.cml#jvp_mul_tensor`, `#jvp_matmul`, and since 2026-11-05 `#jvp_linear`,
+// `#jvp_erf` and `#jvp_erfc` too). A product whose forward rule writes the bare operator still meets
+// `mul_tensor_t` / `matmul_t`, and those compute the lists from the operands' values where the walk
+// holds them.
+
+/// Both operands matrices: `ct · bᵀ`, reduced to `sa`.
+func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sa: int[]): float[?, ?] {
+    return sum_to(matmul(ct, transpose(b)), sa) as float[?, ?]
+}
+
+/// The left operand a row: `ct · bᵀ` is already its own shape, and `sa` is that shape.
+func ct_of_a_stated(ct: float[...], a: float[?], b: float[?, ?], sa: int[]): float[?] {
+    return sum_to(matmul(ct, transpose(b)), sa) as float[?]
+}
+
+/// The right operand a column: the outer product `ct ⊗ b`, spread into `a`'s lanes (the carrier's
+/// extents are `sa`, so this is the spread into `sa`).
+func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?], sa: int[]): float[?, ?] {
+    return broadcast_like(ct, a) * broadcast_like(b, a)
+}
+
+/// Both operands matrices: `aᵀ · ct`, reduced to `sb`.
+func ct_of_b_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sb: int[]): float[?, ?] {
+    return sum_to(matmul(transpose(a), ct), sb) as float[?, ?]
+}
+
+/// The left operand a row: the outer product `a ⊗ ct`, built in `bᵀ`'s lanes and turned round, then
+/// reduced to `sb`. `b` here is the carrier, so `transpose(b)`'s lanes are `b`'s own extents.
+func ct_of_b_stated(ct: float[...], a: float[?], b: float[?, ?], sb: int[]): float[?, ?] {
+    return sum_to(
+        transpose(broadcast_like(ct, transpose(b)) * broadcast_like(a, transpose(b))),
+        sb) as float[?, ?]
+}
+
+/// The right operand a column: `aᵀ · ct` is already its own shape, and `sb` is that shape.
+func ct_of_b_stated(ct: float[...], a: float[?, ?], b: float[?], sb: int[]): float[?] {
+    return sum_to(matmul(transpose(a), ct), sb) as float[?]
 }
 
 // The head takes three type parameters because the walk hands a rule one type per value it can see:
@@ -474,7 +539,25 @@ func ct_of_b(ct: float[..], a: float[?, ?], b: float[?]): float[?] {
 // the operand types whole -- their ranks live in them, which is what the helpers above dispatch on --
 // and `T` is only the element type every cotangent here has.
 export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
-    matmul(a, b) => (ct: T[..]) => (ct_of_a(ct, a, b), ct_of_b(ct, a, b))
+    matmul(a, b) => (ct: T[...]) => (ct_of_a(ct, a, b), ct_of_b(ct, a, b))
+}
+
+/// The transpose of `matmul_stated(a, b, sa, sb)`: `ct · bᵀ` reduced to `sa` for `a`, and `aᵀ · ct`
+/// reduced to `sb` for `b` -- `matmul_t`'s two answers with the two shapes **handed over**.
+///
+/// It serves the same three shapes `matmul_t` does. What differs is where each answer's extents come
+/// from: the `sa` / `sb` port the forward half computed, instead of `shape(a)` / `shape(b)` computed
+/// here; and the answered operand arrives as the carrier the law builds from that list
+/// (`zeros::<T>(sa) as A`), not as a value the walk would have to hold -- the carrier is what picks
+/// the helper by rank, and `sa` is what `sum_to` reduces to. The rank is still the declaration's --
+/// `A` and `B` are the operands' own types, so `float[3, 2, 2]` still matches nothing and a batched
+/// product is refused by name in this law's body, the way `matmul_t` refuses one (`skip=rule-ranks`,
+/// and the reading says which law declined:
+/// `test/cases/compile/transforms/matmul_transpose_rank_three.cml`).
+export rule matmul_stated_t::<T, A, B, SA, SB>(a: A, b: B, sa: SA, sb: SB) when is_float::<T>() {
+    matmul_stated(a, b, sa, sb) => (ct: T[...]) =>
+        (ct_of_a_stated(ct, zeros::<T>(sa) as A, b, sa),
+         ct_of_b_stated(ct, a, zeros::<T>(sb) as B, sb))
 }
 // ---- the transpose rules of the reductions and the layout ----
 //
@@ -502,19 +585,19 @@ export rule matmul_t::<T, A, B>(a: A, b: B) when is_float::<T>() {
 // read that operand and nothing of the tensor: `sum_stated_t` spreads over the list's extents,
 // `take_stated_t` scatters into an array of them, and `mean_axis_stated_t` spreads each lane's
 // cotangent over `numel(t) / numel(ct)` positions. Each list's layout is stated where the forward
-// half builds it (`stdlib/rulesets/jvp.cml#stated_axis_shape`, `#stated_rows`).
+// half builds it: `shape(t)`, and the axis and the flag beside it.
 //
 // The value of a stated operator is the operation itself -- the extents are there for this side --
-// so what a call site hands over is one integer list, and the arrays these laws build carry the
-// extents of a value the transpose never reads.
+// so what a call site hands over is the operand's shape as a parameter of its own, and the arrays
+// these laws build carry the extents of a value the transpose never reads.
 
 /// `xs` with one number at every element: the shape a reduction's cotangent is spread over, taken
 /// from the extents the forward half stated.
 ///
-/// `full` is what makes a spread out of a scalar, and the declared `T[..]` is what lets a rule's
+/// `full` is what makes a spread out of a scalar, and the declared `T[...]` is what lets a rule's
 /// right side hold it: `full` answers an array of open rank from a runtime shape list, which is the
 /// rank its callers already read it at.
-func spread_over::<T>(ct: T, at: int[]): T[..] when is_float::<T>() {
+func spread_over::<T>(ct: T, at: int[]): T[...] when is_float::<T>() {
     return full(at, ct)
 }
 
@@ -523,7 +606,7 @@ func spread_over::<T>(ct: T, at: int[]): T[..] when is_float::<T>() {
 ///
 /// The head declares one type parameter per position a law is instantiated at -- the cotangent's
 /// element type and one per operand, the spelling `mul_tensor_t` uses -- so `t` and `at` are `X` and
-/// `A` and not `T[..]` and `int[]`. A law built at the node's own types is the law the operands have
+/// `A` and not `T[...]` and `int[]`. A law built at the node's own types is the law the operands have
 /// (`modules/transforms/transpose.cpp`, `ruleTakesOperands`), and its parameters are read for their
 /// types, not for a shape this side would have to restate.
 export rule sum_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
@@ -560,29 +643,31 @@ func lane_shape(extents: int[], axis: int): int[] {
 /// multiplication by `full(extents, 1.0)` is what repeats the lane's number over the lane. Both
 /// steps copy and neither rounds, so the answer is the engine's `tensor:expand_axis` element for
 /// element.
-func lane_spread::<T>(ct: T[..], extents: int[], axis: int, keepdims: bool): T[..] {
+func lane_spread::<T>(ct: T[...], extents: int[], axis: int, keepdims: bool): T[...] {
     return if keepdims then full(extents, 1.0) * ct
     else full(extents, 1.0) * reshape<lane_shape(extents, axis)>(ct)
 }
 
-/// The cotangent of `sum_axis_stated(t, at)`: each lane's `ct` spread back over the lane it summed,
-/// where `at = [axis, keepdims, d0, ..., d(rank-1)]`.
-export rule sum_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    sum_axis_stated(t, at) => (ct: T[..]) => lane_spread(ct, at[2:len(at)], at[0], at[1] != 0)
+/// The cotangent of `sum_axis_stated(t, axis, keepdims, extents)`: each lane's `ct` spread back over
+/// the lane it summed. The three stated values are the law's own parameters, so nothing here counts
+/// positions in a list: `extents` is the shape, `axis` the lane and `keepdims` whether `ct` kept it.
+export rule sum_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, extents: E) when is_float::<T>() {
+    sum_axis_stated(t, axis, keepdims, extents) => (ct: T[...]) => lane_spread(ct, extents, axis, keepdims)
 }
 
-/// The cotangent of `mean_stated(t, at)`: the one number it answers is the mean of every element, so
-/// its adjoint gives a `numel(t)`-th of that number to every element of the extents `at` states.
+/// The cotangent of `mean_stated(t, extents)`: the one number it answers is the mean of every
+/// element, so its adjoint gives a `numel(t)`-th of that number to every element of the extents.
 ///
-/// The count is `at`'s product -- the same number the mean divided by -- and the division is one
+/// The count is `extents`' product -- the same number the mean divided by -- and the division is one
 /// operation per element over the spread, which is the engine's `(dy / count)` broadcast exactly:
 /// the two orders divide the same values by the same count.
-export rule mean_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    mean_stated(t, at) => (ct: T) => spread_over(ct, at) / float(extent_product(at))
+export rule mean_stated_t::<T, X, A>(t: X, extents: A) when is_float::<T>() {
+    mean_stated(t, extents) => (ct: T) => spread_over(ct, extents) / float(extent_product(extents))
 }
 
-/// The cotangent of `max_axis_stated(t, mask, at)`: the lane's cotangent, spread back along the axis
-/// the extremum took, and kept only where `mask` says the operand holds the lane's largest element.
+/// The cotangent of `max_axis_stated(t, mask, axis, keepdims, extents)`: the lane's cotangent, spread
+/// back along the axis the extremum took, and kept only where `mask` says the operand holds the lane's
+/// largest element.
 ///
 /// The mask is the whole of an extremum's reverse rule. An extremum is not linear, so its adjoint is
 /// not a spread of `ct` but a *selection*: every position that holds the lane's largest element gets
@@ -590,14 +675,18 @@ export rule mean_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 /// `extremumAxisVjp` answers exactly that, with `strict_eq` against the broadcast output). Two laws a
 /// reader might write instead -- the first position only, or `ct` divided among the tied ones -- are
 /// different numbers on a tie, which is what the case's reading says.
-export rule max_axis_stated_t::<T, X, M, A>(t: X, mask: M, at: A) when is_float::<T>() {
-    max_axis_stated(t, mask, at) => (ct: T[..]) => where(mask, lane_spread(ct, at[2:len(at)], at[0], at[1] != 0), 0.0)
+export rule max_axis_stated_t::<T, X, M, A, K, E>(t: X, mask: M, axis: A, keepdims: K, extents: E)
+    when is_float::<T>() {
+    max_axis_stated(t, mask, axis, keepdims, extents) => (ct: T[...]) => where(
+        mask, lane_spread(ct, extents, axis, keepdims), 0.0)
 }
 
-/// The cotangent of `min_axis_stated(t, mask, at)`: `max_axis_stated_t`'s rule, on the mask of the
-/// lane's smallest elements.
-export rule min_axis_stated_t::<T, X, M, A>(t: X, mask: M, at: A) when is_float::<T>() {
-    min_axis_stated(t, mask, at) => (ct: T[..]) => where(mask, lane_spread(ct, at[2:len(at)], at[0], at[1] != 0), 0.0)
+/// The cotangent of `min_axis_stated(t, mask, axis, keepdims, extents)`: `max_axis_stated_t`'s rule, on
+/// the mask of the lane's smallest elements.
+export rule min_axis_stated_t::<T, X, M, A, K, E>(t: X, mask: M, axis: A, keepdims: K, extents: E)
+    when is_float::<T>() {
+    min_axis_stated(t, mask, axis, keepdims, extents) => (ct: T[...]) => where(
+        mask, lane_spread(ct, extents, axis, keepdims), 0.0)
 }
 
 // ---- the transpose rule of `:op/idx_arr` ----
@@ -636,17 +725,17 @@ func zeros_of::<T>(ct: T, n: int): T[] when is_float::<T>() {
     return zeros::<T>([n])
 }
 
-/// The transpose of `tensor:pick_at(xs, at)`: `ct` at `at[0]`, zero everywhere else, where the
-/// zeros are `at[1]` of them and that is the length the **forward** half stated.
+/// The transpose of `tensor:pick_at(xs, position, length)`: `ct` at `position`, zero everywhere else,
+/// where the zeros are `length` of them and that is the length the **forward** half stated.
 ///
 /// This is the law the linear half of a read meets (`rulesets.jvp`'s `jvp_idx_arr` passes
-/// `[i, len(xs)]`). It reads the list and nothing of `xs`: a transpose rule reads only known
-/// operands, and `T[]` carries no length in its type (design principles 5.4), so the length arrives
-/// as an operand instead of being taken from the array the cotangent comes back through. `len(xs)`
-/// is a value of the primal, which the cut carries to the half that reads it, so what a call site
-/// hands over is one integer list.
-export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
-    pick_at(xs, at) => (ct: T) => scatter_into(zeros_of(ct, at[1]), at[0], ct)
+/// `i, len(xs)`). It reads `position` and `length` and nothing of `xs`: a transpose rule reads only
+/// known operands, and `T[]` carries no length in its type (design principles 5.4), so the length
+/// arrives as an operand instead of being taken from the array the cotangent comes back through.
+/// `len(xs)` is a value of the primal, which the cut carries to the half that reads it, so what a
+/// call site hands over is the number itself.
+export rule pick_at_t::<T, X, P, L>(xs: X, position: P, length: L) when is_float::<T>() {
+    pick_at(xs, position, length) => (ct: T) => scatter_into(zeros_of(ct, length), position, ct)
 }
 
 /// The transpose of `xs[i]`: `ct` at `i`, zero everywhere else, in the extents the operand's **type**
@@ -658,7 +747,7 @@ export rule pick_at_t::<T>(xs: T[], at: int[]) when is_float::<T>() {
 /// named here only because the operator has it. `zeros_of` is the rank-one base the scatter writes
 /// into, exactly as in `pick_at_t` above.
 ///
-/// A type that states no extents (`float[..]`) reaches no law at all: the walk refuses the step by
+/// A type that states no extents (`float[...]`) reaches no law at all: the walk refuses the step by
 /// name (`parameter-shape`) instead of inventing a length.
 export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() {
     index_into(xs, i) => (ct: T) => scatter_into(zeros_of(ct, extent_product(at)), i, ct)
@@ -681,48 +770,47 @@ export rule idx_arr_t::<T, X, I, A>(xs: X, i: I, at: A) when is_float::<T>() {
 
 /// `take(t, indices)`'s adjoint: `dy` added back at the rows the indices name, along the first axis.
 #op(':tangent/scatter_take_arr')
-func scatter_rows::<T>(xs: T[..], indices: int[], delta: T[..], axis: int): T[..]
+func scatter_rows::<T>(xs: T[...], indices: int[], delta: T[...], axis: int): T[...]
 
 /// `n` zeros of the cotangent's own element type, in the shape the forward half stated: the base a
 /// transposed take scatters into.
 ///
 /// The declared result is open rank on purpose and not a shortfall: the base is the operand's **whole**
-/// shape, which is a runtime list, so `T[..]` is the only honest spelling -- and it is the rank
-/// `scatter_rows` takes. The cotangent is written `T[..]` because this cotangent is an array (a
+/// shape, which is a runtime list, so `T[...]` is the only honest spelling -- and it is the rank
+/// `scatter_rows` takes. The cotangent is written `T[...]` because this cotangent is an array (a
 /// take answers rows), so the parameter is what binds `T` to an element; a spelled type argument in a
 /// rule's right side is a function value to the copy, measured 2026-11-04.
-func zeros_of_shape::<T>(ct: T[..], s: int[]): T[..] when is_float::<T>() {
+func zeros_of_shape::<T>(ct: T[...], s: int[]): T[...] when is_float::<T>() {
     return zeros::<T>(s)
 }
 
-/// The cotangent of `take_stated(t, at)`: `ct`'s rows added back where `at`'s indices say they came
-/// from, in an array of `at`'s extents.
+/// The cotangent of `take_stated(t, indices, extents)`: `ct`'s rows added back where `indices` say
+/// they came from, in an array of `extents`.
 ///
-/// `at` is `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` (`stdlib/rulesets/jvp.cml#stated_rows`), so the
-/// leading count splits it: the indices are the `n` entries after it and the extents are everything
-/// after those. The law reads the list and nothing of `t`, which is what it may do: a transpose rule
-/// reads only known operands, and the row count a take forgets -- the indices say where its rows go,
-/// not how many there were -- is a value of the primal.
+/// The law reads `indices` and `extents` and nothing of `t`, which is what it may do: a transpose
+/// rule reads only known operands, and the row count a take forgets -- the indices say where its rows
+/// go, not how many there were -- is a value of the primal. Each parameter says which array it is, so
+/// nothing here counts positions in a list.
 ///
 /// The axis is `0` because that is the axis `take` reads (`tensor:take` names its first dimension).
-func take_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
-    let count = at[0]
-    let base = zeros_of_shape(ct, at[1 + count:len(at)])
-    return scatter_rows(base, at[1:1 + count], ct, 0)
+func take_cotangent::<T>(ct: T[...], indices: int[], extents: int[]): T[...] when is_float::<T>() {
+    let base = zeros_of_shape(ct, extents)
+    return scatter_rows(base, indices, ct, 0)
 }
 
-/// The transpose of `take_stated(t, at)`: the indices are an `int[]` and take no cotangent, so the
-/// rule's right side answers one value, and the extents it spreads into are `at`'s. The head states
-/// the same per-position type parameters as `sum_stated_t`.
-export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    take_stated(t, at) => (ct: T[..]) => take_cotangent(ct, at)
+/// The transpose of `take_stated(t, indices, extents)`: the two `int[]` parameters take no
+/// cotangent, so the rule's right side answers one value, and the extents it spreads into are the
+/// third parameter's. The head states the same per-position type parameters as `sum_stated_t`.
+export rule take_stated_t::<T, X, I, E>(t: X, indices: I, extents: E) when is_float::<T>() {
+    take_stated(t, indices, extents) => (ct: T[...]) => take_cotangent(ct, indices, extents)
 }
 
 // ---- the transpose of `mean` over an axis ----
 //
-// `mean_axis(xs, axis, keepdims)` is the spelling of `tensor:mean_axis` that names every parameter in
-// parentheses, and the forward half's linear call is `mean_axis_stated`, whose second operand states
-// the axis, the flag and the extents in one list (`stdlib/rulesets/jvp.cml#stated_axis_shape`).
+// `mean<axis, keepdims>(xs)` is how a program writes `tensor:mean_axis` -- the whole reduction's
+// name, with the axis and the flag in angle brackets (design principles 7.3) -- and the forward
+// half's linear call is `mean_axis_stated`, whose operands state the axis, the flag and the extents
+// as parameters of their own.
 //
 // The law: the lane's mean spreads its cotangent back over exactly the elements it averaged, so
 // every position of `t` that fed lane `k` gets `ct[k] / lane length`. `numel(t) / numel(ct)` is the
@@ -749,34 +837,40 @@ export rule take_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 /// the answer divides the same values by the same count as the engine's.
 ///
 /// A rank-zero answer -- one axis with `keepdims = false` on a rank-one operand -- has a cotangent
-/// with no shape. The rule below states its cotangent as the *element* (`ct: T`), so it arrives here
-/// through the `T` -> `T[..]` conversion the language inserts where a value enters an array position
-/// (`ArrayType::castSlotFrom`, `Builder::coerceTo`) -- a call argument is such a position, and this
-/// function's `ct` is one. So `numel(ct)` answers 1 instead of a number read as a pointer, and the
-/// arithmetic below serves both shapes of answer with the one law this key holds.
-///
-/// The rule must state the element for that conversion to happen: a port of `float[..]` looks like a
-/// slot that already has a rank, so nothing converts and the number is read as an array -- the
-/// SIGSEGV `docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md`
-/// records. Its type cannot help either: the node's answer is `T[..]` while the value is the element,
-/// so `tangentSpaceOf` says `float[..]` of a value that has no rank.
-func mean_axis_cotangent::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
-    let extents = at[2:len(at)]
+/// with no shape, and the rule below states the cotangent as `T[...]` all the same, because that is
+/// the type the answer has whether it is one number or a lane per number. What makes the one law
+/// serve both is the compiler's: a value entering a position of `T[...]` from the element is
+/// converted where it enters, once, for every position (`ArrayType::castSlotFrom` ->
+/// `Array::createRankZero`; `camel/core/type/composite/array.h#isRankZeroEdge`), so `numel(ct)`
+/// answers 1 for a rank-zero cotangent and the lane count for an array one -- measured 2026-11-04:
+/// `numel` of a scalar in a `float[...]` position answers 1 and its `shape` answers `[]`. Author, that
+/// day: "the ports say `T[...]`, and a scalar entering `T[...]` is converted by the compiler at the one
+/// place, the way `T` entering `T?` is wrapped" (`docs/handover/reviews/questions-2026-10-29.md`,
+/// "秩 0：只有一个转换点"). Stating `ct: T` here instead is not the repair: it would say one number
+/// where the answer has a lane per number, and the law that reads a length would then be handed a
+/// shape it cannot see.
+func mean_axis_cotangent::<T>(ct: T[...], axis: int, keepdims: bool, extents: int[]): T[...]
+    when is_float::<T>() {
     let lanes = float(extent_product(extents)) / float(numel(ct))
-    return lane_spread(ct / lanes, extents, at[0], at[1] != 0)
+    return lane_spread(ct / lanes, extents, axis, keepdims)
 }
 /// The number of positions a shape holds: what a lane mean divided by.
 func extent_product(extents: int[]): int {
     return extents->reduce<(acc: int, d: int) => acc * d, 1>
 }
 
-/// The transpose of `mean_axis_stated(t, at)`: the cotangent spread back over the averaged lane, in
-/// the same per-position type parameters `sum_stated_t` states.
+/// The transpose of `mean_axis_stated(t, axis, keepdims, extents)`: the cotangent spread back over the
+/// averaged lane, in the same per-position type parameters `sum_stated_t` states.
 ///
-/// The cotangent is stated as the element and not as `float[..]`, which is what lets the rank-zero
-/// answer convert instead of being read as an array: see `mean_axis_cotangent` above.
-export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
-    mean_axis_stated(t, at) => (ct: T) => mean_axis_cotangent(ct, at)
+/// The cotangent is stated `T[...]`, the way its twin `sum_axis_stated_t` states it and the way the
+/// answer is typed: `mean_axis_stated` is computed as `(t: T[...], axis: int, keepdims: bool,
+/// extents: int[]) : T[...]`, and a rank-zero answer is one shape of that same type, not a different
+/// type a law would have to state. See `mean_axis_cotangent` above for the conversion that makes the
+/// one port serve both.
+export rule mean_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, extents: E)
+    when is_float::<T>() {
+    mean_axis_stated(t, axis, keepdims, extents) => (ct: T[...]) => mean_axis_cotangent(
+        ct, axis, keepdims, extents)
 }
 
 // ---- the transpose rules of the logarithm and of `pow` (`math:pow_d`) ----
@@ -788,11 +882,17 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 // `index_into` are (`rulesets.jvp` declares its own copies: a family cannot read another module's
 // private function).
 //
-// The two keys are the ones a **pullback** asks for, and they are what `^`'s backward walk stopped
-// on: `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
-// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the linear half of a program that calls `pow`
-// holds a `math:pow_d` and a `math:log_d` node -- measured on `vjp(x => pow(x, 3.0))`, which answered
-// `skip=rule uri=math:log_d reason=unbound` once `pow_d_t` was in place and 12.0 once this law was.
+// The two keys are the ones a **pullback** would ask for, and they are *not* what `^`'s backward walk
+// stops on. `pow`'s forward rule is `jvp_pow_d` (`stdlib/rulesets/jvp.cml`), which writes
+// `w * x^(w-1) * dx + x^w * log(x) * dy` inline, so the `pow` and the `log` land in the **primal**
+// half of a `split` and the linear half holds only products and sums over their results: measured on
+// this tree (2026-11-04) `vjp(x => pow(x, 3.0))(2.0)` answers `12.0` through `rhs=add_t,mul_t`, with
+// neither `math:pow_d` nor `math:log_d` in the walk at all. So these two laws answer for a walk no
+// program reaches today, and the sentence this comment used to carry -- `skip=rule uri=math:log_d
+// reason=unbound` until this law was in place, then `12.0` -- was a reading of a tree whose forward
+// rule wrote the calls out instead of inlining them. Whether they should exist at all is the same
+// question `abs_t`/`log_t`/`maximum_t`/`minimum_t` were answered with ("no"); they are left here
+// because the sweep of this file's laws is one lane's work, not this paragraph's.
 //
 // The exponent's branch is `ct * x^w * ln(x)`: for `x <= 0` that is `NaN`, the same reading the
 // forward rule gives the same operator. It is not written as a zero -- an undefined derivative says
@@ -803,14 +903,14 @@ export rule mean_axis_stated_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 //
 // The three laws above are for the *stated* call the linear half writes (`sum_stated(t, at)`): a cut
 // carries the extents to the half that reads them, so `at` is a value of the primal, handed along
-// with the cotangent. A **value graph** has no such cut. `transpose` walks `sum(mean_axis(x, 0,
-// false) * w)` as it is written, the extents of `x` were never a value in it, and until these laws
+// with the cotangent. A **value graph** has no such cut. `transpose` walks `sum(mean<0, false>(x) *
+// w)` as it is written, the extents of `x` were never a value in it, and until these laws
 // existed the walk answered `skip=rule uri=tensor:sum reason=unbound`: the key has a law, and the
 // law was written for a call the program did not make.
 //
 // What the walk has is the **type**, so these laws name one port more than their operator has and
 // that port is `extent_of::<X>()` -- the extents the operand's type states, materialized as an
-// `int[]` where the step is met (`modules/transforms/transpose.cpp#statedExtentsNodeOf`). The
+// `int[]` where the step is met (`modules/transforms/rule_expand.cpp#statedExtentsValue`). The
 // argument is offered *after* the operands' own types, so a law that does not name it answers
 // exactly as before, and only a step the family above left unanswered can reach these.
 //
@@ -826,7 +926,7 @@ export rule sum_from_type_t::<T, X, A>(t: X, at: A) when is_float::<T>() {
 
 /// The cotangent of `take(t, indices)` where the row count is the type's: the indices say where each
 /// row's cotangent goes, `at` says how many rows there are, and no value of `t` is read.
-func take_cotangent_from_type::<T>(ct: T[..], indices: int[], at: int[]): T[..]
+func take_cotangent_from_type::<T>(ct: T[...], indices: int[], at: int[]): T[...]
     when is_float::<T>() {
     let base = zeros_of_shape(ct, at)
     return scatter_rows(base, indices, ct, 0)
@@ -835,24 +935,24 @@ func take_cotangent_from_type::<T>(ct: T[..], indices: int[], at: int[]): T[..]
 /// The transpose of `take(t, indices)`: the indices are an `int[]` and take no cotangent, so the
 /// right side answers one value, and the extents it scatters into are the operand's own.
 export rule take_from_type_t::<T, X, I, A>(t: X, indices: I, at: A) when is_float::<T>() {
-    take(t, indices) => (ct: T[..]) => take_cotangent_from_type(ct, indices, at)
+    take(t, indices) => (ct: T[...]) => take_cotangent_from_type(ct, indices, at)
 }
 
-/// The cotangent of `mean_axis(t, axis, keepdims)`: each lane's `ct` spread back over the lane it was
+/// The cotangent of `mean<axis, keepdims>(t)`: each lane's `ct` spread back over the lane it was
 /// averaged from, where `at` is the extents of `t`.
 ///
 /// The lane length is the same count `mean_axis_cotangent` takes: `numel(t) / numel(ct)`. It is read
 /// off the extents and the cotangent rather than written down, and `keepdims` needs no reading at
 /// all -- `numel(ct)` already says whether the reduced axis is still there.
-func mean_axis_cotangent_from_type::<T>(ct: T[..], at: int[]): T[..] when is_float::<T>() {
+func mean_axis_cotangent_from_type::<T>(ct: T[...], at: int[]): T[...] when is_float::<T>() {
     let lanes = float(extent_product(at)) / float(numel(ct))
     return full(at, 1.0) * (ct / lanes)
 }
 
-/// The transpose of `mean_axis(t, axis, keepdims)`, with the extents taken from the operand's type.
+/// The transpose of `mean<axis, keepdims>(t)`, with the extents taken from the operand's type.
 export rule mean_axis_from_type_t::<T, X, A, B, C>(t: X, axis: A, keepdims: B, at: C)
     when is_float::<T>() {
-    mean_axis(t, axis, keepdims) => (ct: float[..]) => mean_axis_cotangent_from_type(ct, at)
+    mean<axis, keepdims>(t) => (ct: float[...]) => mean_axis_cotangent_from_type(ct, at)
 }
 
 
@@ -896,15 +996,15 @@ export rule log_d_t(x: float) {
 /// (`stdlib/rulesets/jvp.cml#jvp_erf`), so the cotangent reaches the exponential on the same side of
 /// the constant as the engine's does. Written `ct * (kScale * exp(...))` instead -- the same number
 /// on paper -- this law answers a different last place, which is what the case beside it measures.
-export rule erf_t::<T>(x: T[..]) when is_float::<T>() {
-    erf(x) => (ct: T[..]) => (ct * 1.1283791670955126) * exp((x * x) * -1.0)
+export rule erf_t::<T>(x: T[...]) when is_float::<T>() {
+    erf(x) => (ct: T[...]) => (ct * 1.1283791670955126) * exp((x * x) * -1.0)
 }
 
 /// The transpose of `erfc`: `erf`'s with the sign folded into the constant, which is where the
 /// engine puts it (`erfcVjp` is `erf_grad(x, neg(dy))`). `(ct * -k) * e` and `((-ct) * k) * e` are
 /// one value bit for bit, and the case beside this law reads the sign of every lane.
-export rule erfc_t::<T>(x: T[..]) when is_float::<T>() {
-    erfc(x) => (ct: T[..]) => (ct * -1.1283791670955126) * exp((x * x) * -1.0)
+export rule erfc_t::<T>(x: T[...]) when is_float::<T>() {
+    erfc(x) => (ct: T[...]) => (ct * -1.1283791670955126) * exp((x * x) * -1.0)
 }
 
 /// The transpose of `gelu`: `ct * gelu'(x)`, the slope recomputed from `x` alone -- the shape the
@@ -912,8 +1012,8 @@ export rule erfc_t::<T>(x: T[..]) when is_float::<T>() {
 /// (`modules/tensor/kernels/gradient.cpp#geluGradArm`, the f64 arm), with the tangent multiplied in
 /// once at the end. It is the tanh form's slope and not the `Phi` form's, so a reader who knows
 /// `gelu` from its `erf` definition still reads the number this tree computes.
-export rule gelu_t::<T>(x: T[..]) when is_float::<T>() {
-    gelu(x) => (ct: T[..]) => ct * (0.5 * (1.0 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) + 0.5 * x * (1.0 - tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)) * tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) * 0.7978845608028654 * (1.0 + 3.0 * 0.044715 * x * x))
+export rule gelu_t::<T>(x: T[...]) when is_float::<T>() {
+    gelu(x) => (ct: T[...]) => ct * (0.5 * (1.0 + tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) + 0.5 * x * (1.0 - tanh(0.7978845608028654 * (x + 0.044715 * x * x * x)) * tanh(0.7978845608028654 * (x + 0.044715 * x * x * x))) * 0.7978845608028654 * (1.0 + 3.0 * 0.044715 * x * x))
 }
 
 /// The transpose of `transpose`: the same swap again, because swapping the last two axes twice is
@@ -921,8 +1021,8 @@ export rule gelu_t::<T>(x: T[..]) when is_float::<T>() {
 /// `modules/tensor/ops/layout_ops.cpp`: `tensor:transpose` of the cotangent), and this law needs no
 /// shape, no extent and no operand: it is the one member of the tranche whose backward half reads
 /// nothing but its cotangent.
-export rule transpose_t::<T>(x: T[..]) when is_float::<T>() {
-    transpose(x) => (ct: T[..]) => transpose(ct)
+export rule transpose_t::<T>(x: T[...]) when is_float::<T>() {
+    transpose(x) => (ct: T[...]) => transpose(ct)
 }
 
 /// The transpose of `where`: each branch takes the cotangent where it was selected and zero
@@ -944,8 +1044,8 @@ export rule transpose_t::<T>(x: T[..]) when is_float::<T>() {
 /// where the first is a constant (`false`) the count was still 2 -- a constant component is not a
 /// `with` input of the tuple -- so the first component is written as the condition itself. Its slot
 /// is a shape, not an answer: the walk never asks for it.
-export rule where_t::<T>(c: bool[..], a: T[..], b: T[..]) when is_float::<T>() {
-    where(c, a, b) => (ct: T[..]) => (c, where(c, ct, 0.0), where(c, 0.0, ct))
+export rule where_t::<T>(c: bool[...], a: T[...], b: T[...]) when is_float::<T>() {
+    where(c, a, b) => (ct: T[...]) => (c, where(c, ct, 0.0), where(c, 0.0, ct))
 }
 
 /// The transpose of `max`: the cotangent of the extremum goes to every position that holds it, and
@@ -956,25 +1056,27 @@ export rule where_t::<T>(c: bool[..], a: T[..], b: T[..]) when is_float::<T>() {
 /// is `dy` at every selected position -- so a tie gives each tied position the whole cotangent on
 /// both sides, and `where(..., ct, 0.0)` with a scalar `ct` is that spread. Nothing here reads
 /// `xs`'s shape off the cotangent's operand: the mask's shape is `xs`'s own.
-export rule max_t::<T>(xs: T[..]) when is_float::<T>() {
+export rule max_t::<T>(xs: T[...]) when is_float::<T>() {
     max(xs) => (ct: T) => where(xs >= max(xs), ct, 0.0)
 }
 
 /// The transpose of `min`: `max`'s mirror, one comparison turned round, over the mask the forward
 /// half builds (`stdlib/rulesets/jvp.cml#jvp_min`).
-export rule min_t::<T>(xs: T[..]) when is_float::<T>() {
+export rule min_t::<T>(xs: T[...]) when is_float::<T>() {
     min(xs) => (ct: T) => where(xs <= min(xs), ct, 0.0)
 }
 
-/// The transpose of `linear`: `ct @ wᵀ` for `x` and `xᵀ @ ct` for `w`, each reduced to its own
-/// operand's shape with `sum_to` -- the two answers `matmul_t` already gives for `matmul`
+/// The transpose of `linear`: `ct @ wᵀ` for `x` and `xᵀ @ ct` for `w`, each reduced to the extents
+/// of its own operand with `sum_to` -- the two answers `matmul_t` already gives for `matmul`
 /// (`#ct_of_a`, `#ct_of_b`), one operator further out, and the pair the engine reaches through
 /// `tensor:matmul_grad_lhs` / `_rhs` (`modules/tensor/ops/linalg_ops.cpp#linearVjp`).
 ///
 /// Both operands are read here and both are read from the *known* side: `x` and `w` are a call's
-/// parameters, which the cut carries, the same way `matmul_t` reads them. The head takes three type
-/// parameters for the reason that law's does -- the walk hands a rule the cotangent's element type
-/// and then each operand's own type.
+/// parameters, which the cut carries, the same way `matmul_t` reads them. The extents are
+/// `shape(x)` / `shape(w)`, the runtime shape of those values (author, 2026-11-05), not a type's.
+/// The head takes three type parameters for the reason that law's does -- the walk hands a rule the
+/// cotangent's element type and then each operand's own type.
 export rule linear_t::<T, A, B>(x: A, w: B) when is_float::<T>() {
-    linear(x, w) => (ct: T[..]) => (sum_to(matmul(ct, transpose(w)), x), sum_to(matmul(transpose(x), ct), w))
+    linear(x, w) => (ct: T[...]) =>
+        (sum_to(matmul(ct, transpose(w)), shape(x)), sum_to(matmul(transpose(x), ct), shape(w)))
 }

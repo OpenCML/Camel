@@ -173,11 +173,62 @@ timeout_ms = 60000
 # Each leg is read three ways -- the hand calculation, `vjp`, and the engine's `with_grad` with the
 # *vector* moved into the `with` clause, so the rank-one cotangent is the engine's answer as well and not
 # only the library's. Every difference is exactly 0.0, because every literal here is exact in binary.
+#
+# **Two entries per shape, and they answer two different questions.** The two below declare the vector
+# `float[]` -- rank one, no length -- and they are the programs the twins exist for: the shape the law
+# reduces to is in the declaration nowhere, so it comes from the forward half, which states
+# `shape(a)` / `shape(b)` in the linear call (`stdlib/rulesets/jvp.cml#jvp_matmul`) and the cut carries
+# them to the backward half as known ports. `stdlib/rulesets/transpose.cml#matmul_stated_t` reduces with
+# `sum_to_stated(..., sa)` and builds the zero carrier its helper reads for rank from that same list
+# (`zeros::<T>(sa) as A`), so an operand whose type states rank and no extent is answered (author,
+# 2026-11-04 12:40). Until 2026-11-04 it passed the operand itself, and the expansion asked the caller
+# for a value behind it: `skip=parameter-shape uri=tensor:matmul_stated ... param-type=float[]`. Nothing
+# here may be made green by writing `float[2]` in the declaration instead: a program that can write no
+# length is the only reason those operators exist.
+#
+# Each entry now pins a second leg -- the same two numbers handed to a function whose declaration *does*
+# write the extent -- and the two legs' gradients are compared element by element. That leg is the
+# control the first one is read against: a law that answered the open type by guessing, or by dropping
+# the reduction, would move one of the two readings.
+#
+# The `*_law_stated_extent` pair beside them is the same arithmetic with the extent stated, on its own.
+# It is green, and it is evidence of two things -- the law's rank-one arithmetic is right (0.0 against
+# the engine) and a stated shape can be answered from the type -- and it is **not the road**. Do not
+# delete the two `float[]` ones when they look redundant: they are the program the ruled design is for.
 [[tests]]
 name = "matmul_t.vector_lhs_law"
-desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector's own cotangent is the one the law used to refuse"
+desc = "A row times a matrix: `vjp(sum_of_product)([1, 2], w)` answers dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, and the engine's `with_grad` answers the same numbers with either operand differentiated, max_abs_diff 0.0 on all three. The vector is declared `float[]` -- rank one, no length -- so the length the law reduces to is the `shape(v)` the forward rule states in the linear call; the reverse law reads that list and the other operand, not the answered one. The entry also pins the control leg (`float[2]` declared, same numbers, max_abs_diff 0.0 against the `float[]` leg), so a law that stopped reducing would move a reading here"
 kind = "behavior"
 case = "../../cases/compile/transforms/matmul_transpose_vector_lhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_lhs value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs engine value=3.0 dL/dw=[[1.0, 1.0], [2.0, 2.0]] dL/dv=[0.75, 1.125]", "matmul_t vector_lhs engine_v value=3.0", "matmul_t vector_lhs max_abs_diff_library_vs_engine v=0.000000000000e+00 w=0.000000000000e+00 value=0.000000000000e+00", "matmul_t vector_lhs declared value=3.0 dL/dv=[0.75, 1.125] dL/dw=[[1.0, 1.0], [2.0, 2.0]]", "matmul_t vector_lhs max_abs_diff_declared_vs_unstated dv=0.000000000000e+00 dw=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+[[tests]]
+name = "matmul_t.vector_rhs_law"
+desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, built in the lanes `shape(x)` states. `u` is declared `float[]` -- rank one, no length -- so the length comes from the forward rule's `shape(u)` in the linear call, and the reverse law reads that list and the other operand. The entry also pins the control leg (`float[2]` declared, same numbers, max_abs_diff 0.0 against the `float[]` leg)"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_rhs.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["matmul_t vector_rhs value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs engine_u value=3.5", "matmul_t vector_rhs max_abs_diff_library_vs_engine u=0.000000000000e+00 x=0.000000000000e+00 value=0.000000000000e+00", "matmul_t vector_rhs declared value=3.5 dL/dx=[[0.5, 0.25], [0.5, 0.25]] dL/du=[4.0, 6.0]", "matmul_t vector_rhs max_abs_diff_declared_vs_unstated du=0.000000000000e+00 dx=0.000000000000e+00 value=0.000000000000e+00"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+
+# The same two arithmetic legs with the vector's extent stated in the declaration (`float[2]`), which is
+# what the language can answer today: `sum_to`'s target is written from `extent_of::<float[2]>()`. Green,
+# and kept for what it is worth -- it pins the rank-one arithmetic against the engine at 0.0 and shows a
+# stated shape being answered from the type. It is not the design's terminal road: see the two entries
+# above and `docs/handover/reports/2026-11-04-the-two-vector-laws-ask-for-a-shape-the-declaration-does-not-write.cn.md`.
+[[tests]]
+name = "matmul_t.vector_lhs_law_stated_extent"
+desc = "The same row-times-matrix law as `matmul_t.vector_lhs_law`, with the vector declared `float[2]` instead of `float[]`: dL/dv [0.75, 1.125] and dL/dw [[1, 1], [2, 2]] at loss 3.0, every `max_abs_diff` 0.0 against the engine. It is evidence, not the fix: the shape is answered because the declaration states it, and a program that cannot state a length is served by `mul_stated`/`matmul_stated` instead (author, 2026-11-04 12:40)"
+kind = "behavior"
+case = "../../cases/compile/transforms/matmul_transpose_vector_lhs_stated_extent.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
@@ -186,10 +237,10 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
 
 [[tests]]
-name = "matmul_t.vector_rhs_law"
-desc = "A matrix times a column: `vjp(sum_of_product)(x, [0.5, 0.25])` answers dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, matched element by element by the engine's `with_grad` with either operand differentiated, max_abs_diff 0.0 on all three. The matrix's cotangent here is the outer product `ct ⊗ u`, the half `sum_to` had to build"
+name = "matmul_t.vector_rhs_law_stated_extent"
+desc = "The same matrix-times-column law as `matmul_t.vector_rhs_law`, with the vector declared `float[2]`: dL/dx [[0.5, 0.25], [0.5, 0.25]] and dL/du [4, 6] at loss 3.5, every `max_abs_diff` 0.0 against the engine. Evidence rather than the fix, for the reason the left-hand entry states"
 kind = "behavior"
-case = "../../cases/compile/transforms/matmul_transpose_vector_rhs.cml"
+case = "../../cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 0
@@ -201,11 +252,11 @@ timeout_ms = 60000
 # whose answer is a number, have no cotangent overload, so the law is *chosen* and its own body has nothing
 # for these operands. The walk refuses that by name, with the law, the operator and the ranks:
 #
-#     skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2
-#     reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2]).
+#     skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0
+#     ranks=(3, 2, 1, 1) operands=4
 #
-#     the law `matmul_t` has no cotangent for `tensor:matmul` at these operands: their ranks are (3, 2),
-#     and it serves the ranks its cotangents are written for (node 6)
+#     the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank
+#     (3, 2, 1, 1), and it serves the ranks its cotangents are written for (node <>)
 #
 # `rule-ranks` is its own word, not `rule-shape`: that one means the law's *pattern* rejected the operand
 # types and nothing was built, which is where this reading stood while the law named its ranks in the
@@ -218,13 +269,84 @@ timeout_ms = 60000
 # what replaced this.
 [[tests]]
 name = "matmul_t.rank_three_is_refused_by_name"
-desc = "The product's transpose law serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2)`, with the sentence `the law `matmul_t` has no cotangent for `tensor:matmul` at these operands: their ranks are (3, 2)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently"
+desc = "The product's linear call is `matmul_stated`, so the law that answers it is `matmul_stated_t`; it serves ranks one and two and refuses a batched operand by naming the law, the operator and the ranks: `skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=11 position=0 ranks=(3, 2, 1, 1) operands=4`, with the sentence `the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)`. Its own word and not `rule-shape`, because the pattern took the operands and the law's body is what declined. Pinned on both streams, not as an exit code, so the day the batch axis is served this entry fails rather than passing silently. The ranks list has one entry per operand -- the two tensors and the two stated lists -- and the `reason=` string is left unpinned because it names the helper's argument list rather than the law's"
 kind = "negative"
 case = "../../cases/compile/transforms/matmul_transpose_rank_three.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
-expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_t` has no cotangent for `tensor:matmul` at these operands: their ranks are (3, 2)"]
-expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul rule=matmul_t node=6 position=0 ranks=(3, 2) operands=2", "reason=No matching function found for argument types: <> (float[..], float[3, 2, 2], float[2, 2])"]
+expect_stdout_contains = ["transpose has no transpose for this function: the law `matmul_stated_t` has no cotangent for `tensor:matmul_stated` at operands of rank (3, 2, 1, 1)"]
+expect_stderr_contains = ["skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t"]
+# The node's number is where the compiler put it, so it is `<>` here and every other field of the
+# line stays exact: the function, the skip's own word, the operator URI, the law, the operand
+# position, the ranks and the operand count. The `reason=` string is left free, as the entry's own
+# note says (it names the helper's argument list rather than the law), so the pinned text stops at
+# `operands=4` and the line has to carry a `reason=` after it.
+# Two streams name that node: the reading does it by number and the sentence prints the same number
+# in `(node N)`. The assertion is the relation between them -- whatever number the reading names,
+# the sentence has to name the same one -- so a walk that stopped at one node while the sentence
+# reported another breaks it, and the two numbers are still tied together instead of waved through.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const head = 'TRANSPOSE function=split_of_jvp_of_batched_sum_of_product_backward skip=rule-ranks uri=tensor:matmul_stated rule=matmul_stated_t node=<> position=0 ranks=(3, 2, 1, 1) operands=4'
+const hits = input.normalized.stderr.split('\n').filter((l) => new RegExp('^' + esc(head) + ' reason=').test(l))
+assert(hits.length === 1, `expected exactly one line like '${head} reason=...', found ${hits.length}`)
+const named = /\(node ([0-9]+)\)/.exec(input.normalized.stdout)
+assert(named, 'the sentence that says which law declined names the node it stopped at')
+assert(Number(named[1]) === field(hits[0], 'node'), `the reading names node ${field(hits[0], 'node')}` + ` and the sentence names node ${named[1]}: one node, one number`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 60000
+
+# The loop, which is the thing S2 is. Every row above is a first step, and a first step is not
+# training. "The loss went down" is what any wrong gradient satisfies -- a gradient off by a constant
+# factor still makes it go down -- so the criterion here is the curve itself: twelve rounds of
+# `w = w - 0.03125 * dw`, the library's leg against the engine's `with_grad` leg on the same model
+# with the same update rule, compared value by value. `1/32` is exact in binary and so is every
+# literal, so the two legs are compared for equality and not against a tolerance, and the whole curve
+# is pinned -- a future change to either leg moves a pinned value instead of only the difference.
+#
+# What this row does not claim: the loop composes `vjp`, not the name `grad`. `stdlib/vjp.cml#grad`
+# is declared for `(x: float) => float`, and its general form -- the first `with` parameter, design
+# principles 9.9 -- is the item still blocked on a lifted body calling a function value; `vjp` is the
+# function `grad` is a reading of. The weights sit on ordinary parameters because that is the only
+# channel `vjp` differentiates today, which is why the engine's leg keeps them in a `with` list and
+# the two legs differ in where the weight sits and not in what they compute.
+[[tests]]
+name = "train.twelve_rounds_library_curve_is_the_engine_curve"
+desc = "S2 trained for twelve rounds by the library's reverse transform, `vjp` -- `transpose(split(reinterp<jvp>(f)))`, the composition `grad` is a reading of -- against the engine's `with_grad` on the same tensor model (`x @ w`, `0.5 * sum(e * e)`, `x = [[1, 2], [3, 4]]`, `t = [[0, 0], [1, 1]]`, `w0 = [[0.5, 0.25], [0.125, 1]]`) with the same update rule `w = w - 0.03125 * dw`. The step size is a power of two and every literal is exact in binary, so the two legs are compared for equality and not against a tolerance: the case prints both curves and their largest difference, and this row pins all twelve values of both. It is the row that decides whether S2 can train on the library layer at all, and the reason it cannot say `grad`: that name is declared for `(x: float) => float` and its general form (the first `with` parameter, design principles 9.9) is blocked on a lifted body calling a function value."
+kind = "behavior"
+case = "../../cases/showcase_s2/train_curve.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_stdout_exact = "s2 curve library=[10.34375, 0.22930908203125, 0.1827995777130127, 0.18107431195676327, 0.1795608826687385, 0.1780609732736167, 0.17657359680496876, 0.17509864468616157, 0.17363601311700427, 0.17218559918157558, 0.17074730082370665, 0.16932101683972314]\ns2 curve engine=[10.34375, 0.22930908203125, 0.1827995777130127, 0.18107431195676327, 0.1795608826687385, 0.1780609732736167, 0.17657359680496876, 0.17509864468616157, 0.17363601311700427, 0.17218559918157558, 0.17074730082370665, 0.16932101683972314]\ns2 curve_max_abs_diff=0.000000000000e+00\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 60000
+verify_script = '''
+({ input, assert }) => {
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.length === 3, `expected the two curves and their largest difference, found ${lines.length} line(s)`)
+const curve = (name) => {
+    const prefix = `s2 curve ${name}=`
+    const line = lines.find((l) => l.startsWith(prefix))
+    assert(line !== undefined, `no line reported for the ${name} curve`)
+    return line.slice(prefix.length + 1, -1).split(', ').map(Number)
+}
+const library = curve('library')
+const engine = curve('engine')
+assert(library.length === 12, `the library's curve is ${library.length} values long, not 12`)
+assert(engine.length === 12, `the engine's curve is ${engine.length} values long, not 12`)
+for (let i = 0; i < 12; i += 1) {
+    assert(Number.isFinite(library[i]), `round ${i}: the library's loss is not a number`)
+    assert(Number.isFinite(engine[i]), `round ${i}: the engine's loss is not a number`)
+    assert(library[i] === engine[i],
+        `round ${i}: the library's loss ${library[i]} is not the engine's ${engine[i]}`)
+}
+const worst = lines[2].slice('s2 curve_max_abs_diff='.length)
+assert(Number(worst) === 0, `the largest difference over the curve is ${worst}, not zero`)
+}
+'''

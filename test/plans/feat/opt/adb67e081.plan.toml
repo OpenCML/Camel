@@ -1,0 +1,98 @@
+id = "opt.adb67e081"
+order = 480
+tier = "fast"
+tags = ["feat", "opt", "fold", "branches", "defects"]
+desc = """
+The reduced programs of result `adb67e081` of the CC2027 evaluation
+(`Camel-Archive`, `CC2027/eval/results/adb67e081/e9_reduced/`), four of the six that still
+failed on the v0.2.43 pin, copied unedited into `test/cases/opt/adb67e081/`. Each run is
+expected to do what the program does without the optimization passes: exit 0 and no output.
+`rc05_seed104` (the folding of a branch arm, handed its place in a region the arm does not run
+with) is fixed and is in `feat/compile/fold_arms` beside the case of that defect. `rc04_seed72` is green and stays here, and its green is the splice's doing rather than the guard's:
+`a1723fbb9` writes the body after the statement the call is written after, so the fork the guard
+used to move does not arise at all (`forked=0`), and taking the guard's order input away leaves this
+entry green. The guard is part of the story and not the reason for it: its blind spot was real -- it
+walked four of the five kinds of input edge, so a chain end that reached the moved statement through
+an order edge only looked free to move it, and the move closed a cycle the seal then reported -- and
+`bf12366ba` walks the order edges beside the other four, which is true of the code; what that walk
+does not do is decide this run. `rc03_seed30` is
+green as well: the folding used to hand the pruned branch's place to a `DATA` that belongs to no
+arm, and the fixes are in the passes (`aa157702a`, `0add4cd3c`, `060fbffaa`), not in this plan and
+not in the case -- the head of both paths is still `7cde424bd` (2026-11-04 21:52, when the two were
+red). So the pair below guards the fix, and a red here is the defect returning.
+`rc00_seed27` (SIGSEGV under `std::opt std::nvm`, in the scheduler rather than in a pass) is in no
+plan: it belongs to the lane that owns the schedulers.
+"""
+# Why not `known_fail`: a mark says "this program is expected to be refused", and these are
+# programs the compiler is expected to run. A red here is the defect, visible in `feat/opt`
+# `[SUMMARY]`, and it goes away by fixing the pass. That choice paid off when the two went green
+# (2026-11-05): there was no mark to take off, so the reading was a fix and not a cleanup -- and a
+# red here today means the defect is back.
+
+[[tests]]
+name = "adb67e081.rc03_seed30_reference"
+desc = "`rc03_seed30` without any optimization pass: the reference the folded run must reproduce. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc03_seed30.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc03_seed30_std_opt"
+desc = "`rc03_seed30` under `std::opt`, the pipeline it was found with. Green today, measured 2026-11-05: exits 0 and prints nothing. What it guards against is the refusal it used to meet -- the folding leaves a `DATA` between `BRCH 7` and its `JOIN 6` that belongs to no arm: `Runtime graph '__root__' breaks the branch-arm invariant: DATA 30 runs between BRCH 7 and its JOIN 6 and belongs to no arm: it waits on the BRCH and no arm's result depends on it` (17_graph_rewrite_api_contracts.md, 4.1 rule 2) -- and that sentence is in `expect_output_not_contains`, so a run that reports it again turns red here."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc03_seed30.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc04_seed72_reference"
+desc = "`rc04_seed72` without any optimization pass: the reference the inlined run must reproduce. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc04_seed72_inline"
+desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: `a1723fbb9` writes the body after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included (`bf12366ba`), and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
+args = ["${case}", "std::opt::inline", "${run_nvm}"]
+expect_exit = 0
+expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000

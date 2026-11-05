@@ -1,0 +1,31 @@
+// A bare `transpose` of `abs` is refused, and the sentence says the three things a refusal may say
+// and nothing more.
+//
+// The three are: which operator (`tensor:abs`), that the transpose family `rulesets.transpose` holds
+// no law for it, and that `transpose` is for linear functions while a gradient is taken with `vjp`.
+// What the sentence must NOT say -- and what this entry's `expect_output_not_contains` pins -- is that
+// `abs` is not linear: that claim would need the forward family's index, and a program that imports
+// only `rulesets.transpose` does not carry it (the ruling is the 2026-11-04 page under
+// docs/handover/questions/ whose name begins `2026-11-04-must-a-transpose-refusal-claim`). A wrong
+// explanation is worse than none, because a reader acts on it; "the family holds no rule for this
+// operator" is the fact the index answers, and it is also the one a reader can act on.
+//
+// The right numbers for this operator are pinned where they belong -- through `vjp`, in
+// `vjp_answers_abs_log_maximum_and_minimum.cml` -- because a bare `transpose` is not the route that
+// takes a gradient of a nonlinear function, and only one of the two routes is supposed to answer.
+//
+//     camel test/cases/compile/transforms/transpose_refuses_a_nonlinear_operator.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { abs, sum } from tensor
+
+/// `x ↦ Σ|x|`: the operator the refusal names.
+func f_abs(x: float[3]): float {
+    return float(sum(abs(x)))
+}
+
+func main(): int sync {
+    let cotangent = transpose(f_abs)(1.0)
+    `abs  ct=1.0  {}`->format<cotangent>->println
+    return 0
+}

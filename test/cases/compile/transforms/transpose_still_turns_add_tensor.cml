@@ -1,0 +1,32 @@
+// The second guard for the refusal: an operator whose walk finds a law still answers through a bare
+// `transpose`, and the law it finds is not the one the first guard walks.
+//
+// The refusal says "the family holds no rule for this operator" -- a fact about the index, not a
+// verdict about linearity. Its failure mode is the opposite one: a linear operator whose law is
+// there being refused anyway, which would hand a reader `vjp` for something `transpose` can turn
+// around. `transpose_still_turns_linear_operators.cml` guards that with `sum`, one law and one
+// parameter. One operator is a sample and not the class, so this one is a different law --
+// `add_tensor_t`, filed under the array sum -- and a function of two parameters, which also reads
+// back one cotangent per parameter and in the order the parameters are written.
+//
+// The numbers are `transpose`'s own: `Σ(a + b)` at cotangent 1 spreads one to every element of each
+// operand, so `da` and `db` are both [1.0, 1.0, 1.0]. The `rhs=` line on stderr is the walk's own
+// record of the laws it took -- `add_tensor_t` among them -- and it is pinned because the claim this
+// case makes is "the law is still there and still usable", not "the conclusion is right"; whether
+// the gradient route agrees is `vjp`'s cases.
+//
+//     camel test/cases/compile/transforms/transpose_still_turns_add_tensor.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { sum } from tensor
+
+/// `(a, b) ↦ Σ(a + b)`: two laws, `add_tensor_t` and the sum's, and nothing else.
+func f_pair(a: float[3], b: float[3]): float {
+    return float(sum(a + b))
+}
+
+func main(): int sync {
+    let (da, db) = transpose(f_pair)(1.0)
+    `pair ct=1.0 da={} db={}`->format<da, db>->println
+    return 0
+}

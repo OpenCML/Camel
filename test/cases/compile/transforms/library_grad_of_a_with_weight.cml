@@ -1,17 +1,25 @@
 /**
- * A weight the program holds as an ordinary parameter of a lambda keeps its direction when the
- * lifted body calls a function that reads that weight through a `with` parameter.
+ * A weight that sits in a `with` parameter is differentiated by the library's `grad`, and the
+ * number it answers is the engine's number.
  *
- * `vjp` differentiates the ordinary parameters only, so a weight that is a `with` value is moved
- * onto one -- `f = (ww) => weighted<ww>(2.0)` -- and the library's composition is
- * `transpose(split(jvp(f)))`. The lift of `f` then meets a *call* of `weighted` whose `with`
- * argument is the lambda's own parameter, which is a value the lifted body carries a direction for.
- * Before 2026-11-04 the lifted call handed `jvp_of_weighted` the value of `ww` and the zero the
- * lifted signature leaves a `with` parameter's tangent to be (`jvpSignature`: "the pair is not
- * written for a `with` parameter at all"), so `weighted`'s lifted chain was constant in the weight,
- * its `lin` was the zero map, and the composition answered `value=9.0 grad=0.0` where the engine
- * answers 3.0 -- a wrong number on the library's leg of the parity table, not a refusal, which is
- * why it is pinned here rather than described.
+ * `grad(f)` is `vjp(first_with_as_param(f))` read at the seed 1, its first cotangent taken
+ * (`stdlib/vjp.cml`). The signature reinterpretation is what makes the weight differentiable at all:
+ * `vjp` differentiates the ordinary parameters, so `first_with_as_param` moves the first `with`
+ * value onto the front of that list -- `grad(weighted)(3.0, 2.0)` here -- and everything else about
+ * the body is untouched. The engine's leg is `with_grad(weighted)<3.0>(2.0)`, which reads the same
+ * weight in the angle brackets a `with` parameter is written in; the two legs differ in who computes
+ * the gradient and not in the function they differentiate, which is what makes 3.0 the number worth
+ * pinning twice.
+ *
+ * **The shape this file used to measure is gone, and its number was wrong.** Until 2026-11-05 the
+ * library's leg moved the weight onto an ordinary parameter with a written lambda,
+ * `f = (ww) => weighted<ww>(2.0)`, and relied on the forward lift promoting a *callee's* `with`
+ * parameters into its ordinary list so that a direction could be handed in at the call. That path
+ * (`modules/transforms/jvp.cpp`, deleted in the same merge) is not what the composition is built on: a `with`
+ * value is a constant the lifted body reads, its tangent the zero of its type, so the lifted chain
+ * was constant in the weight, `lin` was the zero map, and the composition answered `value=9.0
+ * grad=0.0` where the engine answers 3.0. `first_with_as_param` is the honest route: the weight is
+ * an ordinary parameter before any lift looks at it.
  *
  * The second line puts the same call's other member on an ordinary parameter, so the two sources of
  * derivative are told apart by their numbers: `weighted<3.0>(t)` is `3t + 3`, whose cotangent is
@@ -19,7 +27,7 @@
  * as one wrong member, not as a line that is wrong as a whole.
  *
  * The third line is the other half of the same argument list. A lifted call's arguments are
- * `(..values, ..their tangents)` (`jvpSignature`, author 2026-11-03), and the lift used to write
+ * `(...values, ...their tangents)` (`jvpSignature`, author 2026-11-03), and the lift used to write
  * each value beside its own tangent as it walked the call's inputs: `(v1, d1, v2, d2)` into a callee
  * that reads `(v1, v2, d1, d2)`. One parameter hid it -- the two orders agree -- and two did not:
  * `split` reads the seam at `count / 2` and refused with "the value half reads the tangent of
@@ -27,8 +35,9 @@
  * value, so it pins the order alone: `mulxy(3.0, 2.0) = 6.0`, `d/dx = y = 2.0`, `d/dy = x = 3.0`.
  */
 
-import { grad } from autodiff
-import { vjp } from vjp
+import { first_with_as_param } from transforms
+import { grad, vjp } from vjp
+import { with_grad } from autodiff
 
 // `d/dy (x*y + x) = x`, so the engine answers 3.0 at a weight of 3.0.
 with <x: float>
@@ -42,16 +51,16 @@ func mulxy(x: float, y: float): float {
 
 func main(): int sync {
     // The engine's leg, for the number the library's leg has to match.
-    let engine = grad(weighted)<3.0>(2.0)
+    let (engine_value, engine_gradient) = with_grad(weighted)<3.0>(2.0)
 
-    // The library's leg: the weight on an ordinary parameter of a lambda.
-    let (value, pullback) = vjp((ww: float): float => weighted<ww>(2.0))(3.0)
-    let library = pullback(1.0).0
-    'weighted engine={} value={} grad={}'->format<engine, value, library>->println
+    // The library's leg: the weight as the first ordinary parameter, which is where
+    // `first_with_as_param` puts it.
+    let library = grad(weighted)(3.0, 2.0)
+    'weighted engine={} value={} grad={}'->format<engine_gradient, engine_value, library>->println
 
     // The same call with the number on an ordinary parameter too: one member per source of
     // derivative, and the two members differ.
-    let (both, bothPullback) = vjp((ww: float, t: float): float => weighted<ww>(t))(3.0, 5.0)
+    let (both, bothPullback) = vjp(first_with_as_param(weighted))(3.0, 5.0)
     'both value={} pullback={}'->format<both, bothPullback(1.0)>->println
 
     // A call of a two-parameter function inside a lifted body.

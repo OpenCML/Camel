@@ -27,14 +27,14 @@ import { export_model } from onnx
 import { weight, bench_input } from camel_bench
 
 type LoraMlp = {
-    fc1_w: f32[..], fc1_b: f32[..], fc1_lora_a: f32[..], fc1_lora_b: f32[..],
-    fc2_w: f32[..], fc2_b: f32[..], fc2_lora_a: f32[..], fc2_lora_b: f32[..],
-    fc3_w: f32[..], fc3_b: f32[..], fc3_lora_a: f32[..], fc3_lora_b: f32[..]
+    fc1_w: f32[...], fc1_b: f32[...], fc1_lora_a: f32[...], fc1_lora_b: f32[...],
+    fc2_w: f32[...], fc2_b: f32[...], fc2_lora_a: f32[...], fc2_lora_b: f32[...],
+    fc3_w: f32[...], fc3_b: f32[...], fc3_lora_a: f32[...], fc3_lora_b: f32[...]
 }
 
 /// LoRA path: backbone under stop_gradient, only adapters receive gradients.
 with <m: LoraMlp>
-func forward(x: f32[..]): f32[..] {
+func forward(x: f32[...]): f32[...] {
     let scale = 2.0
     let h1 = relu(x @ stop_gradient(m.fc1_w) + ((x @ m.fc1_lora_b) @ m.fc1_lora_a) * scale + stop_gradient(m.fc1_b))
     let h2 = relu(h1 @ stop_gradient(m.fc2_w) + ((h1 @ m.fc2_lora_b) @ m.fc2_lora_a) * scale + stop_gradient(m.fc2_b))
@@ -43,7 +43,7 @@ func forward(x: f32[..]): f32[..] {
 
 /// Same architecture with the backbone trainable (contrast export).
 with <m: LoraMlp>
-func forward_full(x: f32[..]): f32[..] {
+func forward_full(x: f32[...]): f32[...] {
     let scale = 2.0
     let h1 = relu(x @ m.fc1_w + ((x @ m.fc1_lora_b) @ m.fc1_lora_a) * scale + m.fc1_b)
     let h2 = relu(h1 @ m.fc2_w + ((h1 @ m.fc2_lora_b) @ m.fc2_lora_a) * scale + m.fc2_b)
@@ -51,43 +51,43 @@ func forward_full(x: f32[..]): f32[..] {
 }
 
 with <m: LoraMlp>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let y = forward<m>(x)
     return float(mean(y * y))
 }
 
 with <m: LoraMlp>
-func loss_full(x: f32[..]): float {
+func loss_full(x: f32[...]): float {
     let y = forward_full<m>(x)
     return float(mean(y * y))
 }
 
-func step(m: LoraMlp, x: f32[..]): (float, LoraMlp) {
+func step(m: LoraMlp, x: f32[...]): (float, LoraMlp) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func step_full(m: LoraMlp, x: f32[..]): (float, LoraMlp) {
+func step_full(m: LoraMlp, x: f32[...]): (float, LoraMlp) {
     let vg = with_grad(loss_full)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
 /// Cross-entropy against one-hot targets, composed from primitive tensor ops
-/// (log_softmax + neg + multiply + sum_axis + mean — every differentiated node
+/// (log_softmax + neg + multiply + sum<axis> + mean — every differentiated node
 /// uses already-registered ONNX lowerings; no dedicated CE lowering needed).
 with <m: LoraMlp>
-func loss_ce(x: f32[..], target: f32[..]): float {
+func loss_ce(x: f32[...], target: f32[...]): float {
     let y = forward<m>(x)
     return float(mean(sum<1>(target * (-log_softmax<1>(y)))))
 }
 
-func step_ce(m: LoraMlp, x: f32[..], target: f32[..]): (float, LoraMlp) {
+func step_ce(m: LoraMlp, x: f32[...], target: f32[...]): (float, LoraMlp) {
     let vg = with_grad(loss_ce)<m>(x, target)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 
 /// T3: the same step with the in-graph Adam optimizer (state carried explicitly).
-func step_ce_adam(m: LoraMlp, st: OptimizerState, x: f32[..], target: f32[..], lr: float): (float, LoraMlp, OptimizerState) {
+func step_ce_adam(m: LoraMlp, st: OptimizerState, x: f32[...], target: f32[...], lr: float): (float, LoraMlp, OptimizerState) {
     let vg = with_grad(loss_ce)<m>(x, target)
     let next = adam(m, vg.1, st, lr)
     return (vg.0, next.0, next.1)
@@ -168,7 +168,7 @@ func do_export_ce_adam(m: LoraMlp): int sync {
     let t = load_npy::<f32>(dir + '/target_0.npy')
     let lr = adam_lr()
     let _ = export_model<out: get_env('CAMEL_BENCH_EXPORT') ?? ''>(
-        (mm: LoraMlp, st: OptimizerState, xx: f32[..], tt: f32[..]): (float, LoraMlp, OptimizerState) => step_ce_adam(mm, st, xx, tt, lr),
+        (mm: LoraMlp, st: OptimizerState, xx: f32[...], tt: f32[...]): (float, LoraMlp, OptimizerState) => step_ce_adam(mm, st, xx, tt, lr),
         (m, adam_state(m), x, t)
     )
     return 0

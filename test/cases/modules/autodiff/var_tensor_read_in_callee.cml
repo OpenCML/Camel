@@ -5,14 +5,14 @@
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
-type P = { p0: f64[..] }
+type P = { p0: f64[...] }
 
-func peek(var acc: f64[]): f64[..] {
+func peek(var acc: f64[]): f64[...] {
     return acc * 1.0
 }
 
 with <m: P>
-func loss(x: f64[..], var acc: f64[]): float sync {
+func loss(x: f64[...], var acc: f64[]): float sync {
     let b = peek(acc)
     return float(sum(m.p0 * x)) + float(sum(b))
 }

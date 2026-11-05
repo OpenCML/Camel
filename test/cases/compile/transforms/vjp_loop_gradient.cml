@@ -1,5 +1,5 @@
 // The gradient through a loop, read the library's way: `vjp`/`grad` from `stdlib/vjp.cml`, which is
-// `transpose(split(reinterp<jvp>(f)))` over the rulesets the library imports -- not the C++ autodiff
+// `transpose(split(jvp(f)))` over the rulesets the library imports -- not the C++ autodiff
 // and not a direct `transpose` call.
 //
 // `f(x) = loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x*x*i` adds `i*x*x` once per round, so on
@@ -24,13 +24,20 @@ func f(x: float): float {
     return loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x * x * i
 }
 
+// `grad` differentiates the first `with` parameter (design principles 9.9), so its leg is read
+// through one; the loop, and the tape it leaves, are `f`'s own.
+with <x: float>
+func f_at(): float {
+    return loop s = 0.0 for i in [1.0, 2.0, 3.0, 4.0] do s + x * x * i
+}
+
 func main(): int sync {
     let (value, pullback) = vjp(f)(3.0)
     let cotangents = pullback(1.0)
     println('vjp_loop value={}'->format<value>)
     println(cotangents)
     println('vjp_loop cotangent={}'->format<cotangents.0>)
-    println('vjp_loop grad={}'->format<grad(f)(3.0)>)
+    println('vjp_loop grad={}'->format<grad(f_at)(3.0)>)
     println('vjp_loop linear-in-ct={}'->format<pullback(2.0).0>)
     return 0
 }

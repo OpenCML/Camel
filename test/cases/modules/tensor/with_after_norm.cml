@@ -7,7 +7,7 @@
 import { reshape, sum } from tensor
 import { grad } from autodiff
 
-with <x: f32[..]>
+with <x: f32[...]>
 func loss(): float {
     let rows = reshape<[2, 3]>(x)
     let columns = sum<0>(rows)

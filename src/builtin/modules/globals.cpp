@@ -1946,7 +1946,7 @@ const std::vector<oper_group_ptr_t> &getGlobalOperatorGroups() {
                     //
                     // The axis is the trailing word so that a two-word call is exactly the first
                     // dimension's position: `t[i]` lowers to that node, and the module
-                    // declarations of `__idx__` are written with that many parameters (the
+                    // declarations of `__idx__` take that many parameters (the
                     // `#op(':op/idx_arr')` declarations under test/cases/compile/native among
                     // them), so a call of two words must stay the call it is -- its third word
                     // is the declaration's default, filled before this rule sees it.

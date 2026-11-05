@@ -18,34 +18,49 @@ import { reshape, sum, tanh } from tensor
 import { with_grad } from autodiff
 import { export_model } from onnx
 
-func affine(x: f32[2, 3]): f32[..] {
+func affine(x: f32[2, 3]): f32[...] {
     let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
     let k = reshape<[6]>([0.5, -0.5, 0.25, -0.25, 1.5, -1.5] as f32[]) as f32[?]
     return x * w + reshape<[2, 3]>(k)
 }
 
-func checked(x: f32[..]): f32[..] {
+func checked(x: f32[...]): f32[...] {
     let y = tanh(x) as f32[2, 3]
     let z = (y * 2.0) as f32[?, 3]
     return z + 1.0
 }
 
-with <x: f32[..]>
+with <x: f32[...]>
 func loss(): float {
     let w = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[]) as f32[2, 3]
     let y = (x * x) as f32[2, 3]
     return float(sum(y * w))
 }
 
-func step(x: f32[..]): (float, f32[..]) {
+func step(x: f32[...]): (float, f32[...]) {
     return with_grad(loss)<x>()
 }
 
-func main(): int sync {
+// The refusal of the first request that was refused, or 'exported' when all three were written.
+// The requests stay the program's own statements (see main): the `onnx::export` pass reads them
+// from the top level of the entry graph, while the error they answer is handled here.
+func report(r1: void!, r2: void!, r3: void!): string! {
+    return match r1 {
+        case error e1 => { return e1 }
+        case v1 => match r2 {
+            case error e2 => { return e2 }
+            case v2 => match r3 {
+                case error e3 => { return e3 }
+                case v3 => 'exported'
+            }
+        }
+    }
+}
+
+func main(): string! sync {
     let ex = reshape<[2, 3]>([1.0, -1.0, 0.5, 2.0, 3.0, -2.0] as f32[]) as f32[2, 3]
-    let _ = export_model<out: 'affine.onnx'>(affine, ex)
-    let _ = export_model<out: 'checked.onnx'>(checked, ex)
-    let _ = export_model<out: 'step.onnx'>(step, ex)
-    println('exported')
-    return 0
+    let r1 = export_model<out: 'affine.onnx'>(affine, ex)
+    let r2 = export_model<out: 'checked.onnx'>(checked, ex)
+    let r3 = export_model<out: 'step.onnx'>(step, ex)
+    return report(r1, r2, r3)
 }

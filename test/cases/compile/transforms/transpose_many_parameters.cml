@@ -21,8 +21,8 @@
 // operands' two and answers the tangents' two). What is refused here is the one shape neither route
 // supports: the pullback of the whole rule with respect to the tangents themselves.
 //
-// The reading is the refusal's own words -- `skip=cotangent-needs-a-value` on `:op/mul_d`,
-// `position=1`, "the rule's right side reads a value the caller does not carry" -- and it is
+// The reading is the refusal's own words -- `skip=law-reads-a-value` on `:op/mul_d`,
+// `position=0`, "the rule's right side reads a value the caller does not carry" -- and it is
 // deliberately one level deeper than the user-facing sentence, because that sentence ("transpose has
 // no transpose for this function") says nothing about *which* value is missing.
 import rulesets.transpose

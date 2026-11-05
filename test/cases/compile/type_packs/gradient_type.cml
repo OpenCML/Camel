@@ -1,0 +1,60 @@
+/**
+ * `Gradient<F>` is the derivative of a function type, as a type of its own: the parameters of `F`,
+ * and the cotangent of the first `with` parameter, which is the parameter `grad` differentiates
+ * (design principles 9.9). The type is computed from `F` -- `ParamsOf<F>`, `WithOf<F>`, and
+ * `FirstOf<WithOf<F>>` for the result -- so one declaration covers every shape.
+ *
+ * **What this case is for.** "The type prints" is not "it is a type": a name that a printer joins
+ * together out of its arguments would print the same text and take part in nothing. So every line
+ * below is a judgment the compiler settles at instantiation, and none of them reads a string:
+ *
+ *   - `FirstOf<WithOf<Loss>>` is `f64[2]`: the pack of `Loss`'s `with` parameters has one member,
+ *     and taking its head names that member's type. This is the half of the derivation that the
+ *     rest of the type is built on.
+ *   - `Gradient<Loss>` is `<...WithOf<Loss>> (x: float) => f64[2]`: one type, with `Loss`'s `with`
+ *     list, its parameters, and the cotangent of the weight as the result. Written out in full it is
+ *     the same type, so the derivation is the whole identity and not an approximation of it.
+ *   - `Gradient<Loss>` is `Gradient<Loss>`: two instances of the declaration are one type.
+ *   - `Gradient<Loss>` is **not** `Loss`: the derivative of a function is not the function. A
+ *     constructor that answered its argument would make the line above true and this one false.
+ *   - `let g: Gradient<Loss> = grad(loss)` compiles, and `g` is the value the engine's `grad`
+ *     answers: the annotation and the engine's answer are the same type, not two that look alike.
+ *     If `Gradient<F>` computed anything else, this line is a type error and the program does not
+ *     begin to run.
+ *
+ * The last line is the number, and it is the same number as before this type had a name: the point
+ * of the case is that naming the derivative changed nothing about taking it.
+ */
+import { FirstOf, Gradient, is_same, WithOf } from types
+import { grad } from autodiff
+import { reshape } from tensor
+
+// A weight that is a tensor: the derivative returns a value of the weight's shape, which is what
+// makes `Gradient<Loss>` different from `Loss`. With a `float` weight the two would coincide, and
+// the "not the function" judgment below would be about a case that cannot separate them.
+type Loss = <w: f64[2]> (x: float) => float
+
+// `Gradient<Loss>` written out in full, as a type of its own so the comparison names two spellings:
+// the `with` list, the parameters, and the cotangent of the weight.
+type LossDerivative = <w: f64[2]> (x: float) => f64[2]
+
+with <w: f64[2]>
+func loss(x: float): float {
+    return w[0] * x + w[1] * x
+}
+
+func main(): int sync {
+    // A value whose type is `Gradient<F>`. The engine's `grad` answers the gradient function, and
+    // the annotation says that function's type is the computed one; the two have to be one type.
+    let g: Gradient<Loss> = grad(loss)
+
+    let w = reshape<[2]>([3.0, 4.0])
+    let x = 2.0
+
+    println(is_same::<FirstOf<WithOf<Loss>>, f64[2]>())
+    println(is_same::<Gradient<Loss>, LossDerivative>())
+    println(is_same::<Gradient<Loss>, Gradient<Loss>>())
+    println(is_same::<Gradient<Loss>, Loss>())
+    'gradient_type g={}'->format<g<w>(x)>->println
+    return 0
+}

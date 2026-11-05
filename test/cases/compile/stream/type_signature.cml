@@ -7,9 +7,9 @@
  *   int!..         the stream of a fallible int        `(int!)..`
  *   int..?         the possibly absent stream          `(int..)?`
  *   int[3]..       the stream of three-element arrays  `(int[3])..`
- *   int[..]..      the stream of open-rank arrays      `(int[..])..`
+ *   int[...]..      the stream of open-rank arrays      `(int[...])..`
  *
- * `int..` and `int[..]` are two different types, and both stand in one signature here. The
+ * `int..` and `int[...]` are two different types, and both stand in one signature here. The
  * only restriction on a stream is linearity, and it is a restriction on containers: an item of
  * a tuple may be a stream (the rule's `tee` hands out a tuple and destructuring consumes it),
  * while an array, a map or a set refuses one (test/cases/compile/stream/type_in_container.cml).
@@ -24,7 +24,7 @@ func count(s: int..): int {
     return 0
 }
 
-func shapes(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[..]..): int {
+func shapes(a: int?.., b: int!.., c: int..?, d: int[3].., e: int[...]..): int {
     return 0
 }
 
@@ -36,7 +36,7 @@ func first::<T>(s: T..): T? {
     return null
 }
 
-func openRank(rows: f32[..]): int {
+func openRank(rows: f32[...]): int {
     return 0
 }
 

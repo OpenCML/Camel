@@ -1,8 +1,8 @@
 // The gradient of a `take` through the library's own rules.
 //
-// `jvp_take` states the indices and the operand's extents in one list (`[n, i0, ..., d0, ...]`), and
-// `take_stated_t` scatters each row's cotangent back where `at`'s indices say it came from, in an
-// array of `at`'s extents -- a shape no operand of the linear call carries.
+// `jvp_take` states the operand's extents beside the indices, and `take_stated_t` scatters each
+// row's cotangent back where the indices say it came from, in an array of the stated extents -- a
+// shape no operand of the linear call carries.
 //
 // The rows read are positions 0 and 2, so their gradient is one and the row nobody read is zero:
 //

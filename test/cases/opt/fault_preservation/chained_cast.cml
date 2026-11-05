@@ -6,7 +6,7 @@
 
 import { zeros } from tensor
 
-func shaped(rows: int, cols: int): f32[..] {
+func shaped(rows: int, cols: int): f32[...] {
     return zeros::<f32>([rows, cols])
 }
 

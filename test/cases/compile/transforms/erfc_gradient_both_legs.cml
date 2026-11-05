@@ -16,14 +16,15 @@
 // **The shape is stated, and that is not decoration.** The library half of this program takes
 // `float[4]`: `mul_tensor_t`'s answer reduces the cotangent to its operand's shape with `sum_to`,
 // and a shape is a value the transposed function only has when the parameter's *type* states it.
-// Measured on this tree with `float[..]` instead: the engine leg prints its array and the library
+// Measured on this tree with `float[...]` instead: the engine leg prints its array and the library
 // leg stops at
 //
-//     skip=cotangent-needs-a-value uri=tensor:multiply position=0 reason=the rule's right side reads a value the caller does not carry
+//     skip=parameter-shape uri=tensor:multiply node=10 position=0 param=0 param-type=float[...]
 //
 // -- the same wall `exp`, `sigmoid`, `tanh` and `relu` meet on this tree today
 // (`exp_gradient_through_the_library` and its three neighbours pin it, and the reason is the same in
-// all four: a slope the tangent multiplies by is a value the backward half has to be handed). A
+// all four: a slope the tangent multiplies by is an operand whose shape the declaration does not
+// state, so the law's `sum_to` has no extents to reduce the cotangent to). A
 // parameter whose shape the type states is answered from the type, so the law is the whole law.
 //
 //     camel test/cases/compile/transforms/erfc_gradient_both_legs.cml
@@ -32,7 +33,7 @@ import { vjp } from vjp
 import { abs, erfc, sum } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
-with <x: float[..]>
+with <x: float[...]>
 func total(): float {
     return sum(erfc(x))
 }

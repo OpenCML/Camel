@@ -1,24 +1,29 @@
-// `float[..]` states neither the rank nor a length, so `extent_of` must refuse it -- never answer
+// `float[...]` states neither the rank nor a length, so `extent_of` must refuse it -- never answer
 // `[]`. An empty list is a rank-zero shape, which `sum_to` reads as "this is one element": an
 // answer of `[]` would be a wrong number that no diagnostic names.
 //
-// Measured 2026-11-04 on `lane-extentof` (host `88zjwei`):
+// Measured 2026-11-04 (`ca464bca2` before the sentence named a position, and the tree after it):
 //
 //   error[SemanticDiag::ExtentOfNeedsStatedShape]: `extent_of::<A>()` answers the extents the type
-//   `A` writes down, and this call's type writes none: the type it is instantiated at is 'float[..]',
-//   and an extent it writes is not a number.
+//   `A` writes down, and this call's type writes none: the type it is instantiated at is
+//   'float[...]', and position 0 is open: `..` states no dimension there, so no position has a
+//   length to read.
 //     --> 4:34
-//     4 |     return extent_of::<float[..]>()
+//     4 |     return extent_of::<float[...]>()
 //       |                                  ^^
 //   help: Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`
 //   ...  or take the shape from a value the program has (`shape(xs)`).
 //   exit=1
 //
+// The clause after the type used to be "an extent it writes is not a number", which named no
+// position: `extent_of_names_the_open_position.cml` pins the position for `float[...]`,
+// `float[2, ?]` and `float[]` alike.
+//
 // The refusal is at the call, where the type is in hand: `[4]` (a rank whose length is stated) is
 // answered by `extent_of::<float[4]>()` in `extent_of_answers_a_parameter_type.cml`.
 
-func open_rank(t: float[..]): int[] {
-    return extent_of::<float[..]>()
+func open_rank(t: float[...]): int[] {
+    return extent_of::<float[...]>()
 }
 
 func main(): int sync {

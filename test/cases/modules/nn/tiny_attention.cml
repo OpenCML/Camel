@@ -9,19 +9,19 @@ import { reshape, shape, softmax, sum, transpose } from tensor
 import { sgd } from nn
 
 type AttentionModel = {
-    wq: f32[..],
-    wk: f32[..],
-    wv: f32[..],
-    wo: f32[..]
+    wq: f32[...],
+    wk: f32[...],
+    wv: f32[...],
+    wo: f32[...]
 }
 
-with <weight: f32[..]>
-func linear(x: f32[..]): f32[..] {
+with <weight: f32[...]>
+func linear(x: f32[...]): f32[...] {
     return x @ weight
 }
 
 with <model: AttentionModel>
-func attend(x: f32[..]): f32[..] {
+func attend(x: f32[...]): f32[...] {
     let q = x->linear<model.wq>
     let k = x->linear<model.wk>
     let v = x->linear<model.wv>
@@ -31,17 +31,17 @@ func attend(x: f32[..]): f32[..] {
 }
 
 with <model: AttentionModel>
-func predict(x: f32[..]): f32[..] {
+func predict(x: f32[...]): f32[...] {
     return x->attend<model> @ model.wo
 }
 
-func mse_loss(pred: f32[..], target: f32[..]): float {
+func mse_loss(pred: f32[...], target: f32[...]): float {
     let diff = pred - target
     return float(sum(diff * diff)) / float(shape(pred)[0])
 }
 
 with <model: AttentionModel>
-func model_loss(x: f32[..], target: f32[..]): float {
+func model_loss(x: f32[...], target: f32[...]): float {
     let pred = x->predict<model>
     return mse_loss(pred, target)
 }
@@ -55,7 +55,7 @@ func init(): AttentionModel {
     }
 }
 
-func train(model: AttentionModel, x: f32[..], target: f32[..], steps: int): AttentionModel {
+func train(model: AttentionModel, x: f32[...], target: f32[...], steps: int): AttentionModel {
     return if steps == 0 then model else train(sgd(model, grad(model_loss)<model>(x, target), 0.5), x, target, steps - 1)
 }
 

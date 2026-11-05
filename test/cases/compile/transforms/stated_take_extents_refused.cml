@@ -1,17 +1,17 @@
 // A take whose stated extents are not the tensor's is a fault, and so is an index outside them.
 //
-// `take_stated(t, at)` reads `at` in two halves: the leading count says how many indices follow, and
-// everything after them is the operand's extents (`support.h#checkStatedExtents`, asked at the
-// count's offset and not at zero). Two readings in one program would stop at the first fault, so
-// this one states an extent the tensor does not have: four rows and a list that says nine. The
-// program stops there rather than scattering a cotangent into an array of nine.
+// `take_stated(t, indices, extents)` states the extents as its third parameter, and
+// `support.h#checkStatedExtents` reads them from there. Two readings in one program would stop at
+// the first fault, so this one states an extent the tensor does not have: four rows and an extents
+// list that says nine. The program stops there rather than scattering a cotangent into an array of
+// nine.
 //
 //     camel test/cases/compile/transforms/stated_take_extents_refused.cml
 import { take_stated } from tensor
 
 func main(): int sync {
     let x = [1.0, 2.0, 3.0, 4.0] as float[]
-    let y = take_stated(x, [1, 0, 9])
+    let y = take_stated(x, [0], [9])
     `stated take={}`->format<y>->println
     return 0
 }

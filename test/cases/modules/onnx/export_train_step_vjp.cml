@@ -14,36 +14,37 @@ import { get_env } from env
 
 // A hard sign with a straight-through gradient scaled by 0.5: the rule, not the body, is what
 // the gradient uses.
-func hard_sign_rule(x: f32[..], dy: f32[..]): f32[..] {
+func hard_sign_rule(x: f32[...], dy: f32[...]): f32[...] {
     return dy * 0.5
 }
 
 #vjp(hard_sign_rule)
-func hard_sign(x: f32[..]): f32[..] {
+func hard_sign(x: f32[...]): f32[...] {
     return where(x > 0.0, x * 0.0 + 1.0, x * 0.0 - 1.0)
 }
 
-type P = { w: f32[..], b: f32[..] }
+type P = { w: f32[...], b: f32[...] }
 
 with <m: P>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let h = hard_sign(x @ m.w + m.b)
     return float(sum(tanh(h + x @ m.w) * h))
 }
 
-func step(m: P, x: f32[..]): (float, P) {
+func step(m: P, x: f32[...]): (float, P) {
     let vg = with_grad(loss)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.1))
 }
 
-func main(): int sync {
+func main(): string! sync {
     let m = { w: reshape<[2, 2]>([0.5, -0.25, 0.75, 1.0] as f32[]), b: reshape<[2]>([0.1, -0.2] as f32[]) }
     let x = reshape<[3, 2]>([1.0, 2.0, -1.0, 0.5, 0.3, -0.7] as f32[])
     let r = step(m, x)
     println(r.0)
     println(r.1.w)
     println(r.1.b)
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>(step, (m, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

@@ -6,11 +6,11 @@ import { sum, zeros } from tensor
 import { with_grad } from autodiff
 
 type Model = {
-    w: f32[..]
+    w: f32[...]
 }
 
 with <m: Model>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     return float(sum(x / m.w))
 }
 

@@ -3,9 +3,11 @@
 
 #include "rule_expand.h"
 
-#include "camel/core/rtdata/func.h"
+#include "camel/core/derivative.h"
 #include "camel/core/mm.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/func.h"
 #include "camel/core/type/base.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/parse/ast/rule_head.h"
@@ -18,6 +20,7 @@
 #include <string>
 #include <string_view>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 namespace camel::transforms {
@@ -120,8 +123,8 @@ RuleChoice chooseRuleAmong(
     std::vector<Type *> shapePorts;
     std::string lastWhy;
     // Every candidate that instantiates and whose ports take the operands. A key can hold more than
-    // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first and
-    // the choice made after it.
+    // one such law (`T[..]` and `T[]` both take a rank-one array), so the fit is collected first
+    // and the choice made after it.
     struct Fit {
         const camel::compile::gir::GenericRuleInstance *instance = nullptr;
         std::string rule;
@@ -159,34 +162,35 @@ RuleChoice chooseRuleAmong(
         }
         // The shape first: a candidate whose ports are not the operands' own types cannot be built,
         // however well its condition holds at the element. Refusing here is what keeps a `float[]`
-        // out of a `float` port -- the run that did it was killed by a signal, and a named refusal is
-        // worth more than a silent death.
+        // out of a `float` port -- the run that did it was killed by a signal, and a named refusal
+        // is worth more than a silent death.
         //
         // A rule's parameters are the operator's **ports, in port order** -- the normal ones, then
         // the `<>` ones (`stdlib/rulesets/jvp.cml`, the paragraph above `jvp_sum`;
-        // `stdlib/rulesets/vmap.cml` states the same protocol where it builds a call). So the rule's
-        // `count` parameters line up with the node's first `count` ports, and a *rule* that names
-        // fewer of them than the node has ports is not refusing anything: `jvp_reshape` is
-        // `rule jvp_reshape::<T>(x: T[..])` over the node `reshape<[2, 2]>(x)`, whose second port is
-        // the shape its own left side writes as a constant. That port is a static slot of the
+        // `stdlib/rulesets/vmap.cml` states the same protocol where it builds a call). So the
+        // rule's `count` parameters line up with the node's first `count` ports, and a *rule* that
+        // names fewer of them than the node has ports is not refusing anything: `jvp_reshape` is
+        // `rule jvp_reshape::<T>(x: T[..])` over the node `reshape<[2, 2]>(x)`, whose second port
+        // is the shape its own left side writes as a constant. That port is a static slot of the
         // operator, not a value the node passes as data -- `normInputsOf` does not answer it,
-        // `withInputsOf` does -- and it is not a parameter of the rule, so counting it refused a law
-        // for the shape of its own left side. What the count still has to say is that no *data* input
-        // is left without a parameter to bind it: a rule that names fewer parameters than the node has
-        // data inputs cannot describe the node, and one that names more parameters than the node has
-        // ports cannot be filled.
+        // `withInputsOf` does -- and it is not a parameter of the rule, so counting it refused a
+        // law for the shape of its own left side. What the count still has to say is that no *data*
+        // input is left without a parameter to bind it: a rule that names fewer parameters than the
+        // node has data inputs cannot describe the node, and one that names more parameters than
+        // the node has ports cannot be filled.
         //
-        // "Takes" is the relation a call site uses, not equality: an instance's ports are written in
-        // the spelling the rule's left side uses, and that spelling does not shrink to the shape of
-        // the operand it meets. `jvp_mul_tensor` is `mul_tensor(x: T[..], w: T[..])`, and a
+        // "Takes" is the relation a call site uses, not equality: an instance's ports are written
+        // in the spelling the rule's left side uses, and that spelling does not shrink to the shape
+        // of the operand it meets. `jvp_mul_tensor` is `mul_tensor(x: T[..], w: T[..])`, and a
         // `float[2, 2]` operand is a value that port takes -- an open rank is every rank, and the
-        // operator walks whatever rank it is given (`stdlib/rulesets/vmap.cml` says the same about the
-        // batch it hands a rule). Asking for equality refused it: `float[..]` and `float[2, 2]` are
-        // not the same type, and the law was refused for the shape of the value it was written for.
-        // The direction is the one a call checks -- the port takes the operand -- and it is the
-        // direction that keeps the case this exists for refused: a `float` port still takes no
-        // `float[]`, because a primitive takes its own type and nothing else (`Type::assignableFrom`),
-        // so `:op/at od` is still stopped before a `float[]` reaches the scalar law's port.
+        // operator walks whatever rank it is given (`stdlib/rulesets/vmap.cml` says the same about
+        // the batch it hands a rule). Asking for equality refused it: `float[..]` and `float[2, 2]`
+        // are not the same type, and the law was refused for the shape of the value it was written
+        // for. The direction is the one a call checks -- the port takes the operand -- and it is
+        // the direction that keeps the case this exists for refused: a `float` port still takes no
+        // `float[]`, because a primitive takes its own type and nothing else
+        // (`Type::assignableFrom`), so `:op/at od` is still stopped before a `float[]` reaches the
+        // scalar law's port.
         std::vector<Type *> ports = rulePortsOf(instance);
         const bool namesTheNode =
             ports.size() <= operandTypes.size() && ports.size() >= dataOperandCount;
@@ -205,7 +209,8 @@ RuleChoice chooseRuleAmong(
             shapeWhy = std::string("the ") + words.subject + " takes " + typeTextOf(ports) +
                        ", and the operator has " + typeTextOf(operandTypes);
             if (dataOperandCount > 0) {
-                shapeWhy += " (of which " + std::to_string(dataOperandCount) + " is a data operand)";
+                shapeWhy +=
+                    " (of which " + std::to_string(dataOperandCount) + " is a data operand)";
             }
             shapePorts = ports;
             continue;
@@ -218,15 +223,34 @@ RuleChoice chooseRuleAmong(
         if (!shapeWhy.empty()) {
             // A law was found and instantiated and its shape refused: that is `Shape`, not `NoLaw`,
             // and the two type lists travel with it.
-            choice.refusal     = RuleRefusal::Shape;
-            choice.lawPorts    = std::move(shapePorts);
+            choice.refusal      = RuleRefusal::Shape;
+            choice.lawPorts     = std::move(shapePorts);
             choice.operandTypes = operandTypes;
         }
         return choice;
     }
-    // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than the
-    // other are two laws the declaration does not choose between -- the author's `two laws both
+    // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than
+    // the other are two laws the declaration does not choose between -- the author's `two laws both
     // accept these arguments` -- and it is reported rather than answered by filing order.
+    //
+    // A law that names more of the operator's ports is the narrower one, and that is settled before
+    // the port types are compared: the axis reduction's law names the axis and the flag beside the
+    // operand (`jvp_sum_axis::<T>(xs, axis, keepdims)`, for `sum<axis, keepdims>(xs)`), while the
+    // whole reduction's law names the operand alone (`jvp_sum::<T>(xs)`, for `sum(xs)`) and does not
+    // refuse the axis node's two extra ports, because `namesTheNode` takes a law that names fewer
+    // ports than the node has -- the rest may be written as constants in the law's own left side
+    // (`reshape`'s shape). Both laws are filed under `sum` at the one operand the parentheses carry,
+    // which is the author's ruling of 2026-11-05 ("a reduction over an axis has one name, the whole
+    // reduction's"), so they are told apart here: the law that names every port is the node's.
+    size_t widest = 0;
+    for (const Fit &fit : fitting) {
+        widest = std::max(widest, fit.ports.size());
+    }
+    fitting.erase(
+        std::remove_if(
+            fitting.begin(), fitting.end(),
+            [widest](const Fit &fit) { return fit.ports.size() != widest; }),
+        fitting.end());
     std::vector<const Fit *> kept;
     for (const Fit &candidate : fitting) {
         bool outranked = false;
@@ -283,8 +307,8 @@ struct RuleRightSide {
     std::vector<gc_node_ref_t> captures;
 };
 
-/// Fills `found` from the instance's right side, or says in `why` what about it is not a function of
-/// the tangents.
+/// Fills `found` from the instance's right side, or says in `why` what about it is not a function
+/// of the tangents.
 bool findRuleRightSide(
     const camel::compile::gir::GenericRuleInstance &instance, RuleRightSide &found,
     std::string &why) {
@@ -298,7 +322,7 @@ bool findRuleRightSide(
             break;
         }
         const auto carried = rhs->normInputsOf(exitRef);
-        exitRef = carried.empty() ? rt::kInvalidNodeRef : carried.front();
+        exitRef            = carried.empty() ? rt::kInvalidNodeRef : carried.front();
     }
     const rt::GCNode *exit = exitRef == rt::kInvalidNodeRef ? nullptr : rhs->node(exitRef);
     if (exit == nullptr) {
@@ -344,8 +368,8 @@ bool findRuleRightSide(
     }
     // The graph the answer runs is the static function value the Data node holds.
     const std::span<const slot_t> slots = rhs->staticSlots();
-    const size_t at = static_cast<size_t>(
-        -static_cast<std::ptrdiff_t>(rhs->node(functionNode)->dataIndex));
+    const size_t at =
+        static_cast<size_t>(-static_cast<std::ptrdiff_t>(rhs->node(functionNode)->dataIndex));
     if (at < slots.size()) {
         const auto *function = camel::core::rtdata::fromSlot<const ::Function *>(slots[at]);
         if (function != nullptr) {
@@ -384,11 +408,12 @@ std::vector<bool> portsReadByBody(const rt::GCGraph &body, const std::vector<boo
 
 /// The operator a law names when it wants an operand's **shape** and not its value.
 ///
-/// `tensor:shape` is the library's own name for the extents of an array (`stdlib/tensor.cml#shape`),
-/// and it is the name a law has always had for this: `jvp_sum` states a sum's extents by writing
-/// `sum_stated(dxs, shape(xs))`. What changes here is where the numbers come from when the caller
-/// carries no value for `xs` -- a transposition has none for the operand it differentiates -- so the
-/// rule layer answers the call from the type instead (`expandRuleRightSide`).
+/// `tensor:shape` is the library's own name for the extents of an array
+/// (`stdlib/tensor.cml#shape`), and it is the name a law has always had for this: `jvp_sum` states
+/// a sum's extents by writing `sum_stated(dxs, shape(xs))`. What changes here is where the numbers
+/// come from when the caller carries no value for `xs` -- a transposition has none for the operand
+/// it differentiates -- so the rule layer answers the call from the type instead
+/// (`expandRuleRightSide`).
 constexpr std::string_view kShapeUri = "tensor:shape";
 
 /// The extents as the value a law reads them as: a rank-one array of the numbers, of the type the
@@ -397,32 +422,105 @@ constexpr std::string_view kShapeUri = "tensor:shape";
 /// This is the whole of the pathway the author asked for on 2026-11-03 (17:35 and 17:55): a shape
 /// arrives at a law as a **known operand** -- a constant of the graph, built where the graph is
 /// built -- instead of being read off the value of an operand the caller does not have. It is not a
-/// zero standing in for a value (that is what `transpose.cpp#shapeCarrierOf` was, and a law that
-/// multiplied by it answered zeros); it is the extents themselves, and the only thing that reads
-/// them is the shape (5.4: a shape is a fact about a type, and this is that fact written down).
+/// zero standing in for a value (`transpose.cpp#shapeCarrierOf` was one, and a law that multiplied
+/// by it answered zeros; deleted 2026-11-05); it is the extents themselves, and the only thing that
+/// reads them is the shape (5.4: a shape is a fact about a type, and this is that fact written
+/// down).
 gc_node_ref_t statedExtentsValue(
     camel::runtime::GraphDraft &draft, camel::core::type::Type *extentsType,
     const std::vector<int64_t> &extents) {
     if (extentsType == nullptr || extentsType->code() != camel::core::type::TypeCode::Array) {
         return rt::kInvalidNodeRef;
     }
-    auto *arrayType = static_cast<camel::core::type::ArrayType *>(extentsType);
+    auto *arrayType      = static_cast<camel::core::type::ArrayType *>(extentsType);
     const int64_t length = static_cast<int64_t>(extents.size());
     ::Array *value       = ::Array::create(
-        camel::core::mm::autoSpace(), arrayType, std::span<const int64_t>(&length, 1),
+        camel::core::mm::autoSpace(),
+        arrayType,
+        std::span<const int64_t>(&length, 1),
         /*zeroInit=*/true);
     if (value == nullptr) {
         return rt::kInvalidNodeRef;
     }
-    // The storage follows the element type (`type::arrayStorageFor`): an `int[]` holds one `int64_t`
-    // per element, and a shape that did not fit the array it was written into would be a shape the
-    // graph reads half of. Refused rather than written short.
+    // The storage follows the element type (`type::arrayStorageFor`): an `int[]` holds one
+    // `int64_t` per element, and a shape that did not fit the array it was written into would be a
+    // shape the graph reads half of. Refused rather than written short.
     if (value->byteSize() != static_cast<size_t>(length) * sizeof(int64_t)) {
         return rt::kInvalidNodeRef;
     }
     std::memcpy(value->rawData(), extents.data(), static_cast<size_t>(length) * sizeof(int64_t));
     return draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<::Array *>(value), extentsType, rt::kGCNodeFlagConstant);
+        camel::core::rtdata::toSlot<::Array *>(value),
+        extentsType,
+        rt::kGCNodeFlagConstant);
+}
+
+} // namespace
+
+namespace {
+
+/// The operators a **product** is written with: the scalar `*` of the written table, at every float
+/// width it has, and the elementwise tensor product. A right side multiplies a tangent by a
+/// coefficient with one of these, and a product is the only shape whose value is decided by an
+/// input being zero: `where(x, dx, 0)` is not a product and its answer still depends on `x`.
+///
+/// The list is written here rather than derived from an operator table because what is being asked
+/// is not "which operators are multiplications" but "which operators a *rule's* right side uses for
+/// a linear term", and the answer to that is the arithmetic the rulesets are written in
+/// (`stdlib/rulesets/**`): the scalar written ops and the tensor product. The scalar arm is read
+/// off the operator's name the way the rule key is (`ruleKeyOf`, `camel/core/forward.h`): `:op/mul`
+/// and then whatever width suffix the operator carries -- `_d`, `_f`, `_bf`, `_f6` -- so a width
+/// the language adds is a product without a list here changing, and `:op/assn_mul_*` (a compound
+/// assignment, not a term) is not one. A product the list does not name is simply not collapsed --
+/// no rule is made wrong by being absent here, the term is just computed the way it was before.
+bool isProductUri(std::string_view uri) {
+    constexpr std::string_view opPrefix = ":op/";
+    if (uri == "tensor:multiply") {
+        return true;
+    }
+    if (uri.substr(0, opPrefix.size()) != opPrefix) {
+        return false;
+    }
+    const std::string_view name = uri.substr(opPrefix.size());
+    const size_t width          = name.find('_');
+    return name.substr(0, width) == "mul";
+}
+
+/// Whether a body node is a product this expansion can write as a zero instead of computing.
+///
+/// The type has to be one whose tangent space states its zero as a **constant**: such a zero is
+/// one value this graph can write down while it is built, and which types those are is the
+/// registry's answer (`zeroTangentConstantOf`, `camel/core/derivative.h` -- every float width it
+/// knows), not a list of widths here. A type whose zero is an operator -- an array's
+/// `:tangent/zeros_arr`, which needs the value whose shape it reads -- is left alone: the product
+/// is computed and multiplied by a structural zero, the old behaviour, which is wrong only where
+/// the coefficient has no real value at all (the scalar `log(x)` at a negative `x`, and its
+/// elementwise form on an array, which this expansion cannot collapse for the same reason: the
+/// zero it would have to write is the shape of a value).
+bool isCollapsibleProduct(const rt::GCGraph &body, gc_node_ref_t ref) {
+    const rt::GCNode *node = body.node(ref);
+    if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
+        return false;
+    }
+    if (node->dataType() == nullptr) {
+        return false;
+    }
+    if (!camel::core::zeroTangentConstantOf(node->dataType()).has_value()) {
+        return false;
+    }
+    const auto *oper = body.nodeBodyAs<rt::GCOperBody>(ref);
+    return oper != nullptr && isProductUri(oper->uri());
+}
+
+/// The zero of a type, written into this graph: what a collapsed product answers with. The value
+/// and the width are the tangent space's (`zeroTangentConstantOf`); a type it holds no constant
+/// for is not a type `isCollapsibleProduct` accepts.
+gc_node_ref_t staticZeroOf(camel::runtime::GraphDraft &draft, camel::core::type::Type *type) {
+    const std::optional<slot_t> zero = camel::core::zeroTangentConstantOf(type);
+    if (!zero.has_value()) {
+        return rt::kInvalidNodeRef;
+    }
+    return draft.materializeStaticValue(*zero, type, rt::kGCNodeFlagConstant);
 }
 
 } // namespace
@@ -437,8 +535,8 @@ ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
     }
     for (const gc_node_ref_t port : side.body->normPorts()) {
         const rt::GCNode *node = side.body->node(port);
-        ports.push_back(node != nullptr ? const_cast<camel::core::type::Type *>(node->dataType())
-                                        : nullptr);
+        ports.push_back(
+            node != nullptr ? const_cast<camel::core::type::Type *>(node->dataType()) : nullptr);
     }
     return ports;
 }
@@ -454,8 +552,9 @@ ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance) {
 gc_node_ref_t expandRuleRightSide(
     camel::runtime::GraphDraftGroup &group, camel::runtime::GraphTransaction &transaction,
     const camel::compile::gir::GenericRuleInstance &instance,
-    const std::function<gc_node_ref_t(size_t)> &valueOf,
-    const std::vector<gc_node_ref_t> &tangents, std::string &why, size_t position) {
+    const std::function<gc_node_ref_t(size_t)> &valueOf, const std::vector<gc_node_ref_t> &tangents,
+    std::string &why, size_t position, const std::unordered_set<gc_node_ref_t> *structurallyZero,
+    std::vector<std::string> *omitted, size_t *unboundOperand) {
     RuleRightSide right;
     if (!findRuleRightSide(instance, right, why)) {
         return rt::kInvalidNodeRef;
@@ -464,12 +563,13 @@ gc_node_ref_t expandRuleRightSide(
     // callee through this program's table: the graphs the rule was instantiated into belong to the
     // program this lift builds on, the way a callee the lifted function calls does.
     group.adopt(*instance.program);
-    const rt::GCGraph *body      = right.body;
-    // Which node of the body is *this* answer. A rule's left side names N values, and its right side
-    // answers N cotangents: a tuple, in the order the left side writes them. Position `i` is that
-    // tuple's i-th component, and only the nodes that component needs are copied -- so a position
-    // never asks for a value its own answer does not read (a loop body's own state, for one, which
-    // has no forward value at all). A right side that answers one value answers position 0 only.
+    const rt::GCGraph *body = right.body;
+    // Which node of the body is *this* answer. A rule's left side names N values, and its right
+    // side answers N cotangents: a tuple, in the order the left side writes them. Position `i` is
+    // that tuple's i-th component, and only the nodes that component needs are copied -- so a
+    // position never asks for a value its own answer does not read (a loop body's own state, for
+    // one, which has no forward value at all). A right side that answers one value answers position
+    // 0 only.
     std::vector<bool> keep;
     gc_node_ref_t answerRef = body->exitNodeRef();
     if (position != kWholeAnswer) {
@@ -480,7 +580,7 @@ gc_node_ref_t expandRuleRightSide(
                 break;
             }
             const auto carried = body->normInputsOf(answerRef);
-            answerRef = carried.empty() ? rt::kInvalidNodeRef : carried.front();
+            answerRef          = carried.empty() ? rt::kInvalidNodeRef : carried.front();
         }
         const rt::GCNode *exit = answerRef == rt::kInvalidNodeRef ? nullptr : body->node(answerRef);
         if (exit == nullptr) {
@@ -519,25 +619,139 @@ gc_node_ref_t expandRuleRightSide(
             for (gc_node_ref_t input : body->normInputsOf(ref)) {
                 work.push_back(input);
             }
-            // An angle argument the answer names is part of what the answer is made of: it is copied
-            // with the nodes that read it, not left behind for the copy to trip over.
+            // An angle argument the answer names is part of what the answer is made of: it is
+            // copied with the nodes that read it, not left behind for the copy to trip over.
             for (gc_node_ref_t input : body->withInputsOf(ref)) {
                 work.push_back(input);
             }
         }
     }
-    const auto capturePorts     = body->closureNodes();
-    const auto parameterPorts   = body->normPorts();
+    const auto capturePorts   = body->closureNodes();
+    const auto parameterPorts = body->normPorts();
     if (capturePorts.size() != right.captures.size() || parameterPorts.size() != tangents.size()) {
         why = "the rule's right side does not take the values and tangents the rule binds";
         return rt::kInvalidNodeRef;
+    }
+    // ---- the term a structurally-zero tangent multiplies ----
+    //
+    // A right side hands the tangent of each operand to a product with the law's own coefficient,
+    // and when the caller's tangent is **structurally** zero -- the zero a lift wrote for a value
+    // that cannot move, or a constant zero a law's own body wrote -- that product is nothing. It is
+    // nothing *before* the coefficient is evaluated, which is the whole point: `x^w * log(x) * dw`
+    // with a structural zero `dw` is arithmetically zero only when `log(x)` has a value, and at
+    // `x < 0` it is `NaN * 0` = `NaN`, so an ordinary `(-3.0) ^ 2.0` would answer `NaN` for a term
+    // that is nothing. So the product is written as the zero of its own type and the nodes nothing
+    // else reads -- the coefficient, and the calls it is made of -- are not copied at all.
+    //
+    // This is the author's ruling of 2026-11-04: the zero of a tangent is a structural fact (a
+    // constant has no tangent), not a value a law computes and branches on. Deciding it here, on
+    // the graph, is what lets `pow_tangent`'s rule carry no `if dw == T(0)` and still answer -6.0.
+    std::vector<bool> collapsed;
+    bool anyCollapsed = false;
+    if (structurallyZero != nullptr && !structurallyZero->empty()) {
+        // A body node whose value is structurally zero: the tangent ports the caller handed a
+        // structural zero for, and every product one of them is an input of.
+        std::vector<bool> zeroValue(body->nodeCount(), false);
+        for (size_t i = 0; i < parameterPorts.size(); ++i) {
+            if (structurallyZero->count(tangents[i]) != 0) {
+                zeroValue[parameterPorts[i]] = true;
+            }
+        }
+        collapsed.assign(body->nodeCount(), false);
+        // The body is a straight line, so one pass in node order would do; the fixed point is what
+        // makes the answer independent of that, and it costs one more pass over a short body.
+        bool grew = true;
+        while (grew) {
+            grew = false;
+            for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+                if (collapsed[ref] || !isCollapsibleProduct(*body, ref)) {
+                    continue;
+                }
+                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                    if (input < zeroValue.size() && zeroValue[input]) {
+                        collapsed[ref] = true;
+                        zeroValue[ref] = true;
+                        anyCollapsed   = true;
+                        grew           = true;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+    if (anyCollapsed) {
+        // What the answer is made of once the collapsed products stop being computations: the walk
+        // that picks a position's nodes, done again with the collapsed nodes as leaves. Their
+        // inputs are then not kept, which is what drops the coefficient and its calls.
+        keep.assign(body->nodeCount(), false);
+        std::vector<gc_node_ref_t> work{answerRef};
+        while (!work.empty()) {
+            const gc_node_ref_t ref = work.back();
+            work.pop_back();
+            if (ref >= keep.size() || keep[ref]) {
+                continue;
+            }
+            keep[ref] = true;
+            if (collapsed[ref]) {
+                continue;
+            }
+            for (gc_node_ref_t input : body->normInputsOf(ref)) {
+                work.push_back(input);
+            }
+            for (gc_node_ref_t input : body->withInputsOf(ref)) {
+                work.push_back(input);
+            }
+        }
+        if (omitted != nullptr) {
+            // The reading: the places that fed only a collapsed product. Reported by uri, in body
+            // order, deduplicated, so a case can print "these are not in the graph" and be counted.
+            std::vector<gc_node_ref_t> work2;
+            for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
+                if (!collapsed[ref]) {
+                    continue;
+                }
+                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+                for (const gc_node_ref_t input : body->withInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+            }
+            std::vector<bool> seen(body->nodeCount(), false);
+            while (!work2.empty()) {
+                const gc_node_ref_t ref = work2.back();
+                work2.pop_back();
+                if (ref >= seen.size() || seen[ref] || (ref < keep.size() && keep[ref])) {
+                    continue;
+                }
+                seen[ref]              = true;
+                const rt::GCNode *node = body->node(ref);
+                if (node != nullptr && node->kind != rt::GCNodeKind::Port &&
+                    node->kind != rt::GCNodeKind::Data) {
+                    std::string uri;
+                    if (const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref)) {
+                        uri = oper->uri();
+                    }
+                    if (!uri.empty() &&
+                        std::find(omitted->begin(), omitted->end(), uri) == omitted->end()) {
+                        omitted->push_back(std::move(uri));
+                    }
+                }
+                for (const gc_node_ref_t input : body->normInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+                for (const gc_node_ref_t input : body->withInputsOf(ref)) {
+                    work2.push_back(input);
+                }
+            }
+        }
     }
     // A capture is a port of the right side's graph, which is one of the arguments the rule is
     // called with: the operands, in the order the left side writes them. Only the captures the body
     // actually reads are bound: a right side that names one operand asks for that one only, and the
     // caller may have no value for the other (a transposed loop body's own state).
-    const auto read            = portsReadByBody(*body, keep);
-    const auto rhsPorts        = instance.rhs->normPorts();
+    const auto read     = portsReadByBody(*body, keep);
+    const auto rhsPorts = instance.rhs->normPorts();
     // The law's own ports, in the order its left side writes them: the operand types the instance
     // was made at, which is where a stated shape lives (`statedShapeOf`).
     const std::vector<camel::core::type::Type *> ports = rulePortsOf(instance);
@@ -547,8 +761,8 @@ gc_node_ref_t expandRuleRightSide(
     std::unordered_map<gc_node_ref_t, bool> answeredAsShape;
     // Whether the answer can have `capture`'s **shape** where it cannot have its value.
     //
-    // The question is the author's 2026-11-03 17:35/17:55 ruling -- a shape reaches a transpose as a
-    // known operand, never read off an operand's value -- and the answer is yes exactly when two
+    // The question is the author's 2026-11-03 17:35/17:55 ruling -- a shape reaches a transpose as
+    // a known operand, never read off an operand's value -- and the answer is yes exactly when two
     // facts hold:
     //
     //   * the law's port for that capture states its extents (`float[2, 3]` does, `float[..]` and a
@@ -588,7 +802,7 @@ gc_node_ref_t expandRuleRightSide(
             if (node == nullptr || node->kind != rt::GCNodeKind::Oper) {
                 return false;
             }
-            const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref);
+            const auto *oper  = body->nodeBodyAs<rt::GCOperBody>(ref);
             const auto inputs = body->normInputsOf(ref);
             if (oper == nullptr || oper->uri() != kShapeUri || inputs.size() != 1 ||
                 inputs.front() != capture) {
@@ -621,17 +835,28 @@ gc_node_ref_t expandRuleRightSide(
             continue;
         }
         const size_t argument = static_cast<size_t>(at - rhsPorts.begin());
-        // Asked before the value, not after it: a caller that has no value for this operand may still
-        // have a *shape* for it, and a caller that has a value may be holding a stand-in for it
-        // (`transpose.cpp#shapeCarrierOf`, a zero array built to be read for its shape). Answering
-        // the shape from the type is the same answer in both cases, and it is the one the author
-        // asked for: the extents the port states, written into the graph where the call stood.
+        // Asked before the value, not after it: a caller that has no value for this operand may
+        // still have a *shape* for it, and that shape is answerable from the port's type whatever
+        // the caller holds. Answering the shape from the type is the same answer in either case,
+        // and it is the one the author asked for: the extents the port states, written into the
+        // graph where the call stood. A caller with no value *and* no stated shape gets no answer
+        // here; the law then asks for the value, and a law whose forward half writes the extents as
+        // operands of the node
+        // (`stdlib/rulesets/jvp.cml#jvp_linear`, `#jvp_erf`) never asks at all.
         if (answerTheShapeOf(capturePorts[i], argument)) {
             continue;
         }
         const gc_node_ref_t value = valueOf == nullptr ? rt::kInvalidNodeRef : valueOf(argument);
         if (value == rt::kInvalidNodeRef) {
             why = "the rule's right side reads a value the caller does not carry";
+            // Which operand it was, because the two answers are told apart by it and by nothing
+            // else: an operand whose declaration states no extents is a shape to write down (the
+            // caller names that cause and its repair), and one whose type is complete is a value to
+            // carry some other way. `why` above is the same sentence for both, so a caller reading
+            // it back would have to parse the law to learn what this one slot says.
+            if (unboundOperand != nullptr) {
+                *unboundOperand = argument;
+            }
             return rt::kInvalidNodeRef;
         }
         bound[capturePorts[i]] = value;
@@ -640,229 +865,256 @@ gc_node_ref_t expandRuleRightSide(
         bound[parameterPorts[i]] = tangents[i];
     }
 
-    auto &draft                                = transaction.edit();
+    auto &draft = transaction.edit();
     std::unordered_map<gc_node_ref_t, gc_node_ref_t> copied;
     const std::span<const slot_t> staticSlots = body->staticSlots();
     // A rule's right side is copied in one pass because a node's inputs are written before it, and
-    // that order is what makes the right side a straight line. An instance built at types the law was
-    // written for is usually in that order; one built at other types is not always -- a reduction
-    // whose answer type follows the *other* operand can end up written before the value it reduces,
-    // while the graph is still a straight line. So the pass repeats while it makes progress, and the
-    // complaint about order is kept for the pass that copies nothing.
-    bool blocked = false;
+    // that order is what makes the right side a straight line. An instance built at types the law
+    // was written for is usually in that order; one built at other types is not always -- a
+    // reduction whose answer type follows the *other* operand can end up written before the value
+    // it reduces, while the graph is still a straight line. So the pass repeats while it makes
+    // progress, and the complaint about order is kept for the pass that copies nothing.
+    bool blocked  = false;
     bool progress = true;
     while (progress) {
         const size_t before = copied.size();
-        blocked = false;
+        blocked             = false;
         for (gc_node_ref_t ref = 0; ref < body->nodeCount(); ++ref) {
-        if (copied.count(ref) != 0) {
-            continue;
-        }
-        const rt::GCNode *node = body->node(ref);
-        if (node == nullptr) {
-            continue;
-        }
-        if (!keep.empty() && !keep[ref]) {
-            continue;
-        }
-        if (const auto stated = statedShapes.find(ref); stated != statedShapes.end()) {
-            // The shape the caller could not carry, written down where the call stood: a constant of
-            // this graph, built from the extents the law's own port states. Everything the answer
-            // does with it is a shape (the call the law wrote is `tensor:shape`), and nothing reads
-            // it as an operand's value.
-            copied[ref] = statedExtentsValue(draft, node->dataType(), stated->second);
-            if (copied[ref] == rt::kInvalidNodeRef) {
-                why = "the rule's right side asks for a shape this graph cannot write down";
-                return rt::kInvalidNodeRef;
+            if (copied.count(ref) != 0) {
+                continue;
             }
-            continue;
-        }
-        if (answeredAsShape.count(ref) != 0) {
-            // A capture answered as a shape: it was removed from `keep` where the position was
-            // picked, and a whole-answer expansion reaches it without that pass.
-            continue;
-        }
-        if (node->kind == rt::GCNodeKind::Port) {
-            // A port of the body is a value the call passes: bound, never copied, so the copy has
-            // no parameters of its own. A port nothing reads is neither bound nor copied.
-            const auto at = bound.find(ref);
-            if (at == bound.end()) {
-                if (!read[ref]) {
-                    continue;
+            const rt::GCNode *node = body->node(ref);
+            if (node == nullptr) {
+                continue;
+            }
+            if (!keep.empty() && !keep[ref]) {
+                continue;
+            }
+            if (ref < collapsed.size() && collapsed[ref]) {
+                // A product of a structurally-zero tangent: nothing, written down. Its inputs are
+                // not asked for, and the nodes that fed only it were dropped from `keep` above.
+                copied[ref] = staticZeroOf(draft, node->dataType());
+                if (copied[ref] == rt::kInvalidNodeRef) {
+                    why = "the rule's right side multiplies a structurally-zero tangent and the "
+                          "zero of "
+                          "the product's type cannot be written";
+                    return rt::kInvalidNodeRef;
                 }
-                why = "the rule's right side reads a value that is neither a capture nor a tangent";
-                return rt::kInvalidNodeRef;
+                continue;
             }
-            copied[ref] = at->second;
-            continue;
-        }
-        if (body->nodeRegion(ref) != 0) {
-            why = "the rule's right side is not a straight line: it has a region";
-            return rt::kInvalidNodeRef;
-        }
-        std::vector<gc_node_ref_t> inputs;
-        bool missing = false;
-        for (gc_node_ref_t input : body->normInputsOf(ref)) {
-            const auto at = copied.find(input);
-            if (at == copied.end()) {
-                why   = "the rule's right side uses a node written after it";
-                missing = true;
-                break;
+            if (const auto stated = statedShapes.find(ref); stated != statedShapes.end()) {
+                // The shape the caller could not carry, written down where the call stood: a
+                // constant of this graph, built from the extents the law's own port states.
+                // Everything the answer does with it is a shape (the call the law wrote is
+                // `tensor:shape`), and nothing reads it as an operand's value.
+                copied[ref] = statedExtentsValue(draft, node->dataType(), stated->second);
+                if (copied[ref] == rt::kInvalidNodeRef) {
+                    why = "the rule's right side asks for a shape this graph cannot write down";
+                    return rt::kInvalidNodeRef;
+                }
+                continue;
             }
-            inputs.push_back(at->second);
-        }
-        if (missing) {
-            blocked = true;
-            continue;
-        }
-        // What the rule's right side passes in angle brackets: `reshape<shape>(dx)` states, on the
-        // right, the same shape the left side was written with, so the value is a constant of the
-        // rule's own graph -- a `with` input like any other, copied the way an operand is. A with
-        // input that is not a constant of the body would have to be the matched node's own context
-        // argument, and the expansion carries the rule's values, not the node's: that one is still
-        // refused by name, below.
-        std::vector<gc_node_ref_t> withs;
-        bool withMissing = false;
-        for (gc_node_ref_t input : body->withInputsOf(ref)) {
-            const auto at = copied.find(input);
-            if (at == copied.end()) {
-                why         = "the rule's right side passes a context argument it does not carry";
-                withMissing = true;
-                break;
+            if (answeredAsShape.count(ref) != 0) {
+                // A capture answered as a shape: it was removed from `keep` where the position was
+                // picked, and a whole-answer expansion reaches it without that pass.
+                continue;
             }
-            withs.push_back(at->second);
-        }
-        if (withMissing) {
-            blocked = true;
-            continue;
-        }
-        const bool isFunctionValue =
-            node->dataType() != nullptr &&
-            node->dataType()->code() == camel::core::type::TypeCode::Function;
-        switch (node->kind) {
-        case rt::GCNodeKind::Data: {
-            // A constant of the body: the same value, in this graph. A function value is not a
-            // constant to copy -- it is the closure this expansion exists to avoid.
-            if (isFunctionValue) {
-                why = "the rule's right side answers with a function value";
-                return rt::kInvalidNodeRef;
-            }
-            const std::ptrdiff_t index = -static_cast<std::ptrdiff_t>(node->dataIndex);
-            if (node->dataIndex >= 0 || index < 0 ||
-                static_cast<size_t>(index) >= staticSlots.size()) {
-                why = "the rule's right side reads a value that is not a constant of its graph";
-                return rt::kInvalidNodeRef;
-            }
-            copied[ref] = draft.materializeStaticValue(
-                staticSlots[static_cast<size_t>(index)], node->dataType(),
-                rt::kGCNodeFlagConstant);
-            break;
-        }
-        case rt::GCNodeKind::Oper: {
-            const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref);
-            if (oper == nullptr) {
-                why = "the rule's right side has an operator node with no operator";
-                return rt::kInvalidNodeRef;
-            }
-            const gc_node_ref_t made = draft.addOperNode(node->dataType(), nullptr, oper->uri());
-            if (!inputs.empty()) {
-                draft.setNormInputs(made, inputs);
-            }
-            if (!withs.empty()) {
-                draft.setWithInputs(made, withs);
-            }
-            copied[ref] = made;
-            break;
-        }
-        case rt::GCNodeKind::Cast:
-        case rt::GCNodeKind::Copy: {
-            // A cast is how the builder states a value of the same meaning in another written type --
-            // the mixed-type instance of a law uses one exactly where 5.4 says a rank-zero array is the
-            // element (`float[..]` reduced to `float`). The rule's right side is a straight line, so a
-            // cast is one input and one node: copy it with the type the body gave it.
-            if (inputs.size() != 1) {
-                why = "a cast on the rule's right side does not take one value";
-                return rt::kInvalidNodeRef;
-            }
-            const gc_node_ref_t made = node->kind == rt::GCNodeKind::Cast
-                                           ? draft.addCastNode(node->dataType())
-                                           : draft.addCopyNode(node->dataType());
-            draft.setNormInputs(made, inputs);
-            copied[ref] = made;
-            break;
-        }
-        case rt::GCNodeKind::Func: {
-            // A call to a named function: what the rule's right side is for, and what stays a call.
-            if (isFunctionValue) {
-                why = "the rule's right side answers with a function value";
-                return rt::kInvalidNodeRef;
-            }
-            const GraphId callee = body->calleeIdOf(ref);
-            if (!rt::isValid(callee)) {
-                why = "the rule's right side calls a function it does not name";
-                return rt::kInvalidNodeRef;
-            }
-            // Which of the call's arguments are tangents -- the rule's own split, recorded on the call
-            // the rule produced as one bit per argument position. The right side binds the values as
-            // its captures and takes the tangents as its own parameters
-            // (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an argument that is one of this
-            // expansion's tangent ports is a tangent wherever the right side writes it: `mul_tangent`
-            // ends with its two, `index_into(dxs, i)` begins with one and puts a value last. The record
-            // is therefore the set of positions, not a run of trailing ones. This is the one place the
-            // fact exists in the tree: `transpose` reads the node rather than re-deriving the split
-            // from a name, and there is no second table to keep in step when a rule is added.
-            //
-            // The record is `GCNode::tangentArgs`, one bit per position. A tangent past its last bit
-            // cannot be written, and a call recorded as one of values only is a wrong split rather
-            // than a missing one, so such a right side is refused by name instead.
-            uint16_t tangentMask = 0;
-            if (!inputs.empty() && !tangents.empty()) {
-                for (size_t i = 0; i < inputs.size(); ++i) {
-                    if (std::find(tangents.begin(), tangents.end(), inputs[i]) == tangents.end()) {
+            if (node->kind == rt::GCNodeKind::Port) {
+                // A port of the body is a value the call passes: bound, never copied, so the copy
+                // has no parameters of its own. A port nothing reads is neither bound nor copied.
+                const auto at = bound.find(ref);
+                if (at == bound.end()) {
+                    if (!read[ref]) {
                         continue;
                     }
-                    if (i >= rt::kTangentArgumentBits) {
-                        why = "the rule's right side passes a tangent as argument " +
-                              std::to_string(i + 1) + " of a call, and a call's tangent positions are "
-                              "recorded for its first " +
-                              std::to_string(rt::kTangentArgumentBits) + " arguments";
-                        return rt::kInvalidNodeRef;
-                    }
-                    tangentMask |= static_cast<uint16_t>(uint16_t{1} << i);
+                    why = "the rule's right side reads a value that is neither a capture nor a "
+                          "tangent";
+                    return rt::kInvalidNodeRef;
                 }
+                copied[ref] = at->second;
+                continue;
             }
-            const gc_node_ref_t made = draft.addFuncNode(
-                callee, node->dataType(), 0, draft.allocateRuntimeSlot(node->dataType()), 0,
-                tangentMask);
-            if (!inputs.empty()) {
+            if (body->nodeRegion(ref) != 0) {
+                why = "the rule's right side is not a straight line: it has a region";
+                return rt::kInvalidNodeRef;
+            }
+            std::vector<gc_node_ref_t> inputs;
+            bool missing = false;
+            for (gc_node_ref_t input : body->normInputsOf(ref)) {
+                const auto at = copied.find(input);
+                if (at == copied.end()) {
+                    why     = "the rule's right side uses a node written after it";
+                    missing = true;
+                    break;
+                }
+                inputs.push_back(at->second);
+            }
+            if (missing) {
+                blocked = true;
+                continue;
+            }
+            // What the rule's right side passes in angle brackets: `reshape<shape>(dx)` states, on
+            // the right, the same shape the left side was written with, so the value is a constant
+            // of the rule's own graph -- a `with` input like any other, copied the way an operand
+            // is. A with input that is not a constant of the body would have to be the matched
+            // node's own context argument, and the expansion carries the rule's values, not the
+            // node's: that one is still refused by name, below.
+            std::vector<gc_node_ref_t> withs;
+            bool withMissing = false;
+            for (gc_node_ref_t input : body->withInputsOf(ref)) {
+                const auto at = copied.find(input);
+                if (at == copied.end()) {
+                    why = "the rule's right side passes a context argument it does not carry";
+                    withMissing = true;
+                    break;
+                }
+                withs.push_back(at->second);
+            }
+            if (withMissing) {
+                blocked = true;
+                continue;
+            }
+            const bool isFunctionValue =
+                node->dataType() != nullptr &&
+                node->dataType()->code() == camel::core::type::TypeCode::Function;
+            switch (node->kind) {
+            case rt::GCNodeKind::Data: {
+                // A constant of the body: the same value, in this graph. A function value is not a
+                // constant to copy -- it is the closure this expansion exists to avoid.
+                if (isFunctionValue) {
+                    why = "the rule's right side answers with a function value";
+                    return rt::kInvalidNodeRef;
+                }
+                const std::ptrdiff_t index = -static_cast<std::ptrdiff_t>(node->dataIndex);
+                if (node->dataIndex >= 0 || index < 0 ||
+                    static_cast<size_t>(index) >= staticSlots.size()) {
+                    why = "the rule's right side reads a value that is not a constant of its graph";
+                    return rt::kInvalidNodeRef;
+                }
+                copied[ref] = draft.materializeStaticValue(
+                    staticSlots[static_cast<size_t>(index)],
+                    node->dataType(),
+                    rt::kGCNodeFlagConstant);
+                break;
+            }
+            case rt::GCNodeKind::Oper: {
+                const auto *oper = body->nodeBodyAs<rt::GCOperBody>(ref);
+                if (oper == nullptr) {
+                    why = "the rule's right side has an operator node with no operator";
+                    return rt::kInvalidNodeRef;
+                }
+                const gc_node_ref_t made =
+                    draft.addOperNode(node->dataType(), nullptr, oper->uri());
+                if (!inputs.empty()) {
+                    draft.setNormInputs(made, inputs);
+                }
+                if (!withs.empty()) {
+                    draft.setWithInputs(made, withs);
+                }
+                copied[ref] = made;
+                break;
+            }
+            case rt::GCNodeKind::Cast:
+            case rt::GCNodeKind::Copy: {
+                // A cast is how the builder states a value of the same meaning in another written
+                // type -- the mixed-type instance of a law uses one exactly where 5.4 says a
+                // rank-zero array is the element (`float[..]` reduced to `float`). The rule's right
+                // side is a straight line, so a cast is one input and one node: copy it with the
+                // type the body gave it.
+                if (inputs.size() != 1) {
+                    why = "a cast on the rule's right side does not take one value";
+                    return rt::kInvalidNodeRef;
+                }
+                const gc_node_ref_t made = node->kind == rt::GCNodeKind::Cast
+                                               ? draft.addCastNode(node->dataType())
+                                               : draft.addCopyNode(node->dataType());
                 draft.setNormInputs(made, inputs);
+                copied[ref] = made;
+                break;
             }
-            if (!withs.empty()) {
-                draft.setWithInputs(made, withs);
+            case rt::GCNodeKind::Func: {
+                // A call to a named function: what the rule's right side is for, and what stays a
+                // call.
+                if (isFunctionValue) {
+                    why = "the rule's right side answers with a function value";
+                    return rt::kInvalidNodeRef;
+                }
+                const GraphId callee = body->calleeIdOf(ref);
+                if (!rt::isValid(callee)) {
+                    why = "the rule's right side calls a function it does not name";
+                    return rt::kInvalidNodeRef;
+                }
+                // Which of the call's arguments are tangents -- the rule's own split, recorded on
+                // the call the rule produced as one bit per argument position. The right side binds
+                // the values as its captures and takes the tangents as its own parameters
+                // (`x * w => (dx, dw) => mul_tangent(x, w, dx, dw)`), so an argument that is one of
+                // this expansion's tangent ports is a tangent wherever the right side writes it:
+                // `mul_tangent` ends with its two, `index_into(dxs, i)` begins with one and puts a
+                // value last. The record is therefore the set of positions, not a run of trailing
+                // ones. This is the one place the fact exists in the tree: `transpose` reads the
+                // node rather than re-deriving the split from a name, and there is no second table
+                // to keep in step when a rule is added.
+                //
+                // The record is `GCNode::tangentArgs`, one bit per position. A tangent past its
+                // last bit cannot be written, and a call recorded as one of values only is a wrong
+                // split rather than a missing one, so such a right side is refused by name instead.
+                uint16_t tangentMask = 0;
+                if (!inputs.empty() && !tangents.empty()) {
+                    for (size_t i = 0; i < inputs.size(); ++i) {
+                        if (std::find(tangents.begin(), tangents.end(), inputs[i]) ==
+                            tangents.end()) {
+                            continue;
+                        }
+                        if (i >= rt::kTangentArgumentBits) {
+                            why = "the rule's right side passes a tangent as argument " +
+                                  std::to_string(i + 1) +
+                                  " of a call, and a call's tangent positions are "
+                                  "recorded for its first " +
+                                  std::to_string(rt::kTangentArgumentBits) + " arguments";
+                            return rt::kInvalidNodeRef;
+                        }
+                        tangentMask |= static_cast<uint16_t>(uint16_t{1} << i);
+                    }
+                }
+                const gc_node_ref_t made = draft.addFuncNode(
+                    callee,
+                    node->dataType(),
+                    0,
+                    draft.allocateRuntimeSlot(node->dataType()),
+                    0,
+                    tangentMask);
+                if (!inputs.empty()) {
+                    draft.setNormInputs(made, inputs);
+                }
+                if (!withs.empty()) {
+                    draft.setWithInputs(made, withs);
+                }
+                // The call reaches its callee through this node, so that graph is a dependency of
+                // this one by the reference table's own rule (a FUNC node names its callee).
+                draft.addDependency(callee);
+                copied[ref] = made;
+                break;
             }
-            // The call reaches its callee through this node, so that graph is a dependency of this
-            // one by the reference table's own rule (a FUNC node names its callee).
-            draft.addDependency(callee);
-            copied[ref] = made;
-            break;
-        }
-        case rt::GCNodeKind::Gate: {
-            const gc_node_ref_t made =
-                draft.addGateNode(node->dataType(), draft.allocateRuntimeSlot(node->dataType()));
-            if (!inputs.empty()) {
-                draft.setNormInputs(made, inputs);
+            case rt::GCNodeKind::Gate: {
+                const gc_node_ref_t made = draft.addGateNode(
+                    node->dataType(),
+                    draft.allocateRuntimeSlot(node->dataType()));
+                if (!inputs.empty()) {
+                    draft.setNormInputs(made, inputs);
+                }
+                copied[ref] = made;
+                break;
             }
-            copied[ref] = made;
-            break;
-        }
-        default:
-            why = std::string("the rule's right side is not a straight line of computations: node ") +
-                  std::to_string(ref) + " kind " + std::to_string(static_cast<int>(node->kind)) +
-                  " of " + std::to_string(body->nodeCount()) + ", answer ref " +
-                  std::to_string(answerRef);
-            return rt::kInvalidNodeRef;
-        }
-        }  // the pass over the body's nodes
+            default:
+                why = std::string(
+                          "the rule's right side is not a straight line of computations: node ") +
+                      std::to_string(ref) + " kind " +
+                      std::to_string(static_cast<int>(node->kind)) + " of " +
+                      std::to_string(body->nodeCount()) + ", answer ref " +
+                      std::to_string(answerRef);
+                return rt::kInvalidNodeRef;
+            }
+        } // the pass over the body's nodes
         progress = copied.size() > before;
         if (!progress && blocked) {
             // A whole pass copied nothing and something was waiting for a node it never got: the
@@ -896,39 +1148,39 @@ gc_node_ref_t expandRuleRightSide(
 gc_node_ref_t expandRuleByName(
     camel::core::context::Context &context, camel::runtime::GraphDraftGroup &group,
     camel::runtime::GraphTransaction &transaction, std::string_view ruleName,
-    const std::function<gc_node_ref_t(size_t)> &valueOf,
-    const std::vector<gc_node_ref_t> &tangents, size_t position,
-    const std::vector<camel::core::type::Type *> &operandTypes, std::string &why,
-    bool *noInstanceAtOperands) {
+    const std::function<gc_node_ref_t(size_t)> &valueOf, const std::vector<gc_node_ref_t> &tangents,
+    size_t position, const std::vector<camel::core::type::Type *> &operandTypes, std::string &why,
+    bool *noInstanceAtOperands, size_t *unboundOperand) {
     using camel::core::type::Type;
     if (noInstanceAtOperands != nullptr) {
         *noInstanceAtOperands = false;
     }
-    // What the rule is instantiated at, and why it is the operands' own types: a law that covers two
-    // shapes of one operator -- `tensor:multiply` on two arrays, and on an array and a number --
-    // names its parameters' types (`mul_tensor_t::<X, W>`), so the instance has to be built at the
-    // types the operator really has. Instantiating at a single `float` made every `T[..]` read
+    // What the rule is instantiated at, and why it is the operands' own types: a law that covers
+    // two shapes of one operator -- `tensor:multiply` on two arrays, and on an array and a number
+    // -- names its parameters' types (`mul_tensor_t::<X, W>`), so the instance has to be built at
+    // the types the operator really has. Instantiating at a single `float` made every `T[..]` read
     // `float[..]`, which is one type for every port: the number's cotangent was a member the
     // signature called `float` and the value called an array.
     //
-    // A law whose type parameters are not one per operand (the scalar `mul_t` names `T` once for two
-    // operands) still instantiates at the single type it always did, so the fallback keeps every
-    // other law exactly where it was.
+    // A law whose type parameters are not one per operand (the scalar `mul_t` names `T` once for
+    // two operands) still instantiates at the single type it always did, so the fallback keeps
+    // every other law exactly where it was.
     std::vector<Type *> types;
     if (!operandTypes.empty()) {
         types = operandTypes;
     }
     const camel::compile::gir::GenericRuleInstance *instance =
-        types.empty() ? nullptr
-                      : camel::compile::gir::genericRuleInstanceByName(context, ruleName, types,
-                                                                       {}, why);
+        types.empty()
+            ? nullptr
+            : camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, why);
     if (instance == nullptr) {
         // What the mixed instantiation said, kept: a second attempt that overwrote it would report
         // the fallback's complaint instead of the reason the law could not be built at these types.
         std::string firstWhy = why;
-        types               = std::vector<Type *>{Type::Float64()};
-        instance = camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, why);
-        why      = firstWhy;
+        types                = std::vector<Type *>{Type::Float64()};
+        instance =
+            camel::compile::gir::genericRuleInstanceByName(context, ruleName, types, {}, why);
+        why = firstWhy;
     }
     if (instance == nullptr) {
         // The law was named and would not be built at these types -- the second of the four ways in
@@ -948,7 +1200,17 @@ gc_node_ref_t expandRuleByName(
     // knows which captures the answer reads -- after the position has picked one component -- and a
     // capture the answer does not read is never asked for, so no operand is invented for a slot the
     // answer does not use.
-    return expandRuleRightSide(group, transaction, *instance, valueOf, tangents, why, position);
+    return expandRuleRightSide(
+        group,
+        transaction,
+        *instance,
+        valueOf,
+        tangents,
+        why,
+        position,
+        nullptr,
+        nullptr,
+        unboundOperand);
 }
 
 } // namespace camel::transforms

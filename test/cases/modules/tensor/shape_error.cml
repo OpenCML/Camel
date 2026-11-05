@@ -5,7 +5,7 @@
 import { ones, sum } from tensor
 
 /// Parameters that state no extent hide the static shapes, so the conflict surfaces at runtime.
-func add(a: f32[..], b: f32[..]): f32[..] {
+func add(a: f32[...], b: f32[...]): f32[...] {
     return a + b
 }
 

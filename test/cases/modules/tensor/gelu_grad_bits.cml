@@ -30,7 +30,7 @@ import { next_key, seed, uniform } from random
 import { grad } from autodiff
 import { sha256 } from hash
 
-with <x: f32[..]>
+with <x: f32[...]>
 func loss(): float {
     return float(sum(gelu(x)))
 }

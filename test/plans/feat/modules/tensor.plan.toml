@@ -124,7 +124,7 @@ case = "../../../cases/modules/tensor/binary_aggregate_not_plain.cml"
 args = ["${case}", "std::fvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_output_contains = ["No candidate of 'to_bytes' applies to", "(t: T[..]) => Bytes — when is_plain::<T>()"]
+expect_output_contains = ["No candidate of 'to_bytes' applies to", "(t: T[...]) => Bytes — when is_plain::<T>()"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
@@ -182,6 +182,19 @@ assert(approx(Number(c[1]), 3, 1e-5) && approx(Number(c[2]), 2, 1e-5), `unexpect
 timeout_ms = 10000
 
 [[tests]]
+name = "sum_to_answers_a_leading_axis_reduction"
+desc = "Ruling 甲's answering half, which no refusal case can pin: `sum_to` reduces the **leading** axes of its operand to the extents its second argument states, and every axis the target states is kept as it states it. Three targets on two operands, and the answers separate the three reductions a broadcast's adjoint actually asks for -- `[2, 3]` to `[3]` removes one axis and answers three numbers, `[2, 3, 4]` to `[4]` removes two and answers four, each a sum of six elements, `[2, 3, 4]` to `[3, 4]` removes one of the three and answers each element as the sum of **two**. A reading that summed the trailing axis, kept the axis it removed, or summed the whole operand reddens a different line: the operand's total is 300 and no line here is 300. The four schedulers agree on all three."
+kind = "behavior"
+case = "../../../cases/modules/tensor/sum_to_answers_a_leading_axis_reduction.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "sum_to(m, [3]) = [5.0, 7.0, 9.0]\nsum_to(c, [4]) = [66.0, 72.0, 78.0, 84.0]\nsum_to(c, [3, 4]) = [[14.0, 16.0, 18.0, 20.0], [22.0, 24.0, 26.0, 28.0], [30.0, 32.0, 34.0, 36.0]]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
+
+[[tests]]
 name = "whole_reduction_element_type"
 desc = "The full-form `sum(t)`/`mean(t)` answer the operand's element type, exactly as the by-axis forms do (design principles 7.3): a function declaring `f32` and returning `sum(<f32 tensor>)` compiles (it was a `ReturnTypeMismatch` while the result was `float`), and the same holds at `f64`, `bf16` and `f16`. The bf16 and f16 readings then show the one rounding on the element type's own grid: the type's neighbour of 0.001 summed with 1.0 answers 1.0 for bf16 (spacing 2^-8) and 1.0009765625 for f16 (spacing 2^-10), while the same stored values through an f32 tensor answer the exact sum as f32 and through an f64 tensor the exact sum itself."
 kind = "behavior"
@@ -212,7 +225,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "mean_axis_elements"
-desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end: `mean_axis([1, 2, 4] as int[3], 0, false)` answers `2` (that is `int(7 / 3)`, the conversion `int(·)` already has -- the number a caller reads as a lost average is exactly what the normative form asks for), `shape` of it answers `[]`, `keepdims` answers `[2]`, and the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. The four schedulers agree on every line."
+desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end: `mean<0, false>([1, 2, 4] as int[3])` answers `2` (that is `int(7 / 3)`, the conversion `int(·)` already has -- the number a caller reads as a lost average is exactly what the normative form asks for), `shape` of it answers `[]`, `keepdims` answers `[2]`, and the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. The four schedulers agree on every line."
 kind = "behavior"
 case = "../../../cases/modules/tensor/mean_axis_elements.cml"
 args = ["${case}", "${backend}"]
@@ -817,7 +830,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "gelu_grad.f64"
-desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
+desc = "The gradient of `gelu` on an f64 array, element by element, pinned against the value it is the derivative of: the engine's tanh approximation (the forward is 0.8411919906082768 at x = 1, not the erf form's 0.8413447460685429), so the three numbers are that function's derivative, which a central difference at h = 1e-3 reproduces to 1.3e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type: the case then read [0.0, 1.5769529523e-314, 0.0] -- zero where the answer was zero, a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [-0.08296408384578255, 0.5, 1.0829640838457826]. The f32 gradient beside it is the arm that was right all along and must keep its numbers."
 kind = "behavior"
 case = "../../../cases/modules/tensor/gelu_grad_f64.cml"
 args = ["${case}"]
@@ -828,7 +841,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "erf_grad.f64"
-desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[..]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
+desc = "The gradient of `erf` on an f64 array, element by element: 2/sqrt(pi) * exp(-x^2), which a central difference of the printed forward at h = 1e-3 reproduces to 3.8e-7. Before this was fixed the operator wrote its answer at f32 behind an `f64[...]` type, so the case read [0.0, 5.098027537e-315, 0.0] -- zero where the answer was zero and a 1e-314-scale denormal where it was not, the reading moving with the input -- instead of [0.4151074974205947, 1.1283791670955126, 0.4151074974205947]. The f32 gradient beside it must keep its numbers."
 kind = "behavior"
 case = "../../../cases/modules/tensor/erf_grad_f64.cml"
 args = ["${case}"]
@@ -1120,7 +1133,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "generic_signature.element_type"
-desc = "The array spelling of a tensor signature's parameter is an explicit generic: `shape`, `numel`, `dim` and `to_bytes` take a `f32[3]`, a `f32[..]` and an `int[3]`, the argument's element type instantiates the type variable (`t[0]` is that type, so `firstElement` returns `f32` for the float array and `int` for the int array), and the rank is the argument's. The module `Tensor` spelling of the same names still stands, so what the tensor operators return is unchanged."
+desc = "The array spelling of a tensor signature's parameter is an explicit generic: `shape`, `numel`, `dim` and `to_bytes` take a `f32[3]`, a `f32[...]` and an `int[3]`, the argument's element type instantiates the type variable (`t[0]` is that type, so `firstElement` returns `f32` for the float array and `int` for the int array), and the rank is the argument's. The module `Tensor` spelling of the same names still stands, so what the tensor operators return is unchanged."
 kind = "behavior"
 case = "../../../cases/modules/tensor/generic_signature_element_type.cml"
 args = ["${case}", "${backend}"]
@@ -1142,14 +1155,14 @@ timeout_ms = 10000
 
 [[tests]]
 name = "generic_signature.text_elements"
-desc = "The signature states its element type: `func f::<T>(x: T[..]) when is_numeric::<T>()` applies exactly where `T` is a number, so an array of text fills no arm of `shape` and the refusal names the condition — `WhenConditionUnmet` lists the candidate with its `when`, instead of a kernel faulting later."
+desc = "The signature states its element type: `func f::<T>(x: T[...]) when is_numeric::<T>()` applies exactly where `T` is a number, so an array of text fills no arm of `shape` and the refusal names the condition — `WhenConditionUnmet` lists the candidate with its `when`, instead of a kernel faulting later."
 kind = "negative"
 case = "../../../cases/modules/tensor/generic_signature_text_elements.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionUnmet"
-expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[..]) => int[] — when is_numeric::<T>()"]
+expect_output_contains = ["No candidate of 'shape' applies to", "every candidate's 'when' condition is false", "(t: T[...]) => int[] — when is_numeric::<T>()"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 # The kernel-timing table is a pass parameter (`std::profile opstats=true`): a run that asks for

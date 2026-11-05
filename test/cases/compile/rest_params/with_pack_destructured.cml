@@ -1,4 +1,4 @@
-with <w: float, ..rest>
+with <w: float, ...rest>
 func combine(x: float): float {
     return x * w + rest.[0]
 }

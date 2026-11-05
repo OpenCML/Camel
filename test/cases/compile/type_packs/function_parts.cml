@@ -1,4 +1,4 @@
-/// `ParamsOf<F>` and `WithOf<F>` are the parameters of a function type as a type pack, and `..`
+/// `ParamsOf<F>` and `WithOf<F>` are the parameters of a function type as a type pack, and `...`
 /// writes them where a list of types is: the elements of a tuple. `ResultOf<F>` is its result.
 import { is_same, ParamsOf, WithOf, ResultOf } from types
 
@@ -7,9 +7,9 @@ type Weighted = <w: float, k: int> (a: int) => bool
 type Unary = (a: int) => string
 
 func main(): int sync {
-    println(is_same::<(..ParamsOf<Binary>), (int, string)>())
-    println(is_same::<(..WithOf<Weighted>), (float, int)>())
+    println(is_same::<(...ParamsOf<Binary>), (int, string)>())
+    println(is_same::<(...WithOf<Weighted>), (float, int)>())
     println(is_same::<ResultOf<Unary>, string>())
-    println(is_same::<(..ParamsOf<Weighted>), (int)>())
+    println(is_same::<(...ParamsOf<Weighted>), (int)>())
     return 0
 }

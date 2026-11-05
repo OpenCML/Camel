@@ -1251,14 +1251,26 @@ FunctionType *Builder::completeLambdaSignature(
                     expectedTotal,
                     effectiveWith + funcType->normTypesCount()));
         }
-    } else if (expectedTotal < effectiveWith + restHole->index) {
+    } else if (restHole->index >= withCount &&
+               expectedFunc->normTypesCount() < restHole->index - withCount) {
+        // An ordinary rest parameter stands for the expected type's ordinary members from its own
+        // position on, and for however many there are -- none included -- so the one thing the
+        // position owes it is to reach it. The position is counted among the expected type's
+        // ordinary members: the lambda's `with` parameters are numbered before them, and a `with`
+        // list the lambda writes is never longer or shorter than the position's (only a pack
+        // absorbs a difference, and a pack has its own comparison above), so counting them here as
+        // well would demand `with` members' worth of ordinary ones that nothing stands in for.
+        //
+        // A pack among the `with` parameters is not this comparison's subject: it sits at a `with`
+        // index, so the position it needs in front of it is a number of `with` members, which the
+        // comparison above already states, and the members past that point are what it stands for.
         report(
             *restHole,
             std::format(
                 "the expected type '{}' ends before the rest parameter, which stands for the "
                 "parameters from position {} on",
                 expectedFunc->toString(),
-                restHole->index + 1));
+                restHole->index - withCount + 1));
     }
     const auto typeAt = [&](size_t index) -> Type * {
         return index < withCount ? funcType->withTypeAt(index)
@@ -1333,6 +1345,23 @@ FunctionType *Builder::completeLambdaSignature(
                     factory.addNormArg(base + "_" + std::to_string(k - i), expanded, false);
                 }
                 continue;
+            }
+            // A hole is filled from a member the position has. A rest parameter, or a pack among
+            // the `with` parameters, is the one shape where the lambda's list may be longer than
+            // what the comparison above measures -- that comparison is about the hole the shape
+            // stands for -- so a parameter written after it asks here whether the position reaches
+            // it at all. Reading past the end instead would take whatever lies next in the type's
+            // storage.
+            const size_t memberAt = i < withCount ? i : i - withCount;
+            const size_t members  = i < withCount ? expectedWith : expectedFunc->normTypesCount();
+            if (memberAt >= members) {
+                report(
+                    param,
+                    std::format(
+                        "the expected type '{}' ends before the parameter at position {}, which "
+                        "the lambda writes",
+                        expectedFunc->toString(),
+                        i + 1));
             }
             Type *const wanted                     = i < withCount
                                                          ? expectedFunc->withTypeAt(i)
@@ -1505,7 +1534,6 @@ void Builder::buildFuncBody(
                         param.index >= writtenWith ? param.index - writtenWith : 0;
                     const auto normPorts     = graph->view().normPorts();
                     std::vector<Type *> parts;
-                    std::vector<size_t> slots;
                     std::vector<node_handle_t> members;
                     for (size_t norm = firstNorm; norm < funcType->normTypesCount(); ++norm) {
                         if (norm >= normPorts.size()) {
@@ -1513,20 +1541,22 @@ void Builder::buildFuncBody(
                         }
                         members.push_back(graph->view().ref(normPorts[norm]));
                         parts.push_back(funcType->normTypeAt(norm));
-                        slots.push_back(norm - firstNorm);
                     }
                     if (!members.empty()) {
-                        node_handle_t tuple = currGraph_->addFillNode(
-                            TupleType::create(parts),
-                            camel::runtime::makeFillPayload(
-                                camel::runtime::GCFillKind::Tuple, slots));
-                        // The members are With inputs, which is how a FILL that a rest argument can
-                        // spread carries them (expandRestArgument reads a tuple FILL's With inputs
-                        // as the arguments, builder_rest.cpp): a Norm tuple is a value, and a value
-                        // is not what `..xs` spreads.
-                        for (node_handle_t member : members) {
-                            linkNodes(LinkType::With, member, tuple);
-                        }
+                        // The tuple is built by `fillStaticValues` rather than here, because a FILL
+                        // reads the shape it fills through a `Norm` input and carries the members
+                        // as `With` inputs (`builder_static.cpp`). Linking the members alone made a
+                        // node with no ordinary input, and the scheduler refused it when the body
+                        // read the pack as a value -- `(..xs) => xs.[0]` at run time:
+                        //
+                        //     Camel Invariant Violation: !normInputs.empty()
+                        //     FILL node must have one source input.   (nodevm.cpp, NodeVMSchedPass)
+                        //
+                        // A tuple that is only ever spread (`(..xs) => forward(..xs)`) never
+                        // reached the scheduler, which is why the case written for spreading was
+                        // green while reading the same pack was not.
+                        node_handle_t tuple = fillStaticValues(
+                            TupleType::create(parts), members, gct, "gir.lambda.rest.tuple");
                         insertNode(restName, tuple);
                     }
                     break;
@@ -1545,21 +1575,17 @@ void Builder::buildFuncBody(
             if (graphNamesValue(gct->at(1), packName)) {
                 const auto withPorts = graph->view().withPorts();
                 std::vector<Type *> parts;
-                std::vector<size_t> slots;
                 std::vector<node_handle_t> members;
                 for (size_t w = packIndex; w < funcType->withTypesCount() && w < withPorts.size();
                      ++w) {
                     members.push_back(graph->view().ref(withPorts[w]));
                     parts.push_back(funcType->withTypeAt(w));
-                    slots.push_back(w - packIndex);
                 }
-                node_handle_t tuple = currGraph_->addFillNode(
-                    TupleType::create(parts),
-                    camel::runtime::makeFillPayload(
-                        camel::runtime::GCFillKind::Tuple, slots));
-                for (node_handle_t member : members) {
-                    linkNodes(LinkType::With, member, tuple);
-                }
+                // The same construction as the rest parameter above, and for the same reason: a
+                // FILL reads the shape it fills through a `Norm` input, so a set of members linked
+                // as `With` inputs alone is a node the scheduler refuses.
+                node_handle_t tuple =
+                    fillStaticValues(TupleType::create(parts), members, gct, "gir.lambda.with.pack");
                 insertNode(packName, tuple);
             }
         }

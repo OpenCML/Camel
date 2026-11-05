@@ -1,0 +1,49 @@
+// A parameter read **both whole and by member**: `f` hands `q` to `sum_of` (the whole value) and also
+// reads `q.0`; `h` does the same with a struct and a field name. Both answer now.
+//
+// This case was `split_whole_and_member_refused` and it pinned a **refusal**: the walk said the sum of
+// two aggregate cotangents had no arithmetic, because no tangent space registers an `addUri` for a
+// tuple or a struct -- the registry registers one for a float and for an array and for nothing else.
+// The author judged that refusal wrong on 2026-11-04: **an aggregate's addition is derived from its
+// type, not registered** (design principles 9.9 -- an aggregate's tangent is its members' tangents, so
+// its sum is the members' sums, one place at a time). The refusal had been measuring the registry's
+// completeness and calling it the type's ability.
+//
+// It was also the same shape as the `Error` defect of that night: "not in the table" read as "not in
+// the world". So the case changed rather than disappearing -- deleting it would say this path was
+// never walked -- and what it pins now is the number, hand-computed here first:
+//
+//   f(q)   = q.0 * 2.0 + (q.0 + q.1)      y = 2*2 + (2+3) = 9.0   df/dq = (2+1, 1) = (3.0, 1.0)
+//   h(p)   = p.a * 2.0 + (p.a + p.b)      y = 9.0                dh/dp = { a: 3.0, b: 1.0 }
+//
+// The hand line is printed beside the engine's so a reader sees both; the plan asserts the engine's
+// numbers, not the hand line, so a wrong hand line cannot make a wrong engine look right.
+import rulesets.jvp
+import { vjp } from vjp
+
+type Point = { a: float, b: float }
+
+func sum_of(t: (float, float)): float {
+    return t.0 + t.1
+}
+
+func sum_p(p: Point): float {
+    return p.a + p.b
+}
+
+func f(q: (float, float)): float {
+    return q.0 * 2.0 + sum_of(q)
+}
+
+func h(p: Point): float {
+    return p.a * 2.0 + sum_p(p)
+}
+
+func main(): int sync {
+    println("hand  y= 9.0  dq= ((3.0, 1.0))  dp= ({ a: 3.0, b: 1.0 })")
+    let (y, pullback) = vjp(f)((2.0, 3.0))
+    println("vjp   y=", y, " dq=", pullback(1.0))
+    let (py, ppullback) = vjp(h)({ a: 2.0, b: 3.0 })
+    println("vpjp  y=", py, " dp=", ppullback(1.0))
+    return 0
+}

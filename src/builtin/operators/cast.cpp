@@ -138,6 +138,19 @@ slot_t __stos__(ArgsView &with, ArgsView &norm, Context &ctx) { return norm.slot
 // struct, function, ...): the text `println` writes for it. The slot used to be read as a
 // string whatever its type, so `string(true)` dereferenced the bool.
 slot_t __atos__(ArgsView &with, ArgsView &norm, Context &ctx) {
+    // An integer is written here, without a stream: `printSlot` writes the same decimal text for
+    // it (`std::to_string` and `os <<` agree on a whole number), and the stream costs a heap
+    // buffer and a second copy of the text. This is the operator a string-building loop converts
+    // through -- `string(i)` reaches it, not a narrower rule -- so it is the row the operator
+    // table of such a run spends most of its time in.
+    switch (norm.code(0)) {
+    case camel::core::type::TypeCode::Int32:
+        return toSlot(String::from(std::to_string(norm.get<Int32>(0)), mm::autoSpace()));
+    case camel::core::type::TypeCode::Int64:
+        return toSlot(String::from(std::to_string(norm.get<Int64>(0)), mm::autoSpace()));
+    default:
+        break;
+    }
     std::ostringstream oss;
     printSlot(oss, norm.slot(0), norm.type(0));
     String *res = String::from(oss.str(), mm::autoSpace());

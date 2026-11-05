@@ -5,8 +5,8 @@
  * when ONNX_OUT is set, exports the model selected by MODEL.
  *
  * `gate` reads one number out of its argument, so it is written at the type that says which
- * numbers the argument holds: `f32[..]`,
- * the generic spelling of `f32[..]`. The
+ * numbers the argument holds: `f32[...]`,
+ * the generic spelling of `f32[...]`. The
  * input is loaded at that same type, because reading an element of an array
  * whose element type nobody wrote is what a parameter with no element type cannot state.
  */
@@ -15,17 +15,17 @@ import { reshape, relu, zeros, shape, load_npy, save_npy } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func gate(t: f32[..]): f32[..] {
+func gate(t: f32[...]): f32[...] {
     return if t[0] > 0.5 then relu(t) * 2.0 else t * (t[1] * 2.0) - 1.0
 }
 
-func forward(x: f32[..], w: f32[..]): f32[..] {
+func forward(x: f32[...], w: f32[...]): f32[...] {
     let n = shape(x)[0]
     let h = zeros::<f32>([n, shape(w)[1]]) + x @ w
     return reshape<[n * shape(w)[1]]>(h)
 }
 
-func main(): int sync {
+func main(): int! sync {
 let x = load_npy::<f32>(get_env('X') ?? '')
     let w = reshape<[2, 3]>([1.0, 0.0, 2.0, 0.0, 1.0, -1.0] as f32[])
     let isGate = (get_env('MODEL') ?? '') == 'gate'
@@ -33,10 +33,14 @@ let x = load_npy::<f32>(get_env('X') ?? '')
     save_npy(y, get_env('Y') ?? '')
     let out = get_env('ONNX_OUT') ?? ''
     return if out == '' then 0 else if isGate then sync {
-        let _ = export_model<out: out>(gate, x)
-        return 0
+        match export_model<out: out>(gate, x) {
+            case error e => { return e }
+            case v => 0
+        }
     } else sync {
-        let _ = export_model<out: out, dynamic_axes: [0]>((t: f32[..]): f32[..] => forward(t, w), x)
-        return 0
+        match export_model<out: out, dynamic_axes: [0]>((t: f32[...]): f32[...] => forward(t, w), x) {
+            case error e => { return e }
+            case v => 0
+        }
     }
 }

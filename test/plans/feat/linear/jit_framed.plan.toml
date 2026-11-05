@@ -201,33 +201,51 @@ expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped c
 
 [[tests]]
 name = "framed.loops.regions.lowered"
-desc = "Which rounds of a compiled loop are native code and which go through the loop helpers, from the compile line of `-vv`, which reports the lowering of every loop of the graph: a `while` loop whose state is several components the body writes in place is native (the test a compare and branch, the back edge a jump, no round count kept), and every shape that cannot be lowered says so and why. No loop of this program that takes the helpers is reported native."
-# The reason a round takes the helpers is a diagnostic of the lowering, not a fact of the program:
-# it is the first check of `loopRoundsOf` that the round fails, so it moves when a shape above it
-# changes (`ticks` read `the round contains OPER at pc=16`, then `the round makes the state tuple
-# anew every round`, with no change to the program). What this entry is about -- which of the two
-# paths a round takes -- is `helper:` against `native rounds`, and `expect_output_not_contains`
-# below still forbids the other path by name for every graph of the case.
+desc = "Which rounds of a compiled loop are native code and which go through the loop helpers, from the compile line of `-vv`, which reports the lowering of every loop of the graph: a `while` loop whose state is several components the body writes in place is native (the test a compare and branch, the back edge a jump, no round count kept), and every shape that cannot be lowered says so and why. The line of every graph of this program is pinned whole -- the reasons, the count each carries, and the end of the line -- so a graph that gains a reason or a loop, or a reason that starts naming a position, is a red. No loop of this program that takes the helpers is reported native."
+# Every needle below is the whole line of that graph, reasons included, ending with the newline
+# that terminates it. `expect_output_contains` finds a needle anywhere in the output, so a needle
+# that stopped at the last reason -- or at `helper:`, which says only that the rounds take the
+# helpers -- also matched a longer line: a graph that grew a second reason, a round count or (on
+# the inlined run's `main`, below) a fifth loop would have passed it. The reason's wording names
+# the instruction kind (`the round contains OPER`), not where an instruction sits, which is the
+# backend's own rule for a reason, so `at pc=<n>` in a reason is a red here rather than a rename
+# nobody notices. `expect_output_not_contains` below still forbids the other path -- `native` --
+# by name for every graph of the case.
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces", "compiled & cached graph 'ticks' as framed code; loop rounds: helper:"]
+expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)\n", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces\n", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round contains OPER\n"]
 expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper", "'sum_to' as framed code; loop rounds: helper", "'sum_squares' as framed code; loop rounds: native", "'until_above' as framed code; loop rounds: native", "'nested' as framed code; loop rounds: native", "'collects' as framed code; loop rounds: native", "'ticks' as framed code; loop rounds: native", "compile skipped", "Segmentation fault", "dumped core"]
 
 [[tests]]
 name = "framed.loops.regions.compiled.inline"
-desc = "The same program after std::opt::inline: every function is inlined into main, so the graph compiled as framed code is main, with all the loops of the program in it."
+desc = "The same program after std::opt::inline: every function is inlined into main, so the graph compiled as framed code is main, with all the loops of the program in it -- and the compile line names, for that one graph, every reason its loops keep the helpers: the sequence rounds (8 of them), the two native rounds, the collecting round and the round with an operator in it."
+# The whole line is pinned, not its prefix: it carries no node id, no address and no time, so one
+# build prints it the same way every run, and the reasons it lists are the lowering's own -- a
+# lowering that moves it is a change this entry is meant to notice. The reading behind that, run by
+# run, is in docs/handover/reports/2026-11-05-rc04-answers-nothing-and-rc00-signals-under-gir-too.cn.md.
+# What makes the needle the whole line is the newline it ends with: `expect_output_contains` finds
+# a needle anywhere in the output, so a needle that stopped at the last reason also matched a longer
+# line, and one did -- the 2026-11-02 install (d2b27967) printed this same summary as
+# `..., helper: the round contains OPER at pc=291`, the position the reason carried before
+# 9e48ccfc0 dropped it, and a needle ending at `OPER` matched that line too. With the newline,
+# anything after the last reason is a red: a field on the reason's own text, and a fifth reason --
+# a copy of this case whose `main` (test/cases/loops/compiled.cml#main) took one more loop read
+# `..., helper: the round contains OPER, helper: the state is a single value, ...`, which the entry
+# above passed. The comma needle below stays for the message it gives: `native rounds` is the only
+# reason of main's that repeats, so a comma at the end is a fifth reason and not a count of a
+# fourth, and that needle names it as one.
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 args = ["-vv", "${case}", "std::opt::inline", "std::jit hot_threshold=0"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'main' as framed code", "'main' as framed code; loop rounds:", "native rounds (2 loops)", "30", "21", "29"]
-expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
+expect_output_contains = ["compiled & cached graph 'main' as framed code", "OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round contains OPER\n", "30", "21", "29"]
+expect_output_not_contains = ["OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round contains OPER,", "compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
 
 [[tests]]
 name = "framed.loops.moving"

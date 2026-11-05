@@ -1,6 +1,6 @@
 import { ones } from tensor
 // A name that only the return type writes is an error: no parameter binds it.
-func only_return(x: f32[..]): f32[n] {
+func only_return(x: f32[...]): f32[n] {
     return x as f32[?]
 }
 func main(): int sync {

@@ -325,8 +325,11 @@ class Context : public std::enable_shared_from_this<Context> {
     const camel::runtime::Program *
     programOfRuntimeGraph(const camel::runtime::GCGraph *graph) const;
     /// See GCGraphManager::pin: programs the core keeps for the context's lifetime (the
-    /// definition graphs of operators).
+    /// definition graphs of operators) and programs a holder keeps outside the heap for as long
+    /// as it holds them (a draft group's, see camel/runtime/draft_session.h#GraphDraftGroup).
     void pinRuntimeProgram(const camel::runtime::Program *program);
+    /// See GCGraphManager::unpin: the holder is done with a program it pinned.
+    void unpinRuntimeProgram(const camel::runtime::Program *program);
     /// The allocator of the program's GraphIds (camel/runtime/graph_id.h): every graph the
     /// front end builds and every graph a rewrite creates takes its id from here.
     camel::runtime::GraphIdAllocator &graphIds() { return graphIds_; }

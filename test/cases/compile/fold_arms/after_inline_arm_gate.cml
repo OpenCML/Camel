@@ -1,0 +1,38 @@
+/**
+ * The minimal program of a progen finding (seed 8; reduced 157 -> 30 -> 21 -> 16 lines), with the
+ * value it computes printed so the answer is pinned beside the structure.
+ *
+ * `std::opt::fold` alone and `std::opt::inline` alone both leave a graph the commit accepts;
+ * `inline` followed by `fold` produced one that broke the branch-arm invariant:
+ *
+ *   Pass 'std::opt::fold' failed with an internal error: Runtime graph 'main' breaks the
+ *   branch-arm invariant: GATE 30 reads GATE 35, which lies in an arm of BRCH 25 that may not be
+ *   taken when GATE 30 runs (docs/technical/17_graph_rewrite_api_contracts.md, 4.1).
+ *
+ * The loop's condition is written as a branch (`if false then false else n61`), so the arm the
+ * pruning keeps holds a GATE forwarding `n61` -- the value of the inlined call, which carries the
+ * call's ordering. Pruning the outer branch (`if n61 then <loop> else { return 4.75 }`) hands the
+ * branch's place in the block's chain to the last statement of the taken arm, and it used to pick
+ * that GATE: the GATE lies in the region of the loop's condition, a region *nested* in the arm, not
+ * the arm itself. Everything written after the branch then waited on a gate only the loop's
+ * condition computes -- the read 4.1 forbids -- and the commit refused the graph. The place is now
+ * handed to a node of the arm's own region (here the LOOP itself), which runs whenever the arm runs.
+ */
+
+import { get_env } from env
+
+type P = { x: int, y: int }
+
+func q48(a49: int, a50: bool): bool sync {
+    return a50;
+}
+
+func main(): int sync {
+    let n60 = (get_env('PROGEN_S2') ?? '');
+    let n61 = q48(0, (-1.5) >= (-1.5));
+    let n75 = (if n61 then (loop s69 = 0.5, c70 = (1.0-2.0) for q71 in [''] while (if false then false else n61) do (1.0, 1.0)).0 else {
+        return 4.75;
+    }, false);
+    println('pair {}'->format<n75.0>);
+    return 0;
+}

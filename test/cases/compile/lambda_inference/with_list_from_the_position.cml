@@ -1,6 +1,6 @@
 // A lambda takes the `with` list it does not write from the position it stands in, as it takes the
 // parameter types (design principles 5.9): `apply` expects `<w: float> (x: float) => float`, so a
-// lambda written `(..xs) => ...` there is called with a `with` argument, and one written `(x) => ...`
+// lambda written `(...xs) => ...` there is called with a `with` argument, and one written `(x) => ...`
 // takes its parameter type from the same place.
 //
 // Before this, the first line was an invariant violation, not a wrong answer: the completion read the
@@ -17,7 +17,7 @@ func apply_two(g: <w: float, v: float> (x: float) => float): float {
 func main(): int sync {
     // A rest hole stands for the position's ordinary parameters, and the `with` list is the
     // position's: nothing of the body reads either here.
-    println(`rest_hole ${apply((..xs) => 7.0)}`)
+    println(`rest_hole ${apply((...xs) => 7.0)}`)
     // The parameter type comes from the position, the same way.
     println(`named_hole ${apply((x) => x * 10.0)}`)
     // Two `with` parameters, in the order the position gives them.

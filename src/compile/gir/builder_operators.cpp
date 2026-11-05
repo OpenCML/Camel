@@ -33,9 +33,9 @@
 #include "camel/core/type/other.h"
 
 #include <algorithm>
-#include <set>
 #include <atomic>
 #include <cctype>
+#include <set>
 #include <stdexcept>
 #define DEBUG_LEVEL -1
 
@@ -273,9 +273,9 @@ bool Builder::addDeclaringModuleOverloads(
     // overload of `===` the second (design principles 4.2, 4.3), exactly as for the overloads
     // the program declares (operatorDrefOf). What the program wrote says that, not the group
     // the call resolves in: for the built-in rule the DREF's group is already the comparison's.
-    const char *negatedWhole   = negatedWholeOf(writtenGroup);
-    const bool negated         = negatedWhole != nullptr;
-    const std::string wanted   = negated ? std::string(negatedWhole) : group;
+    const char *negatedWhole = negatedWholeOf(writtenGroup);
+    const bool negated       = negatedWhole != nullptr;
+    const std::string wanted = negated ? std::string(negatedWhole) : group;
     auto known               = operatorOverloads_.find(dref);
     if (known == operatorOverloads_.end()) {
         known = operatorOverloads_.emplace(dref, operatorOverloadsOf(group)).first;
@@ -471,8 +471,7 @@ compile_graph_ptr_t Builder::chooseOperatorOverload(
     for (const Argument &input : normInputs) {
         statics.push_back(staticArgOf(input.node));
     }
-    const bool builtinAccepts =
-        set.ops->resolve(withTypes, normTypes, statics).has_value();
+    const bool builtinAccepts = set.ops->resolve(withTypes, normTypes, statics).has_value();
     // Design principles 4.3: an overload of the program is preferred where it is more
     // specific than the others that take the arguments. "More specific" is exact: its
     // parameter types are the argument types themselves (as written, without a value entering
@@ -748,7 +747,11 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
                    : std::format("{}{}", prefix, i);
     };
     for (size_t i = 0; i < opType->withTypesCount(); ++i) {
-        factory.addWithArg(nameAt(i, "__w", i), opType->withTypeAt(i), false, opType->withNeedsValueAt(i));
+        factory.addWithArg(
+            nameAt(i, "__w", i),
+            opType->withTypeAt(i),
+            false,
+            opType->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < opType->normTypesCount(); ++i) {
         factory.addNormArg(
@@ -791,8 +794,74 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     return graph;
 }
 
-node_handle_t
-Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) {
+std::optional<Builder::SettledAnswer> Builder::settledAnswerOf(
+    const oper_group_ptr_t &ops, const std::string &ruleUri,
+    const camel::core::type::type_vec_t &types, Type *knownType) {
+    if (types.empty()) {
+        // No type argument was written, so no rule can be asked what it answers about one: a call
+        // of it is a call, and a name of it is not yet a value of any particular type.
+        return std::nullopt;
+    }
+    for (const auto &[uri, rule] : ops->resolvers()) {
+        if (rule == nullptr || (!ruleUri.empty() && uri != ruleUri)) {
+            continue;
+        }
+        const std::optional<slot_t> answer = rule->valueFromTypeArgs(types);
+        if (!answer.has_value()) {
+            // This rule reads something a run has: a call of it is a node, and a name of it is a
+            // function that calls it. Not an answer, and not this rule's question.
+            continue;
+        }
+        // The answer is the call's result, so its type is the one `resolveForCall` promises for the
+        // same type arguments -- unless the call is already resolved and holds that type.
+        Type *answerType = knownType;
+        if (answerType == nullptr) {
+            const std::optional<FunctionType *> callType =
+                rule->resolveForCall(types, nullptr, {}, {}, static_args_t{});
+            answerType =
+                callType.has_value() && *callType != nullptr ? (*callType)->exitType() : nullptr;
+        }
+        if (answerType == nullptr) {
+            return std::nullopt;
+        }
+        return SettledAnswer{*answer, answerType};
+    }
+    return std::nullopt;
+}
+
+compile_graph_ptr_t
+Builder::answerValueGraphOf(Type *answerType, slot_t answer, const GCT::node_ptr_t &origin) {
+    if (answerType == nullptr) {
+        return nullptr;
+    }
+    // Its own type object (a graph completes its function type in place): no parameters, and the
+    // answer's type as the result -- the call it stands for takes no argument either.
+    FunctionTypeFactory factory;
+    factory.setExitType(answerType);
+    FunctionType *type        = factory.build();
+    compile_graph_ptr_t graph = enterScope(type);
+    registerGraphOrigin(context_, graph, origin, "gir.answer.graph");
+    try {
+        bodyStates_[graph.get()] = BodyState::Open;
+        // The body is the value: a settled answer is a constant of the program, and no port of
+        // this function is read (`FuncTypeResolver::valueFromTypeArgs`).
+        auto &draft         = graph->transaction().edit();
+        node_handle_t value = draft.ref(
+            draft.materializeStaticValue(answer, answerType, runtime::kGCNodeFlagConstant));
+        registerNodeOrigin(context_, value, origin, "gir.answer.graph");
+        setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), answerType);
+        bodyStates_[graph.get()] = BodyState::Built;
+        registerBuiltBody(graph);
+    } catch (...) {
+        bodyStates_[graph.get()] = BodyState::Built;
+        leaveScope();
+        throw;
+    }
+    leaveScope();
+    return graph;
+}
+
+node_handle_t Builder::attemptFunctionValue(const Argument &f, const GCT::node_ptr_t &origin) {
     // The argument is what the call would pass: a variable is read here, once, and the value
     // read is what the function captures.
     node_handle_t fValue = valueOf(f.node);
@@ -939,6 +1008,22 @@ node_handle_t Builder::overloadValueFor(
         }
         if (chosen) {
             explicitOperatorTypes_.erase(node);
+            // A call that is already its own answer (`extent_of::<float[2, 3]>`) is a function of
+            // no parameters that gives it, not a call of the operator: the answer is a fact of the
+            // type arguments written with this name, and nothing in the graph or at run time reads
+            // them back. `settledAnswerOf` is where the rule is asked; this position builds the
+            // function that gives what it answers, as the two other positions that take such a
+            // name as a value do.
+            if (const auto settled = settledAnswerOf(
+                    ops,
+                    chosen->uri(),
+                    explicitTypes,
+                    chosen->funcType() != nullptr ? chosen->funcType()->exitType() : nullptr)) {
+                if (compile_graph_ptr_t graph =
+                        answerValueGraphOf(settled->type, settled->value, origin)) {
+                    return createFuncDataNode(graph, true, false);
+                }
+            }
             if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
                 return createFuncDataNode(graph, true, false);
             }
@@ -971,8 +1056,9 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
             }
             ruleWith = *completed;
         }
-        auto result = resolver->resolveForCall(
-            explicitTypes, expectedResult, ruleWith, normTypes, normStatics);
+        auto result =
+            resolver
+                ->resolveForCall(explicitTypes, expectedResult, ruleWith, normTypes, normStatics);
         if (!result) {
             // The rule's parameters do not take these arguments: it was never a candidate for
             // this call, and its condition is not asked about a call it does not fit.
@@ -996,8 +1082,13 @@ std::optional<oper_idx_ptr_t> Builder::resolveGroupedCall(
                 }
             }
         }
-        const RuleVerdict verdict =
-            ruleVerdictForCall(resolver, ops->name(), ruleWith, normTypes, &condition, verdictTypes);
+        const RuleVerdict verdict = ruleVerdictForCall(
+            resolver,
+            ops->name(),
+            ruleWith,
+            normTypes,
+            &condition,
+            verdictTypes);
         if (verdict == RuleVerdict::ConditionUnmet) {
             unmet.emplace_back(resolver->signature(), std::move(condition));
             continue;
@@ -1035,13 +1126,13 @@ std::optional<type_vec_t> Builder::withTypesCompletedFor(
     if (withTypes.size() > arity) {
         return withTypes; // too many: the rule says so itself
     }
-    const auto native = nativeDefaults_.find(uri);
+    const auto native    = nativeDefaults_.find(uri);
     type_vec_t completed = withTypes;
     completed.resize(arity, nullptr);
     for (size_t i = 0; i < arity; ++i) {
-        const bool written = i < withTypes.size() &&
-                             !(withInputs != nullptr && i < withInputs->size() &&
-                               (*withInputs)[i].left);
+        const bool written =
+            i < withTypes.size() &&
+            !(withInputs != nullptr && i < withInputs->size() && (*withInputs)[i].left);
         if (written) {
             continue;
         }
@@ -1103,9 +1194,7 @@ bool Builder::plainOperatorAvailableFor(
     // A built-in operator, or one a module registers for the types it declares (the `+` the
     // tensor module declares for a numeric array): the group answers for the operand types
     // alone (design principles 4.3).
-    if (operatorOverloadsOf(group)
-            .ops->resolve({}, normTypes, statics)
-            .has_value()) {
+    if (operatorOverloadsOf(group).ops->resolve({}, normTypes, statics).has_value()) {
         return true;
     }
     // An `operator` the program writes, or one an import brings: its parameters are matched
@@ -1154,8 +1243,8 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // statement is still the whole assignment where something asks for it (the LSP's
     // navigation, test/plans/feat/tools/lsp.plan.toml).
     const auto makeOperator = [&](GCT::node_ptr_t node) {
-        node->setOrigin(gct->size() > 0 && gct->at(0) != nullptr ? gct->at(0)->origin()
-                                                                : gct->origin());
+        node->setOrigin(
+            gct->size() > 0 && gct->at(0) != nullptr ? gct->at(0)->origin() : gct->origin());
         return node;
     };
     // The right operand is evaluated once: it was built already, and is named here.
@@ -1177,7 +1266,7 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // does not apply and the compound assignment is reported as undefined, exactly as for a
     // type that has no plain operator at all.
     const node_handle_t plain = visitLinkNode(value);
-    Type *result             = valueTypeOf(nodeTypeOf(plain));
+    Type *result              = valueTypeOf(nodeTypeOf(plain));
     if (result == nullptr || !target->assignableFrom(result)) {
         return nullptr;
     }
@@ -1588,7 +1677,9 @@ node_handle_t Builder::buildComposition(const GCT::node_ptr_t &gct, Type *expect
     if (expectedFunc != nullptr) {
         FunctionTypeFactory factory;
         factory.addNormArg(
-            std::string(kCompParameter), expectedFunc->normTypeAt(0), expectedFunc->normIsVarAt(0));
+            std::string(kCompParameter),
+            expectedFunc->normTypeAt(0),
+            expectedFunc->normIsVarAt(0));
         lhsExpected = factory.build();
     }
     // The two operands are values, and a function written by name is its value here as it is in
@@ -1641,8 +1732,9 @@ bool Builder::intervalBounds(node_handle_t from, node_handle_t to) const {
 }
 
 node_handle_t
-Builder::buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs) {    Type *lhsType     = nodeTypeOf(lhs);
-    Type *rhsType = nodeTypeOf(rhs);
+Builder::buildCompositionWith(const GCT::node_ptr_t &gct, node_handle_t lhs, node_handle_t rhs) {
+    Type *lhsType            = nodeTypeOf(lhs);
+    Type *rhsType            = nodeTypeOf(rhs);
     const bool bothFunctions = lhsType != nullptr && rhsType != nullptr &&
                                lhsType->code() == TypeCode::Function &&
                                rhsType->code() == TypeCode::Function;
@@ -1713,10 +1805,12 @@ node_handle_t Builder::composeFunctionValue(
     // instantiation and its overloads are the ones that lambda has, because it is built as one.
     FunctionTypeFactory factory;
     factory.addNormArg(
-        std::string(kCompParameter), lhsType->normTypeAt(0), lhsType->normIsVarAt(0));
+        std::string(kCompParameter),
+        lhsType->normTypeAt(0),
+        lhsType->normIsVarAt(0));
     factory.setExitType(rhsType->exitType());
-    FunctionType *type        = factory.build();
-    compile_graph_ptr_t graph = enterScope(type);
+    FunctionType *type            = factory.build();
+    compile_graph_ptr_t graph     = enterScope(type);
     const bool outerSynced        = synced_;
     const node_handle_t outerLast = lastSyncedNode_;
     const auto restore            = [&] {
@@ -1726,7 +1820,7 @@ node_handle_t Builder::composeFunctionValue(
     };
     try {
         bodyStates_[graph.get()] = BodyState::Open;
-        const auto make = [&](GCT::node_ptr_t node) {
+        const auto make          = [&](GCT::node_ptr_t node) {
             node->setOrigin(gct->origin());
             return node;
         };
@@ -1748,8 +1842,8 @@ node_handle_t Builder::composeFunctionValue(
         GCT::node_ptr_t outer = make(tree_->makeLink(1));
         *outer << nameNode(kCompRhs) << inner;
         // The call is the value of the function, so it runs whenever the function is called.
-        synced_         = true;
-        lastSyncedNode_ = {};
+        synced_             = true;
+        lastSyncedNode_     = {};
         node_handle_t value = visitLinkNode(outer);
         setGraphReturnFromResult(graph, nodeIdOf(value), nodeIdOf(value), nodeTypeOf(value));
         restore();
@@ -1763,8 +1857,8 @@ node_handle_t Builder::composeFunctionValue(
     return createFuncDataNode(graph, true, false);
 }
 
-node_handle_t Builder::intervalValue(
-    node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
+node_handle_t
+Builder::intervalValue(node_handle_t lhs, node_handle_t rhs, const GCT::node_ptr_t &gct) {
     // `a..b` of two integers is the array of them from `a` to `b - 1`, left closed and right
     // open, as the slice `t[a:b]` is (design principles 4.2). It is the step-1 case of `range`,
     // written out as that call with the step, `range(a, b, 1)`: the group has one rule and it
@@ -1788,8 +1882,8 @@ node_handle_t Builder::intervalValue(
     return value;
 }
 
-node_handle_t Builder::visitPipeLink(
-    const GCT::node_ptr_t &call, const GCT::node_ptr_t &replacement) {
+node_handle_t
+Builder::visitPipeLink(const GCT::node_ptr_t &call, const GCT::node_ptr_t &replacement) {
     const auto unused = unusedStatement_;
     PipeState detect;
     detect.call        = call;
@@ -1811,10 +1905,10 @@ node_handle_t Builder::visitPipeLink(
     bool direct            = true;
     {
         PipeState scratch;
-        scratch.call     = call;
-        scratch.receiver = receiver;
-        scratch.mode     = PipeMode::Scratch;
-        scratch.previous = pipe_;
+        scratch.call                     = call;
+        scratch.receiver                 = receiver;
+        scratch.mode                     = PipeMode::Scratch;
+        scratch.previous                 = pipe_;
         unusedStatement_                 = nullptr;
         auto &draft                      = currGraph_->transaction().edit();
         const draft_node_ref_t firstNode = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
@@ -1874,8 +1968,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         explicit ExtentCallScope(Builder &self)
             : previous(camel::core::type::extentCallEvaluator()) {
             camel::core::type::extentCallEvaluator() =
-                [&self](const std::shared_ptr<const void> &call,
-                        const camel::core::type::ExtentValues &values) {
+                [&self](
+                    const std::shared_ptr<const void> &call,
+                    const camel::core::type::ExtentValues &values) {
                     return self.foldExtentCall(
                         const_cast<GCT::Node *>(static_cast<const GCT::Node *>(call.get())),
                         values);
@@ -1944,13 +2039,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     withArgsOfCall_                = gct->at(0)->type() == GCT::NodeKind::WITH;
     // The callee of a call is a name: a rule's binding function called here is called, not made
     // the `Rule` its name gives (visitDRefNode).
-    // A lambda written after `->` that leaves a parameter's type out (`v -> (x) => x + 1`) takes the
-    // type from the receiver: the position of its parameter is that value (design principles 5.1,
-    // 5.9). A lambda called with parentheses, `((x) => x + 1)(2)`, is not in such a position. It is built after the arguments, which are typed without it.
+    // A lambda written after `->` that leaves a parameter's type out (`v -> (x) => x + 1`) takes
+    // the type from the receiver: the position of its parameter is that value (design
+    // principles 5.1, 5.9). A lambda called with parentheses, `((x) => x + 1)(2)`, is not in such a
+    // position. It is built after the arguments, which are typed without it.
     const bool lambdaCalleeAfterArguments =
         gct->at(0)->type() == GCT::NodeKind::FUNC && !gct->at(0)->decoratedBlock() &&
-        gct->at(0)->name().empty() && GCT::Tree::of(gct)->isPipe(gct) &&
-        [&] {
+        gct->at(0)->name().empty() && GCT::Tree::of(gct)->isPipe(gct) && [&] {
             const auto *unwritten = GCT::Tree::of(gct->at(0))->unwrittenParamsOf(gct->at(0));
             return unwritten != nullptr && !unwritten->empty();
         }();
@@ -1959,14 +2054,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (!lambdaCalleeAfterArguments) {
         targetNodeRes = visit(gct->at(0));
     }
-    ruleBindingCallee_                = outerRuleBindingCallee;
-    withArgsOfCall_                = outerWithArgsOfCall;
-    genericCalleeAllowed_          = false;
+    ruleBindingCallee_    = outerRuleBindingCallee;
+    withArgsOfCall_       = outerWithArgsOfCall;
+    genericCalleeAllowed_ = false;
     // The callee may be a lambda written in place (`((x: int): int => x + 1)(3)`,
     // `v -> (x: int): int => x * 2`): visiting it gives its graph, and what is called is the
     // function value of that graph. (The graph was cast to a node: `bad any_cast`, bare.)
-    node_handle_t targetNode =
-        lambdaCalleeAfterArguments ? nullptr : valueNodeOf(targetNodeRes);
+    node_handle_t targetNode = lambdaCalleeAfterArguments ? nullptr : valueNodeOf(targetNodeRes);
     // The group the program wrote. An operator's callee is a DREF naming its group, and `!=` is
     // resolved through `==`'s group (operatorDrefOf), so the name read here is the one the
     // program wrote -- `__neq__` -- and not the group the call is resolved in. The negation,
@@ -2068,12 +2162,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
          generic->second.one()->funcType->hasWithRest())) {
         restTemplate = generic->second.one();
     }
-    const size_t restFixedCount =
-        restTemplate != nullptr
-            ? restTemplate->funcType->normTypesCount() -
-                  (restTemplate->funcType->hasRest() ? 1 : 0) -
-                  restTemplate->funcType->normConstasCount()
-            : 0;
+    const size_t restFixedCount = restTemplate != nullptr
+                                      ? restTemplate->funcType->normTypesCount() -
+                                            (restTemplate->funcType->hasRest() ? 1 : 0) -
+                                            restTemplate->funcType->normConstasCount()
+                                      : 0;
     const size_t restDeclaredCount =
         restTemplate != nullptr ? restTemplate->funcType->normTypesCount() : 0;
     // An ordinary argument may be written by name (`f(1, by: 2)`), and an ordinary parameter
@@ -2164,10 +2257,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             argumentNames != nullptr && i - 1 < argumentNames->size() ? (*argumentNames)[i - 1]
                                                                       : std::nullopt;
         normInputs.push_back({inputNode, argumentExpr, name});
-        const bool takesVariable = isAssignment ||
-                                   (argumentSignature != nullptr &&
-                                    slot < argumentSignature->normTypesCount() &&
-                                    argumentSignature->normIsVarAt(slot));
+        const bool takesVariable = isAssignment || (argumentSignature != nullptr &&
+                                                    slot < argumentSignature->normTypesCount() &&
+                                                    argumentSignature->normIsVarAt(slot));
         if (synced_ && !takesVariable && inputNode != nullptr && isVariable(inputNode)) {
             // An argument written after this one that does more than name a value may write the
             // variable: this one is read first.
@@ -2259,8 +2351,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             std::get<oper_group_ptr_t>(sliceTarget)->name() == "slice" && normInputs.size() == 1 &&
             (withInputs.size() == 3 || withInputs.size() == 4)) {
             const auto staticWord = [&](int64_t value) {
-                node_handle_t word = currGraph_->addStaticDataNode(tt::as_shared<Data>(
-                    std::make_shared<PrimaryData<int64_t>>(value)));
+                node_handle_t word = currGraph_->addStaticDataNode(
+                    tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(value)));
                 registerNodeOrigin(context_, word, gct, "gir.data");
                 return Argument{word, gct, std::nullopt};
             };
@@ -2347,7 +2439,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             if (expectedResult != nullptr && argumentSignature->hasExitType() &&
                 asTagged(argumentSignature->exitType()) == nullptr) {
                 unifyTypeVars(
-                    argumentSignature->exitType(), determinedByPosition(expectedResult), bindings);
+                    argumentSignature->exitType(),
+                    determinedByPosition(expectedResult),
+                    bindings);
             }
         }
         // `i` is a `with` parameter's index: the binding above put `withInputs` in the
@@ -2692,7 +2786,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         diags_->of(SemanticDiag::DimensionMismatch)
                             .atOrigin(inputs[i].expr->origin())
                             .commit(
-                                "Argument " + label, mismatch,
+                                "Argument " + label,
+                                mismatch,
                                 "the dimensions the earlier arguments bound do not allow it");
                         throw BuildAbortException();
                     }
@@ -2749,7 +2844,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         // function by that refusal, and the check states it where the cast spends it: a decorator
         // that answers something else is a program the builder has already reported, never a
         // value that reaches this line.
-        Type *decoratorValueType       = nodeTypeOf(decoratorInvoke);
+        Type *decoratorValueType = nodeTypeOf(decoratorInvoke);
         GUARD(
             decoratorValueType != nullptr && decoratorValueType->code() == TypeCode::Function,
             "The value a decorator's invocation answers must be a function.");
@@ -2791,8 +2886,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         const auto &drefTarget = nodeGraphOf(targetNode)->drefTarget(targetNode);
         if (std::holds_alternative<oper_group_ptr_t>(drefTarget)) {
             const auto &ops = std::get<oper_group_ptr_t>(drefTarget);
-            addDeclaringModuleOverloads(targetNode, ops->name(), withInputTypes, normInputTypes,
-                                        writtenGroup);
+            addDeclaringModuleOverloads(
+                targetNode,
+                ops->name(),
+                withInputTypes,
+                normInputTypes,
+                writtenGroup);
         }
     }
 
@@ -2808,7 +2907,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // ends the program. One warning per call, naming the argument that causes it.
     for (const bool inWith : {true, false}) {
         const std::vector<Argument> &inputs = inWith ? withInputs : normInputs;
-        const type_vec_t &types            = inWith ? withInputTypes : normInputTypes;
+        const type_vec_t &types             = inWith ? withInputTypes : normInputTypes;
         for (size_t i = 0; i < inputs.size() && i < types.size(); ++i) {
             if (types[i] == nullptr || inputs[i].node == nullptr ||
                 valueTypeOf(types[i])->code() != TypeCode::Never) {
@@ -2887,7 +2986,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                  return a.left;
              }))) {
             completeWithFor(
-                chosenTemplate.get(), "", chosenTemplate->funcType, withInputs, withInputTypes);
+                chosenTemplate.get(),
+                "",
+                chosenTemplate->funcType,
+                withInputs,
+                withInputTypes);
         }
         targetGraph = resolveGenericCall(
             chosenTemplate,
@@ -2940,9 +3043,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         camel::core::OperatorTable::instance().inPlaceForm(targetOperator->uri());
                     GUARD(form.has_value(), "An in-place rebinding lost its in-place form.");
                     targetOperator = std::make_shared<OperatorIndex>(
-                        targetOperator->name(), targetOperator->funcType(), *form);
+                        targetOperator->name(),
+                        targetOperator->funcType(),
+                        *form);
                 }
-                targetNode     = currGraph_->addOperNode(targetOperator, 0);
+                targetNode = currGraph_->addOperNode(targetOperator, 0);
                 stampPermissions(targetNode);
                 registerNodeOrigin(context_, targetNode, gct->at(0), "gir.link.oper");
                 targetFuncType = targetOperator->funcType();
@@ -2967,7 +3072,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 const size_t count =
                     with ? targetFuncType->withTypesCount() : targetFuncType->normTypesCount();
                 for (size_t i = 0; i < types.size() && i < count; ++i) {
-                    Type *param = with ? targetFuncType->withTypeAt(i) : targetFuncType->normTypeAt(i);
+                    Type *param =
+                        with ? targetFuncType->withTypeAt(i) : targetFuncType->normTypeAt(i);
                     if (param == nullptr || types[i] == nullptr) {
                         continue;
                     }
@@ -3034,10 +3140,9 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // is step 3 of the same work, and until then such a call is reported as one with no
             // matching function, the type notwithstanding.
             if (graphs->size() == 1) {
-                FunctionType *packed = signatureOf(graphs->front());
-                const size_t fixedWith =
-                    packed->withTypesCount() - (packed->hasWithRest() ? 1 : 0);
-                Type *element = packed->withRestType();
+                FunctionType *packed   = signatureOf(graphs->front());
+                const size_t fixedWith = packed->withTypesCount() - (packed->hasWithRest() ? 1 : 0);
+                Type *element          = packed->withRestType();
                 if (element != nullptr && withInputTypes.size() > fixedWith) {
                     for (size_t i = fixedWith; i < withInputTypes.size(); ++i) {
                         if (element->assignableFrom(valueTypeOf(withInputTypes[i]))) {
@@ -3065,9 +3170,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 completedWith;
             const auto leavesOut = [&](FunctionType *funcType) {
                 return writtenWith.size() < funcType->withTypesCount() ||
-                       std::any_of(writtenWith.begin(), writtenWith.end(), [](const Argument &a) {
-                           return a.left;
-                       });
+                       std::any_of(
+                           writtenWith.begin(),
+                           writtenWith.end(),
+                           [](const Argument &a) { return a.left; });
             };
             for (const bool entering : {false, true}) {
                 if (targetGraph || chosenDecorated) {
@@ -3258,8 +3364,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // (operatorDrefOf) but the program wrote `!=`, and a report about a call that
             // failed names the operator that failed: for every other call this is the group's
             // own name, unchanged.
-            const char *negatedWhole         = negatedWholeOf(writtenGroup);
-            const std::string &reportGroup   = negatedWhole != nullptr ? writtenGroup : ops->name();
+            const char *negatedWhole       = negatedWholeOf(writtenGroup);
+            const std::string &reportGroup = negatedWhole != nullptr ? writtenGroup : ops->name();
             // `a != b` over the built-in `==`: the group resolved here is `==`'s (operatorDrefOf),
             // and what that gives is negated at the end of this call, over this one result
             // (`negateResult`, below). Its single reader is there, so the built-in path needs
@@ -3281,10 +3387,10 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 settleGenericRuleMaker(normInputs, normInputTypes, gct);
             }
             if (ops->name() == "__rule") {
-                // The maker of a rule whose head declares no type parameters: the call keeps its two
-                // function values and the rule value is an ordinary rule, but the two graphs are
-                // registered in the table of rule templates too, so a transform that picks between
-                // the laws of one key can find a law whose parameter types name a type
+                // The maker of a rule whose head declares no type parameters: the call keeps its
+                // two function values and the rule value is an ordinary rule, but the two graphs
+                // are registered in the table of rule templates too, so a transform that picks
+                // between the laws of one key can find a law whose parameter types name a type
                 // (author, 2026-11-03 12:10: two laws of one key are told apart by their parameter
                 // types). The call itself is not changed: an ordinary rule stays ordinary.
                 settleRuleMaker(normInputs, normInputTypes, gct);
@@ -3372,8 +3478,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             // operator does not define falls through and is reported by the group as written.
             if (withInputs.empty() &&
                 camel::core::plainGroupOfCompoundAssignment(ops->name()).has_value()) {
-                if (node_handle_t rebound =
-                        compoundAssignmentByRebinding(ops->name(), gct, normInputs, normInputTypes)) {
+                if (node_handle_t rebound = compoundAssignmentByRebinding(
+                        ops->name(),
+                        gct,
+                        normInputs,
+                        normInputTypes)) {
                     LEAVE("LINK");
                     return rebound;
                 }
@@ -3412,7 +3521,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // type, and a predicate that still does not fit reports as it always did. The
                 // adapted call is resolved again; when that fails too, the original report stands.
                 std::vector<Argument> retriedInputs = normInputs;
-                type_vec_t retriedTypes            = normInputTypes;
+                type_vec_t retriedTypes             = normInputTypes;
                 adaptLiteralOperands(ops->name(), retriedInputs, retriedTypes, gct, true);
                 if (retriedTypes != normInputTypes) {
                     std::vector<StaticArg> retriedStatics;
@@ -3484,10 +3593,8 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     }
                     const std::string argTypes = std::format(
                         "<{}> ({})",
-                        strutil::join(
-                            withInputTypes, ", ", [](Type *t) { return t->toString(); }),
-                        strutil::join(
-                            normInputTypes, ", ", [](Type *t) { return t->toString(); }));
+                        strutil::join(withInputTypes, ", ", [](Type *t) { return t->toString(); }),
+                        strutil::join(normInputTypes, ", ", [](Type *t) { return t->toString(); }));
                     diags_->of(SemanticDiag::WhenConditionUnmet)
                         .atOrigin(gct->origin())
                         .commit(reportGroup, argTypes, conditions);
@@ -3514,7 +3621,7 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         if (type == nullptr || type->code() != TypeCode::Function) {
                             continue;
                         }
-                        const auto *func = tt::as_ptr<FunctionType>(type);
+                        const auto *func   = tt::as_ptr<FunctionType>(type);
                         bool takesVariable = false;
                         for (size_t i = 0; i < func->normTypesCount(); ++i) {
                             takesVariable = takesVariable || func->normIsVarAt(i);
@@ -3600,12 +3707,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                         const std::vector<StaticArg> statics(
                             normStatics.begin(),
                             normStatics.begin() + static_cast<std::ptrdiff_t>(normCount));
-if (ops->resolve(asWith, asNorm, statics).has_value()) {
+                        if (ops->resolve(asWith, asNorm, statics).has_value()) {
                             // A call of a function with an `#impl` kernel resolves in the
                             // kernel's group: the hint names the declaration, not the kernel.
                             const std::string declared = declaredNameOfKernelGroup(ops);
                             argTypesStr += withArgumentsHint(
-                                declared.empty() ? ops->name() : declared, normInputs, normCount);
+                                declared.empty() ? ops->name() : declared,
+                                normInputs,
+                                normCount);
                             break;
                         }
                     }
@@ -3658,32 +3767,31 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                     // The caret is under the step, the argument that says why the call can never
                     // be right.
                     const GCT::node_ptr_t &stepNode = gct->at(gct->size() - 1);
-                    const auto where =
-                        stepNode->origin() != 0 ? stepNode->origin() : gct->origin();
+                    const auto where = stepNode->origin() != 0 ? stepNode->origin() : gct->origin();
                     diags_->of(SemanticDiag::RangeStepZero)
                         .atOrigin(where)
-                        .commit(
-                            sourceTextOf(normInputs[0].expr),
-                            sourceTextOf(normInputs[1].expr));
+                        .commit(sourceTextOf(normInputs[0].expr), sourceTextOf(normInputs[1].expr));
                     throw BuildAbortException();
                 }
             }
-            // A slice with a constant step of 0 takes no element at all: the same rule as the step of a
-            // range, refused where the step is written (design principles 5.4 for the slice, 4.2
-            // for the range). The two spellings of the node are one node -- the subscript's
+            // A slice with a constant step of 0 takes no element at all: the same rule as the step
+            // of a range, refused where the step is written (design principles 5.4 for the
+            // slice, 4.2 for the range). The two spellings of the node are one node -- the
+            // subscript's
             // `__slice__` and the function form's `slice(t, axis, start, end, step, written)`, both
-            // the core's `:op/slice_sub`, or `:op/slice_str` on a string -- so the check reads the node and not the spelling: one
-            // fault has one answer, the catalog's `SliceStepZero`, with the caret under the step.
-            // The step is the node's fifth ordinary argument (the value, the axis, the two bounds,
-            // the step; the sixth is the mask that says which of the two bounds were written, and a
-            // call that stops at five words wrote no mask, so it is read as "both bounds", 3). A
-            // step that is not constant is a fault of the run instead (RuntimeDiag::InvalidArgument,
-            // and a tensor's own slice checks its step with the shape facts it holds).
-            if ((targetOperator->uri() == ":op/slice_sub" || targetOperator->uri() == ":op/slice_str" ||
+            // the core's `:op/slice_sub`, or `:op/slice_str` on a string -- so the check reads the
+            // node and not the spelling: one fault has one answer, the catalog's `SliceStepZero`,
+            // with the caret under the step. The step is the node's fifth ordinary argument (the
+            // value, the axis, the two bounds, the step; the sixth is the mask that says which of
+            // the two bounds were written, and a call that stops at five words wrote no mask, so it
+            // is read as "both bounds", 3). A step that is not constant is a fault of the run
+            // instead (RuntimeDiag::InvalidArgument, and a tensor's own slice checks its step with
+            // the shape facts it holds).
+            if ((targetOperator->uri() == ":op/slice_sub" ||
+                 targetOperator->uri() == ":op/slice_str" ||
                  targetOperator->uri() == ":op/slice_bytes") &&
-                normInputs.size() >= 5 &&
-                normInputs.size() <= 6 && withInputs.empty() && gct->size() >= 1 &&
-                gct->at(0)->type() == GCT::NodeKind::DREF) {
+                normInputs.size() >= 5 && normInputs.size() <= 6 && withInputs.empty() &&
+                gct->size() >= 1 && gct->at(0)->type() == GCT::NodeKind::DREF) {
                 const auto stepIsZero = [](const data_ptr_t &data) {
                     if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
                         integer != nullptr) {
@@ -3696,9 +3804,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                     // The caret is under the step, the argument that says why the slice can
                     // never be right.
                     const GCT::node_ptr_t &stepExpr = normInputs[4].expr;
-                    const auto where = stepExpr != nullptr && stepExpr->origin() != 0
-                                           ? stepExpr->origin()
-                                           : gct->origin();
+                    const auto where                = stepExpr != nullptr && stepExpr->origin() != 0
+                                                          ? stepExpr->origin()
+                                                          : gct->origin();
                     diags_->of(SemanticDiag::SliceStepZero).atOrigin(where).commit();
                     throw BuildAbortException();
                 }
@@ -3874,35 +3982,44 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 LEAVE("LINK");
                 return transformed;
             }
-            if (targetOperator->uri() == ":op/extent_of" && explicitTypes.size() == 1) {
-                // `extent_of::<A>()` answers the extents `A` states, and they are a fact of the
-                // **call** and not of the run: the node keeps the instantiated type of the call but
-                // not the type argument it was written with (`src/builtin/operators/struct.cpp`
-                // #__op_extent_of__), so the value is settled here -- where the argument is still
-                // readable -- and the graph holds the list itself, as a constant.
+            if (!explicitTypes.empty()) {
+                // A call whose answer is a fact of the type arguments it names and which reads no
+                // operand (`extent_of::<float[2, 3]>()` is `[2, 3]`) is settled here: the rule is
+                // asked what it answers about those arguments (`settledAnswerOf`), and the graph
+                // holds that answer. A node keeps the instantiated type of the call but not the
+                // type argument it was written with, so nothing at run time could answer it. That
+                // is also why such an operator carries no kernel
+                // (`src/builtin/operators/struct.cpp`): the answer exists before the node would.
                 //
-                // Nothing is invented: a type argument that states no extents was refused by the
-                // resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so the
-                // answer exists exactly where the type says it does.
-                if (const auto extents = camel::core::type::statedExtentsOf(explicitTypes[0]);
-                    extents.has_value()) {
-                    auto *const intArrayType =
-                        camel::core::type::ArrayType::create(camel::core::type::Type::Int64());
-                    ::Array *stated = ::Array::create(
-                        camel::core::mm::autoSpace(), intArrayType, extents->size());
-                    if (stated != nullptr) {
-                        for (size_t at = 0; at < extents->size(); ++at) {
-                            stated->set<camel::core::rtdata::Int64>(
-                                at, static_cast<camel::core::rtdata::Int64>((*extents)[at]));
-                        }
-                        auto &draft          = currGraph_->transaction().edit();
-                        node_handle_t settled = draft.ref(draft.materializeStaticValue(
-                            camel::core::rtdata::toSlot<::Array *>(stated), intArrayType,
-                            runtime::kGCNodeFlagConstant));
-                        registerNodeOrigin(context_, settled, gct->at(0), "gir.link.oper");
-                        LEAVE("LINK");
-                        return settled;
+                // Nothing is invented, and no rule is recognized by its name: a rule that answers
+                // nothing here is an ordinary operator and keeps its node. A type argument the
+                // rule cannot answer for was refused by the resolver before this point
+                // (`SemanticDiag::ExtentOfNeedsStatedShape`), so the answer exists exactly where
+                // the rule says it does.
+                if (const auto settled = settledAnswerOf(
+                        ops,
+                        targetOperator->uri(),
+                        explicitTypes,
+                        targetOperator->funcType() != nullptr
+                            ? targetOperator->funcType()->exitType()
+                            : nullptr)) {
+                    Type *answerType = settled->type;
+                    if (isGCTraced(answerType->code()) && settled->value != NullSlot) {
+                        typeFoldedRoots_.emplace_back(
+                            camel::core::mm::autoSpace(),
+                            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(
+                                settled->value),
+                            answerType,
+                            "gir.build.settled");
                     }
+                    auto &draft               = currGraph_->transaction().edit();
+                    node_handle_t settledNode = draft.ref(draft.materializeStaticValue(
+                        settled->value,
+                        answerType,
+                        runtime::kGCNodeFlagConstant));
+                    registerNodeOrigin(context_, settledNode, gct->at(0), "gir.link.oper");
+                    LEAVE("LINK");
+                    return settledNode;
                 }
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);
@@ -3944,7 +4061,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         } else if (std::holds_alternative<graph_ptr_t>(drefTarget)) {
             callDecorated(std::get<graph_ptr_t>(drefTarget));
         } else {
-            throw std::runtime_error("Dref target must be graph set, operator group, or decorated graph.");
+            throw std::runtime_error(
+                "Dref target must be graph set, operator group, or decorated graph.");
         }
     } else {
         Type *dataType = nodeTypeOf(targetNode);
@@ -3992,15 +4110,15 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             // reader has to look at). The reason says the same thing either way: this type holds
             // no function, so a call of it has nothing to run.
             const std::string writtenName = writtenCalleeName(gct->at(0));
-            const bool namesCallee         = !writtenName.empty();
+            const bool namesCallee        = !writtenName.empty();
             diags_->of(SemanticDiag::ArgumentsRejected)
                 .atOrigin(gct->origin())
                 .commit(
                     namesCallee ? writtenName : calleeType,
                     argTypesStr,
-                    (namesCallee ? "the value this call stands on has type '" + calleeType +
-                                       "', and that"
-                                 : std::string("a value of that type")) +
+                    (namesCallee
+                         ? "the value this call stands on has type '" + calleeType + "', and that"
+                         : std::string("a value of that type")) +
                         " is not a function: a call runs the function a value holds, so there is "
                         "nothing here to call");
             throw BuildAbortException();
@@ -4134,7 +4252,8 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         targetFuncType->normTypeAt(0) != nullptr &&
         targetFuncType->normTypeAt(0)->code() == TypeCode::Stream) {
         const auto widthBelowOne = [](const data_ptr_t &data) {
-            if (const auto integer = std::dynamic_pointer_cast<LongData>(data); integer != nullptr) {
+            if (const auto integer = std::dynamic_pointer_cast<LongData>(data);
+                integer != nullptr) {
                 return integer->data() < 1;
             }
             const auto integer = std::dynamic_pointer_cast<IntData>(data);
@@ -4169,7 +4288,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         if (a == nullptr || b == nullptr || nodeGraphOf(a) != nodeGraphOf(b)) {
             return false;
         }
-        auto *draft = nodeDraftOf(a);
+        auto *draft                   = nodeDraftOf(a);
         const draft_node_ref_t first  = nodeIdOf(a);
         const draft_node_ref_t second = nodeIdOf(b);
         if (!draft->alive(first) || !draft->alive(second)) {
@@ -4188,84 +4307,88 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         bool readsVersion = false;
     };
     // The node to link and, at a `var` position, the variable the callee writes (if any).
-    const auto passArgument = [&](const Argument &arg, bool isVar, Type *param,
-                                  const std::string &paramLabel) {
-        if (!isVar) {
-            return Passed{
-                arg.early != nullptr ? arg.early : valueOf(arg.node), node_handle_t{}, LinkType::Norm};
-        }
-        requireMutableArgument(arg, calleeLabel);
-        // A `var` parameter is two-way: the callee reads the caller's variable and writes into
-        // it, so the argument is accepted only when each side's type accepts the other's values
-        // (design principles 3.5). A shape one side leaves open is not such a pair: a
-        // `var w: f32[..]` may write a two-dimensional array into a variable that holds an
-        // `f32[]`, and the caller's type never said it could hold one.
-        if (param != nullptr) {
-            Type *have = valueTypeOf(nodeTypeOf(arg.node));
-            if (have == nullptr || !param->assignableFrom(have) || !have->assignableFrom(param)) {
-                diags_->of(SemanticDiag::VarArgumentTypeMismatch)
-                    .atOrigin(arg.expr->origin())
-                    .commit(
-                        calleeLabel,
-                        paramLabel,
-                        param->toString(),
-                        have != nullptr ? have->toString() : std::string("void"));
-                throw BuildAbortException();
+    const auto passArgument =
+        [&](const Argument &arg, bool isVar, Type *param, const std::string &paramLabel) {
+            if (!isVar) {
+                return Passed{
+                    arg.early != nullptr ? arg.early : valueOf(arg.node),
+                    node_handle_t{},
+                    LinkType::Norm};
             }
-        }
-        const bool named = isVariable(arg.node);
-        // The cell the port states: a cell of the parameter's type. Two cell types whose content
-        // types accept each other are one box (type/composite/tuple: the conversion moves
-        // nothing), so the callee still writes the one cell the caller's variable is, and the
-        // edge carries the type the callee's port says.
-        const auto asParameterCell = [&](node_handle_t cell) {
-            if (param == nullptr || nodeTypeOf(cell) == nullptr) {
-                return cell;
-            }
-            Type *wanted = TupleType::cell(param);
-            if (nodeTypeOf(cell)->equals(wanted)) {
-                return cell;
-            }
-            node_handle_t converted = currGraph_->addCastNode(wanted);
-            linkNodes(LinkType::Norm, cell, converted);
-            registerNodeOrigin(context_, converted, arg.expr, "gir.cast");
-            return converted;
-        };
-        if (takesVariables) {
-            // `s.x = e`, `arr[0] = e`, `f() = e`: the target is a temporary, and the store
-            // would be lost without a trace.
-            if (!named && targetOperator != nullptr) {
-                diags_->of(SemanticDiag::AssignmentTargetNotVariable)
-                    .atOrigin(arg.expr->origin())
-                    .commit();
-                throw BuildAbortException();
-            }
-            // An expression that is not a name, passed to a function, is a fresh object
-            // nobody else refers to.
-            node_handle_t variable = named ? arg.node : newVariable(arg.node);
-            // A `var` handed to another graph is read before the callee writes it, and what that
-            // read takes is the version the variable's nearest write made, not the cell the
-            // first write made: the port carries that version as a data edge, and the control
-            // input the writer used to stand in for it is gone with it (linkCaptureSites links a
-            // capture the same way; Builder::valueVersionOf says what a version is). The version
-            // is the cell the write stored into -- `:op/assn` gives that cell back as its own
-            // value -- so the callee still writes the variable's one cell, and the write the
-            // callee does is recorded where the call is built (recordWrite). The `var` position
-            // of an assignment or of a variable operator is the write itself rather than a read
-            // of the cell, so it keeps the cell (docs/design/effects/edges.cn.md 5.6).
-            if (named && targetOperator == nullptr) {
-                if (node_handle_t version = valueVersionOf(variable);
-                    version != nullptr && inSameRegion(version, targetNode)) {
-                    return Passed{asParameterCell(version), variable, LinkType::Norm, true};
+            requireMutableArgument(arg, calleeLabel);
+            // A `var` parameter is two-way: the callee reads the caller's variable and writes into
+            // it, so the argument is accepted only when each side's type accepts the other's values
+            // (design principles 3.5). A shape one side leaves open is not such a pair: a
+            // `var w: f32[..]` may write a two-dimensional array into a variable that holds an
+            // `f32[]`, and the caller's type never said it could hold one.
+            if (param != nullptr) {
+                Type *have = valueTypeOf(nodeTypeOf(arg.node));
+                if (have == nullptr || !param->assignableFrom(have) ||
+                    !have->assignableFrom(param)) {
+                    diags_->of(SemanticDiag::VarArgumentTypeMismatch)
+                        .atOrigin(arg.expr->origin())
+                        .commit(
+                            calleeLabel,
+                            paramLabel,
+                            param->toString(),
+                            have != nullptr ? have->toString() : std::string("void"));
+                    throw BuildAbortException();
                 }
             }
-            return Passed{asParameterCell(variable), variable, LinkType::Norm};
-        }
-        return Passed{
-            arg.early != nullptr ? arg.early : valueOf(arg.node),
-            named ? arg.node : node_handle_t{},
-            LinkType::Norm};
-    };
+            const bool named = isVariable(arg.node);
+            // The cell the port states: a cell of the parameter's type. Two cell types whose
+            // content types accept each other are one box (type/composite/tuple: the conversion
+            // moves nothing), so the callee still writes the one cell the caller's variable is, and
+            // the edge carries the type the callee's port says.
+            const auto asParameterCell = [&](node_handle_t cell) {
+                if (param == nullptr || nodeTypeOf(cell) == nullptr) {
+                    return cell;
+                }
+                Type *wanted = TupleType::cell(param);
+                if (nodeTypeOf(cell)->equals(wanted)) {
+                    return cell;
+                }
+                node_handle_t converted = currGraph_->addCastNode(wanted);
+                linkNodes(LinkType::Norm, cell, converted);
+                registerNodeOrigin(context_, converted, arg.expr, "gir.cast");
+                return converted;
+            };
+            if (takesVariables) {
+                // `s.x = e`, `arr[0] = e`, `f() = e`: the target is a temporary, and the store
+                // would be lost without a trace.
+                if (!named && targetOperator != nullptr) {
+                    diags_->of(SemanticDiag::AssignmentTargetNotVariable)
+                        .atOrigin(arg.expr->origin())
+                        .commit();
+                    throw BuildAbortException();
+                }
+                // An expression that is not a name, passed to a function, is a fresh object
+                // nobody else refers to.
+                node_handle_t variable = named ? arg.node : newVariable(arg.node);
+                // A `var` handed to another graph is read before the callee writes it, and what
+                // that read takes is the version the variable's nearest write made, not the cell
+                // the first write made: the port carries that version as a data edge, and the
+                // control input the writer used to stand in for it is gone with it
+                // (linkCaptureSites links a capture the same way; Builder::valueVersionOf says what
+                // a version is). The version is the cell the write stored into -- `:op/assn` gives
+                // that cell back as its own value -- so the callee still writes the variable's one
+                // cell, and the write the callee does is recorded where the call is built
+                // (recordWrite). The `var` position of an assignment or of a variable operator is
+                // the write itself rather than a read of the cell, so it keeps the cell
+                // (docs/design/effects/edges.cn.md 5.6).
+                if (named && targetOperator == nullptr) {
+                    if (node_handle_t version = valueVersionOf(variable);
+                        version != nullptr && inSameRegion(version, targetNode)) {
+                        return Passed{asParameterCell(version), variable, LinkType::Norm, true};
+                    }
+                }
+                return Passed{asParameterCell(variable), variable, LinkType::Norm};
+            }
+            return Passed{
+                arg.early != nullptr ? arg.early : valueOf(arg.node),
+                named ? arg.node : node_handle_t{},
+                LinkType::Norm};
+        };
 
     // All arguments are read before the call is recorded as a writer: a variable passed both
     // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
@@ -4285,27 +4408,29 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 return std::pair<Type *, std::string>{nullptr, std::string()};
             }
             return std::pair<Type *, std::string>{
-                targetFuncType->withTypeAt(index), argLabel(with, index)};
+                targetFuncType->withTypeAt(index),
+                argLabel(with, index)};
         }
         if (index >= targetFuncType->normTypesCount()) {
             return std::pair<Type *, std::string>{nullptr, std::string()};
         }
         return std::pair<Type *, std::string>{
-            targetFuncType->normTypeAt(index), argLabel(with, index)};
+            targetFuncType->normTypeAt(index),
+            argLabel(with, index)};
     };
     for (size_t i = 0; i < withInputs.size(); i++) {
-        bool isVar = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
+        bool isVar       = i < targetFuncType->withTypesCount() && targetFuncType->withIsVarAt(i);
         const auto param = varParameterOf(i, true);
-        Passed arg = passArgument(withInputs[i], isVar, param.first, param.second);
-        arg.link   = LinkType::With;
+        Passed arg       = passArgument(withInputs[i], isVar, param.first, param.second);
+        arg.link         = LinkType::With;
         passed.push_back(arg);
         hasVarArgument |= isVar;
     }
     for (size_t i = 0; i < normInputs.size(); i++) {
-        bool isVar = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
+        bool isVar       = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
         const auto param = varParameterOf(i, false);
-        Passed arg = passArgument(normInputs[i], isVar, param.first, param.second);
-        arg.link   = LinkType::Norm;
+        Passed arg       = passArgument(normInputs[i], isVar, param.first, param.second);
+        arg.link         = LinkType::Norm;
         passed.push_back(arg);
         hasVarArgument |= isVar;
     }
@@ -4322,10 +4447,12 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             // In a sync block the statement before this call is linked to it below, and when it
             // already comes after the modifier the modifier's edge says nothing more: the edge
             // would be a transitive one, which the contract of the control edges leaves out.
-            const bool chainedAfterModifier =
-                synced_ && lastSyncedNode_ != nullptr && sameGraph(lastSyncedNode_, currGraph_) &&
-                runtime::hasControlDependency(
-                    *nodeTransactionOf(lastSyncedNode_), nodeIdOf(*modifierNode), nodeIdOf(lastSyncedNode_));
+            const bool chainedAfterModifier = synced_ && lastSyncedNode_ != nullptr &&
+                                              sameGraph(lastSyncedNode_, currGraph_) &&
+                                              runtime::hasControlDependency(
+                                                  *nodeTransactionOf(lastSyncedNode_),
+                                                  nodeIdOf(*modifierNode),
+                                                  nodeIdOf(lastSyncedNode_));
             if (sameGraph(*modifierNode, currGraph_) && !chainedAfterModifier &&
                 shouldAddSyncCtrlLink(*modifierNode, targetNode)) {
                 writeControlLink(*modifierNode, targetNode);
@@ -4351,8 +4478,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         }
         const auto *parameterType = tt::as_ptr<FunctionType>(declared);
         if (parameterType == nullptr ||
-            parameterType->resources().mode !=
-                camel::core::sem::ResourceSignature::Mode::Generic) {
+            parameterType->resources().mode != camel::core::sem::ResourceSignature::Mode::Generic) {
             return; // a clause names what the value may reach: nothing is left to the value
         }
         compile_graph_ptr_t value = functionValueGraphOf(argument);
@@ -4370,7 +4496,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         for (node_handle_t origin : summary->second.variables) {
             bool enclosed = false;
             for (DraftGraphBuilder *outer = currGraph_.get(); outer != nullptr;
-                 outer                     = outer->outerGraph().get()) {
+                 outer                    = outer->outerGraph().get()) {
                 if (nodeGraphOf(origin) == outer) {
                     enclosed = true;
                     break;
@@ -4409,12 +4535,11 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             writtenMask = mask->second;
         }
     }
-    const bool callReturnsValue =
-        targetFuncType != nullptr && targetFuncType->hasExitType() &&
-        !isVoidGraphExitType(targetFuncType->exitType());
+    const bool callReturnsValue = targetFuncType != nullptr && targetFuncType->hasExitType() &&
+                                  !isVoidGraphExitType(targetFuncType->exitType());
     if (writtenMask != 0) {
         CallValue value;
-        value.hasReturn = callReturnsValue;
+        value.hasReturn  = callReturnsValue;
         const auto table = capturedValues_.find(targetGraph.get());
         for (size_t k = 0; table != capturedValues_.end() && k < table->second.size(); ++k) {
             if ((writtenMask & (uint32_t{1} << k)) == 0) {
@@ -4450,7 +4575,12 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 writingGraphs.push_back(value.get());
             }
             unit_->pendingIgnoredWrites.push_back(
-                {std::move(writingGraphs), capturedWrites, {}, gct->origin(), subject, "it writes"});
+                {std::move(writingGraphs),
+                 capturedWrites,
+                 {},
+                 gct->origin(),
+                 subject,
+                 "it writes"});
         }
     }
     for (const Passed &arg : passed) {
@@ -4483,9 +4613,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         // function of the program writes is a possible write of it (scanProgramWriters). The call
         // becomes that variable's version (`:var/after`, valueVersionOf), so the read written after
         // it takes the value the call made, and the call runs even where no sync block orders it.
-        // Counting a writer the call does not reach costs the call having to run and the reads after
-        // it being ordered after it; it cannot change a value, because what the read takes is the
-        // variable as it stands after the call.
+        // Counting a writer the call does not reach costs the call having to run and the reads
+        // after it being ordered after it; it cannot change a value, because what the read takes is
+        // the variable as it stands after the call.
         if (!programWriters_.empty()) {
             for (const auto &[name, variable] : visibleVariables()) {
                 if (!programWrites(name)) {
@@ -4495,8 +4625,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
                 // here would take. A variable this graph has not captured yet is counted where it
                 // is captured, so that a read written after this call takes the call (`:var/after`,
                 // readVariableThrough) -- the write happens before the graph needed the cell.
-                const node_handle_t cell =
-                    sameGraph(variable, currGraph_) ? variable : capturedCellIn(currGraph_.get(), variable);
+                const node_handle_t cell = sameGraph(variable, currGraph_)
+                                               ? variable
+                                               : capturedCellIn(currGraph_.get(), variable);
                 if (cell != nullptr) {
                     recordWrite(cell, targetNode, true);
                 } else {
@@ -4581,9 +4712,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // into). Written as a statement, or where the position wants no value at all (the last
     // statement of a `: void` body), the write stands for it: the write is what the statement
     // does.
-    const bool assignment =
-        gct->size() == 3 && gct->at(0) != nullptr && gct->at(0)->type() == GCT::NodeKind::DREF &&
-        gct->at(0)->name().starts_with("__assn");
+    const bool assignment = gct->size() == 3 && gct->at(0) != nullptr &&
+                            gct->at(0)->type() == GCT::NodeKind::DREF &&
+                            gct->at(0)->name().starts_with("__assn");
     // Whether a value is wanted here: the statement's value is not dropped (`unusedStatement`),
     // and the position is not a `void` one (a body declared `: void` takes its last statement's
     // value in no position -- `visitExecNode` builds it and drops it). A position that declares no
@@ -4591,8 +4722,7 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
     // reason its exit type can be inferred. `expectedResult` is the position's type as its caller
     // passed it; `expectedValueType_` is nil for the whole of a call (`callScope`).
     const bool valueWanted =
-        !unusedStatement &&
-        !(expectedResult != nullptr && isVoidGraphExitType(expectedResult));
+        !unusedStatement && !(expectedResult != nullptr && isVoidGraphExitType(expectedResult));
     if (assignment && valueWanted && normInputs.size() == 2) {
         // What the position takes is the value the write wrote -- the write's second operand, one
         // data edge, no read of the cell and no new anchor. The write is an effect of its own and
@@ -4634,9 +4764,9 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
         node_handle_t empty = currGraph_->addStaticDataNode(Data::null());
         node_handle_t gate  = currGraph_->addGateNode(nodeTypeOf(empty));
         linkNodes(LinkType::Norm, empty, gate);
-        // The call is what the gate waits on: a chain link inside a `sync` block, where a wait is the
-        // sync edge and the marks that make it one (docs/design/effects/edges.cn.md 5.3); outside
-        // one there is no chain, and the control edge the kind still gives stands.
+        // The call is what the gate waits on: a chain link inside a `sync` block, where a wait is
+        // the sync edge and the marks that make it one (docs/design/effects/edges.cn.md 5.3);
+        // outside one there is no chain, and the control edge the kind still gives stands.
         if (synced_) {
             writeSyncLink(targetNode, gate);
         } else {

@@ -13,7 +13,7 @@
 //
 //     x     = [[1.0, 2.0],
 //              [3.0, 4.0]]
-//     lanes = mean_axis(x, 1, false) = [1.5, 3.5]            (one lane per row)
+//     lanes = mean<1, false>(x) = [1.5, 3.5]            (one lane per row)
 //     value = sum(take(lanes, [1])) = 3.5
 //     dL/dx = [[0.0, 0.0],
 //              [0.5, 0.5]]                                  (row 1, half of the 1.0 to each element)
@@ -24,17 +24,17 @@
 //     camel test/cases/compile/transforms/stated_mean_axis_gradient_square_axis.cml
 import { grad } from autodiff
 import { vjp } from vjp
-import { abs, mean_axis, sum, take } from tensor
+import { abs, mean, sum, take } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
-with <w: float[..]>
+with <w: float[...]>
 func total(): float {
-    return sum(take(mean_axis(w, 1, false), [1]))
+    return sum(take(mean<1, false>(w), [1]))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[..]): float {
-    return sum(take(mean_axis(x, 1, false), [1]))
+func total_plain(x: float[...]): float {
+    return sum(take(mean<1, false>(x), [1]))
 }
 
 func main(): int sync {
@@ -43,6 +43,6 @@ func main(): int sync {
     let (value, pullback) = vjp(total_plain)(x)
     let library = pullback(1.0).0
     let same = sum(abs(engine - library)) == 0.0
-    `mean_axis square: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    `mean<1> square: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
     return 0
 }

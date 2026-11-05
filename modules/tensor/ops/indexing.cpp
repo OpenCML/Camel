@@ -803,26 +803,30 @@ std::optional<uint8_t> sumToLaw(std::optional<TypeCode> dtype) {
 }
 
 /**
- * sum_to(g, like): g summed down to like's shape, which g broadcasts from. Both shapes known.
- * When they are equal the kernel returns g itself: an identity map, no arithmetic. Otherwise
- * every axis of g is a dim; it is a Reduction dim where like has no such axis or has extent 1
- * against g's larger extent, and the result is written at like's coordinates.
+ * sum_to(t, at): t summed down to the extents `at`, which must be a suffix of t's shape (ruling
+ * 甲: a leading-axis reduction). The tensor's shape is read as a fact of the operand; the target
+ * is the constant list the caller wrote. An `at` that is not constant leaves the operator to the
+ * kernel: an index map has to be built from numbers, and a list the run computes is not one.
+ *
+ * When the shapes are equal the kernel returns t itself: an identity map, no arithmetic.
+ * Otherwise every axis of t is a dim; it is a Reduction dim where `at` has no such axis or states
+ * 1 against t's larger extent, and the result is written at `at`'s coordinates.
  *
  * Its arms are the float widths its kernel carries, f32 then f64, and each names the law at its
  * own position in that list; an integer or bool operand gets no instance, which is what the
  * kernel's refusal says (design principles 5.1: no conversion to reach an arm).
  */
 std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
-    const auto g    = shapeOf(ctx, 0);
-    const auto like = shapeOf(ctx, 1);
-    if (!g || !like || !fullyKnown(*g) || !fullyKnown(*like) || like->size() > g->size()) {
+    const auto g  = shapeOf(ctx, 0);
+    const auto at = ctx.constInts(1);
+    if (!g || !at || !fullyKnown(*g) || at->size() > g->size()) {
         return std::nullopt;
     }
-    if (!sameElementType(ctx)) {
-        return std::nullopt; // ::<T>(g: T[..], like: T[..]): no conversion between two of them
-    }
     IndexBuilder b;
-    if (*g == *like) {
+    if (g->size() == at->size() &&
+        std::equal(at->begin(), at->end(), g->begin(), [](int64_t want, const std::optional<int64_t> &have) {
+            return have && want == *have;
+        })) {
         // Equal shapes: the kernel returns its input itself, so every element type is carried
         // through and the law is never read.
         const auto dims = dimsOver(b, 0, *g);
@@ -833,14 +837,15 @@ std::optional<IndexedInstance> sumToIndexing(const InferContext &ctx) {
     if (!law) {
         return std::nullopt;
     }
-    const size_t shift = g->size() - like->size();
+    const size_t shift = g->size() - at->size();
     std::vector<DimRole> roles(g->size(), DimRole::Reduction);
     for (size_t k = shift; k < g->size(); ++k) {
-        const std::optional<int64_t> L = (*like)[k - shift], G = (*g)[k];
-        if (L == G) {
+        const int64_t L                = (*at)[k - shift];
+        const std::optional<int64_t> G = (*g)[k];
+        if (G && L == *G) {
             roles[k] = DimRole::Parallel;
         } else if (L != 1) {
-            return std::nullopt; // like does not broadcast to g: the kernel rejects it
+            return std::nullopt; // not a suffix of the shape: the kernel refuses it by name
         }
     }
     const auto dims = dimsOver(b, 0, *g, roles);

@@ -17,7 +17,7 @@ import { vjp } from vjp
 import { abs, min, sum } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
-with <x: float[..]>
+with <x: float[...]>
 func total(): float {
     return min(x)
 }

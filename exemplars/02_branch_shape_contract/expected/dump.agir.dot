@@ -35,9 +35,9 @@ digraph GraphIR {
         N0F [label="BRCH", type="BRCH", origin=<ORIGIN>, span="17:34-17:36", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
         N10 [label="true", type="DATA", origin=<ORIGIN>, span="17:44-17:50", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="string"];
         N11 [label=":op/eq_s", type="OPER", origin=<ORIGIN>, span="17:41-17:43", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="bool"];
-        N12 [label="pick", type="FUNC", origin=<ORIGIN>, span="17:12-17:51", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[..]"];
-        N13 [label="tensor:matmul", type="OPER", origin=<ORIGIN>, span="17:52-17:53", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[..]"];
-        N14 [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="17:4-17:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[..]"];
+        N12 [label="pick", type="FUNC", origin=<ORIGIN>, span="17:12-17:51", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[...]"];
+        N13 [label="tensor:matmul", type="OPER", origin=<ORIGIN>, span="17:52-17:53", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[...]"];
+        N14 [label=":io/println", type="OPER", role="effect", origin=<ORIGIN>, span="17:4-17:11", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="f32[...]"];
         N15 [label="0", type="DATA", origin=<ORIGIN>, span="18:11-18:12", srcfile="exemplars/02_branch_shape_contract/program.cml", value_type="int"];
         N16 [label="GATE", type="GATE", value_type="int"];
         N16 -> O01 [label="0", type="EXIT"];

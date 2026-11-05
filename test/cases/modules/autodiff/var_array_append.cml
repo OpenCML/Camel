@@ -10,10 +10,10 @@
 import { reshape, sum } from tensor
 import { with_grad } from autodiff
 
-type P = { p0: f64[..] }
+type P = { p0: f64[...] }
 
 with <m: P>
-func loss(x: f64[..]): float sync {
+func loss(x: f64[...]): float sync {
     var parts: int[] = []
     parts = parts->append<1>
     parts = parts->append<2>

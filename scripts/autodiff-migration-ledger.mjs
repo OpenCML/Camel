@@ -31,8 +31,10 @@
 //    "where the expectation comes from", below.
 // 3. The three non-`pass` columns are counted **from the case sources and the rule files**, never
 //    from the wording of a diagnostic. `array` is a case whose source spells an array or tensor
-//    type (`[]`, `[..]`, `f32`, `f16`, `bf16`, `Model`, `Plain`); `with` is one whose source spells
+//    type (`[]`, `[...]`, `f32`, `f16`, `bf16`, `Model`, `Plain`); `with` is one whose source spells
 //    a function type carrying a `with` parameter (`<x: float> () => float`); `other` is the rest.
+//    **A comment is not a spelling**: both comment forms are stripped before either pattern is looked
+//    for, so an explanation that mentions a type no longer reclassifies the case (2026-11-05).
 //    The rule files are counted the same way and printed with `file:line` anchors beside the table.
 //
 //    **What this contract is, and what it is not.** The columns classify all 118 library cases, so
@@ -202,13 +204,61 @@ let loaderFailure = ''
 // (`test/plans/feat/modules/autodiff.plan.toml`), added by the second-derivative lane: they ask what a
 // nested `jvp`/`vjp` can and cannot be handed, and each is written with a `with` parameter, which is
 // the class they land in. `pass` does not move: the record holds 23 and the host reads 23.
+// **2026-11-05, one case arrived and it is `with`. ** `total` 143 -> 144, `library` 134 -> 135,
+// `with` 53 -> 54; `array` and `other` do not move. The one is
+// `test/cases/modules/autodiff/has_aux_library_composition.cml`: it names `vjp` (the library's
+// `has_aux` it is about) and `with_grad` (the engine leg it is compared against), which is `library`,
+// and it is written with `with` parameters for that comparison -- `with <w: float> func loss_engine()`
+// is the engine's shape, and comparing the two legs is the whole point of the case, so the `with`
+// class rising here is arithmetic and not a case falling back. `pass` is a floor and does not move.
+// **2026-11-05, no case arrived and four changed class: a comment is not a spelling.** Both comment
+// forms are now stripped before the two patterns are looked for, and four cases were being counted by
+// the words of their explanation rather than by what they are written as: `array` 72 -> 69,
+// `with` 54 -> 55, `other` 9 -> 11. The three that leave `array` spell their array only in a doc
+// comment -- `jax_vmap.cml` (`T[]`), `loop_grad_iterable_length.cml` (`float[]`) and
+// `loop_grad_refuse_no_element_tangent.cml` (`string[]`) -- and the last two are `with` cases in code
+// (`with <w: float>`), which is where they land; `jax_vmap` lands in `other`, which is where the other
+// JAX cases are. The fourth, `has_aux_vjp_named.cml`, was `with` on the strength of a `<...>` in the
+// signature its comment quotes, and is `other` in code. **This is a measurement correction, not debt
+// moving**: the ratchet's "only down" is about a case being rewritten to a shape the library takes, and
+// none of these four was rewritten -- the ruler was reading the wrong sentence, so the record is
+// restated here (the same rule the denominators are restated under) rather than left to drift.
+// `total`, `library` and `pass` do not move.
+//
+// **Why the four are a correction and not a moved target: the spelling is not in their code.** One
+// reading each -- the line that carried the spelling, and what the file says once both comment forms are
+// cut out. A case whose spelling *is* in its code would make this paragraph a disguised retune, so the
+// reading is written down where a reviewer can repeat it:
+//
+//   - `jax_vmap.cml`: the comment says "the leading axis of a `T[]` is its elements"; the code part has
+//     no `[]`, no `[...]` and no `f32`/`f16`/`bf16`/`Model`/`Plain`, and no `with` spelling either.
+//   - `loop_grad_iterable_length.cml`: the comment says "only `float[]` is"; the code part has no array
+//     spelling, and has `with <w: float>` -- which is why the case is `with` and not `array`.
+//   - `loop_grad_refuse_no_element_tangent.cml`: the comment says "`string[]` has none"; the code part
+//     has no array spelling, and has `with <w: float>`, so it is `with`.
+//   - `has_aux_vjp_named.cml`: the comment quotes the instantiated signature
+//     `(f: F) => <__pack_0: ...WithOf<F>> (...)`; the code part has neither the `<...>` the class was
+//     read from nor an array spelling, so the case is `other`.
+//
+// So the old reading counted a comment: `array` was overstated by 3, `with` by 1, and `other` understated
+// by 2 -- which is the whole of the movement above.
+//
+// **2026-11-05, third move: no case arrived; one case is now written with a `with` parameter.** `with`
+// 55 -> 56, `other` 11 -> 10; `total`, `library`, `array` and `pass` do not move. The one is
+// `test/cases/modules/autodiff/has_aux_library_plain.cml`, and what moved it is the library's `grad`
+// landing as a composition on `first_with_as_param`: `grad` differentiates the first `with` parameter
+// (design principles 9.9), a reverse transform differentiates the ordinary ones, so the case now
+// declares the value it differentiates as a `with` function -- `with <x: float> func cube_at() = cube(x)`
+// -- instead of handing `grad` a lambda, which is the shape the deleted `with` promotion used to make
+// look differentiable and answered 0.0 for. The numbers the case reads are unchanged (`8.0`, `(12.0)`,
+// `12.0`); only the spelling of its subject moved, and the class it is counted in with it.
 const LEDGER_RECORDED = {
-    total: 143,
-    library: 134,
+    total: 144,
+    library: 135,
     pass: 22,
-    with: 53,
-    array: 72,
-    other: 9,
+    with: 56,
+    array: 69,
+    other: 10,
 }
 
 function camelBinary() {
@@ -350,12 +400,65 @@ function runCase(file, test) {
 // spelled anywhere in the case; `with` is a function type carrying a `with` parameter; `other` is
 // what is left. The same two spellings are counted in the rule files, where the hits are printed with
 // `file:line` anchors so a reader can go and look.
-const ARRAY_SPELLING = /\[\]|\[\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
+const ARRAY_SPELLING = /\[\]|\[\.\.\.\]|\bf32\b|\bf16\b|\bbf16\b|\bModel\b|\bPlain\b/
 const WITH_SPELLING = /<[A-Za-z_]\w*\s*:\s*[^>]+>/
 
+// **A comment is not a spelling.** The class is read from the source text, and it used to read the
+// explanation as readily as the code: `has_aux_vjp_pair.cml` said "a `float` or an `f32`" in its block
+// comment, the case moved from `other` to `array`, and the ratchet -- right to notice a
+// reclassification -- went red on `array=73 other=8` (`05e1145a9`). The sentence and the page both had
+// to be reworded to get the reading back, which is the ruler bending the thing it measures.
+//
+// So both comment forms are cut out before the two spellings are looked for. The stripper follows
+// string literals, because a `//` inside one is not a comment (`"http://..."`) and a type named in a
+// literal is a spelling of it. Newlines are kept, so a `file:line` anchor still points at the line the
+// reader should open.
+function stripComments(source) {
+    let out = ''
+    let quote = null
+    for (let i = 0; i < source.length; ) {
+        const ch = source[i]
+        const next = source[i + 1]
+        if (quote !== null) {
+            out += ch
+            if (ch === '\\' && i + 1 < source.length) {
+                out += next
+                i += 2
+                continue
+            }
+            if (ch === quote) quote = null
+            i += 1
+            continue
+        }
+        if (ch === '"' || ch === "'") {
+            quote = ch
+            out += ch
+            i += 1
+            continue
+        }
+        if (ch === '/' && next === '/') {
+            while (i < source.length && source[i] !== '\n') i += 1
+            continue
+        }
+        if (ch === '/' && next === '*') {
+            i += 2
+            while (i < source.length && !(source[i] === '*' && source[i + 1] === '/')) {
+                if (source[i] === '\n') out += '\n'
+                i += 1
+            }
+            i = Math.min(i + 2, source.length)
+            continue
+        }
+        out += ch
+        i += 1
+    }
+    return out
+}
+
 function classifySource(source) {
-    if (ARRAY_SPELLING.test(source)) return 'array'
-    if (WITH_SPELLING.test(source)) return 'with'
+    const text = stripComments(source)
+    if (ARRAY_SPELLING.test(text)) return 'array'
+    if (WITH_SPELLING.test(text)) return 'with'
     return 'other'
 }
 
@@ -369,7 +472,7 @@ function ruleSpellings() {
         return hits
     }
     for (const name of files) {
-        const lines = fs.readFileSync(path.join(RULE_DIR, name), 'utf8').split('\n')
+        const lines = stripComments(fs.readFileSync(path.join(RULE_DIR, name), 'utf8')).split('\n')
         lines.forEach((line, index) => {
             const anchor = `stdlib/rulesets/${name}:${index + 1}`
             if (ARRAY_SPELLING.test(line)) hits.array.push(anchor)

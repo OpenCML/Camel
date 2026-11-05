@@ -1,0 +1,29 @@
+// A function written inside an expanded body cannot name that body's rest parameter.
+//
+// `outer` has a rest parameter, so it has no graph and no value: each call expands its body into the
+// caller's graph, and `xs` is bound to the nodes the call's arguments left over (`builder_rest.cpp`).
+// A lambda written in that body is a graph of its own, and those nodes belong to the caller's graph.
+//
+// Until 2026-11-05 this program **aborted the compiler**: the name resolved to the expansion's tuple,
+// the lambda's graph linked nodes of another graph, and the encoder reached a live node with no header
+// of its own --
+//
+//     Camel Invariant Violation: header != nullptr
+//     Live compile draft node cannot have a null header.   (src/compile/gir/graph_encode.cpp)
+//
+// -- a process killed by a guarantee, which is the one failure mode a compiler may not have. It is
+// refused by name now, at the line and column of the use, with the same answer a lambda gets when it
+// names a pack no enclosing function binds: from inside this function the pack is not a value any
+// scope holds. Teaching the lambda to *receive* the pack is the `...xs` work on the lambda's own
+// parameter list; this case pins that the compiler says so instead of dying.
+//
+// The guarantee itself is untouched: a link between two graphs is still an invariant violation, and
+// this program no longer asks for one.
+func outer(...xs): () => int {
+    return () => xs.[0]
+}
+
+func main(): int sync {
+    let f = outer(4, 5)
+    return f()
+}

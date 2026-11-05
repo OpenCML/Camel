@@ -1,0 +1,9 @@
+// shape 4 with the new spelling: a parameter pack in a function type.
+func apply::<...A>(f: (...A) => float): float {
+    return 0.0
+}
+
+func main(): int sync {
+    println("ok")
+    return 0
+}

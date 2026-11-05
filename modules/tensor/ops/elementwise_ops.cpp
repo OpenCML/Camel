@@ -221,7 +221,7 @@ OpDef binaryDef(std::string_view name, std::vector<std::string_view> exports) {
         .name      = name,
         .exports   = std::move(exports),
         .params    = kBinaryParams,
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = binaryInfer(k::binaryProducesFloat(Op)),
         .kernel    = &binaryKernel<Op>,
         .traits    = elementwiseTraits(),
@@ -234,7 +234,7 @@ OpDef compareDef(std::string_view name, std::vector<std::string_view> exports) {
         .name      = name,
         .exports   = std::move(exports),
         .params    = kCompareParams,
-        .resultDoc = "bool[..]",
+        .resultDoc = "bool[...]",
         .infer     = compareInfer,
         .kernel    = &compareKernel<Op>,
         .traits    = elementwiseTraits(),
@@ -247,7 +247,7 @@ OpDef unaryDef(std::string_view name, std::vector<std::string_view> exports) {
         .name      = name,
         .exports   = std::move(exports),
         .params    = kUnaryParams,
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = unaryInfer(k::unaryProducesFloat(Op)),
         .kernel    = &unaryKernel<Op>,
         .traits    = elementwiseTraits(),
@@ -278,7 +278,7 @@ OpDef notDef() {
         .name      = "not",
         .exports   = {"__not__"},
         .params    = kNotParams,
-        .resultDoc = "bool[..]",
+        .resultDoc = "bool[...]",
         .infer     = notInfer,
         .kernel    = &unaryKernel<k::UnaryOp::Not>,
         .traits    = elementwiseTraits(),
@@ -325,6 +325,22 @@ void subtractVjp(VjpBuilder &b, const VjpCall &call) {
 
 void multiplyVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 2, 2);
+    if (auto dy = b.gradientOf(call.output)) {
+        const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
+        accumulateOperand(b, lhs, addTensorOper(b, "tensor:multiply", {*dy, rhs}));
+        accumulateOperand(b, rhs, addTensorOper(b, "tensor:multiply", {*dy, lhs}));
+    }
+}
+
+/// `mul_stated`'s pullback: the product's own, because its value is the product's.
+///
+/// The two lists are operands the engine does not need: it holds both operands' **values**, which is
+/// exactly what the lists stand in for on the library side, where a cotangent's operand is a tangent
+/// and a tangent's type states no extents. So the engine's answer and the library's law
+/// (`stdlib/rulesets/transpose.cml#mul_stated_t`) are the same four reads and the same two products,
+/// and the table comparison `scripts/vjp-parity.mjs` sees a law with a rule behind it.
+void mulStatedVjp(VjpBuilder &b, const VjpCall &call) {
+    requireVjpInputs(call, 4, 4);
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t lhs = call.inputs[0], rhs = call.inputs[1];
         accumulateOperand(b, lhs, addTensorOper(b, "tensor:multiply", {*dy, rhs}));
@@ -515,6 +531,37 @@ void whereVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
+/// `mul_stated(x, w, ax, aw)`: the product with **both** operands' extents stated beside it.
+///
+/// The value is `x * w` -- `binaryKernel` is the wrapper `tensor:multiply` runs, so the broadcast, the
+/// element type and the one rounding are the definition's own -- and each list is checked against the
+/// shape of the operand it belongs to (`support.h#checkStatedExtents`). Nothing at run time reads the
+/// lists to compute the value: they are there for the reverse law, which reduces each cotangent to the
+/// shape its own operand had and has no value of that operand to read it from
+/// (`stdlib/rulesets/transpose.cml#mul_stated_t`, and `stdlib/rulesets/jvp.cml#jvp_mul_tensor` for the
+/// half that computes them, where both operands are values).
+///
+/// One list per operand and not one list, unlike the stated reductions: a product broadcasts, so the
+/// two shapes differ (`[2, 2, 3] * [3]`), and one list could not say which shape each cotangent comes
+/// back to. An operand that is one number states no extents, and its list is empty.
+slot_t mulStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
+    const std::vector<int64_t> ax = intListArg(norm, 2, "mul_stated");
+    const std::vector<int64_t> aw = intListArg(norm, 3, "mul_stated");
+    if (norm.code(0) == TypeCode::Array) {
+        checkStatedExtents(tensorArg(norm, 0), ax, 0, "mul_stated");
+    } else if (!ax.empty()) {
+        reportShapeError(
+            "mul_stated", "the left operand is one number, so its stated extents are the empty list");
+    }
+    if (norm.code(1) == TypeCode::Array) {
+        checkStatedExtents(tensorArg(norm, 1), aw, 0, "mul_stated");
+    } else if (!aw.empty()) {
+        reportShapeError(
+            "mul_stated", "the right operand is one number, so its stated extents are the empty list");
+    }
+    return binaryKernel<k::BinaryOp::Mul>(with, norm, ctx);
+}
+
 } // namespace
 
 std::vector<OpDef> elementwiseOps() {
@@ -522,6 +569,21 @@ std::vector<OpDef> elementwiseOps() {
     defs.push_back(binaryDef<k::BinaryOp::Add>("add", {"__add__"}));
     defs.push_back(binaryDef<k::BinaryOp::Sub>("subtract", {"__sub__"}));
     defs.push_back(binaryDef<k::BinaryOp::Mul>("multiply", {"__mul__"}));
+    // The stated twin of the product above: the same value, with the two operands' extents as two
+    // more operands (`mulStatedKernel`). Its signature is declared in `stdlib/tensor.cml`, because
+    // the shape of a product is the broadcast of two shapes and a declaration is the only place that
+    // says so without a value.
+    defs.push_back(OpDef{
+        .name      = "mul_stated",
+        .exports   = {"mul_stated"},
+        .params    = {{"x", ParamKind::TensorOrScalar},
+                      {"w", ParamKind::TensorOrScalar},
+                      {"ax", ParamKind::IntArray},
+                      {"aw", ParamKind::IntArray}},
+        .resultDoc = "float[...]",
+        .infer     = binaryInfer(k::binaryProducesFloat(k::BinaryOp::Mul)),
+        .kernel    = &mulStatedKernel,
+        .traits    = {}});
     defs.push_back(binaryDef<k::BinaryOp::Div>("divide", {"__div__"}));
     defs.push_back(binaryDef<k::BinaryOp::Pow>("pow", {"__pow__"}));
     defs.push_back(binaryDef<k::BinaryOp::Max>("maximum", {"maximum"}));
@@ -564,7 +626,7 @@ std::vector<OpDef> elementwiseOps() {
             {{"cond", ParamKind::Tensor},
              {"lhs", ParamKind::TensorOrScalar},
              {"rhs", ParamKind::TensorOrScalar}},
-        .resultDoc = "float[..]",
+        .resultDoc = "float[...]",
         .infer     = whereInfer,
         .kernel    = &whereKernel,
         .traits    = elementwiseTraits(),
@@ -572,6 +634,7 @@ std::vector<OpDef> elementwiseOps() {
     setVjp(defs, "add", &addVjp);
     setVjp(defs, "subtract", &subtractVjp);
     setVjp(defs, "multiply", &multiplyVjp);
+    setVjp(defs, "mul_stated", &mulStatedVjp);
     setVjp(defs, "divide", &divideVjp);
     setVjp(defs, "pow", &powVjp);
     setVjp(defs, "maximum", &extremumVjp<true>);

@@ -240,7 +240,7 @@ class NamedPairLoad : public Load {
           isRest_(isRest), isConstas_(isConstas) {}
     const std::string toString() const override {
         return "NamedPair: " +
-               (isRest_ ? std::string("..")
+               (isRest_ ? std::string("...")
                         : isConstas_ ? std::string("constas ")
                                      : isVar_ ? std::string("var ")
                                               : isConst_ ? "const " : "") +

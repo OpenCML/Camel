@@ -93,24 +93,14 @@ class TransposeResolver final : public FuncTypeResolver {
         if (transposeSignature(const_cast<FunctionType *>(function)) != nullptr) {
             return std::nullopt;
         }
-        // The exit cause, asked of the type: the cotangent of the result *is* the result's tangent
-        // space, so a `float` result takes a `float` cotangent and an `f32` result takes an `f32` one
-        // (`Tangent<f32>` is `f32`; `stdlib/types.cml#Tangent`, `camel/core/tangent_space.h`). What
-        // the law then needs is the addition of that space -- `:op/add_d` at `float`, `:op/add_f` at
-        // `f32` (`transpose.cpp#addUriFor`) -- so those are the two widths a result can have here.
-        // This is the *reason* the law above said no and not the law: `transposeSignature` is what
-        // decides, and it is asked first, one branch up.
-        const camel::core::TangentSpaceAnswer space =
-            camel::core::tangentSpaceOf(function->exitType());
-        const bool hasCotangentWidth =
-            space.hasSpace() && space.space != nullptr &&
-            (space.space->code() == TypeCode::Float64 || space.space->code() == TypeCode::Float32);
-        if (!hasCotangentWidth) {
-            return std::string(
-                "`transpose` takes a function whose result has a cotangent: the cotangent of the "
-                "result is what goes in, it is the result's own tangent space (`Tangent<f32>` is "
-                "`f32`), and this law adds cotangents with the addition of that space -- `:op/add_d` "
-                "at `float` and `:op/add_f` at `f32`");
+        // The exit cause, asked of the law itself: `resultCotangentRefusal` is what
+        // `transposeSignature` asks one branch up, so the message here cannot drift from the answer
+        // there. It names the member that does not hold a cotangent, or the space that registers no
+        // addition -- the position, not the type, because "this result type is not supported" is
+        // true of every failure and therefore says nothing.
+        const std::string why = resultCotangentRefusal(function->exitType());
+        if (!why.empty()) {
+            return "`transpose` takes a function whose result has a cotangent: " + why;
         }
         return std::string(
             "`transpose` takes a function whose parameters are all linear: each one is what a "
@@ -120,8 +110,10 @@ class TransposeResolver final : public FuncTypeResolver {
     }
 
     std::string signature() const override {
-        return "(f: (float) => float | (float, ...) => float) => "
-               "(cotangent) => (cotangents..)";
+        // The result is any type that has a cotangent, and the parameter the transposed function
+        // takes is that cotangent -- `Tangent<result>`, not a `float` it would have to be read into
+        // (`f6ee4f5d0`; design principles 9.9).
+        return "(f: (params..) => result) => (Tangent<result>) => (cotangents..)";
     }
 
     bool parameterNames(std::vector<std::string> &with, std::vector<std::string> &norm)
@@ -160,9 +152,23 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
         // A build that refused before any site ran records no cause. Saying so is better than a
         // sentence about a shape nothing named.
         return "the transform gave no reason";
-    case TransposeRefusalCause::CotangentNeedsAValue:
-        return position.empty() ? "a parameter holds no cotangent: nothing uses its value"
-                                : position + " holds no cotangent: nothing uses its value";
+    case TransposeRefusalCause::LawReadsAValue:
+        // The value class, and the sentence says which value: the rule needs one beside the
+        // cotangent, and what it needs is not a shape a declaration could add -- the tangent's own
+        // value (a transposition answers the tangent, it is not handed one) or a number whose shape
+        // is already complete. The repair is a port, which is the neighbouring question page's
+        // subject; saying "write the extents" here would name an edit that changes nothing.
+        return position.empty()
+                   ? std::string("the rule's right side reads a value the transposed function is not "
+                                 "handed, and no declaration of a shape supplies it")
+                   : "the rule's right side reads a value " + position +
+                         " is not handed, and no declaration of a shape supplies it";
+    case TransposeRefusalCause::CotangentOnAPair:
+        // A cotangent, not a value: this step read the call's answer as the (value, tangent) pair,
+        // so no cotangent ever arrived on the tangent component and reading one slot's cotangent as
+        // another's is the mistake the refusal exists to prevent.
+        return "this step read the call's answer as a (value, tangent) pair, so no cotangent arrived "
+               "on the tangent component and the call cannot be turned around";
     case TransposeRefusalCause::UnreadParameter:
         return position.empty() ? "a parameter is never read by the body, so it answers no cotangent"
                                 : position + " is never read by the body, so it answers no cotangent";
@@ -188,6 +194,30 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
              refusal.paramType});
     case TransposeRefusalCause::State:
         return "a loop carries its state out of itself, and that shape has no transpose";
+    case TransposeRefusalCause::CotangentPortMismatch:
+        // **Measured unreachable from any program, so this is not a language rule** (author,
+        // 2026-11-04, second ruling on this item: an internal inconsistency that no program reaches
+        // must say so, and must not be written as "the language does not allow this"). The two
+        // spellings are handed over verbatim because the repair is an edit to one of them -- the
+        // law's port and the value the step really has -- but the sentence names the fault as the
+        // compiler's: a law filed under its operator's head and operand count cannot be tied to the
+        // shape a step has, and a program cannot make the two disagree (its cotangent is
+        // `Tangent<ResultOf<F>>`, the type the declaration states). The check stays because it
+        // guards a real internal inconsistency; it is a guard, not a judgement about programs.
+        return "internal error: the rule for '" + refusal.uri + "' takes its cotangent as `" +
+               refusal.portType + "` and this step has a `" + refusal.handedType +
+               "`; a law's port disagreeing with the value the walk hands it is a compiler defect and "
+               "not the program's fault";
+    case TransposeRefusalCause::CalleeBuiltFromAParameter:
+        // **The language's rule, and the parameter it is about** (author, 2026-11-04). `transpose`
+        // answers the map a linear function is; a call whose callee the body *built* out of a
+        // parameter applies a function that parameter produced, so the function being transposed is
+        // not linear in that parameter. The sentence names the parameter because that is the edit a
+        // reader makes, and it says "not linear" and not "the answer has no source": the second
+        // describes this walk, the first describes the language.
+        return "this function is not linear in " +
+               (refusal.paramName.empty() ? position : "the parameter '" + refusal.paramName + "'") +
+               ": it builds the function this call applies out of that parameter";
     case TransposeRefusalCause::CallNoTranspose:
         // One of the two causes a call site can meet, and the one this file said for both of them
         // until 2026-11-03. It is true only here: the callee has no transpose to call. A callee
@@ -260,9 +290,20 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 // missing-module shape reaches this branch when the step is a module operator,
                 // whose key comes from the family's index -- the shape `no-such-family` covers only
                 // an operator the family could spell without the module, like `:op/mul_d`).
-                found = "the walk found no rule key for that operator, so there was no rule to look "
-                        "up: the key is the operator's name at its operand count, the family's "
-                        "index spells no such name, and an unbuilt family spells none at all";
+                // The three facts the walk can prove, and nothing more. "The family holds no rule
+                // for this operator" is the index's own reading (`candidates.empty()`); "transpose
+                // is for linear functions" is the language rule; and `vjp` is the way to take a
+                // gradient. What is *not* said is that the operator is not linear in its k-th
+                // parameter: that would need the forward family's index, and a program that only
+                // imports `rulesets.transpose` does not carry it -- so the claim is out of reach
+                // here, and a wrong explanation is worse than none, because a reader acts on it
+                // (docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md).
+                found = refusal.uri.empty()
+                            ? "the family holds no rule for that operator; `transpose` is for linear "
+                              "functions, so take the gradient with `vjp`"
+                            : "the family holds no rule for `" + refusal.uri +
+                                  "`; `transpose` is for linear functions, so take the gradient "
+                                  "with `vjp`";
             } else {
                 found = "the walk recorded no reason for the lookup";
             }
@@ -296,16 +337,23 @@ case TransposeRefusalCause::RuleShape: {
         // law was chosen, and its body -- the cotangent helpers a law that serves several shapes
         // writes, one overload per shape -- has nothing for the ranks this step has. So the sentence
         // names the law, the operator it is filed under, and the ranks, because those three are
-        // what a reader edits or writes a case for.
+        // what a reader edits or writes a case for. The expansion's own words follow when the call
+        // wrote any: they name the helper the body calls and the types it was handed, which is the
+        // difference between "this law serves other ranks" and an edit.
         std::string answer = "the law ";
         answer += refusal.rule.empty() ? std::string("the index filed") : "`" + refusal.rule + "`";
         answer += " has no cotangent for ";
         answer += refusal.uri.empty() ? std::string("this step") : "`" + refusal.uri + "`";
-        answer += " at these operands";
         if (!refusal.ranks.empty()) {
-            answer += ": their ranks are " + refusal.ranks;
+            answer += " at operands of rank " + refusal.ranks;
+        } else {
+            answer += " at the operands this step has";
         }
-        answer += ", and it serves the ranks its cotangents are written for";
+        if (!refusal.expansion.empty()) {
+            answer += ", and no instance of its body applies: " + refusal.expansion;
+        } else {
+            answer += ", and it serves the ranks its cotangents are written for";
+        }
         if (refusal.node.has_value()) {
             answer += " (node " + std::to_string(*refusal.node) + ")";
         }

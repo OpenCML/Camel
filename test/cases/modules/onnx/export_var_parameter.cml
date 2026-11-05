@@ -9,21 +9,22 @@ import { reshape, tanh } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func step(x: f32[..], var acc: f32[..]): f32[..] sync {
+func step(x: f32[...], var acc: f32[...]): f32[...] sync {
     let y = tanh(x)
     acc = acc + y
     return y * 2.0
 }
 
-func main(): int sync {
+func main(): string! sync {
     let ex = reshape<[3]>([0.5, -1.0, 0.25] as f32[])
     let es = reshape<[3]>([0.0, 0.0, 0.0] as f32[])
-    let f = (x: f32[..], s: f32[..]): (f32[..], f32[..]) => sync {
+    let f = (x: f32[...], s: f32[...]): (f32[...], f32[...]) => sync {
         var acc = s
         let o = step(x, acc)
         return (o, acc)
     }
-    let _ = export_model<out: get_env('EXPORT_VAR_PARAMETER_OUT') ?? ''>(f, (ex, es))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('EXPORT_VAR_PARAMETER_OUT') ?? ''>(f, (ex, es)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

@@ -8,7 +8,7 @@
 //
 //     x     = [[1.0, 2.0, 3.0],
 //              [4.0, 5.0, 6.0]]
-//     lane  = sum_axis(x, -1, false) = [6.0, 15.0]          (one lane per row)
+//     lane  = sum<-1, false>(x) = [6.0, 15.0]          (one lane per row)
 //     value = sum(take(lane, [1]))   = 15.0
 //     dL/dx  = [[0.0, 0.0, 0.0],
 //               [1.0, 1.0, 1.0]]                           (row 1, all three columns)
@@ -19,18 +19,18 @@
 //     camel test/cases/compile/transforms/stated_sum_axis_gradient_negative_axis.cml
 import { grad } from autodiff
 import { vjp } from vjp
-import { abs, sum, sum_axis, take } from tensor
+import { abs, sum, take } from tensor
 
 /// The engine's spelling: the differentiated value is the `with` parameter (design principles 9.9).
-with <w: float[..]>
+with <w: float[...]>
 func total(): float {
-    let lane = sum_axis(w, -1, false)
+    let lane = sum<-1, false>(w)
     return sum(take(lane, [1]))
 }
 
 /// The library's spelling: the same function with the value as an ordinary parameter.
-func total_plain(x: float[..]): float {
-    let lane = sum_axis(x, -1, false)
+func total_plain(x: float[...]): float {
+    let lane = sum<-1, false>(x)
     return sum(take(lane, [1]))
 }
 
@@ -40,6 +40,6 @@ func main(): int sync {
     let (value, pullback) = vjp(total_plain)(x)
     let library = pullback(1.0).0
     let same = sum(abs(engine - library)) == 0.0
-    `sum_axis -1: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
+    `sum<-1>: value={} engine={} library={} same={}`->format<value, engine, library, same>->println
     return 0
 }

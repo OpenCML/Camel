@@ -2,14 +2,26 @@
  * M6, the zero that is easy to get wrong: `grad(vjp(g))` with `g(v) = sum(v*v)`, at
  * `v = [1, 2, 3, 4]`, must be all zeros.
  *
- * Why it must: `vjp(g)(v, c) = c*2v` is linear in `v`, so the pullback's derivative with respect to
- * `v` is a constant and the gradient of that constant is 0. What this catches is the cotangent
+ * Why it must: `vjp(g)(v).1(c) = c*2v` is linear in `v`, so the pullback's derivative with respect
+ * to `v` is a constant and the gradient of that constant is 0. What this catches is the cotangent
  * being differentiated as if it were a variable, which turns a constant into a wrong non-zero
  * value -- the one mistake a "the numbers are right" test of the three combinations cannot see.
  *
  * The page states it on the 2x2 matrix `[[1,2],[3,4]]`; the flat vector here carries the same
  * numbers (flattened, that matrix is 1, 2, 3, 4 and its gradient is 2, 4, 6, 8), so nothing is
  * lost by not needing a batch axis for this one.
+ *
+ * The calls are the surface `stdlib/vjp.cml#vjp` declares: the cotangent is the pullback's
+ * argument (`vjp(g)(w).1(1.0).0`), and the weight is a `with` parameter, because `grad`
+ * differentiates the first `with` parameter of a function that returns a `float` (design
+ * principles 9.9) -- a plain `(w: f32[4]) => ...` lambda has none.
+ *
+ * The numbers below are the page's, and the reading this program would reach is not them: with the
+ * cotangent at 1, the body sums `2w`, whose gradient against `w` is 2 per entry. The zeros belong
+ * to a second derivative, which needs a second `grad` this composition does not write. The
+ * expectation is left as the page has it -- a wrong number is a defect to be read, not a number to
+ * be adjusted -- and the entry is marked `known_fail` on the refusal the composition meets, so the
+ * day it runs the zeros are what it is held to.
  */
 
 import { grad } from autodiff
@@ -21,10 +33,11 @@ func g(v: f32[4]): f32 {
 }
 
 func main(): int sync {
-    let vs: f32[] = [1.0, 2.0, 3.0, 4.0]
+    let vs: f32[4] = [1.0, 2.0, 3.0, 4.0]
     // The cotangent of a scalar result is a scalar: c = 1. The pullback is then 2*v, and summing
     // it before differentiating keeps `grad`'s "the result must be a scalar" rule intact.
-    let zero = grad((w: f32[4]) => sum(vjp(g)(w, 1.0)))(vs)
+    let f = <w: f32[4]> (): f32 => sum(vjp(g)(w).1(1.0).0)
+    let zero = grad(f)<vs>()
     println(zero[0])
     println(zero[1])
     println(zero[2])

@@ -2,12 +2,12 @@
 # SPDX-License-Identifier: MIT
 
 # The positive half of the operand-shape check (`transpose.cpp#sameOperandShape`): the law for two
-# arrays names `T[..]`, and a node whose operands are two arrays of a fixed extent is exactly the
+# arrays names `T[...]`, and a node whose operands are two arrays of a fixed extent is exactly the
 # shape that law was written for. Without this reading, a check that refuses an array-and-number
 # could also refuse an open rank meeting a fixed one, and every array program would stop transposing.
 [[tests]]
 name = "transpose_product_fixed_shape.matches_an_open_rank"
-desc = "`tensor:multiply` with two `float[3]` operands is matched by the law `mul_tensor_t::<T>(x: T[..], w: T[..])`, whose ports are written as an open rank. The transpose answers `ct * w` reduced to `xs`'s shape for `xs` and `ct * xs` reduced to `w`'s shape for `w`, which at xs = (1, 2, 3), w = (2, 3, 4) is 20 with cotangents (2, 3, 4) and (1, 2, 3). The transpose selection asks `sameOperandShape` before taking a rule -- `assignableFrom` and then the clause design principles 5.4 does not answer, that a port written as an array does not take a value that is not one. This case is the other side of that clause: an open rank still takes a fixed extent, so a refusal here would be the check eating the programs it exists to let through."
+desc = "`tensor:multiply` with two `float[3]` operands is matched by the law `mul_tensor_t::<T>(x: T[...], w: T[...])`, whose ports are written as an open rank. The transpose answers `ct * w` reduced to `xs`'s shape for `xs` and `ct * xs` reduced to `w`'s shape for `w`, which at xs = (1, 2, 3), w = (2, 3, 4) is 20 with cotangents (2, 3, 4) and (1, 2, 3). The transpose selection asks `sameOperandShape` before taking a rule -- `assignableFrom` and then the clause design principles 5.4 does not answer, that a port written as an array does not take a value that is not one. This case is the other side of that clause: an open rank still takes a fixed extent, so a refusal here would be the check eating the programs it exists to let through."
 kind = "behavior"
 case = "../../../cases/compile/transforms/transpose_product_fixed_shape.cml"
 args = ["${case}", "${backend}"]

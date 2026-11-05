@@ -157,7 +157,34 @@ args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_output_contains = ["TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=6 callee=autodiff::mul_tangent<float> args=4 tangent-args=2", "TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+expect_output_contains = ["TRANSPOSE function=autodiff::mul_tangent<float>", "type=(float, float, float) => (float, float)", "author vjp value=4.0 dfdx=4.0", "author vjp value=-6.0 dfdx=3.0"]
+# The arm-call reading names its node by position, so the position is `<>` and the rest of the line
+# stays exact -- and the rest is what names it: the region, the callee, the argument count, and how
+# many of those arguments are tangents. Both arms hold a call of the same rule kernel, and the pair
+# is read as a relation: one reading per arm, two different nodes, one callee. The program asks for
+# `vjp(f)` twice (at 2.0 and at -2.0), so each arm's reading is printed twice; that is the count
+# pinned here, and it is a fact of `main`, not of the transform. A reading that stopped at a node in
+# the other arm, or that named one call twice, breaks it without moving a number.
+verify_script = """
+({ input, assert }) => {
+const esc = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&').replace(/<>/g, '\\d+')
+const field = (text, name) => Number(text.split(name + '=')[1].split(/[ ,\]]/)[0])
+const stderr = input.normalized.stderr
+for (const reading of ['TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=1 node=<> callee=autodiff::mul_tangent<float> args=4 tangent-args=2', 'TRANSPOSE function=split_of_jvp_of_f_backward arm-call region=2 node=<> callee=autodiff::mul_tangent<float> args=4 tangent-args=2']) {
+  const hits = stderr.split('\n').filter((l) => new RegExp('^' + esc(reading) + '$').test(l))
+  assert(hits.length === 2, `two calls of vjp(f), so two lines like '${reading}', found ${hits.length}`)
+}
+const arms = stderr.split('\n').filter((l) => l.startsWith('TRANSPOSE function=split_of_jvp_of_f_backward arm-call '))
+const byRegion = new Map()
+for (const arm of arms) {
+  const at = field(arm, 'region')
+  const id = field(arm, 'node')
+  assert(byRegion.get(at) === undefined || byRegion.get(at) === id, `one node per arm: region ${at} named ${byRegion.get(at)} and ${id}`)
+  byRegion.set(at, id)
+}
+assert(byRegion.size === 2 && byRegion.get(1) !== byRegion.get(2), `two arms, two call nodes: ${[...byRegion]}`)
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -296,7 +323,7 @@ timeout_ms = 20000
 # (`residualsOf`), so the backward half reads it out of `lin`'s closure and declares nothing.
 [[tests]]
 name = "split_capture_of_a_tensor"
-desc = "`vjp` of a lambda whose body reads a captured tensor, `dot(w) = sum(w * x)`: the cut of the lifted lambda reads the capture through a closure port, which neither `normPorts` nor the call's `with` inputs named, so both halves refused the read (`skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`). The answer is the engine's number for the same derivative, computed by hand before the reading was taken: `sum([1,2,3] * [4,5,6]) = 32` with pullback `[4, 5, 6]`, and the same `w` against the capture `[-1, 2, 0.5]` giving `4.5` with pullback `[-1, 2, 0.5]` -- the second point is what separates a pullback that reads the capture from one that hands back a remembered array. The extent is stated (`f64[3]`): with an open extent the same cut answers and `transpose` refuses one step later (`skip=cotangent-needs-a-value uri=tensor:multiply`), which is the case's boundary and not its subject."
+desc = "`vjp` of a lambda whose body reads a captured tensor, `dot(w) = sum(w * x)`: the cut of the lifted lambda reads the capture through a closure port, which neither `normPorts` nor the call's `with` inputs named, so both halves refused the read (`skip=forward construct=a port uri=- why=the port is not a parameter of the graph, so neither half takes it`). The answer is the engine's number for the same derivative, computed by hand before the reading was taken: `sum([1,2,3] * [4,5,6]) = 32` with pullback `[4, 5, 6]`, and the same `w` against the capture `[-1, 2, 0.5]` giving `4.5` with pullback `[-1, 2, 0.5]` -- the second point is what separates a pullback that reads the capture from one that hands back a remembered array. The extent is stated (`f64[3]`): with an open extent the same cut answers and `transpose` refuses one step later (`skip=parameter-shape uri=tensor:multiply`), which is the case's boundary and not its subject."
 kind = "behavior"
 case = "../../../cases/transforms/split/split_capture_of_a_tensor.cml"
 args = ["${case}", "std::nvm"]
@@ -324,5 +351,78 @@ args = ["${case}", "std::nvm"]
 backends = ["nvm"]
 expect_exit = 0
 expect_output_contains = ["value= 18.0  tangent= 12.0", "dx1= 12.0", "dx05= 6.0", "dx2= 24.0", "twice_dx1= true", "residuals=3"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# A parameter whose members the body reads **one at a time**, through `vjp` -- the shape that used to
+# stop the run on a signal. `split(jvp(g))` was never the defect: it answers 11.0 and 4.0 on the same
+# program, and both are pinned here beside the pullback so that a change that "fixes" `vjp` by
+# changing the halves shows up as a cut that stopped agreeing with its own lift.
+#
+# The defect was one step later. `transpose` files a member's cotangent in the place that member has
+# in the value it was read from (`memberCotangents`,
+# `modules/transforms/transpose.cpp#buildTransposeMember`) and marks the parameter answered, and
+# nothing joined those places back into the cotangent the answer needs: the answer tuple held an
+# empty reference, the encoder was handed a node whose input was no node, and the run died inside the
+# encoder's input table -- `SIGSEGV`, empty stdout, stderr ending after `REINTERP split function=...`
+# with no `TRANSPOSE` line at all. The struct half of the same shape refused one step earlier
+# (`skip=unread-parameter port=5 type=Point no-cotangent-zero`): a field read names its member by
+# symbol, and the slot table is indexed by place.
+#
+# The adjoint of reading a parameter by member is the parameter's cotangent, assembled member by
+# member -- `Tangent<(float, float)>` is the tuple of the members' tangents, `Tangent<Point>` the
+# struct of them, in the declaration's order (design principles 9.9; author, 2026-11-04: a member read
+# accumulates onto the parameter). So the numbers: `((4.0, 1.0))` for `g(q) = q.0 * 4.0 + q.1`, which
+# is dg/dq hand-computed; `{ a: 4.0, b: 1.0 }` for the same function written with a struct parameter;
+# and the two one-member shapes separate a zero from an empty place -- `g_0(q) = 4q.0` answers
+# `((4.0, 0.0))` for the member nobody read, `g_1(q) = 3q.1` answers `((0.0, 3.0))`, the member order
+# of the **parameter** and not the order the body happened to read them in. A shape that answered one
+# member's zero for the other's cotangent passes a one-member reading and fails these two.
+[[tests]]
+name = "split_tuple_member_read"
+desc = "A parameter read one member at a time, through `vjp`: the pullback answers `((4.0, 1.0))` for the tuple parameter and `{ a: 4.0, b: 1.0 }` for the struct one -- one member per parameter, the member being that parameter's own cotangent, dg/dq = (4, 1) hand-computed -- while the same program's cut answers `forward y= 11.0` and `lin dp= 4.0`. `g_0(q) = 4q.0` reads `((4.0, 0.0))` and `g_1(q) = 3q.1` reads `((0.0, 3.0))`, which is the parameter's member order and not the body's read order. No `skip=unread-parameter` line may be printed: the struct half used to refuse there, and a pullback that answered by refusing again would keep the old wall while looking green on the tuple."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_tuple_member_read.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["lift value= 11.0  tangent= 4.0", "forward y= 11.0", "lin dp= 4.0", "vjp y= 11.0  dq= ((4.0, 1.0))", "vjp0 y= 8.0  dq= ((4.0, 0.0))", "vjp1 y= 9.0  dq= ((0.0, 3.0))", "vjph y= 11.0  dq= ({ a: 4.0, b: 1.0 })", "TRANSPOSE function=split_of_jvp_of_h_backward graph="]
+expect_output_not_contains = ["skip=unread-parameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+# The other side of the same shape: a parameter read **both whole and by member**. This entry used to
+# pin a refusal (`why=no-addition-for-an-aggregate-cotangent`) on the argument that no tangent space
+# registers an addition for an aggregate. The author judged that argument wrong on 2026-11-04: an
+# aggregate's addition is **derived from its type** -- its tangent is its members' tangents, so its sum
+# is the members' sums, one place at a time (design principles 9.9) -- and the refusal had been
+# measuring the registry's completeness and calling it the type's ability. It is the same shape as the
+# `Error` defect of that night: "not in the table" read as "not in the world". The entry now pins the
+# number, for a tuple and for a struct, with the hand-computation written into the case above the
+# engine's line.
+[[tests]]
+name = "split_whole_and_member"
+desc = "One parameter read both **whole** (handed to `sum_of`) and **by member** (`q.0`), and the same shape with a struct parameter and a field name: the adjoint of the two uses is their sum, and an aggregate's sum is its members' sums one place at a time. `f(q) = q.0 * 2.0 + (q.0 + q.1)` at `(2.0, 3.0)` answers `y= 9.0` and `dq= ((3.0, 1.0))`; `h(p) = p.a * 2.0 + (p.a + p.b)` answers `y= 9.0` and `dp= ({ a: 3.0, b: 1.0 })`. Both numbers are hand-computed in the case and printed beside the engine's, and the plan asserts the engine's line. This entry used to read `skip=component` and `why=no-addition-for-an-aggregate-cotangent` with exit 1; a run that refuses here again would be reading the registry as the language."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_whole_and_member_answers.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["vjp   y= 9.0  dq= ((3.0, 1.0))", "vpjp  y= 9.0  dp= ({ a: 3.0, b: 1.0 })"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The zero side of the same question: a member nobody read, whose tangent space has no zero this file
+# can build. `Tangent<Point>` is `Point` for a struct of floats, so the space is known and it is the
+# **zero** that is missing -- a struct has neither a zero constant in the registry nor a shape a
+# `zerosLike` could be asked of. The same refusal an unread parameter gets from the answer assembly.
+[[tests]]
+name = "split_unread_member_with_no_zero"
+desc = "A tuple parameter whose first member is a struct of floats, with the body reading only the second member: the unread member's space is `Point` and there is no zero of it -- no registered constant, no `zerosLike` shape. Reads `skip=component` and `member=0 memberType=Point space=Point why=no-zero-for-an-unread-member`, exit 1, instead of writing a `float` zero into a place that holds a struct. Building an aggregate's zero member by member is a separate capability; when it lands this entry turns green."
+kind = "behavior"
+case = "../../../cases/transforms/split/split_unread_member_with_no_zero_refused.cml"
+args = ["${case}", "std::nvm"]
+backends = ["nvm"]
+expect_exit = 1
+expect_output_contains = ["has no transpose for this function", "skip=component", "member=0 memberType=Point space=Point why=no-zero-for-an-unread-member"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

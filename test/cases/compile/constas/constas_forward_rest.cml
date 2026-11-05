@@ -5,12 +5,12 @@
  * it was given and the trees it was given.
  */
 
-func column(constas n: string, ..ts): (int, int) {
+func column(constas n: string, ...ts): (int, int) {
     return ( static for j in indices ts => ts.[j].[n] )
 }
 
-func columnOf(constas n: string, ..ts): (int, int) {
-    return column(n, ..ts)
+func columnOf(constas n: string, ...ts): (int, int) {
+    return column(n, ...ts)
 }
 
 func main(): int sync {

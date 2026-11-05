@@ -1886,9 +1886,22 @@ GraphDraftGroup::GraphDraftGroup(
     program_  = context_->reserveProgram();
     *program_ = *base;
     program_->makeSatellite();
+    // The group holds its program in C++, not through a value the collector can reach, and a
+    // group made while a program runs is reserved while `running_` is not zero -- which is the
+    // branch of reserve() that does not root what it makes. So the holder roots it, here, for as
+    // long as the group lives: without this the graphs of the group are graphs the collector
+    // never traces, and a safepoint that falls between the reservation and the bind into a
+    // program the context knows leaves the old addresses of their static values in the slots
+    // (--gc-check poison reports it as a use-after-safepoint; measured on the two `modules.nn`
+    // large-bytecode cases, whose rule expansion runs a group per instantiated rule).
+    context_->pinRuntimeProgram(program_);
 }
 
-GraphDraftGroup::~GraphDraftGroup() = default;
+GraphDraftGroup::~GraphDraftGroup() {
+    if (program_ != nullptr) {
+        context_->unpinRuntimeProgram(program_);
+    }
+}
 
 GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
     const GraphId id    = context_->graphIds().allocate();

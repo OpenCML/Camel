@@ -35,10 +35,10 @@ import { adam, adam_state } from nn
 // parameter *tree* (a struct of tensors), so `with_grad` hands back a gradient of the same type
 // and `adam` consumes it without this program naming a leaf.
 type Denoiser = {
-    w1: float[..],
-    b1: float[..],
-    w2: float[..],
-    b2: float[..]
+    w1: float[...],
+    b1: float[...],
+    w2: float[...],
+    b2: float[...]
 }
 
 // == schedule ==
@@ -58,7 +58,7 @@ func weights(t: int): (float, float) {
 // == model ==
 // A 4x4 image (16 values, row-major) goes in, a 4x4 noise map of the same shape comes out.
 with <m: Denoiser>
-func predicted_noise(x: float[..]): float[..] {
+func predicted_noise(x: float[...]): float[...] {
     return relu(x @ m.w1 + m.b1) @ m.w2 + m.b2
 }
 
@@ -67,14 +67,14 @@ func predicted_noise(x: float[..]): float[..] {
 // and the noise that was actually added.  No 1/sigma weighting and no variational lower bound --
 // that is what "simplified" means, and it is the loss a diffusion trainer reports.
 with <m: Denoiser>
-func loss(x: float[..], target: float[..]): float {
+func loss(x: float[...], target: float[...]): float {
     let difference = predicted_noise<m>(x) - target
     return float(sum(difference * difference)) / float(numel(difference))
 }
 
 // == data ==
 // One 4x4 image, written out so a reader can see the pixels: a diagonal that fades.
-func image(): float[..] {
+func image(): float[...] {
     let pixels = [
         0.9, 0.1, 0.1, 0.1,
         0.1, 0.8, 0.1, 0.1,
@@ -87,7 +87,7 @@ func image(): float[..] {
 // The batch is the same image four times: a diffusion step trains on images, and four copies make
 // the mean over a batch a mean over more than one sample while keeping the picture on screen.
 // (The multiplication broadcasts a [4, 1] column of ones against the [1, 16] row of pixels.)
-func batch(): float[..] {
+func batch(): float[...] {
     return ones::<float>([4, 1]) * reshape<[1, 16]>(image())
 }
 

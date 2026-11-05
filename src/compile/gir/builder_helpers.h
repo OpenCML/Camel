@@ -1158,27 +1158,13 @@ inline ConditionSeparation separateWhenConditions(
 /// same comparison). `Builder::coerceTo` is where the conversion is inserted, and a call argument --
 /// the one entrance that is not some position's `coerceTo` -- asks this same question before it
 /// enters (builder_operators.cpp), so both entrances answer with one rule.
-inline bool isRankZeroEdge(Type *target, Type *source) {
-    if (target == nullptr || source == nullptr || target->equals(source)) {
-        return false;
-    }
-    const bool targetIsArray = target->code() == TypeCode::Array;
-    if (targetIsArray == (source->code() == TypeCode::Array)) {
-        return false;
-    }
-    if (targetIsArray) {
-        // `T` into `T[..]`: the value of the element type is the value of the open rank, and the
-        // slot keeps it as the rank-zero array the run holds.
-        const auto *arrayTarget = tt::as_ptr<const ArrayType>(target);
-        return arrayTarget != nullptr && arrayTarget->rankZeroType() != nullptr &&
-               arrayTarget->assignableFrom(source);
-    }
-    // `T[..]` into `T`: only the open rank has a value with no dimension to read the element from;
-    // `T[]` and `T[3, ..]` state dimensions and are not this edge.
-    const auto *arraySource = tt::as_ptr<const ArrayType>(source);
-    Type *element          = arraySource != nullptr ? arraySource->rankZeroType() : nullptr;
-    return element != nullptr && target->assignableFrom(element);
-}
+///
+/// The rule itself is stated once, in the type layer
+/// (`camel/core/type/composite/array.h#isRankZeroEdge`), because the transposition walk asks it too
+/// where it hands a law the cotangent of that law's port, and that entrance is not a builder's
+/// (`modules/transforms/transpose.cpp#ruleCotangent`). One rule, and the entrances that ask it rather
+/// than a second reading each.
+using camel::core::type::isRankZeroEdge;
 
 /// The element type a position of `T[..]` holds, or null when the position is not an open rank with
 /// no prefix. A rank-zero value is that element (design principles 5.4), which is what a literal in

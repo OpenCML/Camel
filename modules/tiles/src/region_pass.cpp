@@ -5,6 +5,7 @@
 
 #include "camel/core/tags.h"
 #include "camel/execute/pass/opt.h"
+#include "camel/passes/opt/generic.h"
 #include "tiles/internal/placement.h"
 #include "tiles/internal/regions.h"
 #include "tiles/internal/residency.h"
@@ -39,6 +40,20 @@ class RegionPass final : public RuntimeGraphRewritePass {
         // placement report, before the rewrite, and empty for a program that writes no fact, so
         // an untagged program's output is unchanged. It reads the graph; it inserts no node yet.
         out << residencyReport(*program);
+        // What the segmentation decides depends on which operators are still in the graph, and one
+        // family of them is not an operator at all: a fact of an argument's type (`shape`, `numel`,
+        // `dim`) is a constant the type folder answers, and the device path has no program for it
+        // because there is nothing to compute.
+        //
+        // `std::opt::fold` folds those, and a pipeline that names it before this pass leaves nothing
+        // for this step to do. The pass cannot require that pass (its contract is to consume the
+        // program it is handed, and a pipeline may reasonably not optimize), so it runs the same
+        // fold -- `foldTypedOperators` is the very function `std::opt::fold` reaches, called once
+        // here. It runs before the cut and not inside a segment: a segment that folded for itself
+        // would fold the same node once per segment, and every repetition is an operator call and
+        // an allocation the report of the run would show. The reports above are printed first
+        // because they are the reading of the program this pass was handed.
+        program = foldTypedOperators(context_, program);
         size_t count    = 0;
         slot_t refusal  = NullSlot;
         const auto *result = outlineRegions(

@@ -11,10 +11,10 @@ import { sgd } from nn
 import { get_env } from env
 import { export_model } from onnx
 
-type Mlp = { w1: float[..], b1: float[..], w2: float[..], b2: float[..] }
+type Mlp = { w1: float[...], b1: float[...], w2: float[...], b2: float[...] }
 
 with <m: Mlp>
-func loss_b(x: float[..]): float {
+func loss_b(x: float[...]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     let s = float(mean(y * y))
@@ -22,23 +22,23 @@ func loss_b(x: float[..]): float {
 }
 
 with <m: Mlp>
-func loss_n(x: float[..]): float {
+func loss_n(x: float[...]): float {
     let h = relu(x @ m.w1 + m.b1)
     let y = h @ m.w2 + m.b2
     return float(mean(y * y))
 }
 
-func step_b(m: Mlp, x: float[..]): (float, Mlp) {
+func step_b(m: Mlp, x: float[...]): (float, Mlp) {
     let vg = with_grad(loss_b)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func step_n(m: Mlp, x: float[..]): (float, Mlp) {
+func step_n(m: Mlp, x: float[...]): (float, Mlp) {
     let vg = with_grad(loss_n)<m>(x)
     return (vg.0, sgd(m, vg.1, 0.01))
 }
 
-func fwd_b(m: Mlp, x: float[..]): float {
+func fwd_b(m: Mlp, x: float[...]): float {
     return loss_b<m>(x)
 }
 
@@ -51,19 +51,19 @@ func load(): Mlp {
     }
 }
 
-func do_fwd(m: Mlp, x: float[..]): int sync {
+func do_fwd(m: Mlp, x: float[...]): int sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(fwd_b, (m, x))
     println('exported fwd_b')
     return 0
 }
 
-func do_nobranch(m: Mlp, x: float[..]): int sync {
+func do_nobranch(m: Mlp, x: float[...]): int sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step_n, (m, x))
     println('exported step_n')
     return 0
 }
 
-func do_step(m: Mlp, x: float[..]): int sync {
+func do_step(m: Mlp, x: float[...]): int sync {
     let _ = export_model<out: get_env('ONNX_OUT') ?? ''>(step_b, (m, x))
     println('exported step_b')
     return 0

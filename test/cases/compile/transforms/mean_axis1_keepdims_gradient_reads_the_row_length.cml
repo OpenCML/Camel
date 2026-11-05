@@ -5,13 +5,13 @@
  * `dxs * (1 / shape(xs)[axis])`, so the tangent keeps the *operand's* shape while the reduced
  * output's tangent is the reduced one. At `keepdims = false` on a non-last axis the two cannot
  * broadcast and the run stops in the tensor kernel -- measured 2026-11-04 on
- * `mean_axis(x, 1, false)`: `TensorDimensionMismatch: Array shape mismatch in 'multiply':
+ * `mean<1, false>(x)`: `TensorDimensionMismatch: Array shape mismatch in 'multiply':
  * cannot broadcast [2, 3] with [2]`. With `keepdims = true` and a weight of the output's own
  * shape the two do broadcast and the numbers are CORRECT, which is what this file pins: the law
  * is not wrong where it builds, what it lacks is the reduction of the tangent's shape
  * (`docs/handover/questions/2026-11-04-does-a-mean-tangent-reduce-the-axis-it-averaged`).
  *
- * Why this reading is worth a case of its own: the `arity` wall -- a three-operand `mean_axis`
+ * Why this reading is worth a case of its own: the `arity` wall -- a three-operand axis `mean`
  * node in a transposed *value* graph -- is what hides the broadcast inside `mean_axis_t`
  * (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`) today; a naked `transpose` of this loss stops at
  * `skip=arity uri=tensor:mean_axis operands=3` (measured the same day). When that wall falls,
@@ -19,7 +19,7 @@
  *
  * The reading is ELEMENT BY ELEMENT, derived by hand and not read off a run:
  *
- *   mean  f(x) = sum(mean_axis(x, 1, true) * [[10], [20]]) on x = [[1, 2, 3], [4, 5, 6]]
+ *   mean  f(x) = sum(mean<1, true>(x) * [[10], [20]]) on x = [[1, 2, 3], [4, 5, 6]]
  *         the row means are [[2], [5]], so f = 2 * 10 + 5 * 20 = 120.0; every position of a row
  *         was averaged over that row's 3 positions, so the cotangent at ct = 1.0 is w[i] / 3,
  *         constant along the row:
@@ -45,11 +45,11 @@
  */
 import rulesets.jvp
 import rulesets.transpose
-import { mean_axis, sum } from tensor
+import { mean, sum } from tensor
 import { vjp } from vjp
 
 func loss_row_mean(x: float[2, 3]): float {
-    return float(sum(mean_axis(x, 1, true) * ([[10.0], [20.0]] as float[2, 1])))
+    return float(sum(mean<1, true>(x) * ([[10.0], [20.0]] as float[2, 1])))
 }
 
 func main(): int sync {

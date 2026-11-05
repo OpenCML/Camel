@@ -1,0 +1,72 @@
+// A vector on the right of a product: `x · u`, and the cotangent of both operands.
+//
+// Here the cotangent of `x` is the outer product `ct ⊗ u` -- the half where the rank-one operand is
+// the *other* one -- and the cotangent of `u` is `xᵀ · ct`, a row, its own shape. Both are read off
+// the known operand whose shape is the answer's (`stdlib/rulesets/transpose.cml#ct_of_a`).
+//
+//     x = [[1, 2], [3, 4]],  u = [0.5, 0.25]
+//     x · u   = [0.5 + 0.5, 1.5 + 1.0] = [1.0, 2.5]     sum = 3.5
+//     dL/dx   = [[0.5, 0.25], [0.5, 0.25]]              (each row is `u`, once per row of `x`)
+//     dL/du   = [1 + 3, 2 + 4] = [4, 6]
+//
+// `u`'s extent is written in the declaration and repeated at the call, for the reason the left-hand
+// case states in full: the law reads the *other* operand's shape as `sum_to`'s target, a transposed
+// function is handed the cotangent and no parameter, and the shape therefore comes from the type
+// (`modules/transforms/transpose.cpp#shapeFromTypeOf`) -- which `float[]` does not state. The
+// language's answer for a declaration that leaves it open is `TransposeNeedsParameterShape`: write
+// the shape in the type.
+//
+// **Second of two, and its green is evidence rather than the road**: the rank-one arithmetic and the
+// fact that a stated shape can be answered from the type. The terminal state is the author's
+// 2026-11-04 12:40 ruling -- the shape travels as a known argument of the linear call
+// (`mul_stated` / `matmul_stated`) -- which is what serves the `float[]` declaration of
+// `matmul_transpose_vector_rhs.cml`; that one stays red until they land.
+//
+//     camel test/cases/compile/transforms/matmul_transpose_vector_rhs_stated_extent.cml
+import { matmul, sum } from tensor
+import { vjp } from vjp
+import { with_grad } from autodiff
+import { abs, max } from math
+
+/// The product under a sum, both operands ordinary parameters.
+func sum_of_product(x: float[2, 2], u: float[2]): float {
+    return sum(matmul(x, u))
+}
+
+/// The same for the engine's pullback over `x`.
+with <x: float[2, 2]>
+func product_with_x(u: float[]): float {
+    return sum(matmul(x, u))
+}
+
+/// And once over `u`, the rank-one half.
+with <u: float[]>
+func product_with_u(x: float[2, 2]): float {
+    return sum(matmul(x, u))
+}
+
+func main(): int sync {
+    let x = [[1.0, 2.0], [3.0, 4.0]] as float[2, 2]
+    let u = [0.5, 0.25] as float[2]
+
+    let (value, pullback) = vjp(sum_of_product)(x, u)
+    let (dx, du) = pullback(1.0)
+    `matmul_t vector_rhs value={} dL/dx={} dL/du={}`->format<value, dx, du>->println
+
+    let (engine_value_x, engine_x) =
+        with_grad(product_with_x)<[[1.0, 2.0], [3.0, 4.0]] as float[2, 2]>(u)
+    let (engine_value_u, engine_u) = with_grad(product_with_u)<[0.5, 0.25]>(x)
+    `matmul_t vector_rhs engine value={} dL/dx={} dL/du={}`
+        ->format<engine_value_x, engine_x, engine_u>->println
+    `matmul_t vector_rhs engine_u value={}`->format<engine_value_u>->println
+
+    let dvalue = abs(value - engine_value_x)
+    let dx00 = abs(dx[0][0] - engine_x[0][0])
+    let dx01 = abs(dx[0][1] - engine_x[0][1])
+    let dx10 = abs(dx[1][0] - engine_x[1][0])
+    let dx11 = abs(dx[1][1] - engine_x[1][1])
+    let dx_diff = max(max(dx00, dx01), max(dx10, dx11))
+    `matmul_t vector_rhs max_abs_diff_library_vs_engine u={:.12e} x={:.12e} value={:.12e}`
+        ->format<max(abs(du[0] - engine_u[0]), abs(du[1] - engine_u[1])), dx_diff, dvalue>->println
+    return 0
+}

@@ -18,30 +18,30 @@ import { export_model } from onnx
 import { get_env } from env
 
 // rec: two tensors and a counter, as a struct.
-type Run = { h: f32[..], acc: f32[..], k: int }
+type Run = { h: f32[...], acc: f32[...], k: int }
 
 func walk(s: Run): Run {
     return if s.k >= 6 || sum(s.h * s.h) < 1.0 then s
         else walk({ h: tanh(s.h) * 0.3 + s.h * 0.6, acc: s.acc + s.h, k: s.k + 1 })
 }
 
-func start(x: f32[..]): Run {
+func start(x: f32[...]): Run {
     return walk({ h: x, acc: x * 0.0, k: 0 })
 }
 
 // tup: the same state as a tuple.
-func walkT(s: (f32[..], f32[..], int)): (f32[..], f32[..], int) {
+func walkT(s: (f32[...], f32[...], int)): (f32[...], f32[...], int) {
     return if s.2 >= 6 || sum(s.0 * s.0) < 1.0 then s
         else walkT((tanh(s.0) * 0.3 + s.0 * 0.6, s.1 + s.0, s.2 + 1))
 }
 
-func startT(x: f32[..]): (f32[..], f32[..], int) {
+func startT(x: f32[...]): (f32[...], f32[...], int) {
     return walkT((x, x * 0.0, 0))
 }
 
 // nest: a struct in a struct.
-type Inner = { h: f32[..], k: int }
-type Outer = { deep: Inner, acc: f32[..] }
+type Inner = { h: f32[...], k: int }
+type Outer = { deep: Inner, acc: f32[...] }
 
 func walkN(s: Outer): Outer {
     return if s.deep.k >= 6 || sum(s.deep.h * s.deep.h) < 1.0 then s
@@ -51,7 +51,7 @@ func walkN(s: Outer): Outer {
         })
 }
 
-func startN(x: f32[..]): Outer {
+func startN(x: f32[...]): Outer {
     return walkN({ deep: { h: x, k: 0 }, acc: x * 0.0 })
 }
 
@@ -62,24 +62,24 @@ func walkS(s: Small): Small {
     return if s.n >= 6 then s else walkS({ x: s.x * 0.5 + 0.25, n: s.n + 1 })
 }
 
-func startS(x: f32[..]): Small {
+func startS(x: f32[...]): Small {
     return walkS({ x: float(sum(x)), n: 0 })
 }
 
 // empt: a struct with an empty struct field; the field has no leaf, the tensor still changes.
 type Empty = {}
-type Hold = { h: f32[..], e: Empty, k: int }
+type Hold = { h: f32[...], e: Empty, k: int }
 
 func walkE(s: Hold): Hold {
     return if s.k >= 6 || sum(s.h * s.h) < 1.0 then s
         else walkE({ h: tanh(s.h) * 0.3 + s.h * 0.6, e: {}, k: s.k + 1 })
 }
 
-func startE(x: f32[..]): Hold {
+func startE(x: f32[...]): Hold {
     return walkE({ h: x, e: {}, k: 0 })
 }
 
-func main(): int sync {
+func main(): string! sync {
     let x = load_npy::<f32>('x.npy')
     let a = start(x)
     save_npy(a.h, 'rec_0.npy')
@@ -101,22 +101,30 @@ func main(): int sync {
     save_npy(reshape<[1]>([f.k]), 'empt_1.npy')
     let out = get_env('ONNX_OUT') ?? ''
     let which = get_env('MODEL') ?? ''
-    let exported = if out == '' then 0 else if which == 'rec' then sync {
-        let _ = export_model<out: out>((x: f32[..]): Run => start(x), (x))
-        1
+    return if out == '' then '0' else if which == 'rec' then sync {
+        match export_model<out: out>((x: f32[...]): Run => start(x), (x)) {
+            case error e => { return e }
+            case v => '1'
+        }
     } else if which == 'tup' then sync {
-        let _ = export_model<out: out>((x: f32[..]): (f32[..], f32[..], int) => startT(x), (x))
-        1
+        match export_model<out: out>((x: f32[...]): (f32[...], f32[...], int) => startT(x), (x)) {
+            case error e => { return e }
+            case v => '1'
+        }
     } else if which == 'nest' then sync {
-        let _ = export_model<out: out>((x: f32[..]): Outer => startN(x), (x))
-        1
+        match export_model<out: out>((x: f32[...]): Outer => startN(x), (x)) {
+            case error e => { return e }
+            case v => '1'
+        }
     } else if which == 'scal' then sync {
-        let _ = export_model<out: out>((x: f32[..]): Small => startS(x), (x))
-        1
+        match export_model<out: out>((x: f32[...]): Small => startS(x), (x)) {
+            case error e => { return e }
+            case v => '1'
+        }
     } else sync {
-        let _ = export_model<out: out>((x: f32[..]): Hold => startE(x), (x))
-        1
+        match export_model<out: out>((x: f32[...]): Hold => startE(x), (x)) {
+            case error e => { return e }
+            case v => '1'
+        }
     }
-    println(exported)
-    return 0
 }

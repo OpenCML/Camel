@@ -10,14 +10,18 @@ import { reshape, relu } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func counts(t: f32[..]): int[..] {
+func counts(t: f32[...]): int[...] {
     return relu(int(t) - 2)
 }
 
 func main(): void! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     println(counts(x))
-    let _ = export_model<out: get_env('ONNX_OUT_UNCHECKED') ?? '', dynamic_axes: [], target: 'none'>(counts, x)
-    println('written without the check')
-    export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
+    return match export_model<out: get_env('ONNX_OUT_UNCHECKED') ?? '', dynamic_axes: [], target: 'none'>(counts, x) {
+        case error e => { return e }
+        case v => sync {
+            println('written without the check')
+            export_model<out: get_env('ONNX_OUT') ?? ''>(counts, x)
+        }
+    }
 }

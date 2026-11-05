@@ -8,11 +8,13 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/mm/root_handle.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/graph_txn.h"
 
 #include <algorithm>
+#include <deque>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -140,6 +142,30 @@ camel::core::OperId operIdOf(const camel::runtime::GraphTransaction &transaction
 /// operator is pure and foldable. Whether the node may also be dropped, moved or reordered is a
 /// different question, which only `nodeIsFreelySchedulable` (camel/runtime/graph.h) answers.
 bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
+
+/**
+ * Replaces a pure operator by the constant its argument types fix, through the operator the core
+ * registered a type folder for (`OperatorTable::typeFolder`), and returns whether a value was
+ * written. `tensor:shape`, `tensor:numel` and `tensor:dim` are the three today
+ * (`modules/tensor/ops/layout_ops.cpp#shapeFold`, `gradient_ops.cpp`): their result is a fact of
+ * the argument's type, so no observation of a value decides it.
+ *
+ * The fold is the same one wherever it runs, and it runs in two places for two reasons:
+ * `foldDraft` (the `std::opt::fold` stage) reaches it for a node whose arguments are not all
+ * constants, and `foldTypedOperators` (generic.h) offers every operator of a program to it on its
+ * own, for a pass that reads a graph structurally before it rewrites it. The second caller exists
+ * because what the fold decides can be the difference between a graph a consumer accepts and one
+ * it refuses -- `tiles::compile` cuts a `#gpu` scope into segments, and a `shape` operator inside
+ * one is an operator no device program exists for, while the constant folded here is a value the
+ * segment reads.
+ *
+ * `roots` keeps a value the fold materializes alive until the commit moves it into the graph's
+ * static area; it must outlive the transaction's commit, which is why it is the caller's.
+ * `constantBudget` bounds the bytes of constant this may write.
+ */
+bool foldFromTypes(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
+    std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget);
 
 /// True for nodes whose only observable result is their value, so that a pass may arrange them
 /// anywhere: static DATA and the COPY/ACCS/FILL/CAST/OPER nodes that are freely schedulable (pure

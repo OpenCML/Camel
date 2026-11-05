@@ -33,8 +33,8 @@ namespace {
 /// the scaling node among the inputs handed the gradient node the scalar's type: the node's value
 /// was the `[3, 2]` tensor and its declared type was one number, so the reader that reads it by
 /// its type (`tensor:sum_to`, which takes its operand for an array) found the element where the
-/// tensor was and refused -- `sum_to: cannot broadcast [3, 2] to []`, the wall behind every red
-/// the f64 arm uncovered.
+/// tensor was and refused -- `sum_to: the target extents [] are not a suffix of the tensor's shape
+/// [3, 2]`, the wall behind every red the f64 arm uncovered.
 bool statesTensorElementType(const type::Type *type) {
     if (type == nullptr || type->code() != type::TypeCode::Array) {
         return false;
@@ -207,6 +207,23 @@ vjp_node_t addFloatOper(
         std::span<const vjp_node_t>(inputs.begin(), inputs.size()));
 }
 
+type::Type *shapeListType(const VjpBuilder &builder, vjp_node_t value) {
+    static type::ArrayType *open = type::ArrayType::create(type::Type::Int64());
+    const type::Type *type       = builder.nodeType(value);
+    if (type == nullptr) {
+        return open;
+    }
+    const auto facts = camel::tensor::tensorFactsOf(type);
+    if (!facts.shape) {
+        return open;
+    }
+    // `shape(x)` has one entry per axis: when the rank is a fact, the list's length is too. That
+    // length is what a reader of the list needs (`sum_to` counts the axes it keeps), and the
+    // numbers are the value, computed where the value is.
+    const int64_t rank = static_cast<int64_t>(facts.shape->size());
+    return type::ArrayType::create(type::Type::Int64(), std::span<const int64_t>(&rank, 1));
+}
+
 vjp_node_t staticInt(VjpBuilder &builder, int64_t value) {
     return builder.addStatic(camel::core::rtdata::toSlot<int64_t>(value), type::Type::Int64());
 }
@@ -255,9 +272,17 @@ vjp_node_t tensorCastTo(VjpBuilder &builder, vjp_node_t value, vjp_node_t gradie
 
 void accumulateOperand(VjpBuilder &builder, vjp_node_t operand, vjp_node_t gradient) {
     if (isTensorNode(builder, operand)) {
+        // `sum_to` takes the target extents themselves (ruling 甲: a leading-axis reduction, and the
+        // length is the caller's), so the operand's shape is an operand of the reduction -- computed
+        // by `tensor:shape` -- and not the operand's own value. The value would have been read for
+        // its shape and nothing else, which is the move this operator no longer makes.
+        const vjp_node_t shape = builder.addOper(
+            shapeListType(builder, operand),
+            "tensor:shape",
+            std::span<const vjp_node_t>(&operand, 1));
         builder.accumulateGradient(
             operand,
-            addTensorOperFor(builder, operand, "tensor:sum_to", {gradient, operand}));
+            addTensorOperFor(builder, operand, "tensor:sum_to", {gradient, shape}));
     } else if (isFloatNode(builder, operand)) {
         const vjp_node_t total = isTensorNode(builder, gradient)
                                      ? addFloatOper(builder, "tensor:sum", {gradient})

@@ -1,4 +1,4 @@
-func bad(..ts: int): int {
+func bad(...ts: int): int {
     return 0
 }
 

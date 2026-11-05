@@ -12,12 +12,12 @@
 // the law.
 //
 // The law states the axis instead of indexing by it: `jvp_mean_axis` answers
-// `mean_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))`, and its adjoint
-// (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`) reads only the list's extents,
-// `at[2:len(at)]` -- never `at[0]`, the axis. So the axis travels as written and is normalized where
-// the reduction's own entry point normalizes it (`modules/tensor/kernels/reduce.cpp#normalizeAxis`,
-// `axis < 0 ? axis + rank : axis`): `-1` on a 2x3 value names axis 1, the lane length is
-// `extent_product(at[2:])`, and this leg answers the engine's number. The cut and the walk build it
+// `mean_axis_stated(dxs, axis, keepdims, shape(xs))`, and its adjoint
+// (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`) reads `extents` and `axis` by name.
+// The axis travels as written and is normalized where the reduction's own entry point normalizes it
+// (`modules/tensor/kernels/reduce.cpp#normalizeAxis`, `axis < 0 ? axis + rank : axis`): `-1` on a
+// 2x3 value names axis 1, the lane length is `extent_product(extents)`, and this leg answers the
+// engine's number. The cut and the walk build it
 // as `residuals=4`, `rhs=sum_stated_t,mean_axis_stated_t`:
 //
 //     mean_axis_negative library value=7.00000000000000000
@@ -39,7 +39,7 @@ import { vjp } from vjp
 import { mean, sum } from tensor
 
 /// The library's spelling: the differentiated value is an ordinary parameter (design principles 9.9).
-func f(x: float[..]): float {
+func f(x: float[...]): float {
     return sum(mean<-1, true>(x))
 }
 

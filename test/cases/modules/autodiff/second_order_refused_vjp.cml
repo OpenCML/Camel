@@ -3,19 +3,28 @@
 //   f(x) = x*x*x,  f'(x) = 3x^2,  f''(2) = 12
 //
 // The writing is the natural one -- differentiate the result of `vjp` -- and it is refused inside
-// the library, at `stdlib/vjp.cml#vjp`'s `split(jvp(f))<..ws>(..xs)`:
+// the library, at `stdlib/vjp.cml#vjp`'s `split(jvp(f))<...ws>(...xs)`:
 //
 //   cannot differentiate through this call of a function value: which function it calls is not
-//   evident where it is called: the function is the result of 'transforms:split'
+//   evident where it is called: the function is computed at run time
 //
-// The forward half `split` answers does not exist as a graph until the program runs
-// (`modules/transforms/split_operator.cpp#splitKernel` reads `function->graph()` and builds it), so
-// the derivative the call would need cannot be planned before it runs. Reading the pullback out of
-// the pair and calling that stops at the second half of the same wall: "the function is read from a
-// tuple, a struct or an array" (`pullback.cpp#Backward::whyNotEvident`).
+// The verdict is the engine's and it is read off what the value **is**, not off where it came from:
+// the sentence used to end "the function is the result of 'transforms:split'", which named the
+// operator that computed the value -- provenance, and a fact this engine knows nothing else about
+// (removed 2026-11-04 04:20, `modules/autodiff/pullback.cpp#Backward::whyNotEvident`). What the
+// engine can say by content is the sentence above: the value is computed at run time, so which
+// function it calls is not evident where it is called.
 //
-// What *is* available today is the second derivative through `grad`, whose inner transform is an
-// OPER of the autodiff module over a static function and is built while the rewrite runs:
+// The reason the verdict stands is that the forward half `split` answers does not exist as a graph
+// until the program runs (`modules/transforms/split_operator.cpp#splitKernel` reads
+// `function->graph()` and builds it), so the derivative the call would need cannot be planned before
+// it runs. Reading the pullback out of the pair and calling that stops at the second half of the same
+// wall: "the function is read from a tuple, a struct or an array".
+//
+// The transform's rules are the library's, not the engine's: `stdlib/vjp.cml#grad` is `vjp` read at
+// the seed 1, and `stdlib/types.cml#Transpose` is the contract `transpose` builds. What *is*
+// available today is the second derivative through `grad`, whose inner transform is an OPER of the
+// autodiff module over a static function and is built while the rewrite runs:
 // `second_order_nest.cml` (12 from the nest), `second_order.cml` (12 from the named form).
 
 import { grad } from autodiff

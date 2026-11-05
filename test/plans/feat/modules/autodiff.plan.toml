@@ -454,12 +454,13 @@ timeout_ms = 6000
 
 [[tests]]
 name = "second_order_refused_vjp"
-desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, stdlib/vjp.cml#vjp's split(jvp(f))<..ws>(..xs), naming 'transforms:split': the forward half it answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). What is available today is the same number through the grad nest (second_order_nest.nvm)."
+desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, stdlib/vjp.cml#vjp's split(jvp(f))<...ws>(...xs): the forward half `split` answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. The verdict is by content -- 'the function is computed at run time' -- and no longer by provenance: the sentence used to read 'the function is the result of \\'transforms:split\\'', naming the operator that computed the value (engine change of 2026-11-04 04:20, modules/autodiff/pullback.cpp#Backward::whyNotEvident). The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). The same number is produced by the same second derivative written through the nest (second_order_nest.nvm)."
 kind = "negative"
 case = "../../../cases/modules/autodiff/second_order_refused_vjp.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
-expect_output_contains = ["cannot differentiate through this call of a function value", "the function is the result of 'transforms:split'"]
+expect_output_contains = ["cannot differentiate through this call of a function value", "which function it calls is not evident where it is called: the function is computed at run time"]
+expect_output_not_contains = ["the function is the result of"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
 
@@ -2856,7 +2857,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "grad_tuple_discrete_member"
-desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[..], int)>` gets `(f32[..], int)` back, with the `int` at zero, and `let g: (f32[..], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple ."
+desc = "A tuple model keeps its discrete member in the gradient: `with <m: (f32[...], int)>` gets `(f32[...], int)` back, with the `int` at zero, and `let g: (f32[...], int) = gradient` pins that the gradient is the model's own type. What decides is who reads the answer -- the user's `grad`/`with_grad` gradient against the machinery's own aggregates -- not whether the parameter is a struct or a tuple ."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/grad_tuple_discrete_member.cml"
 args = ["${case}", "std::macro", "${backend}"]
@@ -3348,7 +3349,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "f64_broadcast_grad"
-desc = "An f64 gradient through a broadcast: sum(x * p0) with x a f64[2, 3] and p0 a f64[3] multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'f64[..]'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
+desc = "An f64 gradient through a broadcast: sum(x * p0) with x a f64[2, 3] and p0 a f64[3] multiplies by broadcasting p0 over the rows, and tensor:sum_to is the reduction of that broadcast, so this is where an f64 gradient was refused with \"'the gradient kernels' does not support a value of type 'f64[...]'\". Both gradients are printed in the array form and both distances are 0.0 against the values written out by hand from the forward expression (d/dx is the row broadcast of p0, d/dp0 the column sum [5, 7, 9]). The wide pair sums 2^24 + 1 in the third column: 16777217.0 in f64 and 16777216.0 if the value is accumulated in f32, so its printed third coordinate and its distance (0.0 against 1.0) say which accumulator the arm uses."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/f64_broadcast_grad.cml"
 args = ["${case}", "${run_nvm}"]
@@ -3489,7 +3490,7 @@ timeout_ms = 20000
 # first dimension crashed the run instead of answering.
 [[tests]]
 name = "flat_element_pullback_reaches_every_element"
-desc = "The gradient of `flat(xs: float[..], i)` -- a read of the element an open-rank value holds -- goes back to the position the read took: `flat([[w, 2.0], [3.0, 4.0]], 0)` pulls back 1.0 and `flat([[1.0, 2.0], [3.0, w]], 3)` pulls back 1.0 although the position is the fourth element, past the first dimension's two; a position the value does not depend on pulls back 0.0. The second reading was `Index 3 is out of range for the first dimension of the input array of length 2` from `(flat.pb)` when the scatter's bound counted `dim(0)` while the read took the flat slot, which is the pair `__index_arr__` had already been fixed for."
+desc = "The gradient of `flat(xs: float[...], i)` -- a read of the element an open-rank value holds -- goes back to the position the read took: `flat([[w, 2.0], [3.0, 4.0]], 0)` pulls back 1.0 and `flat([[1.0, 2.0], [3.0, w]], 3)` pulls back 1.0 although the position is the fourth element, past the first dimension's two; a position the value does not depend on pulls back 0.0. The second reading was `Index 3 is out of range for the first dimension of the input array of length 2` from `(flat.pb)` when the scatter's bound counted `dim(0)` while the read took the flat slot, which is the pair `__index_arr__` had already been fixed for."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/flat_element_pullback.cml"
 args = ["${case}", "${backend}"]
@@ -3584,6 +3585,21 @@ expect_exit = 0
 expect_stdout_exact = "has_aux_off_library\nvalue=8.0\n(12.0)\ngrad=12.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# Form three reached from one name: `has_aux` in the library is the composition, so the library's leg
+# no longer needs the writer to spell the two projections out (`has_aux.library` above keeps that
+# reading reachable, and its numbers are the ones this entry has to match).
+[[tests]]
+name = "has_aux.library.composition"
+desc = "The library's `has_aux` against the engine's `with_grad(f, has_aux: true)`, both at 3: `has_aux(loss)(3.0)` answers `((9.0, 13.0), 6.0)` -- the value, the auxiliary value and the gradient, in the engine's order -- and the program compares the three as floats, so `same_value=true same_aux=true same_grad=true` is the reading. The body is `jvp` read at the weight's direction (`stdlib/vjp.cml#has_aux`): `jvp(loss)(3.0, 1.0)` answers the pair and the pair's tangent, and the value's derivative is the tangent's first member. It is the forward direction because the transposed one cannot carry a pair -- `vjp`'s second half turns a cotangent around, a pair has none, and the refusal is `has_aux.vjp_pair` above. A composition that handed the pair's first element back where the gradient belongs answers 9.0, and one that added the auxiliary value's own slope answers 7.0. `frozen(w) = (1.0, w*w)` separates the two halves by the numbers and is compared with the engine's leg too: `held value=1.0 aux=9.0 grad=0.0` and `held_same value=true aux=true grad=true`, which is what a pass that differentiated the pair rather than its first member answers 6.0 for."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_library_composition.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_library_composition\nengine value=9.0 aux=13.0 grad=6.0\nlibrary value=9.0 aux=13.0 grad=6.0\nsame_value=true same_aux=true same_grad=true\nheld value=1.0 aux=9.0 grad=0.0\nheld_same value=true aux=true grad=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 # The refusals that make form three a composition rather than a guess: the parameter form names a
 # parameter `vjp` does not declare, and a pair-returning function handed to `vjp` stops where the
 # cotangent of a pair would have to go into `transpose`.
@@ -3602,14 +3618,16 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 20000
 [[tests]]
 name = "has_aux.vjp_pair"
-desc = "A pair-returning function handed to `vjp` with no named argument is refused inside the library: `transpose` takes a function whose result has a cotangent (the cotangent of the result is what goes in), and a pair has none, so the call stops at `stdlib/vjp.cml`'s `transpose(lin)` instead of answering `(value, pullback)` with the pair's first element silently differentiated. This is the pair form of the same mistake `has_aux.vjp_named` pins as the parameter form. The sentence changed with `lane-f32trans` (2026-11-04): the old text, `takes a function that returns a `float``, is what `transpose` said while its exit-type check was written for `float` only; the check now asks the result's tangent space (`modules/transforms/transpose_operator.cpp#explainRejection`) -- quoted verbatim from the merged tree: `transpose` takes a function whose result has a cotangent: the cotangent of the result is what goes in, it is the result's own tangent space (`Tangent<f32>` is `f32`), and this law adds cotangents with the addition of that space -- `:op/add_d` at `float` and `:op/add_f` at `f32`."
-kind = "negative"
+desc = "A pair-returning function handed to `vjp`: the pullback takes the pair's cotangent, and two seeds pin the numbers. Seeding `(1.0, 0.0)` asks only the value half and answers 6.0 (`d(x*x)` at 3); seeding `(0.0, 1.0)` asks only the auxiliary half and answers 1.0 (`d(x + 10)`). Two seeds rather than one because `grad=0.0` is a legal gradient: a walk that never distributed the cotangent and a function whose derivative is zero answer the same number, and a single seed could not tell them apart. The pair's own value and auxiliary value are pinned as well (`value=9.0 aux=13.0`), so a pullback that answered the gradient where the pair belongs fails on the first line. This case used to pin the refusal `transpose takes a function whose result has a cotangent`, and that sentence was wrong -- a pair's cotangent is the pair of its members' (design principles 9.9, author `f6ee4f5d0`), and the law now asks the result's tangent space instead of listing two type codes."
+kind = "positive"
 case = "../../../cases/modules/autodiff/has_aux_vjp_pair.cml"
 args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ArgumentsRejected"
-expect_output_contains = ["Invalid call to 'transpose'", "takes a function whose result has a cotangent"]
-expect_output_not_contains = ["UnknownInternalError", "never printed"]
+expect_exit = 0
+expect_stdout_exact = """has_aux_vjp_pair
+value=9.0 aux=13.0
+seed_value grad=6.0
+seed_aux grad=1.0
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 20000
 # The pair contract itself: the three results that break "the pair is `(value, aux)`, the first

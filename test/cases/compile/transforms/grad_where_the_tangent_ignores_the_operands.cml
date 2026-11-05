@@ -1,16 +1,28 @@
-// The end-to-end shape of the same missing cotangent: `grad` is `transpose(split(reinterp(jvp(f))))`,
-// so a tangent function that ignores its operands is on the path of every `grad` of a sum. For
+// The end-to-end shape of the same missing cotangent: `grad` is `transpose(split(jvp(f)))`, so a
+// tangent function that ignores its operands is on the path of every `grad` of a sum. For
 // `(x) => x + 1.0` the tangent comes out as `1.0` -- the derivative of a straight line -- and for
 // `(x) => x*x*x + 1.0` as 3*3*3 = 27, the cube that `mul_tangent` lifts plus the one it does not
 // touch. What the addition adds is in the tangent either as a zero or not at all, and either way the
 // answer is the derivative of the term that is not constant.
+//
+// `grad` differentiates the first `with` parameter (design principles 9.9), so the operand is a
+// `with` value here: the three expressions, and the constants beside them, are unchanged.
 import rulesets.jvp
 import rulesets.transpose
 import { grad } from vjp
 
+with <x: float>
+func plus_one(): float { return x + 1.0 }
+
+with <x: float>
+func cube_plus_one(): float { return x * x * x + 1.0 }
+
+with <x: float>
+func square_plus_one(): float { return x * x + 1.0 }
+
 func main(): int sync {
-    println(grad((x) => x + 1.0)(3.0))
-    println(grad((x) => x * x * x + 1.0)(3.0))
-    println(grad((x) => x * x + 1.0)(3.0))
+    println(grad(plus_one)(3.0))
+    println(grad(cube_plus_one)(3.0))
+    println(grad(square_plus_one)(3.0))
     return 0
 }

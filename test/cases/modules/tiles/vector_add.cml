@@ -1,7 +1,7 @@
 import { reshape, sum } from tensor
 import { device, run_preferred_resident, download } from tiles
 
-func add(x: f32[..], y: f32[..]): f32[..] {
+func add(x: f32[...], y: f32[...]): f32[...] {
     return x + y
 }
 

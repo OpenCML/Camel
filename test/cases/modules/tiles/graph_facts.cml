@@ -1,13 +1,13 @@
 import { reshape, sum, abs, transpose } from tensor
 import { inspect, run_preferred_resident, download } from tiles
-func fixed(x: f32[2, 3]): f32[..] {
+func fixed(x: f32[2, 3]): f32[...] {
     return transpose(x + x)
 }
-func dynamic(x: f32[..]): f32[..] {
+func dynamic(x: f32[...]): f32[...] {
     return transpose(x + x)
 }
 with <ax: int>
-func axis(x: f32[2,3]): f32[..] {
+func axis(x: f32[2,3]): f32[...] {
     return x + sum<ax, true>(x)
 }
 func main(): int sync {

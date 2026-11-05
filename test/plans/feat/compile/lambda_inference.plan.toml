@@ -160,7 +160,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "lambda_inference.with_list_from_the_position"
-desc = "A lambda takes the `with` list it does not write from the position it stands in (design principles 5.9), as it takes the parameter types: `apply` expects `<w: float> (x: float) => float`, and `(..xs) => 7.0` there is a function of a `with` argument. Two `with` parameters keep the position's order. Before, the first line was an invariant violation -- the completion read the expected type's ordinary slots at the lambda's own numbering, past the end of `normTypeAt`."
+desc = "A lambda takes the `with` list it does not write from the position it stands in (design principles 5.9), as it takes the parameter types: `apply` expects `<w: float> (x: float) => float`, and `(...xs) => 7.0` there is a function of a `with` argument. Two `with` parameters keep the position's order. Before, the first line was an invariant violation -- the completion read the expected type's ordinary slots at the lambda's own numbering, past the end of `normTypeAt`."
 kind = "behavior"
 case = "../../../cases/compile/lambda_inference/with_list_from_the_position.cml"
 args = ["${case}", "std::nvm"]
@@ -171,7 +171,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "lambda_inference.with_pack_on_a_lambda"
-desc = "A lambda writes a pack among its `with` parameters and forwards it (author's ruling of 2026-11-03 13:50, the pack rule of design principles 5.6), and the completion binds that pack to the `with` list of the position the lambda stands in -- the same rule an ordinary rest parameter follows from the expected type. `through(scaled)` answers `<..ws> (x) => g<..ws>(x)`: the position's `w` = 2.0 and `x` = 3.0 give 6.0, the same number as the lambda that reads the position's name (`apply((x) => x * w)`), so the pack carries the value and not only the syntax. Before, `<..ws>` was `Unexpected '..'; expected a name` -- the `with` half of the 10:00 ruling while the ordinary pack already parsed. The third line is the empty pack: `vjp` of a function with no `with` parameters stands at a position whose list is empty, `ws` is `()`, and `split(jvp(f))<..ws>(x)` spreads nothing -- value 9.0, slope 6.0."
+desc = "A lambda writes a pack among its `with` parameters and forwards it (author's ruling of 2026-11-03 13:50, the pack rule of design principles 5.6), and the completion binds that pack to the `with` list of the position the lambda stands in -- the same rule an ordinary rest parameter follows from the expected type. `through(scaled)` answers `<...ws> (x) => g<...ws>(x)`: the position's `w` = 2.0 and `x` = 3.0 give 6.0, the same number as the lambda that reads the position's name (`apply((x) => x * w)`), so the pack carries the value and not only the syntax. Before, `<...ws>` was `Unexpected '...'; expected a name` -- the `with` half of the 10:00 ruling while the ordinary pack already parsed. The third line is the empty pack: `vjp` of a function with no `with` parameters stands at a position whose list is empty, `ws` is `()`, and `split(jvp(f))<...ws>(x)` spreads nothing -- value 9.0, slope 6.0."
 kind = "behavior"
 case = "../../../cases/compile/lambda_inference/with_pack_on_a_lambda.cml"
 args = ["${case}", "std::nvm"]
@@ -179,4 +179,45 @@ expect_exit = 0
 expect_stdout = "named=6.00000000000000000 packed=6.00000000000000000\nsquare value=9.00000000000000000 slope=6.00000000000000000\n"
 expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "lambda_inference.with_list_from_a_pack_in_the_position"
+desc = "The `with` list of the position can come from a pack: a declared type writes that prefix as `...WithOf<F>` (the shape `stdlib/types.cml#Gradient` and the `has_aux` result the library owes have), and the instantiation turns it into the members `F` has -- one parameter named after nothing the source wrote, `<__pack_0_0: float>`. A lambda written `<w, ...rest>` there takes the first `with` parameter by name and the pack stands for the ones left over, the same rule an ordinary rest parameter follows; the ordinary parameters it writes are filled from the same position. Three lines: `two<2.0, 3.0>()` is the reading that the pack absorbed `k` (a lambda of one `with` parameter would not match that call), and `three<2.0>(3.0, 4.0)` is 2.0 * 3.0 * 4.0 = 24.0, so the ordinary members came from the position too. Before, the first line was refused with 'the expected type ... ends before the rest parameter', because the arity comparison counted the `with` parameters a second time."
+kind = "behavior"
+case = "../../../cases/compile/lambda_inference/with_list_from_a_pack_in_the_position.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout = "one (2.0, 1.0)\ntwo (2.0, 1.0)\nthree (24.0, 1.0)\n"
+expect_output_not_contains = ["Warning", "[Error]", "LambdaParameterWithoutType"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+[[tests]]
+name = "lambda_inference.with_list_from_a_pack_and_a_parameter_it_lacks"
+desc = "The other side of the same shape: a position whose `with` list came from a pack still says how many parameters it takes, so a lambda that writes one more than that is refused at the parameter it does not reach, with the expected type quoted. The message names the parameter and the position -- this place cannot say what the parameter is, which is a fact about the program -- rather than crashing or being accepted."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/with_list_from_a_pack_and_a_parameter_it_lacks.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 18
+expect_diagnostic_column = 64
+expect_output_contains = ["the expected type '<__pack_0_0: float> () => (float, float)' ends before the parameter at position 3, which the lambda writes"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+[[tests]]
+name = "lambda_inference.rest_parameter_beyond_the_position"
+desc = "The contract an ordinary rest parameter's completion keeps, pinned beside the pack: the position has to reach the rest parameter's own position and may have exactly as many ordinary members as the lambda writes before it. `apply` expects `(a: float) => float`, so `(a, b, ...xs)` asks for a member the position does not have, and the report names the rest parameter and the position it stands at."
+kind = "negative"
+case = "../../../cases/compile/lambda_inference/rest_parameter_beyond_the_position.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LambdaParameterWithoutType"
+expect_diagnostic_code = "0x0300017E"
+expect_diagnostic_line = 13
+expect_diagnostic_column = 26
+expect_output_contains = ["the expected type '(a: float) => float' ends before the rest parameter, which stands for the parameters from position 3 on"]
+expect_output_not_contains = ["never printed", "UnknownInternalError", "Warning"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000

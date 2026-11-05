@@ -5,6 +5,19 @@
 # one place that moves a tree to the host and starts work on it; nothing else in the repository
 # reaches the host for a build or a plan.
 #
+# --- this file is the gate's only entry -------------------------------------
+# 闸门入口只认 `internal/tools/camel-remote.ps1`；`<worktree root>/camel-remote.ps1` 是历史遗留副本，不要用
+#
+# Copies of this script were once kept at each worktree's root, from before the machine-specific
+# values moved into camel-gate.local.json and before the -NoBuild guard could name the build
+# configuration. Such a copy is wider than this file on three counts, and it says none of them: its
+# guard has no `--config` to pass, so `-Tier debug -NoBuild` verifies and accepts an install built
+# Release (the options fingerprint it compares is a Release one); the plan's stderr is not brought
+# back, so a plan that wrote only its reason to stderr reaches the caller as a bare non-zero exit;
+# and the host, the bare repository, the panel's state file and the libstdc++ directory are baked
+# into it, so a run from another machine or another host reaches the one it names. A lane that runs
+# the copy therefore believes it ran the gate while it read a different, laxer reading.
+#
 # What a run does, in order:
 #   * pushes the worktree's branch to the host's bare staging repository, writes the uncommitted
 #     changes with `git diff HEAD --binary`, and tars the untracked files;
@@ -98,7 +111,14 @@
 # exit code:
 #
 #   * the names are the table below, and every entry is the invocation the repository already uses,
-#     so a lane runs what the gate runs and not a paraphrase. `-Check all` runs all of them in order;
+#     so a lane runs what the gate runs and not a paraphrase. `-Check all` runs all of them in order,
+#     except the entries marked `planStage`: those read the plan stage's own record and are asked for
+#     by name beside the plan they read (`-Plan <target> -Check plan-debt`), because a check with no
+#     reading of its own must refuse rather than pass over nothing;
+#   * `all` is therefore the static layer and not the whole table, and the closing summary says which
+#     entries that leaves out instead of leaving it to the reader: the line after "N run" names every
+#     `planStage` entry this run skipped, and a run that named one prints that it is not part of
+#     `all`. Both read the table as it stands, so a new `planStage` entry appears there by itself;
 #   * the stages are build -> plan -> checks, so one call answers both questions and a failing plan
 #     still gets its checkers (their readings are not thrown away with the plan's);
 #   * the run exits non-zero when any checker failed, and the exit code is the plan's when it failed,
@@ -163,6 +183,7 @@
 #        -Plan test/plans/feat/modules/graph.plan.toml -Jobs 16
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Plan smoke -NoBuild
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Config Debug -Plan smoke -Tier debug
+#   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Plan feat/opt -Check plan-debt
 #   pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Clean
 
 # Named binding only: a token that is not a switch must not become the next parameter by position.
@@ -200,6 +221,12 @@ param(
     # Run the plans the change touches instead of a written list: `node scripts/test.js --changed`,
     # with `origin/develop` as the base unless -ChangedBase names another revision. This is the
     # per-merge gate; the full fast layer is for batch points, not for every merge.
+    # The change is listed *here*, where the base branch exists, and travels with the patch as
+    # `--changed-files`: the host holds the lane's commits but not the base branch (the staging
+    # repository is not upstream and the host reaches no upstream), so a selection made there
+    # answered "cannot read origin/develop" and every gate run took the widening to the whole fast
+    # layer without printing a symptom. A base that cannot be read here is exit 2 before the push,
+    # naming the base and the layer it declines to run; it is never a run of the whole layer.
     [switch]$Changed,
     [string]$ChangedBase = 'origin/develop',
     # Rewrite the goldens of the named plans instead of checking them: runs the golden tool,
@@ -208,6 +235,8 @@ param(
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
+    # `all` leaves out the entries marked `planStage` (they read the plan stage's own record and are
+    # named beside the plan they read); the run's closing summary names the ones it left out.
     # An unknown name is exit 2 before anything runs; see "what the panel sees" and the -Check
     # section of the header for the stages and the exit code.
     [string[]]$Check = @(),
@@ -275,6 +304,13 @@ $checkers = [ordered]@{
     # ~/.local/bin/z3 itself, so the host's copy is found without an environment variable here; it
     # reads sources only and never starts the tree's binary, so it is not a compiler entry.
     'rule-proofs'         = @{ script = 'scripts/rule-proofs.mjs'; args = @('--require-solver'); compiler = $false }
+    # The plan's own prose against the plan's own reading: a `desc`, a `known_fail_note` or a `#`
+    # comment that says its case is red today must find that case running red in the run this gate
+    # just took (`scripts/check-plan-debt.mjs`). It is the one checker whose evidence is the plan
+    # stage and not the checkout, so it needs a plan in the same call -- `-Plan <target> -Check
+    # plan-debt` -- and it is left out of `all`: with no plan selected it has no reading to judge
+    # against, and it says so (exit 2) rather than passing over nothing.
+    'plan-debt'           = @{ script = 'scripts/check-plan-debt.mjs'; args = @(); compiler = $false; planStage = $true }
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
@@ -296,7 +332,13 @@ $Check = @($Check | ForEach-Object { $_ -split ',' } | ForEach-Object { $_.Trim(
 $checkNames = @()
 foreach ($requested in $Check) {
     if ($requested -eq 'all') {
-        foreach ($known in $checkers.Keys) { if ($checkNames -notcontains $known) { $checkNames += $known } }
+        # A `planStage` entry reads the plan stage's own record, so it is not part of the static
+        # layer `all` means: it would refuse (exit 2) on every call that selects no plan, which is
+        # what `-Check all` is for. It is asked for by name, beside the plan it reads.
+        foreach ($known in $checkers.Keys) {
+            if ($checkers[$known].planStage) { continue }
+            if ($checkNames -notcontains $known) { $checkNames += $known }
+        }
     } elseif ($checkers.Contains($requested)) {
         if ($checkNames -notcontains $requested) { $checkNames += $requested }
     } else {
@@ -305,6 +347,18 @@ foreach ($requested in $Check) {
     }
 }
 $checkList = $checkNames -join ' '
+
+# What `all` cannot mean, read out of the table above and never out of a list written beside it.
+# Every entry marked `planStage` is a check whose evidence is the plan stage, and `all` has no plan
+# to offer it. Typing those names here would just move "remember which checks are named-only" from a
+# person's head into a second list that misses the next added entry; derived from `$checkers`, the
+# closing line below picks a new `planStage` entry up with no edit of its own.
+#
+# `$planStageSkipped` is what this run left out, not what `all` leaves out: `-Check all,plan-debt`
+# runs it, and a line claiming otherwise would be the same wrong reading this line exists to remove.
+$checkHasAll = $Check -contains 'all'
+$planStageNames = @($checkers.Keys | Where-Object { $checkers[$_].planStage })
+$planStageSkipped = @($planStageNames | Where-Object { $checkNames -notcontains $_ })
 
 # A reading taken on a loaded host is not comparable to one taken on a quiet one: this machine also
 # runs every other lane's build, and several lanes at -Jobs 8 is more work than there are cores. So
@@ -668,6 +722,57 @@ try {
     $untrackedTar = Join-Path $scratch 'untracked.tar'
 
     $sw = [Diagnostics.Stopwatch]::StartNew()
+
+    # The change, listed on this side where the base branch is readable. It travels with the patch
+    # (`--changed-files`) and it is the same list the runner would build for itself: `git diff
+    # --name-only` against the base plus the untracked files. Two things depend on it -- `-Changed`
+    # and the milestone stage's selection -- and both read a list that says "cannot read" rather
+    # than a list that says nothing, so the widening to the whole layer has no branch left to take.
+    # It is computed before the push: a base nobody can read must cost a push and a build nothing.
+    $untracked = @(git -C $Path ls-files --others --exclude-standard)
+    $changedListFile = Join-Path $scratch 'changed.txt'
+    if ($Changed -and -not $UpdateGolden) {
+        $changedList = @()
+        $listProblem = $null
+        try {
+            # Three different refusals used to read as one: a ref that does not resolve, a ref with
+            # no merge-base (a shallow clone, another root's history -- `git diff` answers across
+            # that and reports every file), and a diff that failed. Each names itself here.
+            git -C $Path rev-parse --verify --quiet "$ChangedBase^{commit}" 2>$null | Out-Null
+            if ($LASTEXITCODE -ne 0) {
+                $listProblem = "cannot read $ChangedBase`: it does not resolve to a commit here"
+            }
+            if (-not $listProblem) {
+                $common = @(git -C $Path merge-base $ChangedBase HEAD 2>$null)
+                $commonOk = ($LASTEXITCODE -eq 0) -and (@($common | Where-Object { "$_".Trim() }).Count -gt 0)
+                if (-not $commonOk) {
+                    $listProblem = "cannot read $ChangedBase`: it shares no merge-base with HEAD (unrelated history, or a shallow clone), so the change against it is undefined"
+                }
+            }
+            if (-not $listProblem) {
+                $changedList = @(git -C $Path diff --name-only $ChangedBase 2>$null)
+                if ($LASTEXITCODE -ne 0) { $listProblem = "cannot read $ChangedBase`: git diff --name-only against it failed" }
+            }
+        } catch {
+            $listProblem = "cannot read $ChangedBase`: $($_.Exception.Message)"
+        }
+        if ($listProblem) {
+            # What the fallback would have run, counted the way the run reads it: the report has to
+            # carry the size of the thing that is not run, or "it failed" is itself unreadable.
+            $layerPlans = @(git -C $Path ls-files --cached --others --exclude-standard -- test/plans/smoke test/plans/feat 2>$null |
+                Where-Object { "$_" -like '*.plan.toml' })
+            Write-Host "[camel-remote] ERROR -Changed: $listProblem"
+            Write-Host "[camel-remote] ERROR -Changed: the plans this change touches are unknown, so none is selected and no plan runs. The fallback this replaces would have run the whole fast layer ($($layerPlans.Count) plan file(s) under test/plans/smoke and test/plans/feat), which reads exactly like a correct selection in every reading a gate takes."
+            Write-Host "[camel-remote] ERROR -Changed: name the layer deliberately with -Plan all if that is the question."
+            exit 2
+        }
+        $lines = @($changedList) + @($untracked) |
+            ForEach-Object { "$_".Trim().Replace('\', '/') } |
+            Where-Object { $_ }
+        [System.IO.File]::WriteAllText($changedListFile, (($lines -join "`n") + "`n"),
+            (New-Object System.Text.UTF8Encoding($false)))
+        Write-Host ("[camel-remote] -Changed: {0} changed file(s) against {1}, listed here for the host" -f $lines.Count, $ChangedBase)
+    }
     # --force, and the ref is dropped in the finally block: the staging branch is scratch. Without
     # the force, a worktree re-created at another commit (a rebuilt lane, an A/B run) is a
     # non-fast-forward to the same ref name, and the run stopped before it reached the host;
@@ -714,7 +819,6 @@ try {
     # `git diff --output=` writes the patch as raw bytes; `>` in PowerShell would write UTF-16.
     git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
 
-    $untracked = @(git -C $Path ls-files --others --exclude-standard)
     if ($untracked.Count -gt 0) {
         # Paths with spaces and non-ASCII names travel through a list file, one per line.
         $listFile = Join-Path $scratch 'untracked.txt'
@@ -772,7 +876,11 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     $runPlan = if ($UpdateGolden) {
         "cd `$R/ && node test/tools/run-tests.mjs --update-golden $planArgs --jobs $Jobs$tierArg"
     } elseif ($Changed) {
-        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --jobs $Jobs$tierArg"
+        # The list above travels with the patch: the host has the lane's commits but not the base
+        # branch, so a selection made there answered "cannot read origin/develop" and the run fell
+        # back to the whole fast layer. `CAMEL_TEST_BASE` stays for the sentences the runner prints
+        # -- the list is the one taken against that base -- but the list is what it reads.
+        "cd `$R/ && CAMEL_TEST_BASE='$ChangedBase' node scripts/test.js --changed --changed-files '$remoteScratch/changed.txt' --jobs $Jobs$tierArg"
     } elseif ($planArgs) {
         # No CAMEL_TEST_EXTRA_LIB_DIRS here any more: the install a 26888783c-or-later build writes
         # carries the toolchain's libstdc++.so.6 in its `libs/` and finds it through its own
@@ -1250,6 +1358,21 @@ exit `$code
         Write-Host ("[camel-remote] checks: {0} run, {1} failed ({2} s)" -f `
             $checkResults.Count, $checkFailed.Count, $checksSeconds)
         foreach ($result in $checkResults) { Write-Host ("[camel-remote]   {0} exit {1}" -f $result.name, $result.exit) }
+
+        # `N run` above is the static layer, not the whole table, and that count has been read as
+        # "every check ran" while a named-stage check had not run at all. So the count is followed by
+        # what it leaves out. The names come from `$planStageNames`, the table, so a new entry marked
+        # `planStage` shows up here without this line being touched; a run with none to name prints
+        # nothing, because then there is nothing the count is not counting.
+        if ($checkHasAll -and $planStageSkipped.Count -gt 0) {
+            Write-Host ("[camel-remote] checks: {0} named-stage check(s) not run by -Check all: {1} (use -Check <name>)" -f `
+                $planStageSkipped.Count, ($planStageSkipped -join ', '))
+        }
+        # The other direction, for a run that named one: it did run, and it is still not part of
+        # `all`. Without this line the same "all green" sentence is read over a check `all` never runs.
+        foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].planStage })) {
+            Write-Host ("[camel-remote] checks: {0} is a named-stage check, not part of -Check all; it ran because it was named" -f $result.name)
+        }
     }
 
     if ($null -ne $planStartedAt) {

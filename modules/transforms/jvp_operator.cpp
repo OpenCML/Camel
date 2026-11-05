@@ -155,7 +155,7 @@ class JvpResolver final : public FuncTypeResolver {
     /// states a false type is worse than one that states the rule (author, A2 of 2026-11-03: the type
     /// follows the declaration, and the declaration is the only source).
     std::string signature() const override {
-        return "(f: (..) => any) => (the parameters and their tangents) => (value, tangent)";
+        return "(f: (...) => any) => (the parameters and their tangents) => (value, tangent)";
     }
 
     /// `f` is the only parameter, in every form: `jvp(f: g)` has to bind to it.
@@ -192,12 +192,18 @@ slot_t jvpKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         // reads `f`'s `file:line` and still tells two calls of the same `jvp` apart
         // (ExecutionSiteHint::keepRaiseSite). A refusal that only prints a reading would leave the
         // reader at the call site, guessing which operator in `f` it was.
+        //
+        // A named construct is refused with the sentence the language would write for it, not with
+        // "this transform does not reinterpret it yet" (author, 2026-11-04 04:20): the constructs
+        // that reach here are outside the rule -- a loop whose element has a tangent, a call whose
+        // callee takes nothing but its `with` values -- and the rule plus the reading is the whole
+        // answer, so nothing is promised for later.
         const std::string why = built.refusedConstruct.empty()
                                     ? std::format(
                                           "transforms: jvp has no forward rule for `{}` ({})",
                                           built.refusedUri, built.refusedWhy)
                                     : std::format(
-                                          "transforms: jvp does not reinterpret {} yet ({})",
+                                          "transforms: jvp cannot differentiate through {} ({})",
                                           built.refusedConstruct, built.refusedWhy);
         throw camel::core::error::RuntimeFault(
             RuntimeDiag::RuntimeError, {why}, "", nullptr,

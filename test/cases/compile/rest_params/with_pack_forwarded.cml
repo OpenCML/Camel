@@ -1,11 +1,11 @@
-with <..ws>
+with <...ws>
 func add3(a: float, b: float, c: float): float {
     return a + b + c
 }
 
-with <..ws>
+with <...ws>
 func forward(x: float): float {
-    return add3<..ws>(x, 1.0, 2.0)
+    return add3<...ws>(x, 1.0, 2.0)
 }
 
 func main(): int sync {

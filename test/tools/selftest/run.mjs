@@ -8,9 +8,9 @@
 //   * the plan schema: a misspelled key or a known key of the wrong type fails its own plan with
 //     the file, the test and the key named, while a valid plan in the same directory still runs;
 //     `expect_stdout_exact` (and its legacy name `expect_stdout`) compares the whole output;
-//   * the `known_fail` gate: a marked case that names no owner, no reason, a placeholder reason or
-//     a reason that names no wall is refused where its plan is loaded, by name, and an entry that
-//     carries all three loads, runs and reports `[XFAIL]` with its owner printed;
+//   * the `known_fail` gate: a marked case that names no owner, no reason, a placeholder reason, a
+//     reason that names no wall or no sentence is refused where its plan is loaded, by name, and an
+//     entry that carries all four loads, runs and reports `[XFAIL]` with its owner printed;
 //   * the payload a `verify_script_path` receives: the resolved case path under `case_path` and
 //      the other fields docs/test-plans.md documents;
 //   * the per-test scratch directory: scratch.plan.toml is run twice, and a test must not see
@@ -41,6 +41,7 @@
 //     the only plan that runs the case, or the selection file records the shared case with a
 //      reason.
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
@@ -246,22 +247,24 @@ if (!strict.output.includes(`[INFO] test scratch kept: ${strictRoot}`)) {
 }
 fs.rmSync(strictRoot, { recursive: true, force: true })
 
-// --- the `known_fail` gate: a marked case carries an owner and a wall ---------------------------
+// --- the `known_fail` gate: a marked case carries an owner, a wall and a sentence --------------
 // The author's ruling of 2026-11-03 00:30: a case that cannot pass today stays in the plan with the
 // mark, who is responsible for making it green, and why it cannot pass. Two of the three used to be
 // prose inside `known_fail_note`, which nothing checked and a review had to remember to read; they
-// are fields now, and a plan that omits either is refused where it is loaded. Five plan files share
-// one directory -- four ways to be incomplete and one complete entry. The four must fail with the
-// file, the case and the missing (or unusable) field named; the complete one must load, run, and
-// report `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason
-// would make the four pass and this block red, which is the direction that matters.
+// are fields now, and a plan that omits either is refused where it is loaded. A fourth field, the
+// sentence the case prints today, is refused the same way: without it the runner takes any failure
+// as the expected one, and another defect can wear the mark's name. Six plan files share one
+// directory -- five ways to be incomplete and one complete entry. The five must fail with the file,
+// the case and the missing (or unusable) field named; the complete one must load, run, and report
+// `[XFAIL]` with its owner printed beside the mark. A default owner or a default reason would make
+// the five pass and this block red, which is the direction that matters.
 const knownfailDir = path.join(here, 'knownfail')
 const knownfail = runRunner([knownfailDir])
 if (knownfail.status !== 1) problems.push(`known_fail gate: runner exit ${knownfail.status}, expected 1`)
-if (!knownfail.output.includes('[SUMMARY] total: 5, pass: 0, fail: 4, known failures: 1')) {
+if (!knownfail.output.includes('[SUMMARY] total: 6, pass: 0, fail: 5, known failures: 1')) {
     problems.push(`known_fail gate: unexpected summary (${summaryLine(knownfail.output)})`)
 }
-// The four readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
+// The five readings, each a refusal that names its own missing thing. Kept as pairs so the verdict
 // printed below is read off the output and not off this file's intentions.
 const knownfailReadings = [
     [
@@ -283,6 +286,11 @@ const knownfailReadings = [
         'reason-names-no-wall',
         "test/tools/selftest/knownfail/no_wall.plan.toml: test 'no_wall': known_fail_reason names "
             + 'no wall',
+    ],
+    [
+        'missing-msg',
+        "test/tools/selftest/knownfail/no_msg.plan.toml: test 'no_msg': known_fail needs "
+            + 'known_fail_msg',
     ],
 ]
 const knownfailVerdict = knownfailReadings.map(([what, needle]) => {
@@ -1053,6 +1061,70 @@ if (changedBase() !== 'origin/release') {
 }
 if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
+
+//  --- a measured empty selection starts nothing, and says the count --------------------------
+// `--changed` with nothing to narrow by used to hand an empty target list to `run-tests.mjs`, whose
+// `loadPlans` reads "no target" as the whole plan tree: the run was the whole fast layer. So 0
+// changed files started 336 plan files and printed a `[SUMMARY]` with no failure -- the same three
+// numbers a correct selection of one plan prints, and the same exit code. The fallback is gone
+// (nothing is selected, so nothing starts), and the count is a line of its own: "changed: 0
+// target(s)" is the only thing that tells a zero from a layer in a log, and a selection that really
+// did select plans must not print it, or the line would mean nothing.
+const changedScratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-changed-'))
+const fallbackLine = (output) =>
+    (output.match(/^\[WARN\] --changed:.*falling back to the whole fast layer \(\d+ plan file\(s\).*$/m) || [
+        '',
+    ])[0]
+const emptyChangedList = path.join(changedScratch, 'empty.txt')
+fs.writeFileSync(emptyChangedList, '')
+const emptySelection = runTestCli(['--changed', '--changed-files', emptyChangedList, '--list'])
+if (emptySelection.status !== 0) {
+    problems.push(`--changed on an empty list: exit ${emptySelection.status}, expected 0`)
+}
+if (!/^\[INFO\] changed: 0 target\(s\)/m.test(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list did not print 'changed: 0 target(s)': ${emptySelection.output.trim()}`
+    )
+}
+if (fallbackLine(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list still widens to the layer: ${emptySelection.output.trim()}`
+    )
+}
+if (/\(the whole fast layer: smoke \+ feat\)/.test(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list says the layer is what it runs: ${emptySelection.output.trim()}`
+    )
+}
+// The run path, not only the listing: a zero has to reach the runner as a zero, or the widest
+// reading of `--changed` is the one nobody checked.
+const emptyRun = runRunner(['--selection-empty'])
+if (emptyRun.status !== 0) {
+    problems.push(`--selection-empty: exit ${emptyRun.status}, expected 0`)
+}
+if (!/discovered plans: 0/.test(emptyRun.output)) {
+    problems.push(`--selection-empty widened to the plan tree: ${summaryLine(emptyRun.output)}`)
+}
+if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(emptyRun.output)) {
+    problems.push(`--selection-empty: ${summaryLine(emptyRun.output)}`)
+}
+const matchedChangedList = path.join(changedScratch, 'matched.txt')
+fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
+const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
+if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
+    problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+}
+if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
+    problems.push(
+        `--changed printed the zero-target line for a selection that selected plans: ${matchedSelection.output.trim()}`
+    )
+}
+if (fallbackLine(matchedSelection.output)) {
+    problems.push(
+        `--changed printed the fallback sentence for a selection that selected plans: ${matchedSelection.output.trim()}`
+    )
+}
+fs.rmSync(changedScratch, { recursive: true, force: true })
 
 // --- a benchmark whose timed pass fails --------------------------------------------------------
 // gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the

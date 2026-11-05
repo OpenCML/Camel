@@ -42,8 +42,8 @@
 #include "camel/core/type/composite/array.h"
 #include "catalog.h"
 #include "support.h"
-#include <format>
 #include <array>
+#include <format>
 
 namespace camel::tensor::ops {
 
@@ -98,12 +98,14 @@ bool keepDimsArg(ArgsView &norm, size_t index) {
 
 template <k::ReduceOp Op> slot_t reduceAxisKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("reduce", [&] {
-        return wrap(norm.resultType(), k::reduceAxis(
-            Op,
-            tensorArg(norm, 0),
-            intArg(norm, 1),
-            keepDimsArg(norm, 2),
-            resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::reduceAxis(
+                Op,
+                tensorArg(norm, 0),
+                intArg(norm, 1),
+                keepDimsArg(norm, 2),
+                resultAllocator()));
     });
 }
 
@@ -131,13 +133,15 @@ InferFn reduceAxisInfer(k::ReduceOp op) {
 }
 
 template <k::ReduceOp Op>
-OpDef reduceAxisDef(std::string_view name, std::string_view exportName, std::string_view resultDoc) {
+OpDef reduceAxisDef(
+    std::string_view name, std::string_view exportName, std::string_view resultDoc) {
     OpDef def{
-        .name    = name,
-        // The operator's own name first: it is the one a call of this node is printed as
-        // (`tensor::mean_axis(x, 0, false)`), and the name the reduction's algebraic spelling
-        // shares (`mean`) is exported beside it, so both spellings are this one definition.
-        .exports = {name, exportName},
+        .name = name,
+        // The name a program writes: the whole reduction's (`sum`, `mean`, ...). The axis form is
+        // the same name with the axis and the flag in angle brackets (design principles 7.3), so
+        // the algebraic spelling is the only exported name the operator has; `name` stays the URI
+        // suffix, which is an identity of the implementation and not a spelling of a call.
+        .exports = {exportName},
         .params =
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
@@ -146,22 +150,20 @@ OpDef reduceAxisDef(std::string_view name, std::string_view exportName, std::str
         .infer     = reduceAxisInfer(Op),
         .kernel    = &positionally<reduceAxisKernel<Op>>,
         .traits    = {},
-        // Two call spellings, and both of them reach this definition's `infer`:
+        // One call spelling: `t` in the parentheses, the axis and the flag in angle brackets
+        // (`mean<0>(xs)`, `argmin<0, true>(rows)`). `ordinaryParams` is one, so
+        // `OpDefResolver::resolveForCall` refuses a call that writes the axis in the parentheses --
+        // that spelling named a second operator (`mean_axis(t, axis, keepdims)`), and the author's
+        // ruling of 2026-11-05 removed it: a reduction over an axis has one name, the whole
+        // reduction's. `withAfterNorm` joins the angle-bracketed parameters back into the kernel's
+        // one list.
         //
-        //   * `mean_axis(xs, 0, false)` -- every parameter in the parentheses, which is what a
-        //     program writes and what this node is printed as. `ordinaryParams` is the whole list,
-        //     so `OpDefResolver::resolveForCall` does not refuse the count, and the registry
-        //     records the call shape (`registry.cpp`, "every parameter is an ordinary one");
-        //   * `argmin<0, true>(rows)` -- the axis and the flag in angle brackets, which a pass
-        //     builds and which `withAfterNorm` joins back into the kernel's one list.
-        //
-        // The extents are `reduceAxisInfer`'s answer either way. They have to be: with no
-        // declaration standing above this name, nothing else states them, and a declaration cannot
-        // name them at all -- they follow from the operand's type *and* from the values of `axis`
-        // and `keepdims` (design principles 5.4).
+        // The extents are `reduceAxisInfer`'s answer. They have to be: a declaration cannot state
+        // them at all -- they follow from the operand's type *and* from the values of `axis` and
+        // `keepdims` (design principles 5.4).
         .withAfterNorm = true,
     };
-    def.ordinaryParams = def.params.size();
+    def.ordinaryParams = 1;
     return def;
 }
 
@@ -266,21 +268,22 @@ InferFn wholeReductionInfer(k::ReduceOp op) {
 //
 // Both are second spellings of the operator above them for the reason `tensor:pick_at` is a
 // second spelling of `:op/idx_arr` (`modules/tensor/ops/layout_ops.cpp#elementAtKernel`): a law's
-// parameters are bound one per operand, and the transpose walk answers an operator with one or two
-// normal operands, so the extents travel in one integer list beside the value rather than as
-// operands of their own. `rulesets.jvp`'s `jvp_sum` and `jvp_mean_axis` state them, and
-// `rulesets.transpose`'s `sum_stated_t` and `mean_axis_stated_t` read them and nothing of the
-// operand.
+// parameters are bound one per operand, and `:op/idx_arr`'s key is filed at two operands in the
+// core, so a third value cannot ride on it. The extents are operands of their own here -- the walk
+// answers an operator with a third *parameter*; what it refuses is a third *tensor* (measured
+// 2026-11-04 on `take_stated`, two `int[]` beside the tensor, both legs answered).
+// `rulesets.jvp`'s `jvp_sum` and `jvp_mean_axis` state them, and `rulesets.transpose`'s
+// `sum_stated_t` and `mean_axis_stated_t` read them and nothing of the operand.
 
-/// `sum_stated(t, at)`: the whole-tensor sum, with `at` the operand's extents.
+/// `sum_stated(t, extents)`: the whole-tensor sum, with the operand's extents beside it.
 ///
 /// The value is `sum(t)` -- `sumAllKernel` below is the same kernel, so the accumulation, the
-/// element type and the one rounding are the definition's own -- and `at` is checked against the
-/// operand's shape: an extent nobody verified would be a gradient of the wrong shape
+/// element type and the one rounding are the definition's own -- and `extents` is checked against
+/// the operand's shape: an extent nobody verified would be a gradient of the wrong shape
 /// (`support.h#checkStatedExtents`).
 slot_t sumStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
-    const std::vector<int64_t> at = intListArg(norm, 1, "sum_stated");
-    checkStatedExtents(tensorArg(norm, 0), at, 0, "sum_stated");
+    const std::vector<int64_t> extents = intListArg(norm, 1, "sum_stated");
+    checkStatedExtents(tensorArg(norm, 0), extents, 0, "sum_stated");
     return sumAllKernel(with, norm, ctx);
 }
 
@@ -288,25 +291,20 @@ std::optional<Type *> sumStatedInfer(const InferContext &ctx) {
     return Type::create(wholeReductionDtype(k::ReduceOp::Sum, ctx.facts(0).dtype));
 }
 
-/// `mean_axis_stated(t, at)`: the lane mean, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]`.
+/// `mean_axis_stated(t, axis, keepdims, extents)`: the lane mean, with the axis, the flag and the
+/// operand's extents stated as parameters of their own types.
 ///
 /// The value is `mean_axis(t, axis, keepdims)` -- `k::reduceAxis` is the kernel the axis form runs,
-/// so the lane's mean and its one rounding are the definition's own -- and the extents after the
-/// two scalars are checked against the operand's shape. The axis and the flag travel in the list
-/// because the reverse law needs the *shape* alone (`numel(t) / numel(ct)` is the lane length, and
-/// the answer is `full(shape, 1) * (ct / lanes)`), while the value is the one thing that needs the
-/// axis: one list, two readers.
+/// so the lane's mean and its one rounding are the definition's own -- and `extents` is checked
+/// against the operand's shape. The reverse law needs the *shape* (`numel(t) / numel(ct)` is the
+/// lane length, and the answer is `full(shape, 1) * (ct / lanes)`) and the value needs the axis, so
+/// the three facts are read where they are stated instead of being counted out of a list.
 slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *t               = tensorArg(norm, 0);
-    const std::vector<int64_t> at = intListArg(norm, 1, "mean_axis_stated");
-    if (at.size() < 3) {
-        reportShapeError(
-            "mean_axis_stated",
-            "expects an integer list: the axis, the keepdims flag and the tensor's extents");
-    }
-    const int64_t axis  = at[0];
-    const bool keepDims = at[1] != 0;
-    checkStatedExtents(t, at, 2, "mean_axis_stated");
+    const Array *t                     = tensorArg(norm, 0);
+    const int64_t axis                 = intArg(norm, 1);
+    const bool keepDims                = boolArg(norm, 2);
+    const std::vector<int64_t> extents = intListArg(norm, 3, "mean_axis_stated");
+    checkStatedExtents(t, extents, 0, "mean_axis_stated");
     return runKernel("mean_axis_stated", [&] {
         return wrap(
             norm.resultType(),
@@ -314,16 +312,16 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     });
 }
 
-/// The stated lane mean's result: the axis form's own element type at the extents `at` states.
+/// The stated lane mean's result: the axis form's own element type at the extents the call states.
 ///
-/// `at` is `[axis, keepdims, d0, ..., d(rank-1)]`, so it carries the two values `reduceAxisInfer`
-/// reads as arguments -- the axis at `at[0]`, the flag at `at[1]` -- and the operand's extents after
-/// them. That is why this name is **computed** rather than declared
+/// The three parameters carry the values `reduceAxisInfer` reads as arguments -- `axis`, `keepdims`
+/// and the operand's `extents` -- and each is read by name now, not by its place in a list. That is
+/// why this name is **computed** rather than declared
 /// (`modules/tensor/module.cpp#kDeclaredOperators`): a declaration's result is a type, and these
 /// extents are a function of three values, so the only type a declaration could write is `T[..]`.
 ///
-/// When a call writes `at`, the extents are stated and the answer is stated with them: `axis 0`,
-/// no `keepdims`, over a rank-1 operand of four elements answers the element itself (design
+/// When a call states all three, the extents are known and the answer is stated with them: `axis
+/// 0`, no `keepdims`, over a rank-1 operand of four elements answers the element itself (design
 /// principles 5.4), and the graph reads `float` -- not `float[..]` and a conversion. That is the
 /// difference between a result somebody stated and a result nobody did: with the declaration this
 /// name had, every call read `float[..]`, and the cotangent the reverse law was handed had no rank
@@ -331,69 +329,60 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// read a number's bits as a pointer,
 /// docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md).
 ///
-/// A call whose `at` is a **value of the run** has stated nothing, and this inference says exactly
-/// that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse, because
-/// the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent call --
-/// build the list with `stated_axis_shape(axis, keepdims, shape(xs))`, whose extents are the
-/// primal's and therefore a value; refusing would turn a legal program away for a shape its own
-/// operand has. Measured on that tree: both sites report `at=runtime`, and the reverse walk used to
-/// stop on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed from
-/// this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0 answer under
-/// an array type has no conversion to make. The repair is not here and not in the walk -- a slot whose
-/// type already claims a rank has nothing to convert -- but in the law that reads the cotangent: it
-/// states the cotangent as the element (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`), so the
-/// language's own `T` -> `T[..]` conversion at its next call argument boxes the value and `numel(ct)`
-/// answers 1. The rank-0 program answers `[0.25, 0.25, 0.25, 0.25]` instead of dying
+/// A call whose parameters are **values of the run** has stated nothing, and this inference says
+/// exactly that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse,
+/// because the two call sites that exist -- `stdlib/rulesets/jvp.cml#jvp_mean_axis` and its tangent
+/// call -- pass `shape(xs)`, whose extents are the primal's and therefore a value; refusing would
+/// turn a legal program away for a shape its own operand has. Measured on that tree: both sites
+/// report the extents as a value, and the reverse walk used to
+/// stop on a SIGSEGV in `numelKernel`, because the cotangent a transposition is handed is typed
+/// from this node's type (`modules/transforms/transpose.cpp`, `cotangentTypeOf`) and a rank-0
+/// answer under an array type has no conversion to make. The repair is not here and not in the walk
+/// -- a slot whose type already claims a rank has nothing to convert -- but in the law that reads
+/// the cotangent: it states the cotangent as the element
+/// (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`), so the language's own `T` -> `T[..]`
+/// conversion at its next call argument boxes the value and `numel(ct)` answers 1. The rank-0
+/// program answers `[0.25, 0.25, 0.25, 0.25]` instead of dying
 /// (docs/handover/questions/2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md).
 std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const TypeCode dtype = reductionDtype(k::ReduceOp::Mean, in.dtype);
-    const auto at        = ctx.constInts(1);
-    if (!at.has_value()) {
+    const auto axis      = ctx.constInt(1);
+    const auto keepDims  = ctx.constBool(2);
+    const auto extents   = ctx.constInts(3);
+    if (!axis.has_value() || !keepDims.has_value() || !extents.has_value()) {
         return tensorOf(dtype, std::nullopt);
     }
-    if (at->size() < 3) {
-        throw ShapeError(std::format(
-            "mean_axis_stated expects `at` = `[axis, keepdims, d0, ..., d(rank-1)]`: the axis, the "
-            "flag and the operand's {} extent(s), and the list has {} entr{}",
-            in.shape ? in.shape->size() : 0,
-            at->size(),
-            at->size() == 1 ? "y" : "ies"));
-    }
-    const StaticShape stated(at->begin() + 2, at->end());
+    const StaticShape stated(extents->begin(), extents->end());
     // The extents a stated reduction names are the operand's own, and a list that names another
     // number of them is refused here rather than at the run: `support.h#checkStatedExtents` makes
     // the same comparison when the value is known, and a program that writes its extents is the
     // one case where the comparison can be made before it runs.
     if (in.shape && in.shape->size() != stated.size()) {
-        throw ShapeError(std::format(
-            "mean_axis_stated states {} extent(s) and the operand has rank {}: `at` is "
-            "`[axis, keepdims, d0, ..., d(rank-1)]`",
-            stated.size(),
-            in.shape->size()));
+        throw ShapeError(
+            std::format(
+                "mean_axis_stated states {} extent(s) and the operand has rank {}",
+                stated.size(),
+                in.shape->size()));
     }
-    return tensorOf(dtype, reduceShape(stated, (*at)[0], (*at)[1] != 0));
+    return tensorOf(dtype, reduceShape(stated, *axis, *keepDims));
 }
 
-/// `sum_axis_stated(t, at)`: the lane sum, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]`.
+/// `sum_axis_stated(t, axis, keepdims, extents)`: the lane sum, with the three facts its adjoint
+/// reads stated as parameters of their own types.
 ///
 /// The value is `sum_axis(t, axis, keepdims)` -- `k::reduceAxis` is the kernel the axis form runs,
-/// so the accumulation, the element type and the one rounding are the definition's own -- and the
-/// extents after the two scalars are checked against the operand's shape
-/// (`support.h#checkStatedExtents`). It exists beside `mean_axis_stated` for the same reason:
-/// the adjoint of a lane reduction spreads each lane's cotangent back over the lane, and the
-/// transpose side has no operand to read that shape from.
+/// so the accumulation, the element type and the one rounding are the definition's own -- and
+/// `extents` is checked against the operand's shape (`support.h#checkStatedExtents`). It exists
+/// beside `mean_axis_stated` for the same reason: the adjoint of a lane reduction spreads each
+/// lane's cotangent back over the lane, and the transpose side has no operand to read that shape
+/// from.
 slot_t sumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    const Array *t               = tensorArg(norm, 0);
-    const std::vector<int64_t> at = intListArg(norm, 1, "sum_axis_stated");
-    if (at.size() < 3) {
-        reportShapeError(
-            "sum_axis_stated",
-            "expects an integer list: the axis, the keepdims flag and the tensor's extents");
-    }
-    const int64_t axis  = at[0];
-    const bool keepDims = at[1] != 0;
-    checkStatedExtents(t, at, 2, "sum_axis_stated");
+    const Array *t                     = tensorArg(norm, 0);
+    const int64_t axis                 = intArg(norm, 1);
+    const bool keepDims                = boolArg(norm, 2);
+    const std::vector<int64_t> extents = intListArg(norm, 3, "sum_axis_stated");
+    checkStatedExtents(t, extents, 0, "sum_axis_stated");
     return runKernel("sum_axis_stated", [&] {
         return wrap(
             norm.resultType(),
@@ -407,36 +396,32 @@ std::optional<Type *> sumAxisStatedInfer(const InferContext &ctx) {
     return tensorOf(reductionDtype(k::ReduceOp::Sum, ctx.facts(0).dtype), std::nullopt);
 }
 
-/// `max_axis_stated(t, mask, at)` / `min_axis_stated(t, mask, at)`: the lane extremum, with the tie
-/// selection, the axis, the flag and the extents stated.
+/// `max_axis_stated(t, mask, axis, keepdims, extents)` / `min_axis_stated(t, mask, axis, keepdims,
+/// extents)`: the lane extremum, with the tie selection, the axis, the flag and the extents stated.
 ///
 /// The value is `max_axis(t, axis, keepdims)` -- `k::reduceAxis` again, so the element type and the
-/// comparison are the axis form's own -- and `at` is `[axis, keepdims, d0, ..., d(rank-1)]`, checked
-/// like the lane sum's list. `mask` is not read for the value: it is the *selection* the reverse law
-/// needs, and an extremum's adjoint is not a spread but "the whole cotangent for every position that
-/// holds the extremum" (`extremumAxisVjp` answers exactly that), so the forward half carries
-/// `t >= spread(output)` beside the linear call. A mask of another shape is answered where it is
-/// used: the reverse law's `where` broadcasts it against the extents `at` states.
-template <k::ReduceOp Op> slot_t extremumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
+/// comparison are the axis form's own -- and the three stated values are parameters of their own
+/// types, checked like the lane sum's. `mask` is not read for the value: it is the *selection* the
+/// reverse law needs, and an extremum's adjoint is not a spread but "the whole cotangent for every
+/// position that holds the extremum" (`extremumAxisVjp` answers exactly that), so the forward half
+/// carries `t >= spread(output)` beside the linear call. A mask of another shape is answered where
+/// it is used: the reverse law's `where` broadcasts it against the stated extents.
+template <k::ReduceOp Op>
+slot_t extremumAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
     constexpr std::string_view name =
         Op == k::ReduceOp::Max ? "max_axis_stated" : "min_axis_stated";
-    const Array *t                = tensorArg(norm, 0);
-    const std::vector<int64_t> at = intListArg(norm, 2, name);
-    if (at.size() < 3) {
-        reportShapeError(
-            name, "expects an integer list: the axis, the keepdims flag and the tensor's extents");
-    }
-    const int64_t axis  = at[0];
-    const bool keepDims = at[1] != 0;
-    checkStatedExtents(t, at, 2, name);
+    const Array *t                     = tensorArg(norm, 0);
+    const int64_t axis                 = intArg(norm, 2);
+    const bool keepDims                = boolArg(norm, 3);
+    const std::vector<int64_t> extents = intListArg(norm, 4, name);
+    checkStatedExtents(t, extents, 0, name);
     return runKernel(name, [&] {
-        return wrap(
-            norm.resultType(), k::reduceAxis(Op, t, axis, keepDims, resultAllocator()));
+        return wrap(norm.resultType(), k::reduceAxis(Op, t, axis, keepDims, resultAllocator()));
     });
 }
 
-/// The stated extremum's result, for the reason the stated lane sum's is open: the two values of the
-/// list it reads decide the rank after the call is built.
+/// The stated extremum's result, for the reason the stated lane sum's is open: the two values of
+/// the list it reads decide the rank after the call is built.
 template <k::ReduceOp Op> InferFn extremumAxisStatedInfer() {
     return [](const InferContext &ctx) -> std::optional<Type *> {
         return tensorOf(reductionDtype(Op, ctx.facts(0).dtype), std::nullopt);
@@ -451,8 +436,8 @@ template <k::ReduceOp Op> InferFn extremumAxisStatedInfer() {
 /// the cotangent by the number of elements, and that count is a value of the primal, so the
 /// forward half states it as the extents the reverse law multiplies out.
 slot_t meanStatedKernel(ArgsView &with, ArgsView &norm, context::Context &ctx) {
-    const std::vector<int64_t> at = intListArg(norm, 1, "mean_stated");
-    checkStatedExtents(tensorArg(norm, 0), at, 0, "mean_stated");
+    const std::vector<int64_t> extents = intListArg(norm, 1, "mean_stated");
+    checkStatedExtents(tensorArg(norm, 0), extents, 0, "mean_stated");
     return meanAllKernel(with, norm, ctx);
 }
 
@@ -483,8 +468,8 @@ const char *wholeExtremumName(k::ReduceOp op) {
 /// outside `runKernel`, which would turn it into a kernel error (7.1: a kernel agrees with its
 /// definition, faults included).
 template <k::ReduceOp Op> slot_t extremumAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
-    Array *t          = tensorArg(norm, 0);
-    const char *name  = wholeExtremumName(Op);
+    Array *t           = tensorArg(norm, 0);
+    const char *name   = wholeExtremumName(Op);
     const bool maximum = Op == k::ReduceOp::Max || Op == k::ReduceOp::ArgMax;
     if (t->numel() == 0) {
         throwRuntimeFault(
@@ -535,19 +520,22 @@ slot_t logSoftmaxKernel(ArgsView &, ArgsView &norm, context::Context &) {
 
 slot_t softmaxGradKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("softmax_grad", [&] {
-        return wrap(norm.resultType(), k::softmaxGrad(
-            tensorArg(norm, 0),
-            tensorArg(norm, 1),
-            axisOrLast(norm, 2),
-            resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::softmaxGrad(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                axisOrLast(norm, 2),
+                resultAllocator()));
     });
 }
 
 std::optional<Type *> floatLikeFirst(const InferContext &ctx) {
     const auto dtype = ctx.facts(0).dtype;
-    return tensorOf(dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
-                                               : std::optional(TypeCode::Float32),
-                    ctx.facts(0).shape);
+    return tensorOf(
+        dtype == TypeCode::Float64 ? std::optional(TypeCode::Float64)
+                                   : std::optional(TypeCode::Float32),
+        ctx.facts(0).shape);
 }
 
 /// softmax(t, axis = -1), log_softmax: the axis must exist.
@@ -558,11 +546,12 @@ std::optional<Type *> softmaxInfer(const InferContext &ctx) {
     if (shape && axis) {
         const auto rank = static_cast<int64_t>(shape->size());
         if (*axis < -rank || *axis >= rank) {
-            throw ShapeError(std::format(
-                "axis {} is out of range for the rank-{} input {}",
-                *axis,
-                rank,
-                formatShape(*shape)));
+            throw ShapeError(
+                std::format(
+                    "axis {} is out of range for the rank-{} input {}",
+                    *axis,
+                    rank,
+                    formatShape(*shape)));
         }
     }
     return tensorOf(
@@ -585,11 +574,12 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
             fits = !want.has_value() || !have.has_value() || want == have;
         }
         if (!fits) {
-            throw ShapeError(std::format(
-                "{} {} does not match the trailing dimensions of the input {}",
-                i == 1 ? "gamma" : "beta",
-                formatShape(*p),
-                formatShape(*x)));
+            throw ShapeError(
+                std::format(
+                    "{} {} does not match the trailing dimensions of the input {}",
+                    i == 1 ? "gamma" : "beta",
+                    formatShape(*p),
+                    formatShape(*x)));
         }
     }
     // The element type follows the input's, and the shape does not decide it. The previous form
@@ -603,12 +593,14 @@ std::optional<Type *> layerNormInfer(const InferContext &ctx) {
 slot_t layerNormKernel(ArgsView &, ArgsView &norm, context::Context &) {
     return runKernel("layer_norm", [&] {
         const double eps = hasArg(norm, 3) ? numberArg(norm, 3) : 1e-5;
-        return wrap(norm.resultType(), k::layerNorm(
-            tensorArg(norm, 0),
-            tensorArg(norm, 1),
-            tensorArg(norm, 2),
-            eps,
-            resultAllocator()));
+        return wrap(
+            norm.resultType(),
+            k::layerNorm(
+                tensorArg(norm, 0),
+                tensorArg(norm, 1),
+                tensorArg(norm, 2),
+                eps,
+                resultAllocator()));
     });
 }
 
@@ -619,11 +611,7 @@ void sumVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         b.accumulateGradient(
             call.inputs[0],
-            addTensorOperFor(
-                b,
-                call.inputs[0],
-                "tensor:broadcast_like",
-                {*dy, call.inputs[0]}));
+            addTensorOperFor(b, call.inputs[0], "tensor:broadcast_like", {*dy, call.inputs[0]}));
     }
 }
 
@@ -657,14 +645,12 @@ void sumStatedVjp(VjpBuilder &b, const VjpCall &call) {
 void extremumAllVjp(VjpBuilder &b, const VjpCall &call) {
     requireVjpInputs(call, 1, 1);
     if (auto dy = b.gradientOf(call.output)) {
-        const vjp_node_t x = call.inputs[0];
-        const vjp_node_t spread =
-            addTensorOperFor(b, x, "tensor:broadcast_like", {*dy, x});
+        const vjp_node_t x      = call.inputs[0];
+        const vjp_node_t spread = addTensorOperFor(b, x, "tensor:broadcast_like", {*dy, x});
         const vjp_node_t extreme =
             addTensorOperFor(b, x, "tensor:broadcast_like", {call.output, x});
         const vjp_node_t selected = addTensorOper(b, "tensor:strict_eq", {x, extreme});
-        const vjp_node_t share =
-            addTensorOperFor(b, x, "tensor:cast_like", {selected, spread});
+        const vjp_node_t share    = addTensorOperFor(b, x, "tensor:cast_like", {selected, spread});
         b.accumulateGradient(x, addTensorOper(b, "tensor:multiply", {share, spread}));
     }
 }
@@ -681,11 +667,12 @@ void meanVjp(VjpBuilder &b, const VjpCall &call) {
             addFloatOper(b, ":op/ltod", {b.addOper(Type::Int64(), "tensor:numel", std::array{x})});
         const vjp_node_t atWidth = floatGradientAtWidth(b, *dy, count);
         const type::Type *dyType = b.nodeType(*dy);
-        const bool narrow = dyType != nullptr && dyType->code() == type::TypeCode::Float32;
-        const vjp_node_t share =
-            narrow ? b.addOper(
-                         type::Type::Float32(), ":op/div_f", std::array<vjp_node_t, 2>{*dy, atWidth})
-                   : addFloatOper(b, ":op/div_d", {*dy, atWidth});
+        const bool narrow        = dyType != nullptr && dyType->code() == type::TypeCode::Float32;
+        const vjp_node_t share   = narrow ? b.addOper(
+                                                type::Type::Float32(),
+                                                ":op/div_f",
+                                                std::array<vjp_node_t, 2>{*dy, atWidth})
+                                          : addFloatOper(b, ":op/div_d", {*dy, atWidth});
         b.accumulateGradient(x, addTensorOperFor(b, x, "tensor:broadcast_like", {share, x}));
     }
 }
@@ -720,35 +707,29 @@ void meanAxisVjp(VjpBuilder &b, const VjpCall &call) {
     }
 }
 
-// mean_axis_stated(t, at): the lane mean, with `at` = `[axis, keepdims, d0, ..., d(rank-1)]` and
-// the extents taken out of `at` (`meanAxisStatedKernel` below).
+// mean_axis_stated(t, axis, keepdims, extents): the lane mean, with the axis, the flag and the
+// extents stated as parameters of their own (`meanAxisStatedKernel` above).
 //
-// The adjoint is `mean_axis`'s with the two scalars taken out of the list instead of off the
-// call's own ports: spread the cotangent back over the lane (`tensor:expand_axis`) and divide by
-// the lane's length (`tensor:dim`). `at[0]` is the axis and `at[1]` is the flag written as an
-// integer -- the list holds one element type (`stdlib/tensor.cml#mean_axis_stated`) -- so the flag
-// reaches `expand_axis` as a real `bool` and not as an integer where a flag is read
-// (`:op/gt_l(at[1], 0)`): a slot read at the wrong width answers a lane count of nonsense, which is
-// the one way this rule could be wrong silently.
+// The adjoint is `mean_axis`'s: spread the cotangent back over the lane (`tensor:expand_axis`) and
+// divide by the lane's length (`tensor:dim`). The axis and the flag are operands this rule is
+// handed, so they reach `expand_axis` as they were stated -- the flag as a real `bool`, which is
+// what the parameter's type says it is, and no longer an integer read out of a list and compared
+// against zero. A slot read at the wrong width answers a lane count of nonsense, which is the one
+// way this rule could be wrong silently; a typed parameter cannot be read at the wrong width.
 //
-// The extents after `at[1]` are read nowhere, for the reason `sumStatedVjp` gives: the operand is
-// at hand, so `tensor:dim` takes the lane's length from it, and the list's extents are what the
-// library's law reads in the same position (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`,
-// whose `mean_axis_cotangent` needs `numel(t) / numel(ct)`).
+// The extents are read nowhere here, for the reason `sumStatedVjp` gives: the operand is at hand,
+// so `tensor:dim` takes the lane's length from it, and the stated extents are what the library's
+// law reads in the same position (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`, whose
+// `mean_axis_cotangent` needs `numel(t) / numel(ct)`).
 void meanAxisStatedVjp(VjpBuilder &b, const VjpCall &call) {
-    requireVjpInputs(call, 2, 2);
+    requireVjpInputs(call, 4, 4);
     const auto dy = b.gradientOf(call.output);
     if (!dy) {
         return;
     }
-    const vjp_node_t x  = call.inputs[0];
-    const vjp_node_t at = call.inputs[1];
-    const std::array<vjp_node_t, 2> axisWords{at, staticInt(b, 0)};
-    const vjp_node_t axis = b.addOper(Type::Int64(), ":op/idx_arr", axisWords);
-    const std::array<vjp_node_t, 2> flagWords{at, staticInt(b, 1)};
-    const std::array<vjp_node_t, 2> flagInputs{
-        b.addOper(Type::Int64(), ":op/idx_arr", flagWords), staticInt(b, 0)};
-    const vjp_node_t keepDims = b.addOper(Type::Bool(), ":op/gt_l", flagInputs);
+    const vjp_node_t x        = call.inputs[0];
+    const vjp_node_t axis     = call.inputs[1];
+    const vjp_node_t keepDims = call.inputs[2];
     const vjp_node_t expanded =
         addTensorOperFor(b, x, "tensor:expand_axis", {*dy, x, axis, keepDims});
     const std::array<vjp_node_t, 2> dimInputs{x, axis};
@@ -766,11 +747,14 @@ void extremumAxisVjp(VjpBuilder &b, const VjpCall &call) {
     if (auto dy = b.gradientOf(call.output)) {
         const vjp_node_t expanded = expandReduced(b, call, *dy);
         const vjp_node_t selected = addTensorOper(
-            b, "tensor:strict_eq", {call.inputs[0], expandReduced(b, call, call.output)});
+            b,
+            "tensor:strict_eq",
+            {call.inputs[0], expandReduced(b, call, call.output)});
         const vjp_node_t share =
             addTensorOperFor(b, expanded, "tensor:cast_like", {selected, expanded});
         b.accumulateGradient(
-            call.inputs[0], addTensorOper(b, "tensor:multiply", {share, expanded}));
+            call.inputs[0],
+            addTensorOper(b, "tensor:multiply", {share, expanded}));
     }
 }
 
@@ -835,163 +819,194 @@ std::vector<OpDef> reductionOps() {
     // this text against the declaration's result, and a sentence is a type it cannot compare, so
     // the two statements of one promise would never have been read side by side.
     std::vector<OpDef> defs;
-    defs.push_back(OpDef{
-        .name      = "sum",
-        .exports   = {"sum"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "T",
-        .infer     = wholeReductionInfer(k::ReduceOp::Sum),
-        .kernel    = &sumAllKernel,
-        .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum", "T[..]"));
-    defs.push_back(OpDef{
-        .name      = "mean",
-        .exports   = {"mean"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "T",
-        .infer     = wholeReductionInfer(k::ReduceOp::Mean),
-        .kernel    = &meanAllKernel,
-        .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[..]"));
+    defs.push_back(
+        OpDef{
+            .name      = "sum",
+            .exports   = {"sum"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "T",
+            .infer     = wholeReductionInfer(k::ReduceOp::Sum),
+            .kernel    = &sumAllKernel,
+            .traits    = {}});
+    defs.push_back(reduceAxisDef<k::ReduceOp::Sum>("sum_axis", "sum", "T[...]"));
+    defs.push_back(
+        OpDef{
+            .name      = "mean",
+            .exports   = {"mean"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "T",
+            .infer     = wholeReductionInfer(k::ReduceOp::Mean),
+            .kernel    = &meanAllKernel,
+            .traits    = {}});
+    defs.push_back(reduceAxisDef<k::ReduceOp::Mean>("mean_axis", "mean", "T[...]"));
     // The two stated twins of the reductions above (`sumStatedKernel`, `meanAxisStatedKernel`):
-    // the same value, with the extents the reverse law needs as a second operand. Both are one
-    // ordinary operand and one integer list, which is the count the transpose walk answers.
-    defs.push_back(OpDef{
-        .name      = "sum_stated",
-        .exports   = {"sum_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T",
-        .infer     = sumStatedInfer,
-        .kernel    = &sumStatedKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "mean_axis_stated",
-        .exports   = {"mean_axis_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
-        .infer     = meanAxisStatedInfer,
-        .kernel    = &meanAxisStatedKernel,
-        .traits    = {}});
+    // the same value, with the extents the reverse law needs as an operand of its own.
+    defs.push_back(
+        OpDef{
+            .name      = "sum_stated",
+            .exports   = {"sum_stated"},
+            .params    = {{"t", ParamKind::Tensor}, {"extents", ParamKind::IntArray}},
+            .resultDoc = "T",
+            .infer     = sumStatedInfer,
+            .kernel    = &sumStatedKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "mean_axis_stated",
+            .exports = {"mean_axis_stated"},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"axis", ParamKind::Int},
+                 {"keepdims", ParamKind::Bool},
+                 {"extents", ParamKind::IntArray}},
+            .resultDoc = "T[...]",
+            .infer     = meanAxisStatedInfer,
+            .kernel    = &meanAxisStatedKernel,
+            .traits    = {}});
     // The two stated twins the lane reductions and the whole-tensor mean were missing
     // (`sumAxisStatedKernel`, `meanStatedKernel`): the same value as the operator above them, with
-    // the extents the reverse law reads as one integer list beside it.
-    defs.push_back(OpDef{
-        .name      = "sum_axis_stated",
-        .exports   = {"sum_axis_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
-        .infer     = sumAxisStatedInfer,
-        .kernel    = &sumAxisStatedKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "mean_stated",
-        .exports   = {"mean_stated"},
-        .params    = {{"t", ParamKind::Tensor}, {"at", ParamKind::IntArray}},
-        .resultDoc = "T",
-        .infer     = meanStatedInfer,
-        .kernel    = &meanStatedKernel,
-        .traits    = {}});
+    // the extents the reverse law reads as a parameter beside them.
+    defs.push_back(
+        OpDef{
+            .name    = "sum_axis_stated",
+            .exports = {"sum_axis_stated"},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"axis", ParamKind::Int},
+                 {"keepdims", ParamKind::Bool},
+                 {"extents", ParamKind::IntArray}},
+            .resultDoc = "T[...]",
+            .infer     = sumAxisStatedInfer,
+            .kernel    = &sumAxisStatedKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "mean_stated",
+            .exports   = {"mean_stated"},
+            .params    = {{"t", ParamKind::Tensor}, {"extents", ParamKind::IntArray}},
+            .resultDoc = "T",
+            .infer     = meanStatedInfer,
+            .kernel    = &meanStatedKernel,
+            .traits    = {}});
     // The two stated extrema (`extremumAxisStatedKernel`): the value is the axis form's, and the
     // mask is the selection its adjoint needs -- an extremum sends the whole cotangent to every
     // position that holds it, which is not a spread the extents alone could rebuild.
-    defs.push_back(OpDef{
-        .name      = "max_axis_stated",
-        .exports   = {"max_axis_stated"},
-        .params    = {{"t", ParamKind::Tensor},
-                      {"mask", ParamKind::BoolArray},
-                      {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
-        .infer     = extremumAxisStatedInfer<k::ReduceOp::Max>(),
-        .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Max>,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "min_axis_stated",
-        .exports   = {"min_axis_stated"},
-        .params    = {{"t", ParamKind::Tensor},
-                      {"mask", ParamKind::BoolArray},
-                      {"at", ParamKind::IntArray}},
-        .resultDoc = "T[..]",
-        .infer     = extremumAxisStatedInfer<k::ReduceOp::Min>(),
-        .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Min>,
-        .traits    = {}});
-    defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[..]"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[..]"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[..]"));
-    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin", "int[..]"));
-    defs.push_back(OpDef{
-        .name      = "max",
-        .exports   = {"max"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "T",
-        .infer     = wholeReductionInfer(k::ReduceOp::Max),
-        .kernel    = &extremumAllKernel<k::ReduceOp::Max>,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "min",
-        .exports   = {"min"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "T",
-        .infer     = wholeReductionInfer(k::ReduceOp::Min),
-        .kernel    = &extremumAllKernel<k::ReduceOp::Min>,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "argmax",
-        .exports   = {"argmax"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "int",
-        .infer     = wholeReductionInfer(k::ReduceOp::ArgMax),
-        .kernel    = &extremumAllKernel<k::ReduceOp::ArgMax>,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name      = "argmin",
-        .exports   = {"argmin"},
-        .params    = {{"t", ParamKind::Tensor}},
-        .resultDoc = "int",
-        .infer     = wholeReductionInfer(k::ReduceOp::ArgMin),
-        .kernel    = &extremumAllKernel<k::ReduceOp::ArgMin>,
-        .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "max_axis_stated",
+            .exports = {"max_axis_stated"},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"mask", ParamKind::BoolArray},
+                 {"axis", ParamKind::Int},
+                 {"keepdims", ParamKind::Bool},
+                 {"extents", ParamKind::IntArray}},
+            .resultDoc = "T[...]",
+            .infer     = extremumAxisStatedInfer<k::ReduceOp::Max>(),
+            .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Max>,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "min_axis_stated",
+            .exports = {"min_axis_stated"},
+            .params =
+                {{"t", ParamKind::Tensor},
+                 {"mask", ParamKind::BoolArray},
+                 {"axis", ParamKind::Int},
+                 {"keepdims", ParamKind::Bool},
+                 {"extents", ParamKind::IntArray}},
+            .resultDoc = "T[...]",
+            .infer     = extremumAxisStatedInfer<k::ReduceOp::Min>(),
+            .kernel    = &extremumAxisStatedKernel<k::ReduceOp::Min>,
+            .traits    = {}});
+    defs.push_back(reduceAxisDef<k::ReduceOp::Max>("max_axis", "max", "T[...]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::Min>("min_axis", "min", "T[...]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMax>("argmax_axis", "argmax", "int[...]"));
+    defs.push_back(reduceAxisDef<k::ReduceOp::ArgMin>("argmin_axis", "argmin", "int[...]"));
+    defs.push_back(
+        OpDef{
+            .name      = "max",
+            .exports   = {"max"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "T",
+            .infer     = wholeReductionInfer(k::ReduceOp::Max),
+            .kernel    = &extremumAllKernel<k::ReduceOp::Max>,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "min",
+            .exports   = {"min"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "T",
+            .infer     = wholeReductionInfer(k::ReduceOp::Min),
+            .kernel    = &extremumAllKernel<k::ReduceOp::Min>,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "argmax",
+            .exports   = {"argmax"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "int",
+            .infer     = wholeReductionInfer(k::ReduceOp::ArgMax),
+            .kernel    = &extremumAllKernel<k::ReduceOp::ArgMax>,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name      = "argmin",
+            .exports   = {"argmin"},
+            .params    = {{"t", ParamKind::Tensor}},
+            .resultDoc = "int",
+            .infer     = wholeReductionInfer(k::ReduceOp::ArgMin),
+            .kernel    = &extremumAllKernel<k::ReduceOp::ArgMin>,
+            .traits    = {}});
 
-    defs.push_back(OpDef{
-        .name      = "softmax",
-        .exports   = {"softmax"},
-        .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
-        .infer          = softmaxInfer,
-        .kernel         = &positionally<softmaxKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1});
-    defs.push_back(OpDef{
-        .name      = "log_softmax",
-        .exports   = {"log_softmax"},
-        .params    = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
-        .infer          = softmaxInfer,
-        .kernel         = &positionally<logSoftmaxKernel>,
-        .traits         = {},
-        .withAfterNorm  = true,
-        .ordinaryParams = 1});
-    defs.push_back(OpDef{
-        .name    = "softmax_grad",
-        .exports = {"softmax_grad"},
-        .params =
-            {{"y", ParamKind::Tensor}, {"dy", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
-        .resultDoc = "float[..]",
-        .infer     = floatLikeFirst,
-        .kernel    = &softmaxGradKernel,
-        .traits    = {}});
-    defs.push_back(OpDef{
-        .name    = "layer_norm",
-        .exports = {"layer_norm"},
-        .params =
-            {{"x", ParamKind::Tensor},
-             {"gamma", ParamKind::Tensor},
-             {"beta", ParamKind::Tensor},
-             {"eps", ParamKind::Number, true}},
-        .resultDoc = "float[..]",
-        .infer     = layerNormInfer,
-        .kernel    = &layerNormKernel,
-        .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name           = "softmax",
+            .exports        = {"softmax"},
+            .params         = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
+            .resultDoc      = "float[...]",
+            .infer          = softmaxInfer,
+            .kernel         = &positionally<softmaxKernel>,
+            .traits         = {},
+            .withAfterNorm  = true,
+            .ordinaryParams = 1});
+    defs.push_back(
+        OpDef{
+            .name           = "log_softmax",
+            .exports        = {"log_softmax"},
+            .params         = {{"t", ParamKind::Tensor}, {"axis", ParamKind::Int, true}},
+            .resultDoc      = "float[...]",
+            .infer          = softmaxInfer,
+            .kernel         = &positionally<logSoftmaxKernel>,
+            .traits         = {},
+            .withAfterNorm  = true,
+            .ordinaryParams = 1});
+    defs.push_back(
+        OpDef{
+            .name    = "softmax_grad",
+            .exports = {"softmax_grad"},
+            .params =
+                {{"y", ParamKind::Tensor},
+                 {"dy", ParamKind::Tensor},
+                 {"axis", ParamKind::Int, true}},
+            .resultDoc = "float[...]",
+            .infer     = floatLikeFirst,
+            .kernel    = &softmaxGradKernel,
+            .traits    = {}});
+    defs.push_back(
+        OpDef{
+            .name    = "layer_norm",
+            .exports = {"layer_norm"},
+            .params =
+                {{"x", ParamKind::Tensor},
+                 {"gamma", ParamKind::Tensor},
+                 {"beta", ParamKind::Tensor},
+                 {"eps", ParamKind::Number, true}},
+            .resultDoc = "float[...]",
+            .infer     = layerNormInfer,
+            .kernel    = &layerNormKernel,
+            .traits    = {}});
     setVjp(defs, "sum", &sumVjp);
     setVjp(defs, "mean", &meanVjp);
     setVjp(defs, "max", &extremumAllVjp);

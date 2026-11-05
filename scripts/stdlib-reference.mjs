@@ -494,6 +494,33 @@ function bracketed(text, open) {
     throw new Error(`unbalanced brackets in: ${text}`)
 }
 
+// How many `{` a text leaves open. A `match type` body is followed to its close with this, in a
+// declaration and in the definition of a type function alike.
+function braceDepth(text) {
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        if (text[i] === '{') depth++
+        else if (text[i] === '}') depth--
+    }
+    return depth
+}
+
+// The result type a declaration states, read from the line the declaration is on. A `match type`
+// result is written over several lines -- its case list is the part that looks like a body -- so
+// the brace group is followed to its close and the whole text is the result. Any other result is
+// the text after the colon, with a body opening (when the declaration has a body) cut off.
+function readResultType(after, lines, lineIndex) {
+    const text = after.replace(/^\s*:\s*/, '').trim()
+    if (!/^match\s+type\b/.test(text)) return text.replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+    let joined = text
+    let depth = braceDepth(joined)
+    for (let j = lineIndex + 1; depth > 0 && j < lines.length; j++) {
+        joined += ` ${lines[j].trim()}`
+        depth = braceDepth(joined)
+    }
+    return joined.trim()
+}
+
 // The index of the bracket that closes the one at `open`, or -1 when the line ends first.
 function closingBracket(text, open) {
     const pairs = { '(': ')', '[': ']', '{': '}', '<': '>' }
@@ -537,6 +564,12 @@ function isFieldList(text) {
 // Whether the text after a declaration's `)` carries a body. The old form is
 // `: R { return '<uri>' }`; a body may also open with `sync {` or on the following line.
 function declarationBody(rest, lines, lineIndex) {
+    // A `match type` result is a type, not a body: the brace group it opens holds one case per line
+    // and closes. Read as a body, every declaration that states a type function became a function
+    // with an implementation, was left out of the comparison, and the operator it declares went
+    // unchecked -- which is how a library writing type functions turned this check red 15 times
+    // without one of those reds saying "a signature I cannot read".
+    if (/^\s*(?::\s*)?match\s+type\b/.test(rest)) return false
     // A type has no statement keyword; a `sync` body marker is unambiguous.
     if (/\b(sync|return)\b/.test(rest)) return true
     const colon = rest.indexOf(':')
@@ -784,7 +817,7 @@ function readDeclarations(file, module, options = {}) {
                 pendingUri = null
                 continue
             }
-            const result = after.replace(/^\s*:\s*/, '').replace(/\s*(sync\s*)?\{\s*$/, '').trim()
+            const result = readResultType(after, lines, i)
             const entry = {
                 module: module.name,
                 name,
@@ -1155,12 +1188,39 @@ function splitArguments(text) {
     return parts
 }
 
-function declaredParams(entry) {
-    return entry.norm
+// A parameter's type without the default it may be given: `keepdims: bool = false` states `bool`,
+// and the default is the call's, not the port's. A cut is only made at the top level and only for an
+// `=`, not for the `=>` of a function type.
+function typeWithoutDefault(type) {
+    let depth = 0
+    for (let i = 0; i < type.length; i++) {
+        const char = type[i]
+        if ('([{<'.includes(char)) depth++
+        else if (')]}>'.includes(char)) depth--
+        else if (char === '=' && type[i + 1] !== '>' && depth === 0) return type.slice(0, i).trim()
+    }
+    return type.trim()
+}
+
+// The positions a declaration writes, in the order the operator registers them: the ordinary
+// parameters, then the `<>` ones (`OpDef::params`, written `withAfterNorm`; the protocol
+// `modules/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
+// axis form (design principles 7.3) is exactly this: `sum` declares one ordinary parameter and two
+// `with` ones, `sum<axis, keepdims>(t)`, and the operator registers three ports -- so the two lists
+// are one list when the counts add up. When they do not (a declaration may write a `with` parameter
+// the operator keeps out of its ports), the ordinary parameters alone are compared and the arity
+// stop names the difference.
+function declaredParams(entry, ruleParams = null) {
+    const lists = [entry.norm]
+    if (ruleParams !== null && entry.norm.length + entry.with.length === ruleParams.length) {
+        lists.push(entry.with)
+    }
+    return lists
+        .flat()
         .map((text) => {
             // A pack writes its dots before the name (`...rest: T`); the dots are not part of it.
             const match = text.match(/^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/)
-            return match ? { text, name: match[1], type: match[2].trim() } : null
+            return match ? { text, name: match[1], type: typeWithoutDefault(match[2]) } : null
         })
         .filter(Boolean)
 }
@@ -1806,16 +1866,16 @@ function namesOfDeclaration(entry) {
 // registers: `inspect --ops` prints that signature, and the text after its last `=>` is the
 // operator's result (`resultDoc` for a kernel of `tensor`/`nn`, what the resolver computes for a
 // module whose rules are C++). Comparing only names, arity, parameter names and purity left the
-// result free to be a lie: `one_hot` was declared `int64[..]` while its kernel, its inference and
+// result free to be a lie: `one_hot` was declared `int64[...]` while its kernel, its inference and
 // every test returned `float32` rows, and nothing read the two statements against each other.
 //
 // The comparison is on the type, not on the spelling. The authority for which spellings name one
 // type is the compiler's own table (`initInnerTypes`, src/compile/gct/builder.cpp): `int` and
 // `i64` are Int64, `float` and `f64` are Float64, and `f32`, `i32`, `bf16`, `f16`, `c64`, `c128`,
 // `bool`, `string`, `Bytes`, `void` and `never` are their own. Two types are the same only when
-// their codes are, so `f32[..]` and `float[..]` stay two types here (design principles 5.1: no
-// value converts between them), while `int64[..]`, `i64[..]` and `int[..]` are one. A name this
-// table does not hold is not read at all: a type variable (`T[..]`), a module's named type
+// their codes are, so `f32[...]` and `float[...]` stay two types here (design principles 5.1: no
+// value converts between them), while `int64[...]`, `i64[...]` and `int[...]` are one. A name this
+// table does not hold is not read at all: a type variable (`T[...]`), a module's named type
 // (`Gradient<F>`, `Device<f32>`) and an aggregate the C++ side names in prose (`Tensor`,
 // `NumericAggregate`) are reported as not compared, never as a difference.
 
@@ -1825,8 +1885,8 @@ function namesOfDeclaration(entry) {
 // same types (`i64` for Int64, which the declaration files write as `int64`; `float64` for
 // Float64), and the names the tensor module writes an element type with (`dtypeName`,
 // modules/tensor/dtype.cpp: `float32`, `float64`, `bfloat16`, `float16`, `int32`, `int64`) --
-// those are what a kernel's own `resultDoc` says, so a claim of `float32[..]` and a declaration of
-// `f32[..]` are the same type here.
+// those are what a kernel's own `resultDoc` says, so a claim of `float32[...]` and a declaration of
+// `f32[...]` are the same type here.
 const RESULT_SCALARS = new Map([
     ['int', 'int'],
     ['i64', 'int'],
@@ -1918,7 +1978,7 @@ function dimensionIndex(text) {
     return -1
 }
 
-// What a dimension list says, in the form the two sides are compared in: `[..]` is any number of
+// What a dimension list says, in the form the two sides are compared in: `[...]` is any number of
 // dimensions, `[?]` is one of unknown extent (`[]` is that list too), and `[n, m]` keeps the
 // extents it writes. null when the text is not a dimension list.
 function dimensionsOf(text) {
@@ -1934,7 +1994,7 @@ function dimensionsOf(text) {
         if (one === '?') return '?'
         return one.replace(/\s+/g, '')
     })
-    if (written.length > 0 && written.every((one) => one === '..')) return '[..]'
+    if (written.length > 0 && written.every((one) => one === '..')) return '[...]'
     return `[${written.join(', ')}]`
 }
 
@@ -1942,8 +2002,8 @@ function dimensionsOf(text) {
 // is not a result type at all. `opaque` marks a name only the module can read (a type variable, a
 // named type, an aggregate), which makes the two sides incomparable rather than different.
 // A tuple writes its parts in parentheses and may carry a dimension list of its own
-// (`(f32[..], f32[..])[]`), and a pack may be written with a trailing comma
-// (`(..ElementOf<A>,)`), which is the same tuple.
+// (`(f32[...], f32[...])[]`), and a pack may be written with a trailing comma
+// (`(...ElementOf<A>,)`), which is the same tuple.
 function canonicalResult(text) {
     const source = withoutConditions(text)
     if (source === '') return null
@@ -1978,7 +2038,7 @@ function canonicalResult(text) {
     // `float` alone is the word the tensor module writes where an operator gives back a tensor of
     // its argument's element type: `softmax`, `layer_norm`, `linear` and `softmax_grad` return
     // `dtypeOf<T>()` of the input (modules/tensor/kernels/reduce.cpp) and their `resultDoc` says
-    // `float[..]`, while an operator that returns f64 says `float64[..]` (`from_bytes_f64`,
+    // `float[...]`, while an operator that returns f64 says `float64[...]` (`from_bytes_f64`,
     // `to_bytes_f64`). So a bare `float` in a claim is the element family, not one element type.
     return { text: `${known}${dimensions}`, opaque: false, family: base === 'float' }
 }
@@ -1989,15 +2049,318 @@ function claimedResult(signature) {
     return arrow < 0 ? '' : signature.slice(arrow + 2)
 }
 
+// ---- reading a type function (`match type`) --------------------------------------------------
+//
+// A type function is an ordinary function on types (design principles 1: a type is a compile-time
+// value), and the library writes one as `match type`:
+//
+//   export type WithElement<A, E> = match type A {
+//       case X[...Dims] => E[...Dims]
+//       case X[...] => E[...]
+//   }
+//
+// That text reaches a signature on both sides, and it is the same function on both. A declaration
+// may write it where it writes the result; an operator declared `bf16::<A>(x: A):
+// WithElement<A, bf16>` registers the name applied -- the compiler prints what the function answers
+// with the element fixed, in the words of the definition:
+//
+//   (...) => match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }
+//
+// The checker read neither. `=>` inside the text made it say "a function type", `[{]` made the
+// result unreadable to `canonicalResult`, and two promises that are the same were listed as an
+// exception instead of being compared -- the one answer this comparison exists to give. What
+// follows reads the shape as what it is: a result that depends on the argument's shape, compared
+// case by case, and, when two of them differ, at the dimension that differs.
+
+// The type functions the library defines, by name, as `{params, body}` with `body` the `match type`
+// text. Read once, on the first comparison that needs them: a mode that renders the page, audits
+// the table or checks the examples never reads one.
+let typeFunctionTable = null
+
+function typeFunctions() {
+    if (typeFunctionTable !== null) return typeFunctionTable
+    const table = new Map()
+    const visit = (dir) => {
+        for (const item of fs.readdirSync(dir, { withFileTypes: true })) {
+            const full = path.join(dir, item.name)
+            if (item.isDirectory()) {
+                visit(full)
+                continue
+            }
+            if (!item.name.endsWith('.cml')) continue
+            const lines = fs.readFileSync(full, 'utf8').replace(/\r\n/g, '\n').split('\n')
+            for (let i = 0; i < lines.length; i++) {
+                const found = /^\s*(?:export\s+)?type\s+([A-Z]\w*)\s*(?:<([^>]*)>)?\s*=\s*(.+)$/.exec(lines[i])
+                if (found === null || !/^match\s+type\b/.test(found[3].trim())) continue
+                let body = found[3].trim()
+                for (let j = i + 1; braceDepth(body) > 0 && j < lines.length; j++) body += ` ${lines[j].trim()}`
+                const params = found[2] === undefined ? [] : splitTopLevel(found[2]).map((one) => one.trim())
+                table.set(found[1], { params, body })
+            }
+        }
+    }
+    visit(STDLIB_DIR)
+    typeFunctionTable = table
+    return table
+}
+
+// The index of the `=>` separating a case's pattern from its result, or -1 when there is none at
+// the top level. `=>` inside a group (a function-typed result) belongs to that group.
+function topLevelArrow(text) {
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '=' && text[i + 1] === '>') {
+            if (depth === 0) return i
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) depth--
+    }
+    return -1
+}
+
+// A `match type` text as its subject and its cases, or null when the text is not one. One reader
+// serves both sides: the form the compiler prints for a registered result is the form a
+// declaration writes, and a reader that took one and not the other would compare a promise with
+// its own text.
+function parseMatchType(text) {
+    const source = (text || '').trim()
+    if (!/^match\s+type\b/.test(source)) return null
+    let depth = 0
+    let open = -1
+    for (let i = 0; i < source.length; i++) {
+        const c = source[i]
+        if (c === '=' && source[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([<'.includes(c)) depth++
+        else if (')]>'.includes(c)) depth--
+        else if (c === '{' && depth === 0) {
+            open = i
+            break
+        }
+    }
+    if (open < 0) return null
+    const close = partnerBracket(source, open)
+    if (close !== source.length - 1) return null
+    const subject = source.slice('match type'.length, open).trim()
+    if (subject === '') return null
+    const cases = matchTypeCases(source.slice(open + 1, close))
+    if (cases === null) return null
+    return { subject, cases: cases.list, elided: cases.elided }
+}
+
+// The cases of a `match type` body: `case <pattern> => <result>`, separated by `;` (the form the
+// compiler prints) or one `case` per line (the form the library writes). A lone `...` is the rest
+// of a case list not stated, so the cases it stands for are not compared and are not called a
+// difference. A case this reader cannot read makes the whole text unreadable rather than partly
+// compared: half a case list is not a promise.
+function matchTypeCases(body) {
+    const chunks = []
+    let depth = 0
+    let start = 0
+    for (let i = 0; i < body.length; i++) {
+        const c = body[i]
+        if (c === '=' && body[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([{'.includes(c)) {
+            depth++
+            continue
+        }
+        if (')]}'.includes(c)) {
+            if (--depth < 0) return null
+            continue
+        }
+        if (depth !== 0) continue
+        if (c === ';') {
+            chunks.push(body.slice(start, i))
+            start = i + 1
+            continue
+        }
+        if (/^case\b/.test(body.slice(i)) && (i === start || /[\s;]/.test(body[i - 1]))) {
+            if (i > start) chunks.push(body.slice(start, i))
+            start = i
+        }
+    }
+    chunks.push(body.slice(start))
+    const list = []
+    let elided = false
+    for (const chunk of chunks) {
+        const piece = chunk.trim()
+        if (piece === '') continue
+        if (/^\.{2,3}$/.test(piece)) {
+            elided = true
+            continue
+        }
+        if (!/^case\b/.test(piece)) return null
+        const rest = piece.slice('case'.length).trim()
+        const arrow = topLevelArrow(rest)
+        if (arrow < 0) return null
+        const pattern = rest.slice(0, arrow).trim()
+        const result = rest.slice(arrow + 2).trim()
+        if (pattern === '' || result === '') return null
+        list.push({ pattern, result })
+    }
+    if (list.length === 0) return null
+    return { list, elided }
+}
+
+// One side of a case -- its pattern or its result -- as the two sides are compared on it: its base
+// type, through the spellings the compiler holds (`int64` is `int`, `bfloat16` is `bf16`), and the
+// dimension list it writes. The dimension list keeps the names it binds: `bf16[...Dims]` says "the
+// argument's extents" and `bf16[?...]` does not, so the two are not the same promise and the name
+// is what tells them apart. null when the text is not a type this reader holds.
+function matchPiece(text) {
+    const source = (text || '').trim().replace(/\s+/g, ' ')
+    if (source === '') return null
+    const at = dimensionIndex(source)
+    const base = (at < 0 ? source : source.slice(0, at)).trim()
+    if (base === '') return null
+    let entries = []
+    if (at >= 0) {
+        const list = source.slice(at).trim()
+        if (!list.startsWith('[') || partnerBracket(list, 0) !== list.length - 1) return null
+        const inner = list.slice(1, -1).trim()
+        if (inner === '') {
+            entries = ['?']
+        } else {
+            const parts = splitTopLevel(inner)
+            if (parts === null) return null
+            entries = parts.map((part) => part.trim().replace(/\s+/g, ''))
+            if (entries.every((one) => one === '...')) entries = ['...']
+        }
+    }
+    const known = RESULT_SCALARS.get(base)
+    return { base: known === undefined ? base : known, written: base, entries }
+}
+
+// How the two sides of one part of a case stand: equal, different at a named place, or one of them
+// not a type this reader holds (null -- the caller hands that pair to the comparison it had).
+function compareMatchPieces(declared, operator, what) {
+    const mine = matchPiece(declared)
+    const theirs = matchPiece(operator)
+    if (mine === null || theirs === null) return { same: null }
+    if (mine.base !== theirs.base) {
+        return { same: false, at: `the ${what}'s type`, mine: mine.written, theirs: theirs.written }
+    }
+    const count = Math.max(mine.entries.length, theirs.entries.length)
+    for (let i = 0; i < count; i++) {
+        const a = mine.entries[i] === undefined ? '(none)' : mine.entries[i]
+        const b = theirs.entries[i] === undefined ? '(none)' : theirs.entries[i]
+        if (a !== b) return { same: false, at: `the ${what}'s dimension ${i + 1}`, mine: a, theirs: b }
+    }
+    return { same: true }
+}
+
+// The `match type` form a text stands for: the text itself, or the definition of the name it
+// applies when the library defines that name as a type function. null when the text is a name this
+// reader has no definition for, or a type function applied to a subject the type layer would have
+// evaluated: neither is a form this comparison reads, and both stay with the exception classes.
+function matchTypeForm(text) {
+    const source = withoutConditions(text)
+    const direct = parseMatchType(source)
+    if (direct !== null) return direct
+    const applied = applyTypeFunction(source)
+    return applied === null ? null : parseMatchType(applied)
+}
+
+// `Name<arguments>` with `Name` a type function, instantiated as the definition writes it. The
+// subject is the parameter the body matches on; a call still written on a type variable is the
+// form a registered signature prints, and the only one this reader compares.
+function applyTypeFunction(text) {
+    const source = (text || '').trim()
+    const found = /^([A-Z]\w*)\s*</.exec(source)
+    if (found === null) return null
+    const known = typeFunctions().get(found[1])
+    if (known === undefined) return null
+    const open = source.indexOf('<', found[1].length)
+    const close = partnerBracket(source, open)
+    if (close !== source.length - 1) return null
+    const args = splitTopLevel(source.slice(open + 1, close))
+    if (args === null || args.length !== known.params.length) return null
+    const values = new Map(known.params.map((name, i) => [name, args[i].trim()]))
+    const bodyOpen = known.body.indexOf('{')
+    if (bodyOpen < 0) return null
+    const subject = known.body.slice('match type'.length, bodyOpen).trim()
+    const given = values.get(subject)
+    if (given === undefined || !/^[A-Z]$/.test(given)) return null
+    let body = known.body
+    for (const [name, value] of values) body = body.replace(new RegExp(`\\b${name}\\b`, 'g'), value)
+    return body
+}
+
+// Whether a declaration's result and the registered result are the same type function: an answer
+// when both sides are one, and null when they are not both -- that pair belongs to the comparison
+// the caller already has (`canonicalResult` and its exception classes), and this reader does not
+// take it over.
+function matchTypeVerdict(declaredText, operatorText) {
+    const mine = matchTypeForm(declaredText)
+    const theirs = matchTypeForm(operatorText)
+    if (mine === null || theirs === null) return null
+    const subject = compareMatchPieces(mine.subject, theirs.subject, 'subject')
+    if (subject.same !== true) {
+        return {
+            same: false,
+            why: `the declaration matches on \`${mine.subject}\` and the operator on \`${theirs.subject}\``,
+        }
+    }
+    const shared = Math.min(mine.cases.length, theirs.cases.length)
+    for (let i = 0; i < shared; i++) {
+        const a = mine.cases[i]
+        const b = theirs.cases[i]
+        const pattern = compareMatchPieces(a.pattern, b.pattern, 'pattern')
+        if (pattern.same === null) {
+            return {
+                same: false,
+                why: `case ${i + 1}: the declaration's pattern \`${a.pattern}\` is not a type this checker reads`,
+            }
+        }
+        if (pattern.same === false) {
+            return {
+                same: false,
+                why: `case ${i + 1}: ${pattern.at} is \`${pattern.mine}\`, and the operator's is \`${pattern.theirs}\``,
+            }
+        }
+        const result = compareMatchPieces(a.result, b.result, 'result')
+        if (result.same === null) {
+            return {
+                same: false,
+                why: `case ${i + 1}: the declaration's result \`${a.result}\` is not a type this checker reads`,
+            }
+        }
+        if (result.same === false) {
+            return {
+                same: false,
+                why: `case ${i + 1}: ${result.at} is \`${result.mine}\`, and the operator's is \`${result.theirs}\``,
+            }
+        }
+    }
+    if (mine.cases.length !== theirs.cases.length && !mine.elided && !theirs.elided) {
+        return {
+            same: false,
+            why: `the declaration states ${mine.cases.length} case(s) and the operator ${theirs.cases.length}`,
+        }
+    }
+    return {
+        same: true,
+        why: `the declaration's type function and the operator's are the same ${shared} case(s)`,
+    }
+}
+
 // What a registered parameter says it takes (`modules/tensor/ops/op_def.cpp`, `kindText`). These
-// are not types but sets of them, and `float[..]` in one is the operator's spelling for "a tensor",
+// are not types but sets of them, and `float[...]` in one is the operator's spelling for "a tensor",
 // not for f64: the kind is what the argument reader takes, and a tensor of any element type is one
 // it takes. A signature a resolver builds instead writes real types; those are compared as types.
 const KIND_SETS = new Map([
     ['Tensor', ['tensor']],
-    ['float[..] | number[]', ['tensor', 'array']],
-    ['float[..] | number', ['tensor', 'number']],
-    ['float[..] | number[] | number', ['tensor', 'array', 'number']],
+    ['float[...] | number[]', ['tensor', 'array']],
+    ['float[...] | number', ['tensor', 'number']],
+    ['float[...] | number[] | number', ['tensor', 'array', 'number']],
     ['int', ['int']],
     ['number', ['number']],
     ['bool', ['bool']],
@@ -2045,7 +2408,7 @@ const EXCEPTIONS = {
     // The operator's own result text is a shape no type variable holds: a function type, a tuple, a
     // record, a `gradient of W0`, a generic application (`Device<T>`), a named aggregate (`Tensor`),
     // a bare type variable, or no result text at all; and the cases where the rule reads and the
-    // declaration is the side that does not (`T[..]` from `from_bytes`, `Jvp<F>` from the
+    // declaration is the side that does not (`T[...]` from `from_bytes`, `Jvp<F>` from the
     // transforms).
     result: {
         'rule states no result': {
@@ -2055,14 +2418,16 @@ const EXCEPTIONS = {
         'rule states a function type': {
             'attempt (:mark/attempt)#result':
                 'the rule answers the function it was given, `((...args: A) => T!)`; the declaration states only the error `F!`',
+            'first_with_as_param (transforms:first_with_as_param)#result':
+                'the rule answers a function type -- the reinterpreted function, `((the first `with` parameter, then the parameters) => any)` -- and the declaration writes it `FirstWithAsParam<F>`, a type function this checker does not expand',
             'split (transforms:split)#result':
                 'the rule answers a pair whose second half is a function type, `(float, (float) => float)`; the declaration spells the same pair as text, and a function type is not compared',
         },
         'rule states a tuple': {
             'batch_norm_train (nn:batch_norm_train)#result':
-                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[..]`',
+                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[...]`',
             'batch_norm_train_grad (nn:batch_norm_train_grad)#result':
-                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[..]`',
+                'the rule answers `(Tensor, Tensor, Tensor)`; the declaration writes the same three as `f32[...]`',
             'grad (autodiff:grad_aux)#result':
                 'the rule answers `(gradient of W0, aux)`, a pair one half of which is a phrase; the declaration writes `GradientAndAux<F>`',
             'jvp (transforms:jvp)#result':
@@ -2084,67 +2449,67 @@ const EXCEPTIONS = {
         },
         'rule states a generic application': {
             'upload (tiles:upload)#result':
-                'the rule answers `Device<T>`, a generic application; the declaration narrows it to `Device<f32[..]>`',
+                'the rule answers `Device<T>`, a generic application; the declaration narrows it to `Device<f32[...]>`',
         },
         'rule states a named type': {
             'avg_pool2d (nn:avg_pool2d)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'avg_pool2d_grad (nn:avg_pool2d_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'batch_norm (nn:batch_norm)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d (nn:conv2d)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_bias_grad (nn:conv2d_bias_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_input_grad (nn:conv2d_input_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'conv2d_kernel_grad (nn:conv2d_kernel_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'embedding (nn:embedding)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'embedding_table_grad (nn:embedding_table_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'max_pool2d (nn:max_pool2d)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'max_pool2d_grad (nn:max_pool2d_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'run_preferred_resident (tiles:run_preferred_resident)#result':
                 'the rule answers `DeviceAggregate`, a named aggregate; the declaration writes `Device<f32>`',
             'softmax_cross_entropy_grad (nn:softmax_cross_entropy_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
             'softmax_cross_entropy_grad (nn:softmax_cross_entropy_labels_grad)#result':
-                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[..]` it produces',
+                'the rule answers `Tensor`, a named aggregate of the module; the declaration writes the `f32[...]` it produces',
         },
         'rule states a type variable': {
             'download (tiles:download)#result':
-                'the rule answers `T`, the element type of the device it read; the declaration writes `f32[..]`',
+                'the rule answers `T`, the element type of the device it read; the declaration writes `f32[...]`',
         },
         'declaration states a type variable': {
             'from_bytes (tensor:from_bytes_bf16)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `bfloat16[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `bfloat16[...]`',
             'from_bytes (tensor:from_bytes_bool)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `bool[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `bool[...]`',
             'from_bytes (tensor:from_bytes_f16)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float16[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `float16[...]`',
             'from_bytes (tensor:from_bytes_f32)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float32[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `float32[...]`',
             'from_bytes (tensor:from_bytes_f64)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `float64[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `float64[...]`',
             'from_bytes (tensor:from_bytes_i32)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `int32[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `int32[...]`',
             'from_bytes (tensor:from_bytes_i64)#result':
-                'the element type comes from the bytes, so the declaration writes `T[..]` and this rule answers `int64[..]`',
+                'the element type comes from the bytes, so the declaration writes `T[...]` and this rule answers `int64[...]`',
             'load_npy (tensor:load_npy_bool)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `bool[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `bool[...]`',
             'load_npy (tensor:load_npy_f32)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `float32[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `float32[...]`',
             'load_npy (tensor:load_npy_f64)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `float64[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `float64[...]`',
             'load_npy (tensor:load_npy_i32)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `int32[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `int32[...]`',
             'load_npy (tensor:load_npy_i64)#result':
-                'the element type comes from the file, so the declaration writes `T[..]` and this rule answers `int64[..]`',
+                'the element type comes from the file, so the declaration writes `T[...]` and this rule answers `int64[...]`',
             'remat (transforms:remat)#result':
                 'the rule answers the argument\'s own type (`(f: F) => F`), which the declaration writes `F`; this rule states `float` for the two-parameter function it was asked about',
         },
@@ -2174,11 +2539,11 @@ const EXCEPTIONS = {
         },
         'untyped pack ..rest': {
             'eprintln (:io/eprintln)#parameter':
-                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+                'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
             'print (:io/print)#parameter':
-                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+                'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
             'println (:io/println)#parameter':
-                'the rule writes `(x: T, ..rest)`, a pack with no type, so no position maps to the declaration',
+                'the rule writes `(x: T, ...rest)`, a pack with no type, so no position maps to the declaration',
         },
         'function-typed parameter': {
             'attempt (:mark/attempt)#parameter':
@@ -2188,7 +2553,9 @@ const EXCEPTIONS = {
             'grad (autodiff:grad_aux)#parameter':
                 'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
             'jvp (transforms:jvp)#parameter':
-                'parameter 1 is `(..) => any`, a function type whose positions are not spelled',
+                'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
+            'first_with_as_param (transforms:first_with_as_param)#parameter':
+                'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
             'remat (transforms:remat)#parameter':
                 'parameter 1 is `(float, float) => float`, a function type the declaration writes as a bare `F`',
             'split (transforms:split)#parameter':
@@ -2289,6 +2656,8 @@ const EXAMPLE_STOPS = {
             'a rule set comes from the caller, and `rules` is it',
         'stdlib/rewrite.cml#why_not#1':
             'a run, a rule and a value come from the caller, and `target` is one of them',
+        'stdlib/vjp.cml#grad#1':
+            '`grad` is generic in the function it takes (`F`), so the checker can write no value for the parameter: the function whose first `with` parameter is differentiated is a declaration in the surrounding program',
         'stdlib/signatures/autodiff.cml#grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
         'stdlib/signatures/autodiff.cml#grad#2':
@@ -2296,7 +2665,9 @@ const EXAMPLE_STOPS = {
         'stdlib/signatures/autodiff.cml#with_grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
         'stdlib/signatures/autodiff.cml#with_grad#2':
-            'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes'
+            'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
+        'stdlib/signatures/transforms.cml#first_with_as_param#1':
+            'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
@@ -2452,6 +2823,10 @@ function resultStopClass(claimedType, claimed, promised) {
 // has a class for -- that exception is unlabelled, and the run refuses it.
 function classifyOpaque(text) {
     const source = (text || '').trim()
+    // A `match type` result is a function on the argument's shape, not a function type: the `=>`
+    // inside it separated one case's pattern from its result. Read as a function type, every
+    // signature written with a type function was an exception instead of a comparison.
+    if (/^match\s+type\b/.test(source)) return 'a match-type result'
     if (source.includes('=>')) return 'a function type'
     if (source.startsWith('(')) return 'a tuple'
     if (source.startsWith('{')) return 'a record'
@@ -2486,6 +2861,7 @@ function paramVerdict(declared, operator) {
 // classifyOpaque names. The same shape is the same class on either side: a function-typed parameter
 // is one whether the operator or the declaration writes it.
 const PARAMETER_SHAPES = new Map([
+    ['a match-type result', 'match-type parameter'],
     ['a function type', 'function-typed parameter'],
     ['a tuple', 'tuple-typed parameter'],
     ['a record', 'record-typed parameter'],
@@ -2543,7 +2919,7 @@ function operatorAccepts(text) {
 // What a declaration requires of one position, as the set it names: 'tensor', 'array', 'int',
 // 'i32', 'f32', 'float', 'bf16', 'f16', 'c64', 'c128', 'bool', 'string', 'Bytes' or 'number'. null
 // when the text is not a type this checker reads -- a bare type variable (`F`), a module's own type
-// (`OptimizerState`, `Device<f32[..]>`), a function type (`(a: float) => float`) or a tuple.
+// (`OptimizerState`, `Device<f32[...]>`), a function type (`(a: float) => float`) or a tuple.
 function declaredNeed(text) {
     const source = (text || '').trim()
     if (source === '') return null
@@ -2561,7 +2937,7 @@ function declaredNeed(text) {
     }
     // The bracket suffix decides the arrangement: `[]` is the rank-one array a kind writes as
     // `int[]` (the element type a declaration names there is narrower than what the kind says, so
-    // it is not compared), and every other suffix -- `[..]`, `[?]`, `[n]`, `[n, m]` -- is a
+    // it is not compared), and every other suffix -- `[...]`, `[?]`, `[n]`, `[n, m]` -- is a
     // tensor, including a type variable applied to dimensions.
     if (source.slice(at).trim() === '[]') return 'array'
     return dimensionsOf(source.slice(at).trim()) === null ? null : 'tensor'
@@ -2588,7 +2964,7 @@ function declaredNeeds(text) {
 function signatureParams(signature) {
     let text = (signature || '').trim()
     // A signature may open with its const type parameters (`<count: int> (x: T) => T`, or
-    // `::<T>(bytes: Bytes, shape: int[]) => T[..]`); they are not positions of the call, and the
+    // `::<T>(bytes: Bytes, shape: int[]) => T[...]`); they are not positions of the call, and the
     // declaration states them as `::<count: int>`.
     if (text.startsWith('::')) text = text.slice(2).trim()
     if (text.startsWith('<')) {
@@ -2741,7 +3117,7 @@ function verifyOps() {
             //
             // The parameter types are compared the way a kind is compared with a type, not the way
             // two types are. A declaration of one name differs from the registered rule in type
-            // (that is what an overload is: `len` is declared for `string`, `T[..]`, `Map<K, V>`
+            // (that is what an overload is: `len` is declared for `string`, `T[...]`, `Map<K, V>`
             // and `Set<T>`, and one rule of `len` writes `Map<K, V> | Set<T>`), and the two sides
             // spell the types in different words (`i32` for `int`): comparing them as equal texts
             // reports one difference per overload and per alias, which is what it did when it was
@@ -2755,7 +3131,7 @@ function verifyOps() {
             const ruleParams = signatureParams(op.signature)
             const promisedParams = []
             for (const entry of matching) {
-                const params = declaredParams(entry)
+                const params = declaredParams(entry, ruleParams)
                 const key = params.map((one) => one.type).join('\u0001')
                 if (promisedParams.some((other) => other.key === key)) continue
                 const verdicts =
@@ -2852,9 +3228,20 @@ function verifyOps() {
                 if (promised.some((one) => one.key === key)) continue
                 promised.push({ entry, declaredText, declared: canonicalResult(entry.result), key })
             }
+            // A result written as a type function is compared by its rules, not by its text: the
+            // declaration's `WithElement<A, bf16>` and the registered `match type A { ... }` are one
+            // function, and two of them that differ differ at a case and a dimension this reader
+            // names (design principles 1: a type function is an ordinary function, so its identity
+            // is what it answers, not how it is spelled). Only a pair of two type functions takes
+            // this path: every other pair keeps the comparison below, which is the one it had.
+            const typeFunctionsCompared = promised
+                .map((one) => ({ one, reading: matchTypeVerdict(one.declaredText, claimedType) }))
+                .filter((each) => each.reading !== null)
+            const functionAgrees = typeFunctionsCompared.some((each) => each.reading.same)
             const agreed =
-                claimed !== null && promised.some((one) => one.declared !== null && one.declared.text === claimed.text)
-            // A claim the module writes as the element family (`float[..]`) does not say which
+                functionAgrees ||
+                (claimed !== null && promised.some((one) => one.declared !== null && one.declared.text === claimed.text))
+            // A claim the module writes as the element family (`float[...]`) does not say which
             // element type the result has, so a declaration that writes one of that family is not
             // a difference: the operator takes the element type from its argument and the
             // declaration is the one instance it supports. It is not agreement either -- the
@@ -2873,6 +3260,16 @@ function verifyOps() {
                 promised.some((one) => one.declaredText.replace(/\s+/g, '') === claimedType.replace(/\s+/g, ''))
             if (agreed || spelledAlike) {
                 resultsCompared++
+            } else if (typeFunctionsCompared.length > 0) {
+                // Both sides are type functions and no declaration answers what the operator does:
+                // the reading names the case and the place inside it that differs, so the reader of
+                // the failure learns which dimension to look at rather than that the texts differ.
+                for (const { one, reading } of typeFunctionsCompared) {
+                    problems.push(
+                        `${one.entry.file}:${one.entry.line}: '${one.entry.name}' declares the result \`${one.declaredText}\`, ` +
+                            `and ${op.uri} registers \`${claimedText.trim()}\`: ${reading.why}`,
+                    )
+                }
             } else if (readable && !followsArgument) {
                 for (const one of promised) {
                     problems.push(
@@ -2983,10 +3380,71 @@ function verifyOps() {
     }
 }
 
+// ---- the probes that hold the type-function reader -------------------------------------------
+//
+// `--verify-ops` compares two texts a person never sees side by side: a declaration, and the
+// signature a registry prints for the operator it declares. A reader for a shape of those texts can
+// be wrong in two directions, and a run over the library is silent about both: it can call two
+// promises different because it read one of them wrong, and it can call them the same because it
+// read neither. So the shape is measured on its own, against declarations written for the
+// measurement. `test/cases/modules/stdlib/match_type_probes.decl` is read by the same reader the
+// library's declarations are read by, each probe says which answer it must get, and a probe that
+// expects a difference says which place the reading has to name -- a verdict that is right about
+// "different" and silent about the dimension is half an answer.
+function verifyMatchType(declarationFile, probeFile) {
+    const shownPath = (file) => path.relative(REPO_ROOT, file).replace(/\\/g, '/')
+    const declared = readDeclarations(declarationFile, { name: 'probe', kind: 'cpp' })
+    const probes = JSON.parse(fs.readFileSync(probeFile, 'utf8'))
+    if (!Array.isArray(probes) || probes.length === 0) {
+        console.log(`${shownPath(probeFile)}: no probe, so nothing about the type-function reader is measured`)
+        process.exit(1)
+    }
+    const problems = []
+    let asExpected = 0
+    for (const [index, probe] of probes.entries()) {
+        const entry = declared.find((one) => one.name === probe.declaration)
+        if (entry === undefined) {
+            problems.push(
+                `probe ${index + 1}: the declaration '${probe.declaration}' is not in ${shownPath(declarationFile)}`,
+            )
+            continue
+        }
+        const reading = matchTypeVerdict(entry.result, probe.operator)
+        const verdict = reading === null ? 'unreadable' : reading.same ? 'match' : 'mismatch'
+        const why =
+            reading === null
+                ? `the declaration's result \`${entry.result}\` and the operator's \`${probe.operator}\` are not both a type function this checker reads`
+                : reading.why
+        console.log(`MATCH-TYPE ${index + 1} ${verdict}: ${probe.declaration} -- ${why}`)
+        if (verdict !== probe.expect) {
+            problems.push(
+                `probe ${index + 1} (${probe.declaration}): the reader answered ${verdict}, and the probe says ${probe.expect}`,
+            )
+            continue
+        }
+        const missing = (probe.says || []).filter((piece) => !why.includes(piece))
+        if (missing.length > 0) {
+            problems.push(
+                `probe ${index + 1} (${probe.declaration}): the reading does not name ${missing
+                    .map((one) => `\`${one}\``)
+                    .join(', ')}`,
+            )
+            continue
+        }
+        asExpected++
+    }
+    for (const problem of problems) console.log(problem)
+    if (problems.length > 0) {
+        console.log(`${problems.length} probe(s) were read differently from what the probe says`)
+        process.exit(1)
+    }
+    console.log(`the type-function reader answers as the probes say: ${asExpected} probe(s), ${asExpected} as expected`)
+}
+
 // ---- main -----------------------------------------------------------------------------------
 
 const USAGE =
-    'usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit [--compile] [--camel <path>]'
+    'usage: node scripts/stdlib-reference.mjs --write | --verify-doc | --verify-ops | --verify-docs | --audit | --verify-match-type <declarations> <probes> [--compile] [--camel <path>]'
 
 // `--camel <path>` names the install a mode that needs a compiler measures; it is taken out of the
 // arguments here so the mode stays the first word that is not a flag.
@@ -3212,6 +3670,17 @@ if (mode === '--write' || mode === '--verify-doc') {
             `${Object.keys(EXAMPLE_STOPS).length} class(es), ${STALE_FRAGMENTS} marked a fragment that compile alone, ` +
             `${coverage.bound.length} that compile only with the name they say they need`,
     )
+} else if (mode === '--verify-match-type') {
+    // The type-function reader on its own, against declarations written for the measurement: the
+    // one mode that reads neither the library's declarations nor a compiler, so a reader that
+    // stopped reading the shape fails here and not only inside a run over 569 overloads.
+    if (flags[1] === undefined || flags[2] === undefined) {
+        console.log('--verify-match-type needs the file of declarations and the file of probes')
+        console.log(USAGE)
+        process.exit(2)
+    }
+    const resolve = (one) => (path.isAbsolute(one) ? one : path.join(REPO_ROOT, one))
+    verifyMatchType(resolve(flags[1]), resolve(flags[2]))
 } else if (mode === '--verify-ops') {
     const { problems, checked, unchecked, resultsCompared, paramsCompared, paramsUnchecked, found } = verifyOps()
     for (const problem of problems) console.log(problem)

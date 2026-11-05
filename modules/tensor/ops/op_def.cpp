@@ -99,11 +99,11 @@ std::string_view kindText(ParamKind kind) {
     case ParamKind::Tensor:
         return "Tensor";
     case ParamKind::TensorLike:
-        return "float[..] | number[]";
+        return "float[...] | number[]";
     case ParamKind::TensorOrScalar:
-        return "float[..] | number";
+        return "float[...] | number";
     case ParamKind::TensorLikeOrScalar:
-        return "float[..] | number[] | number";
+        return "float[...] | number[] | number";
     case ParamKind::Int:
         return "int";
     case ParamKind::Number:

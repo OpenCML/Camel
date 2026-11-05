@@ -1,0 +1,23 @@
+// **The refusal the array projection did not delete.** `pair` builds an `f32[]`: the rank is stated
+// and the extent is not, so the value's type names no member count, and a transposition that handed
+// member `i` of the cotangent to operand `i` would have to invent the number of members it has. That
+// is refused here, by name, with the construction's own cause -- `skip=kind` and the line
+// `kind=fill whole-cotangent ... members=- parts=2`, where `members=-` is the count the type does not
+// state -- and the program does not go on to print a number it does not have.
+//
+// This is the guard's coverage, measured beside the projection: a stated rank-one extent is a
+// projection (`transpose_array_literal_member_projection`), and a construction the walk cannot place
+// is still a refusal rather than a silent zero. A program whose type states the extent and whose
+// answers are the elements is the shape that answers; the shape that states no extent is not.
+import rulesets.transpose
+import { transpose } from transforms
+
+func pair(a: f32, b: f32): f32[] {
+    return [a, b]
+}
+
+func main(): int sync {
+    let back = transpose(pair)
+    println("pair_pullback=", back([1.5, 2.5]))
+    return 0
+}

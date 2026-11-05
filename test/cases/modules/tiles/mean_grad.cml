@@ -5,11 +5,11 @@ import { reshape, mean, abs, sum } from tensor
 import { grad } from autodiff
 import { source, run_preferred_resident, download } from tiles
 import { exit } from process
-with <x: f32[..]>
+with <x: f32[...]>
 func mse(): float { return float(mean(x * x)) }
 func main(run_gpu: bool): int sync {
     let x = reshape<[2, 3]>([1.0, 2.0, 3.0, 4.0, 5.0, 6.0] as f32[])
-    let derivative = (v: f32[..]): f32[..] => grad(mse)<v>()
+    let derivative = (v: f32[...]): f32[...] => grad(mse)<v>()
     let y = reshape<[1, 2]>([1.0, 2.0] as f32[])
     let first = source<derivative>(x)
     let second = source<derivative>(y)

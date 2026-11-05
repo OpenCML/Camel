@@ -1,7 +1,7 @@
 /**
  * `tensor:zeros` crosses the bridge as `tensor:ones` does, and comes back the same way.
  *
- * The result is a `T[..]`, which is the shaped array `rt::Array<T>` in this back end: the runtime
+ * The result is a `T[...]`, which is the shaped array `rt::Array<T>` in this back end: the runtime
  * fills the tensor, the bridge copies the elements out with the shape the value states, and the
  * program prints it with the same `println` as an array of its own -- so the line below is
  * std::fvm's, byte for byte. `zeros` was the last tensor builder refused as work not done

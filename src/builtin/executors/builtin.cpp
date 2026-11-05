@@ -415,11 +415,6 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         {"tangent/init_arr", __tangent_init_arr__},
         {"tangent/last_arr", __tangent_last_arr__},
 
-        // `extent_of::<A>()`: the shape a type writes down. The value is a fact of the type
-        // argument and is settled where the call is built, so a call that reaches the run has
-        // nothing to read (`src/builtin/operators/struct.cpp#__op_extent_of__`).
-        {"op/extent_of", __op_extent_of__},
-
         // profiler
         {"profiler/begin", __profiler_begin__},
         {"profiler/end", __profiler_end__},
@@ -665,6 +660,17 @@ void registerBuiltinOperatorTraits() {
             ":" + name,
             {.pure = pure, .elementwise = arrayConversions.contains(key), .mayFault = !kNeverFaults.contains(key)});
     }
+    // `extent_of` is the one operator declared without a kernel of its own: a call it accepts is
+    // answered where it is built, so no path makes a node for a run to execute
+    // (`src/builtin/operators/struct.h`). It is still an operator a program writes and a module
+    // declares (`src/builtin/modules/globals.cpp#extentOfResolver`), so it states its purity like
+    // every other one -- the loop above registers the operators that have an implementation, and
+    // this one has none by design rather than by omission. It reads a type and nothing else, so it
+    // is pure, it is not elementwise, and a run never reaches it to fault. The three answers are
+    // one decision and not three defaults: if a kernel is ever written for this operator, `mayFault`
+    // becomes a guard that says nothing about a path that now exists unless all three are decided
+    // again together.
+    registry.set(":op/extent_of", {.pure = true, .elementwise = false, .mayFault = false});
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.

@@ -4,8 +4,22 @@
 /*
  * The derivative, as a library (design 4.4, `docs/design/program-transforms/README.cn.md`).
  *
- *     vjp(f) = transpose(split(reinterp<jvp>(f)))
- *     grad(f)              -- `vjp` read at one number, the seed 1
+ *     vjp(f)  = transpose(split(jvp(f)))
+ *     grad(f) = vjp(first_with_as_param(f)) read at the seed 1, its first cotangent
+ *     has_aux(f) = the same lift read forward, the pair's value member taken
+ *
+ * The first line is the design's assembly (design principles 9.9, design 4.4) with its middle step
+ * written as the call that performs it: `jvp(f)` is the forward transform as an operator of the
+ * `transforms` module (`stdlib/signatures/transforms.cml`), because a pass cannot answer a function
+ * value and a call cannot name a rule set in its angle brackets.
+ *
+ * `grad` differentiates the first `with` parameter (design principles 9.9), and a reverse transform
+ * differentiates the ordinary parameters, so the weight has to be moved onto that list before `vjp`
+ * sees the function. The move is the signature reinterpretation `first_with_as_param`
+ * (`stdlib/signatures/transforms.cml`): it reclassifies one port and copies the body unchanged, and
+ * it puts the weight **first** among the parameters, so the first member of the pullback's answer is
+ * its cotangent. `GradientOf<F>` (`stdlib/types.cml`) is that shape -- the weight, then `F`'s own
+ * parameters.
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
  * answers the forward half, and the forward half called at the point answers `(value, lin)`: the
@@ -20,7 +34,7 @@
  * half reads (author's ruling of 2026-11-03 15:15: 带 `with` 的函数，pullback 带不带 `with` 列表——
  * 不带，闭包捕获). `split` captures the `with` value the backward half reads in `lin`'s closure, so
  * `lin` is a function of the tangents alone and `transpose(lin)` is the declared `Pullback<F>`
- * `(ct) => (..Tangent<ParamsOf<F>>)` -- `stdlib/types.cml`. The `with` values are written once, in
+ * `(ct) => (...Tangent<ParamsOf<F>>)` -- `stdlib/types.cml`. The `with` values are written once, in
  * the call that supplies them to `vjp`: `let (y, pb) = vjp(scale)<2.0>(3.0); pb(1.0)`.
  *
  * The surface is JAX's (author's ruling of 2026-11-01): `vjp(f)(x)` is the pair `(y, pullback)` and
@@ -44,8 +58,8 @@
 
 import rulesets.jvp
 import rulesets.transpose
-import { is_function, ParamsOf, Vjp, WithOf } from types
-import { jvp, split, transpose } from transforms
+import { is_function, GradientOf, Vjp } from types
+import { first_with_as_param, jvp, split, transpose } from transforms
 
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
@@ -65,16 +79,16 @@ import { jvp, split, transpose } from transforms
 /// a one-long tuple).
 ///
 /// One declaration for every arity: `F` is the function, `Vjp<F>` says the parameters are `F`'s and the
-/// pullback's cotangents are too (stdlib/types.cml), and `<..ws> (..xs)` takes both lists the
+/// pullback's cotangents are too (stdlib/types.cml), and `<...ws> (...xs)` takes both lists the
 /// instantiated `Vjp<F>` has -- the `with` list and the parameters, each from the position the lambda
 /// stands in (author's rulings of 2026-11-01 19:10 and 2026-11-03 13:50). The packs are values in the
 /// body: `xs` is the tuple of the parameters and `ws` the tuple of `f`'s `with` values, so
-/// `split(jvp(f))<..ws>(..xs)` hands the forward half the list it declares and the parameters it
+/// `split(jvp(f))<...ws>(...xs)` hands the forward half the list it declares and the parameters it
 /// takes. `transpose(lin)` takes no `with` argument and none is written for it: `lin` has no `with`
 /// list, because the `with` value the backward half reads is a residual the cut captured in its
 /// closure (author's ruling of 2026-11-03 15:15; `Pullback<F>` in stdlib/types.cml is
-/// `(ct) => (..Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
-/// lambda receives them, and `split(jvp(f))<..ws>(..xs)` is the only place they appear. The lambda
+/// `(ct) => (...Tangent<ParamsOf<F>>)`, no list). So the `with` values are written once, where the
+/// lambda receives them, and `split(jvp(f))<...ws>(...xs)` is the only place they appear. The lambda
 /// writes the pack rather than naming the `with` parameters: `Vjp<F>` splices `WithOf<F>` as types,
 /// and a body that read a name from there would depend on what the caller of `vjp` called its own
 /// parameters.
@@ -83,75 +97,78 @@ import { jvp, split, transpose } from transforms
 /// derivative there, one member per parameter.
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
-    return <..ws> (..xs) => {
-        let (y, lin) = split(jvp(f))<..ws>(..xs)
+    return <...ws> (...xs) => {
+        let (y, lin) = split(jvp(f))<...ws>(...xs)
         (y, transpose(lin))
     }
 }
-/// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
-/// one member a one-parameter pullback answers read out by position --
-/// `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
-/// the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
-/// `vjp`, not as a second transform.
+/// The gradient of a function with respect to its first `with` parameter (design principles 9.9):
+/// `grad(f)` takes the weight first and `f`'s own parameters after it, and answers the weight's
+/// cotangent -- `grad(weighted)(3.0, 2.0)` for `<x: float> func weighted(y) = x*y + x`.
+///
+/// It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
+/// taken. The weight is on the ordinary list because that is the list `vjp` differentiates, so the
+/// step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
+/// port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
+/// differentiated body reads a `with` value that would need a direction of its own.
+/// `GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let slope = grad(f)
-export func grad(f: (x: float) => float): (x: float) => float {
-    let reading = vjp(f)
-    return (x: float) => {
-        let (value, pullback) = reading(x)
+export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
+    let reading = vjp(first_with_as_param(f))
+    return (...xs) => {
+        let (value, pullback) = reading(...xs)
         let _ = value
         let cotangents = pullback(1.0)
         cotangents.0
     }
 }
-
-/// The value and the gradient of `f`'s first `with` parameter -- the shape the engine's `with_grad`
-/// answers (`stdlib/signatures/autodiff.cml`), written as the composition design principles 9.9 asks
-/// for and held at the wall the composition meets. **The call refuses, and the refusal is the
-/// reading**: what stands here is a name that can be called, not a name that answers a number it
-/// cannot compute.
+/// The value, the auxiliary value and the gradient together, for a function whose result is the pair
+/// `(value, aux)`: `has_aux(f)` gives a function of the weight that answers `((value, aux), gradient)`
+/// -- the shape and the order the engine's `with_grad(f, has_aux: true)` answers, JAX's
+/// `value_and_grad(f, has_aux=True)`. The weight is the one ordinary parameter `f` takes, as it is
+/// for `grad` above: the library's names are functions of ordinary parameters, and the subject's
+/// `with` values are closed over where the lambda is written.
 ///
-/// The composition is one step: `vjp` differentiates the ordinary parameters only, so the weight is
-/// moved to one by a lambda -- `vjp((ww: W) => f<ww>(..))(w)` -- and the seed 1 read off the
-/// pullback is its gradient. The lambda can be written; the body inside it cannot do its half,
-/// because the lambda's parameter goes back into a call's `with` list and forward mode answers the
-/// tangent of a value that crosses that list as the zero of its type (`stdlib/signatures/transforms.cml`
-/// states the rule under `Jvp<F>`: a value that reaches a body through a `with` parameter does not
-/// move). Measured on this tree, `x_times_y` being `x * y`:
+/// The body is the composition, not a second transform, and it composes **forward**: `jvp(f)` is the
+/// function `(w, dw) => (result, tangent)`, so `jvp(f)(w, 1.0)` reads one direction -- the weight's --
+/// and answers the pair and the pair's tangent; the value's derivative is the tangent's first
+/// member, because a pair's tangent is a pair in the same order (`core/tangent_space.h`). One pass
+/// answers all three numbers.
 ///
-///     jvp((ww: float) => x_times_y<ww>(2.0))(3.0, 1.0)   value=6.0 tangent=0.0
-///     jvp((y: float) => x_times_y<3.0>(y))(2.0, 1.0)     value=6.0 tangent=3.0
+/// The transposed half is not what this is written on, and the reason is the pair: `vjp`'s second
+/// half turns the cotangent of what the function answers around, and a pair has no cotangent --
+/// `transpose` takes a function whose result has one, which is why handing a pair-returning function
+/// to `vjp` is refused rather than guessed at (`has_aux_vjp_pair` in
+/// test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
+/// direction needs, so the composition that reads all three numbers is the one above.
 ///
-/// The first line is the shape every `with_grad` composition has, and the derivative it owes is
-/// `d/dx (x*y)` at `y = 2`, which is 2.0. So the composition answers the zero of the gradient's
-/// type for every weight that reaches the body through that list -- and a weight always does, since
-/// the `with` list is what a weight is written as. The other shapes a `with_grad` is asked for stop
-/// before that point and are refused where they stop, so each one names its own wall instead of
-/// answering a number: a `with` parameter that is a struct, and a function of two `with` parameters
-/// with no ordinary parameter, both stop in `jvp`; a tensor `with` parameter whose lambda captures
-/// an array stops in `split`.
+/// The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+/// read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
+/// the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
+/// member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph
+/// of `(t) => lin(t).0` needs a transposed graph for `lin`, `lin` is a value and not a named callee,
+/// and the pass stops with `transforms: transpose has no transpose for this function: this call's
+/// callee has no transpose of its own, so the call cannot be turned around`. The wall is
+/// `transpose`'s (a written body whose callee arrives as a value), not this composition's, so this
+/// name stays forward and the backward spelling waits for that rule.
 ///
-/// The result type says only what is true of this call: it never gives a value. The declaration the
-/// engine's transform has -- `ValueAndGradient<F>`, whose second member is the type of the *first*
-/// member of `F`'s `with` list -- is not writable in the library today: `stdlib/types.cml` writes
-/// `ParamsOf<F>`, `WithOf<F>`, `ResultOf<F>` and `Tangent<T>`, and no type function names the first
-/// element of a pack, so a declaration written here would either refuse to compile or be an
-/// approximation of the shape it claims. `never` is neither.
+/// The pair is carried and the auxiliary value is not differentiated: `frozen(w) = (1.0, w*w)`
+/// answers a gradient of 0.0 with an auxiliary value of 9.0. The tangent's second member is the
+/// auxiliary value's own slope; it is built (the lift answers the whole pair's direction) and not
+/// read, which is what makes "carried, not differentiated" a fact about the body rather than about
+/// the numbers it happens to print.
 ///
-/// The day forward mode carries the tangent of a value handed to a `with` list, the body of this
-/// function is `vjp`'s own composition and the declaration is the engine's; the four shapes to
-/// measure it on are the four groups of
-/// `test/cases/modules/autodiff/grad_first_with_parameter.cml`, and the entry that holds this
-/// refusal is `test/cases/compile/transforms/with_grad_from_the_library.cml`.
-/// The example is a program of its own and stops at the name: it writes a call that is a value, and it
-/// reads nothing out of it, because the function `with_grad` answers returns `never` -- a program that
-/// asked `frozen(3.0)` for a number would not compile, and one that ran would stop with the sentence
-/// above. The gradient of a first `with` parameter is read with `grad`: `grad(weighted)<3.0>(2.0)`.
-/// @example let frozen = with_grad((y: float) => y * 2.0)
-export func with_grad::<F>(f: F): <..WithOf<F>> (..ParamsOf<F>) => never when is_function::<F>() {
-    let _ = f
-    return <..ws> (..xs) => {
-        fail<'RuntimeError'>(
-            'vjp is transpose(split(jvp(f))), and forward mode answers the tangent of a value handed to a call\'s `with` list as the zero of its type, so a `with_grad` built on this composition would answer the zero of the gradient\'s type for every weight that reaches the body through that list. Read the gradient of a first `with` parameter with `grad(f)<w>(..)` from the autodiff module, and the derivatives of the ordinary parameters with `vjp(f)`.')
+/// The shape is written once, for a weight of one `float` and a result of two, the way `grad` above
+/// is written once for one parameter; the declarations whose parameters and results are packs are
+/// what the generic form is written with when the library takes it, and this name keeps answering
+/// that shape until then.
+/// @example-fragment `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
+/// @example let step = has_aux(loss)
+export func has_aux(f: (w: float) => (float, float)): (w: float) => ((float, float), float) {
+    let lifted = jvp(f)
+    return (w: float) => {
+        let (pair, tangent) = lifted(w, 1.0)
+        (pair, tangent.0)
     }
 }

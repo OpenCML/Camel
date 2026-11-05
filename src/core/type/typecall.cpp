@@ -35,6 +35,8 @@ constexpr std::string_view kTypeFunctions[] = {
     "ValueOf",
     "WithElement",
     "RowsOf",
+    "HeadOf",
+    "RestOf",
     "ParamsOf",
     "WithOf",
     "ResultOf",
@@ -89,6 +91,40 @@ bool TypeCallType::isTypeFunction(std::string_view name) {
 
 Type *TypeCallType::evaluate(
     std::string_view name, std::span<Type *const> arguments, std::string &error) {
+    // The two projections of a pack (`stdlib/types.cml#HeadOf`, `#RestOf`): the member at its head,
+    // and the pack of the members after it. They are read **before** the member-wise rule below,
+    // because their answer is about the pack itself and not about each member of it: mapped over
+    // the members, `HeadOf<(float, int)>` would ask `HeadOf<float>` for every one of them.
+    //
+    // They are primitives where `FirstOf<P>` is the `match type` a program writes, and the
+    // difference is not the answer -- both answer the type at the head -- but where the answer is
+    // *read*: a `match type` written into the result of a generic function leaves its two names
+    // (`W`, `Rest`) as type variables of that call, which no argument binds, so a library function
+    // whose answer moves a pack's first member onto another list cannot be called at all
+    // (`stdlib/vjp.cml#grad`). A primitive is evaluated with the pack in hand.
+    if (name == "HeadOf" || name == "RestOf") {
+        if (arguments.size() != 1 || arguments.front() == nullptr) {
+            error = "it takes one pack";
+            return nullptr;
+        }
+        Type *pack = arguments.front();
+        if (!TypeCallType::isPack(pack)) {
+            error = pack->toString() + " is not a pack (`..` of a type is a type expression)";
+            return nullptr;
+        }
+        const std::span<Type *const> members = TypeCallType::packMembers(pack);
+        if (name == "HeadOf") {
+            if (members.empty()) {
+                error = "the pack is empty: it has no first member";
+                return nullptr;
+            }
+            return members.front();
+        }
+        if (members.empty()) {
+            return makePack(std::vector<Type *>{});
+        }
+        return makePack(std::vector<Type *>(members.begin() + 1, members.end()));
+    }
     if (name == "WithElement") {
         if (arguments.size() != 2 || arguments[0] == nullptr || arguments[1] == nullptr) {
             error = "it takes an array type and an element type";
@@ -100,6 +136,11 @@ Type *TypeCallType::evaluate(
         }
         return static_cast<ArrayType *>(arguments[0])->withElementType(arguments[1]);
     }
+    // A pack is a list of types, and taking it apart is the `match type` case the language writes
+    // (design principles 5.6: `case (W, ...Rest)` in a type position binds the member at the head of
+    // the pack and the rest of it). No primitive of this file does it: a type function that takes a
+    // pack apart is the case written in the standard library, so a program that writes the pattern
+    // gets the same answer the library's name gives.
     if (arguments.size() != 1 || arguments.front() == nullptr) {
         error = "it takes one type";
         return nullptr;
@@ -258,7 +299,7 @@ TypeCallType *TypeCallType::create(std::string_view name, std::span<Type *const>
 
 std::string TypeCallType::toString() const {
     if (*name_ == kExpandName) {
-        return ".." + (params_[0] != nullptr ? params_[0]->toString() : std::string("?"));
+        return "..." + (params_[0] != nullptr ? params_[0]->toString() : std::string("?"));
     }
     if (name_->starts_with(kLengthsTag)) {
         return name_->substr(kLengthsTag.size());
@@ -350,15 +391,22 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
     std::vector<Type *> params{subject};
     std::vector<uint16_t> shapes;
     std::vector<uint32_t> identityCounts;
+    std::vector<uint32_t> packCounts;
     std::vector<uintptr_t> key{typeKeyWord(TypeTable::instance().canonical(subject))};
     for (const MatchTypeArm &arm : arms) {
         shapes.push_back(arm.shapes);
         identityCounts.push_back(static_cast<uint32_t>(arm.identities.size()));
+        packCounts.push_back(static_cast<uint32_t>(arm.packPatterns.size()));
         key.push_back(arm.shapes);
         key.push_back(arm.identities.size());
+        key.push_back(arm.packPatterns.size());
         for (Type *identity : arm.identities) {
             params.push_back(identity);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(identity)));
+        }
+        for (Type *pattern : arm.packPatterns) {
+            params.push_back(pattern);
+            key.push_back(typeKeyWord(TypeTable::instance().canonical(pattern)));
         }
         params.push_back(arm.result);
         key.push_back(typeKeyWord(TypeTable::instance().canonical(arm.result)));
@@ -368,14 +416,15 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
             Type **copy = OtherType::copyParams(params);
             void *mem   = mm::permSpace().alloc(sizeof(MatchTypeType), alignof(MatchTypeType));
             GUARD(mem != nullptr, "Failed to allocate MatchTypeType from permSpace");
-            return new (mem) MatchTypeType(shapes, identityCounts, params.size(), copy);
+            return new (mem)
+                MatchTypeType(shapes, identityCounts, packCounts, params.size(), copy);
         }));
 }
 
 size_t MatchTypeType::firstParamOf(size_t arm) const {
     size_t at = 1;
     for (size_t i = 0; i < arm; ++i) {
-        at += identityCounts_[i] + 1;
+        at += identityCounts_[i] + packCounts_[i] + 1;
     }
     return at;
 }
@@ -384,14 +433,32 @@ std::span<Type *const> MatchTypeType::armIdentities(size_t arm) const {
     return std::span<Type *const>(params_ + firstParamOf(arm), identityCounts_[arm]);
 }
 
+std::span<Type *const> MatchTypeType::armPackPatterns(size_t arm) const {
+    return std::span<Type *const>(
+        params_ + firstParamOf(arm) + identityCounts_[arm], packCounts_[arm]);
+}
+
 Type *MatchTypeType::armResult(size_t arm) const {
-    return params_[firstParamOf(arm) + identityCounts_[arm]];
+    return params_[firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm]];
 }
 
 std::string MatchTypeType::toString() const {
     std::string text = "match type " + subject()->toString() + " {";
     for (size_t i = 0; i < armCount(); ++i) {
-        text += " case ... => " + armResult(i)->toString() + ";";
+        const std::span<Type *const> identities = armIdentities(i);
+        const std::span<Type *const> pack       = armPackPatterns(i);
+        text += " case ";
+        if (identities.empty() && pack.empty()) {
+            text += "...";
+        }
+        size_t written = 0;
+        for (Type *identity : identities) {
+            text += (written++ == 0 ? "" : " | ") + identity->toString();
+        }
+        for (Type *pattern : pack) {
+            text += (written++ == 0 ? "" : " | ") + pattern->toString();
+        }
+        text += " => " + armResult(i)->toString() + ";";
     }
     return text + " }";
 }
@@ -399,7 +466,12 @@ std::string MatchTypeType::toString() const {
 std::string MatchTypeType::mangle() const {
     std::string text = "MT" + subject()->mangle();
     for (size_t i = 0; i < armCount(); ++i) {
-        text += "_" + std::to_string(shapes_[i]) + "_" + armResult(i)->mangle();
+        text += "_" + std::to_string(shapes_[i]) + "_" + std::to_string(identityCounts_[i]) + "_" +
+                std::to_string(packCounts_[i]);
+        for (Type *pattern : armPackPatterns(i)) {
+            text += "P" + pattern->mangle();
+        }
+        text += "_" + armResult(i)->mangle();
     }
     return text;
 }
@@ -428,6 +500,9 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
         arm.shapes = shapes_[i];
         for (uint32_t k = 0; k < identityCounts_[i]; ++k) {
             arm.identities.push_back(params[at++]);
+        }
+        for (uint32_t k = 0; k < packCounts_[i]; ++k) {
+            arm.packPatterns.push_back(params[at++]);
         }
         arm.result = params[at++];
         arms.push_back(std::move(arm));
@@ -460,13 +535,13 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
         if (std::all_of(call->paramsSpan().begin(), call->paramsSpan().end(), concrete)) {
             if (TypeCallType::isPack(call)) {
                 what = call->toString();
-                why  = "a type pack is a list of types, and `..` writes its members where a type "
+                why  = "a type pack is a list of types, and `...` writes its members where a type "
                        "list is";
                 return true;
             }
             if (TypeCallType::isExpand(call)) {
                 what = call->toString();
-                why  = "`..` expands a type pack, and the type after it uses none";
+                why  = "`...` expands a type pack, and the type after it uses none";
                 return true;
             }
             std::string error;
@@ -507,6 +582,25 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
             }
         }
         return false;
+    case TypeCode::Function: {
+        // A function type holds types too -- the `with` list, the parameters and the one it
+        // answers -- and a type function left unevaluated in any of them is a type the program did
+        // not ask for. Without this the check stopped at the edge of a function type, so
+        // `Gradient<F>` for a function with no `with` parameter was a type the compiler accepted
+        // while the same empty pack, written where a type stands, was refused.
+        auto *func = static_cast<FunctionType *>(type);
+        for (Type *member : func->withTypesSpan()) {
+            if (describeUnevaluatedTypeCall(member, what, why)) {
+                return true;
+            }
+        }
+        for (Type *member : func->normTypesSpan()) {
+            if (describeUnevaluatedTypeCall(member, what, why)) {
+                return true;
+            }
+        }
+        return func->hasExitType() && describeUnevaluatedTypeCall(func->exitType(), what, why);
+    }
     default:
         return false;
     }
@@ -522,6 +616,15 @@ bool containsTypeCall(Type *type) {
     case TypeCode::Tuple: {
         const auto types = static_cast<TupleType *>(type)->types();
         return std::any_of(types.begin(), types.end(), containsTypeCall);
+    }
+    case TypeCode::Function: {
+        // A function type is a type like a tuple is: what it is computed from is computed too.
+        auto *func = static_cast<FunctionType *>(type);
+        const auto withs = func->withTypesSpan();
+        const auto norms = func->normTypesSpan();
+        return std::any_of(withs.begin(), withs.end(), containsTypeCall) ||
+               std::any_of(norms.begin(), norms.end(), containsTypeCall) ||
+               (func->hasExitType() && containsTypeCall(func->exitType()));
     }
     default:
         break;

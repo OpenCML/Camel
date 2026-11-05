@@ -13,11 +13,11 @@
 // line.  `transpose` swaps the last two axes of a rank-2 tensor, which is the scores' shape here.
 import { softmax, sum, transpose } from tensor
 
-func mask(): float[..] {
+func mask(): float[...] {
     return [[0.0, -1000.0], [0.0, 0.0]] as float[2, 2]
 }
 
-func block(x: float[..], wq: float[..], wk: float[..], wv: float[..]): float[..] {
+func block(x: float[...], wq: float[...], wk: float[...], wv: float[...]): float[...] {
     let q = x @ wq
     let k = transpose(x @ wk)
     let scores = q @ k * 0.70710678118654752

@@ -1,0 +1,42 @@
+[
+    {
+        "why": "a declaration written as the library writes a type function, and the operator's registered text: the compiler prints what the function answers, and the two are one promise -- this reader has to call them the same, not an exception",
+        "declaration": "bf16",
+        "operator": "match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }",
+        "expect": "match"
+    },
+    {
+        "why": "the declaration writes the library's own name for a type function and the operator's text is what that name answers, so the name is read through its definition",
+        "declaration": "first_of",
+        "operator": "match type P { case (W, ...Rest) => W }",
+        "expect": "match"
+    },
+    {
+        "why": "one dimension of the result changed: the declaration has an unknown extent before the argument's, the operator has only the argument's, so the two differ and the reading has to name that dimension",
+        "declaration": "bf16_one_more_dimension",
+        "operator": "match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }",
+        "expect": "mismatch",
+        "says": ["case 1", "result's dimension 1", "`?`", "`...Dims`"]
+    },
+    {
+        "why": "the element type changed, so the base type of the case's result is what differs",
+        "declaration": "bf16_element",
+        "operator": "match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }",
+        "expect": "mismatch",
+        "says": ["case 1", "result's type", "`f32`", "`bf16`"]
+    },
+    {
+        "why": "one dimension of the pattern changed, and the pattern is where the reading has to point",
+        "declaration": "bf16_pattern",
+        "operator": "match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }",
+        "expect": "mismatch",
+        "says": ["case 1", "pattern's dimension 1"]
+    },
+    {
+        "why": "a case the operator does not state: the two case lists are not the same length and neither is elided",
+        "declaration": "bf16_extra_case",
+        "operator": "match type A { case X[...Dims] => bf16[...Dims]; case X[...] => bf16[...] }",
+        "expect": "mismatch",
+        "says": ["states 3 case(s) and the operator 2"]
+    }
+]

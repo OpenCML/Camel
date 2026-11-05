@@ -1,0 +1,46 @@
+# Local configuration for internal/tools/camel-remote.ps1.
+#
+# Copy this file to `camel-remote.local.ps1` in the same directory and replace every placeholder.
+# Git ignores `internal/tools/*.local.ps1`, so nothing here reaches the repository: the script is
+# public and must keep containing no host name, user name, internal address or absolute path.
+#
+# Path values are written as the host's shell sees them. `$HOME/...` is expanded on the host, so the
+# remote user name never appears here either.
+#
+# The script takes a parameter over this file, and this file over a CAMEL_REMOTE_<KEY> environment
+# variable. A key left out of the table falls through to the default the script documents.
+
+$CamelLocal = @{
+    # The host to build and test on, as ssh names it: an ssh_config alias, or a literal address.
+    # Required for a real run; there is no default.
+    SshHost      = '<ssh-host-alias>'
+
+    # ssh and scp clients, if they are not on PATH under these names.
+    SshExe       = 'ssh'
+    ScpExe       = 'scp'
+
+    # The staging bare repository on the host, relative to the remote home. Scratch: the host
+    # fetches one ref per run from it and this script deletes that ref afterwards.
+    BareRepo     = 'camel-work/Camel.git'
+
+    # The directory on the host holding one checkout per worktree name (each with its own build
+    # directory). `-Clean` and the dead-checkout prune work inside it.
+    RemoteRoot   = '$HOME/camel-work'
+
+    # Toolchain on the host: compiler and the build/bench virtual environments. Put on PATH, and
+    # the compiler root is used for CC/CXX and LD_LIBRARY_PATH.
+    ClangRoot    = '$HOME/camel-eval/conda/envs/clang'
+    VenvBuild    = '$HOME/camel-eval/venv-build/bin'
+    VenvBench    = '$HOME/camel-eval/venv-bench/bin'
+
+    # The libstdc++ directory that the tree's own `camel` binary needs. The host's system
+    # libstdc++.so.6 is older than the one that binary links against, so a checker or a plan that
+    # starts it without this dies with "version `GLIBCXX_3.4.36' not found". Empty leaves the
+    # environment alone.
+    LibStdCxxDir = '<path-to-libstdcxx-dir-on-host>'
+
+    # Local directory holding the panel's build-state.json, test-state.json and
+    # run-registry.jsonl. Empty (or absent) disables that publishing for this machine -- it is
+    # advisory state, and a host run must work without it.
+    StateDir     = '<local-directory-for-panel-state>'
+}

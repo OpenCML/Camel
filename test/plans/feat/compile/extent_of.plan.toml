@@ -28,7 +28,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "extent_of.open_rank_numbers"
-desc = "The same value behind `t: f32[..]` answers the same numbers -- `shape = [2, 3]`, `dim<0> = 2`, `dim<1> = 3`, `numel = 6` -- because they are the value's and not the type's. This is the case a law cannot have: the parameter's type states no extent, and the value is the operand the cotangent comes back through (author, 2026-11-03 11:10 and 17:35)."
+desc = "The same value behind `t: f32[...]` answers the same numbers -- `shape = [2, 3]`, `dim<0> = 2`, `dim<1> = 3`, `numel = 6` -- because they are the value's and not the type's. This is the case a law cannot have: the parameter's type states no extent, and the value is the operand the cotangent comes back through (author, 2026-11-03 11:10 and 17:35)."
 kind = "behavior"
 case = "../../../cases/compile/transforms/extent_of_open_rank.cml"
 args = ["${case}", "${backend}"]
@@ -69,5 +69,31 @@ case = "../../../cases/compile/transforms/extent_of_axis_outside.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_stdout_contains = ["2", "dim: dim axis out of range"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.an_array_of_arrays_answers_its_own_extent"
+desc = "`float[2][3]` is an array of arrays -- `T[m, n]` is the rank-2 spelling (`docs/language/03_data_model.md`, 3.1; design principles 5.4) -- so it is a rank-1 array of three `float[2]` values and `extent_of::<float[2][3]>()` answers `[3]`: the type's own extent, which is the list `shape` answers for a value of that type. The two answers the number must not drift to are pinned by name: the innermost dimension `[2]` (another type) and the rank-2 shape `[2, 3]` (`float[2, 3]`, the other type). Asserted per position (`len`, `[0]`) and as a whole, in both directions."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_array_of_arrays.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[3]\n1\n3\n[3]\ntrue\nfalse\nfalse\n[2]\n[2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of.three_nested_dimensions_answers_the_outermost"
+desc = "One nesting deeper: `float[2][3][4]` is four values of `float[2][3]`, so its own extent is 4, and `extent_of` answers `[4]` -- again the list `shape` answers for a value of that type, and not either inner level (`[2]`, `[3]`) and not the rank-3 list (`[2, 3, 4]`). A reader that took the first-written bracket, or that flattened the nesting, answers a number pinned here as false."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_array_of_arrays_four.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[4]\n1\n4\n[4]\ntrue\nfalse\nfalse\nfalse\n[2]\n[3]\n[2, 3, 4]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000

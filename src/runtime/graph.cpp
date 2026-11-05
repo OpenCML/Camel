@@ -1035,12 +1035,35 @@ void emitDraftPayload(
 
     size_t inputCursor       = 0;
     // Appends the runtime refs of `refs` to the input table; returns where they begin.
-    auto appendInputs = [&](std::span<const gc_node_ref_t> refs) -> gc_off_t {
+    auto appendInputs = [&](gc_node_ref_t user, std::span<const gc_node_ref_t> refs,
+                            std::string_view role) -> gc_off_t {
         const auto begin = static_cast<gc_off_t>(inputCursor);
         for (gc_node_ref_t draftRef : refs) {
-            ASSERT(
-                draftRef < plan.runtimeRefsByDraftId.size(),
-                "Draft edge emission encountered a node outside the payload plan.");
+            if (CAMEL_UNLIKELY(draftRef >= plan.runtimeRefsByDraftId.size())) {
+                // A draft node's input names a node of the same draft, and the plan holds one entry
+                // per node of it. A reference outside the plan -- `kInvalidNodeRef` is 0xffffffff --
+                // is a graph built with a hole in it, and read as an index it walks 16 GB past the
+                // table. This was an `ASSERT`, which `NDEBUG` makes `((void)0)`: the build that
+                // ships had no check here at all, so a hole the passes made arrived as a SIGSEGV
+                // with an empty stdout and no sentence (measured 2026-11-04, a transposed half whose
+                // answer tuple was handed an empty cotangent). A throw and not an abort: a pass that
+                // builds a graph the encoder cannot write is the pass's answer to give, and the
+                // driver reports it as one (`reportPassFailure`), by name.
+                throw std::runtime_error(
+                    std::format(
+                        "The {} input list of node {} names draft node {}, which is not one of the "
+                        "{} nodes this graph's payload plan holds (it holds {}, the reserved empty "
+                        "reference being {}). The graph was built with a hole where an input belongs, "
+                        "and no text of a program writes one: this is a shape the encoding was never "
+                        "given, so read the pass that built the graph rather than the program it was "
+                        "built from.",
+                        role,
+                        user,
+                        draftRef,
+                        plan.runtimeRefsByDraftId.size(),
+                        plan.nodes.size(),
+                        static_cast<gc_node_ref_t>(kInvalidNodeRef)));
+            }
             const gc_node_ref_t runtimeRef = plan.runtimeRefsByDraftId[draftRef];
             GUARD(
                 runtimeRef != kInvalidNodeRef,
@@ -1093,9 +1116,9 @@ void emitDraftPayload(
         record.tangentArgs = draftHeader->tangentArgs;
         record.dataIndex = slotOf(planned.draftId);
         record.typeId    = typeIdOf(effectiveDraftNodeType(draft, *draftHeader));
-        record.inBegin   = appendInputs(draft.normInputsOf(planned.draftId));
-        record.withBegin = appendInputs(draft.withInputsOf(planned.draftId));
-        record.ctrlBegin = appendInputs(draft.ctrlInputsOf(planned.draftId));
+        record.inBegin   = appendInputs(planned.ref, draft.normInputsOf(planned.draftId), "norm");
+        record.withBegin = appendInputs(planned.ref, draft.withInputsOf(planned.draftId), "with");
+        record.ctrlBegin = appendInputs(planned.ref, draft.ctrlInputsOf(planned.draftId), "control");
         record.payload   = planned.payload;
         // Origin ids index the origin table of the source manager, a vector of records: they
         // fit 32 bits long before memory runs out (design 3.8: a 32-bit OriginId per node).

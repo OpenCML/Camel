@@ -2,7 +2,7 @@ id = "compile.array_shape"
 order = 342
 tier = "fast"
 tags = ["feat", "compile", "types", "array", "dimensions", "syntax"]
-desc = "The array type's source syntax (docs/design/arrays-memory/plan.cn.md section 4): `f32[4]`, `f32[n]`, `f32[?]`, `f32[..]` and `f32[..rest]`, a shape argument `[n, 4]` of a module type, the binding of dimension names in a signature, and the diagnostics the shape is refused with."
+desc = "The array type's source syntax (docs/design/arrays-memory/plan.cn.md section 4): `f32[4]`, `f32[n]`, `f32[?]`, `f32[...]` and `f32[...rest]`, a shape argument `[n, 4]` of a module type, the binding of dimension names in a signature, and the diagnostics the shape is refused with."
 
 [[tests]]
 name = "syntax"
@@ -51,7 +51,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "pack"
-desc = "`float[3, ..rest]` is a rank at least two with the first dimension fixed, `f32[..]` any rank, and `len` reads the first dimension."
+desc = "`float[3, ...rest]` is a rank at least two with the first dimension fixed, `f32[...]` any rank, and `len` reads the first dimension."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/pack.cml"
 args = ["${case}", "std::nvm"]
@@ -84,7 +84,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "err_pack_not_last"
-desc = "Nothing may follow the pack: `f32[..rest, 3]` is refused when the type is read."
+desc = "Nothing may follow the pack: `f32[...rest, 3]` is refused when the type is read."
 kind = "negative"
 case = "../../../../cases/compile/array_shape/err_pack_not_last.cml"
 args = ["${case}"]
@@ -95,7 +95,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "err_pack_twice"
-desc = "One array type has one pack: `f32[..a, ..b]` is refused."
+desc = "One array type has one pack: `f32[...a, ...b]` is refused."
 kind = "negative"
 case = "../../../../cases/compile/array_shape/err_pack_twice.cml"
 args = ["${case}"]
@@ -151,7 +151,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "err_pack_name_bound"
-desc = "A dimension name and a pack name are separate namespaces: writing the bound name `n` again as the pack `..n` would bind it twice, and the diagnostic says to write `n`."
+desc = "A dimension name and a pack name are separate namespaces: writing the bound name `n` again as the pack `...n` would bind it twice, and the diagnostic says to write `n`."
 kind = "negative"
 case = "../../../../cases/compile/array_shape/err_pack_name_bound.cml"
 args = ["${case}"]
@@ -392,7 +392,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "let_shape"
-desc = "The shape a declaration writes is the type of the value it binds (design principles 5.1, 5.4): `let x: f32[3] = [1.0, 2.0, 3.0]` is one `f32[3]`, so the call to a parameter that states that shape needs no conversion, and the literal keeps its three elements. An annotation that states less than the value does -- `f32[..]` is any number of dimensions, not one -- is the type of the name, and the value underneath keeps the shape it has: `len` of the two-by-two array is 2, not the 4 the array of its rows would answer."
+desc = "The shape a declaration writes is the type of the value it binds (design principles 5.1, 5.4): `let x: f32[3] = [1.0, 2.0, 3.0]` is one `f32[3]`, so the call to a parameter that states that shape needs no conversion, and the literal keeps its three elements. An annotation that states less than the value does -- `f32[...]` is any number of dimensions, not one -- is the type of the name, and the value underneath keeps the shape it has: `len` of the two-by-two array is 2, not the 4 the array of its rows would answer."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/let_shape.cml"
 args = ["${case}"]
@@ -403,7 +403,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "let_shape_on_the_graph"
-desc = "The graph of the same program: the literal under `f32[3]` is one DATA of `f32[3]`, not the `f32[]` its elements alone give it, and the two-by-two literal under `f32[..]` is a DATA of `f32[2, 2]` under a CAST to the declared type -- the annotation gives the name its type, and the conversion is checked when it runs."
+desc = "The graph of the same program: the literal under `f32[3]` is one DATA of `f32[3]`, not the `f32[]` its elements alone give it, and the two-by-two literal under `f32[...]` is a DATA of `f32[2, 2]` under a CAST to the declared type -- the annotation gives the name its type, and the conversion is checked when it runs."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/let_shape.cml"
 args = ["${case}", "std::gir"]
@@ -414,8 +414,8 @@ verify_script = """
   const data = (type) => lines.filter((l) => l.includes('type="DATA"') && l.includes(`value_type="${type}"`))
   assert(data('f32[3]').length === 1, `no f32[3] literal: ${data('f32[3]').join(' | ')}`)
   assert(data('f32[2, 2]').length === 1, `no f32[2, 2] literal: ${data('f32[2, 2]').join(' | ')}`)
-  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[..]"'))
-  assert(casts.length === 1, `no CAST to f32[..]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
+  const casts = lines.filter((l) => l.includes('type="CAST"') && l.includes('value_type="f32[...]"'))
+  assert(casts.length === 1, `no CAST to f32[...]: ${lines.filter((l) => l.includes('type="CAST"')).join(' | ')}`)
   assert(data('f32[]').length === 0, `a literal kept the unknown shape: ${data('f32[]').join(' | ')}`)
 }
 """
@@ -476,7 +476,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "open_rank_element"
-desc = "The ranks `f32[..]` takes include rank zero, which is the element itself (design principles 5.4): a value of type `f32` enters the position -- it is that value, not an array holding it -- and a rank-1 and a rank-2 array enter as the arrays they are. The same element declared `f32[..]` and written with `as f32[..]` is still the number: it prints as one, so no array was made for it."
+desc = "The ranks `f32[...]` takes include rank zero, which is the element itself (design principles 5.4): a value of type `f32` enters the position -- it is that value, not an array holding it -- and a rank-1 and a rank-2 array enter as the arrays they are. The same element declared `f32[...]` and written with `as f32[...]` is still the number: it prints as one, so no array was made for it."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_element.cml"
 args = ["${case}", "std::nvm"]
@@ -487,7 +487,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_one_refuses_element"
-desc = "`f32[]` states one dimension, so it is not `f32[..]`: the value of rank zero the open rank takes is refused here. The refusal is the call's own NoMatchingFunction, whose candidate list is the evidence that the parameter is `f32[]` (the diagnostic is written over several lines, so its name is not asserted)."
+desc = "`f32[]` states one dimension, so it is not `f32[...]`: the value of rank zero the open rank takes is refused here. The refusal is the call's own NoMatchingFunction, whose candidate list is the evidence that the parameter is `f32[]` (the diagnostic is written over several lines, so its name is not asserted)."
 kind = "negative"
 case = "../../../../cases/compile/array_shape/rank_one_refuses_element.cml"
 args = ["${case}", "std::nvm"]
@@ -498,7 +498,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "open_rank_tuple_element"
-desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): `(int, f32)[..]` takes a tuple -- the element itself -- and an array of tuples, one tuple per element."
+desc = "The element of an open rank is the type the value has at rank zero (design principles 5.4): `(int, f32)[...]` takes a tuple -- the element itself -- and an array of tuples, one tuple per element."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_tuple_element.cml"
 args = ["${case}", "std::nvm"]
@@ -509,7 +509,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "open_rank_literal_element"
-desc = "A literal in a position declared `T[..]` is the element (design principles 5.4): the position includes rank zero, which is the element itself, so `let x: f32[..] = 1.0` is the f32, `let t: (int, f32)[..] = (7, 2.5)` is the tuple, and an array literal keeps the rank it has: `[1.0, 2.0]` enters as the rank-1 array it is. The arithmetic on the name runs in the element type, so no array was made for it."
+desc = "A literal in a position declared `T[...]` is the element (design principles 5.4): the position includes rank zero, which is the element itself, so `let x: f32[...] = 1.0` is the f32, `let t: (int, f32)[...] = (7, 2.5)` is the tuple, and an array literal keeps the rank it has: `[1.0, 2.0]` enters as the rank-1 array it is. The arithmetic on the name runs in the element type, so no array was made for it."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_literal_element.cml"
 args = ["${case}", "std::nvm"]
@@ -531,7 +531,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "norma
 timeout_ms = 8000
 [[tests]]
 name = "rank_zero_show"
-desc = "`show(1.0)` with `v: f32[..]` (design principles 5.4): the slot takes the element and the callee prints the value it was given. Before the conversion on that edge the same program exited 139 on `show(2.5)`; after it the four backends print the same two lines."
+desc = "`show(1.0)` with `v: f32[...]` (design principles 5.4): the slot takes the element and the callee prints the value it was given. Before the conversion on that edge the same program exited 139 on `show(2.5)`; after it the four backends print the same two lines."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_show.cml"
 args = ["${case}", "std::nvm"]
@@ -575,7 +575,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_parameter_slot"
-desc = "The element into a `f32[..]` parameter and back out as `f32` (design principles 5.4): the two conversions are the compiler's, and the slot prints the same two lines the other slots print."
+desc = "The element into a `f32[...]` parameter and back out as `f32` (design principles 5.4): the two conversions are the compiler's, and the slot prints the same two lines the other slots print."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_parameter_slot.cml"
 args = ["${case}", "std::nvm"]
@@ -586,7 +586,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_let_slot"
-desc = "A name declared `f32[..]` and given the element is the same rule as a parameter (design principles 5.4): one value, wrapped once, printing the same two lines."
+desc = "A name declared `f32[...]` and given the element is the same rule as a parameter (design principles 5.4): one value, wrapped once, printing the same two lines."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_let_slot.cml"
 args = ["${case}", "std::nvm"]
@@ -597,7 +597,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_field_slot"
-desc = "A struct field declared `f32[..]` filled from a computed value: the FILL's element input is converted as it enters, so the field reads back as the element (design principles 5.4) and prints the same two lines. Before that entrance converted, this read the field as an array and crashed."
+desc = "A struct field declared `f32[...]` filled from a computed value: the FILL's element input is converted as it enters, so the field reads back as the element (design principles 5.4) and prints the same two lines. Before that entrance converted, this read the field as an array and crashed."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_field_slot.cml"
 args = ["${case}", "std::nvm"]
@@ -608,7 +608,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_var_slot"
-desc = "A `var` declared `f32[..]`, written at the declaration and again later: both writes enter the same slot the same way (design principles 5.4), and the value prints the same two lines."
+desc = "A `var` declared `f32[...]`, written at the declaration and again later: both writes enter the same slot the same way (design principles 5.4), and the value prints the same two lines."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_var_slot.cml"
 args = ["${case}", "std::nvm"]
@@ -618,7 +618,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 [[tests]]
 name = "rank_zero_field_literal"
-desc = "A struct field declared `f32[..]` filled from a literal is the rank-zero value of the element (design principles 5.4), made at the data level because there is nothing to compute: the literal was refused with LiteralNotRepresentable while data had no rank-zero value, and the field now reads back as `1.5` and `2.5`."
+desc = "A struct field declared `f32[...]` filled from a literal is the rank-zero value of the element (design principles 5.4), made at the data level because there is nothing to compute: the literal was refused with LiteralNotRepresentable while data had no rank-zero value, and the field now reads back as `1.5` and `2.5`."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_field_literal.cml"
 args = ["${case}", "std::nvm"]
@@ -727,7 +727,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_field"
-desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule."
+desc = "The field slot (design principles 5.4): a struct field declared `f32[...]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
 args = ["${case}", "std::nvm"]
@@ -738,7 +738,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_field_fvm"
-desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the bytecode VM."
+desc = "The field slot (design principles 5.4): a struct field declared `f32[...]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the bytecode VM."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
 args = ["${case}", "std::fvm"]
@@ -749,7 +749,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_field_jit"
-desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the JIT."
+desc = "The field slot (design principles 5.4): a struct field declared `f32[...]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the JIT."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
 args = ["${case}", "std::jit"]
@@ -760,7 +760,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_field_tf"
-desc = "The field slot (design principles 5.4): a struct field declared `f32[..]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the taskflow scheduler."
+desc = "The field slot (design principles 5.4): a struct field declared `f32[...]` filled from a literal (the data layer) and from a computed value (the conversion at the FILL) reads back as the element both ways, so the two roads are one rule. Same programs on the taskflow scheduler."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_field.cml"
 args = ["${case}", "std::tf"]
@@ -859,7 +859,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_return"
-desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed."
+desc = "The `return` slot (design principles 5.4): a function returning `f32[...]` hands back the element whether it writes the value as a literal or returns one the program computed."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
 args = ["${case}", "std::nvm"]
@@ -870,7 +870,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_return_fvm"
-desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the bytecode VM."
+desc = "The `return` slot (design principles 5.4): a function returning `f32[...]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the bytecode VM."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
 args = ["${case}", "std::fvm"]
@@ -881,7 +881,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_return_jit"
-desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the JIT."
+desc = "The `return` slot (design principles 5.4): a function returning `f32[...]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the JIT."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
 args = ["${case}", "std::jit"]
@@ -892,7 +892,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_return_tf"
-desc = "The `return` slot (design principles 5.4): a function returning `f32[..]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the taskflow scheduler."
+desc = "The `return` slot (design principles 5.4): a function returning `f32[...]` hands back the element whether it writes the value as a literal or returns one the program computed. Same programs on the taskflow scheduler."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_return.cml"
 args = ["${case}", "std::tf"]
@@ -947,7 +947,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_nested_field"
-desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops."
+desc = "A field of `f32[...]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
 args = ["${case}", "std::nvm"]
@@ -958,7 +958,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_nested_field_fvm"
-desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the bytecode VM."
+desc = "A field of `f32[...]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the bytecode VM."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
 args = ["${case}", "std::fvm"]
@@ -969,7 +969,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_nested_field_jit"
-desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the JIT."
+desc = "A field of `f32[...]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the JIT."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
 args = ["${case}", "std::jit"]
@@ -980,7 +980,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "rank_zero_slot_nested_field_tf"
-desc = "A field of `f32[..]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the taskflow scheduler."
+desc = "A field of `f32[...]` one level down (design principles 5.2 and 5.4): the nested literal is the named type its field states and the field inside it is the rank-zero value of the element, taken one after the other -- where a conversion that only looks one level deep stops. Same programs on the taskflow scheduler."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/rank_zero_slot_nested_field.cml"
 args = ["${case}", "std::tf"]
@@ -995,7 +995,7 @@ timeout_ms = 8000
 # refused as out of range for a length-2 first dimension.
 [[tests]]
 name = "open_rank_reads_its_elements"
-desc = "A position on an open-rank value is flat (design principles 5.4): `at(x: float[..], i: int)` on a `float[2, 2]` answers 1.0, 4.0, 2.0 and 3.0 for 0, 3, 1 and 2 -- the elements in row order, not rows -- and 4 is the fault `Index 4 is out of range for the elements of length 4`, which names what was counted. The same check refused the pullback of an array literal's third computed element (test/cases/modules/autodiff/literal_pullback.cml)."
+desc = "A position on an open-rank value is flat (design principles 5.4): `at(x: float[...], i: int)` on a `float[2, 2]` answers 1.0, 4.0, 2.0 and 3.0 for 0, 3, 1 and 2 -- the elements in row order, not rows -- and 4 is the fault `Index 4 is out of range for the elements of length 4`, which names what was counted. The same check refused the pullback of an array literal's third computed element (test/cases/modules/autodiff/literal_pullback.cml)."
 kind = "behavior"
 case = "../../../../cases/compile/array_shape/open_rank_reads_its_elements.cml"
 args = ["${case}", "std::nvm"]

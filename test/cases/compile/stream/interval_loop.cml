@@ -12,7 +12,7 @@ func main(): int sync {
     println(loop n = 0 for i in 3..3 do n + 1)
     println(loop n = 0 for i in 5..1 do n + 1)
 
-    // The bounds are the operands `..` takes, so an expression is parenthesised.
+    // The bounds are the operands `...` takes, so an expression is parenthesised.
     let n = 4
     println(loop acc = 0 for i in 0..(n + 1) do acc + i)
     println(loop last = -1 for i in (-2)..3 do i)

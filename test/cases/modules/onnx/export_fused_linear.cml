@@ -7,16 +7,17 @@ import { reshape, relu, sum } from tensor
 import { export_model } from onnx
 import { get_env } from env
 
-func net(x: f32[..]): f32[..] {
+func net(x: f32[...]): f32[...] {
     let w = reshape<[3, 2]>([0.5, -1.0, 2.0, 1.0, -0.5, 0.25] as f32[])
     let b = reshape<[2]>([0.1, -0.2] as f32[])
     return relu(x @ w + b)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let x = reshape<[2, 3]>([1.0, -2.0, 3.0, 0.5, -1.5, 2.5] as f32[])
     println(sum(net(x)))
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[..]): f32[..] => net(x), x)
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>((x: f32[...]): f32[...] => net(x), x) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

@@ -9,7 +9,7 @@
  * `jvp_reshape` names one of them.
  *
  * This is its own file, and not a line in a file with the other two operators, so that its answer
- * is not reported behind another line's wall: the transposed walk of `mean_axis` (see
+ * is not reported behind another line's wall: the transposed walk of `mean<axis>` (see
  * `rules_angle_args_mean_transpose.cml`) stops the whole program, and while the three readings
  * shared one `main` a correct number here was recorded as a red one. One program, one reading.
  *
@@ -23,7 +23,7 @@ import rulesets.jvp
 import { jvp } from transforms
 import { reshape, sum } from tensor
 
-func loss_reshape(x: float[..]): float {
+func loss_reshape(x: float[...]): float {
     return float(sum(reshape<[2, 2]>(x) * ([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])))
 }
 

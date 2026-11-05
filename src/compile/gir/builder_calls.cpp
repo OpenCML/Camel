@@ -7,8 +7,8 @@
  */
 
 #include "builder.h"
-#include "builder_support.h"
 #include "builder_helpers.h"
+#include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
@@ -131,9 +131,8 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
         // `f<w>` as a value is a partial application (design principles 4.4). The binding
         // used to be dropped here, without a word. It is located at `f<w>` itself, not at the
         // statement the binding is written in (1.6).
-        const auto withIt = boundWithOrigin_.find(node);
-        const GCT::node_ptr_t at =
-            withIt != boundWithOrigin_.end() ? withIt->second : origin;
+        const auto withIt        = boundWithOrigin_.find(node);
+        const GCT::node_ptr_t at = withIt != boundWithOrigin_.end() ? withIt->second : origin;
         if (node_handle_t applied = partialApplicationOf(node, at)) {
             return applied;
         }
@@ -160,10 +159,25 @@ node_handle_t Builder::functionValueOf(node_handle_t node, const GCT::node_ptr_t
         }
     }
     if (std::holds_alternative<oper_group_ptr_t>(target)) {
+        // A rule whose call is already its own answer (`extent_of::<float[2, 3]>`) is a function
+        // that gives that answer, not a call of the operator: the answer is a fact of the type
+        // arguments written with this name, and no graph and no run reads them back. Which rule
+        // answers, and what it answers, is `settledAnswerOf`'s question; nothing here knows the
+        // name of one.
+        const auto &ops = std::get<oper_group_ptr_t>(target);
+        if (const auto typed = explicitOperatorTypes_.find(node);
+            typed != explicitOperatorTypes_.end()) {
+            if (const auto settled = settledAnswerOf(ops, "", typed->second)) {
+                explicitOperatorTypes_.erase(node);
+                if (compile_graph_ptr_t graph =
+                        answerValueGraphOf(settled->type, settled->value, origin)) {
+                    return createFuncDataNode(graph, true, false);
+                }
+            }
+        }
         // A library operator with one signature that does not depend on its arguments
         // (`trim: (s: string) => string`) is one function, like a user function of that
         // name: its value is a function that calls it.
-        const auto &ops = std::get<oper_group_ptr_t>(target);
         if (ops->resolvers().size() == 1) {
             const auto &[uri, resolver] = ops->resolvers().front();
             if (FunctionType *fixed = resolver->fixedSignature()) {
@@ -260,7 +274,7 @@ node_handle_t Builder::createFuncDataNode(
         graph->funcType(),
         slotIndex,
         static_cast<uint8_t>(runtime::kGCNodeFlagConstant));
-    auto dataNode = currGraph_->view().ref(dataRef);
+    auto dataNode            = currGraph_->view().ref(dataRef);
     node_handle_t resultNode = dataNode;
     if (hasClosure) {
         // The closure: the captured values, as the current graph sees them, in the order of
@@ -316,7 +330,7 @@ node_handle_t Builder::partialApplicationOf(
     // the caller gives (a value passed where a function of a type is expected). The expression is
     // the union of the node's own span (`<w>`) and its operands, as for a call (design
     // principles 5.1): the callee and the angled arguments together.
-    const auto originIt = boundWithOrigin_.find(target);
+    const auto originIt         = boundWithOrigin_.find(target);
     const GCT::node_ptr_t where = originIt != boundWithOrigin_.end() ? originIt->second : origin;
     const auto exprSpan         = callExpressionSpan(context_, where);
     const auto exprOrigin       = deriveGirOrigin(
@@ -531,7 +545,10 @@ node_handle_t Builder::partialApplicationOf(
     };
     for (size_t i = bound.size(); i < withCount; ++i) {
         factory.addWithArg(
-            nameAt(i, "__w", i), calleeType->withTypeAt(i), false, calleeType->withNeedsValueAt(i));
+            nameAt(i, "__w", i),
+            calleeType->withTypeAt(i),
+            false,
+            calleeType->withNeedsValueAt(i));
     }
     for (size_t i = 0; i < calleeType->normTypesCount(); ++i) {
         factory.addNormArg(
@@ -545,7 +562,7 @@ node_handle_t Builder::partialApplicationOf(
     {
         const sem::ResourceSignature &sig = calleeType->resources();
         if (sig.mode == sem::ResourceSignature::Mode::Concrete) {
-            bool expressible = sig.captures.empty();
+            bool expressible                = sig.captures.empty();
             sem::ResourceSignature remapped = sig;
             remapped.params.clear();
             for (const auto &use : sig.params) {
@@ -564,19 +581,10 @@ node_handle_t Builder::partialApplicationOf(
     }
     FunctionType *type = factory.build();
 
-    compile_graph_ptr_t graph     = enterScope(type);
+    compile_graph_ptr_t graph = enterScope(type);
     // The graph is the value `f<w>`: it is located at that expression, so the function value
     // made from it covers `f<w>` and not the statement it is written in (1.6).
-    registerGraphOrigin(
-        context_,
-        graph,
-        where,
-        "gir.partial.graph",
-        {},
-        {},
-        false,
-        "",
-        exprSpan);
+    registerGraphOrigin(context_, graph, where, "gir.partial.graph", {}, {}, false, "", exprSpan);
     const bool outerSynced        = synced_;
     const node_handle_t outerLast = lastSyncedNode_;
     const auto restore            = [&] {
@@ -622,8 +630,7 @@ node_handle_t Builder::partialApplicationOf(
     return createFuncDataNode(graph, true, false);
 }
 
-compile_graph_ptr_t
-Builder::singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const {
+compile_graph_ptr_t Builder::singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const {
     if (std::holds_alternative<graph_ptr_t>(target)) {
         return std::get<graph_ptr_t>(target);
     }
@@ -638,8 +645,7 @@ Builder::singleGraphOfDref(const DraftGraphBuilder::DrefTarget &target) const {
     return nullptr;
 }
 
-const Builder::TopLevelDeclaration *
-Builder::ruleBindingOf(const compile_graph_ptr_t &graph) const {
+const Builder::TopLevelDeclaration *Builder::ruleBindingOf(const compile_graph_ptr_t &graph) const {
     if (graph == nullptr) {
         return nullptr;
     }
@@ -659,8 +665,7 @@ bool Builder::isRuleBindingTarget(node_handle_t node) const {
 }
 
 node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_ptr_t &at) {
-    const compile_graph_ptr_t graph =
-        singleGraphOfDref(nodeGraphOf(target)->drefTarget(target));
+    const compile_graph_ptr_t graph = singleGraphOfDref(nodeGraphOf(target)->drefTarget(target));
     const TopLevelDeclaration *declaration = ruleBindingOf(graph);
     GUARD(declaration != nullptr, "A rule's binding function is declared at the top level.");
     FunctionType *calleeType = graph->funcType();
@@ -688,7 +693,8 @@ node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_
     // leaves no `Rule` to write: the rule is a function of it, and the name is a call of that
     // function only when every parameter is bound (design principles 5.5).
     const std::vector<std::optional<ParameterDefaultValue>> *withDefaults = nullptr;
-    if (const auto it = defaults_.find(graph.get()); it != defaults_.end() && !it->second.with.empty()) {
+    if (const auto it = defaults_.find(graph.get());
+        it != defaults_.end() && !it->second.with.empty()) {
         withDefaults = &it->second.with;
     }
     const std::string ruleName(declaration->names.front());
@@ -708,8 +714,7 @@ node_handle_t Builder::ruleBindingValueOf(node_handle_t target, const GCT::node_
             continue;
         }
         const ParameterDefaultValue *fallback = nullptr;
-        if (withDefaults != nullptr && i < withDefaults->size() &&
-            (*withDefaults)[i].has_value()) {
+        if (withDefaults != nullptr && i < withDefaults->size() && (*withDefaults)[i].has_value()) {
             fallback = &(*withDefaults)[i].value();
         }
         if (fallback == nullptr || fallback->data == nullptr) {
@@ -795,8 +800,8 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
     if (isMacroGraph(target)) {
         // A function value of a macro function stays a macro through the forwarder: a call
         // through the value is still one std::macro may evaluate ahead of time.
-        graph->edit().setFlags(static_cast<uint8_t>(
-            graph->view().flags() | camel::runtime::kGraphFlagMacro));
+        graph->edit().setFlags(
+            static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     try {
         auto sourceContext = context_ ? context_->sourceContext() : nullptr;
@@ -977,8 +982,7 @@ void Builder::evaluateDefaults(
     // an ordinary one follow the same rule; only the diagnostic and the parameter list differ.
     const auto evaluate = [&](const std::vector<GCT::Tree::ParameterDefault> &list,
                               size_t count,
-                              bool isWith)
-        -> std::vector<std::optional<ParameterDefaultValue>> {
+                              bool isWith) -> std::vector<std::optional<ParameterDefaultValue>> {
         std::vector<std::optional<ParameterDefaultValue>> values(count);
         for (size_t i = 0; i < count && i < list.size(); ++i) {
             const GCT::Tree::ParameterDefault &defaultNode = list[i];
@@ -989,8 +993,9 @@ void Builder::evaluateDefaults(
             Type *paramType = isWith ? funcType->withTypeAt(i) : funcType->normTypeAt(i);
             if (!parametersInScope && readsParameter(defaultNode.expr, readsParameter)) {
                 diags_
-                    ->of(isWith ? SemanticDiag::WithDefaultNotConstant
-                                : SemanticDiag::ParamDefaultNotConstant)
+                    ->of(
+                        isWith ? SemanticDiag::WithDefaultNotConstant
+                               : SemanticDiag::ParamDefaultNotConstant)
                     .atOrigin(defaultNode.expr->origin())
                     .commit(
                         name,
@@ -999,12 +1004,13 @@ void Builder::evaluateDefaults(
                 throw BuildAbortException();
             }
             node_handle_t value = visitInPosition(defaultNode.expr, paramType);
-            data_ptr_t data      = constantOfNode(value);
+            data_ptr_t data     = constantOfNode(value);
             if (data == nullptr) {
                 const std::string text = sourceTextOf(defaultNode.expr);
                 diags_
-                    ->of(isWith ? SemanticDiag::WithDefaultNotConstant
-                                : SemanticDiag::ParamDefaultNotConstant)
+                    ->of(
+                        isWith ? SemanticDiag::WithDefaultNotConstant
+                               : SemanticDiag::ParamDefaultNotConstant)
                     .atOrigin(defaultNode.expr->origin())
                     .commit(
                         name,
@@ -1016,8 +1022,9 @@ void Builder::evaluateDefaults(
                 data_ptr_t converted = data->convertTo(paramType);
                 if (converted == nullptr) {
                     diags_
-                        ->of(isWith ? SemanticDiag::WithDefaultWrongType
-                                    : SemanticDiag::ParamDefaultWrongType)
+                        ->of(
+                            isWith ? SemanticDiag::WithDefaultWrongType
+                                   : SemanticDiag::ParamDefaultWrongType)
                         .atOrigin(defaultNode.expr->origin())
                         .commit(name, data->type()->toString(), paramType->toString());
                     throw BuildAbortException();
@@ -1033,13 +1040,13 @@ void Builder::evaluateDefaults(
         evaluate(written->norm, normCount, false)};
 }
 
-const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defaultsOfCallee(
-    node_handle_t callee, bool isWith) const {
+const std::vector<std::optional<Builder::ParameterDefaultValue>> *
+Builder::defaultsOfCallee(node_handle_t callee, bool isWith) const {
     if (callee == nullptr) {
         return nullptr;
     }
-    const auto defaultsOf = [&](const void *owner)
-        -> const std::vector<std::optional<ParameterDefaultValue>> * {
+    const auto defaultsOf =
+        [&](const void *owner) -> const std::vector<std::optional<ParameterDefaultValue>> * {
         const auto it = defaults_.find(owner);
         if (it == defaults_.end()) {
             return nullptr;
@@ -1069,10 +1076,9 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
         if (!std::holds_alternative<oper_group_ptr_t>(target)) {
             return nullptr;
         }
-        FunctionType *same = nullptr;
+        FunctionType *same     = nullptr;
         const std::string *uri = nullptr;
-        for (const auto &[entryUri, resolver] :
-             std::get<oper_group_ptr_t>(target)->resolvers()) {
+        for (const auto &[entryUri, resolver] : std::get<oper_group_ptr_t>(target)->resolvers()) {
             FunctionType *fixed = resolver ? resolver->fixedSignature() : nullptr;
             if (fixed == nullptr && resolver) {
                 fixed = resolver->declaredSignature(); // a generic declaration is one too
@@ -1091,8 +1097,7 @@ const std::vector<std::optional<Builder::ParameterDefaultValue>> *Builder::defau
         if (uri == nullptr) {
             return nullptr;
         }
-        const auto &values = isWith ? nativeDefaults_.at(*uri).with
-                                    : nativeDefaults_.at(*uri).norm;
+        const auto &values = isWith ? nativeDefaults_.at(*uri).with : nativeDefaults_.at(*uri).norm;
         return values.empty() ? nullptr : &values;
     }
     const auto graphs = std::get<graph_vec_ptr_t>(target);
@@ -1115,7 +1120,9 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
             return;
         }
         declaration.readable = camel::core::type::namesOfSignature(
-            funcType, declaration.withNames, declaration.normNames);
+            funcType,
+            declaration.withNames,
+            declaration.normNames);
     };
     CalleeSet set;
     if (const auto generic = genericDrefs_.find(callee); generic != genericDrefs_.end()) {
@@ -1134,12 +1141,12 @@ std::optional<Builder::CalleeSet> Builder::declarationsOfCallee(node_handle_t ca
         if (std::holds_alternative<oper_group_ptr_t>(target)) {
             // The rules of an operator group are the declarations of its name (design principles
             // 6.4): whether a call can give an argument by name does not depend on whether the
-            // callee is a Camel declaration or a group of rules a C++ module registered. The name has to mark the same
-            // position in every rule, exactly as it has to in every declaration of a name, and a
-            // rule that cannot place a name (a signature that follows its arguments and spells
-            // none, a variadic list, a `rest` parameter) makes the whole call refuse one: the
-            // rule is one the name does not reach, and binding the others would bind a position
-            // this rule means another thing at.
+            // callee is a Camel declaration or a group of rules a C++ module registered. The name
+            // has to mark the same position in every rule, exactly as it has to in every
+            // declaration of a name, and a rule that cannot place a name (a signature that follows
+            // its arguments and spells none, a variadic list, a `rest` parameter) makes the whole
+            // call refuse one: the rule is one the name does not reach, and binding the others
+            // would bind a position this rule means another thing at.
             const auto &ops = std::get<oper_group_ptr_t>(target);
             for (const auto &[uri, resolver] : ops->resolvers()) {
                 CalleeDeclaration declaration;
@@ -1284,14 +1291,14 @@ void Builder::bindNamedArgumentsToDeclarations(
         }
         if (!one.has_value()) {
             diags_
-                ->of(isWith ? SemanticDiag::WithArgumentUnknown : SemanticDiag::ParamArgumentUnknown)
+                ->of(
+                    isWith ? SemanticDiag::WithArgumentUnknown : SemanticDiag::ParamArgumentUnknown)
                 .atOrigin(input.expr->origin())
                 .commit(name, label);
             throw BuildAbortException();
         }
         if (elsewhere) {
-            diags_
-                ->of(SemanticDiag::OverloadParameterNames)
+            diags_->of(SemanticDiag::OverloadParameterNames)
                 .atOrigin(input.expr->origin())
                 .commit(name, label);
             throw BuildAbortException();
@@ -1302,8 +1309,7 @@ void Builder::bindNamedArgumentsToDeclarations(
         // hold for each of them.
         for (const CalleeDeclaration &declaration : set.declarations) {
             if (*one < countOf(declaration) && nameOfPosition(declaration, *one) != name) {
-                diags_
-                    ->of(SemanticDiag::OverloadParameterNames)
+                diags_->of(SemanticDiag::OverloadParameterNames)
                     .atOrigin(input.expr->origin())
                     .commit(name, label);
                 throw BuildAbortException();
@@ -1322,8 +1328,9 @@ void Builder::bindNamedArgumentsToDeclarations(
         if (taken[position[at]]) {
             const Argument &input = inputs[at];
             diags_
-                ->of(isWith ? SemanticDiag::WithArgumentDuplicate
-                            : SemanticDiag::ParamArgumentDuplicate)
+                ->of(
+                    isWith ? SemanticDiag::WithArgumentDuplicate
+                           : SemanticDiag::ParamArgumentDuplicate)
                 .atOrigin(input.expr->origin())
                 .commit(*input.name, label);
             throw BuildAbortException();
@@ -1350,8 +1357,7 @@ void Builder::bindNamedArgumentsToDeclarations(
             diags_->of(calleeDiag).atOrigin(input.expr->origin()).commit(*input.name, label);
             throw BuildAbortException();
         }
-        diags_
-            ->of(isWith ? SemanticDiag::WithArgumentMissing : SemanticDiag::ParamArgumentMissing)
+        diags_->of(isWith ? SemanticDiag::WithArgumentMissing : SemanticDiag::ParamArgumentMissing)
             .atOrigin(call->origin())
             .commit(*name, label);
         throw BuildAbortException();
@@ -1377,8 +1383,7 @@ bool Builder::completeWithFor(
     // A pack among the `with` parameters (`with <..ws>`) is not a parameter a call names or a
     // default fills: it stands for the `with` arguments a call writes beyond the fixed ones
     // (design principles 4.4, 5.6), so the parameters to complete end before its `void` slot.
-    const size_t arity =
-        signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
+    const size_t arity = signature->withTypesCount() - (signature->hasWithRest() ? 1 : 0);
     if (inputs.size() > arity) {
         return false;
     }
@@ -1417,8 +1422,7 @@ bool Builder::completeWithFor(
     }
     types.clear();
     for (const Argument &input : completed) {
-        types.push_back(input.node == nullptr ? Type::Void()
-                                              : valueTypeOf(nodeTypeOf(input.node)));
+        types.push_back(input.node == nullptr ? Type::Void() : valueTypeOf(nodeTypeOf(input.node)));
     }
     inputs = std::move(completed);
     return true;
@@ -1427,8 +1431,9 @@ bool Builder::completeWithFor(
 void Builder::bindArguments(
     std::vector<Argument> &inputs, node_handle_t callee, const GCT::node_ptr_t &call,
     FunctionType *signature, bool isWith) {
-    const bool named = std::any_of(
-        inputs.begin(), inputs.end(), [](const Argument &input) { return input.name.has_value(); });
+    const bool named = std::any_of(inputs.begin(), inputs.end(), [](const Argument &input) {
+        return input.name.has_value();
+    });
     // `signature` is the call's own reading of the callee (signatureForArgumentContext), so
     // the names below are resolved against exactly the signature the call resolves against.
     //
@@ -1460,11 +1465,11 @@ void Builder::bindArguments(
         if (!named) {
             return;
         }
-        const Argument &first = *std::find_if(
-            inputs.begin(), inputs.end(),
-            [](const Argument &input) { return input.name.has_value(); });
-        diags_
-            ->of(isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee)
+        const Argument &first =
+            *std::find_if(inputs.begin(), inputs.end(), [](const Argument &input) {
+                return input.name.has_value();
+            });
+        diags_->of(isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee)
             .atOrigin(first.expr->origin())
             .commit(*first.name, declarations ? declarations->label : call->at(0)->toString());
         throw BuildAbortException();
@@ -1503,8 +1508,7 @@ void Builder::bindArguments(
             *std::find_if(inputs.begin(), inputs.end(), [](const Argument &input) {
                 return input.name.has_value();
             });
-        diags_
-            ->of(isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee)
+        diags_->of(isWith ? SemanticDiag::WithArgumentCallee : SemanticDiag::ParamArgumentCallee)
             .atOrigin(first.expr->origin())
             .commit(*first.name, label);
         throw BuildAbortException();
@@ -1525,16 +1529,18 @@ void Builder::bindArguments(
             }
             if (!found) {
                 diags_
-                    ->of(isWith ? SemanticDiag::WithArgumentUnknown
-                                : SemanticDiag::ParamArgumentUnknown)
+                    ->of(
+                        isWith ? SemanticDiag::WithArgumentUnknown
+                               : SemanticDiag::ParamArgumentUnknown)
                     .atOrigin(input.expr->origin())
                     .commit(*input.name, label);
                 throw BuildAbortException();
             }
             if (filled[index]) {
                 diags_
-                    ->of(isWith ? SemanticDiag::WithArgumentDuplicate
-                                : SemanticDiag::ParamArgumentDuplicate)
+                    ->of(
+                        isWith ? SemanticDiag::WithArgumentDuplicate
+                               : SemanticDiag::ParamArgumentDuplicate)
                     .atOrigin(input.expr->origin())
                     .commit(*input.name, label);
                 throw BuildAbortException();
@@ -1548,7 +1554,7 @@ void Builder::bindArguments(
             }
         }
         ordered[index] = input;
-        filled[index]   = true;
+        filled[index]  = true;
     }
     for (size_t i = 0; i < count; ++i) {
         if (filled[i]) {
@@ -1563,8 +1569,8 @@ void Builder::bindArguments(
                 return;
             }
             diags_
-                ->of(isWith ? SemanticDiag::WithArgumentMissing
-                            : SemanticDiag::ParamArgumentMissing)
+                ->of(
+                    isWith ? SemanticDiag::WithArgumentMissing : SemanticDiag::ParamArgumentMissing)
                 .atOrigin(call->origin())
                 .commit(nameAt(i), label);
             throw BuildAbortException();
@@ -1575,8 +1581,7 @@ void Builder::bindArguments(
         const ParameterDefaultValue &value = *(*defaults)[i];
         node_handle_t dataNode{};
         if (const auto graph = defaultNodes_.find(currGraph_.get()); graph != defaultNodes_.end()) {
-            if (const auto found = graph->second.find(value.expr);
-                found != graph->second.end()) {
+            if (const auto found = graph->second.find(value.expr); found != graph->second.end()) {
                 dataNode = found->second;
             }
         }

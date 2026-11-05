@@ -1,29 +1,29 @@
 /**
- * Rest parameters (design principles 5.5, step 6): `..ts` is the last parameter of a
+ * Rest parameters (design principles 5.5, step 6): `...ts` is the last parameter of a
  * signature and takes every argument left over. The call is expanded where it is written: the
  * fixed parameters take their arguments and `ts` is the tuple of the rest, so `indices ts` sees
- * a tuple whose arity is known, and `..(a, b)` passes the elements of a tuple literal.
+ * a tuple whose arity is known, and `...(a, b)` passes the elements of a tuple literal.
  */
 
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func first(a: int, ..ts): int {
+func first(a: int, ...ts): int {
     return a
 }
 
-func twice(..ts): int {
-    return sum(..ts)
+func twice(...ts): int {
+    return sum(...ts)
 }
 
-func pair(..ts): (int, int) {
+func pair(...ts): (int, int) {
     return (ts.[0], ts.[1])
 }
 
 func main(): int sync {
     println(sum(1, 2, 3))
-    println(sum(..(4, 5)))
+    println(sum(...(4, 5)))
     println(twice(6, 7))
     println(first(8))
     println(sum())

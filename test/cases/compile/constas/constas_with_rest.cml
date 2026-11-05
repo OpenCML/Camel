@@ -3,7 +3,7 @@
  * value is bound before the expansion, and the rest parameter takes the arguments left over.
  */
 
-func first(constas offset: int, ..ts): int {
+func first(constas offset: int, ...ts): int {
     return offset + ts.[0]
 }
 

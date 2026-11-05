@@ -1,0 +1,44 @@
+// A linear operator that has a law in **both** rule tables still answers through a bare `transpose`,
+// and what this case reads is a number, not the fact that nothing refused.
+//
+// `subtract` is the operator: the forward family holds `jvp_subtract`
+// (`stdlib/rulesets/jvp.cml#jvp_subtract`, `d(x - w) = dx - dw`), the transpose family holds
+// `subtract_t` (`stdlib/rulesets/transpose.cml#subtract_t`, `ct` for `x` and `-ct` for `w`), and the
+// function below puts it on the way to a scalar so a bare `transpose` has one cotangent to hand in.
+//
+// Why a number and not just "it was not refused": a refusal may now stop only when the family really
+// holds no law for the operator, so a program that used to be refused for a reason that was never a
+// language rule passes again -- and a wrong adjoint passes exactly as happily as a right one. So the
+// answers are written out and compared: `da` must be [1.0, 1.0, 1.0] and `db` must be
+// [-1.0, -1.0, -1.0], and `max_abs_diff` below is the largest distance from either answer. 0.0 is the
+// reading that says the operator answered; a law that dropped the difference's sign would answer
+// [1.0, 1.0, 1.0] twice and turn the diff into 2.0.
+//
+// The numbers are exact in binary floating point, so "equal" means equal: `Σ(a - b)` at cotangent 1
+// spreads that one to every element of `a`, and the sign the difference puts on `b` is the whole of
+// the second cotangent.
+//
+//     camel test/cases/compile/transforms/transpose_still_turns_subtract.cml
+import rulesets.transpose
+import { transpose } from transforms
+import { sum } from tensor
+import { abs, max } from math
+
+/// `(a, b) ↦ Σ(a - b)`: linear in both operands, and one law per table.
+func f_diff(a: float[3], b: float[3]): float {
+    return float(sum(a - b))
+}
+
+/// The largest distance between an element of `d` and the answer it should hold: this case's
+/// `max_abs_diff`, written over the three positions the type states.
+func worst_abs(d: float[3], expected: float): float {
+    return max(max(abs(d[0] - expected), abs(d[1] - expected)), abs(d[2] - expected))
+}
+
+func main(): int sync {
+    let (da, db) = transpose(f_diff)(1.0)
+    let worst = max(worst_abs(da, 1.0), worst_abs(db, -1.0))
+    `subtract ct=1.0 da={} db={}`->format<da, db>->println
+    `transpose subtract max_abs_diff={:.12e}`->format<worst>->println
+    return 0
+}

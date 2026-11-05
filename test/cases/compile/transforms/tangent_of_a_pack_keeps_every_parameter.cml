@@ -3,34 +3,34 @@
 /// `Jvp<F>` and `Vjp<F>` keeps all of them.
 ///
 /// The shape this pins is a function whose parameters are arrays, because that is where the defect
-/// showed: `Tangent<float[..]>` is `float[..]` and `Tangent<int[..]>` is `()`, so a splice that
+/// showed: `Tangent<float[...]>` is `float[...]` and `Tangent<int[...]>` is `()`, so a splice that
 /// answered the empty tuple for the pack, or one member per *distinct type*, would agree with the
 /// declared type for a function of `int`, `string` and `bool` -- where every tangent is `()` -- and
 /// disagree only here.  `vjp` and `jvp` are the types `types` declares, so the reading is a program
 /// of its own: no function is called, and the whole check is a comparison of types.
 ///
-/// `(..ParamsOf<F>, ..Tangent<ParamsOf<F>>)` at `F3` is six parameters: three values, then the
-/// tangent of each.  `float[..]` is its own tangent space, `int[..]` is not differentiable and takes
-/// the empty tuple, and the parameters are kept in the order they are written -- the two `int[..]`
+/// `(...ParamsOf<F>, ...Tangent<ParamsOf<F>>)` at `F3` is six parameters: three values, then the
+/// tangent of each.  `float[...]` is its own tangent space, `int[...]` is not differentiable and takes
+/// the empty tuple, and the parameters are kept in the order they are written -- the two `int[...]`
 /// parameters both stay, though their tangents are the same type.
 import { ParamsOf, Tangent, Vjp, is_same } from types
 
-type F3 = (a: float[..], b: int[..], c: int[..]) => float
+type F3 = (a: float[...], b: int[...], c: int[...]) => float
 type TwoFloats = (x: float, y: float) => float
 
-type SpliceOfF3 = (..ParamsOf<F3>, ..Tangent<ParamsOf<F3>>) => float
-type SpliceWritten = (a: float[..], b: int[..], c: int[..], ta: float[..], tb: (), tc: ()) => float
-type ParametersPacked = (..ParamsOf<F3>) => float
-type ParametersOnly = (a: float[..], b: int[..], c: int[..]) => float
-type PullbackOfF3 = (ct: float) => (float[..], (), ())
-type VjpOfF3 = (a: float[..], b: int[..], c: int[..]) => (float, PullbackOfF3)
-type TangentsOfTwoFloats = (..Tangent<ParamsOf<TwoFloats>>) => float
+type SpliceOfF3 = (...ParamsOf<F3>, ...Tangent<ParamsOf<F3>>) => float
+type SpliceWritten = (a: float[...], b: int[...], c: int[...], ta: float[...], tb: (), tc: ()) => float
+type ParametersPacked = (...ParamsOf<F3>) => float
+type ParametersOnly = (a: float[...], b: int[...], c: int[...]) => float
+type PullbackOfF3 = (ct: float) => (float[...], (), ())
+type VjpOfF3 = (a: float[...], b: int[...], c: int[...]) => (float, PullbackOfF3)
+type TangentsOfTwoFloats = (...Tangent<ParamsOf<TwoFloats>>) => float
 type TwoFloatsWritten = (x: float, y: float) => float
 
 func main(): int sync {
     // The tangent of a float array is the array itself; the tangent of an integer is nothing.
-    println(`tangent_of_float_array ${is_same::<Tangent<float[..]>, float[..]>()}`)
-    println(`tangent_of_int_array ${is_same::<Tangent<int[..]>, ()>()}`)
+    println(`tangent_of_float_array ${is_same::<Tangent<float[...]>, float[...]>()}`)
+    println(`tangent_of_int_array ${is_same::<Tangent<int[...]>, ()>()}`)
     // The parameters keep their order and their multiplicity.
     println(`params_of_f3 ${is_same::<ParametersPacked, ParametersOnly>()}`)
     // The splice: three values and then three tangents, six members in all.

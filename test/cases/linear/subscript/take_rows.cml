@@ -25,7 +25,7 @@ func rowsOfRank3(t: f32[4, 2, 2], idx: int[2]): f32[2, 2, 2] {
     return t[idx]
 }
 
-func anyRank(t: f32[..], idx: int[]): f32[..] {
+func anyRank(t: f32[...], idx: int[]): f32[...] {
     return t[idx]
 }
 

@@ -1361,6 +1361,33 @@ bool devirtualizeClosureCallInDraft(
     return true;
 }
 
+/// True when `from` runs after `target`, over every kind of edge the cycle check follows (value,
+/// `with`, control, sync and order alike: docs/technical/17_graph_rewrite_api_contracts.md, 4.2
+/// rule 1). Used to name the statement a call is written after among the arguments it reads.
+bool waitsOnAnyEdge(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t target) {
+    std::vector<gc_node_ref_t> work{from};
+    std::unordered_set<gc_node_ref_t> seen;
+    while (!work.empty()) {
+        const gc_node_ref_t id = work.back();
+        work.pop_back();
+        if (id == target) {
+            return true;
+        }
+        if (!seen.insert(id).second) {
+            continue;
+        }
+        for (const auto &group :
+             {draft.normInputsOf(id),
+              draft.withInputsOf(id),
+              draft.ctrlInputsOf(id),
+              draft.syncInputsOf(id),
+              draft.orderInputsOf(id)}) {
+            work.insert(work.end(), group.begin(), group.end());
+        }
+    }
+    return false;
+}
+
 /// A node whose work is inside the regions it owns (the arms of a branch, the parts of a loop):
 /// it carries no computation of its own to order, and what its regions hold is in them before it
 /// is. Ordering such a node would order the region as a whole, which is not what 5.7 asks for and
@@ -1573,6 +1600,17 @@ void resolvePlaceForks(GraphDraft &draft) {
     // the answer is no: a statement's place may not be one that waits on the statement itself (the
     // graph would lie on a cycle of inputs). An exhausted walk answers yes, because not proving it
     // free does not make it safe to move.
+    //
+    // Every kind of input is walked, the order ones included. An order edge is as real an ordering as
+    // a sync one (docs/design/effects/edges.cn.md 1), and the check the frozen graph gets walks it
+    // beside them (graph_edges.cpp, `findCycle`: "every edge kind takes part, the sync and order ones
+    // included"). Walking four of the five kinds was not a narrowing that stayed safe: a chain end
+    // whose only way back to the statement runs along an order edge -- the edge a write to a `var`
+    // leaves on the read before it, the edge a spliced body leaves on the statement after the call --
+    // looked free when it was not. `rc04_seed72` (test/cases/opt/adb67e081) is the program that
+    // showed it: the move closed a cycle through the chain end's order input, and the seal then
+    // reported a cycle of inputs -- the wrong defect, at the wrong node -- where the truth was that
+    // the statement has no place in that chain, and refusing the move leaves a graph the pass runs.
     const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
         std::vector<gc_node_ref_t> work{from};
         std::unordered_set<gc_node_ref_t> seen;
@@ -1590,6 +1628,7 @@ void resolvePlaceForks(GraphDraft &draft) {
                  {draft.normInputsOf(node),
                   draft.withInputsOf(node),
                   draft.ctrlInputsOf(node),
+                  draft.orderInputsOf(node),
                   draft.syncInputsOf(node)}) {
                 for (gc_node_ref_t input : group) {
                     if (budget == 0) {
@@ -2305,6 +2344,40 @@ DraftInlineResult inlineCallableInDraft(
     // side of the region, and the chain it stands in is the one the branch's place entered: without
     // reading that place the body would be handed nothing to enter its chain from.
     std::vector<gc_node_ref_t> placePreds = callSyncInputs;
+    if (placePreds.empty()) {
+        // A block's chain link is left out where the statement reads, as a value, the node the link
+        // would run from (docs/design/effects/edges.cn.md 5.7; src/compile/gir/builder_helpers.h,
+        // `chainLinkSaysSomething`): the data edge orders the two already. The statement the call is
+        // written after is then the argument the call reads, not that argument's own predecessor.
+        // Handing the body the control frontier instead writes the body's head *beside* the
+        // argument, and the block's chain forks -- two statements follow the same one. The fork
+        // resolution below (`resolvePlaceForks`) then moves the argument's place onto the body's
+        // tail, so the argument is written after the code that reads it, and the commit refuses the
+        // graph on a cycle of inputs (4.2 rule 1). A body that reads the argument through a
+        // parameter GATE is where this shows: the splice itself made the body wait on that GATE.
+        std::vector<gc_node_ref_t> argumentPlace;
+        for (gc_node_ref_t argument : draft.normInputsOf(funcNodeId)) {
+            if (argument == funcNodeId || !draft.alive(argument) ||
+                draft.syncInputsOf(argument).empty() ||
+                controlRegionOf(draft, argument) != callBlockRegion) {
+                continue;
+            }
+            argumentPlace.push_back(argument);
+        }
+        // The nearest one when several are read: an argument another argument waits on is written
+        // before it, and the call follows the last of them.
+        gc_node_ref_t nearest = kInvalidNodeRef;
+        for (gc_node_ref_t candidate : argumentPlace) {
+            if (nearest == kInvalidNodeRef ||
+                (!waitsOnAnyEdge(draft, nearest, candidate) &&
+                 waitsOnAnyEdge(draft, candidate, nearest))) {
+                nearest = candidate;
+            }
+        }
+        if (nearest != kInvalidNodeRef) {
+            placePreds.push_back(nearest);
+        }
+    }
     if (placePreds.empty()) {
         placePreds = ctrlPreds;
     }

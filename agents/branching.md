@@ -125,6 +125,23 @@ file list shown in the merge message. Documents cannot make code green or red, s
 Being behind by a commit that touches code is not an exception — it is the thing the check exists
 to catch.
 
+### An escaped spelling does not survive a merge that rewrites it
+
+This tree spells the same operator two ways — `..` for an interval, a composition and a stream type,
+`...` for a pack — so a regular expression written `\.\.` matches only the first of them. A text
+migration cannot see that pattern (a backslash separates the dots), so **a merge that brings a
+migrated spelling together with such a pattern silently turns a check into one that finds nothing**:
+it does not throw, it answers "no problems". Measured twice on 2026-11-04: `scripts/law-cotangent-ports.mjs`
+(`kindOfType`'s `\[\s*\.\.\]`) and `test/cases/compile/rulesets/deleted_row_reduction_helpers.mjs`.
+Before reporting a merge green, run:
+
+```
+git grep -n '\\\.\\\.' -- '*.mjs' '*.ts' '*.cml' '*.toml'
+```
+
+Each hit is read as "does this pattern still mean what it meant when it was written". A check that
+quietly finds nothing is worse than one that fails loudly, because nothing about it looks wrong.
+
 ### When a ruling and a reading disagree
 
 A ruling is a decision about what the language should be; a reading is what the tree does today. They
@@ -161,6 +178,8 @@ The coordinator's own work follows a two-step integration so the remote stays qu
 - A `handover/Hxx-...` branch is a **local staging branch**: do not push it to the remote, and do not create a remote branch for it. The only remote branch that represents the coordinator's development is `wzj-dev`.
 - Merge each finished handover branch into `wzj-dev` first (`git merge --no-ff`), and promote `wzj-dev` into `develop` in batches — at least every half hour, so an AI reading `develop` sees the progress quickly. Pushing `develop` and `wzj-dev` is what makes the work visible.
 - As soon as a handover branch is merged into `wzj-dev` and its worktree is removed, delete the branch. If an older remote `handover/...` branch still exists from before this rule, delete it too; the commits are in `develop`.
+  - `git branch -d` refuses for **two different reasons** and they print almost the same. One is that the branch's **content** is not in `origin/develop` — that is the one a human must read. The other is that the branch's **configured upstream** (`origin/<same name>`) is not merged: `warning: not deleting branch '<b>' that is not yet merged to 'refs/remotes/origin/<b>', even though it is merged to HEAD`, followed by `error: the branch '<b>' is not fully merged`. The second refuses `-d` but would pass `-D`, while the content is demonstrably in `develop` (`git cherry origin/develop <b>` all `-`, `git rev-list --count origin/develop..<b>` = 0). Do not read it as "content not merged", and do not switch to `-D`; record which of the two the message was and leave the branch for its owner.
+- `git checkout -b <lane> origin/develop` makes `origin/develop` the branch's **configured upstream**, so a later `git pull` on that branch merges `develop` **into** the lane — the direction of integration reverses, and nothing reports it. Point the upstream at the lane's own remote branch right after creating it (`git branch --set-upstream-to=origin/<lane> <lane>`; `git rev-parse --abbrev-ref '@{u}'` must read `origin/<lane>`).
 - The rules above still hold: merge commits only, never rebase `develop`, never force-push, never touch `main`.
 
 ## The `release` Branch: Where A Version Is Assembled
@@ -284,4 +303,43 @@ work while the checkout goes back to being readable. Six times in one night this
 into from somewhere else: a reformatted header, a broken replacement in `graph_read.cpp`, a duplicated
 probe diagnostic, a zero-byte `cml.cpp`, and once eight files plus a branch other than `develop`. Each
 time the diff had to be recovered from the wreckage before anyone could say whether it was work or a
-repeat of work that had already landed.
+repeat of work that had already landed.## The Merge Lane Is A Standing Slot
+
+One work slot is reserved for merging, always. It is not "the next free slot" — it is a slot
+that stays open so that a merge never has to wait, and so that a merge never runs inside the
+coordinator's own session.
+
+### Why it is reserved rather than scheduled
+
+A merge is the only operation that touches shared git state: `--no-ff`, conflict resolution,
+a full gate, a push. Those are long. When they run inside the coordinator's session, the session
+cannot answer anything else for their whole duration — a ruling, a new reading, a lane that
+finished, a question page that arrived. The cost is not the merge's runtime; it is everything
+that was not answered while it ran.
+
+So the merge is handed to a lane and the coordinator stays free. A lane that reports after
+twenty minutes costs nothing, because the coordinator was answering other things in the
+meantime. A merge that runs in the session costs twenty minutes of everything.
+
+### What counts as a merge-lane job
+
+- Integrating one or more finished lanes into `develop` (`--no-ff`, no rebase, no force).
+- Resolving conflicts, judged by content: docs keep both sides, code keeps both cases.
+- The full gate on the tree that will be pushed, and proof that the pushed tree is the gated
+  tree — same tree hash, not a verbal assurance.
+- Reverting something the gate proved broken, and gating the revert.
+- Pushing a lane branch, or `develop`, and verifying the remote ref afterwards.
+
+### What does not
+
+- Deciding whether a red is debt or a regression — that is a judgement on readings.
+- Writing a question page.
+- Anything that can be answered by reading an existing `[SUMMARY]`.
+
+### The rule, stated as a test
+
+> If an operation will take longer than a few minutes and it writes shared git state, it goes
+> to the merge lane. The coordinator does not hold a lock on the session to do it.
+
+A corollary that has already paid for itself: **a lane may finish its own work and then be
+re-tasked as the merge lane.** The slot is defined by the job, not by a fixed agent.

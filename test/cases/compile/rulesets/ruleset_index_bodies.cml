@@ -15,7 +15,7 @@
  */
 import rulesets.vmap
 import { vmap } from transforms
-import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, permute, reshape, sum, sum_axis, transpose, unsqueeze, where } from tensor
+import { argmax, argmin, concat, dim, matmul, max, mean, min, permute, reshape, sum, transpose, unsqueeze, where } from tensor
 
 // ---- the scalar arithmetic: `+/2`, `-/2`, `*/2`, `//2`, `-/1` ----
 func plus(x: float): float {
@@ -63,32 +63,32 @@ func row_argmin(r: float[3]): int {
     return argmin(r)
 }
 
-// ---- the same six with an axis word: `sum_axis/3` ... `argmin_axis/3` ----
+// ---- the same six with an axis word: `sum/1` ... `argmin/1`, a second law under the key ----
 // A row of two axes, so the answer is the rank below the row's (and its static type says so: the
-// axis reductions are declared `T[..]`/`int[..]`, an open rank, because which axis an axis word
+// axis reductions are declared `T[...]`/`int[...]`, an open rank, because which axis an axis word
 // drops is a fact at the call).
-func plane_sum_axis(r: float[2, 3]): float[..] {
-    return sum_axis(r, 0, false)
+func plane_sum_axis(r: float[2, 3]): float[...] {
+    return sum<0, false>(r)
 }
 
-func plane_mean_axis(r: float[2, 3]): float[..] {
-    return mean_axis(r, 0, false)
+func plane_mean_axis(r: float[2, 3]): float[...] {
+    return mean<0, false>(r)
 }
 
-func plane_max_axis(r: float[2, 3]): float[..] {
-    return max_axis(r, 0, false)
+func plane_max_axis(r: float[2, 3]): float[...] {
+    return max<0, false>(r)
 }
 
-func plane_min_axis(r: float[2, 3]): float[..] {
-    return min_axis(r, 0, false)
+func plane_min_axis(r: float[2, 3]): float[...] {
+    return min<0, false>(r)
 }
 
-func plane_argmax_axis(r: float[2, 3]): int[..] {
-    return argmax_axis(r, 0, false)
+func plane_argmax_axis(r: float[2, 3]): int[...] {
+    return argmax<0, false>(r)
 }
 
-func plane_argmin_axis(r: float[2, 3]): int[..] {
-    return argmin_axis(r, 0, false)
+func plane_argmin_axis(r: float[2, 3]): int[...] {
+    return argmin<0, false>(r)
 }
 
 // ---- a row's matrix product: `matmul/2` ----

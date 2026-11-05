@@ -1,15 +1,15 @@
 /**
- * `..ts` forwards a rest parameter's build-time tuple. the elements are passed on
+ * `...ts` forwards a rest parameter's build-time tuple. the elements are passed on
  * as they are, with no FILL for `ts` and no ACCS for an element. Both rest calls are expanded,
  * so `main` is the hand-written sum of the three arguments.
  */
 
-func sum(..ts): int {
+func sum(...ts): int {
     return static loop acc = 0 for j in indices ts do acc + ts.[j]
 }
 
-func forward(..ts): int {
-    return sum(..ts)
+func forward(...ts): int {
+    return sum(...ts)
 }
 
 func main(): int sync {

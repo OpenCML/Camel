@@ -1,6 +1,6 @@
 /**
  * A tail recursion whose depth depends on the model input and which returns the state together
- * with the number of steps, `(f32[..], int)`: forward as one ONNX Loop with the counter as an
+ * with the number of steps, `(f32[...], int)`: forward as one ONNX Loop with the counter as an
  * int64 output, and its gradient (with_grad of a loss over the returned state) as paired
  * Loops. Numbers are checked by ort_loop_values.py and ort_grad_loop_values.py; this program is
  * the one both export entries are compared on (pass_export.py equiv).
@@ -10,30 +10,31 @@ import { with_grad } from autodiff
 import { export_model } from onnx
 import { get_env } from env
 
-type P = { w: f32[..] }
+type P = { w: f32[...] }
 
 with <m: P>
-func walk(h: f32[..], k: int): (f32[..], int) {
+func walk(h: f32[...], k: int): (f32[...], int) {
     return if k >= 6 || sum(h * h) < 1.0 then (h, k) else walk<m>(tanh(h @ m.w) * 0.3 + h * 0.6, k + 1)
 }
 
 with <m: P>
-func loss(x: f32[..]): float {
+func loss(x: f32[...]): float {
     let (h, k) = walk<m>(x, 0)
     return float(sum(h * h)) * (1.0 + 0.5 * float(k))
 }
 
-func model(w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) {
+func model(w: f32[...], x: f32[...]): (f32[...], int, float[...], f32[...]) {
     let m = { w: w }
     let (h, k) = walk<m>(x, 0)
     let g = with_grad(loss)<m>(x)
     return (h, k, reshape<[1]>([g.0]), g.1.w)
 }
 
-func main(): int sync {
+func main(): string! sync {
     let x = reshape<[2, 2]>([1.0, 2.0, 3.0, 4.0] as f32[])
     let w = reshape<[2, 2]>([0.5, -0.25, 0.1, 0.3] as f32[])
-    let _ = export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[..], x: f32[..]): (f32[..], int, float[..], f32[..]) => model(w, x), (w, x))
-    println('exported')
-    return 0
+    return match export_model<out: get_env('ONNX_OUT') ?? ''>((w: f32[...], x: f32[...]): (f32[...], int, float[...], f32[...]) => model(w, x), (w, x)) {
+        case error e => { return e }
+        case v => 'exported'
+    }
 }

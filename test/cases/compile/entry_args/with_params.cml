@@ -8,7 +8,7 @@
 import { tanh } from tensor
 
 with <w: f32[3, 4], b: f32[4]>
-func layer(x: f32[..]): f32[..] {
+func layer(x: f32[...]): f32[...] {
     return tanh(x @ w + b)
 }
 
