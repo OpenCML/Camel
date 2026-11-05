@@ -1188,12 +1188,39 @@ function splitArguments(text) {
     return parts
 }
 
-function declaredParams(entry) {
-    return entry.norm
+// A parameter's type without the default it may be given: `keepdims: bool = false` states `bool`,
+// and the default is the call's, not the port's. A cut is only made at the top level and only for an
+// `=`, not for the `=>` of a function type.
+function typeWithoutDefault(type) {
+    let depth = 0
+    for (let i = 0; i < type.length; i++) {
+        const char = type[i]
+        if ('([{<'.includes(char)) depth++
+        else if (')]}>'.includes(char)) depth--
+        else if (char === '=' && type[i + 1] !== '>' && depth === 0) return type.slice(0, i).trim()
+    }
+    return type.trim()
+}
+
+// The positions a declaration writes, in the order the operator registers them: the ordinary
+// parameters, then the `<>` ones (`OpDef::params`, written `withAfterNorm`; the protocol
+// `modules/transforms/jvp.cpp` states where it matches a call). One name for a reduction and its
+// axis form (design principles 7.3) is exactly this: `sum` declares one ordinary parameter and two
+// `with` ones, `sum<axis, keepdims>(t)`, and the operator registers three ports -- so the two lists
+// are one list when the counts add up. When they do not (a declaration may write a `with` parameter
+// the operator keeps out of its ports), the ordinary parameters alone are compared and the arity
+// stop names the difference.
+function declaredParams(entry, ruleParams = null) {
+    const lists = [entry.norm]
+    if (ruleParams !== null && entry.norm.length + entry.with.length === ruleParams.length) {
+        lists.push(entry.with)
+    }
+    return lists
+        .flat()
         .map((text) => {
             // A pack writes its dots before the name (`...rest: T`); the dots are not part of it.
             const match = text.match(/^(?:\.{2,3})?(\w+)\s*\??\s*:\s*(.+)$/)
-            return match ? { text, name: match[1], type: match[2].trim() } : null
+            return match ? { text, name: match[1], type: typeWithoutDefault(match[2]) } : null
         })
         .filter(Boolean)
 }
@@ -3102,7 +3129,7 @@ function verifyOps() {
             const ruleParams = signatureParams(op.signature)
             const promisedParams = []
             for (const entry of matching) {
-                const params = declaredParams(entry)
+                const params = declaredParams(entry, ruleParams)
                 const key = params.map((one) => one.type).join('\u0001')
                 if (promisedParams.some((other) => other.key === key)) continue
                 const verdicts =

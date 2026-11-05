@@ -225,7 +225,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "mean_axis_elements"
-desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end: `mean_axis([1, 2, 4] as int[3], 0, false)` answers `2` (that is `int(7 / 3)`, the conversion `int(·)` already has -- the number a caller reads as a lost average is exactly what the normative form asks for), `shape` of it answers `[]`, `keepdims` answers `[2]`, and the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. The four schedulers agree on every line."
+desc = "The mean keeps the element type, and its canonical form is `T(sum(float(x)) / float(numel(x)))` with the sum and the division in f64 and one rounding at the end: `mean<0, false>([1, 2, 4] as int[3])` answers `2` (that is `int(7 / 3)`, the conversion `int(·)` already has -- the number a caller reads as a lost average is exactly what the normative form asks for), `shape` of it answers `[]`, `keepdims` answers `[2]`, and the same three elements through `f32(xs)` answer `2.3333333`. `[16777216.0, 1.0, -16777216.0]` separates the accumulations: an f32 accumulator loses the `1` and answers `0`, the f64 one keeps it and answers `0.33333334`. Rows of an `int[2, 3]` reduced on axis 1 answer `[2, 4]`. The four schedulers agree on every line."
 kind = "behavior"
 case = "../../../cases/modules/tensor/mean_axis_elements.cml"
 args = ["${case}", "${backend}"]

@@ -2,7 +2,7 @@
 //
 // `log_softmax(x) = x - log(sum(exp(x)))`, so its jacobian is `I - 1 pᵀ` with `p = softmax(x)`, and the
 // gradient of `sum(log_softmax(x))` is `1 - n p` with `n = 3`. The engine builds it from its own output
-// (`logSoftmaxVjp`, `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(y) * sum_axis(dy, axis, true)`),
+// (`logSoftmaxVjp`, `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(y) * sum<axis, true>(dy)`),
 // so the sign and the broadcast direction are the whole content of the rule.
 //
 // The array on `[1.0, 2.0, 3.0]` is `[0.7299082804888587, 0.2658145868356071, -0.9957228673244654]`.

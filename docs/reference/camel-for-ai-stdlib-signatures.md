@@ -219,7 +219,7 @@ grad: (f: (x: float) => float) => (x: float) => float
 has_aux: (f: (w: float) => (float, float)) => (w: float) => ((float, float), float)
 ```
 
-**`tensor`** — import { ... } from tensor — 82 name(s)
+**`tensor`** — import { ... } from tensor — 76 name(s)
 
 ```text
 zeros: (shape: int[]) => T[...] when is_numeric::<T>()
@@ -253,23 +253,17 @@ dim: <axis: int> (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: i32> (t: T[...]) => int when is_numeric::<T>()
 pick_at: (t: T[...], position: int, length: int) => T when is_numeric::<T>()
 sum: (t: T[...]) => T
-sum: (t: T[...], axis: int, keepdims?: bool) => T[...]
-sum_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+sum: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 mean: (t: T[...]) => T
-mean: (t: T[...], axis: int, keepdims?: bool) => T[...]
-mean_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+mean: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 max: (t: T[...]) => T
 min: (t: T[...]) => T
 argmax: (t: T[...]) => int
 argmin: (t: T[...]) => int
-max: (t: T[...], axis: int, keepdims?: bool) => T[...]
-max_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
-min: (t: T[...], axis: int, keepdims?: bool) => T[...]
-min_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
-argmax: (t: float[...], axis: int, keepdims?: bool) => int64[...]
-argmax_axis: (t: T[...], axis: int, keepdims: bool) => int[...]
-argmin: (t: float[...], axis: int, keepdims?: bool) => int64[...]
-argmin_axis: (t: T[...], axis: int, keepdims: bool) => int[...]
+max: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
+min: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
+argmax: <axis: int, keepdims: bool = false> (t: float[...]) => int64[...]
+argmin: <axis: int, keepdims: bool = false> (t: float[...]) => int64[...]
 mean_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 softmax: (t: f32[...], axis?: int) => f32[...]
 softmax: (t: float[...], axis?: int) => float[...]

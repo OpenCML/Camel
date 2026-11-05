@@ -39,7 +39,7 @@ import {
     sub_cotangent,
     sub_cotangent_c,
 } from autodiff
-import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean_axis, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
+import { abs, broadcast_like, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, numel, pick_at, relu, reshape, rsqrt, shape, sigmoid, sqrt, subtract, sum, sum_axis_stated, sum_stated, sum_to, take, take_stated, tanh, transpose, where, zeros, zeros_like } from tensor
 // `log as math_log`, for the reason `rulesets.jvp` records: the plain `log` here is the **array**
 // one (`log_t` files its law below), and a second import of one name hides the first instead of
 // overloading it, so `pow_d_t`'s scalar `log(x)` is spelled `math_log`.
@@ -250,7 +250,7 @@ export rule sigmoid_t::<T>(x: T[...]) when is_float::<T>() {
 }
 /// The transpose of `log_softmax`: `ct - exp(y) * sum(ct)` with `y = log_softmax(x)` and the axis summed
 /// with `keepdims` -- the expression the engine's own rule writes (`logSoftmaxVjp`,
-/// `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(output) * sum_axis(dy, axis, true)`), not the
+/// `modules/tensor/ops/reduction_ops.cpp`: `dy - exp(output) * sum<axis, true>(dy)`), not the
 /// transposed direction of `jvp_log_softmax`, which is `ct - sum(exp(y) * ct)`. The two differ by a
 /// broadcast: for `ct = 1` the wrong one answers zero everywhere, because `sum(p) = 1`.
 export rule log_softmax_t::<T>(x: T[...]) when is_float::<T>() {
@@ -807,9 +807,10 @@ export rule take_stated_t::<T, X, I, E>(t: X, indices: I, extents: E) when is_fl
 
 // ---- the transpose of `mean` over an axis ----
 //
-// `mean_axis(xs, axis, keepdims)` is the spelling of `tensor:mean_axis` that names every parameter in
-// parentheses, and the forward half's linear call is `mean_axis_stated`, whose second operand states
-// the axis, the flag and the extents as parameters of their own.
+// `mean<axis, keepdims>(xs)` is how a program writes `tensor:mean_axis` -- the whole reduction's
+// name, with the axis and the flag in angle brackets (design principles 7.3) -- and the forward
+// half's linear call is `mean_axis_stated`, whose operands state the axis, the flag and the extents
+// as parameters of their own.
 //
 // The law: the lane's mean spreads its cotangent back over exactly the elements it averaged, so
 // every position of `t` that fed lane `k` gets `ct[k] / lane length`. `numel(t) / numel(ct)` is the
@@ -902,8 +903,8 @@ export rule mean_axis_stated_t::<T, X, A, K, E>(t: X, axis: A, keepdims: K, exte
 //
 // The three laws above are for the *stated* call the linear half writes (`sum_stated(t, at)`): a cut
 // carries the extents to the half that reads them, so `at` is a value of the primal, handed along
-// with the cotangent. A **value graph** has no such cut. `transpose` walks `sum(mean_axis(x, 0,
-// false) * w)` as it is written, the extents of `x` were never a value in it, and until these laws
+// with the cotangent. A **value graph** has no such cut. `transpose` walks `sum(mean<0, false>(x) *
+// w)` as it is written, the extents of `x` were never a value in it, and until these laws
 // existed the walk answered `skip=rule uri=tensor:sum reason=unbound`: the key has a law, and the
 // law was written for a call the program did not make.
 //
@@ -937,7 +938,7 @@ export rule take_from_type_t::<T, X, I, A>(t: X, indices: I, at: A) when is_floa
     take(t, indices) => (ct: T[...]) => take_cotangent_from_type(ct, indices, at)
 }
 
-/// The cotangent of `mean_axis(t, axis, keepdims)`: each lane's `ct` spread back over the lane it was
+/// The cotangent of `mean<axis, keepdims>(t)`: each lane's `ct` spread back over the lane it was
 /// averaged from, where `at` is the extents of `t`.
 ///
 /// The lane length is the same count `mean_axis_cotangent` takes: `numel(t) / numel(ct)`. It is read
@@ -948,10 +949,10 @@ func mean_axis_cotangent_from_type::<T>(ct: T[...], at: int[]): T[...] when is_f
     return full(at, 1.0) * (ct / lanes)
 }
 
-/// The transpose of `mean_axis(t, axis, keepdims)`, with the extents taken from the operand's type.
+/// The transpose of `mean<axis, keepdims>(t)`, with the extents taken from the operand's type.
 export rule mean_axis_from_type_t::<T, X, A, B, C>(t: X, axis: A, keepdims: B, at: C)
     when is_float::<T>() {
-    mean_axis(t, axis, keepdims) => (ct: float[...]) => mean_axis_cotangent_from_type(ct, at)
+    mean<axis, keepdims>(t) => (ct: float[...]) => mean_axis_cotangent_from_type(ct, at)
 }
 
 
