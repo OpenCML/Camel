@@ -78,7 +78,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_inline"
-desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. Green since the place-fork guard walks the order edges beside the other four kinds: the chain end it was about to place the statement after waited on that statement through an order edge, the move closed a cycle, and the run read `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24` -- the guard's blind spot, reported as a cycle of inputs at a node that was not the defect. With the move refused the statement keeps its place and the graph runs."
+desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. Green since `a1723fbb9` (`fix(opt): splice a body after the statement the call is written after`) writes the body's head after the statement the call is written after, so no place fork arises: the case measures `forked=0`, and a tree rebuilt with `draft.orderInputsOf(node)` deleted from `src/runtime/draft_inline.cpp#resolvePlaceForks` -- four kinds of input edge instead of five -- still exits 0 with the reading unchanged, while the 2026-11-02 build was red (`node 24 (11): lies on a cycle of inputs`). The guard does walk all five kinds of input edge, `order` included (`norm ✓ with ✓ ctrl ✓ order ✓ sync ✓`: 5 in the list, 5 asked, 0 difference), but in the existing corpus the `order` branch never decides the refusal on its own -- of the 52 (fork statement, chain end) pairs the readings are 26 (0,0), 26 (1,1) and 0 (1,0) -- so the guard is relevant and is not the reason this case is green."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
 args = ["${case}", "std::opt::inline", "${run_nvm}"]
