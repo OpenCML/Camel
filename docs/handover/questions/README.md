@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：14 页
+## 现在在等作者：16 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -16,10 +16,12 @@
 | [`2026-11-03-does-a-mark-encode-shape-or-history`](2026-11-03-does-a-mark-encode-shape-or-history.cn.md) | 一处标记编码的是"形状"还是"已发生过的事件"？ |
 | [`2026-11-03-the-mean-axis-transpose-waits-for-two-upstreams`](2026-11-03-the-mean-axis-transpose-waits-for-two-upstreams.cn.md) | `mean_axis` 的转置：一条律改不动这道墙，它等的是两个上游 |
 | [`2026-11-04-a-refusal-removed-is-a-defect-hidden`](2026-11-04-a-refusal-removed-is-a-defect-hidden.cn.md) | 一个拒绝被拿掉之后，它挡住的缺陷就只剩读数了 |
+| [`2026-11-04-does-the-poison-sweep-belong-in-the-milestone-layer`](2026-11-04-does-the-poison-sweep-belong-in-the-milestone-layer.cn.md) | 扫描派生的 3272 条副本，该和其余 246 条一起被当作「一层」吗？ |
 | [`2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement`](2026-11-04-does-the-seal-check-judge-the-marker-or-the-statement.cn.md) | 同步边的封口判据：问标记，还是问"这个节点是不是语句" |
 | [`2026-11-04-how-does-a-type-pack-take-apart`](2026-11-04-how-does-a-type-pack-take-apart.cn.md) | 类型层的包怎么拆：`match type` 的元组模式，还是声明处的拆包？ |
 | [`2026-11-04-what-is-a-value-of-extent-of`](2026-11-04-what-is-a-value-of-extent-of.cn.md) | `extent_of::<A>` 当一个值用：答，还是拒绝这个值？ |
 | [`2026-11-04-which-bracket-is-outer-in-an-array-of-arrays`](2026-11-04-which-bracket-is-outer-in-an-array-of-arrays.cn.md) | 数组的数组，外层是哪一个方括号：`extent_of::<float[2][3]>()` 该答 `[3]` 还是 `[2]` |
+| [`2026-11-04-who-runs-a-milestone-tier-plan-and-when`](2026-11-04-who-runs-a-milestone-tier-plan-and-when.cn.md) | `tier = "milestone"` 的计划该由谁、在什么时候跑？ |
 | [`2026-11-05-a-type-position-pattern-is-not-expressible-only-inside-match-type`](2026-11-05-a-type-position-pattern-is-not-expressible-only-inside-match-type.cn.md) | 包模式只在一个位置有读法：类型位置的 `match type` 的 case |
 | [`2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent`](2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent.cn.md) | 构造元组（`FILL`）的转置，有没有把余切逐成员交给两个操作数 |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 |
