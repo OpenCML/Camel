@@ -463,15 +463,16 @@ func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
 // contracts its extent against the matrix's first axis), and the walk never holds a value for the
 // position it is answering (`buildTransposeMember`: the transposition is handed the cotangent and the
 // *other* operand). The plain helpers above therefore reach `float[]` and stop: `ct_of_a(ct, a, b)`
-// names `a`, the expansion asks for a value behind it, the type states no extents, no carrier can be
-// built from it (`modules/transforms/transpose.cpp#shapeCarrierOf`), and the step is refused by name.
+// names `a`, the expansion asks for a value behind it, the type states no extents, and the walk builds
+// no zero array to stand in for it (`modules/transforms/transpose.cpp#buildTransposeMember`, deleted
+// 2026-11-05), so the step is refused by name.
 // Measured 2026-11-04 on the two vector cases of `test/plans/feat/showcase_s2.plan.toml`:
 //
 //     skip=parameter-shape uri=tensor:matmul_stated node=11 position=0 param=0 param-type=float[]
 //
 // So the law builds the carrier itself, from the list, and hands it over in the answered operand's
-// place -- the same move the walk makes when a type *does* state the extents (a zero array read for
-// its shape and never for its elements: `shapeCarrierOf`, the author's 2026-11-03 16:15 ruling),
+// place -- the move the walk used to make on its own (a zero array read for its shape and never for
+// its elements: the author's 2026-11-03 16:15 ruling, whose *walk-side* form was deleted 2026-11-05),
 // with the extents taken from `sa` / `sb` instead of from the type.
 //
 // **The carrier is not where the length comes from; `sa` is, and it goes straight into `sum_to`.**
@@ -493,9 +494,10 @@ func ct_of_b(ct: float[...], a: float[?, ?], b: float[?]): float[?] {
 //
 // The law's domain is unchanged: `mul_stated_t` and `matmul_stated_t` answer a product reached
 // through a forward rule that states `shape(...)` in the half where both operands are values
-// (`stdlib/rulesets/jvp.cml#jvp_mul_tensor` and `#jvp_matmul` do, and `#jvp_linear` does not yet). A
-// product whose forward rule writes the bare operator still meets `mul_tensor_t` / `matmul_t`, and
-// those compute the lists from the operands' values where the walk holds them.
+// (`stdlib/rulesets/jvp.cml#jvp_mul_tensor`, `#jvp_matmul`, and since 2026-11-05 `#jvp_linear`,
+// `#jvp_erf` and `#jvp_erfc` too). A product whose forward rule writes the bare operator still meets
+// `mul_tensor_t` / `matmul_t`, and those compute the lists from the operands' values where the walk
+// holds them.
 
 /// Both operands matrices: `ct · bᵀ`, reduced to `sa`.
 func ct_of_a_stated(ct: float[...], a: float[?, ?], b: float[?, ?], sa: int[]): float[?, ?] {

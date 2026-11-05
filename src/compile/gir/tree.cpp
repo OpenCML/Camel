@@ -24,7 +24,6 @@ namespace {
 // for the compiler, the checkpoints and the modules).
 namespace tr = core::type::tree;
 bool internal(Type *type) { return tr::isInternal(type); }
-size_t sizeOf(Type *type) { return tr::arity(type); }
 Type *fieldType(Type *type, size_t i) { return tr::childType(type, i); }
 std::string fieldName(Type *type, size_t i) { return tr::childName(type, i); }
 } // namespace
@@ -68,7 +67,8 @@ node_handle_t Builder::expandTreeCall(
         std::vector<size_t> slots(values.size());
         std::iota(slots.begin(), slots.end(), 0);
         auto out = currGraph_->addFillNode(
-            type, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            type,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         linkNodes(LinkType::Norm, base, out);
         for (auto value : values)
             linkNodes(LinkType::With, valueOf(value), out);
@@ -77,11 +77,14 @@ node_handle_t Builder::expandTreeCall(
     };
     std::vector<node_handle_t> leaves;
     const auto walk = [&](auto &&self, Type *shape, node_handle_t value) -> void {
-        if (!internal(shape)) {
+        // No members is the leaf, which is what this walk does with every type that has none; the
+        // tag/cell rule stays `internal`'s (a tagged or cell tuple has members and is a leaf here).
+        const auto members = tr::arity(shape);
+        if (!members || !internal(shape)) {
             leaves.push_back(value);
             return;
         }
-        for (size_t i = 0; i < sizeOf(shape); ++i) {
+        for (size_t i = 0; i < *members; ++i) {
             self(self, fieldType(shape, i), access(value, i));
         }
     };

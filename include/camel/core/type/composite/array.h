@@ -147,7 +147,7 @@ class ArrayType : public CompositeType {
     /// that rank has, and the type a value must have to enter `T[..]` at that rank.
     Type *rankZeroType() const {
         return anyRank_ && extents_.empty() && elemTypeCode_ != TypeCode::Void ? elemType_
-                                                                              : nullptr;
+                                                                               : nullptr;
     }
 
     /// This type with another element type, shape and flags unchanged.
@@ -213,8 +213,8 @@ class ArrayType : public CompositeType {
         Type *elemType, std::vector<ExtentForm> extents, bool anyRank, const std::string *packName);
 
     /// Interned construction after normalization and validation.
-    static ArrayType *make(
-        Type *elemType, std::vector<ExtentForm> extents, bool anyRank, std::string_view pack);
+    static ArrayType *
+    make(Type *elemType, std::vector<ExtentForm> extents, bool anyRank, std::string_view pack);
 
     Type *elemType_;        // Element type pointer (used by the type system).
     TypeCode elemTypeCode_; // Element type code (used at runtime).
@@ -249,13 +249,13 @@ bool isElementTypeUnstated(const Type *type);
 /// element, so the conversion is invisible to the program: the same value, the same printing, the
 /// same comparison, and `numel` of it answers `1` while `shape` answers `[]`).
 ///
-/// This is the **one** spelling of that question, because it is a rule of the language and not of an
-/// entrance. `Builder::coerceTo` asks it where a value takes the type of its position and
-/// `Builder::visitCall` where an argument enters a parameter; the transposition walk asks it where it
-/// hands a law the cotangent of that law's port (`modules/transforms/transpose.cpp#ruleCotangent`,
-/// the entrance that is not some position's `coerceTo` because the port is filled by the caller and
-/// not by a builder). A second reading of the same rule somewhere else is the way the two ends start
-/// disagreeing about one value.
+/// This is the **one** spelling of that question, because it is a rule of the language and not of
+/// an entrance. `Builder::coerceTo` asks it where a value takes the type of its position and
+/// `Builder::visitCall` where an argument enters a parameter; the transposition walk asks it where
+/// it hands a law the cotangent of that law's port
+/// (`modules/transforms/transpose.cpp#ruleCotangent`, the entrance that is not some position's
+/// `coerceTo` because the port is filled by the caller and not by a builder). A second reading of
+/// the same rule somewhere else is the way the two ends start disagreeing about one value.
 inline bool isRankZeroEdge(Type *target, Type *source) {
     if (target == nullptr || source == nullptr || target->equals(source)) {
         return false;
@@ -274,7 +274,7 @@ inline bool isRankZeroEdge(Type *target, Type *source) {
     // `T[..]` into `T`: only the open rank has a value with no dimension to read the element from;
     // `T[]` and `T[3, ..]` state dimensions and are not this edge.
     const auto *arraySource = asArrayType(source);
-    Type *element          = arraySource != nullptr ? arraySource->rankZeroType() : nullptr;
+    Type *element           = arraySource != nullptr ? arraySource->rankZeroType() : nullptr;
     return element != nullptr && target->assignableFrom(element);
 }
 
@@ -290,11 +290,11 @@ inline bool isRankZeroEdge(Type *target, Type *source) {
 /// behind it, and both such readers go through here: the builtin `extent_of::<A>()`, which answers
 /// these extents as an `int[]` (`src/builtin/operators/struct.cpp#extentOfResolver`), and the
 /// transposition walk, which asks a bare `transpose` for the shape a law reads
-/// (`modules/transforms/transpose.cpp#shapeFromTypeOf`). A second evaluation for that question would
-/// be a second answer to one question. The literal conversion keeps its own reading
-/// (`src/core/data/composite/array.cpp#statedShapeOf`) because it asks something else: which written
-/// shape a literal's elements can fill, where a form that is an expression states none however it
-/// would evaluate.
+/// (`modules/transforms/transpose.cpp#statedExtentsNodeOf`). A second evaluation for that question
+/// would be a second answer to one question. The literal conversion keeps its own reading
+/// (`src/core/data/composite/array.cpp#statedShapeOf`) because it asks something else: which
+/// written shape a literal's elements can fill, where a form that is an expression states none
+/// however it would evaluate.
 inline std::optional<std::vector<int64_t>> statedExtentsOf(const Type *type) {
     const ArrayType *array = asArrayType(type);
     if (array == nullptr) {
