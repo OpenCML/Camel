@@ -533,7 +533,11 @@ std::string resultCotangentRefusalImpl(const Type *result) {
         code == camel::core::type::TypeCode::Struct) {
         // Member by member, because that is how the addition of an aggregate is defined
         // (`accumulate`), and the member that fails is named with its index.
-        const size_t count = camel::core::type::tree::arity(result);
+        size_t count = 0;
+        if (!camel::core::type::tree::arityOf(result, count)) {
+            return "`" + result->toString() + "` is not a type with members, and the cotangent of an " +
+                   "aggregate is defined member by member";
+        }
         for (size_t i = 0; i < count; ++i) {
             const Type *const memberType = camel::core::type::tree::childType(result, i);
             const std::string inner        = resultCotangentRefusalImpl(memberType);
@@ -1540,7 +1544,12 @@ bool buildTransposeMember(
             if (space != nullptr &&
                 (space->code() == camel::core::type::TypeCode::Tuple ||
                  space->code() == camel::core::type::TypeCode::Struct)) {
-                const size_t count = camel::core::type::tree::arity(space);
+                size_t count = 0;
+                if (!camel::core::type::tree::arityOf(space, count)) {
+                    // Not a type with members: the aggregate branch of this sum cannot run, and a
+                    // count read out of another type's bytes would have made it run on nothing.
+                    return rt::kInvalidNodeRef;
+                }
                 std::vector<gc_node_ref_t> parts;
                 parts.reserve(count);
                 for (size_t i = 0; i < count; ++i) {
@@ -3164,7 +3173,13 @@ bool buildTransposeMember(
                        << " why=no-tangent-space-for-the-parameter\n";
                     return false;
                 }
-                const size_t arity = camel::core::type::tree::arity(joinPrimal);
+                size_t arity = 0;
+                if (!camel::core::type::tree::arityOf(joinPrimal, arity)) {
+                    refuse(TransposeRefusalCause::Component);
+                    os << " node=" << ref << " type=" << joinPrimal->toString()
+                       << " why=not-a-type-with-members\n";
+                    return false;
+                }
                 if (slots->second.size() > arity) {
                     refuse(TransposeRefusalCause::Component);
                     os << " node=" << ref << " slots=" << slots->second.size()

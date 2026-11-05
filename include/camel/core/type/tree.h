@@ -36,10 +36,37 @@ inline bool isInternal(const Type *type) {
     return !tuple->isTagged() && !tuple->isCell();
 }
 
-/// The number of children of an inner node.
+/// The number of children of an inner node: a tuple's or a struct's. **This is not a question about
+/// any other type**, and it used to answer one anyway -- every type that is not a `Struct` was cast to
+/// `TupleType` and its member count read out of that object's bytes, so `arity(f32[3])` answered
+/// `131961841501032` with no error and no default. A default can be argued with; another object's bytes
+/// cannot. Callers that may hold an array (or any non-tree type) ask `arityOf` and handle the refusal.
 inline size_t arity(const Type *type) {
     return type->code() == TypeCode::Struct ? static_cast<const StructType *>(type)->size()
                                             : static_cast<const TupleType *>(type)->size();
+}
+
+/// The number of children of `type`, when `type` is the kind of type that has children: `false` for
+/// everything else (an array, a function, a number, a string).
+///
+/// It exists because `arity` above answers a non-tree type with whatever its bytes say. The no-answer is
+/// a *return value*, not an `assert`, on purpose: **an `assert` is compiled out of the release build**
+/// (`NDEBUG`), so a guard written that way is loud on a developer's machine and absent for every user --
+/// which is worse than no guard, because the code then looks protected. `false` travels in every build.
+inline bool arityOf(const Type *type, size_t &count) {
+    if (type == nullptr) {
+        return false;
+    }
+    const TypeCode code = type->code();
+    if (code == TypeCode::Struct) {
+        count = static_cast<const StructType *>(type)->size();
+        return true;
+    }
+    if (code == TypeCode::Tuple) {
+        count = static_cast<const TupleType *>(type)->size();
+        return true;
+    }
+    return false;
 }
 
 inline Type *childType(const Type *type, size_t i) {
