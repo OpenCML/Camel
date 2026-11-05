@@ -155,18 +155,36 @@ nobody can tell afterwards that it was never measured.
 
 > 闸门入口只认 `internal/tools/camel-remote.ps1`；`<worktree root>/camel-remote.ps1` 是历史遗留副本，不要用
 
-Worktree roots still hold copies of the script from before the machine-specific values moved into
+The second copy is not at a worktree root any more, and that matters to the reader: the only one left
+on this machine is `D:\Projects\Camel-wt\camel-remote.ps1`, in the directory that *holds* the
+worktrees. No checkout contains one -- a recursive find under `D:\Projects\Camel-wt` returns nothing
+inside a tree, and a freshly added worktree has none -- so a sentence that names only "the copy at the
+worktree root" sends a reader looking for a file that is not there. It is also not a file of this
+repository: `git ls-files` names only `internal/tools/camel-remote.ps1`, and `git log -1 -- <that path>`
+answers `is outside repository at ...`, so no commit can delete it and no checkout can put it back.
+
+What it is: the wrapper from before the machine-specific values moved into
 `internal/tools/camel-gate.local.json` and before the `-NoBuild` guard could name the build
-configuration. Such a copy is **wider** than the entry, silently, in three measured ways: its guard
-has no `--config` to pass, so `-Tier debug -NoBuild` verifies and accepts an install built Release
-(the fingerprint it compares is a Release one); it does not bring the plan's stderr back, so a plan
-that wrote only its reason to stderr arrives as a bare non-zero exit; and it carries the host, the
-bare repository, the panel's state file and the libstdc++ directory as literals, so a run from
-another machine reaches the host it names -- where the entry stops with exit 2 and names the setting
-it could not find. The copy's own header says none of this, so a lane that runs it believes it ran
-the gate. Point `-File` at the tree's `internal/tools/camel-remote.ps1`, and read the readings of a
-run whose command line did not: `[camel-remote]` lines are printed by both copies and do not say
-which one printed them.
+configuration. It is 201 lines shorter than the entry (1275 against 1476) and is **wider** than the
+entry, silently, in three measured ways: its guard has no `--config` to pass, so `-Tier debug -NoBuild`
+verifies and accepts an install built Release (the fingerprint it compares is a Release one), and the
+run then answers a question about a binary the tree never built; it does not bring the plan's stderr
+back, so a plan that wrote only its reason to stderr arrives as a bare non-zero exit; and it carries
+`$sshHost = '88zjwei'`, `$bare = 'camel-work/Camel.git'` and the libstdc++ directory as literals, so a
+run from another machine reaches the host it names -- where the entry stops with exit 2 and names the
+setting it could not find. The copy's own header says none of this, so a lane that runs it believes it
+ran the gate and reads an older, laxer number as this tree's.
+
+It is documented here instead of deleted because it still has callers, and one of them is in this tree:
+`scripts/bisect-merge.mjs#parseArgs` defaults `--wrapper` to `path.resolve(<tree>, '..',
+'camel-remote.ps1')`, which for any tree under `D:\Projects\Camel-wt\` is exactly that file, and
+`scripts/bisect-merge.mjs#measure` runs it with `pwsh -File`. The machine-local helpers beside it
+(`bisect2.ps1`, `h598-reds.ps1`, ...) hardcode the same path. Deleting it would break those callers,
+and the break would read as "the gate is missing" rather than "you named the old one".
+
+Point `-File` at the tree's `internal/tools/camel-remote.ps1`, and read the readings of a run whose
+command line did not: `[camel-remote]` lines are printed by both copies and do not say which one printed
+them.
 
 ## A revert that covers part of a change reads as "the rest of the change is still in the tree"
 
