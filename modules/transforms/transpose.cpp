@@ -3410,6 +3410,16 @@ bool buildTransposeMember(
                     Type *const wholeType     = cotangentTypeOf(ref);
                     size_t memberCount        = 0;
                     bool membersByIndex       = false;
+                    // **Where the `arity` signature change lands.** The author's ruling
+                    // (`a2cc57100`) makes `tree::arity` itself answer no answer
+                    // (`std::optional<size_t>`) and deletes `arityOf`, so one name is left. This
+                    // site is written with `arityOf` because that is the tree it landed in; when
+                    // that change arrives the migration here is the unwrapping of that one answer
+                    // and nothing else in this case moves -- `if (!memberCountKnown)` becomes the
+                    // same test on `arity(wholeType).has_value()`. The file's other `arity` call
+                    // site (`buildTransposeMember`'s `Accs` case, `member <
+                    // tree::arity(holderType)`, guarded by a Tuple/Struct check on the holder's
+                    // type) migrates the same way.
                     const bool memberCountKnown =
                         camel::core::type::tree::arityOf(wholeType, memberCount);
                     if (!memberCountKnown && wholeType != nullptr) {

@@ -1492,6 +1492,29 @@ expect_stdout_not_contains = ["pair_pullback="]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The fallback's other half: a node kind that is not a construction still gets the table's `kind`
+# word and its own kind number. A projection that bought its answer by dropping this arm would look
+# identical on the two entries above and say nothing here.
+[[tests]]
+name = "transpose_call_of_a_zero_argument_closure_refuses_the_kind"
+desc = "`f(x) = let g = () => x; g()`: the call's callee is a value the graph carries, not a static reference, so the walk reaches the call with no operand to read and no callee to transpose, and refuses with the cause table's `kind` word **and the node's own kind** -- `TRANSPOSE function=f skip=kind node=<> kind=8`, where `8` is `GCNodeKind::Call`. This is the half of the guard the array projection must not have eaten: a feature that answered by deleting the fallback's coverage would leave `transpose_array_literal_member_projection` green and this line silent, and the two are pinned apart for that reason -- one on `kind=fill whole-cotangent ... members=- parts=2`, this one on `kind=8`, both on the `skip=kind` word, neither on an exit code alone. The node position is `<>` because it moves when a declaration above it grows a node while the reading stays the same."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_call_of_a_zero_argument_closure_refuses_the_kind.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 1
+expect_output_contains = ["TRANSPOSE function=f skip=kind", "kind=8", "transpose has no transpose for this function"]
+expect_stdout_not_contains = ["f_pullback="]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stderr.split('\n').filter((l) => /^TRANSPOSE function=f skip=kind node=\\d+ kind=8$/.test(l))
+assert(lines.length === 1, `expected exactly one 'TRANSPOSE function=f skip=kind node=<n> kind=8' line, found ${lines.length} in: ${input.normalized.stderr}`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The same missing cotangent, seen from the library: `grad` is
 # `transpose(split(reinterp(jvp(f))))`, so a tangent function that ignores its operands is on every
 # `grad` of a sum, and a refusal there is a refusal of the plainest derivative there is.
