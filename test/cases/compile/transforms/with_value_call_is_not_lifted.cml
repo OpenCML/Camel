@@ -1,0 +1,28 @@
+// A call through a **parameter of `with`-function type**: the differentiated function takes
+// `(g: <k: float> () => float, w: float)` and calls `g<2.0>()`.
+//
+// The forward lift reads a call through a value by lifting the callee at run time, and a callee whose
+// type has a `with` list needs that list promoted into the value half (`jvpCalleeSignature`), which is
+// a build-time decision the lift can make only for a callee whose graph it holds. A callee that
+// arrives as a parameter has no graph until the call runs, so the lift answers with the runtime's
+// fallback message and names no construct: "transforms: jvp has no forward transform for this
+// function" (RuntimeDiag::RuntimeError). The `with` value here is a constant, so nothing is missing
+// from the call site -- the shape is the wall, not the direction.
+//
+// A call through a parameter of *plain* function type is lifted
+// (test/cases/compile/transforms/value_call_with_a_function_parameter.cml), and so is a call through
+// a **named** `with` function where the lambda is written
+// (test/cases/compile/transforms/library_grad_of_a_with_weight.cml). This is the one shape in between.
+import { vjp } from vjp
+
+with <k: float>
+func square(): float {
+    return k * k
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp((g: <k: float> () => float, w: float): float => g<2.0>() * w)(square, 3.0)
+    let cotangents = pullback(1.0)
+    println('value={} cotangents={}'->format<value, cotangents>)
+    return 0
+}

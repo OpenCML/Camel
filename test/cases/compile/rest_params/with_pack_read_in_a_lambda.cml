@@ -1,0 +1,21 @@
+// A lambda's `with` pack read as a value inside its own body: `<w, ...rest> () => rest.[0]`.
+//
+// The lambda stands in a position whose type is `<...WithOf<F>> (...ParamsOf<F>) => (float, float)`
+// for a function of two `with` parameters, so `<w, ...rest>` takes the first `with` member by name
+// and `rest` stands for the second. Spreading `rest` is answered at build time; *reading* it is the
+// tuple the pack is, which is what `stdlib/vjp.cml#has_aux` asks of it.
+import { WithOf, ParamsOf } from types
+
+type PairOf<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+
+with <w: float, k: float>
+func twice(): float {
+    return w * k
+}
+
+func main(): int sync {
+    let g: PairOf<<w: float, k: float> () => float> = <w, ...rest> () => (rest.[0], 1.0)
+    let (read, constant) = g<2.0, 3.0>()
+    println('read={} constant={}'->format<read, constant>)
+    return 0
+}

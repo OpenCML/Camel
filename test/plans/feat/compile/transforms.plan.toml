@@ -3054,3 +3054,25 @@ expect_stdout_contains = ["subtract ct=1.0 da=[1.0, 1.0, 1.0] db=[-1.0, -1.0, -1
 expect_stderr_contains = ["rhs=dtod_t,sum_from_type_t,subtract_t"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "value_call_with_a_function_parameter"
+desc = "A call through a parameter of plain function type, inside the function `vjp` differentiates: `vjp((h: (z: float) => float, w: float): float => h(w))(square, 3.0)` answers `value=9.0` and a pullback whose answer is `((), 6.0)`. Two things are pinned and they are different: the function parameter has no tangent space, so it takes the `()` slot its type gives it (the halves line up by position, which is what makes the second member unambiguous), and the weight really is differentiated through the call -- 6.0 rather than the 0.0 a lift that stopped at a value call would answer. The call the lift reads is a call through a parameter, which is the shape `modules/transforms/jvp.cpp#liftSignature` hands the run-time lift."
+kind = "behavior"
+case = "../../../cases/compile/transforms/value_call_with_a_function_parameter.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "value=9.0 cotangents=((), 6.0)\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 15000
+
+[[tests]]
+name = "with_value_call_is_not_lifted"
+desc = "A call through a parameter of `with`-function type is the one shape between the two that work: `vjp((g: <k: float> () => float, w: float): float => g<2.0>() * w)(square, 3.0)` fails inside the library's own `vjp`, at the `jvp` it writes (`stdlib/vjp.cml#vjp`), with the runtime's fallback message -- \"transforms: jvp has no forward transform for this function\", RuntimeDiag::RuntimeError -- and with no construct named, which is the reading this entry pins: the forward lift can promote a `with` list only for a callee whose graph it holds at build time, and a callee that arrives as a parameter has none until the call runs. The `with` value here is a constant, so the shape is the wall and not the direction: a plain function parameter is lifted (`value_call_with_a_function_parameter` above) and so is a **named** `with` function called from a written-out lambda (test/cases/compile/transforms/library_grad_of_a_with_weight.cml). The failure is exit 1 and not a wrong number, which is the guarantee worth keeping while the shape is out of reach."
+kind = "negative"
+case = "../../../cases/compile/transforms/with_value_call_is_not_lifted.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["stdlib/vjp.cml", "transforms: jvp has no forward transform for this function", "name=RuntimeDiag::RuntimeError, code=0x04000000"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000

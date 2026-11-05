@@ -299,3 +299,25 @@ expect_exit = 0
 expect_stdout_exact = "3.0\n30.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "with_pack_read_in_a_lambda"
+desc = "A lambda's `with` pack read as a value inside its own body: `<w, ...rest> () => rest.[0]` in a position typed `<...WithOf<F>> (...ParamsOf<F>) => (float, float)`. The pack takes the `with` members the position's first-named member leaves over, and reading it is what `stdlib/vjp.cml#has_aux` asks of the pack -- `w` is the weight and `rest` is what it has to hand on. The reading is the second `with` argument and not the first, so a pack wired to the wrong member answers 2.0: `rest.[0]` is 3.0 for `twice<2.0, 3.0>()`."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/with_pack_read_in_a_lambda.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "read=3.0 constant=1.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
+
+[[tests]]
+name = "nested_function_reads_the_with_pack"
+desc = "A function written inside a lambda's body cannot name that body's `with` pack: the pack is a tuple of the lambda's own graph and the nested function is a graph of its own, so the name is refused where it is used, with the answer a lambda gets for any pack no scope holds -- the same answer `nested_function_reads_the_pack` records for an expanded body's rest parameter. `has_aux`'s composition would separate the weight from the remaining `with` values, and this is the writing that separation cannot use."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/nested_function_reads_the_with_pack.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_output_contains = ["Unresolved reference: 'rest'"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

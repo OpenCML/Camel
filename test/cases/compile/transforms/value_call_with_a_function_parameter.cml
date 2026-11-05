@@ -1,0 +1,17 @@
+// A differentiated function that takes a plain function value and calls it: `vjp` differentiates the
+// ordinary parameters of the function it hands to the lift, so `h` is one of them and the call the
+// lift reads is a call through a parameter. `h`'s type has no tangent space, so it takes the `()`
+// slot its type gives it and the pullback answers `()` for it; the weight is the second parameter,
+// and its cotangent is the second member of the pullback's answer.
+import { vjp } from vjp
+
+func square(z: float): float {
+    return z * z
+}
+
+func main(): int sync {
+    let (value, pullback) = vjp((h: (z: float) => float, w: float): float => h(w))(square, 3.0)
+    let cotangents = pullback(1.0)
+    println('value={} cotangents={}'->format<value, cotangents>)
+    return 0
+}
