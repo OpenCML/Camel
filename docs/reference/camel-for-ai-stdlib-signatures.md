@@ -200,7 +200,7 @@ tree_reduce: <f: (acc: R, leaf: A) => R> (t: T, init: R) => R
 tree_unzip: (r: R, s: S) => ?
 ```
 
-**`transforms`** — import { ... } from transforms — 5 name(s)
+**`transforms`** — import { ... } from transforms — 6 name(s)
 
 ```text
 jvp: (f: F) => Jvp<F> when is_function::<F>()
@@ -208,6 +208,7 @@ split: (f: (v: float, d: float) => (float, float)) => (v: float, d: float) => (f
 transpose: (f: F) => Transpose<F> when is_function::<F>()
 vmap: (f: F) => Vmap<F> when is_function::<F>()
 remat: (f: F) => F when is_function::<F>()
+first_with_as_param: (f: F) => FirstWithAsParam<F> when is_function::<F>()
 ```
 
 **`vjp`** — import { ... } from vjp — 3 name(s)

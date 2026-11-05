@@ -1,0 +1,54 @@
+/**
+ * The signature reinterpretation `reinterp<first_with_as_param>(f)` and the derivative it makes
+ * reachable: a weight declared as a `with` parameter stops being one, becomes the first ordinary
+ * parameter, and the body is not touched.
+ *
+ * `weighted` is `with <x: float> func weighted(y) = x*y + x`. With the weight on the ordinary list,
+ * `vjp` differentiates it like any other parameter, and the pullback answers one cotangent per
+ * parameter -- the weight's first, because the reinterpretation puts it in front.
+ *
+ * The numbers are written down before the run, and two of the three lines exist to tell a right
+ * answer from a wrong one that happens to print the same number:
+ *
+ *   - `weighted` at `x = 3, y = 2`: the body is `9.0`, `d/dx = y + 1 = 3.0`, `d/dy = x = 3.0`.
+ *     **Both cotangents are 3.0**, so this line alone cannot say which parameter was read.
+ *   - `squared` is `x*y*y`, and at the same point `d/dx = y*y = 4.0` while `d/dy = 2*x*y = 12.0`.
+ *     That is the line that tells them apart: an implementation that read the second parameter's
+ *     cotangent, or that moved the weight to the end of the list, answers 12 and 4 the other way
+ *     round, and one that differentiated the wrong thing answers 0.0 -- which is why the line pins
+ *     both members and not the first one.
+ *   - the `with`-weight member is `3.0` here and `4.0` there, so the number is not the weight's
+ *     value repeated: `x` is 3.0 in both lines and the answer moves.
+ *
+ * The reinterpretation is a port reclassification: the graph's body is copied unchanged and one port
+ * changes list. `REINTERP first_with_as_param function=weighted with_in=1 params_in=1 with_out=0
+ * params_out=2` is that sentence as a reading, and it is on stderr (a transform's own readings do
+ * not share the program's stdout).
+ */
+
+import { vjp } from vjp
+import { first_with_as_param } from transforms
+
+with <x: float>
+func weighted(y: float): float {
+    return x * y + x
+}
+
+with <x: float>
+func squared(y: float): float {
+    return x * y * y
+}
+
+func main(): int sync {
+    // d/dx = y + 1 = 3.0 and d/dy = x = 3.0: the coincidence the next line breaks.
+    let (value, pullback) = vjp(first_with_as_param(weighted))(3.0, 2.0)
+    let (dw, dy) = pullback(1.0)
+    'weighted value={} weight={} y={}'->format<value, dw, dy>->println
+
+    // d/dx = y*y = 4.0 and d/dy = 2*x*y = 12.0: two different numbers, so the members say which
+    // parameter each cotangent belongs to.
+    let (squaredValue, squaredPullback) = vjp(first_with_as_param(squared))(3.0, 2.0)
+    let (sdw, sdy) = squaredPullback(1.0)
+    'squared value={} weight={} y={}'->format<squaredValue, sdw, sdy>->println
+    return 0
+}

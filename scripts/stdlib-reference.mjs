@@ -2391,6 +2391,8 @@ const EXCEPTIONS = {
         'rule states a function type': {
             'attempt (:mark/attempt)#result':
                 'the rule answers the function it was given, `((...args: A) => T!)`; the declaration states only the error `F!`',
+            'first_with_as_param (transforms:first_with_as_param)#result':
+                'the rule answers a function type -- the reinterpreted function, `((the first `with` parameter, then the parameters) => any)` -- and the declaration writes it `FirstWithAsParam<F>`, a type function this checker does not expand',
             'split (transforms:split)#result':
                 'the rule answers a pair whose second half is a function type, `(float, (float) => float)`; the declaration spells the same pair as text, and a function type is not compared',
         },
@@ -2525,6 +2527,8 @@ const EXCEPTIONS = {
                 'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
             'jvp (transforms:jvp)#parameter':
                 'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
+            'first_with_as_param (transforms:first_with_as_param)#parameter':
+                'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
             'remat (transforms:remat)#parameter':
                 'parameter 1 is `(float, float) => float`, a function type the declaration writes as a bare `F`',
             'split (transforms:split)#parameter':
@@ -2632,7 +2636,9 @@ const EXAMPLE_STOPS = {
         'stdlib/signatures/autodiff.cml#with_grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
         'stdlib/signatures/autodiff.cml#with_grad#2':
-            'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes'
+            'the function must return a pair whose first element is the loss, which only a declaration in the surrounding program writes',
+        'stdlib/signatures/transforms.cml#first_with_as_param#1':
+            'the example reinterprets a function that has a `with` parameter, and a `with` list is written on a declaration: no lambda this page can write inline has one'
     },
     // `an internal error` is gone (2026-11-03). The class held the examples that reached the
     // compiler with a function-typed parameter bound by name: `split`'s own example, which kept a
