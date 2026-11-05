@@ -1,9 +1,8 @@
 // The engine's reading of a `take_stated` node, beside the library's reading of the same take.
 //
-// `take_stated(t, at)` is the stated spelling of `take`: `at` is
-// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`, the rows read and the operand's extents, because a
-// transpose law cannot read the shape of the value a cotangent comes back through
-// (`modules/tensor/ops/layout_ops.cpp#takeStatedKernel`).
+// `take_stated(t, indices, extents)` is the stated spelling of `take`: the rows read and the
+// operand's extents, because a transpose law cannot read the shape of the value a cotangent comes
+// back through (`modules/tensor/ops/layout_ops.cpp#takeStatedKernel`).
 //
 // The library answers a take's gradient through `stdlib/rulesets/jvp.cml#jvp_take`, whose tangent
 // call is `take_stated`, and `stdlib/rulesets/transpose.cml#take_stated_t` scatters each row's
@@ -27,7 +26,7 @@ import { vjp } from vjp
 /// The differentiated value is the `with` parameter (design principles 9.9).
 with <w: float[]>
 func stated(): float {
-    return sum(take_stated(w, [2, 0, 2, 4]))
+    return sum(take_stated(w, [0, 2], [4]))
 }
 
 func through_library(x: float[]): float {

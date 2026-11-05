@@ -462,7 +462,7 @@ timeout_ms = 120000
 
 # The table itself, once, with nothing else in the output: twenty lines in key order. A key added or
 # dropped is red here, which is the half of the pair that the plan report cannot show on its own --
-# a long stdout is elided as `... N line(s) before`, so a reader counting the visible rows of a
+# a long stdout is elided as `omitted N line(s) above`, so a reader counting the visible rows of a
 # twenty-row table reads twelve.
 [[tests]]
 name = "ruleset_index_table_is_the_whole_index"

@@ -1,17 +1,17 @@
 // The forward rule of a read with a stated length: `pick_at`, and the two legs of the library that
 // answer it.
 //
-// `pick_at(xs, at)` is `xs[at[0]]` of a rank-1 array whose length `at[1]` states. It is the operator
-// the linear half of a read is written with (`stdlib/rulesets/jvp.cml#jvp_idx_arr` answers with
-// `pick_at(dxs, extent_pair(i, len(xs)))`), and until this commit it had a reverse law
+// `pick_at(xs, position, length)` is `xs[position]` of a rank-1 array whose length `length` states.
+// It is the operator the linear half of a read is written with (`stdlib/rulesets/jvp.cml#jvp_idx_arr`
+// answers with `pick_at(dxs, i, len(xs))`), and until this commit it had a reverse law
 // (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one: a program that wrote the read
 // itself was refused by name, although the same program written as `xs[i]` ran.
 //
 // The law is one line, because a read moves no element: the tangent of the read is the read of the
-// tangent, and the same `at` answers both -- the tangent has the primal's shape, and `at[1]` is that
-// length. No stated twin is needed the way a `sum`, a lane mean and a `take` need one: their
-// adjoints have to build an array whose length nothing in the cotangent states, and here the list
-// that carries the position already carries the length.
+// tangent, and the same two numbers answer both -- the tangent has the primal's shape, and `length`
+// is that length. No stated twin is needed the way a `sum`, a lane mean and a `take` need one: their
+// adjoints have to build an array whose length nothing in the cotangent states, and here the call
+// that carries the position carries the length beside it.
 //
 // Everything below is hand-computed before it is run. The read is the second element of a
 // three-element array and the direction is a three-element array:
@@ -46,7 +46,7 @@ import { pick_at, sum } from tensor
 
 /// The read: one element of an array, with the array's length stated beside the position.
 func read(x: float[]): float {
-    return pick_at(x, [1, 3])
+    return pick_at(x, 1, 3)
 }
 
 func main(): int sync {

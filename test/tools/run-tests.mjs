@@ -1236,10 +1236,18 @@ function printMatchDiagnostics(diagnostics) {
  * integration, where the files of test/results are not at hand): with CI or
  * CAMEL_TEST_SHOW_OUTPUT set, the last lines of standard output and standard error follow the
  * failure, line ends and control characters made visible.
+ *
+ * When the tail is shorter than what the test wrote, the line that cuts it says how much it cut
+ * **and where the uncut text is** (`pointer`, the same line the caller printed above the tail). A
+ * printer that cuts evidence in silence is worse than one that prints nothing: the second sends the
+ * reader to the log, and the first lets them believe they have already read it. Measured on
+ * 2026-11-04: `runner.backend_matrix` was red because the two lines naming the defect were 75 lines
+ * above a tail that looked complete, and the elision line said `... 75 line(s) before` -- a count
+ * with no destination.
  */
 const SHOW_FAILED_OUTPUT = Boolean(process.env.CAMEL_TEST_SHOW_OUTPUT || process.env.CI)
 
-function printFailedOutput(result) {
+function printFailedOutput(result, pointer) {
     if (!SHOW_FAILED_OUTPUT) return
     const maxLines = 12
     const maxWidth = 240
@@ -1251,7 +1259,10 @@ function printFailedOutput(result) {
         const lines = text.replace(/\n$/, '').split('\n')
         const shown = lines.slice(-maxLines)
         if (lines.length > shown.length) {
-            console.log(`    ${COLORS.cyan}[${name}]${COLORS.reset} ... ${lines.length - shown.length} line(s) before`)
+            const where = pointer ? ` -- ${pointer}` : ''
+            console.log(
+                `    ${COLORS.cyan}[${name}]${COLORS.reset} omitted ${lines.length - shown.length} line(s) above${where}`,
+            )
         }
         for (const line of shown) {
             const visible = line
@@ -3425,16 +3436,20 @@ async function executePlans(plans, options, sharedVars, logDir) {
             if (note) {
                 printDetailLines([`note: ${note}`])
             }
+            // The pointer to the whole output, computed once: it is printed before the twelve-line
+            // tail, and again on the line that cuts the tail, so a reader who stops at the tail has
+            // been told twice where the rest is.
+            const pointer = outcome.status === 'fail'
+                ? fullOutputLine(logPathOf(plan, test, outcome.status, logDir))
+                : ''
             if (outcome.status === 'fail') {
-                // The pointer comes before the twelve-line tail: a reader who stops at the tail must
-                // still have been told where the rest is.
-                printDetailLines([fullOutputLine(logPathOf(plan, test, outcome.status, logDir))])
+                printDetailLines([pointer])
             }
             printDetailLines(outcome.failures)
             // A regex that matched nothing prints its pattern and the head of what it read, before
             // the tail: the two ends of the output are two different readings.
             if (outcome.status === 'fail') printMatchDiagnostics(outcome.result && outcome.result.matchDiagnostics)
-            if (outcome.status === 'fail') printFailedOutput(outcome.result)
+            if (outcome.status === 'fail') printFailedOutput(outcome.result, pointer)
         }
         const writeStarted = performance.now()
         writeLogFiles(plan, test, outcome.result, outcome.status, logDir)

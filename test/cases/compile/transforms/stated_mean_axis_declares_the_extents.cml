@@ -1,9 +1,9 @@
-// The signature of a stated reduction is the one its `at` states.
+// The signature of a stated reduction is the one its three stated values name.
 //
-// `mean_axis_stated(t, at)` takes `at` = `[axis, keepdims, d0, ..., d(rank-1)]`, so a call that
-// writes the list has stated the result's extents. Here the axis is 0, there is no `keepdims`, and
-// the operand is a rank-1 tensor of four elements: one lane, so the answer is the element itself
-// (design principles 5.4) and the value is the mean, 2.5.
+// `mean_axis_stated(t, axis, keepdims, extents)` takes the axis, the flag and the operand's extents
+// as parameters of their own, so a call that states all three has stated the result's extents. Here
+// the axis is 0, there is no `keepdims`, and the operand is a rank-1 tensor of four elements: one
+// lane, so the answer is the element itself (design principles 5.4) and the value is the mean, 2.5.
 //
 // The reading this case pins is the *type*, not the number: the operator is computed rather than
 // declared (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`), so the node's type is
@@ -15,7 +15,7 @@
 import { mean_axis_stated } from tensor
 
 func lane_mean(x: float[]): float {
-    return mean_axis_stated(x, [0, 0, 4])
+    return mean_axis_stated(x, 0, false, [4])
 }
 
 func main(): int sync {

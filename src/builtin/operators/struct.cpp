@@ -4,15 +4,15 @@
 #include "struct.h"
 #include "camel/core/context/context.h"
 #include "camel/core/derivative.h"
-#include "camel/core/error/runtime.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
+#include "camel/core/error/runtime.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/bytes.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/executor.h"
 #include "camel/utils/type.h"
-#include "camel/core/rtdata/bytes.h"
 #include "camel/utils/utf8.h"
 #include "ops.h"
 #include <format>
@@ -35,9 +35,9 @@ slot_t __iter_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     String *s                   = norm.get<String *>(0);
     const std::string_view text = s != nullptr ? s->view() : std::string_view();
     auto *arrayType             = ArrayType::create(Type::String());
-    Array *result               = Array::create(mm::autoSpace(), arrayType, camel::utf8::count(text));
-    size_t at                   = 0;
-    size_t index                = 0;
+    Array *result = Array::create(mm::autoSpace(), arrayType, camel::utf8::count(text));
+    size_t at     = 0;
+    size_t index  = 0;
     while (at < text.size()) {
         const size_t start = at;
         (void)camel::utf8::decodeOne(text, at);
@@ -65,18 +65,22 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // function takes is a value nobody has (author, 2026-11-03 17:55).
 //
 // So the language gets one function whose answer is a fact of its **type argument** and of nothing
-// else: `extent_of::<float[2, 3]>()` is `[2, 3]`, an `int[]`. A type that leaves an extent open
+// else: `extent_of::<float[2, 3]>()` is `[2, 3]`, an `int[]`. The extents are the type's own, one
+// level: `float[2][3]` is an array of arrays (three `float[2]` values), so it answers `[3]` -- the
+// list `shape` answers for a value of that type -- and `[2, 3]` is what the rank-2 `float[2, 3]`
+// answers; the element type's extent is the question `extent_of::<float[2]>()` answers. A type
+// that leaves an extent open
 // answers nothing and is refused where the call is instantiated (`extentOfResolver`), which is the
 // same rule `statedExtentsOf` (camel/core/type/composite/array.h) spells for every other reader.
 //
 // The value is settled where the call is built, not where it runs: an OPER node carries the
 // instantiated type of the call, never the type argument it was written with, so nothing at run
 // time still says which type the extents belong to. A reader that has the type -- the transposition
-// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#shapeFromTypeOf`).
+// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#statedExtentsNodeOf`).
 //
 // So this operator has no kernel, and deliberately not one that would only throw. The rule accepts
-// a call only when the type argument states every extent (`resolveForCall`), and every accepted call
-// is settled from that same `statedExtentsOf` before a node is made (`valueFromTypeArgs`, from
+// a call only when the type argument states every extent (`resolveForCall`), and every accepted
+// call is settled from that same `statedExtentsOf` before a node is made (`valueFromTypeArgs`, from
 // `Builder::visitLinkNode` and `Builder::functionValueOf`), so no path builds an OPER node of this
 // operator for a run to execute. The kernel that used to stand here answered every such run with
 // `RuntimeDiag::PassInternalError` -- a compiler's defect reported as the program's fault -- and
@@ -85,9 +89,7 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 namespace {
 
 /// The `int[]` an extents value is: `extent_of` answers this type and nothing else.
-ArrayType *extentsArrayType() {
-    return ArrayType::create(Type::Int64());
-}
+ArrayType *extentsArrayType() { return ArrayType::create(Type::Int64()); }
 
 /// The extents `type` states, as the `int[]` a program reads -- or nullptr when the type states
 /// none. Both readers go through `statedExtentsOf`, so the builtin and the transposition walk
@@ -136,8 +138,8 @@ std::string openPositionText(Type *type) {
 /// `extent_of::<A>()`: the call's type argument is the whole question, so the rule reads it and
 /// nothing else. It takes no ordinary arguments and no `with` arguments (a call that writes any is
 /// not this function), and it answers `int[]` whenever `A` is an array type whose extents are all
-/// written down -- `statedExtentsOf` is the answer, so the builtin and the transposition walk cannot
-/// disagree about which types have a shape.
+/// written down -- `statedExtentsOf` is the answer, so the builtin and the transposition walk
+/// cannot disagree about which types have a shape.
 ///
 /// The answer is the rule's `valueFromTypeArgs` as well as its result type: a call of this rule
 /// reads no operand, and nothing in the graph or at run time could state the type argument it was
@@ -149,16 +151,16 @@ class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
   public:
     /// A call with no type argument says nothing about a type, and this function answers about the
     /// type it is given: `nullopt` here is "this is not a call of `extent_of`", not a diagnostic.
-    std::optional<FunctionType *> resolve(const type_vec_t &with, const type_vec_t &norm)
-        const override {
+    std::optional<FunctionType *>
+    resolve(const type_vec_t &with, const type_vec_t &norm) const override {
         (void)with;
         (void)norm;
         return std::nullopt;
     }
 
-    std::optional<FunctionType *>
-    resolveForCall(const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
-                   const type_vec_t &norm, static_args_t normStatics) const override {
+    std::optional<FunctionType *> resolveForCall(
+        const type_vec_t &types, Type *expectedResult, const type_vec_t &with,
+        const type_vec_t &norm, static_args_t normStatics) const override {
         (void)expectedResult;
         (void)normStatics;
         if (!with.empty() || !norm.empty() || types.size() != 1 || types.front() == nullptr) {
@@ -168,7 +170,8 @@ class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
             return std::nullopt;
         }
         return FunctionType::create(
-            camel::core::type::param_init_list_t{}, camel::core::type::param_init_list_t{},
+            camel::core::type::param_init_list_t{},
+            camel::core::type::param_init_list_t{},
             extentsArrayType());
     }
 
@@ -333,16 +336,15 @@ SliceRange sliceRange(
     SliceRange range;
     range.step = step;
     if (step > 0) {
-        range.start = wroteStart ? startRaw : 0;
+        range.start     = wroteStart ? startRaw : 0;
         const Int64 end = wroteEnd ? endRaw : extent;
         if (range.start < 0 || range.start > extent || end < 0 || end > extent) {
-            throwRuntimeFault(
-                RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
+            throwRuntimeFault(RuntimeDiag::SliceOutOfRange, range.start, end, what, extent);
         }
         range.count = range.start < end ? (end - range.start + step - 1) / step : 0;
         return range;
     }
-    range.start = wroteStart ? startRaw : extent - 1;
+    range.start     = wroteStart ? startRaw : extent - 1;
     const Int64 end = wroteEnd ? endRaw : -1;
     if ((wroteStart && (range.start < 0 || range.start >= extent)) ||
         (wroteEnd && (end < 0 || end > extent))) {
@@ -355,7 +357,7 @@ SliceRange sliceRange(
 /// The axis a slice names, read as the position it is: an axis counts from the end when it is
 /// negative, `-1` being the last one. A value does not have the axis is a fault.
 Int64 sliceAxis(const Array *arr, Int64 axisArg) {
-    const auto rank = static_cast<Int64>(arr->rank());
+    const auto rank  = static_cast<Int64>(arr->rank());
     const Int64 axis = axisArg < 0 ? axisArg + rank : axisArg;
     if (axis < 0 || axis >= rank) {
         throwRuntimeFault(
@@ -372,11 +374,8 @@ Int64 sliceAxis(const Array *arr, Int64 axisArg) {
 /// extents, so a parent whose element type is not pure data (a slot array) maps by the same
 /// arithmetic as a compact one.
 Int64 parentIndexOfSlice(
-    Int64 flat,
-    const std::vector<int64_t> &sliceExtents,
-    const std::vector<int64_t> &parentStrides,
-    size_t axis,
-    const SliceRange &range) {
+    Int64 flat, const std::vector<int64_t> &sliceExtents, const std::vector<int64_t> &parentStrides,
+    size_t axis, const SliceRange &range) {
     Int64 rest   = flat;
     Int64 parent = 0;
     for (size_t k = sliceExtents.size(); k-- > 0;) {
@@ -428,11 +427,8 @@ std::string indexDimensionName(size_t axis, size_t rank) {
 /// axis is the same arithmetic with one position, which is why the forward read and the two
 /// scatters of its gradient all read the axes here.
 Int64 parentIndexOfTake(
-    Int64 flat,
-    const std::vector<int64_t> &resultExtents,
-    const std::vector<int64_t> &parentStrides,
-    size_t axis,
-    std::span<const Int64> positions) {
+    Int64 flat, const std::vector<int64_t> &resultExtents,
+    const std::vector<int64_t> &parentStrides, size_t axis, std::span<const Int64> positions) {
     Int64 rest   = flat;
     Int64 parent = 0;
     for (size_t k = resultExtents.size(); k-- > 0;) {
@@ -482,20 +478,15 @@ uint64_t numelOf(const std::vector<int64_t> &extents) {
 /// `i` of the slice goes to the flat index the parent's own coordinates give it. `result` is
 /// already filled with the zeros of the positions the slice does not take.
 void scatterSliceGradient(
-    Array *result,
-    const Array *dx,
-    const std::vector<int64_t> &sliceExtents,
-    const std::vector<int64_t> &parentExtents,
-    size_t axis,
-    const SliceRange &range,
+    Array *result, const Array *dx, const std::vector<int64_t> &sliceExtents,
+    const std::vector<int64_t> &parentExtents, size_t axis, const SliceRange &range,
     const ArrayType *tangentType) {
     const std::vector<int64_t> strides = rowMajorStrides(parentExtents);
     const uint64_t count               = numelOf(sliceExtents);
     for (uint64_t i = 0; i < count; ++i) {
-        const Int64 at = parentIndexOfSlice(
-            static_cast<Int64>(i), sliceExtents, strides, axis, range);
-        result->set<slot_t>(
-            static_cast<uint64_t>(at), dx->get<slot_t>(i), tangentType);
+        const Int64 at =
+            parentIndexOfSlice(static_cast<Int64>(i), sliceExtents, strides, axis, range);
+        result->set<slot_t>(static_cast<uint64_t>(at), dx->get<slot_t>(i), tangentType);
     }
 }
 
@@ -526,28 +517,23 @@ slot_t __slice_sub__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const size_t words  = norm.size();
     const Int64 step    = words >= 5 ? norm.get<Int64>(4) : 1;
     const Int64 written = words >= 6 ? norm.get<Int64>(5) : 3;
-    const Int64 axis  = sliceAxis(arr, norm.get<Int64>(1));
-    const auto at     = static_cast<size_t>(axis);
-    const SliceRange range = sliceRange(
-        arr->dim(at),
-        norm.get<Int64>(2),
-        norm.get<Int64>(3),
-        step,
-        written);
+    const Int64 axis    = sliceAxis(arr, norm.get<Int64>(1));
+    const auto at       = static_cast<size_t>(axis);
+    const SliceRange range =
+        sliceRange(arr->dim(at), norm.get<Int64>(2), norm.get<Int64>(3), step, written);
     std::vector<int64_t> extents = slicedExtents(arr, at, range);
     if (axis == 0 && range.step == 1 && arr->isCompact()) {
         // A slice is a view sharing the data block (design principles 5.4).
-        return rtdata::toSlot(Array::view(
-            arr, extents, static_cast<uint64_t>(range.start * arr->step(0))));
+        return rtdata::toSlot(
+            Array::view(arr, extents, static_cast<uint64_t>(range.start * arr->step(0))));
     }
     // A slot array has no block to share and is copied (the deviation recorded for slot arrays);
     // so is a stepped slice, and a slice of an axis other than the first.
-    Array *res = Array::create(mm::autoSpace(), arrType, extents);
+    Array *res                         = Array::create(mm::autoSpace(), arrType, extents);
     const std::vector<int64_t> strides = rowMajorStrides(arr->shapeVector());
     const uint64_t count               = res->numel();
     for (uint64_t i = 0; i < count; ++i) {
-        const Int64 src = parentIndexOfSlice(
-            static_cast<Int64>(i), extents, strides, at, range);
+        const Int64 src = parentIndexOfSlice(static_cast<Int64>(i), extents, strides, at, range);
         res->set<slot_t>(i, arr->get<slot_t>(static_cast<uint64_t>(src)), arrType);
     }
     return rtdata::toSlot(res);
@@ -579,15 +565,14 @@ slot_t __slice_str__(ArgsView &with, ArgsView &norm, Context &ctx) {
     }
     const auto count = static_cast<Int64>(offsets.size());
     offsets.push_back(text.size());
-    const SliceRange range = sliceRange(
-        count, norm.get<Int64>(2), norm.get<Int64>(3), step, written, "a string");
+    const SliceRange range =
+        sliceRange(count, norm.get<Int64>(2), norm.get<Int64>(3), step, written, "a string");
     std::string out;
     if (range.step == 1) {
-        out.assign(
-            text.substr(
-                offsets[static_cast<size_t>(range.start)],
-                offsets[static_cast<size_t>(range.start + range.count)] -
-                    offsets[static_cast<size_t>(range.start)]));
+        out.assign(text.substr(
+            offsets[static_cast<size_t>(range.start)],
+            offsets[static_cast<size_t>(range.start + range.count)] -
+                offsets[static_cast<size_t>(range.start)]));
     } else {
         for (Int64 k = 0; k < range.count; ++k) {
             const auto at = static_cast<size_t>(range.start + k * range.step);
@@ -609,8 +594,7 @@ slot_t __len_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
 slot_t __eq_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
     (void)ctx;
-    return rtdata::toSlot(
-        norm.get<BytesObject *>(0)->view() == norm.get<BytesObject *>(1)->view());
+    return rtdata::toSlot(norm.get<BytesObject *>(0)->view() == norm.get<BytesObject *>(1)->view());
 }
 
 // `a + b` of two `Bytes`: the bytes of a followed by those of b, as for two strings.
@@ -639,7 +623,11 @@ slot_t __slice_bytes__(ArgsView &with, ArgsView &norm, Context &ctx) {
     const Int64 step       = words >= 5 ? norm.get<Int64>(4) : 1;
     const Int64 written    = words >= 6 ? norm.get<Int64>(5) : 3;
     const SliceRange range = sliceRange(
-        static_cast<Int64>(data.size()), norm.get<Int64>(2), norm.get<Int64>(3), step, written,
+        static_cast<Int64>(data.size()),
+        norm.get<Int64>(2),
+        norm.get<Int64>(3),
+        step,
+        written,
         "a Bytes");
     std::string out;
     out.reserve(static_cast<size_t>(range.count));
@@ -655,11 +643,10 @@ namespace {
 /// element type, and otherwise the element type the argument's value holds (an array literal
 /// whose element type nobody fixed yet). Only the element type is read from it; the extents of
 /// the value are the ones computed where the result is made.
-ArrayType *
-resultArrayType(Type *declared, const Array *values, std::span<const int64_t> extents) {
+ArrayType *resultArrayType(Type *declared, const Array *values, std::span<const int64_t> extents) {
     auto *declaredArray = declared != nullptr ? tt::as_ptr<ArrayType>(declared) : nullptr;
     const bool stated   = declaredArray != nullptr && declaredArray->elemType() != nullptr &&
-                        declaredArray->elemType()->code() != TypeCode::Void;
+                          declaredArray->elemType()->code() != TypeCode::Void;
     if (stated) {
         return declaredArray;
     }
@@ -691,8 +678,8 @@ slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
             RuntimeDiag::RuntimeError,
             "a value of rank zero has no positions to index: it is the element itself");
     }
-    const Int64 axis    = indexAxis(arr, axisArg);
-    const auto at       = static_cast<size_t>(axis);
+    const Int64 axis = indexAxis(arr, axisArg);
+    const auto at    = static_cast<size_t>(axis);
     // The read the type states decides which positions are in range, and the two reads below count
     // different things: the first dimension's position hands back that row, while a read whose
     // result type is not an array is the value's own element (design principles 5.4) -- the flat
@@ -702,8 +689,8 @@ slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // a `float[2, 2]` (length 2) although the value holds four elements, and it refused the third
     // computed element of a `[[a, b], [c, 1.0]]` literal its pullback position the same way.
     const Type *const readType = norm.resultType();
-    const bool elementRead     = at == 0 && arr->rank() > 1 && readType != nullptr &&
-                             readType->code() != TypeCode::Array;
+    const bool elementRead =
+        at == 0 && arr->rank() > 1 && readType != nullptr && readType->code() != TypeCode::Array;
     const Int64 extent = elementRead ? static_cast<Int64>(arr->numel()) : arr->dim(at);
     if (raw < 0 || raw >= extent) {
         throwRuntimeFault(
@@ -731,10 +718,10 @@ slot_t __index_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     // one it had, so the elements are gathered by the parent's own strides.
     std::vector<int64_t> extents = arr->shapeVector();
     extents.erase(extents.begin() + static_cast<std::ptrdiff_t>(at));
-    std::vector<int64_t> taken = arr->shapeVector();
-    taken[at]                  = 1; // the position is one position on that dimension
-    auto *const resType        = resultArrayType(norm.resultType(), arr, extents);
-    Array *res                 = Array::create(mm::autoSpace(), resType, extents);
+    std::vector<int64_t> taken         = arr->shapeVector();
+    taken[at]                          = 1; // the position is one position on that dimension
+    auto *const resType                = resultArrayType(norm.resultType(), arr, extents);
+    Array *res                         = Array::create(mm::autoSpace(), resType, extents);
     const std::vector<int64_t> strides = rowMajorStrides(arr->shapeVector());
     const std::vector<Int64> positions{raw};
     const uint64_t count = res->numel();
@@ -762,8 +749,7 @@ slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         // A rank-0 array has no dimension to take a position from. The type system states a rank
         // of at least one for this operator, so this is a defect rather than something a program
         // writes.
-        throwRuntimeFault(
-            RuntimeDiag::InvalidArgument, "[]", "a subscript of an array of rank 0");
+        throwRuntimeFault(RuntimeDiag::InvalidArgument, "[]", "a subscript of an array of rank 0");
     }
     const Int64 axisArg = norm.size() >= 3 ? norm.get<Int64>(2) : 0;
     const Int64 axis    = indexAxis(arr, axisArg);
@@ -785,10 +771,10 @@ slot_t __idx_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
         }
         positions[k] = raw;
     }
-    std::vector<int64_t> extents = arr->shapeVector();
-    extents[at]                  = static_cast<int64_t>(take);
-    auto *const resType = resultArrayType(norm.resultType(), arr, extents);
-    Array *res          = Array::create(mm::autoSpace(), resType, extents);
+    std::vector<int64_t> extents       = arr->shapeVector();
+    extents[at]                        = static_cast<int64_t>(take);
+    auto *const resType                = resultArrayType(norm.resultType(), arr, extents);
+    Array *res                         = Array::create(mm::autoSpace(), resType, extents);
     const std::vector<int64_t> strides = rowMajorStrides(arr->shapeVector());
     const uint64_t count               = res->numel();
     for (uint64_t i = 0; i < count; ++i) {
@@ -960,7 +946,8 @@ slot_t callTangentOperator(
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             std::format(
-                "autodiff: the operator '{}' a tangent space names has no implementation", uri));
+                "autodiff: the operator '{}' a tangent space names has no implementation",
+                uri));
     }
     SlotArgs norm(std::move(slots), std::move(types));
     SlotArgs with({}, {});
@@ -1062,7 +1049,9 @@ slot_t zeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot_t pri
             zero->set<slot_t>(
                 i,
                 zeroTangent(
-                    ctx, primalArray->elemType(), tangentArray->elemType(),
+                    ctx,
+                    primalArray->elemType(),
+                    tangentArray->elemType(),
                     value->get<slot_t>(i)),
                 tangentArray);
         }
@@ -1089,8 +1078,7 @@ slot_t moduleZeroTangent(Context &ctx, Type *primalType, Type *tangentType, slot
     if (space->zerosLikeUri.empty()) {
         noStructuralTangent("a zero tangent", tangentType);
     }
-    return callTangentOperator(
-        ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
+    return callTangentOperator(ctx, space->zerosLikeUri, tangentType, {primal}, {primalType});
 }
 
 // The sum of two tangents of a type whose tangent space a module owns: the module published the
@@ -1148,18 +1136,21 @@ slot_t addTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t rhsSlo
         // As in zeroTangent: an array whose element type is the `Void` marker has no element type
         // to add along, so its two tangents are added by the kind's own operator (`tensor:add`),
         // which reads the element type the values actually have.
-        if (arrayType->elemType() != nullptr &&
-            arrayType->elemType()->code() == TypeCode::Void) {
+        if (arrayType->elemType() != nullptr && arrayType->elemType()->code() == TypeCode::Void) {
             const auto *space =
                 camel::core::DerivativeRegistry::instance().findTangentSpace(tangentType);
             if (space == nullptr || space->addUri.empty()) {
                 noStructuralTangent("a sum of tangents", tangentType);
             }
             return callTangentOperator(
-                ctx, space->addUri, tangentType, {lhsSlot, rhsSlot}, {tangentType, tangentType});
+                ctx,
+                space->addUri,
+                tangentType,
+                {lhsSlot, rhsSlot},
+                {tangentType, tangentType});
         }
-        auto *lhs       = fromSlot<Array *>(lhsSlot);
-        auto *rhs       = fromSlot<Array *>(rhsSlot);
+        auto *lhs = fromSlot<Array *>(lhsSlot);
+        auto *rhs = fromSlot<Array *>(rhsSlot);
         ASSERT(lhs->size() == rhs->size(), "autodiff: tangent arrays of different lengths.");
         Array *sum = Array::create(mm::autoSpace(), lhs->size());
         for (size_t i = 0; i < lhs->size(); ++i) {
@@ -1186,7 +1177,11 @@ slot_t moduleAddTangent(Context &ctx, Type *tangentType, slot_t lhsSlot, slot_t 
         noStructuralTangent("a sum of tangents", tangentType);
     }
     return callTangentOperator(
-        ctx, space->addUri, tangentType, {lhsSlot, rhsSlot}, {tangentType, tangentType});
+        ctx,
+        space->addUri,
+        tangentType,
+        {lhsSlot, rhsSlot},
+        {tangentType, tangentType});
 }
 
 } // namespace
@@ -1235,8 +1230,7 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     for (uint64_t i = 0; i < value->numel(); ++i) {
         zero->setSlot(
             i,
-            zeroTangent(
-                ctx, primalArray->elemType(), tangentArray->elemType(), value->getSlot(i)),
+            zeroTangent(ctx, primalArray->elemType(), tangentArray->elemType(), value->getSlot(i)),
             tangentArray);
     }
     return rtdata::toSlot(zero);
@@ -1258,21 +1252,19 @@ slot_t __tangent_zeros_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // the element, and the slab's (an array) when it was the slab.
 slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    auto *arrayType     = tt::as_ptr<ArrayType>(norm.type(0));
-    auto *base          = norm.get<Array *>(0);
-    const Int64 index   = norm.get<Int64>(1);
-    const Int64 axisArg = norm.size() >= 4 ? norm.get<Int64>(3) : 0;
-    const Int64 axis    = indexAxis(base, axisArg);
-    const auto at       = static_cast<size_t>(axis);
-    const bool elementRead =
-        at == 0 && base->rank() > 1 && norm.code(2) != TypeCode::Array;
-    const Int64 extent = elementRead ? static_cast<Int64>(base->numel()) : base->dim(at);
+    auto *arrayType        = tt::as_ptr<ArrayType>(norm.type(0));
+    auto *base             = norm.get<Array *>(0);
+    const Int64 index      = norm.get<Int64>(1);
+    const Int64 axisArg    = norm.size() >= 4 ? norm.get<Int64>(3) : 0;
+    const Int64 axis       = indexAxis(base, axisArg);
+    const auto at          = static_cast<size_t>(axis);
+    const bool elementRead = at == 0 && base->rank() > 1 && norm.code(2) != TypeCode::Array;
+    const Int64 extent     = elementRead ? static_cast<Int64>(base->numel()) : base->dim(at);
     if (index < 0 || index >= extent) {
         throwRuntimeFault(
             RuntimeDiag::IndexOutOfRange,
             index,
-            elementRead ? std::string{"the elements"}
-                        : indexDimensionName(at, base->rank()),
+            elementRead ? std::string{"the elements"} : indexDimensionName(at, base->rank()),
             static_cast<size_t>(extent));
     }
     // The gradient carries the element type of the array it is the gradient of: an array created
@@ -1287,12 +1279,14 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
         // is the element's own tangent, an array for an array of arrays).
         const auto slot = static_cast<uint64_t>(index);
         result->setSlot(
-            slot, addTangent(ctx, arrayType->elemType(), base->getSlot(slot), norm.slot(2)), arrayType);
+            slot,
+            addTangent(ctx, arrayType->elemType(), base->getSlot(slot), norm.slot(2)),
+            arrayType);
         return rtdata::toSlot(result);
     }
     // A position on a deeper dimension takes the slab along it (a row, for a rank-2 array), so the
     // gradient of that slab goes back to the positions the slab holds, one element at a time.
-    auto *const delta = norm.get<Array *>(2);
+    auto *const delta          = norm.get<Array *>(2);
     std::vector<int64_t> taken = base->shapeVector();
     taken[at]                  = 1; // the position is one position on that dimension
     if (delta->numel() != numelOf(taken)) {
@@ -1311,8 +1305,7 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
             parentIndexOfTake(static_cast<Int64>(i), taken, strides, at, positions));
         result->setSlot(
             dst,
-            addTangent(
-                ctx, arrayType->elemType(), result->getSlot(dst), delta->getSlot(i)),
+            addTangent(ctx, arrayType->elemType(), result->getSlot(dst), delta->getSlot(i)),
             arrayType);
     }
     return rtdata::toSlot(result);
@@ -1328,20 +1321,20 @@ slot_t __tangent_scatter_add_arr__(ArgsView &with, ArgsView &norm, Context &ctx)
 // them.
 slot_t __tangent_scatter_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
     (void)with;
-    auto *arrayType   = tt::as_ptr<ArrayType>(norm.type(0));
-    auto *base        = norm.get<Array *>(0);
-    auto *indices     = norm.get<Array *>(1);
-    auto *delta       = norm.get<Array *>(2);
+    auto *arrayType     = tt::as_ptr<ArrayType>(norm.type(0));
+    auto *base          = norm.get<Array *>(0);
+    auto *indices       = norm.get<Array *>(1);
+    auto *delta         = norm.get<Array *>(2);
     const Int64 axisArg = norm.size() >= 4 ? norm.get<Int64>(3) : 0;
     if (base->rank() < 1) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             "autodiff: the gradient of a take needs an array of rank at least one");
     }
-    const Int64 axis   = indexAxis(base, axisArg);
-    const auto at      = static_cast<size_t>(axis);
-    const Int64 extent = base->dim(at);
-    const size_t take  = static_cast<size_t>(indices->numel());
+    const Int64 axis           = indexAxis(base, axisArg);
+    const auto at              = static_cast<size_t>(axis);
+    const Int64 extent         = base->dim(at);
+    const size_t take          = static_cast<size_t>(indices->numel());
     std::vector<int64_t> taken = base->shapeVector();
     taken[at]                  = static_cast<int64_t>(take);
     if (delta->numel() != numelOf(taken)) {
@@ -1374,8 +1367,7 @@ slot_t __tangent_scatter_take_arr__(ArgsView &with, ArgsView &norm, Context &ctx
             parentIndexOfTake(static_cast<Int64>(i), taken, strides, at, positions));
         result->setSlot(
             dst,
-            addTangent(
-                ctx, arrayType->elemType(), result->getSlot(dst), delta->getSlot(i)),
+            addTangent(ctx, arrayType->elemType(), result->getSlot(dst), delta->getSlot(i)),
             arrayType);
     }
     return rtdata::toSlot(result);
@@ -1415,8 +1407,7 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
         norm.get<Int64>(5),
         norm.get<Int64>(6));
     const std::vector<int64_t> sliceExtents = slicedExtents(like, at, range);
-    if (static_cast<uint64_t>(dx->numel()) != numelOf(sliceExtents) ||
-        dx->rank() != like->rank()) {
+    if (static_cast<uint64_t>(dx->numel()) != numelOf(sliceExtents) || dx->rank() != like->rank()) {
         throwRuntimeFault(
             RuntimeDiag::RuntimeError,
             std::format(
@@ -1435,13 +1426,19 @@ slot_t __tangent_scatter_slice_arr__(ArgsView &with, ArgsView &norm, Context &ct
     // An array whose tangent's element type is `Void` has no element type to take a zero from;
     // its kind's own zero reads the element type the value actually has, and every position the
     // slice does not take holds that zero.
-    if (tangentArray->elemType() != nullptr &&
-        tangentArray->elemType()->code() == TypeCode::Void) {
+    if (tangentArray->elemType() != nullptr && tangentArray->elemType()->code() == TypeCode::Void) {
         slot_t zero = moduleZeroTangent(ctx, primalType, tangentType, rtdata::toSlot(like));
         for (size_t i = 0; i < like->numel(); ++i) {
             result->set<slot_t>(i, zero, tangentArray);
         }
-        scatterSliceGradient(result, dx, sliceExtents, like->shapeVector(), at, range, tangentArray);
+        scatterSliceGradient(
+            result,
+            dx,
+            sliceExtents,
+            like->shapeVector(),
+            at,
+            range,
+            tangentArray);
         return rtdata::toSlot(result);
     }
     for (size_t i = 0; i < like->numel(); ++i) {

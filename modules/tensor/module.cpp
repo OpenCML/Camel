@@ -60,7 +60,7 @@ class TensorExecutor : public Executor {
 /// `stdlib/signatures/tensor.cml`).
 ///
 /// `mean_axis_stated` is not among them for the same kind of reason and one step further: its
-/// result's extents are the operand's with the axis `at[0]` removes -- or the flag `at[1]` keeps --
+/// result's extents are the operand's with the `axis` removed -- or `keepdims` keeps --
 /// so they follow from a *value*, and the only type a declaration could write is `T[..]`. That
 /// type is a claim the value can contradict: the answer is the element itself when the reduction
 /// leaves rank 0 (design principles 5.4), and a cotangent typed array over a value that has no
@@ -74,37 +74,27 @@ class TensorExecutor : public Executor {
 ///
 /// `mul_stated` and `matmul_stated` are declared for the same reason and one step further: their
 /// results' extents are a *function of the values* the two lists carry (a product's shape is the
-/// broadcast of the two, a matrix product's is neither), so the only type a declaration can write is
-/// `T[..]` and that is the honest one. The declared result is what a program sees; the walk reads the
-/// lists and never the result's extents.
+/// broadcast of the two, a matrix product's is neither), so the only type a declaration can write
+/// is `T[..]` and that is the honest one. The declared result is what a program sees; the walk
+/// reads the lists and never the result's extents.
 constexpr std::string_view kDeclaredOperators[] = {
-    "broadcast_like",
-    "dim",
-    "pick_at",
-    "gemm_backend",
-    "gemm_library",
-    "gemm_library_threads",
-    "gemm_threads",
-    "num_threads",
-    "matmul_stated",
-    "max_axis_stated",
-    "mean_stated",
-    "min_axis_stated",
-    "mul_stated",
-    "numel",
-    "save_npy",
-    "set_num_threads",
-    "shape",
-    "sum_axis_stated",
-    "sum_stated",
-    "sum_to",
-    "take_stated",
-    "show",
+    "broadcast_like", "dim",
+    "pick_at",        "gemm_backend",
+    "gemm_library",   "gemm_library_threads",
+    "gemm_threads",   "num_threads",
+    "matmul_stated",  "max_axis_stated",
+    "mean_stated",    "min_axis_stated",
+    "mul_stated",     "numel",
+    "save_npy",       "set_num_threads",
+    "shape",          "sum_axis_stated",
+    "sum_stated",     "sum_to",
+    "take_stated",    "show",
     "to_bytes",
 };
 
 bool isScalarConversion(std::string_view name) {
-    constexpr std::string_view names[] = {"i32", "i64", "int", "f32", "f64", "float", "bf16", "f16"};
+    constexpr std::string_view names[] =
+        {"i32", "i64", "int", "f32", "f64", "float", "bf16", "f16"};
     return std::find(std::begin(names), std::end(names), name) != std::end(names);
 }
 
@@ -121,10 +111,10 @@ TensorModule::TensorModule(context_ptr_t ctx) : BuiltinModule("tensor", ctx) {
     camel::tensor::registerMulNegFusion();
     camel::tensor::ops::registerTensorOps();
     camel::tensor::passes::registerTensorPasses();
-    // `tensor:multiply`'s batching rule is a `rule` in `stdlib/rulesets/vmap.cml` whose left side is
-    // `mul_tensor(x, w)`, and nothing here says so: the array product has no token of its own -- `*` at
-    // two operands is the scalar product's key -- so its key is one of the two that cannot be derived
-    // from the operator's name, and it is named, with this reason, in
+    // `tensor:multiply`'s batching rule is a `rule` in `stdlib/rulesets/vmap.cml` whose left side
+    // is `mul_tensor(x, w)`, and nothing here says so: the array product has no token of its own --
+    // `*` at two operands is the scalar product's key -- so its key is one of the two that cannot
+    // be derived from the operator's name, and it is named, with this reason, in
     // `camel/core/forward.h#ruleKeyExceptions()`.
     // `Tensor` is no type name: a tensor's type is the array spelling that states its element type
     // (`f32[..]`, `f32[2, 3]`, docs/design/arrays-memory/plan.cn.md section 5.1), and a program
@@ -203,9 +193,9 @@ bool TensorModule::load() {
                camel::core::type::Type *&valueType) -> slot_t {
                 namespace tensor = camel::tensor;
                 if (!tensor::isTensorType(declared)) {
-                    //The .npy format holds a numeric array. Another array — an array of arrays,
+                    // The .npy format holds a numeric array. Another array — an array of arrays,
                     //`string[]` — is not one, and this loader does not take it: the caller
-                    //reports it the way it reports any type no loader takes.
+                    // reports it the way it reports any type no loader takes.
                     return NullSlot;
                 }
                 std::filesystem::path path = camel::utils::pathFromUtf8(text);
@@ -227,7 +217,7 @@ bool TensorModule::load() {
                     value,
                     camel::core::type::ArrayType::openRank(
                         camel::core::type::asArrayType(declared)->elemType()));
-                const auto dims = t->shapeSpan();
+                const auto dims               = t->shapeSpan();
                 camel::core::type::Type *elem = camel::core::type::Type::create(t->dtype());
                 valueType = dims.empty() ? elem : camel::core::type::ArrayType::create(elem, dims);
                 return value;
@@ -244,8 +234,8 @@ bool TensorModule::load() {
                camel::core::type::Type *type,
                const std::string &text) -> std::string {
                 if (!camel::tensor::isTensorType(type)) {
-                    //As above: a .npy file holds a numeric array, and this saver does not write
-                    //the other arrays (`string[]`, an array of arrays).
+                    // As above: a .npy file holds a numeric array, and this saver does not write
+                    // the other arrays (`string[]`, an array of arrays).
                     return std::string();
                 }
                 std::filesystem::path path = camel::utils::pathFromUtf8(text);

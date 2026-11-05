@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -278,25 +278,14 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // its type (design principles 5.4). `jvp_idx_arr` below is the same arrangement for a read, and
 // `tensor.pick_at` is the operator it states a length to.
 //
-// The extents ride inside one integer list because the transpose walk answers an operator with one
-// or two normal operands: a third position is refused before any law is looked up
-// (`skip=arity uri=tensor:mean_axis operands=3`, measured 2026-11-03). And the list is built by a
-// function rather than written in the rule's right side, for the reason `extent_pair` below gives:
-// a list literal holding a computed element is written before the node that computes it, and the
-// copy of a rule's right side refuses that order.
-
-/// `[axis, keepdims, d0, ..., d(rank-1)]`: what a lane mean's linear half states to its adjoint.
-/// The flag is an integer because the list holds one element type, and `1` is true.
-func stated_axis_shape(axis: int, keepdims: bool, s: int[]): int[] {
-    let flag = if keepdims then 1 else 0
-    return concat([axis, flag], s)
-}
-
-/// `[n, i0, ..., i(n-1), d0, ..., d(rank-1)]`: what a take's linear half states to its adjoint.
-/// The leading count is what splits the list: `n` indices, then the operand's extents.
-func stated_rows(indices: int[], s: int[]): int[] {
-    return concat(concat([len(indices)], indices), s)
-}
+// The extents used to ride inside one integer list with the axis and the flag, on the reading that
+// the transpose walk refuses an operator with a third operand (`skip=arity
+// uri=tensor:mean_axis operands=3`, measured 2026-11-03). That is true of a third *tensor*: the
+// stated reductions take their axis, their flag and their extents as three parameters today
+// (`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
+// node with five operands, and the laws read them by name. A list would have needed a function to
+// build it. Nothing builds a list for a call's arguments any more: every one of those parameters
+// is a parameter of its own.
 
 /// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
 /// the tangent of the sum.
@@ -319,7 +308,7 @@ export rule jvp_sum::<T>(xs: T[...]) when is_float::<T>() {
 /// was averaged from, so the tangent call states the axis, the flag and the extents in one list; the
 /// operator that takes them is `mean_axis_stated`, and `mean_axis_stated_t` reads that list alone.
 export rule jvp_mean_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (dxs: T[...]) => mean_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
+    mean_axis(xs, axis, keepdims) => (dxs: T[...]) => mean_axis_stated(dxs, axis, keepdims, shape(xs))
 }
 
 /// `d(sum_axis(xs, axis, keepdims)) = sum_axis(dxs, axis, keepdims)`: a lane sum adds up the
@@ -338,7 +327,7 @@ export rule jvp_mean_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_fl
 /// (`rulesets.transpose#sum_axis_t` records the refusal word for word): a sum's tangent *is* a
 /// reduction, and no transposable spelling removes it from the linear half.
 export rule jvp_sum_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    sum_axis(xs, axis, keepdims) => (dxs: T[...]) => sum_axis_stated(dxs, stated_axis_shape(axis, keepdims, shape(xs)))
+    sum_axis(xs, axis, keepdims) => (dxs: T[...]) => sum_axis_stated(dxs, axis, keepdims, shape(xs))
 }
 
 /// `d(max_axis(xs, axis, keepdims)) = max_axis(dxs, axis, keepdims)` where the lane's largest element
@@ -352,13 +341,13 @@ export rule jvp_sum_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_flo
 /// (`max_axis_stated_t`). NaN selects nothing on either side, which is the engine's `strict_eq`
 /// reading too (`extremumAxisVjp`).
 export rule jvp_max_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    max_axis(xs, axis, keepdims) => (dxs: T[...]) => max_axis_stated(dxs, xs >= max_axis(xs, axis, true), stated_axis_shape(axis, keepdims, shape(xs)))
+    max_axis(xs, axis, keepdims) => (dxs: T[...]) => max_axis_stated(dxs, xs >= max_axis(xs, axis, true), axis, keepdims, shape(xs))
 }
 
 /// `d(min_axis(xs, axis, keepdims)) = min_axis(dxs, axis, keepdims)` where the lane's smallest element
 /// is: the same selection as the max's, read with `<=`.
 export rule jvp_min_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    min_axis(xs, axis, keepdims) => (dxs: T[...]) => min_axis_stated(dxs, xs <= min_axis(xs, axis, true), stated_axis_shape(axis, keepdims, shape(xs)))
+    min_axis(xs, axis, keepdims) => (dxs: T[...]) => min_axis_stated(dxs, xs <= min_axis(xs, axis, true), axis, keepdims, shape(xs))
 }
 
 /// `d(mean(xs)) = mean(dxs)`: the mean of every element is a sum divided by a count, and the
@@ -388,7 +377,7 @@ export rule jvp_reshape::<T>(x: T[...]) when is_float::<T>() {
 /// tangent call is `take_stated`, which takes the indices and the extents in one list, and
 /// `take_stated_t` builds the zeros from those extents and reads nothing of `dt`.
 export rule jvp_take::<T>(t: T[...], indices: int[]) {
-    take(t, indices) => (dt: T[...]) => take_stated(dt, stated_rows(indices, shape(t)))
+    take(t, indices) => (dt: T[...]) => take_stated(dt, indices, shape(t))
 }
 
 // ---- the forward rule of the array subtraction ----
@@ -652,22 +641,11 @@ func index_into::<T>(x: T[], i: int): T {
     return x[i]
 }
 
-/// `[position, length]`: how a read states where it reads and how long the array is.
-///
-/// The pair is a call rather than a list literal written in `jvp_idx_arr`'s right side because a
-/// rule's right side is copied node by node and has to be a straight line of nodes in the order it
-/// writes them: a list literal holding a computed element is written before the node that computes
-/// it, and the copy refuses that (`skip=rule uri=:op/idx_arr reason=the rule's right side uses a node
-/// written after it`, measured 2026-11-04).
-func extent_pair(position: int, length: int): int[] {
-    return [position, length]
-}
-
 /// `d(xs[i]) = dxs[i]`: the tangent of an element is that element of the array's tangent. The index
 /// carries no tangent of its own -- `Tangent<int>` is `()` -- so it does not enter the right side.
 ///
 /// The linear body also states how long the array is: `len(xs)` is a value of the primal, and it
-/// travels to the read as `at[1]` (`tensor.pick_at` is `xs[i]` with the length stated). The law
+/// travels to the read as its `length` (`tensor.pick_at` is `xs[i]` with the length stated). The law
 /// that answers the read's transposition builds its zeros from that length and reads nothing of the
 /// array, which is what a transpose rule is allowed to do (author, 2026-11-03 11:10 and 17:35): `xs`
 /// is the operand the cotangent comes back through, so on the reverse side it has no value, and
@@ -679,14 +657,14 @@ func extent_pair(position: int, length: int): int[] {
 /// tangent *and* carries the fact the reverse reading needs.
 /// @example index_into([0.5, 0.25], 1)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25]`
 export rule jvp_idx_arr::<T>(xs: T[], i: int) {
-    index_into(xs, i) => (dxs: T[]) => pick_at(dxs, extent_pair(i, len(xs)))
+    index_into(xs, i) => (dxs: T[]) => pick_at(dxs, i, len(xs))
 }
 
 // ---- the forward rule of `tensor:pick_at`, the read that states its length ----
 //
-// `pick_at(xs, at)` is `xs[at[0]]` of a rank-1 array whose length `at[1]` states, and it is the
-// operator the linear half of a read is written with: `jvp_idx_arr` above answers with
-// `pick_at(dxs, extent_pair(i, len(xs)))`. That node never reached this rule, because a rule's right
+// `pick_at(xs, position, length)` is `xs[position]` of a rank-1 array whose length `length` states,
+// and it is the operator the linear half of a read is written with: `jvp_idx_arr` above answers with
+// `pick_at(dxs, i, len(xs))`. That node never reached this rule, because a rule's right
 // side is not differentiated again -- so the read carried a reverse law
 // (`stdlib/rulesets/transpose.cml#pick_at_t`) and no forward one, and a program that wrote the read
 // itself was refused by name while the same program written as `xs[i]` ran:
@@ -698,21 +676,22 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 // the read of the tangent, and the **same** `at` answers both -- which is why this rule needs no
 // stated twin the way `sum`, `mean_axis` and `take` do. Those three state extents because their
 // adjoints have to build an array of the operand's shape and nothing in the cotangent says how long
-// that is; here the list that carries the position (`at[0]`) already carries the length (`at[1]`),
-// and the tangent is checked against the same length the primal was.
+// that is; here the call that carries the position carries the length beside it, and the tangent is
+// checked against the same length the primal was.
 //
 // The operands are the registration's, in its order (`modules/tensor/ops/layout_ops.cpp`, the OpDef
-// named `pick_at`: a `Tensor` then an `IntArray`), and the closure takes **one** tangent and not
-// two: `at` is a known value of the call, not a differentiated one -- `Tangent<int[]>` is `()` -- so
-// there is no second position to answer. The reverse law's closure looks different because it is
+// named `pick_at`: a `Tensor` then two `int`s), and the closure takes **one** tangent and not
+// three: both integers are known values of the call, not differentiated ones -- `Tangent<int>` is
+// `()` -- so there is no second position to answer. The reverse law's closure looks different because it is
 // handed the other half: `pick_at_t` answers `(ct: T)`, one cotangent of the **result**, where this
 // one answers `(dxs: T[])`, one tangent of the **operand**.
 
-/// `d(pick_at(xs, at)) = pick_at(dxs, at)`: the read is linear, so the tangent of the element is that
-/// element of the array's tangent, at the position the primal read and against the length it stated.
-/// @example pick_at([0.5, 0.25, -1.0] as float[], [1, 3])    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25, -1.0]`
-export rule jvp_pick_at::<T>(xs: T[], at: int[]) when is_float::<T>() {
-    pick_at(xs, at) => (dxs: T[]) => pick_at(dxs, at)
+/// `d(pick_at(xs, position, length)) = pick_at(dxs, position, length)`: the read is linear, so the
+/// tangent of the element is that element of the array's tangent, at the position the primal read and
+/// against the length it stated.
+/// @example pick_at([0.5, 0.25, -1.0] as float[], 1, 3)    // the tangent of `xs[1]` when `dxs` is `[0.5, 0.25, -1.0]`
+export rule jvp_pick_at::<T>(xs: T[], position: int, length: int) when is_float::<T>() {
+    pick_at(xs, position, length) => (dxs: T[]) => pick_at(dxs, position, length)
 }
 
 // ---- the forward rule of `^` (a power) ----
@@ -944,8 +923,27 @@ export rule jvp_bf16_from_string(x: string) {
 /// `dx * (kScale * exp(...))` transposes to `ct * (kScale * exp(...))` and rounds in a different
 /// place. `1.1283791670955126` is the kernel's own literal (2/sqrt(pi)), and `-x*x`, `-(x*x)` and
 /// `(x*x) * -1.0` are one value: negation is exact.
+///
+/// **Both products are `mul_stated`, and that is what the backward half reads** (author, 2026-11-05:
+/// the extents arrive as known operands, so no law has to read a value nobody carries). The lists are
+/// `shape(x)` -- the primal's runtime shape, which is also `dx`'s, since a tangent lives in its own
+/// space -- and in the backward half `x` is a **residual**, so the lists are recomputed there rather
+/// than asked of the transposed function's caller. Without them the transpose law is
+/// `transpose.cml#mul_tensor_t`, whose `shape(x)` is a read of the answered operand: that operand is
+/// `dx`, a parameter of the backward half, and the step was refused by name
+/// (`skip=law-reads-a-value uri=tensor:multiply`).
+///
+/// The second product's second operand is `full(shape(x), kScale)` and not the bare `kScale`, because
+/// `mul_stated` takes an array in each operand slot: a constant array multiplies every lane by the
+/// same number, so the bits are `A * kScale`'s own, while the chain's order -- the thing the paragraph
+/// above is about -- is untouched.
 export rule jvp_erf::<T>(x: T[...]) when is_float::<T>() {
-    erf(x) => (dx: T[...]) => (dx * exp((x * x) * -1.0)) * 1.1283791670955126
+    erf(x) => (dx: T[...]) =>
+        mul_stated(
+            mul_stated(dx, exp((x * x) * -1.0), shape(x), shape(x)),
+            full(shape(x), 1.1283791670955126),
+            shape(x),
+            shape(x))
 }
 
 /// `d(erfc(x)) = -2/sqrt(pi) * exp(-x*x) * dx`: the same slope as `erf` with the sign in the
@@ -954,7 +952,12 @@ export rule jvp_erf::<T>(x: T[...]) when is_float::<T>() {
 /// -- a float's sign is a bit and the magnitude is the same product -- so the negation is folded
 /// into the constant in both halves and the chain keeps the engine's order.
 export rule jvp_erfc::<T>(x: T[...]) when is_float::<T>() {
-    erfc(x) => (dx: T[...]) => (dx * exp((x * x) * -1.0)) * -1.1283791670955126
+    erfc(x) => (dx: T[...]) =>
+        mul_stated(
+            mul_stated(dx, exp((x * x) * -1.0), shape(x), shape(x)),
+            full(shape(x), -1.1283791670955126),
+            shape(x),
+            shape(x))
 }
 
 /// `d(gelu(x)) = gelu'(x) * dx`, with the slope of the **tanh form** the operator is defined by and
@@ -1018,10 +1021,20 @@ export rule jvp_min::<T>(xs: T[...]) when is_float::<T>() {
 /// `d(linear(x, w)) = x @ dw + dx @ w` with `w` laid out `[in, out]`: the product rule of a matrix
 /// product, with each term keeping its own operand's place.
 ///
-/// The two terms are the product's, so their transposes are `matmul_t`'s two answers and the walk
+/// The two terms are the product's, so their transposes are the product's two answers and the walk
 /// needs nothing new by name: `d/dx = ct @ wᵀ` and `d/dw = xᵀ @ ct`, which is the pair the engine's
 /// `linearVjp` reaches through `tensor:matmul_grad_lhs` / `_rhs`
 /// (`modules/tensor/ops/linalg_ops.cpp`).
+///
+/// **Both terms are `matmul_stated`** (author, 2026-11-05, the same move `jvp_matmul` and
+/// `jvp_mul_tensor` already make): the two lists are the operands' extents as **known operands**, so
+/// `stdlib/rulesets/transpose.cml#matmul_stated_t` reads them and never a `shape()` of the position it
+/// answers. Written with the bare `matmul`, the backward half met `#matmul_t`, whose right side names
+/// the operands only as arguments of `ct_of_a(ct, a, b)` -- a **call**, not a `shape()` -- so the shape
+/// that was in the type (`float[2, 2]`) was unreadable there and the step was refused by name
+/// (`skip=law-reads-a-value uri=tensor:matmul position=0`). A tangent has its own space's shape, so
+/// `shape(x)` is `dx`'s shape and `shape(w)` is `dw`'s: the lists come from the **primal** operands,
+/// which the backward half carries as residuals.
 ///
 /// This law states **two** operands, which is the form a call writes when the bias is left out. A
 /// three-operand call has a third port and a law's parameters are the node's ports one for one, so
@@ -1030,6 +1043,7 @@ export rule jvp_min::<T>(xs: T[...]) when is_float::<T>() {
 /// bias's own cotangent is (`ct`, spread over the bias) is the addition's law's answer and not a
 /// product's, which is the second reason this one waits.
 export rule jvp_linear::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    linear(x, w) => (dx: T[...], dw: T[...]) => matmul(dx, w) + matmul(x, dw)
+    linear(x, w) => (dx: T[...], dw: T[...]) =>
+        matmul_stated(dx, w, shape(x), shape(w)) + matmul_stated(x, dw, shape(x), shape(w))
 }
 
