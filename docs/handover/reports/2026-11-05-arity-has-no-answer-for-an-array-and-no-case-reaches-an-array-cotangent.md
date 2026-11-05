@@ -5,7 +5,7 @@
 
 ## 一、`tree::arity` 对非元组、非结构体的类型没有答案，却会读另一种布局
 
-`include/camel/core/type/tree.h:40`：
+`include/camel/core/type/tree.h#arity`：
 
 ```cpp
 inline size_t arity(const Type *type) {
@@ -18,24 +18,32 @@ inline size_t arity(const Type *type) {
 它**读数组类型对象开头那几个字节当元组的成员数**——实测 `arity(f32[3]) == 131961841501032`。
 **这比「查不到就落默认值」更坏：落默认值至少是一个说得出理由的数，这个数是另一份内存的解读。**
 
-这条在 `transpose.cpp` 的 `FILL` 整余切守卫里先发作：守卫拿 `tree::arity(wholeType) != parts.size()` 判
-「成员数与操作数个数是否一致」，于是一个正确的 `f32[3]` 构建被判成不一致、按兜底拒绝。
-**结果是「拒绝」这个正确行为由一个错误的判据发出**——判据错与功能缺在读数上长得一模一样。
+**`assert` 不是修法。** `NDEBUG` 把它从发布构建里编掉（`npm run build`），于是它只在开发机上响、
+在用户那里不存在，而代码因为「有 assert」看起来被保护过。**「留一个不生效的守卫比不留更糟」的字面版。**
+所以答案是发布构建里也生效的形态：`include/camel/core/type/tree.h#arityOf` 返回 `bool` + 出参，
+非元组/非结构体一律 `false`，调用点当场处理。
 
-本仓 `modules/transforms/transpose.cpp` 里 `memberCountOfType` 是这条的局部答案（元组/结构体问 `arity`，
-秩 1 且维度为常量的数组取那个维度，其余返回 `SIZE_MAX` 让调用者拒绝）。**但 `arity` 本身仍是共享工具，
-全树其它调用点没有一个是安全的：**
+### 已按这条改掉的（`modules/transforms/transpose.cpp`）
 
-- `modules/ckpt/src/checkpoint.cpp:116,169,171,233,234,235`——存档按元组/结构体遍历成员，一份 `f32[3]`
-  的槽进去会按「若干成员」写；
-- `src/compile/gir/builder_static.cpp:102,105,806,1039,1246`、`builder_when.cpp:483`——构建期的多值展开，
-  一个数组值若走到这些位置，取到的成员数就是上面那个数；
-- `modules/transforms/transpose.cpp:1543,1775,3167,3348,3383`——本文件的 `accumulate` 与成员读。
+| 位置 | 处理 |
+|---|---|
+| `modules/transforms/transpose.cpp#resultCotangentRefusal` | 拿到 `false` 就说明「这个类型没有成员，而聚合的余切是逐成员定义的」 |
+| `modules/transforms/transpose.cpp#accumulate` | 拿到 `false` 返回 `kInvalidNodeRef`（这之前会按「若干成员」遍历一个非聚合） |
+| `modules/transforms/transpose.cpp`（`Join` 的槽数检查） | 拿到 `false` 按 `Component` 拒绝并点名 `why=not-a-type-with-members` |
+| `modules/transforms/transpose.cpp#memberCountOfType` 及另外两处 | **先判 `Tuple`/`Struct` 再问 `arity`**，问题因此是有定义的；数组那一支按秩 1 常量维度取 |
 
-**该做什么**：`arity` 对「不是元组也不是结构体」的类型**必须没有答案**——要么 `assert`，要么改签名成
-`std::optional<size_t>`/返回 `SIZE_MAX`，让每个调用点当场面对「这里可能不是元组」。**今天它给一个数，
-而那个数会被当成真的用。**
+### 仍然在给数的调用点（本笔只列清单，各自该走哪条路）
 
+- `modules/ckpt/src/checkpoint.cpp`（`writeMembers` 一类的成员遍历）：**路径是「值必须是元组或结构体」**，
+  该走 `arityOf` + 一条存档诊断，而不是默认值；
+- `src/compile/gir/builder_static.cpp`（多值展开、静态元组长度的四处）：**数组值若到这些位置，问的是
+  「这个值有几个成员」，答案应当是拒绝**，不是零；
+- `src/compile/gir/builder_when.cpp`（`when` 的分支值展开）：同上。
+
+**为什么没有把 `arity` 本身翻成「无答案」**：全树 `for (size_t i = 0; i < arity(type); ++i)` 这种循环有二十
+余处，直接让它返回 `SIZE_MAX` 会让每一处**空转而不是报错**——那是把「读错数」换成「挂住」。所以顺序是：
+先把调用点搬到 `arityOf`（看得见的 `false`），最后一个调用点搬完时 `arity` 才能收掉，**这一步记成具名欠账，
+不是「以后再说」**。
 ## 二、没有一条用例断言过「余切是数组」
 
 要撞到数组余切，需要**一个结果类型是数组的函数被 `transpose`/`vjp`/`grad`**（余切参数的类型才是数组）。
@@ -56,6 +64,11 @@ inline size_t arity(const Type *type) {
 
 ## 结论与下一步
 
-两件独立的事都可以先落：`arity` 的答案要能被调用点分辨（本页第一条），以及「结果类型是数组」这一格要
-有用例（本页第二条）。**数组投影本身排在它们之后**，判据是逐元素可分辨（`a=1.5 b=2.5 c=7.25`），
-且兜底对数组构建不再发话、对其它种类仍然发话。
+两件独立的事都可以先落：`arity` 的答案要能被调用点看见（本页第一条，`arityOf` 已落地三处），以及
+「结果类型是数组」这一格要有用例（本页第二条）。**数组投影本身排在它们之后**，判据是逐元素可分辨
+（`a=1.5 b=2.5 c=7.25`），且兜底对数组构建不再发话、对其它种类仍然发话。
+
+## 顺带一条机器读数
+
+`2026-11-05` 闸门 55 的 `plan 687.0 s` 是这一夜第一次落在 `674–684 s` 带外（最高值）。**单次不证明什么**
+——判据是连续三次在带内才排除「是这次改动」；**若接下来三次继续往上，那是机器的事，不是代码的事。**
