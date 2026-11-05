@@ -305,6 +305,15 @@ void GCGraphManager::pin(const Program *program) {
     }
 }
 
+void GCGraphManager::unpin(const Program *program) {
+    mm::NoCollectionScope noCollection;
+    std::lock_guard lock(mutex_);
+    if (auto it = std::find(pinned_.begin(), pinned_.end(), program); it != pinned_.end()) {
+        pinned_.erase(it);
+        rebuildGcRoots();
+    }
+}
+
 void GCGraphManager::settle(const Program *keep) {
     {
         mm::NoCollectionScope noCollection;
