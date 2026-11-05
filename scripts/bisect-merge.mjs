@@ -90,6 +90,7 @@ function parseArgs(argv) {
         host: '88zjwei',
         hostRoot: null,
         forward: false,
+        printWrapper: false,
         merges: [],
         groups: [],
         harmless: [],
@@ -157,6 +158,12 @@ function parseArgs(argv) {
                 break
             case '--forward':
                 args.forward = true
+                break
+            case '--print-wrapper':
+                // Prints the resolved wrapper and stops, before anything is built or pushed. This is
+                // how the default is read back: a guard on the default that cannot print what it
+                // resolved would be a guard nobody can falsify (see the case in test/).
+                args.printWrapper = true
                 break
             default:
                 throw new Error(`unknown argument: ${key}`)
@@ -442,6 +449,10 @@ function revert(args, baseline) {
 
 function main() {
     const args = parseArgs(process.argv.slice(2))
+    if (args.printWrapper) {
+        console.log(`[bisect] wrapper ${args.wrapper}`)
+        return 0
+    }
     const status = git(['status', '--porcelain'], args.path)
     if (status.code !== 0) {
         throw new Error(`git status failed: ${status.output.trim()}`)

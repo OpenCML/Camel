@@ -184,9 +184,15 @@ worktree sits; `--wrapper` still overrides it.
 
 The copy itself is documented here instead of deleted because it still has callers outside this
 repository: the machine-local helpers beside it (`bisect2.ps1`, `h598-reds.ps1`, `h585-gir-walk.ps1`,
-`.h552-verify.ps1`, ...) hardcode the same path, and design and handover pages still show it in a
-command. Deleting it would break those, and the break would read as "the gate is missing" rather than
-"you named the old one".
+`.h552-verify.ps1`, ...) hardcode the same path. Deleting it would break those, and the break would read
+as "the gate is missing" rather than "you named the old one".
+
+Inside this repository every command example names the entry, and names it the way the entry's own
+header does: `internal/tools/camel-remote.ps1`, relative to the repository root. None of them points at
+`Camel-wt\camel-remote.ps1` any more -- a page that did sent the next reader to the old readings while
+saying, in the same paragraph, that the copy was old. A page that records a past measurement may still
+say which copy *was* used there; that is history, and rewriting it would be the falsification this
+section exists to prevent, not a fix.
 
 Point `-File` at the tree's `internal/tools/camel-remote.ps1`, and read the readings of a run whose
 command line did not: `[camel-remote]` lines are printed by both copies and do not say which one printed

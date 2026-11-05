@@ -181,7 +181,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
 主机是共享的 8×RTX 3090，负载会动。所以：**断言只用精确计数、校验和与后端/主机一致性**，不写墙钟阈值；
 确实要报时间时，写清设备序号、同一时刻的负载（`nvidia-smi` 的利用率与占用进程数）、以及重复次数与离散度，
 并说明这个数不足以作为断言。编译/运行只走
-`pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h365-h49-gpu-plan -Plan ...`；
+`pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\h365-h49-gpu-plan -Plan ...`；
 `-Plan <某个 plan.toml>` 按文件全跑。磁盘缓存的用例写在每次运行的临时目录，避免共享主机上的残留让第二次命中
 变成假绿。
 

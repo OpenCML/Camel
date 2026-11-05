@@ -27,7 +27,7 @@
 | 分支 | `lane-showcase`，从 `origin/develop` 的 `ef60bd42a8978b80a801f4fcb4e590f7cbf55605` 分叉 |
 | 测量所在的树 | 主机 `/home/zjwei/camel-work/showcase`（工作树 `D:\Projects\Camel-wt\showcase`） |
 | 二进制构建时间 | 每次运行由 runner 打印，最后一次为 `2026-11-02T09:21:43-05:00` |
-| 跑法（一次一个 plan） | `& 'D:\Projects\Camel-wt\camel-remote.ps1' -Path D:\Projects\Camel-wt\showcase -Plan test/plans/perf/showcase_c3.plan.toml -Jobs 8` |
+| 跑法（一次一个 plan） | `& 'internal/tools/camel-remote.ps1' -Path D:\Projects\Camel-wt\showcase -Plan test/plans/perf/showcase_c3.plan.toml -Jobs 8` |
 | 全部探针 | `python showcase/c3-char-transformer/probe.py`（在树的根上跑） |
 
 ## 十八个探针的答案

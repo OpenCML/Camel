@@ -28,7 +28,7 @@
 **不在本机构建或测试**（会蓝屏）。全部测量在主机 `88zjwei` 上，走 `camel-remote.ps1`，工作树 `D:\Projects\Camel-wt\h396-h248-plan`，基线 `origin/develop` = `ad9ed160e`：
 
 ```powershell
-pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 `
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 `
   -Path D:\Projects\Camel-wt\h396-h248-plan `
   -Plan test/plans/feat/compile/_h248probe.plan.toml -Tier fast -Jobs 8
 # 退出码从运行器带回：RUN_EXIT=1（14 条探针全部按「今天失败」记录）
