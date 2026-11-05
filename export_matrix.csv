@@ -128,6 +128,7 @@ tensor:zeros,9,
 tensor:zeros_like,,1
 tiles:tiles_,,
 tiles:tiles_rows,,
+transforms:first_with_as_param,,
 transforms:jvp,,
 transforms:split,,
 transforms:transpose,,
