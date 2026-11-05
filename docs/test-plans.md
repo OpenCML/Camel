@@ -132,6 +132,11 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   `FORBIDDEN`, whose own files say `tier = "milestone"`), the copies a sweep did not sample, and
   any other test whose cost or whose measurement is a property of the machine. No ordinary run and
   no gate selects them; `--tier milestone` does.
+  **From 2026-11-05 this layer also runs on a schedule: the merge lane runs it once a day at 09:00
+  Asia/Shanghai and once before every release, as
+  `node scripts/test.js test/plans --tier milestone --jobs 8`.** A red in it is an ordinary red:
+  it is reworked and re-gated like any other, and it gets no ledger of its own -- the reading is the
+  run's `[SUMMARY]` line together with the names of the entries that failed.
 - `debug` is a test that is only meaningful with assertions compiled in: it aborts on purpose,
   or it checks something a Release build removes. It runs only under `--tier debug`, never under
   `fast`, `slow`, `milestone` or `all`, because those four run the Release binary.
