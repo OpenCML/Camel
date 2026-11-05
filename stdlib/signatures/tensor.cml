@@ -167,21 +167,18 @@ export func one_hot(labels: int64[...] | number[], classes: int): f32[...]
 /// @example sum([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 10.0
 export func sum::<T>(t: T[...]): T
 
-/// The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [4.0, 6.0]
-#op('tensor:sum_axis')
-export func sum::<T>(t: T[...], axis: int, keepdims?: bool): T[...]
-
 /// The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
-/// rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+/// rounded once into the element type. The axis and the flag are the call's `with` arguments --
+/// `sum<0>`, `sum<1, true>` -- under the whole reduction's name (design principles 7.3), and
+/// `keepdims` leaves the reduced axis as an extent of one.
 /// The result's extents are the operand's, with that axis removed or kept as an extent of one, so
 /// the type a call reads states them (`float[2, 3]` along axis 0 is a `float[3]`).
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank
-/// @example sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [4.0, 6.0]
-export func sum_axis::<T>(t: T[...], axis: int, keepdims: bool): T[...]
+/// @example sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [4.0, 6.0]
+#op('tensor:sum_axis')
+with <axis: int, keepdims: bool = false>
+export func sum::<T>(t: T[...]): T[...]
 
 /// The mean of every element, in the operand's element type, with one rounding: the canonical
 /// form of the element type `T` is `mean::<T>(x: T[...]): T = T(sum(float(x)) / float(numel(x)))`.
@@ -194,20 +191,17 @@ export func sum_axis::<T>(t: T[...], axis: int, keepdims: bool): T[...]
 /// @example mean([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 2.5
 export func mean::<T>(t: T[...]): T
 
-/// The same mean over one axis; keepdims keeps the axis with extent 1.
+/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+/// the element type. An empty axis is a fault. The axis and the flag are the call's `with`
+/// arguments -- `mean<0>`, `mean<1, true>` -- under the whole reduction's name (design principles
+/// 7.3). The result's extents are the operand's, with that axis removed or kept as an extent of
+/// one.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty
 /// @example mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.5, 3.5]
 #op('tensor:mean_axis')
-export func mean::<T>(t: T[...], axis: int, keepdims?: bool): T[...]
-
-/// The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
-/// the element type. An empty axis is a fault. The result's extents are the operand's, with that
-/// axis removed or kept as an extent of one.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [2.0, 3.0]
-export func mean_axis::<T>(t: T[...], axis: int, keepdims: bool): T[...]
+with <axis: int, keepdims: bool = false>
+export func mean::<T>(t: T[...]): T[...]
 
 /// IEEE 754-2019 maximum of every element (design principles 7.7): a NaN anywhere gives `nan`, and
 /// -0 is below +0. An extremum has no identity, so a tensor with no element is a fault rather than
@@ -240,76 +234,58 @@ export func argmax::<T>(t: T[...]): int
 /// @example argmin([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // 0
 export func argmin::<T>(t: T[...]): int
 
-/// IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
-/// the same bits); keepdims keeps the axis with extent 1.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [3.0, 4.0]
-#op('tensor:max_axis')
-export func max::<T>(t: T[...], axis: int, keepdims?: bool): T[...]
-
 /// The largest element of each lane along one axis. An empty axis is a fault, as for the whole
-/// tensor. The result's extents are the operand's, with that axis removed or kept.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [3.0, 4.0]
-export func max_axis::<T>(t: T[...], axis: int, keepdims: bool): T[...]
-
-/// IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
-/// axis with extent 1.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.0, 3.0]
-#op('tensor:min_axis')
-export func min::<T>(t: T[...], axis: int, keepdims?: bool): T[...]
-
-/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
-/// element has no identity to return. The result's extents are the operand's, with that axis
-/// removed or kept.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1.0, 2.0]
-export func min_axis::<T>(t: T[...], axis: int, keepdims: bool): T[...]
-
-/// The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
-/// NaN if there is one, +0 above -0, the earlier position on a tie.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1, 1]
-#op('tensor:argmax_axis')
-export func argmax(t: float[...], axis: int, keepdims?: bool): int64[...]
-
-/// The position of the largest element of each lane along one axis, an `int` index along that
-/// axis. A tie keeps the earlier position. An empty axis is a fault. The result's extents are the
+/// tensor. The axis and the flag are the call's `with` arguments -- `max<0>`, `max<1, true>` --
+/// under the whole reduction's name (design principles 7.3). The result's extents are the
 /// operand's, with that axis removed or kept.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [1, 1]
-export func argmax_axis::<T>(t: T[...], axis: int, keepdims: bool): int[...]
+/// @example max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [3.0, 4.0]
+#op('tensor:max_axis')
+with <axis: int, keepdims: bool = false>
+export func max::<T>(t: T[...]): T[...]
 
-/// The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
-/// NaN if there is one, -0 below +0, the earlier position on a tie.
-/// @pure
-/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty
-/// @example argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [0, 0]
-#op('tensor:argmin_axis')
-export func argmin(t: float[...], axis: int, keepdims?: bool): int64[...]
-
-/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
-/// position. An empty axis is a fault. The result's extents are the operand's, with that axis
-/// removed or kept.
+/// The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+/// element has no identity to return. The axis and the flag are the call's `with` arguments --
+/// `min<1>`, `min<0, true>` -- under the whole reduction's name (design principles 7.3). The
+/// result's extents are the operand's, with that axis removed or kept.
 /// @pure
 /// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
-/// @example argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)    // [0, 0]
-export func argmin_axis::<T>(t: T[...], axis: int, keepdims: bool): int[...]
+/// @example min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1.0, 3.0]
+#op('tensor:min_axis')
+with <axis: int, keepdims: bool = false>
+export func min::<T>(t: T[...]): T[...]
+
+/// The position of the largest element of each lane along one axis, an `int` index along that
+/// axis. A tie keeps the earlier position. An empty axis is a fault. The axis and the flag are the
+/// call's `with` arguments -- `argmax<1>`, `argmax<0, true>` -- under the whole reduction's name
+/// (design principles 7.3). The result's extents are the operand's, with that axis removed or
+/// kept.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
+/// @example argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [1, 1]
+#op('tensor:argmax_axis')
+with <axis: int, keepdims: bool = false>
+export func argmax(t: float[...]): int64[...]
+
+/// The position of the smallest element of each lane along one axis; a tie keeps the earlier
+/// position. An empty axis is a fault. The axis and the flag are the call's `with` arguments --
+/// `argmin<0>`, `argmin<1, true>` -- under the whole reduction's name (design principles 7.3). The
+/// result's extents are the operand's, with that axis removed or kept.
+/// @pure
+/// @fails fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element
+/// @example argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [0, 0]
+#op('tensor:argmin_axis')
+with <axis: int, keepdims: bool = false>
+export func argmin(t: float[...]): int64[...]
 
 // ---- the reductions with their extents stated ----
 
 /// The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
 /// as parameters of their own: `mean_axis_stated(t, axis, keepdims, extents)` is
-/// `mean_axis(t, axis, keepdims)`.
+/// `mean<axis, keepdims>(t)`.
 ///
-/// The result is `mean_axis`'s at the stated extents: the operand's, with the `axis` removed, or kept
+/// The result is the axis mean's at the stated extents: the operand's, with the `axis` removed, or kept
 /// as an extent of one when `keepdims`. It is computed rather than declared because those extents
 /// follow from values, so a call that states all three states its own result -- `0, false, [4]` over a
 /// rank-1 operand is the element, not `float[...]` and a conversion -- and a call whose parameters are

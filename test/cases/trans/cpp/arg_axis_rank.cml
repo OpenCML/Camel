@@ -12,34 +12,34 @@
  * differ. (A `2x2x2` value is symmetric in the split and cannot.)
  *
  * A value of one dimension has one lane and nothing beside it, so what it reduces to *is* the answer
- * (design principles 5.4): `argmax_axis(xs, 0, false)` of an `f32[3]` is a value of no dimension --
- * printed `1`, with `shape` answering `[]` -- and `argmin_axis` of it is `0`. Asking for the dimension
+ * (design principles 5.4): `argmax<0, false>(xs)` of an `f32[3]` is a value of no dimension --
+ * printed `1`, with `shape` answering `[]` -- and `argmin<0>` of it is `0`. Asking for the dimension
  * kept gives it back as a one (`[1]`, `[0]`). The extremes answer the same way, which is the walk
  * reading the rank the value has rather than two or more.
  */
 import { nan } from math
-import { argmax_axis, argmin_axis, max_axis, min_axis, reshape, shape } from tensor
+import { argmax, argmin, max, min, reshape, shape } from tensor
 
 func main(): int sync {
     let m: float[3, 2] = [[1.0, -2.0], [5.0, 0.0], [-3.0, 4.0]]
-    println(argmax_axis(m, 0, false))
-    println(argmax_axis(m, 1, false))
-    println(argmin_axis(m, 1, true))
+    println(argmax<0, false>(m))
+    println(argmax<1, false>(m))
+    println(argmin<1, true>(m))
     let t: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 9.0]]]
-    println(argmax_axis(t, 1, false))
+    println(argmax<1, false>(t))
     let flat: float[6] = [1.0, 2.0, 2.0, nan, 2.0, nan]
     let withTies = reshape<[2, 3]>(flat)
-    println(argmax_axis(withTies, 1, false))
+    println(argmax<1, false>(withTies))
     let wide: f32[2, 3] = [[1.0, 3.0, 2.0], [6.0, 5.0, 4.0]]
-    println(shape(argmax_axis(wide, 1, false)), argmax_axis(wide, 1, false))
+    println(shape(argmax<1, false>(wide)), argmax<1, false>(wide))
     let cube: f32[2, 3, 4] = [[[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]], [[12.0, 11.0, 10.0, 9.0], [8.0, 7.0, 6.0, 5.0], [4.0, 3.0, 2.0, 1.0]]]
-    println(shape(argmax_axis(cube, 1, false)), argmax_axis(cube, 1, false))
+    println(shape(argmax<1, false>(cube)), argmax<1, false>(cube))
     let line: f32[3] = [1.0, 5.0, 2.0]
-    let at = argmax_axis(line, 0, false)
+    let at = argmax<0, false>(line)
     println(at)
     println(shape(at))
-    println(shape(argmax_axis(line, 0, true)), argmax_axis(line, 0, true))
-    println(argmin_axis(line, 0, false), shape(argmin_axis(line, 0, false)))
-    println(max_axis(line, 0, false), min_axis(line, 0, false))
+    println(shape(argmax<0, true>(line)), argmax<0, true>(line))
+    println(argmin<0, false>(line), shape(argmin<0, false>(line)))
+    println(max<0, false>(line), min<0, false>(line))
     return 0
 }

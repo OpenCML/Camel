@@ -1155,7 +1155,7 @@ Rules buildRules() {
                 return std::nullopt;
             }
             // The axis and the flag arrive on one of two roads: as arguments of the call
-            // (`sum_axis(xs, 1, false)`) or as the constant the callee was written with
+            // (`sum<1, false>(xs)`) or as the constant the callee was written with
             // (`sum<1>(xs)`), which the graph keeps beside the value rather than among the
             // arguments (`with`). Either road names the same two things, and the rule reads
             // whichever carried them.
@@ -1177,7 +1177,7 @@ Rules buildRules() {
             // A rank-1 value has one lane, and what it sums to *is* the answer (design principles
             // 5.4). Which shape that answer takes is the node's type, not the rule's choice: the
             // template form `sum<0>(xs)` answers the element (printed `8.0`), while
-            // `sum_axis(xs, 0, false)` -- whose signature says `T[..]` -- answers an open-rank
+            // `sum<0, false>(xs)` -- whose signature says `T[..]` -- answers an open-rank
             // array whose recorded shape is `[]` (test/cases/trans/cpp/sum_axis_rank.cml is that
             // reading). So the rule asks the node's own type: an element is `rt::sumAll` (the
             // lanes from +0 in ascending order, the same walk), an array is `rt::sumAxis`. Writing
@@ -1286,7 +1286,7 @@ Rules buildRules() {
     // the operator and the axis; that refusal is the only one these four have that the sum does not.
     // A value of one dimension is a value with one axis and nothing beside it: what that one lane
     // reduces to *is* the answer (design principles 5.4), so the answer is a value of no dimension --
-    // an element, not an array of one -- and the graph's own type says so: `max_axis(flat, 0, false)`
+    // an element, not an array of one -- and the graph's own type says so: `max<0, false>(flat)`
     // of a `f32[3]` is an `f32`, and only a *kept* dimension or an open rank leaves an array. The two
     // answers are written differently, for the same reason `sum_axis`'s are (`rt::sumAll` against
     // `rt::sumAxis`): an element answer is the lane walk of a value whose one lane is the whole run,

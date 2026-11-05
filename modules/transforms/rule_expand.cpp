@@ -232,6 +232,25 @@ RuleChoice chooseRuleAmong(
     // The narrowest fit, and only when it is one law. Two laws neither of which is narrower than
     // the other are two laws the declaration does not choose between -- the author's `two laws both
     // accept these arguments` -- and it is reported rather than answered by filing order.
+    //
+    // A law that names more of the operator's ports is the narrower one, and that is settled before
+    // the port types are compared: the axis reduction's law names the axis and the flag beside the
+    // operand (`jvp_sum_axis::<T>(xs, axis, keepdims)`, for `sum<axis, keepdims>(xs)`), while the
+    // whole reduction's law names the operand alone (`jvp_sum::<T>(xs)`, for `sum(xs)`) and does not
+    // refuse the axis node's two extra ports, because `namesTheNode` takes a law that names fewer
+    // ports than the node has -- the rest may be written as constants in the law's own left side
+    // (`reshape`'s shape). Both laws are filed under `sum` at the one operand the parentheses carry,
+    // which is the author's ruling of 2026-11-05 ("a reduction over an axis has one name, the whole
+    // reduction's"), so they are told apart here: the law that names every port is the node's.
+    size_t widest = 0;
+    for (const Fit &fit : fitting) {
+        widest = std::max(widest, fit.ports.size());
+    }
+    fitting.erase(
+        std::remove_if(
+            fitting.begin(), fitting.end(),
+            [widest](const Fit &fit) { return fit.ports.size() != widest; }),
+        fitting.end());
     std::vector<const Fit *> kept;
     for (const Fit &candidate : fitting) {
         bool outranked = false;

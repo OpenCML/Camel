@@ -6,7 +6,7 @@
  * domain: `transpose(loss_mean)` is handed the cotangent of the result (`float[3]`) and no argument,
  * so nothing in the graph says how many positions `x` has. The shape is not in the type either
  * (`float[...]` states neither a rank nor a length) and no value in the program carries it, so the
- * pullback of `mean_axis` cannot be built: `mean_axis_cotangent` reads `xs` for `numel(xs)` and
+ * pullback of `mean<axis>` cannot be built: `mean_axis_cotangent` reads `xs` for `numel(xs)` and
  * `ones_like(xs)`.
  *
  * This is the language's rule and not a gap of the transform (author, 2026-11-03 16:15): the answer
@@ -21,10 +21,10 @@
  */
 import rulesets.transpose
 import { transpose } from transforms
-import { mean_axis, sum } from tensor
+import { mean, sum } from tensor
 
 func loss_mean(x: float[...]): float {
-    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+    return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
 func main(): int sync {

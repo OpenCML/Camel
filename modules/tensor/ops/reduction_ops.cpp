@@ -137,10 +137,11 @@ OpDef reduceAxisDef(
     std::string_view name, std::string_view exportName, std::string_view resultDoc) {
     OpDef def{
         .name = name,
-        // The operator's own name first: it is the one a call of this node is printed as
-        // (`tensor::mean_axis(x, 0, false)`), and the name the reduction's algebraic spelling
-        // shares (`mean`) is exported beside it, so both spellings are this one definition.
-        .exports = {name, exportName},
+        // The name a program writes: the whole reduction's (`sum`, `mean`, ...). The axis form is
+        // the same name with the axis and the flag in angle brackets (design principles 7.3), so
+        // the algebraic spelling is the only exported name the operator has; `name` stays the URI
+        // suffix, which is an identity of the implementation and not a spelling of a call.
+        .exports = {exportName},
         .params =
             {{"t", ParamKind::Tensor},
              {"axis", ParamKind::Int},
@@ -149,22 +150,20 @@ OpDef reduceAxisDef(
         .infer     = reduceAxisInfer(Op),
         .kernel    = &positionally<reduceAxisKernel<Op>>,
         .traits    = {},
-        // Two call spellings, and both of them reach this definition's `infer`:
+        // One call spelling: `t` in the parentheses, the axis and the flag in angle brackets
+        // (`mean<0>(xs)`, `argmin<0, true>(rows)`). `ordinaryParams` is one, so
+        // `OpDefResolver::resolveForCall` refuses a call that writes the axis in the parentheses --
+        // that spelling named a second operator (`mean_axis(t, axis, keepdims)`), and the author's
+        // ruling of 2026-11-05 removed it: a reduction over an axis has one name, the whole
+        // reduction's. `withAfterNorm` joins the angle-bracketed parameters back into the kernel's
+        // one list.
         //
-        //   * `mean_axis(xs, 0, false)` -- every parameter in the parentheses, which is what a
-        //     program writes and what this node is printed as. `ordinaryParams` is the whole list,
-        //     so `OpDefResolver::resolveForCall` does not refuse the count, and the registry
-        //     records the call shape (`registry.cpp`, "every parameter is an ordinary one");
-        //   * `argmin<0, true>(rows)` -- the axis and the flag in angle brackets, which a pass
-        //     builds and which `withAfterNorm` joins back into the kernel's one list.
-        //
-        // The extents are `reduceAxisInfer`'s answer either way. They have to be: with no
-        // declaration standing above this name, nothing else states them, and a declaration cannot
-        // name them at all -- they follow from the operand's type *and* from the values of `axis`
-        // and `keepdims` (design principles 5.4).
+        // The extents are `reduceAxisInfer`'s answer. They have to be: a declaration cannot state
+        // them at all -- they follow from the operand's type *and* from the values of `axis` and
+        // `keepdims` (design principles 5.4).
         .withAfterNorm = true,
     };
-    def.ordinaryParams = def.params.size();
+    def.ordinaryParams = 1;
     return def;
 }
 

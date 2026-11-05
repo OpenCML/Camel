@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis_stated, maximum, mean, mean_axis_stated, mean_stated, min, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -226,12 +226,12 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 //
 // These are what a model writes at every step: a loss is a `sum` over every element, a layer norm is
 // a `mean` along an axis, the head split is a `reshape` and the head's normalisation a `softmax`.
-// `sum` and `mean_axis` are **linear** -- a sum, a mean add nothing a tangent does not already carry
-// through -- so their forward rule is the operator itself applied to the tangents, and the right side
-// names that operator rather than an arithmetic this ruleset would have to keep in step with it.
-// `mean_axis` is the one of the two whose declaration has a parenthesised form,
-// `mean_axis(t, axis, keepdims?)` (`stdlib/tensor.cml#mean_axis`), even though the node it builds
-// carries the axis as a context port.
+// `sum` and `mean` are **linear** -- a sum, a mean add nothing a tangent does not already carry
+// through -- so the forward rule of a reduction is the operator itself applied to the tangents, and
+// the right side names that operator rather than an arithmetic this ruleset would have to keep in
+// step with it. A reduction over an axis has the whole reduction's name (design principles 7.3), so
+// the axis laws below are written `mean<axis, keepdims>(xs)`: the name, with the axis and the flag in
+// angle brackets where the node keeps them as context ports -- one name and one spelling.
 //
 // `reshape` and `softmax` are the two operators that state a deciding value in angle brackets --
 // `reshape<shape>(x)`, `softmax<axis>(x)` -- because the shape and the axis are what decides which
@@ -254,13 +254,13 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // Each key is the operator's own name (`tensor:sum` -> `sum`). A rule's parameters are the
 // operator's **ports, in port order**: the normal ones, then the `<>` ones (`OpDef::params` written
 // `withAfterNorm`, and `modules/transforms/vmap.cpp` states the same protocol where it builds a
-// call). That is why `jvp_mean_axis` declares all three of `mean_axis`'s parameters even though only
+// call). That is why `jvp_mean_axis` declares all three of the axis mean's parameters even though only
 // the first is an operand: `axis` and `keepdims` arrive as the node's context ports, and the walk
 // hands them over after the tensor. They carry no tangent of their own (`Tangent<int>` and
 // `Tangent<int[]>` are `()`), so none of them enters a right side as a lifted value: the right side
 // takes the cotangents of the parameters that have a tangent space, in that same order.
 //
-// `sum`, `mean_axis` and `take` are the three whose adjoint needs the **extents** the operation
+// `sum`, the axis mean and `take` are the three whose adjoint needs the **extents** the operation
 // consumed, and the two paragraphs below are how the linear half states them. `sum` states
 // `shape(xs)` and nothing else, because a sum forgets only how many elements it added; a lane mean
 // states its axis and its flag beside the extents, because the value needs them; a take states its
@@ -283,9 +283,11 @@ export rule jvp_matmul::<T>(a: T[...], b: T[...]) when is_float::<T>() {
 // uri=tensor:mean_axis operands=3`, measured 2026-11-03). That is true of a third *tensor*: the
 // stated reductions take their axis, their flag and their extents as three parameters today
 // (`stdlib/tensor.cml`, `tensor:sum_axis_stated` and its four neighbours), the walk hands the law a
-// node with five operands, and the laws read them by name. A list would have needed a function to
-// build it. Nothing builds a list for a call's arguments any more: every one of those parameters
-// is a parameter of its own.
+// node with five operands, and the laws read them by name. The plain axis form never needed the
+// reading either: with the axis and the flag in angle brackets it carries one normal operand and two
+// context ports (`sum<axis, keepdims>(xs)`), under the count the walk holds (author's ruling,
+// 2026-11-05). A list would have needed a function to build it. Nothing builds a list for a
+// call's arguments any more: every one of those parameters is a parameter of its own.
 
 /// `d(sum(xs)) = sum(dxs)`: a sum adds its elements up, so it is linear and the sum of the tangents is
 /// the tangent of the sum.
@@ -299,19 +301,20 @@ export rule jvp_sum::<T>(xs: T[...]) when is_float::<T>() {
     sum(xs) => (dxs: T[...]) => sum_stated(dxs, shape(xs))
 }
 
-/// `d(mean_axis(xs, axis, keepdims)) = mean_axis(dxs, axis, keepdims)`: a mean is a sum divided by a
+/// `d(mean<axis, keepdims>(xs)) = mean<axis, keepdims>(dxs)`: a mean is a sum divided by a
 /// count, and neither the count nor the division reads the value, so the tangent of a mean is the
 /// mean of the tangents. It is written as the operator so that the accumulator, the order and the one
 /// rounding are the definition's own (`stdlib/tensor_definitions.cml`).
 ///
 /// A lane mean forgets the lane, and its adjoint spreads each lane's cotangent back over the lane it
-/// was averaged from, so the tangent call states the axis, the flag and the extents in one list; the
-/// operator that takes them is `mean_axis_stated`, and `mean_axis_stated_t` reads that list alone.
+/// was averaged from, so the tangent call states the axis, the flag and the extents as parameters of
+/// their own; the operator that takes them is `mean_axis_stated`, and `mean_axis_stated_t` reads them
+/// and nothing of the operand.
 export rule jvp_mean_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (dxs: T[...]) => mean_axis_stated(dxs, axis, keepdims, shape(xs))
+    mean<axis, keepdims>(xs) => (dxs: T[...]) => mean_axis_stated(dxs, axis, keepdims, shape(xs))
 }
 
-/// `d(sum_axis(xs, axis, keepdims)) = sum_axis(dxs, axis, keepdims)`: a lane sum adds up the
+/// `d(sum<axis, keepdims>(xs)) = sum<axis, keepdims>(dxs)`: a lane sum adds up the
 /// elements of each lane, so it is linear and the tangent of the lane sum is the lane sum of the
 /// tangents. It is the operator and not a decomposition, so the accumulation, the element type and
 /// the one rounding are the definition's own.
@@ -327,13 +330,13 @@ export rule jvp_mean_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_fl
 /// (`rulesets.transpose#sum_axis_t` records the refusal word for word): a sum's tangent *is* a
 /// reduction, and no transposable spelling removes it from the linear half.
 export rule jvp_sum_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    sum_axis(xs, axis, keepdims) => (dxs: T[...]) => sum_axis_stated(dxs, axis, keepdims, shape(xs))
+    sum<axis, keepdims>(xs) => (dxs: T[...]) => sum_axis_stated(dxs, axis, keepdims, shape(xs))
 }
 
-/// `d(max_axis(xs, axis, keepdims)) = max_axis(dxs, axis, keepdims)` where the lane's largest element
+/// `d(max<axis, keepdims>(xs)) = max<axis, keepdims>(dxs)` where the lane's largest element
 /// is: a max is a selection, and the tangent of a selection is the tangent of the element it chose.
 ///
-/// The selection is what the stated call carries. `xs >= max_axis(xs, axis, true)` is `true` exactly
+/// The selection is what the stated call carries. `xs >= max<axis, true>(xs)` is `true` exactly
 /// at the positions that hold the lane's largest element -- every tied one, since a value is greater
 /// than or equal to the max of its lane iff it is that max -- and the inner call states `keepdims` so
 /// that the comparison broadcasts against `xs` whatever axis was reduced. The mask depends on `xs`
@@ -341,13 +344,13 @@ export rule jvp_sum_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_flo
 /// (`max_axis_stated_t`). NaN selects nothing on either side, which is the engine's `strict_eq`
 /// reading too (`extremumAxisVjp`).
 export rule jvp_max_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    max_axis(xs, axis, keepdims) => (dxs: T[...]) => max_axis_stated(dxs, xs >= max_axis(xs, axis, true), axis, keepdims, shape(xs))
+    max<axis, keepdims>(xs) => (dxs: T[...]) => max_axis_stated(dxs, xs >= max<axis, true>(xs), axis, keepdims, shape(xs))
 }
 
-/// `d(min_axis(xs, axis, keepdims)) = min_axis(dxs, axis, keepdims)` where the lane's smallest element
+/// `d(min<axis, keepdims>(xs)) = min<axis, keepdims>(dxs)` where the lane's smallest element
 /// is: the same selection as the max's, read with `<=`.
 export rule jvp_min_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    min_axis(xs, axis, keepdims) => (dxs: T[...]) => min_axis_stated(dxs, xs <= min_axis(xs, axis, true), axis, keepdims, shape(xs))
+    min<axis, keepdims>(xs) => (dxs: T[...]) => min_axis_stated(dxs, xs <= min<axis, true>(xs), axis, keepdims, shape(xs))
 }
 
 /// `d(mean(xs)) = mean(dxs)`: the mean of every element is a sum divided by a count, and the
@@ -674,7 +677,7 @@ export rule jvp_idx_arr::<T>(xs: T[], i: int) {
 // A read moves no element: it answers one element of the array it is given, and its tangent has that
 // array's own shape (`T[]` of the same length, design principles 5.4). So the tangent of the read is
 // the read of the tangent, and the **same** `at` answers both -- which is why this rule needs no
-// stated twin the way `sum`, `mean_axis` and `take` do. Those three state extents because their
+// stated twin the way `sum`, the axis mean and `take` do. Those three state extents because their
 // adjoints have to build an array of the operand's shape and nothing in the cotangent says how long
 // that is; here the call that carries the position carries the length beside it, and the tangent is
 // checked against the same length the primal was.

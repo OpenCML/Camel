@@ -7,7 +7,7 @@
  * first is a value a tangent is paired with.
  *
  * This is its own file for the reason given in `rules_angle_args_reshape.cml`: while the three
- * readings shared one `main`, the transposed walk of `mean_axis` stopped the program and this
+ * readings shared one `main`, the transposed walk of `mean<axis>` stopped the program and this
  * correct number was recorded as part of a red one.
  *
  * The number is derived by hand, not read off a run:

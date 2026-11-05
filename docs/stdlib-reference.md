@@ -2043,29 +2043,19 @@ its element type, `bool` as `int64`.
 #### `sum`
 
 ```camel
-sum: (t: T[...], axis: int, keepdims?: bool) => T[...]
-```
-
-The same sum over one axis, in an `f64` accumulator; keepdims keeps the axis with extent 1.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[4.0, 6.0]`
-
-#### `sum_axis`
-
-```camel
-sum_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+sum: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
 The sum of each lane along one axis, accumulated in `f64` from `+0` in ascending order and
-rounded once into the element type. `keepdims` leaves the reduced axis as an extent of one.
+rounded once into the element type. The axis and the flag are the call's `with` arguments --
+`sum<0>`, `sum<1, true>` -- under the whole reduction's name (design principles 7.3), and
+`keepdims` leaves the reduced axis as an extent of one.
 The result's extents are the operand's, with that axis removed or kept as an extent of one, so
 the type a call reads states them (`float[2, 3]` along axis 0 is a `float[3]`).
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank.
-- Example: `sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[4.0, 6.0]`
+- Example: `sum<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[4.0, 6.0]`
 
 #### `mean`
 
@@ -2087,28 +2077,18 @@ is a fault.
 #### `mean`
 
 ```camel
-mean: (t: T[...], axis: int, keepdims?: bool) => T[...]
+mean: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
-The same mean over one axis; keepdims keeps the axis with extent 1.
+The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
+the element type. An empty axis is a fault. The axis and the flag are the call's `with`
+arguments -- `mean<0>`, `mean<1, true>` -- under the whole reduction's name (design principles
+7.3). The result's extents are the operand's, with that axis removed or kept as an extent of
+one.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `DivisionByZero` when the axis is empty.
 - Example: `mean<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.5, 3.5]`
-
-#### `mean_axis`
-
-```camel
-mean_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
-```
-
-The mean of each lane along one axis: the sum and the count both in `f64`, one rounding into
-the element type. An empty axis is a fault. The result's extents are the operand's, with that
-axis removed or kept as an extent of one.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
-- Example: `mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[2.0, 3.0]`
 
 #### `max`
 
@@ -2168,109 +2148,63 @@ tie. A tensor with no element is a fault.
 #### `max`
 
 ```camel
-max: (t: T[...], axis: int, keepdims?: bool) => T[...]
-```
-
-IEEE 754-2019 maximum over the axis (exactly associative and commutative: any order gives
-the same bits); keepdims keeps the axis with extent 1.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[3.0, 4.0]`
-
-#### `max_axis`
-
-```camel
-max_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
+max: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
 ```
 
 The largest element of each lane along one axis. An empty axis is a fault, as for the whole
-tensor. The result's extents are the operand's, with that axis removed or kept.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
-- Example: `max_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[3.0, 4.0]`
-
-#### `min`
-
-```camel
-min: (t: T[...], axis: int, keepdims?: bool) => T[...]
-```
-
-IEEE 754-2019 minimum over the axis (exactly associative and commutative); keepdims keeps the
-axis with extent 1.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.0, 3.0]`
-
-#### `min_axis`
-
-```camel
-min_axis: (t: T[...], axis: int, keepdims: bool) => T[...]
-```
-
-The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
-element has no identity to return. The result's extents are the operand's, with that axis
-removed or kept.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
-- Example: `min_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1.0, 2.0]`
-
-#### `argmax`
-
-```camel
-argmax: (t: float[...], axis: int, keepdims?: bool) => int64[...]
-```
-
-The position (`int64`) of the first maximum over the axis by IEEE 754-2019 maximum: the first
-NaN if there is one, +0 above -0, the earlier position on a tie.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1, 1]`
-
-#### `argmax_axis`
-
-```camel
-argmax_axis: (t: T[...], axis: int, keepdims: bool) => int[...]
-```
-
-The position of the largest element of each lane along one axis, an `int` index along that
-axis. A tie keeps the earlier position. An empty axis is a fault. The result's extents are the
+tensor. The axis and the flag are the call's `with` arguments -- `max<0>`, `max<1, true>` --
+under the whole reduction's name (design principles 7.3). The result's extents are the
 operand's, with that axis removed or kept.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
-- Example: `argmax_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[1, 1]`
+- Example: `max<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[3.0, 4.0]`
+
+#### `min`
+
+```camel
+min: <axis: int, keepdims: bool = false> (t: T[...]) => T[...]
+```
+
+The smallest element of each lane along one axis. An empty axis is a fault: a minimum over no
+element has no identity to return. The axis and the flag are the call's `with` arguments --
+`min<1>`, `min<0, true>` -- under the whole reduction's name (design principles 7.3). The
+result's extents are the operand's, with that axis removed or kept.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `min<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1.0, 3.0]`
+
+#### `argmax`
+
+```camel
+argmax: <axis: int, keepdims: bool = false> (t: float[...]) => int64[...]
+```
+
+The position of the largest element of each lane along one axis, an `int` index along that
+axis. A tie keeps the earlier position. An empty axis is a fault. The axis and the flag are the
+call's `with` arguments -- `argmax<1>`, `argmax<0, true>` -- under the whole reduction's name
+(design principles 7.3). The result's extents are the operand's, with that axis removed or
+kept.
+
+- Pure.
+- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
+- Example: `argmax<1>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[1, 1]`
 
 #### `argmin`
 
 ```camel
-argmin: (t: float[...], axis: int, keepdims?: bool) => int64[...]
-```
-
-The position (`int64`) of the first minimum over the axis by IEEE 754-2019 minimum: the first
-NaN if there is one, -0 below +0, the earlier position on a tie.
-
-- Pure.
-- Failure: fault `RuntimeError` when the axis is outside the rank, and fault `RuntimeError` when the axis is empty.
-- Example: `argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[0, 0]`
-
-#### `argmin_axis`
-
-```camel
-argmin_axis: (t: T[...], axis: int, keepdims: bool) => int[...]
+argmin: <axis: int, keepdims: bool = false> (t: float[...]) => int64[...]
 ```
 
 The position of the smallest element of each lane along one axis; a tie keeps the earlier
-position. An empty axis is a fault. The result's extents are the operand's, with that axis
-removed or kept.
+position. An empty axis is a fault. The axis and the flag are the call's `with` arguments --
+`argmin<0>`, `argmin<1, true>` -- under the whole reduction's name (design principles 7.3). The
+result's extents are the operand's, with that axis removed or kept.
 
 - Pure.
 - Failure: fault `RuntimeError` when the axis is outside the rank, and fault `InvalidArgument` when the axis has no element.
-- Example: `argmin_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false)` gives `[0, 0]`
+- Example: `argmin<0>([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[0, 0]`
 
 ### The reductions with their extents stated
 
@@ -2282,9 +2216,9 @@ mean_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[..
 
 The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
 as parameters of their own: `mean_axis_stated(t, axis, keepdims, extents)` is
-`mean_axis(t, axis, keepdims)`.
+`mean<axis, keepdims>(t)`.
 
-The result is `mean_axis`'s at the stated extents: the operand's, with the `axis` removed, or kept
+The result is the axis mean's at the stated extents: the operand's, with the `axis` removed, or kept
 as an extent of one when `keepdims`. It is computed rather than declared because those extents
 follow from values, so a call that states all three states its own result -- `0, false, [4]` over a
 rank-1 operand is the element, not `float[...]` and a conversion -- and a call whose parameters are
@@ -2653,7 +2587,7 @@ sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...
 ```
 
 The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
-stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum_axis(t, axis, keepdims)`.
+stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum<axis, keepdims>(t)`.
 
 The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
 accumulation in `f64`, the element type and the one rounding are the definition's own -- and
@@ -2695,7 +2629,7 @@ max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents
 
 The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
 the operand's extents stated: `max_axis_stated(t, mask, axis, keepdims, extents)` is
-`max_axis(t, axis, keepdims)`, and `mask` holds `true` at every position that holds its lane's
+`max<axis, keepdims>(t)`, and `mask` holds `true` at every position that holds its lane's
 largest element.
 
 The mask is what an extremum's adjoint needs and what the extents cannot rebuild: an extremum
@@ -2717,7 +2651,7 @@ min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents
 ```
 
 The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
-the operand's extents stated: `min_axis(t, axis, keepdims)`, laid out exactly as
+the operand's extents stated: `min<axis, keepdims>(t)`, laid out exactly as
 `max_axis_stated` is.
 outside the rank
 
@@ -2802,21 +2736,22 @@ CBLAS, otherwise the canonical kernel's name, which is what the path forwards to
 
 ### The reductions along an axis, computed rather than declared
 
-`sum_axis`, `mean_axis`, `min_axis`, `max_axis`, `argmax_axis` and `argmin_axis` are the
-operators `tensor:sum_axis` and its five siblings (the same naming `shape` and `numel` use, and
-the one the ONNX lowering table and the semantics declarations are keyed on), and they are not
-declared here: their **result type** is not a signature a declaration can state. The extents of
+The six reductions along an axis -- `sum`, `mean`, `min`, `max`, `argmax` and `argmin` with the
+axis and the flag in angle brackets (one name per reduction, design principles 7.3) -- are the
+operators `tensor:sum_axis` and its five siblings (that URI naming is what the ONNX lowering table
+and the semantics declarations are keyed on), and they are not declared here: their **result
+type** is not a signature a declaration can state. The extents of
 an axis reduction are the operand's extents with one axis removed -- or kept as an extent of one
 -- so they follow from the operand's type *and* from the value of `axis` and of `keepdims`, and
 a declaration's result is a type, not a function of two values. Written here as a declaration
 the name answered `T[...]`, which is a result that states no extent at all; the operator's own
 inference computes the extents (`modules/tensor/ops/reduction_ops.cpp#reduceAxisInfer`, through
-`support.cpp#reduceShape`), and a program that writes `mean_axis(x, 0, false)` now reads a
+`support.cpp#reduceShape`), and a program that writes `mean<0, false>(x)` now reads a
 `float[3]` where it used to read a `float[...]`.
 
 The one thing that stays unknown is what the axis and the flag really are: `mean_axis_stated`
-takes them inside a runtime integer list, so no call site states the rank, and its result is
-`T[...]` and honestly so. That is why it is still declared above and these six are not.
+takes them as parameters of its own, so a call that leaves them to the run states no rank, and its
+result is `T[...]` and honestly so. That is why it is still declared above and these six are not.
 
 `stdlib/signatures/tensor.cml` records the six computed signatures; `stdlib/array.cml` imports
 the names instead of declaring a second spelling of each.
@@ -7529,7 +7464,7 @@ axes the row had after it, over the rank the value itself carries (`shape`). `su
 and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
 positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
 batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
-axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
+axis, and `argmax` along that axis counts them -- see the section below `vmap_rule_min`.
 
 `reshape` and the broadcasting moves are the next tier.
 
@@ -7727,7 +7662,7 @@ batch is an axis these operators already walk.
 vmap_sum_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`sum_axis(xs, axis, keepdims)` batched: each row's sum along the axis it was given. The parameters
+`sum<axis, keepdims>(xs)` batched: each row's sum along the axis it was given. The parameters
 are the open rank for the reason `vmap_matmul` gives: a lifted type does not name the element to a
 call's inference, and a right side may not name it either.
 
@@ -7744,7 +7679,7 @@ from (`batched_axis`).
 vmap_mean_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`mean_axis(xs, axis, keepdims)` batched: each row's mean along the axis it was given.
+`mean<axis, keepdims>(xs)` batched: each row's mean along the axis it was given.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.5, 3.5]`
@@ -7755,7 +7690,7 @@ vmap_mean_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 vmap_max_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`max_axis(xs, axis, keepdims)` batched: each row's largest element along the axis it was given.
+`max<axis, keepdims>(xs)` batched: each row's largest element along the axis it was given.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_max_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[5.0, 4.0]`
@@ -7766,14 +7701,15 @@ vmap_max_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 vmap_min_axis: (xs: T[...], axis: int[], keepdims: bool[]) => T[...]
 ```
 
-`min_axis(xs, axis, keepdims)` batched: each row's smallest element along the axis it was given.
+`min<axis, keepdims>(xs)` batched: each row's smallest element along the axis it was given.
 
 - A native operator of this module: an opaque node, pure.
 - Example: `vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])` gives `[1.0, 3.0]`
 
 ### The positions along an axis
 
-`argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+The axis `argmax` and the axis `argmin` are the reductions whose *result* element is not the
+operand's:
 they take any numeric tensor and answer `int` positions (the operator's own signature spells that
 type `int64`). That is why their rules are the ones that show what a batching rule is generic in
 -- the element the operands are made of, read from an operand, never from the type of the node the
@@ -7786,7 +7722,7 @@ result's element type would be a rule about `int` arrays applied to floats.
 vmap_argmax_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
 ```
 
-`argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+`argmax<axis, keepdims>(xs)` batched: each row's position of its largest element along the
 axis it was given. The positions are `int` whatever the operand's element is, so the type this
 function is generic in is the operand's (`T`), not its result's.
     // [1, 2]
@@ -7800,7 +7736,7 @@ function is generic in is the operand's (`T`), not its result's.
 vmap_argmin_axis: (xs: T[...], axis: int[], keepdims: bool[]) => int[...]
 ```
 
-`argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+`argmin<axis, keepdims>(xs)` batched: each row's position of its smallest element along the
 axis it was given, with the earlier position on a tie.
     // [0, 0]
 
