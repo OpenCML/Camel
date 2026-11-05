@@ -26,10 +26,10 @@
 //
 //     camel test/cases/compile/transforms/stated_mean_axis_gradient.cml
 import { vjp } from vjp
-import { mean_axis } from tensor
+import { mean } from tensor
 
 func total(x: float[]): float {
-    return mean_axis(x, 0, false)
+    return mean<0, false>(x)
 }
 
 func main(): int sync {

@@ -26,22 +26,22 @@
  */
 import rulesets.vmap
 import { vmap as row_vmap } from array
-import { argmax_axis, argmin_axis } from tensor
+import { argmax, argmin } from tensor
 import { vmap } from transforms
 
 // The axis is the row's first one: in the lifted value it is the second.
 func column_argmax(x: float[2, 3]): int[...] {
-    return argmax_axis(x, 0, false)
+    return argmax<0, false>(x)
 }
 
 // `keepdims` keeps the reduced axis, so the batch keeps it too.
 func column_argmin(x: float[2, 3]): int[...] {
-    return argmin_axis(x, 0, true)
+    return argmin<0, true>(x)
 }
 
 // The axis is the row's second one, which is the lifted value's third.
 func row_argmax(x: float[2, 3]): int[...] {
-    return argmax_axis(x, 1, false)
+    return argmax<1, false>(x)
 }
 
 func main(): int sync {

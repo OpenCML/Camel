@@ -11,30 +11,30 @@
  * are the shape's: `[6.0, 15.0]` is one dimension of two and `[[6.0], [15.0]]` two dimensions with
  * the reduced one kept.
  *
- * `sum_axis`'s result type is the open rank `T[...]`, so these `shape` calls are also the reading that
+ * `sum<axis>`'s result type is the open rank `T[...]`, so these `shape` calls are also the reading that
  * an open rank is not what used to stop `shape`: the rank is a fact about the value and the value
  * carries it, while an open rank is a fact about the type and says nothing about this value.
  *
  * The readings are the lines below; `agree_with_fvm` compares them with std::fvm byte for byte.
  */
-import { shape, sum_axis } from tensor
+import { shape, sum } from tensor
 
 func main(): int sync {
     let m: float[3, 2] = [[1.0, 2.0], [3.0, 4.0], [5.0, 6.0]]
-    println(sum_axis(m, 0, false))
-    println(sum_axis(m, 1, false))
-    println(sum_axis(m, 1, true))
+    println(sum<0, false>(m))
+    println(sum<1, false>(m))
+    println(sum<1, true>(m))
     let t: float[2, 2, 2] = [[[1.0, 2.0], [3.0, 4.0]], [[5.0, 6.0], [7.0, 8.0]]]
-    println(sum_axis(t, 1, false))
-    println(sum_axis(t, 0, false))
-    println(sum_axis(t, 2, false))
+    println(sum<1, false>(t))
+    println(sum<0, false>(t))
+    println(sum<2, false>(t))
     let line: f32[3] = [1.0, 5.0, 2.0]
-    println(sum_axis(line, 0, false))
-    println(sum_axis(line, 0, true))
-    println(shape(sum_axis(line, 0, false)), shape(sum_axis(line, 0, true)))
+    println(sum<0, false>(line))
+    println(sum<0, true>(line))
+    println(shape(sum<0, false>(line)), shape(sum<0, true>(line)))
     let wide: f32[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
-    println(sum_axis(wide, 1, false))
-    println(sum_axis(wide, 1, true))
-    println(shape(sum_axis(wide, 1, false)))
+    println(sum<1, false>(wide))
+    println(sum<1, true>(wide))
+    println(shape(sum<1, false>(wide)))
     return 0
 }

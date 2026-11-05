@@ -13,17 +13,17 @@
  * answers `0`, the f64 one keeps it and answers `0.33333334`. The 2-D line reduces rows of three, so
  * each answer is a lane rather than one run of the whole value.
  */
-import { mean_axis, shape } from tensor
+import { mean, shape } from tensor
 
 func main(): int sync {
     let ints: int[3] = [1, 2, 4]
-    println(mean_axis(ints, 0, false))
-    println(shape(mean_axis(ints, 0, false)))
-    println(mean_axis(ints, 0, true))
-    println(mean_axis(f32(ints), 0, false))
+    println(mean<0, false>(ints))
+    println(shape(mean<0, false>(ints)))
+    println(mean<0, true>(ints))
+    println(mean<0, false>(f32(ints)))
     let apart: f32[3] = [16777216.0, 1.0, -16777216.0]
-    println(mean_axis(apart, 0, false))
+    println(mean<0, false>(apart))
     let two: int[2, 3] = [[1, 2, 4], [3, 4, 5]]
-    println(mean_axis(two, 1, false))
+    println(mean<1, false>(two))
     return 0
 }

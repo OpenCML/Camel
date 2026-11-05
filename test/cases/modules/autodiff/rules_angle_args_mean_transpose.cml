@@ -1,7 +1,7 @@
 /**
  * The pullback of a function whose reduction takes its axis and its `keepdims` as ports.
  *
- * `mean_axis(xs, axis, keepdims)` has three ports: one data operand and two context arguments.
+ * `mean<axis, keepdims>(xs)` has three ports: one data operand and two context arguments.
  * `mean_axis_t` names all three, because a rule's parameters are the operator's ports in port
  * order -- and only the first answers a cotangent, since `int` and `bool` have no tangent space.
  * The cotangent the law has to spread needs the *length of the lane* it spreads over, which it reads
@@ -18,7 +18,7 @@
  *
  * The number is derived by hand, not read off a run, and it is read ELEMENT BY ELEMENT:
  *
- *   mean     f(x) = sum(mean_axis(x, 0, false) * [1, 2, 3]) on x = [[1, 2, 3], [4, 5, 6]]
+ *   mean     f(x) = sum(mean<0, false>(x) * [1, 2, 3]) on x = [[1, 2, 3], [4, 5, 6]]
  *            the lane means are [2.5, 3.5, 4.5], so f = 2.5 + 7.0 + 13.5 = 23.0; the cotangent of x
  *            at ct = 1.0 is w[k] / 2 in both rows:
  *
@@ -34,10 +34,10 @@
  */
 import rulesets.transpose
 import { transpose } from transforms
-import { mean_axis, sum } from tensor
+import { mean, sum } from tensor
 
 func loss_mean(x: float[2, 3]): float {
-    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+    return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
 func main(): int sync {

@@ -1,10 +1,10 @@
-// The extents a reduction states are read by whatever takes its result: `mean_axis(x, 0, false)` is a
+// The extents a reduction states are read by whatever takes its result: `mean<0, false>(x)` is a
 // `f32[3]`, so the product with a `f32[3]` is a `f32[3]` too -- and a function that wants five
 // elements is a compile-time error that names the three the product has. An operator whose operand
 // says `f32[...]` could not say this: the product would have no extents to state.
 //
 //     camel test/cases/modules/tensor/shape_types/reduction_extents_reach_the_product.cml
-import { mean_axis } from tensor
+import { mean } from tensor
 
 func five(v: f32[5]): float {
     return float(v[0])
@@ -13,6 +13,6 @@ func five(v: f32[5]): float {
 func main(): int sync {
     let x = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]] as f32[2, 3]
     let w = [1.0, 2.0, 3.0] as f32[3]
-    println(five(mean_axis(x, 0, false) * w))
+    println(five(mean<0, false>(x) * w))
     return 0
 }

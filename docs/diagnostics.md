@@ -10964,10 +10964,10 @@ A type states the extents its declaration writes and no others: `float[2, 3]` st
 ```camel
 import rulesets.transpose
 import { transpose } from transforms
-import { mean_axis, sum } from tensor
+import { mean, sum } from tensor
 
 func loss_mean(x: float[...]): float {
-    return float(sum(mean_axis(x, 0, false) * ([1.0, 2.0, 3.0] as float[])))
+    return float(sum(mean<0, false>(x) * ([1.0, 2.0, 3.0] as float[])))
 }
 
 func main(): int sync {

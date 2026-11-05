@@ -32,7 +32,7 @@
  * and `min` are written that way. `argmax` and `argmin` answer a *position*, which no fold of axis
  * positions produces (`argmax` of a `float[2, 3]` row is 5, not `[1, 2]`), so their rule reads the
  * batch as one line instead: `reshape<[shape(xs)[0], -1]>(xs)` puts a row's elements on its last
- * axis, and `argmax_axis` along that axis counts them -- see the section below `vmap_rule_min`.
+ * axis, and `argmax` along that axis counts them -- see the section below `vmap_rule_min`.
  *
  * `reshape` and the broadcasting moves are the next tier.
  *
@@ -41,7 +41,7 @@
  */
 
 import { is_float, is_numeric, RowsOf } from types
-import { argmax, argmax_axis, argmin, argmin_axis, concat, dim, matmul, max, max_axis, mean, mean_axis, min, min_axis, numel, permute, reshape, shape, sum, sum_axis, transpose, unsqueeze, where } from tensor
+import { argmax, argmin, concat, dim, matmul, max, mean, min, numel, permute, reshape, shape, sum, transpose, unsqueeze, where } from tensor
 
 // `tensor` is imported for its operators, not its names. A rule is written as the primitive's own
 // spelling (`x * w`), and it is instantiated at the type the primitive works on -- a row, `f32[3]`,
@@ -286,7 +286,7 @@ func batched_axis(axis: int[]): int {
     return if a < 0 then a else a + 1
 }
 
-/// `sum_axis(xs, axis, keepdims)` batched: each row's sum along the axis it was given. The parameters
+/// `sum<axis, keepdims>(xs)` batched: each row's sum along the axis it was given. The parameters
 /// are the open rank for the reason `vmap_matmul` gives: a lifted type does not name the element to a
 /// call's inference, and a right side may not name it either.
 ///
@@ -296,67 +296,68 @@ func batched_axis(axis: int[]): int {
 /// @example vmap_sum_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])    // [3.0, 7.0]
 export func vmap_sum_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): T[...]
     when is_numeric::<T>() {
-    return sum_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+    return sum<batched_axis(axis), at(keepdims, 0)>(xs)
 }
 
-/// `mean_axis(xs, axis, keepdims)` batched: each row's mean along the axis it was given.
+/// `mean<axis, keepdims>(xs)` batched: each row's mean along the axis it was given.
 /// @example vmap_mean_axis([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0], [false])    // [1.5, 3.5]
 export func vmap_mean_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): T[...]
     when is_float::<T>() {
-    return mean_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+    return mean<batched_axis(axis), at(keepdims, 0)>(xs)
 }
 
-/// `max_axis(xs, axis, keepdims)` batched: each row's largest element along the axis it was given.
+/// `max<axis, keepdims>(xs)` batched: each row's largest element along the axis it was given.
 /// @example vmap_max_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])    // [5.0, 4.0]
 export func vmap_max_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): T[...]
     when is_numeric::<T>() {
-    return max_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+    return max<batched_axis(axis), at(keepdims, 0)>(xs)
 }
 
-/// `min_axis(xs, axis, keepdims)` batched: each row's smallest element along the axis it was given.
+/// `min<axis, keepdims>(xs)` batched: each row's smallest element along the axis it was given.
 /// @example vmap_min_axis([[1.0, 5.0], [3.0, 4.0]] as float[2, 2], [0], [false])    // [1.0, 3.0]
 export func vmap_min_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): T[...]
     when is_numeric::<T>() {
-    return min_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+    return min<batched_axis(axis), at(keepdims, 0)>(xs)
 }
 
 // ---- the positions along an axis ----
 //
-// `argmax_axis` and `argmin_axis` are the reductions whose *result* element is not the operand's:
+// The axis `argmax` and the axis `argmin` are the reductions whose *result* element is not the
+// operand's:
 // they take any numeric tensor and answer `int` positions (the operator's own signature spells that
 // type `int64`). That is why their rules are the ones that show what a batching rule is generic in
 // -- the element the operands are made of, read from an operand, never from the type of the node the
 // result is (`modules/transforms/vmap.cpp`'s `firstOperandTypeOf`). A rule instantiated at the
 // result's element type would be a rule about `int` arrays applied to floats.
 
-/// `argmax_axis(xs, axis, keepdims)` batched: each row's position of its largest element along the
+/// `argmax<axis, keepdims>(xs)` batched: each row's position of its largest element along the
 /// axis it was given. The positions are `int` whatever the operand's element is, so the type this
 /// function is generic in is the operand's (`T`), not its result's.
 /// @example vmap_argmax_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])
 ///     // [1, 2]
 export func vmap_argmax_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): int[...]
     when is_numeric::<T>() {
-    return argmax_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+    return argmax<batched_axis(axis), at(keepdims, 0)>(xs)
 }
 
-/// `argmin_axis(xs, axis, keepdims)` batched: each row's position of its smallest element along the
+/// `argmin<axis, keepdims>(xs)` batched: each row's position of its smallest element along the
 /// axis it was given, with the earlier position on a tie.
 /// @example vmap_argmin_axis([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3], [0], [false])
 ///     // [0, 0]
 export func vmap_argmin_axis::<T>(xs: T[...], axis: int[], keepdims: bool[]): int[...]
     when is_numeric::<T>() {
-    return argmin_axis::<T>(xs, batched_axis(axis), at(keepdims, 0))
+    return argmin<batched_axis(axis), at(keepdims, 0)>(xs)
 }
 
-/// `argmax_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+/// `argmax<axis, keepdims>(xs)` batched: the axis the row reduces is one place further in.
 export rule vmap_rule_argmax_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_numeric::<T>() {
-    argmax_axis(xs, axis, keepdims) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+    argmax<axis, keepdims>(xs) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_argmax_axis(bxs, baxis, bkeep)
 }
 
-/// `argmin_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+/// `argmin<axis, keepdims>(xs)` batched: the axis the row reduces is one place further in.
 export rule vmap_rule_argmin_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_numeric::<T>() {
-    argmin_axis(xs, axis, keepdims) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+    argmin<axis, keepdims>(xs) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_argmin_axis(bxs, baxis, bkeep)
 }
 
@@ -376,7 +377,7 @@ export func vmap_sum::<T>(xs: T[...]): T[...] when is_numeric::<T>() {
 }
 
 func fold_sum_axes::<T>(xs: T[...], left: int): T[...] when is_numeric::<T>() {
-    return if left <= 0 then xs else fold_sum_axes::<T>(sum_axis(xs, 1, false), left - 1)
+    return if left <= 0 then xs else fold_sum_axes::<T>(sum<1, false>(xs), left - 1)
 }
 
 /// `mean(xs)` batched: one mean per row, folded the same way `sum` is. A mean is of a float: an
@@ -387,7 +388,7 @@ export func vmap_mean::<T>(xs: T[...]): T[...] when is_float::<T>() {
 }
 
 func fold_mean_axes::<T>(xs: T[...], left: int): T[...] when is_float::<T>() {
-    return if left <= 0 then xs else fold_mean_axes::<T>(mean_axis(xs, 1, false), left - 1)
+    return if left <= 0 then xs else fold_mean_axes::<T>(mean<1, false>(xs), left - 1)
 }
 
 /// `sum(xs)` batched: the batch axis stays in front and the row's axes are folded away.
@@ -408,7 +409,7 @@ export rule vmap_rule_mean::<T>(xs: T[...]) when is_float::<T>() {
 /// number, in either shape.
 /// @example vmap_max([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])    // [5.0, 4.0]
 export func vmap_max::<T>(xs: T[...]): T[...] when is_numeric::<T>() {
-    return max_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
+    return max<1, false>(reshape<[shape(xs)[0], -1]>(xs))
 }
 
 /// `min(xs)` batched: the same one-pass minimum over the flattened row, with the IEEE 754-2019
@@ -416,7 +417,7 @@ export func vmap_max::<T>(xs: T[...]): T[...] when is_numeric::<T>() {
 /// whole-tensor form gives.
 /// @example vmap_min([[1.0, 5.0, 2.0], [4.0, 0.0, 3.0]] as float[2, 3])    // [1.0, 0.0]
 export func vmap_min::<T>(xs: T[...]): T[...] when is_numeric::<T>() {
-    return min_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
+    return min<1, false>(reshape<[shape(xs)[0], -1]>(xs))
 }
 
 /// `max(xs)` batched: the batch axis stays in front and the row's axes are folded away.
@@ -446,14 +447,14 @@ export rule vmap_rule_min::<T>(xs: T[...]) when is_numeric::<T>() {
 /// `[rows, -1]` and a reduction of its last axis -- which is one row's elements.
 /// @example vmap_argmax([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])    // [1, 2]
 export func vmap_argmax::<T>(xs: T[...]): int[...] when is_numeric::<T>() {
-    return argmax_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
+    return argmax<1, false>(reshape<[shape(xs)[0], -1]>(xs))
 }
 
 /// `argmin(xs)` batched: the same reading of the batch as `[rows, -1]`, with the earlier position on
 /// a tie.
 /// @example vmap_argmin([[1.0, 9.0, 3.0], [4.0, 5.0, 6.0]] as float[2, 3])    // [0, 0]
 export func vmap_argmin::<T>(xs: T[...]): int[...] when is_numeric::<T>() {
-    return argmin_axis(reshape<[shape(xs)[0], -1]>(xs), 1, false)
+    return argmin<1, false>(reshape<[shape(xs)[0], -1]>(xs))
 }
 
 /// `argmax(xs)` batched: the row read as one line, reduced along its last axis.
@@ -466,27 +467,27 @@ export rule vmap_rule_argmin::<T>(xs: T[...]) when is_numeric::<T>() {
     argmin(xs) => (bxs: Lift<T[...]>) => vmap_argmin(bxs)
 }
 
-/// `sum_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+/// `sum<axis, keepdims>(xs)` batched: the axis the row reduces is one place further in.
 export rule vmap_rule_sum_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_numeric::<T>() {
-    sum_axis(xs, axis, keepdims) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+    sum<axis, keepdims>(xs) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_sum_axis(bxs, baxis, bkeep)
 }
 
-/// `mean_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+/// `mean<axis, keepdims>(xs)` batched: the axis the row reduces is one place further in.
 export rule vmap_rule_mean_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_float::<T>() {
-    mean_axis(xs, axis, keepdims) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+    mean<axis, keepdims>(xs) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_mean_axis(bxs, baxis, bkeep)
 }
 
-/// `max_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+/// `max<axis, keepdims>(xs)` batched: the axis the row reduces is one place further in.
 export rule vmap_rule_max_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_numeric::<T>() {
-    max_axis(xs, axis, keepdims) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+    max<axis, keepdims>(xs) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_max_axis(bxs, baxis, bkeep)
 }
 
-/// `min_axis(xs, axis, keepdims)` batched: the axis the row reduces is one place further in.
+/// `min<axis, keepdims>(xs)` batched: the axis the row reduces is one place further in.
 export rule vmap_rule_min_axis::<T>(xs: T[...], axis: int, keepdims: bool) when is_numeric::<T>() {
-    min_axis(xs, axis, keepdims) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
+    min<axis, keepdims>(xs) => (bxs: Lift<T[...]>, baxis: Lift<int>, bkeep: Lift<bool>) =>
         vmap_min_axis(bxs, baxis, bkeep)
 }
 

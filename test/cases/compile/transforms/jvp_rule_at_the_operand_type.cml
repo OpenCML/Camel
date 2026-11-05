@@ -10,7 +10,7 @@
 //
 // `f32` is the smallest program that tells the two writings apart: its tangent space is the value's
 // own type and it is not `float`. An *array* operand cannot show the difference, because the rule's
-// `T` is the array's element -- `sum_axis` over a `float[]` matches at `float` either way, which is
+// `T` is the array's element -- `sum<0>` over a `float[]` matches at `float` either way, which is
 // why `rule_types.h` asks for the element and not the operand's type.
 //
 // g(x) = x * x, so g(1) = 1 and g'(1) * 1 = 2.
