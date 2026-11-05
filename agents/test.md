@@ -175,12 +175,18 @@ run from another machine reaches the host it names -- where the entry stops with
 setting it could not find. The copy's own header says none of this, so a lane that runs it believes it
 ran the gate and reads an older, laxer number as this tree's.
 
-It is documented here instead of deleted because it still has callers, and one of them is in this tree:
-`scripts/bisect-merge.mjs#parseArgs` defaults `--wrapper` to `path.resolve(<tree>, '..',
-'camel-remote.ps1')`, which for any tree under `D:\Projects\Camel-wt\` is exactly that file, and
-`scripts/bisect-merge.mjs#measure` runs it with `pwsh -File`. The machine-local helpers beside it
-(`bisect2.ps1`, `h598-reds.ps1`, ...) hardcode the same path. Deleting it would break those callers,
-and the break would read as "the gate is missing" rather than "you named the old one".
+Inside this tree the one caller was `scripts/bisect-merge.mjs`: `#parseArgs` defaulted `--wrapper` to
+`path.resolve(<tree>, '..', 'camel-remote.ps1')`, which for any tree under `D:\Projects\Camel-wt\`
+resolved to exactly that file, and `#measure` runs the result with `pwsh -File` -- so a bisect took every
+reading through the old copy while printing ordinary `[camel-remote]` lines. The default now resolves
+`internal/tools/camel-remote.ps1` from the script's own location, so it no longer depends on where the
+worktree sits; `--wrapper` still overrides it.
+
+The copy itself is documented here instead of deleted because it still has callers outside this
+repository: the machine-local helpers beside it (`bisect2.ps1`, `h598-reds.ps1`, `h585-gir-walk.ps1`,
+`.h552-verify.ps1`, ...) hardcode the same path, and design and handover pages still show it in a
+command. Deleting it would break those, and the break would read as "the gate is missing" rather than
+"you named the old one".
 
 Point `-File` at the tree's `internal/tools/camel-remote.ps1`, and read the readings of a run whose
 command line did not: `[camel-remote]` lines are printed by both copies and do not say which one printed
