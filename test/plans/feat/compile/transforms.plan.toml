@@ -2024,6 +2024,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
 known_fail = true
 known_fail_owner = "lane-deleth"
+known_fail_msg = "Reference 'with_grad' is declared as imported but is not exported by its module."
 known_fail_reason = "库层 `with_grad` 按裁定 `080778522` 删除，等它作为组合写出来：`stdlib/vjp.cml` 不再导出这个名字，所以用例停在 `import { with_grad } from vjp`，不是停在组合的某道墙上。"
 known_fail_note = "The mark is the removal, not a wall: the placeholder was deleted with its `fail` sentence and its doc, so there is no name for the case to call and nothing to rewrite the library's leg onto. The four groups, the engine's four answers and the pin stay as the object the composition will answer; `grad_first_with_parameter.cml`'s two entries already pin the engine's numbers, which is why this entry is not duplicated as an engine-only case. Waits on `stdlib/vjp.cml` gaining `with_grad` as the composition (`vjp` of a lambda that moves the weight onto an ordinary parameter, seed 1 read off the pullback) with the declaration `FirstOf<WithOf<F>>` beside it."
 
