@@ -3147,3 +3147,25 @@ S2 改用 `grad` 等这一步落地后再做。
    原来那条按开放形状裸转置的用例，改成断言具名拒绝。这不是"换掉判据"：原判据问的写法本身违背规则。
 
 不用等 `same=no` 的收口。按上面两条做，这条用例就有确定的答案。页挪到 `reviews/` 留档。
+
+## 裁定（2026-11-05 11:30）：找回的八页
+
+这八页在 `37cfbc6d6` 之后丢失，`b37bf99b7` 把它们找了回来，之前都没有答过，这一轮一次答完。
+
+**一、链位三页，用一条规则答**（`is-a-chain-start-the-same-question-as-an-order-carrier`、`who-carries-the-chain-place-after-a-branch`、`a-structural-nodes-chain-position-belongs-to-its-join`）：
+- **规则：一个结构语句（拥有区域的 `BRCH`/`LOOP`，以及 `CALL`）在链上占一格，这一格从它的拥有节点开始，到它的 `JOIN` 结束。**前一条语句的同步边进拥有节点，后一条语句的同步边从 `JOIN` 出来。`JOIN` 不是一条单独的语句，它是这一格的出口。对应 P0-2 的谓词："拥有区域的 `Brch`/`Loop` 是链上语句"，以及"区域的拥有者只读区域的出口"。
+- 所以第二页答第 3 条（"分支自己占一格、join 从分支接"）；第三页的甲是同一句话。
+- 封口检查按这一条认：起点是一条语句，或一个结构语句的 `JOIN`；终点是一条语句，或一个结构语句的拥有节点。这不是给 `JOIN` 单独开口子。读数 (b) 里"分支体没人等"的问题也随之消失：分支作为一格挂在链上，执行到它就会执行。
+- 第一页的两个谓词：`nodeTakesAnOrder` 与"是不是链上语句"是两个问题，不要合并。次序边可以落在任何有副作用或可能故障的节点上；链位只属于语句。
+
+**二、标记编码的是形状还是事件（`does-a-mark-encode-shape-or-history`）**：页里的结论对，标记编码的是已经发生过的事件。`draft.cpp` 那一处判错的守卫直接删掉，`branch.graph` 与 `generic.gate_branch_wait` 转绿就是读数。
+
+**三、封口检查问标记还是问语句（`does-the-seal-check-judge-the-marker-or-the-statement`）**：都不选，二者在同一次合并里换。按第一条的规则把推导谓词补全，然后在同一次合并里：封口检查改问推导谓词；写标记的 8 处一起删掉；`kGCNodeFlagSyncStatement` 删掉。这一次合并就是 P0-2 的收尾。在那之前，标记照旧，也不在注释里把"先问标记"写成规则。
+
+**四、`gc_soak` 的那一跳（`the-gc-soak-step-is-not-the-eq-rewrite`）**：同意 (i)：预算不动，下一条性能任务是字符串构造的热路径（`:op/atos`/`:op/add_s`）。我 12:10 的机制判断被读数证伪了，以读数为准。窥孔保留，因为它在那种形状真出现的地方有 16% 到 18% 的收益，与 `gc_soak` 无关。
+
+**五、`extent_of::<A>` 当作值（`what-is-a-value-of-extent-of`）**：照甲，答。规则写成通用的：任何函数都能当作值取走；一个只由类型实参决定值的内建，它的函数值就是一个没有参数、函数体为常量的函数。不按名字特判 `extent_of`。
+
+**六、包模式只在类型位置的 `match type` 里有读法（`a-type-position-pattern-is-not-expressible-only-inside-match-type`）**：记成第二种说法，"包模式只在一个位置有读法"。要补的是值位置的 `match type` 也绑定包模式里的名字，规则与类型位置相同（同一类事一条规则）。库层 `grad` 不靠它，走 02:30 定的签名重解释（`first_with_as_param`），所以这件事不在 `grad` 的关键路径上。
+
+八页挪到 `reviews/` 留档。
