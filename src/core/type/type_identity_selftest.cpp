@@ -5,6 +5,7 @@
 
 #include "camel/core/type/base.h"
 #include "camel/core/derivative.h"
+#include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/stream.h"
@@ -341,22 +342,24 @@ std::string debugRunTypeIdentitySelfTest() {
     // A pack expansion: `..E` is `E` written once for each member of a pack a call bound, and the
     // type it makes is the tuple of those results (typecall.h `$expand` over `$pack`, the
     // expansion in typevar.cpp). This is the shape a declaration with a pack parameter needs for
-    // its result type: `(..ElementOf<A>)[]` over three array types is the array of a three-member
-    // tuple, which is the type `zip` has.
+    // its result type: `(..KeyOf<A>)[]` over three map types is the array of a three-member tuple,
+    // which is the type `zip` has over maps. The type function is one the compiler still answers
+    // (`KeyOf`, typecall.cpp `kTypeFunctions`): the ones a library writes take their members apart
+    // in the type layer, and this test is about the expansion over a pack.
     {
-        Type *packVar    = TypeVarType::create("A", false);
-        Type *elementOfA = TypeCallType::create("ElementOf", std::span<Type *const>(&packVar, 1));
-        Type *expansion  = TypeCallType::makeExpand(elementOfA);
+        Type *packVar = TypeVarType::create("A", false);
+        Type *keyOfA  = TypeCallType::create("KeyOf", std::span<Type *const>(&packVar, 1));
+        Type *expansion = TypeCallType::makeExpand(keyOfA);
         require(
-            expansion->toString() == "...ElementOf<A>",
+            expansion->toString() == "...KeyOf<A>",
             "an expansion prints as '...' and its body: " + expansion->toString());
         require(
-            TypeCallType::makeExpand(elementOfA) == expansion,
+            TypeCallType::makeExpand(keyOfA) == expansion,
             "two expansions of one body are two objects");
         require(TypeCallType::isExpand(expansion), "an expansion is not seen as one");
         require(containsTypeCall(expansion), "containsTypeCall does not see an expansion");
 
-        std::vector<Type *> three{ArrayType::create(i), ArrayType::create(s), ArrayType::create(f)};
+        std::vector<Type *> three{MapType::get(i, f), MapType::get(s, f), MapType::get(f, f)};
         type_bindings_t packed{
             {"A", TypeCallType::makePack(std::span<Type *const>(three.data(), three.size()))}};
         Type *expanded = substituteTypeVars(expansion, packed);
@@ -374,7 +377,7 @@ std::string debugRunTypeIdentitySelfTest() {
         // A pack bound to one member expands to a one-member tuple, not to that member: a written
         // `..E` denotes a sequence of results, and how a parameter list reads a sequence is the
         // declaration's business.
-        std::vector<Type *> one{ArrayType::create(i)};
+        std::vector<Type *> one{MapType::get(i, f)};
         require(
             substituteTypeVars(
                 expansion,

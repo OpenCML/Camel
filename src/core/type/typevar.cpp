@@ -299,6 +299,60 @@ bool takePackApart(Type *pattern, Type *subject, type_bindings_t &bindings) {
     return true;
 }
 
+/// A pattern a `match type` case writes to take an array type apart (`case E[...Dims]`,
+/// `case E[...]`), tried against `subject`: whether it fits, what the names it writes stand for,
+/// and the dimensions it reached. The element type binds the name the pattern writes where the
+/// type is a name (`E`); a concrete element type written in the pattern is the type the case
+/// selects, by identity.
+///
+/// The dims pack says which of the two things a shape states the case takes. A *named* pack
+/// (`E[...Dims]`) stands for the dimensions themselves, so the case selects an array whose rank
+/// is stated (a shape of `?` per dimension is a stated rank, `T[]` included) and no array whose
+/// rank is open: `Dims` then stands for `rank` dimensions, both as the dimension pack the type
+/// layer can put back (`RowsOf`) and, where an extent is written, as the number of them
+/// (`int[Dims]`, the rank `ShapeOf` answers). An *anonymous* pack (`E[...]`) is the open rank
+/// itself: what the case selects is an array whose rank nobody stated, and there is nothing to
+/// bind. Design principles 5.4: `T[...]` is every rank, `T[]` is one dimension of unknown length,
+/// and a dimension pack is the dimensions a type does not name.
+bool takeArrayApart(
+    Type *pattern, Type *subject, type_bindings_t &bindings, ExtentValues &values,
+    ExtentPacks &packs) {
+    const ArrayType *shape = asArrayType(substituteTypeVars(pattern, bindings));
+    const ArrayType *array = asArrayType(subject);
+    if (shape == nullptr || array == nullptr) {
+        return false;
+    }
+    const bool namesDims = !shape->packName().empty();
+    if (namesDims == array->anyRank()) {
+        // A named pack takes the dimensions of a stated rank apart; an anonymous one is the open
+        // rank. Neither selects the other: a case that binds the dimensions cannot select a value
+        // whose rank is not stated, and the open-rank case is not the closed one.
+        return false;
+    }
+    if (!shape->extents().empty()) {
+        // Only a pack with no extent before it is a pattern this matcher reads: `case E[3, ...R]`
+        // states a shape, which is what an identity case selects.
+        return false;
+    }
+    Type *element = shape->elemType();
+    if (element != nullptr && element->code() == TypeCode::TypeVar) {
+        bindings.emplace_back(static_cast<TypeVarType *>(element)->name(), array->elemType());
+    } else if (element == nullptr || containsTypeVar(element) ||
+               !typeEquals(element, array->elemType())) {
+        return false;
+    }
+    if (namesDims) {
+        const std::string name(shape->packName());
+        std::vector<ExtentForm> dims(array->extents().begin(), array->extents().end());
+        // One name, two readings, in the two namespaces the type layer already has: the pack is
+        // the dimensions (`E[?, ...Dims]` puts them back), and an extent written as `Dims` is how
+        // many there are.
+        values[name] = static_cast<int64_t>(dims.size());
+        packs[name]  = std::move(dims);
+    }
+    return true;
+}
+
 /// A factory holding `func` with the variables (and, when `extents` is not null, the named
 /// extents) replaced; `changed` tells whether anything was. A `constas` parameter is part of the
 /// declaration's identity, not a runtime argument: it is dropped when `dropConstas` says the
@@ -744,6 +798,28 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         // looked at; with a type variable still in the subject it waits.
         auto *match   = static_cast<MatchTypeType *>(type);
         Type *subject = substituteTypeVars(match->subject(), bindings);
+        if (TypeCallType::isPack(subject)) {
+            // A type function applied to a pack of known members is applied to each member, and
+            // the pack of the answers is its answer: `Tangent<ParamsOf<F>>` is one tangent per
+            // parameter of `F`, and `...ElementOf<A>` is one element type per array (design
+            // principles 5.6). A case that writes a pack pattern takes the pack apart instead --
+            // that is what `FirstOf<P>` is -- so the pack is one subject and not a list exactly
+            // where a case says how to take it apart.
+            bool takesPackApart = false;
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                takesPackApart |= !match->armPackPatterns(arm).empty();
+            }
+            if (!takesPackApart) {
+                std::vector<Type *> params(
+                    match->paramsSpan().begin(), match->paramsSpan().end());
+                std::vector<Type *> mapped;
+                for (Type *member : TypeCallType::packMembers(subject)) {
+                    params[0] = member;
+                    mapped.push_back(substituteTypeVars(match->cloneWithParams(params), bindings));
+                }
+                return TypeCallType::makePack(mapped);
+            }
+        }
         if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
             for (size_t arm = 0; arm < match->armCount(); ++arm) {
@@ -753,6 +829,18 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                     type_bindings_t taken = bindings;
                     if (takePackApart(pattern, subject, taken)) {
                         return substituteTypeVars(match->armResult(arm), taken);
+                    }
+                }
+                // A case that takes an array type apart (`case E[...Dims]`) selects it the same
+                // way, and the dimensions it reached are the pack the result writes back
+                // (`E[?, ...Dims]`) and, as an extent, the number of them (`int[Dims]`).
+                for (Type *pattern : match->armArrayPatterns(arm)) {
+                    type_bindings_t taken = bindings;
+                    ExtentValues values;
+                    ExtentPacks packs;
+                    if (takeArrayApart(pattern, subject, taken, values, packs)) {
+                        return substituteExtentValues(
+                            substituteTypeVars(match->armResult(arm), taken), values, packs);
                     }
                 }
                 bool selected = (match->armShapes(arm) & shapes) != 0;
@@ -806,13 +894,22 @@ OpenFunctionType *instantiateFunctionType(
 }
 
 Type *substituteExtentValues(Type *type, const ExtentValues &values, const ExtentPacks &packs) {
-    if (type == nullptr || values.empty()) {
+    if (type == nullptr || (values.empty() && packs.empty())) {
         return type;
+    }
+    // A dimension pack written where an extent stands is how many dimensions it stands for: the
+    // one name answers the dimensions themselves (`E[?, ...Dims]` puts them back) and their
+    // number (`int[Dims]`, which is the rank). One reading, and it is the length of the pack, the
+    // count `indices` walks in the value layer -- so a type states the rank of a shape it is given
+    // without a second spelling for it.
+    ExtentValues named = values;
+    for (const auto &[name, dims] : packs) {
+        named[name] = static_cast<int64_t>(dims.size());
     }
     switch (type->code()) {
     case TypeCode::Array: {
         auto *array = static_cast<ArrayType *>(type);
-        Type *elem  = substituteExtentValues(array->elemType(), values, packs);
+        Type *elem  = substituteExtentValues(array->elemType(), named, packs);
         // An array's own extents name values too (`f32[n]` with a `constas n: int`), and they are
         // where such a name lives now that `[]` is the core array type: replace them as the type
         // arguments of a module type are replaced, so the parameter of a call becomes the concrete
@@ -820,15 +917,15 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
         // the shape check to the core). While the name stayed in the type, an array with a named extent
         // accepts every
         // extent, so `total(3, ones([4]))` with `x: f32[n]` was taken as it was.
-        if (const Type *named = array->withExtentValues(values, packs); named != nullptr) {
-            array = const_cast<ArrayType *>(static_cast<const ArrayType *>(named));
+        if (const Type *replaced = array->withExtentValues(named, packs); replaced != nullptr) {
+            array = const_cast<ArrayType *>(static_cast<const ArrayType *>(replaced));
         }
         return elem == array->elemType() ? array : array->withElementType(elem);
     }
     case TypeCode::Stream: {
         // A stream's type holds no extent of its own: its element type may.
         auto *stream = static_cast<StreamType *>(type);
-        Type *elem   = substituteExtentValues(stream->elemType(), values, packs);
+        Type *elem   = substituteExtentValues(stream->elemType(), named, packs);
         return elem == stream->elemType() ? type : StreamType::create(elem);
     }
     case TypeCode::Tuple: {
@@ -837,7 +934,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
         std::vector<Type *> types;
         types.reserve(tuple->size());
         for (Type *elem : tuple->types()) {
-            types.push_back(substituteExtentValues(elem, values, packs));
+            types.push_back(substituteExtentValues(elem, named, packs));
             changed |= types.back() != elem;
         }
         if (!changed) {
@@ -858,14 +955,14 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
             std::vector<Type *> args;
             args.reserve(record->typeArgCount());
             for (Type *arg : record->typeArgs()) {
-                args.push_back(substituteExtentValues(arg, values, packs));
+                args.push_back(substituteExtentValues(arg, named, packs));
                 changed |= args.back() != arg;
             }
             return changed ? StructType::get(record->decl(), args) : type;
         }
         StructTypeFactory factory;
         for (size_t i = 0; i < record->size(); ++i) {
-            Type *field = substituteExtentValues(record->typeAt(i), values, packs);
+            Type *field = substituteExtentValues(record->typeAt(i), named, packs);
             changed |= field != record->typeAt(i);
             factory.add(std::string(record->fieldName(i)), field);
         }
@@ -874,7 +971,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     case TypeCode::Function: {
         bool changed = false;
         FunctionTypeFactory factory =
-            rebuildFunctionType(static_cast<FunctionType *>(type), {}, &values, false, changed);
+            rebuildFunctionType(static_cast<FunctionType *>(type), {}, &named, false, changed);
         return changed ? factory.build() : type;
     }
     default:
@@ -883,7 +980,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
     if (type->isOtherType()) {
         // A module type decides what its named extents mean (`Tensor` keeps them as a shape).
         // A type that knows nothing of them leaves the type alone.
-        if (const Type *replaced = type->withExtentValues(values, packs);
+        if (const Type *replaced = type->withExtentValues(named, packs);
             replaced != nullptr && replaced != type) {
             return const_cast<Type *>(replaced);
         }
@@ -1139,6 +1236,30 @@ void collectTypeVars(Type *type, std::vector<std::string> &names) {
     }
     default:
         break;
+    }
+    if (type->code() == MatchTypeType::typeCode()) {
+        // A `match type` is a type function written out: what it varies with is its subject, and a
+        // case's patterns bind the names they write (the element and the dimensions of an array
+        // pattern, the members and the rest of a pack pattern). Those names stand for what the
+        // case reached, so they are not variables of the type the `match type` is part of, and
+        // only a case's result names what the case does not bind.
+        const auto *match = static_cast<MatchTypeType *>(type);
+        collectTypeVars(match->subject(), names);
+        for (size_t arm = 0; arm < match->armCount(); ++arm) {
+            std::vector<std::string> bound;
+            match->armBoundNames(arm, bound);
+            std::vector<std::string> fromResult;
+            collectTypeVars(match->armResult(arm), fromResult);
+            for (const std::string &name : fromResult) {
+                if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
+                    continue;
+                }
+                if (std::find(names.begin(), names.end(), name) == names.end()) {
+                    names.push_back(name);
+                }
+            }
+        }
+        return;
     }
     if (OtherType *applied = asTypeApplication(type)) {
         among(applied->paramsSpan());
