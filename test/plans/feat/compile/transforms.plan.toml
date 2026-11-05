@@ -3025,6 +3025,31 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "extent_of_a_name_is_a_value_everywhere"
+desc = "A name whose call is already its own answer is a function wherever a name may stand, and no position has to state what function it wants: a `let` with no type, a `return` whose result type states one, an element of an array literal, an argument of function type, and a type argument that is a name the enclosing declaration binds (`from_param::<A>()`). All six spellings answer the extents the type argument writes: `[2, 3]`, `[3]`, `[4]`, `[2, 3]`, `[2]`, `[2, 3]`. The rule is the builder's (`Builder::settledAnswerOf`, asked by the call, by the name of a position that states a function type and by the name of a position that states none), and the type argument being a name is what says so: nothing of `extent_of` is known where the answer is made."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_a_name_is_a_value_everywhere.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "[2, 3]\n[3]\n[4]\n[2, 3]\n[2]\n[2, 3]\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "extent_of_a_name_is_a_value_everywhere.graph"
+desc = "The graph half: every one of those spellings holds its answer as a constant `DATA` node of type `int[]`, and the graph has **no** `:op/extent_of` node -- the answer of this builtin is never a call, so no path reaches a kernel. The `from_param` instance settles when the type argument is bound, which is the same rule applied at a type that was a name at the point the name was written."
+kind = "behavior"
+case = "../../../cases/compile/transforms/extent_of_a_name_is_a_value_everywhere.cml"
+args = ["${case}", "std::gir"]
+expect_exit = 0
+expect_output_contains = ["label=\"[2, 3]\"", "value_type=\"int[]\"", "label=\"[4]\""]
+expect_output_not_contains = [":op/extent_of"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "extent_of_names_the_open_position"
 desc = "A type whose shape is not written down is refused, and the sentence names the **position** that is open, because that position is where the repair is written: `float[...]` states no rank at all, so position 0 is the open one and `..` gives no position after it a length; `float[2, ?]` states two positions and leaves the second without a number; `float[]` (= `float[?]`) has one position and no length for it. Measured 2026-11-04 on `ca464bca2` the sentence was 'an extent it writes is not a number' -- a reader who wrote `float[2, ?]` had to find the second extent themselves -- and all three refusals are reported together, each at its own call. The refusal must stay a refusal: `[]` would be the rank-zero shape, which `sum_to` reads as one element, a wrong number no diagnostic would name."
 kind = "negative"

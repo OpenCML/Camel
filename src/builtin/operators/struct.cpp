@@ -141,12 +141,16 @@ std::string openPositionText(Type *type) {
 /// written down -- `statedExtentsOf` is the answer, so the builtin and the transposition walk
 /// cannot disagree about which types have a shape.
 ///
-/// The answer is the rule's `valueFromTypeArgs` as well as its result type: a call of this rule
-/// reads no operand, and nothing in the graph or at run time could state the type argument it was
-/// written with, so the value is made where the call is instantiated -- and where the name is used
-/// as a value, as a function that gives it. This is the one `extent_of` special case; there is no
-/// second spelling of it anywhere in the builder (`Builder::visitLinkNode`,
-/// `Builder::functionValueOf`).
+/// The answer is this rule's `valueFromTypeArgs` as well as its result type: a call of it reads no
+/// operand, and nothing in the graph or at run time could state the type argument it was written
+/// with, so the value is made where the call is instantiated -- and where the name is used as a
+/// value, as a function of no parameters that gives it (`Builder::settledAnswerOf`,
+/// `Builder::answerValueGraphOf`).
+///
+/// This declaration is all that a builtin of its kind adds, and it is not a case the builder
+/// knows: a rule whose value is a fact of its type arguments is one the builder asks every rule
+/// (`FuncTypeResolver::valueFromTypeArgs`), and a second builtin of that kind needs its answer
+/// computed and no branch anywhere else. `extent_of` is the language's one such builtin today.
 class ExtentOfResolver final : public camel::core::type::FuncTypeResolver {
   public:
     /// A call with no type argument says nothing about a type, and this function answers about the
