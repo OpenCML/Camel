@@ -1,0 +1,34 @@
+// **The transpose of a construction whose value is an array.** `identity3` builds an `f32[3]` out of
+// three `f32` parameters, so its transposition is the member-wise projection of the cotangent: the
+// element at place `i` of `[1.5, 2.5, 7.25]` goes to parameter `i` -- `a = 1.5`, `b = 2.5`,
+// `c = 7.25` -- and no other answer is a transposition of this function.
+//
+// The three numbers are pairwise different, and none of them is the sum (11.25), one of the pairs
+// (4.0, 8.75, 10.0) or one of the doubled components (3.0, 5.0, 14.5): a projection that read the
+// cotangent as a scalar and broadcast it, summed it, or dropped it would answer one of those, and a
+// tuple printed as a whole would not say which member went where. Each answer is read by its own
+// place for that reason, and the whole tuple is printed beside them so a length or a reordering
+// shows up too.
+//
+// A member of a tuple is read at a place (`GCAccsKind::TupleIndex`) and an element of an array is
+// taken by index (`:op/idx_arr`). They are different reads -- the first names a slot of an
+// aggregate's layout, the second runs the array's index taking -- and this case is what says the
+// second one is the one an array's projection needs: the first built the projection and the run
+// died in the VM with no number printed.
+import rulesets.transpose
+import { transpose } from transforms
+
+func identity3(a: f32, b: f32, c: f32): f32[3] {
+    return [a, b, c]
+}
+
+func main(): int sync {
+    let back = transpose(identity3)
+    let ct: f32[3] = [1.5, 2.5, 7.25]
+    let g = back(ct)
+    println("identity3_pullback=", g)
+    println("a=", g.0)
+    println("b=", g.1)
+    println("c=", g.2)
+    return 0
+}
