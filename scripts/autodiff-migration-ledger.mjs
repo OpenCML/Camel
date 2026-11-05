@@ -224,6 +224,24 @@ let loaderFailure = ''
 // none of these four was rewritten -- the ruler was reading the wrong sentence, so the record is
 // restated here (the same rule the denominators are restated under) rather than left to drift.
 // `total`, `library` and `pass` do not move.
+//
+// **Why the four are a correction and not a moved target: the spelling is not in their code.** One
+// reading each -- the line that carried the spelling, and what the file says once both comment forms are
+// cut out. A case whose spelling *is* in its code would make this paragraph a disguised retune, so the
+// reading is written down where a reviewer can repeat it:
+//
+//   - `jax_vmap.cml`: the comment says "the leading axis of a `T[]` is its elements"; the code part has
+//     no `[]`, no `[...]` and no `f32`/`f16`/`bf16`/`Model`/`Plain`, and no `with` spelling either.
+//   - `loop_grad_iterable_length.cml`: the comment says "only `float[]` is"; the code part has no array
+//     spelling, and has `with <w: float>` -- which is why the case is `with` and not `array`.
+//   - `loop_grad_refuse_no_element_tangent.cml`: the comment says "`string[]` has none"; the code part
+//     has no array spelling, and has `with <w: float>`, so it is `with`.
+//   - `has_aux_vjp_named.cml`: the comment quotes the instantiated signature
+//     `(f: F) => <__pack_0: ...WithOf<F>> (...)`; the code part has neither the `<...>` the class was
+//     read from nor an array spelling, so the case is `other`.
+//
+// So the old reading counted a comment: `array` was overstated by 3, `with` by 1, and `other` understated
+// by 2 -- which is the whole of the movement above.
 const LEDGER_RECORDED = {
     total: 144,
     library: 135,
