@@ -144,7 +144,7 @@ if (hits.size !== expected.size) {
 
 // ---- the eight keys this run exists for ----
 // The ones a reader of the *tail* of the table's output does not see (the plan report elides the
-// head of a long stdout as `... N line(s) before`, which is what made a complete table look like a
+// head of a long stdout as `omitted N line(s) above`, which is what made a complete table look like a
 // table of twelve): the five arithmetic tokens and three of the arg* family. Each must be a row.
 const head = ['*/2', '+/2', '-/1', '-/2', '//2', 'argmax/1', 'argmax_axis/3', 'argmin/1']
 const missing = head.filter((key) => !table.has(key))

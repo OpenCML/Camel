@@ -2,9 +2,8 @@
 //
 //     t: f32[2, 3]   ->   shape(t) = [2, 3]   dim<0> = 2   dim<1> = 3   dim<-1> = 3   numel = 6
 //
-// This is the family `extent_of` was named for (`shape`, `numel`, `dim` in `stdlib/tensor.cml`,
-// and `extent_pair` in `stdlib/rulesets/jvp.cml`): one dimension's length is what a transpose law
-// needs and cannot read off its own operand. `dim<axis>` is the name that answers it today, and it
+// This is the family `extent_of` was named for (`shape`, `numel`, `dim` in `stdlib/tensor.cml`):
+// one dimension's length is what a transpose law needs and cannot read off its own operand. `dim<axis>` is the name that answers it today, and it
 // answers **from the value** -- which is why the law cannot use it: a law's linear operand has no
 // value on the transpose side (author, 2026-11-03 11:10 and 17:35).
 //

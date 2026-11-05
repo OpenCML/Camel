@@ -1991,31 +1991,33 @@ The extent of one axis; a negative axis counts from the last one (`-1` is the la
 #### `pick_at`
 
 ```camel
-pick_at: (t: T[...], at: int[]) => T when is_numeric::<T>()
+pick_at: (t: T[...], position: int, length: int) => T when is_numeric::<T>()
 ```
 
-The element at `at[0]` of a rank-1 tensor whose length is `at[1]`: `t[at[0]]`, with the length
-stated by whoever holds the value.
+The element at `position` of a rank-1 tensor whose length is `length`: `t[position]`, with the
+length stated by whoever holds the value.
 
 The length is a **known operand**, and it is the reason this spelling exists beside the
 language's own `t[i]`. A transpose rule may read only known operands (author, 2026-11-03 11:10),
 and `T[]` carries no length in its type (design principles 5.4), so the law that scatters a
 cotangent back into the array's shape (9.9: the reverse of a gather is a scatter-add) has nothing
 to build the zeros from unless the value's length is handed to it. A forward half can state it --
-`rulesets.jvp`'s `jvp_idx_arr` passes `[i, len(xs)]`, a value of the primal -- and this operator
-is what it passes it to.
+`rulesets.jvp`'s `jvp_idx_arr` passes `len(xs)`, a value of the primal -- and this operator is
+what it passes it to.
 
-The position and the length travel in one integer list because the transpose walk's operator path
-takes one or two normal operands, and that count is not this operator's to lift: it is the guard
-`tensor:mean_axis`'s three ports are held by.
+The position and the length are two parameters of their own sorts and not one list. They were a
+list while this read was written, because the transpose walk was believed to answer an operator
+with one or two normal operands and two integers beside the tensor would have been three. The
+walk's refusal is about a third **tensor**, not a third parameter (`take_stated` takes two
+`int[]` operands beside its tensor), so the count was never this operator's limit: each value
+now says which it is, and a reader of a law does not count positions in a list.
 
 The stated length is checked against the tensor and the position against both, so a wrong length
 is a fault rather than an array of the wrong shape.
-or `at[0]` is outside it
 
 - Pure.
-- Failure: fault `RuntimeError` when the list is not two entries, `at[1]` disagrees with the tensor,.
-- Example: `pick_at([1.0, 2.0, 3.0] as float[], [2, 3])` gives `3.0`
+- Failure: fault `RuntimeError` when `length` disagrees with the tensor, or `position` is outside it.
+- Example: `pick_at([1.0, 2.0, 3.0] as float[], 2, 3)` gives `3.0`
 
 ### Reduction
 
@@ -2275,22 +2277,22 @@ removed or kept.
 #### `mean_axis_stated`
 
 ```camel
-mean_axis_stated: (t: T[...], at: int[]) => T[...]
+mean_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...]
 ```
 
 The mean of each lane along one axis, with the axis, `keepdims` and the operand's extents stated
-in one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `mean_axis(t, axis, keepdims)`.
+as parameters of their own: `mean_axis_stated(t, axis, keepdims, extents)` is
+`mean_axis(t, axis, keepdims)`.
 
-The result is `mean_axis`'s at the extents `at` states: the operand's, with the axis at `at[0]`
-removed, or kept as an extent of one when `at[1]` is not zero. It is computed rather than
-declared because those extents follow from values, so a call that writes `at` states its own
-result -- `[0, 0, 4]` over a rank-1 operand is the element, not `float[...]` and a conversion --
-and a call whose list is a value of the run states the operand's element type at a rank nobody
-fixed.
+The result is `mean_axis`'s at the stated extents: the operand's, with the `axis` removed, or kept
+as an extent of one when `keepdims`. It is computed rather than declared because those extents
+follow from values, so a call that states all three states its own result -- `0, false, [4]` over a
+rank-1 operand is the element, not `float[...]` and a conversion -- and a call whose parameters are
+values of the run states the operand's element type at a rank nobody fixed.
 
 - Pure.
-- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 1, 2, 2])` gives `[[2.0, 3.0]]`
+- Failure: fault `RuntimeError` when the extents disagree with the tensor's shape, or the axis is outside the rank.
+- Example: `mean_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, true, [2, 2])` gives `[[2.0, 3.0]]`
 
 #### `softmax`
 
@@ -2556,7 +2558,7 @@ carries no extents in its type (design principles 5.4).
 
 So the forward half states them, and these declarations are what it states them to. Each is the
 operation above it with one more operand, an `int[]` the value does not need and the reverse law
-reads instead of the array. `pick_at` is the same arrangement for the read: `at[1]` is the length
+reads instead of the array. `pick_at` is the same arrangement for the read: `length` is the number
 `xs[i]` cannot state for itself.
 
 The extents travel in one list because that is the list the reverse law wants whole: the axis and
@@ -2569,10 +2571,10 @@ a third port, their tie selection, which no extent list could carry.)
 #### `sum_stated`
 
 ```camel
-sum_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
+sum_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 ```
 
-The sum of every element, with the operand's extents stated: `sum(t)`, and `at` is `shape(t)`.
+The sum of every element, with the operand's extents stated: `sum(t)`, and `extents` is `shape(t)`.
 
 The extents are read by `rulesets.transpose`'s `sum_stated_t` and by nothing else -- the value is
 the sum, and the accumulation, the element type and the one rounding are `sum`'s own. A list that
@@ -2580,27 +2582,27 @@ disagrees with the tensor's shape is a fault, because a spread over extents nobo
 gradient of the wrong shape.
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape.
 - Example: `sum_stated([1.0, 2.0, 3.0] as float[], [3])` gives `6.0`
 
 #### `take_stated`
 
 ```camel
-take_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
+take_stated: (t: T[...], indices: int[], extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
-The rows `take` reads, with the indices and the operand's extents stated in one list:
-`[n, i0, ..., i(n-1), d0, ..., d(rank-1)]` is `take(t, [i0, ..., i(n-1)])`.
+The rows `take` reads, with the indices it reads **and** the operand's extents stated:
+`take_stated(t, [i0, ..., i(n-1)], [d0, ..., d(rank-1)])` is `take(t, [i0, ..., i(n-1)])`.
 
-The value is that take; the leading count splits the list, so the indices are the `n` entries
-after it and the extents are everything after them. `rulesets.transpose`'s `take_stated_t` reads
-the extents to build the array the scatter-add writes into, which is the operand's shape and
-therefore has to come from a known operand.
-disagree with the tensor's shape, or an index is outside the first dimension
+The value is that take. `rulesets.transpose`'s `take_stated_t` reads `extents` to build the
+array the scatter-add writes into, which is the operand's shape and therefore has to come from a
+known operand. The two lists are told apart by their parameters, not by a count written into the
+first one: `indices` is what `take` reads and `extents` is the shape to spread the rows back into.
+outside the first dimension
 
 - Pure.
-- Failure: fault `RuntimeError` when the list's first entry is not its index count, the extents.
-- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1, 1, 2, 2])` gives `[[3.0, 4.0]]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or an index is.
+- Example: `take_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [1], [2, 2])` gives `[[3.0, 4.0]]`
 
 #### `mul_stated`
 
@@ -2647,75 +2649,81 @@ the answer's shape is neither operand's: a `[3, 4] @ [4, 2]` product reduces the
 #### `sum_axis_stated`
 
 ```camel
-sum_axis_stated: (t: T[...], at: int[]) => T[...] when is_numeric::<T>()
+sum_axis_stated: (t: T[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
-The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents stated in
-one list: `[axis, keepdims, d0, ..., d(rank-1)]` is `sum_axis(t, axis, keepdims)`.
+The sum of each lane along one axis, with the axis, `keepdims` and the operand's extents
+stated: `sum_axis_stated(t, axis, keepdims, extents)` is `sum_axis(t, axis, keepdims)`.
 
 The value needs the axis and the flag -- `k::reduceAxis` is the kernel the axis form runs, so the
-accumulation in `f64`, the element type and the one rounding are the definition's own -- and the
-extents after the two scalars are checked against the tensor's shape. `rulesets.transpose`'s
-`sum_axis_stated_t` reads the list and nothing of the operand: the adjoint of a lane sum spreads
-each lane's cotangent back over the lane, which is a shape of the primal. A negative axis counts
-from the last one, as it does in the axis form: the reduction normalizes it on entry and this
-spelling hands it over unchanged.
+accumulation in `f64`, the element type and the one rounding are the definition's own -- and
+`extents` is checked against the tensor's shape. `rulesets.transpose`'s `sum_axis_stated_t` reads
+the three stated values and nothing of the operand: the adjoint of a lane sum spreads each lane's
+cotangent back over the lane, which is a shape of the primal. A negative axis counts from the last
+one, as it does in the axis form: the reduction normalizes it on entry and this spelling hands it
+over unchanged.
+outside the rank
 
 - Pure.
-- Failure: fault `RuntimeError` when the list is shorter than three entries, the extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [0, 0, 2, 2])` gives `[4.0, 6.0]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `sum_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], 0, false, [2, 2])` gives `[4.0, 6.0]`
 
 #### `mean_stated`
 
 ```camel
-mean_stated: (t: T[...], at: int[]) => T when is_numeric::<T>()
+mean_stated: (t: T[...], extents: int[]) => T when is_numeric::<T>()
 ```
 
-The mean of every element, with the operand's extents stated: `mean(t)`, and `at` is `shape(t)`.
+The mean of every element, with the operand's extents stated: `mean(t)`, and `extents` is
+`shape(t)`.
 
 The value is the mean -- the sum and the division both in `f64`, rounded into the element type
 once, which is `mean`'s own definition -- and the extents are what its adjoint needs: the reverse
 law (`rulesets.transpose`'s `mean_stated_t`) divides the cotangent by the number of elements and
 spreads it over those extents, and neither number is in the cotangent's type.
+element
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` disagrees with the tensor's shape, or the tensor has no element.
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the tensor has no.
 - Example: `mean_stated([1.0, 2.0, 3.0, 4.0] as float[], [4])` gives `2.5`
 
 #### `max_axis_stated`
 
 ```camel
-max_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
+max_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The largest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
-the operand's extents stated: `max_axis(t, axis, keepdims)`, `at` is `[axis, keepdims, d0, ..., d(rank-1)]`
-and `mask` holds `true` at every position that holds its lane's largest element.
+the operand's extents stated: `max_axis_stated(t, mask, axis, keepdims, extents)` is
+`max_axis(t, axis, keepdims)`, and `mask` holds `true` at every position that holds its lane's
+largest element.
 
 The mask is what an extremum's adjoint needs and what the extents cannot rebuild: an extremum
 gives the whole cotangent to **every** position that holds it (a tie is not shared out), and which
-positions those are is a fact of the values. Both the mask and `at` are read by
+positions those are is a fact of the values. The mask and the three stated values are read by
 `rulesets.transpose`'s `max_axis_stated_t` and by nothing else -- the value is the axis form's own
 reduction -- so a mask of another shape is answered where it is used: the reverse law's `where`
-broadcasts it against the extents `at` states.
+broadcasts it against the stated extents.
+outside the rank
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], [1, 0, 2, 2])` gives `[2.0, 4.0]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `max_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[false, true], [false, true]] as bool[2, 2], 1, false, [2, 2])` gives `[2.0, 4.0]`
 
 #### `min_axis_stated`
 
 ```camel
-min_axis_stated: (t: T[...], mask: bool[...], at: int[]) => T[...] when is_numeric::<T>()
+min_axis_stated: (t: T[...], mask: bool[...], axis: int, keepdims: bool, extents: int[]) => T[...] when is_numeric::<T>()
 ```
 
 The smallest element of each lane along one axis, with the tie selection, the axis, `keepdims` and
 the operand's extents stated: `min_axis(t, axis, keepdims)`, laid out exactly as
 `max_axis_stated` is.
+outside the rank
 
 - Pure.
-- Failure: fault `RuntimeError` when `at` is shorter than three entries, its extents disagree with the tensor's shape, or the axis is outside the rank.
-- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], [1, 0, 2, 2])` gives `[1.0, 3.0]`
+- Failure: fault `RuntimeError` when `extents` disagrees with the tensor's shape, or the axis is.
+- Example: `min_axis_stated([[1.0, 2.0], [3.0, 4.0]] as float[2, 2], [[true, false], [true, false]] as bool[2, 2], 1, false, [2, 2])` gives `[1.0, 3.0]`
 
 ### Module state
 
