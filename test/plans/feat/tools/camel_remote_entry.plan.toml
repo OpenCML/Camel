@@ -1,0 +1,25 @@
+id = "feat.tools.camel_remote_entry"
+tier = "fast"
+tags = ["feat", "tools", "gate", "bisect"]
+desc = "A tool that takes gate readings names the gate's one entry: `scripts/bisect-merge.mjs` defaults `--wrapper` to `internal/tools/camel-remote.ps1` from its own checkout, never to the copy beside the worktrees, and `--print-wrapper` makes that default readable instead of only checkable by eye"
+
+# `#parseArgs` used to default `--wrapper` to `path.resolve(<tree>, '..', 'camel-remote.ps1')`. For a
+# lane tree under `D:\Projects\Camel-wt\` that is the copy left over from before the machine-specific
+# values moved into `internal/tools/camel-gate.local.json`: it runs, it prints `[camel-remote]` lines,
+# and its readings are wider than the entry's (no `--config`, so `-Tier debug -NoBuild` is verified
+# against a Release install; a plan's stderr is not brought back; `$sshHost` and `$bare` are literals).
+# Every bisect reading was taken through it and looked normal. The case pins the resolved path rather
+# than the shape of the source, because "the code looks right" is what let this drift in the first
+# place; `--print-wrapper` exists so the default can be read back, and stops before anything is built.
+
+[[tests]]
+name = "camel_remote_entry.wrapper_default"
+desc = "Two `--print-wrapper` calls with two different and non-existent `--path` values: both exit 0, the printed path ends with `internal/tools/camel-remote.ps1` and is a file of this checkout, the two paths are equal (the default does not follow the worktree), and neither is `<tree>/../camel-remote.ps1`."
+kind = "behavior"
+tool = "node"
+case = "../../../cases/tools/camel_remote_entry/wrapper_default.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["PASS"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 120000

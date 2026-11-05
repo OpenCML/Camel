@@ -622,7 +622,7 @@ Draft §1 记下的缺口是"设备 64 MiB / 32 项"：训练规模下每步的�
 
 ```powershell
 # 构建与窄门禁（远端）
-pwsh -NoProfile -File D:\Projects\Camel-wt\camel-remote.ps1 -Path D:\Projects\Camel-wt\h49-gpu-plan -Plan smoke -Jobs 8
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path D:\Projects\Camel-wt\h49-gpu-plan -Plan smoke -Jobs 8
 
 # C2（GPU）
 python showcase\c2-mlp-mnist\compare.py --profile standard --torch-device cuda --camel-devices 0
