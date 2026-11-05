@@ -1539,6 +1539,34 @@ declarations show, because the result of a call is the exit type its resolver gi
 
 - Example: `let remembered = remat((x: int) => x + 1)`
 
+#### `first_with_as_param`
+
+```camel
+first_with_as_param: (f: F) => FirstWithAsParam<F> when is_function::<F>()
+```
+
+The signature reinterpretation: `f` with its first `with` parameter moved onto the front of the
+ordinary list, and its body untouched. The design's name for this kind of step is
+`reinterp<first_with_as_param>(f)` (design principles 9.9: `reinterp<H>(f)` gives every primitive
+the meaning `H` gives it); in this tree the kind is the operator's own name, the way `jvp(f)` is
+`reinterp<jvp>(f)`, because a pass cannot answer a function value.
+
+The body is not read, rewritten or re-derived -- the one thing that differs is which list a port
+is in -- and a `with` value the body reads is read through a port like any other value, so a
+reclassification of the port is the whole of the transform
+(`modules/transforms/first_with_as_param_operator.cpp`). The transform is what makes a weight
+differentiable by the library's composition: a `with` parameter has no place to take a direction
+in from, and an ordinary one has.
+
+Three shapes have no first `with` parameter to move, and each is refused where it is written: a
+function with a `with` pack (the pack stands for however many arguments a call gives past the
+fixed ones, so it has no first member), a `var` `with` parameter (a variable is read and written
+by name, not handed in by a call), and a `constas` one (part of the signature's identity rather
+than a value).
+
+- Example (a fragment, not compiled): `let reinterpreted = first_with_as_param(weighted)`
+- Why it is not compiled: `weighted` is a function the program declares, because the example needs a `with` parameter
+
 <a id="vjp"></a>
 
 ## `vjp`: the derivative, as a library

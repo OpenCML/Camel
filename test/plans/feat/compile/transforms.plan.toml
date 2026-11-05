@@ -2767,6 +2767,20 @@ expect_output_not_contains = ["Warning", "[Error]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+[[tests]]
+name = "first_with_as_param_moves_the_weight"
+desc = "The signature reinterpretation `reinterp<first_with_as_param>(f)`: a weight declared as a `with` parameter becomes the first ordinary parameter, the body is not touched, and `vjp` differentiates it like any other parameter. `weighted` is `with <x: float> func weighted(y) = x*y + x`; at `x = 3, y = 2` the body is `9.0` and the pullback answers `(d/dx, d/dy) = (y + 1, x) = (3.0, 3.0)`. **Both members are 3.0 there**, so that line cannot tell a right answer from one that read the other parameter -- which is why a second line is pinned: `squared` is `x*y*y`, and at the same point `d/dx = y*y = 4.0` while `d/dy = 2*x*y = 12.0`. Two different numbers say which parameter each cotangent belongs to, and the weight's member moves from 3.0 to 4.0 while `x` stays 3.0, so the answer is not the weight's value echoed back. Both backends run it: the reinterpretation is a graph a kernel builds, and the two schedulers read the same one. The reading the kernel prints (`REINTERP first_with_as_param function=weighted with_in=1 params_in=1 with_out=0 params_out=2`) is on stderr and is not pinned here: it names a graph id that the next graph built moves."
+kind = "behavior"
+case = "../../../cases/compile/transforms/first_with_as_param_moves_the_weight.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["weighted value=9.0 weight=3.0 y=3.0", "squared value=12.0 weight=4.0 y=12.0"]
+expect_output_not_contains = ["Warning", "[Error]", "first_with_as_param found a signature with a `with` parameter but a graph with no"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # `exp` with its shape in the type: the fixed-shape half of the open-rank gap the four library cases
 # below still record. The walk answers a tangent's shape through `shapeCarrierOf`, which answers a
 # stated type and nothing else (author, 2026-11-03 16:15), so `float[2]` answers where `float[]` refuses.

@@ -120,3 +120,38 @@ export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 /// the value stands on; the shapes a call site can write today are the ones `jvp`'s and `split`'s
 /// declarations show, because the result of a call is the exit type its resolver gives.
 export func remat::<F>(f: F): F when is_function::<F>()
+
+/// `FirstWithAsParam<F>`, written out as a type function so that it is one law: `F`'s remaining
+/// `with` parameters keep their places, the first one becomes the first ordinary parameter, and the
+/// rest of the ordinary list and the result are `F`'s own.
+///
+/// The first ordinary position is the whole point of the order: `jvp` and `vjp` differentiate the
+/// ordinary parameters, and a pullback answers one cotangent per parameter in the order the
+/// parameters are written, so a weight moved to the front is the cotangent a library `grad` reads
+/// first. Moving it to the end would answer the same numbers for a two-parameter call and the wrong
+/// member for a gradient.
+/// @example-fragment `weighted` is a function the program declares, because the example needs a `with` parameter
+/// @example is_same::<FirstWithAsParam<<x: float> (y: float) => float>, (x: float, y: float) => float>()    // true
+export type FirstWithAsParam<F> = match type WithOf<F> { case (W, ...Rest) => <...Rest> (W, ...ParamsOf<F>) => ResultOf<F> }
+
+/// The signature reinterpretation: `f` with its first `with` parameter moved onto the front of the
+/// ordinary list, and its body untouched. The design's name for this kind of step is
+/// `reinterp<first_with_as_param>(f)` (design principles 9.9: `reinterp<H>(f)` gives every primitive
+/// the meaning `H` gives it); in this tree the kind is the operator's own name, the way `jvp(f)` is
+/// `reinterp<jvp>(f)`, because a pass cannot answer a function value.
+///
+/// The body is not read, rewritten or re-derived -- the one thing that differs is which list a port
+/// is in -- and a `with` value the body reads is read through a port like any other value, so a
+/// reclassification of the port is the whole of the transform
+/// (`modules/transforms/first_with_as_param_operator.cpp`). The transform is what makes a weight
+/// differentiable by the library's composition: a `with` parameter has no place to take a direction
+/// in from, and an ordinary one has.
+///
+/// Three shapes have no first `with` parameter to move, and each is refused where it is written: a
+/// function with a `with` pack (the pack stands for however many arguments a call gives past the
+/// fixed ones, so it has no first member), a `var` `with` parameter (a variable is read and written
+/// by name, not handed in by a call), and a `constas` one (part of the signature's identity rather
+/// than a value).
+/// @example-fragment `weighted` is a function the program declares, because the example needs a `with` parameter
+/// @example let reinterpreted = first_with_as_param(weighted)
+export func first_with_as_param::<F>(f: F): FirstWithAsParam<F> when is_function::<F>()

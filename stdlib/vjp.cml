@@ -4,8 +4,14 @@
 /*
  * The derivative, as a library (design 4.4, `docs/design/program-transforms/README.cn.md`).
  *
- *     vjp(f) = transpose(split(reinterp<jvp>(f)))
+ *     vjp(f) = transpose(split(jvp(f)))
  *     grad(f)              -- `vjp` read at one number, the seed 1
+ *
+ * The design writes the first line `transpose(split(reinterp<jvp>(f)))` (design principles 9.9:
+ * `reinterp<H>(f)` gives every primitive the meaning `H` gives it). `reinterp<jvp>(f)` is
+ * `jvp(f)`: the kind is the operator's own name, because a pass cannot answer a function value and
+ * a call cannot write a rule set in its angle brackets. So the line above is the same statement in
+ * a spelling a reader can type -- the design's name is not a name in this tree.
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
  * answers the forward half, and the forward half called at the point answers `(value, lin)`: the
