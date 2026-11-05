@@ -20,7 +20,7 @@
  */
 
 import { is_float, is_integer, is_same, is_string, Tangent } from types
-import { abs, erf, erfc, exp, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
+import { abs, erf, erfc, exp, full, gelu, linear, log, log_softmax, matmul, matmul_stated, max, max_axis, max_axis_stated, maximum, mean, mean_axis, mean_axis_stated, mean_stated, min, min_axis, min_axis_stated, minimum, mul_stated, pick_at, relu, reshape, rsqrt, shape, sigmoid, softmax, sqrt, sum, sum_axis, sum_axis_stated, sum_stated, take, take_stated, tanh, transpose, where, zeros_like } from tensor
 // `log as math_log`: this module files the **array** `log`'s forward rule below (`jvp_log`), and a
 // rule's left side has to spell its operator with the operator's own name, so the plain `log` here
 // is `tensor:log`. The scalar `log` is what `pow_tangent` needs, and one module holds one `log`: the
@@ -944,8 +944,27 @@ export rule jvp_bf16_from_string(x: string) {
 /// `dx * (kScale * exp(...))` transposes to `ct * (kScale * exp(...))` and rounds in a different
 /// place. `1.1283791670955126` is the kernel's own literal (2/sqrt(pi)), and `-x*x`, `-(x*x)` and
 /// `(x*x) * -1.0` are one value: negation is exact.
+///
+/// **Both products are `mul_stated`, and that is what the backward half reads** (author, 2026-11-05:
+/// the extents arrive as known operands, so no law has to read a value nobody carries). The lists are
+/// `shape(x)` -- the primal's runtime shape, which is also `dx`'s, since a tangent lives in its own
+/// space -- and in the backward half `x` is a **residual**, so the lists are recomputed there rather
+/// than asked of the transposed function's caller. Without them the transpose law is
+/// `transpose.cml#mul_tensor_t`, whose `shape(x)` is a read of the answered operand: that operand is
+/// `dx`, a parameter of the backward half, and the step was refused by name
+/// (`skip=law-reads-a-value uri=tensor:multiply`).
+///
+/// The second product's second operand is `full(shape(x), kScale)` and not the bare `kScale`, because
+/// `mul_stated` takes an array in each operand slot: a constant array multiplies every lane by the
+/// same number, so the bits are `A * kScale`'s own, while the chain's order -- the thing the paragraph
+/// above is about -- is untouched.
 export rule jvp_erf::<T>(x: T[...]) when is_float::<T>() {
-    erf(x) => (dx: T[...]) => (dx * exp((x * x) * -1.0)) * 1.1283791670955126
+    erf(x) => (dx: T[...]) =>
+        mul_stated(
+            mul_stated(dx, exp((x * x) * -1.0), shape(x), shape(x)),
+            full(shape(x), 1.1283791670955126),
+            shape(x),
+            shape(x))
 }
 
 /// `d(erfc(x)) = -2/sqrt(pi) * exp(-x*x) * dx`: the same slope as `erf` with the sign in the
@@ -954,7 +973,12 @@ export rule jvp_erf::<T>(x: T[...]) when is_float::<T>() {
 /// -- a float's sign is a bit and the magnitude is the same product -- so the negation is folded
 /// into the constant in both halves and the chain keeps the engine's order.
 export rule jvp_erfc::<T>(x: T[...]) when is_float::<T>() {
-    erfc(x) => (dx: T[...]) => (dx * exp((x * x) * -1.0)) * -1.1283791670955126
+    erfc(x) => (dx: T[...]) =>
+        mul_stated(
+            mul_stated(dx, exp((x * x) * -1.0), shape(x), shape(x)),
+            full(shape(x), -1.1283791670955126),
+            shape(x),
+            shape(x))
 }
 
 /// `d(gelu(x)) = gelu'(x) * dx`, with the slope of the **tanh form** the operator is defined by and
@@ -1018,10 +1042,20 @@ export rule jvp_min::<T>(xs: T[...]) when is_float::<T>() {
 /// `d(linear(x, w)) = x @ dw + dx @ w` with `w` laid out `[in, out]`: the product rule of a matrix
 /// product, with each term keeping its own operand's place.
 ///
-/// The two terms are the product's, so their transposes are `matmul_t`'s two answers and the walk
+/// The two terms are the product's, so their transposes are the product's two answers and the walk
 /// needs nothing new by name: `d/dx = ct @ wᵀ` and `d/dw = xᵀ @ ct`, which is the pair the engine's
 /// `linearVjp` reaches through `tensor:matmul_grad_lhs` / `_rhs`
 /// (`modules/tensor/ops/linalg_ops.cpp`).
+///
+/// **Both terms are `matmul_stated`** (author, 2026-11-05, the same move `jvp_matmul` and
+/// `jvp_mul_tensor` already make): the two lists are the operands' extents as **known operands**, so
+/// `stdlib/rulesets/transpose.cml#matmul_stated_t` reads them and never a `shape()` of the position it
+/// answers. Written with the bare `matmul`, the backward half met `#matmul_t`, whose right side names
+/// the operands only as arguments of `ct_of_a(ct, a, b)` -- a **call**, not a `shape()` -- so the shape
+/// that was in the type (`float[2, 2]`) was unreadable there and the step was refused by name
+/// (`skip=law-reads-a-value uri=tensor:matmul position=0`). A tangent has its own space's shape, so
+/// `shape(x)` is `dx`'s shape and `shape(w)` is `dw`'s: the lists come from the **primal** operands,
+/// which the backward half carries as residuals.
 ///
 /// This law states **two** operands, which is the form a call writes when the bias is left out. A
 /// three-operand call has a third port and a law's parameters are the node's ports one for one, so
@@ -1030,6 +1064,7 @@ export rule jvp_min::<T>(xs: T[...]) when is_float::<T>() {
 /// bias's own cotangent is (`ct`, spread over the bias) is the addition's law's answer and not a
 /// product's, which is the second reason this one waits.
 export rule jvp_linear::<T>(x: T[...], w: T[...]) when is_float::<T>() {
-    linear(x, w) => (dx: T[...], dw: T[...]) => matmul(dx, w) + matmul(x, dw)
+    linear(x, w) => (dx: T[...], dw: T[...]) =>
+        matmul_stated(dx, w, shape(x), shape(w)) + matmul_stated(x, dw, shape(x), shape(w))
 }
 

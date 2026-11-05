@@ -72,7 +72,7 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // The value is settled where the call is built, not where it runs: an OPER node carries the
 // instantiated type of the call, never the type argument it was written with, so nothing at run
 // time still says which type the extents belong to. A reader that has the type -- the transposition
-// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#shapeFromTypeOf`).
+// walk -- asks `statedExtentsOf` directly (`modules/transforms/transpose.cpp#statedExtentsNodeOf`).
 //
 // So this operator has no kernel, and deliberately not one that would only throw. The rule accepts
 // a call only when the type argument states every extent (`resolveForCall`), and every accepted call

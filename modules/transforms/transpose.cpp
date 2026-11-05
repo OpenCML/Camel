@@ -880,35 +880,22 @@ camel::core::type::ArrayType *intArrayTypeOf() {
 /// disagree about which types have a shape that can be written while the graph is built.
 /// `jvp.cpp#zeroConstantFor` makes the same reading of the same fact.
 
-/// The value a law's right side is handed for a parameter a cotangent is answered for: the zero of
-/// the parameter's type, which is that type's **shape** and nothing else.
+/// The value a law's right side is handed for a parameter a cotangent is answered for: **nothing**.
 ///
 /// `transposeSignature` gives the transposed function the cotangent and no parameter, so a law that
-/// reads the parameter -- `mean_axis_cotangent` reads `xs` for `numel` and `ones_like` -- has the type
-/// and not the argument. What the type says is the shape, and the shape is what a transposition needs:
-/// the adjoint of a linear map is a function of the cotangent and of the domain's shape (author,
-/// 2026-11-03 16:15). The value below carries that shape; every element of it is zero, which is the
-/// one thing here that is not the argument. A law that reads an *element* would therefore be answered
-/// with zeros -- and such a law is not a law of a transposition, because a transposition has no
-/// element of the argument to read. This is the same zero `jvp` gives a value that does not move
-/// (`jvp.cpp#zeroConstantFor`).
+/// reads the parameter has the type and not the argument. A zero of the parameter's type used to stand
+/// in for it here, on the reading that what a transposition needs of the domain is its **shape**
+/// (author, 2026-11-03 16:15). The reading was right and the value was not: every element of what it
+/// handed over was zero, so a law that read an *element* was answered a number that is not the
+/// argument. Deleted 2026-11-05 (`lane-capturectx`). What a law needs of the position it answers is
+/// now one of two things, and neither is a value of this walk's making: a **shape** answered from the
+/// port's type where the law reads it through `tensor:shape`
+/// (`modules/transforms/rule_expand.cpp#answerTheShapeOf`), or the **extents handed over as operands**
+/// of the node (`stdlib/rulesets/jvp.cml#jvp_linear`, `#jvp_erf`: the `*_stated` twins, whose transpose
+/// laws read the lists and no `shape()` at all).
 ///
-/// Nothing when the type leaves an extent open: then the shape is written down nowhere, and the
-/// caller refuses by name instead of inventing one.
-gc_node_ref_t shapeCarrierOf(camel::runtime::GraphDraft &draft, Type *type) {
-    const std::optional<std::vector<int64_t>> extents = statedShapeOf(type);
-    if (!extents.has_value()) {
-        return rt::kInvalidNodeRef;
-    }
-    auto *array = static_cast<camel::core::type::ArrayType *>(type);
-    ::Array *zero = ::Array::create(
-        mm::autoSpace(), array, std::span<const int64_t>(*extents), /*zeroInit=*/true);
-    if (zero == nullptr) {
-        return rt::kInvalidNodeRef;
-    }
-    return draft.materializeStaticValue(
-        camel::core::rtdata::toSlot<::Array *>(zero), type, rt::kGCNodeFlagConstant);
-}
+/// Nothing when the type leaves an extent open: then the shape is written down nowhere, and the caller
+/// refuses by name instead of inventing one.
 
 gc_node_ref_t statedExtentsNodeOf(camel::runtime::GraphDraft &draft, Type *type) {
     const std::optional<std::vector<int64_t>> extents = camel::core::type::statedExtentsOf(type);
@@ -928,21 +915,11 @@ gc_node_ref_t statedExtentsNodeOf(camel::runtime::GraphDraft &draft, Type *type)
         camel::core::rtdata::toSlot<::Array *>(stated), intArrayType, rt::kGCNodeFlagConstant);
 }
 
-/// The shape-only value of a type: `tensor:zeros` of the extents it states.
-///
-/// This is the value a law that reads an operand for its **shape** and has no stated twin is handed
-/// -- `mul_tensor_t`'s `sum_to(ct * w, x)` asks `x` for its extents and for nothing else. The
-/// extents are `extent_of`'s answer, and the value is the library's own `tensor:zeros`, so the walk
-/// states a shape and the library makes the value.
-gc_node_ref_t shapeFromTypeOf(camel::runtime::GraphDraft &draft, Type *type) {
-    const gc_node_ref_t shape = statedExtentsNodeOf(draft, type);
-    if (shape == rt::kInvalidNodeRef) {
-        return rt::kInvalidNodeRef;
-    }
-    const gc_node_ref_t zeros = draft.addOperNode(type, nullptr, "tensor:zeros");
-    draft.setNormInputs(zeros, std::span<const gc_node_ref_t>(&shape, 1));
-    return zeros;
-}
+/// The shape of a parameter as a value: `tensor:shape` is not needed here and this is **not** a value
+/// of the parameter. What a law asks an operand for is its extents, and they arrive either as the
+/// node's own `*_stated` operand or as `rule_expand.cpp#answerTheShapeOf`'s answer; `shapeFromTypeOf`,
+/// which built `tensor:zeros` of the type's extents and handed it to a law that read the operand, was
+/// deleted on 2026-11-05 for the reason `#shapeCarrierOf`'s note gives.
 
 /// The parameter whose **declaration** leaves `value`'s shape open, or nothing.
 ///
@@ -1014,8 +991,9 @@ std::optional<size_t> unstatedParameterBehind(
 /// `shapeFrom` is the value the shape is read from, and it has to be a node of **this** graph: a ref
 /// of the source graph written into a node of the new one reads whatever node sits at that index,
 /// which is how a zero array came to be built from a number (`autodiff: a zero tangent array needs
-/// an array with a tangent`). `kInvalidNodeRef` builds the shape from the type's stated extents
-/// (`shapeCarrierOf`), which is what a zero needs in order to be an array of the right shape.
+/// an array with a tangent`). `kInvalidNodeRef` builds no shape at all any more: it used to take the
+/// type's stated extents (`shapeCarrierOf`) and that is the zero value deleted on 2026-11-05, so the
+/// refusal below is the answer when the caller has no value to read the shape from.
 ///
 /// An invalid ref for a space the registry does not know, or one with neither a zero constant nor a
 /// `zerosLikeUri`: a cotangent that has no zero cannot be accumulated, and the caller refuses by name
@@ -1037,9 +1015,9 @@ gc_node_ref_t zeroOfSpaceOf(
         return rt::kInvalidNodeRef;
     }
     if (shapeFrom == rt::kInvalidNodeRef) {
-        shapeFrom = shapeCarrierOf(draft, space);
-    }
-    if (shapeFrom == rt::kInvalidNodeRef) {
+        // No value of this walk's to read the shape from, and no zero built in its place: a zero
+        // array answered a law's `shape(...)` read with a value that was not the argument, and the
+        // answer to "no shape" is the refusal, not an invented array (deleted 2026-11-05).
         return rt::kInvalidNodeRef;
     }
     const gc_node_ref_t zeros =
@@ -2213,21 +2191,21 @@ bool buildTransposeMember(
                         forwardOf[ref] =
                             at < portOfParam.size() ? portOfParam[at] : rt::kInvalidNodeRef;
                         if (forwardOf[ref] == rt::kInvalidNodeRef && i < paramCount) {
-                            // Neither a port nor a closure slot hands this parameter in, and the
-                            // law's right side reads its value. What the law reads it for is the
-                            // **shape** the parameter's type states (author, 2026-11-03 17:55:
-                            // "`transpose(pick)` on `x: float[3]` answers `([0.0, 1.0, 0.0])`, and it
-                            // rests on `extent_of`, not on a zero carrier"): the transposed function
-                            // is given the cotangent alone, so a law that reads `xs` for `numel` or
-                            // `ones_like` is answered from the type, through the language's own
-                            // `extent_of` rule (`camel::core::type::statedExtentsOf`) and the
-                            // library's own `tensor:zeros`.
+                            // Neither a port nor a closure slot hands this parameter in. **Nothing is
+                            // written here on the parameter's behalf any more**: a zero array of the
+                            // parameter's type used to stand in for its value, which is how a law that
+                            // reads an operand's value was answered a number that is not the argument
+                            // (deleted 2026-11-05, `#shapeCarrierOf`'s note). What a law reads off the
+                            // type alone -- a shape -- is answered where the law is expanded
+                            // (`rule_expand.cpp#answerTheShapeOf`), and what it needs as a value now
+                            // arrives as an operand of the node itself (`jvp_linear` / `jvp_erf` write
+                            // the `*_stated` twins), so no port of this signature is asked for it.
+                            //
+                            // What is recorded here is only the fact the shape repair is about: a
+                            // declaration that states no extents, and the parameter whose extents the
+                            // walk wanted. The law-choice path refuses on it (`ParameterShape`), and
+                            // so does the rule-expansion path when it cannot do better.
                             Type *const askType = function->funcType()->normTypeAt(at);
-                            if (const gc_node_ref_t carrier = shapeFromTypeOf(draft, askType);
-                                carrier != rt::kInvalidNodeRef) {
-                                forwardOf[ref] = carrier;
-                                return carrier;
-                            }
                             if (askType != nullptr &&
                                 askType->code() == camel::core::type::TypeCode::Array) {
                                 // The type does not state the shape, so nothing can be answered from
@@ -4438,11 +4416,18 @@ bool buildTransposeMember(
                     // A slot nobody read is zero: that state's value pulls nothing back into it. The
                     // zero is the zero of the state's own cotangent space, which is the type the port
                     // above was made at -- an `f32` state's seed is an `f32` zero, built by that
-                    // space's own zero and not by a `float` constant.
-                    loopNorm.push_back(
+                    // space's own zero and not by a `float` constant. A space whose zero is built from
+                    // a value's shape has no shape here (the carrier that used to supply one is gone,
+                    // 2026-11-05), so the type writes the zero the declaration itself states.
+                    gc_node_ref_t seed =
                         slot == rt::kInvalidNodeRef
                             ? zeroOfSpaceOf(draft, stateCotangentTypes[i], rt::kInvalidNodeRef)
-                            : slot);
+                            : slot;
+                    if (slot == rt::kInvalidNodeRef && seed == rt::kInvalidNodeRef &&
+                        stateCotangentTypes[i] != nullptr) {
+                        seed = zeroOfType(stateCotangentTypes[i], stateCotangentTypes[i]);
+                    }
+                    loopNorm.push_back(seed);
                 }
                 for (size_t i = 0; i < caught.size(); ++i) {
                     // Every sum starts at zero: a value a round never reaches adds nothing. The sum
@@ -4450,10 +4435,14 @@ bool buildTransposeMember(
                     // that component's own cotangent space (`componentTypes`, which the answer's
                     // components were typed from).
                     const size_t componentAt = stateCount + i;
-                    loopNorm.push_back(zeroOfSpaceOf(
-                        draft, componentAt < componentTypes.size() ? componentTypes[componentAt]
-                                                                   : nullptr,
-                        rt::kInvalidNodeRef));
+                    Type *const componentType =
+                        componentAt < componentTypes.size() ? componentTypes[componentAt] : nullptr;
+                    gc_node_ref_t componentZero =
+                        zeroOfSpaceOf(draft, componentType, rt::kInvalidNodeRef);
+                    if (componentZero == rt::kInvalidNodeRef && componentType != nullptr) {
+                        componentZero = zeroOfType(componentType, componentType);
+                    }
+                    loopNorm.push_back(componentZero);
                 }
                 draft.setNormInputs(loopNode, std::span<const gc_node_ref_t>(loopNorm));
                 // The With inputs of a loop are the results of its parts and its round: the round is

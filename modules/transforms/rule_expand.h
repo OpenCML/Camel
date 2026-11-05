@@ -49,10 +49,10 @@ ruleCotangentPortsOf(const camel::compile::gir::GenericRuleInstance &instance);
 /// an extent over a name nothing binds -- so the transforms agree about which types have a shape that
 /// can be written while the graph is built.
 ///
-/// There is one definition of this reading because there is one answer to give: `transpose` builds a
-/// shape carrier out of it (`shapeCarrierOf`) and `expandRuleRightSide` hands the same numbers to a
-/// law that asks for an operand's shape
-/// (`mul_tensor_t`'s `shape(x)`, `stdlib/rulesets/transpose.cml`). Two copies of it would be two
+/// There is one definition of this reading because there is one answer to give: `expandRuleRightSide`
+/// hands these numbers to a law that asks for an operand's shape
+/// (`mul_tensor_t`'s `shape(x)`, `stdlib/rulesets/transpose.cml`), and `transpose` writes the same
+/// extents into the graph as a value (`statedExtentsNodeOf`). Two copies of it would be two
 /// answers the day one of them learned about a type form the other did not.
 std::optional<std::vector<int64_t>> statedShapeOf(const camel::core::type::Type *type);
 
