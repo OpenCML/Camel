@@ -1,0 +1,74 @@
+/**
+ * The library's `has_aux`, which is a composition and not a second transform: `has_aux(loss)(3.0)`
+ * answers `((value, aux), gradient)` -- `((9.0, 13.0), 6.0)` for `loss(w) = (w*w, w + 10.0)` at 3,
+ * which are the engine's three numbers in the engine's order.
+ *
+ * The body is `jvp` read at the weight's direction (`stdlib/vjp.cml#has_aux`): `jvp(loss)(3.0, 1.0)`
+ * answers the pair and the pair's tangent, so the value's derivative is the tangent's first member.
+ * It is the forward direction because the transposed one cannot carry a pair: `vjp`'s second half
+ * turns a cotangent around, a pair has no cotangent, and handing a pair-returning function to `vjp`
+ * is refused rather than guessed at (test/cases/modules/autodiff/has_aux_vjp_pair.cml). A pair does
+ * have a tangent space, which is what the forward direction reads.
+ *
+ * The library's name takes a function of one ordinary parameter, as `grad` does: the engine's
+ * `with` form is closed over in the lambda that is handed in. Both legs are written so that the
+ * three quantities can be compared as floats in the program, which is what makes the two ways this
+ * composition can be wrong two `false` lines: the pair's first element handed back where the
+ * gradient belongs (9.0), and the auxiliary value's own slope added to the gradient (7.0 instead of
+ * 6.0). `frozen(w) = (1.0, w*w)` is the sharpest form of the same statement: the value does not
+ * depend on the weight at all, so the gradient is 0.0 while the auxiliary value is 9.0 -- a pass
+ * that differentiated the pair instead of its first member answers 6.0 there.
+ */
+import { has_aux } from vjp
+import { with_grad } from autodiff
+
+func loss(w: float): (float, float) {
+    return (w * w, w + 10.0)
+}
+
+func frozen(w: float): (float, float) {
+    return (1.0, w * w)
+}
+
+with <w: float>
+func loss_engine(): (float, float) {
+    return (w * w, w + 10.0)
+}
+
+with <w: float>
+func frozen_engine(): (float, float) {
+    return (1.0, w * w)
+}
+
+func main(): int sync {
+    let engine = with_grad(loss_engine, has_aux: true)<3.0>()
+    let engine_pair = engine.0
+    let engine_value = engine_pair.0
+    let engine_aux = engine_pair.1
+    let engine_grad = engine.1
+
+    let library = has_aux(loss)(3.0)
+    let library_pair = library.0
+    let library_value = library_pair.0
+    let library_aux = library_pair.1
+    let library_grad = library.1
+
+    println('has_aux_library_composition')
+    println('engine value={} aux={} grad={}'->format<engine_value, engine_aux, engine_grad>)
+    println('library value={} aux={} grad={}'->format<library_value, library_aux, library_grad>)
+    let same_value = engine_value == library_value
+    let same_aux = engine_aux == library_aux
+    let same_grad = engine_grad == library_grad
+    println('same_value={} same_aux={} same_grad={}'->format<same_value, same_aux, same_grad>)
+
+    let held_engine = with_grad(frozen_engine, has_aux: true)<3.0>()
+    let held_engine_pair = held_engine.0
+    let held_library = has_aux(frozen)(3.0)
+    let held_library_pair = held_library.0
+    let same_held_grad = held_engine.1 == held_library.1
+    let same_held_value = held_engine_pair.0 == held_library_pair.0
+    let same_held_aux = held_engine_pair.1 == held_library_pair.1
+    println('held value={} aux={} grad={}'->format<held_library_pair.0, held_library_pair.1, held_library.1>)
+    println('held_same value={} aux={} grad={}'->format<same_held_value, same_held_aux, same_held_grad>)
+    return 0
+}

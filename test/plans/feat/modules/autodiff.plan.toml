@@ -3585,6 +3585,21 @@ expect_exit = 0
 expect_stdout_exact = "has_aux_off_library\nvalue=8.0\n(12.0)\ngrad=12.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+# Form three reached from one name: `has_aux` in the library is the composition, so the library's leg
+# no longer needs the writer to spell the two projections out (`has_aux.library` above keeps that
+# reading reachable, and its numbers are the ones this entry has to match).
+[[tests]]
+name = "has_aux.library.composition"
+desc = "The library's `has_aux` against the engine's `with_grad(f, has_aux: true)`, both at 3: `has_aux(loss)(3.0)` answers `((9.0, 13.0), 6.0)` -- the value, the auxiliary value and the gradient, in the engine's order -- and the program compares the three as floats, so `same_value=true same_aux=true same_grad=true` is the reading. The body is `jvp` read at the weight's direction (`stdlib/vjp.cml#has_aux`): `jvp(loss)(3.0, 1.0)` answers the pair and the pair's tangent, and the value's derivative is the tangent's first member. It is the forward direction because the transposed one cannot carry a pair -- `vjp`'s second half turns a cotangent around, a pair has none, and the refusal is `has_aux.vjp_pair` above. A composition that handed the pair's first element back where the gradient belongs answers 9.0, and one that added the auxiliary value's own slope answers 7.0. `frozen(w) = (1.0, w*w)` separates the two halves by the numbers and is compared with the engine's leg too: `held value=1.0 aux=9.0 grad=0.0` and `held_same value=true aux=true grad=true`, which is what a pass that differentiated the pair rather than its first member answers 6.0 for."
+kind = "behavior"
+case = "../../../cases/modules/autodiff/has_aux_library_composition.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "has_aux_library_composition\nengine value=9.0 aux=13.0 grad=6.0\nlibrary value=9.0 aux=13.0 grad=6.0\nsame_value=true same_aux=true same_grad=true\nheld value=1.0 aux=9.0 grad=0.0\nheld_same value=true aux=true grad=true\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
 # The refusals that make form three a composition rather than a guess: the parameter form names a
 # parameter `vjp` does not declare, and a pair-returning function handed to `vjp` stops where the
 # cotangent of a pair would have to go into `transpose`.
