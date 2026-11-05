@@ -271,6 +271,26 @@ thread was created with: on `-t 1` the same camel process is 4 threads, of which
 which is what `count.timeit_cli_one_serial` expects. **When a Windows API's reading looks
 surprising, check whether it is the API that answers a different question than the one you asked.**
 
+## A citation check that reads a name is satisfied by a note saying the name is gone
+
+`scripts/check-doc-links.mjs --citations` answers one question about a citation written
+`file#Symbol`: does that file contain that name? `names()` tests the file's text for the symbol, and
+nothing in it distinguishes a definition or a call from a sentence about the symbol.
+
+So a citation of something deleted passes as long as the file still says it was deleted. Measured
+2026-11-05: `shapeFromTypeOf` was removed from `modules/transforms/transpose.cpp`, which keeps the
+note "was deleted on 2026-11-05 for the reason `#shapeCarrierOf`'s note gives", and three test-case
+comments still cite `modules/transforms/transpose.cpp#shapeFromTypeOf` while the run reports
+`902 of 902 symbol citation(s) verified`. **A eulogy feeds the check that asks whether the name is
+alive.**
+
+Two consequences. A green `--citations` means "the name still occurs in the file", never "the thing
+it names is still there": when a symbol is deleted, grep for its citations and edit them, because
+this check cannot find them. And the check does not read every page: `RECORD_DIRS` holds
+`docs/handover` and `docs/reviews`, which `scannedFiles()` skips, so a page under
+`docs/handover/` can cite anything it likes and the denominator will not move -- the citation count
+is a reading about `docs/` and the code, not about our own record pages.
+
 ## A fixture that writes a path into Camel source writes forward slashes
 
 The author's ruling of 2026-11-02 13:10, in response to the `interpreter_first_use` red: **a fixture
@@ -348,6 +368,14 @@ entry in `rules` (the tool's path to the plan) plus the plan's name in the rule 
 The same applies to a plan that must stay out of an ordinary change: `SLOW_PLANS` and the selection
 rules are two halves of one fact — a plan is either reachable on purpose or named in the slow list on
 purpose, never neither.
+
+**`changed: 0 target(s)` is a reading, and it means nothing was tested.** `--changed` starts no plan
+when no file differs from the base, and prints that count instead of running the layer: 0 changed
+files used to widen to 336 plan files and a `[SUMMARY]` with no failure — the reading a correct
+selection of one plan gives — so the widening had no symptom. A lane that sees the line is in one of
+two situations, and neither is a green: its work is not committed or not on the branch yet, or it
+named a base the branch equals. Name the plans (`-Plan smoke,test/plans/feat/...`) or `--all` when the
+layer is the question; the layer is never run to fill a selection.
 
 ## A timeout budget is a change like any other
 
