@@ -3225,3 +3225,20 @@ S2 改用 `grad` 等这一步落地后再做。
 两点：
 - 内核往 `readings()` 写的 `REINTERP first_with_as_param …` 是又一处常开的读数，归入每日审查 R7 一起处理，不要再新增这类常开输出。
 - 下一步就是提交信息里说的下一笔：库层 `grad(f) = vjp(first_with_as_param(f))` 取第一个余切，`has_aux` 按 02:30 的反向写法改。同一次合并删掉 `withIsPromoted` 一路和注记，那三组手算的数是判据。然后 S2 改用 `grad`，权重放回 `with`。
+
+## 裁定（2026-11-05 17:20）：三页
+
+**一、`T[]` 形参的规则要不要接 `T[..]` 实参（`whether-a-rank-one-rule-has-to-answer-an-open-rank-operand`）**：不接，照路 A。`T[..]` 的值可能是 2 秩，`T[]` 的形参不能接；可赋值性只有 `assignableFrom` 这一条规则，不为规则匹配另开口子。要对任意秩成立的律，就在 `rulesets` 里写 `T[..]` 的那一条。页里说的那一行顺手补上。
+
+**二、不在根里的图版本，静态区没人更新（`does-a-graph-version-outside-the-roots-keep-its-static-values`）**：这不是待裁的问题，是内存安全缺陷，优先级排在主线之前。规则只有一条：**一个图版本从它造出来的那一刻起，只要静态区里有对象，就必须能从某个根到达，或者被一个已登记的外根跟踪。**页里已经排除了 draft 和 work table，下一步：
+- 找到 `train$spec0` 那个版本是谁造的，谁持有它，在它被绑进程序之前，它挂在哪个结构上；
+- 让那个结构成为根，或者在造出版本的那一刻就把它交给一个被跟踪的持有者。
+
+**判据**：页里那条最小复现（`--gc-check poison`，`gru_lite`）`rc=0`；两条 `*_large_bytecode` 在 poison 下转绿；不标 `known_fail`，在修好之前就是红的。
+
+**三、`FirstOf` 与"其余"那半（`firstof-hands-over-the-head-and-the-rest-has-no-generic-spelling`）**：
+- `Gradient<F>` 只要第一个成员，`with` 列表本来就是整包，所以 `FirstOf` 加整包 `...WithOf<F>` 就是它的最终写法，不必改写。
+- 在 `with` 列表的位置直接写 `<(W, ...Rest)>` 这种模式语法，不需要；拆包由 `match type` 的 case 负责。
+- 但页里第 2 节量出一处真缺陷：`RestOf<P> = match type P { case (W, ...Rest) => Rest }` 在具体类型上答对，在泛型声明里展开 `...RestOf<WithOf<F>>` 就报错。规则只有一条：`match type` 答出的包，在泛型声明里和在具体类型里一样能展开，求值推迟到实例化，和其他类型函数调用一样。修这一处；判据是页里那个探针（`RestOnly<Loss>` 与 `RestOnlyShape` 相同）答 `true`。
+
+三页挪到 `reviews/` 留档。
