@@ -3,15 +3,33 @@
 // come out of the transposed graph the ruleset writes -- and `x / 4.0` passes through the transpose of
 // `div_tangent`, whose own division is by a computed value, so the second name's cotangent of `div_t`
 // is on the path and is answered, not refused and not divided by the wrong operand.
+//
+// `grad` differentiates the first `with` parameter (design principles 9.9), so each operand is a
+// `with` value here: the arithmetic under it is the same five expressions.
 import rulesets.jvp
 import rulesets.transpose
 import { grad } from vjp
 
+with <x: float>
+func times_three(): float { return x * 3.0 }
+
+with <x: float>
+func less_one(): float { return x - 1.0 }
+
+with <x: float>
+func negated(): float { return -x }
+
+with <x: float>
+func divided_by_four(): float { return x / 4.0 }
+
+with <x: float>
+func four_over(): float { return 4.0 / x }
+
 func main(): int sync {
-    println(grad((x) => x * 3.0)(1.0))
-    println(grad((x) => x - 1.0)(1.0))
-    println(grad((x) => -x)(1.0))
-    println(grad((x) => x / 4.0)(8.0))
-    println(grad((x) => 4.0 / x)(2.0))
+    println(grad(times_three)(1.0))
+    println(grad(less_one)(1.0))
+    println(grad(negated)(1.0))
+    println(grad(divided_by_four)(8.0))
+    println(grad(four_over)(2.0))
     return 0
 }

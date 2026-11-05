@@ -242,13 +242,23 @@ let loaderFailure = ''
 //
 // So the old reading counted a comment: `array` was overstated by 3, `with` by 1, and `other` understated
 // by 2 -- which is the whole of the movement above.
+//
+// **2026-11-05, third move: no case arrived; one case is now written with a `with` parameter.** `with`
+// 55 -> 56, `other` 11 -> 10; `total`, `library`, `array` and `pass` do not move. The one is
+// `test/cases/modules/autodiff/has_aux_library_plain.cml`, and what moved it is the library's `grad`
+// landing as a composition on `first_with_as_param`: `grad` differentiates the first `with` parameter
+// (design principles 9.9), a reverse transform differentiates the ordinary ones, so the case now
+// declares the value it differentiates as a `with` function -- `with <x: float> func cube_at() = cube(x)`
+// -- instead of handing `grad` a lambda, which is the shape the deleted `with` promotion used to make
+// look differentiable and answered 0.0 for. The numbers the case reads are unchanged (`8.0`, `(12.0)`,
+// `12.0`); only the spelling of its subject moved, and the class it is counted in with it.
 const LEDGER_RECORDED = {
     total: 144,
     library: 135,
     pass: 22,
-    with: 55,
+    with: 56,
     array: 69,
-    other: 11,
+    other: 10,
 }
 
 function camelBinary() {

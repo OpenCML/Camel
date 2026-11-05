@@ -2656,6 +2656,8 @@ const EXAMPLE_STOPS = {
             'a rule set comes from the caller, and `rules` is it',
         'stdlib/rewrite.cml#why_not#1':
             'a run, a rule and a value come from the caller, and `target` is one of them',
+        'stdlib/vjp.cml#grad#1':
+            '`grad` is generic in the function it takes (`F`), so the checker can write no value for the parameter: the function whose first `with` parameter is differentiated is a declaration in the surrounding program',
         'stdlib/signatures/autodiff.cml#grad#1':
             '`loss` must have a `with` parameter for its gradient to exist, and only a declaration in the surrounding program gives it one',
         'stdlib/signatures/autodiff.cml#grad#2':

@@ -19,6 +19,10 @@
  *     both members and not the first one.
  *   - the `with`-weight member is `3.0` here and `4.0` there, so the number is not the weight's
  *     value repeated: `x` is 3.0 in both lines and the answer moves.
+ *   - the third line reads the *same* 4.0 through the library's `grad`, which takes the first
+ *     cotangent of this very composition: a `grad` that read the last one would answer 12.0, and one
+ *     that read the weight's value would answer 3.0. The pair and the single number are pinned side
+ *     by side so the reader can see that `grad` picked a member and which one.
  *
  * The reinterpretation is a port reclassification: the graph's body is copied unchanged and one port
  * changes list. `REINTERP first_with_as_param function=weighted with_in=1 params_in=1 with_out=0
@@ -26,7 +30,7 @@
  * not share the program's stdout).
  */
 
-import { vjp } from vjp
+import { grad, vjp } from vjp
 import { first_with_as_param } from transforms
 
 with <x: float>
@@ -50,5 +54,10 @@ func main(): int sync {
     let (squaredValue, squaredPullback) = vjp(first_with_as_param(squared))(3.0, 2.0)
     let (sdw, sdy) = squaredPullback(1.0)
     'squared value={} weight={} y={}'->format<squaredValue, sdw, sdy>->println
+
+    // The same 4.0 through the library's `grad`, which takes the first cotangent: 12.0 here would be
+    // the second member, and 3.0 would be the weight's value.
+    let squaredGradient = grad(squared)(3.0, 2.0)
+    'squared grad={}'->format<squaredGradient>->println
     return 0
 }
