@@ -356,14 +356,17 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
     std::vector<uint16_t> shapes;
     std::vector<uint32_t> identityCounts;
     std::vector<uint32_t> packCounts;
+    std::vector<uint32_t> arrayCounts;
     std::vector<uintptr_t> key{typeKeyWord(TypeTable::instance().canonical(subject))};
     for (const MatchTypeArm &arm : arms) {
         shapes.push_back(arm.shapes);
         identityCounts.push_back(static_cast<uint32_t>(arm.identities.size()));
         packCounts.push_back(static_cast<uint32_t>(arm.packPatterns.size()));
+        arrayCounts.push_back(static_cast<uint32_t>(arm.arrayPatterns.size()));
         key.push_back(arm.shapes);
         key.push_back(arm.identities.size());
         key.push_back(arm.packPatterns.size());
+        key.push_back(arm.arrayPatterns.size());
         for (Type *identity : arm.identities) {
             params.push_back(identity);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(identity)));
@@ -371,6 +374,13 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
         for (Type *pattern : arm.packPatterns) {
             params.push_back(pattern);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(pattern)));
+        }
+        // An array pattern's identity is the object itself, not its canonical twin: the twin
+        // erases the pack name, and the name is what the case binds (`E[...Dims]` and `E[...]`
+        // are one shape and two different cases).
+        for (Type *pattern : arm.arrayPatterns) {
+            params.push_back(pattern);
+            key.push_back(typeKeyWord(pattern));
         }
         params.push_back(arm.result);
         key.push_back(typeKeyWord(TypeTable::instance().canonical(arm.result)));
@@ -380,15 +390,15 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
             Type **copy = OtherType::copyParams(params);
             void *mem   = mm::permSpace().alloc(sizeof(MatchTypeType), alignof(MatchTypeType));
             GUARD(mem != nullptr, "Failed to allocate MatchTypeType from permSpace");
-            return new (mem)
-                MatchTypeType(shapes, identityCounts, packCounts, params.size(), copy);
+            return new (mem) MatchTypeType(
+                shapes, identityCounts, packCounts, arrayCounts, params.size(), copy);
         }));
 }
 
 size_t MatchTypeType::firstParamOf(size_t arm) const {
     size_t at = 1;
     for (size_t i = 0; i < arm; ++i) {
-        at += identityCounts_[i] + packCounts_[i] + 1;
+        at += identityCounts_[i] + packCounts_[i] + arrayCounts_[i] + 1;
     }
     return at;
 }
@@ -402,8 +412,35 @@ std::span<Type *const> MatchTypeType::armPackPatterns(size_t arm) const {
         params_ + firstParamOf(arm) + identityCounts_[arm], packCounts_[arm]);
 }
 
+std::span<Type *const> MatchTypeType::armArrayPatterns(size_t arm) const {
+    return std::span<Type *const>(
+        params_ + firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm], arrayCounts_[arm]);
+}
+
+void MatchTypeType::armBoundNames(size_t arm, std::vector<std::string> &names) const {
+    const auto add = [&names](std::string_view name) {
+        if (!name.empty() &&
+            std::find(names.begin(), names.end(), name) == names.end()) {
+            names.emplace_back(name);
+        }
+    };
+    // A pack pattern is written out of type variables -- `(W, ...Rest)` -- and the ones it holds
+    // are the ones taking it apart binds. An array pattern binds the type variable written where
+    // the element stands, and the pack it names for the dimensions.
+    for (Type *pattern : armPackPatterns(arm)) {
+        collectTypeVars(pattern, names);
+    }
+    for (Type *pattern : armArrayPatterns(arm)) {
+        collectTypeVars(pattern, names);
+        if (const ArrayType *array = asArrayType(pattern)) {
+            add(array->packName());
+        }
+    }
+}
+
 Type *MatchTypeType::armResult(size_t arm) const {
-    return params_[firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm]];
+    return params_[
+        firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm] + arrayCounts_[arm]];
 }
 
 std::string MatchTypeType::toString() const {
@@ -411,8 +448,9 @@ std::string MatchTypeType::toString() const {
     for (size_t i = 0; i < armCount(); ++i) {
         const std::span<Type *const> identities = armIdentities(i);
         const std::span<Type *const> pack       = armPackPatterns(i);
+        const std::span<Type *const> arrays     = armArrayPatterns(i);
         text += " case ";
-        if (identities.empty() && pack.empty()) {
+        if (identities.empty() && pack.empty() && arrays.empty()) {
             text += "...";
         }
         size_t written = 0;
@@ -420,6 +458,9 @@ std::string MatchTypeType::toString() const {
             text += (written++ == 0 ? "" : " | ") + identity->toString();
         }
         for (Type *pattern : pack) {
+            text += (written++ == 0 ? "" : " | ") + pattern->toString();
+        }
+        for (Type *pattern : arrays) {
             text += (written++ == 0 ? "" : " | ") + pattern->toString();
         }
         text += " => " + armResult(i)->toString() + ";";
@@ -431,9 +472,12 @@ std::string MatchTypeType::mangle() const {
     std::string text = "MT" + subject()->mangle();
     for (size_t i = 0; i < armCount(); ++i) {
         text += "_" + std::to_string(shapes_[i]) + "_" + std::to_string(identityCounts_[i]) + "_" +
-                std::to_string(packCounts_[i]);
+                std::to_string(packCounts_[i]) + "_" + std::to_string(arrayCounts_[i]);
         for (Type *pattern : armPackPatterns(i)) {
             text += "P" + pattern->mangle();
+        }
+        for (Type *pattern : armArrayPatterns(i)) {
+            text += "A" + pattern->mangle();
         }
         text += "_" + armResult(i)->mangle();
     }
@@ -467,6 +511,9 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
         }
         for (uint32_t k = 0; k < packCounts_[i]; ++k) {
             arm.packPatterns.push_back(params[at++]);
+        }
+        for (uint32_t k = 0; k < arrayCounts_[i]; ++k) {
+            arm.arrayPatterns.push_back(params[at++]);
         }
         arm.result = params[at++];
         arms.push_back(std::move(arm));

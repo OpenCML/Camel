@@ -1968,10 +1968,12 @@ a `f32` tensor of shape [labels, classes], each row a distribution over the clas
 #### `shape`
 
 ```camel
-shape: (t: T[...]) => int[] when is_numeric::<T>()
+shape: (t: T) => ShapeOf<T>
 ```
 
-The extents of a tensor, in order.
+The extents of a tensor, in order: as many as the type states dimensions, so a tensor whose
+shape the type fixes has a list whose length is fixed too (`ShapeOf`); a scalar is a tensor of
+rank zero and answers the empty list.
 
 - Pure.
 - Example: `shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])` gives `[2, 2]`

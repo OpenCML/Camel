@@ -1762,8 +1762,10 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     } fieldTagOwner(*this, declNode);
     if (!typeNode && !typeLoad->params().empty() && module_->name() == "types" &&
         TypeCallType::isTypeFunction(typeLoad->ref().toString())) {
-        // `export type ElementOf<T>`: a primitive type function (design principles 5.6), declared
-        // here without a body; the compiler takes the type apart where `match type` cannot.
+        // `export type PayloadOf<T>`: a primitive type function (design principles 5.6),
+        // declared here without a body; the compiler answers it, because what it answers is a field
+        // of the type that a `match type` case cannot name. A type function that only takes a type
+        // apart or puts one back together is written in the library as a `match type` instead.
         const string typeName = typeLoad->ref().toString();
         struct TypeScopeGuard {
             Builder &self;
@@ -6200,16 +6202,14 @@ node_ptr_t Builder::visitGeneratorBody(
                             const std::string binderName = loopLoad->binder().toString();
                             if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
                                 cellNames.end()) {
-                                // The binder's type is the sequence's element type, written the
-                                // way the language writes it -- `ElementOf<typeof xs>`, a type
-                                // function applied to a `typeof`. `typeof` gives the type of the
-                                // value without evaluating it, so the position is static.
-                                std::vector<Type *> binderArguments = {
-                                    TypeOfType::create(sequence)};
-                                addCellOfType(
-                                    binderName,
-                                    TypeCallType::create("ElementOf", binderArguments),
-                                    stmt);
+                                // The binder's type is the type of the element the loop reads: the
+                                // same expression the loop writes into the cell, asked with
+                                // `typeof` (design principles 5.6: `typeof` gives the type a value
+                                // would have and evaluates nothing), so the position is static. What
+                                // an element of a container is, is what indexing it gives -- the
+                                // same rule the library's `ElementOf` writes in Camel -- so the
+                                // comprehension needs no type function of its own.
+                                addTypedCell(binderName, elementAt(), stmt);
                                 cellNames.push_back(binderName);
                             }
                             const int afterPc = newArm();
@@ -7560,27 +7560,48 @@ void Builder::packPatternNamesOf(const AST::node_ptr_t &typeAst, std::vector<std
     // The names the case has written so far, and the types the scopes and the imports answer,
     // decide which of the pattern's names are new (design principles 5.4 binds a dimension name the
     // same way: a name a type here already answers is a reference).
-    const auto binds = [&](const std::string &name) {
-        if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
-            return false;
-        }
-        if (typeScope_->get(Reference(name)).has_value()) {
-            return false;
-        }
-        return module_ == nullptr || !module_->getImportedType(Reference(name)).has_value();
-    };
     const auto &members = *typeAst->atAs<AST::RepeatedLoad>(0);
     // The members the pattern writes out bind first, then the rest binds what is left of the pack.
     for (size_t i = 0; i + 1 < members.size(); ++i) {
         const std::string member = writtenNameOf(members.at(i));
-        if (!member.empty() && binds(member)) {
+        if (!member.empty() && patternNameIsNew(member, bound)) {
             bound.push_back(member);
         }
     }
     const std::string rest = packRestNameOf(members.at(members.size() - 1));
-    if (!rest.empty() && binds(rest)) {
+    if (!rest.empty() && patternNameIsNew(rest, bound)) {
         bound.push_back(rest);
     }
+}
+
+const AST::DimGroup *Builder::arrayPatternDimsOf(const AST::node_ptr_t &typeAst) {
+    if (typeAst == nullptr || typeAst->type() != AST::LoadType::Type ||
+        typeAst->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Array) {
+        return nullptr;
+    }
+    const auto &groups = typeAst->loadAs<AST::ArrayTypeLoad>()->dims();
+    if (groups.size() != 1) {
+        return nullptr;
+    }
+    const AST::DimGroup &group = groups.front();
+    // A pack is the trailing dimensions; a case pattern that states extents before it states a
+    // shape, which is what an identity case selects.
+    if (group.pack == AST::DimPack::None || !group.extents.empty() || group.packRepeated ||
+        group.packItem + 1 != group.itemCount) {
+        return nullptr;
+    }
+    return &group;
+}
+
+bool Builder::patternNameIsNew(
+    const std::string &name, const std::vector<std::string> &bound) const {
+    if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
+        return false;
+    }
+    if (typeScope_->get(Reference(name)).has_value()) {
+        return false;
+    }
+    return module_ == nullptr || !module_->getImportedType(Reference(name)).has_value();
 }
 
 /*
@@ -7605,13 +7626,42 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
         const auto caseLoad         = armAst->loadAs<AST::TypeCaseLoad>();
         // A case that writes the rest of a pack (`case (W, ...Rest)`) takes the subject pack apart,
         // and the names it writes stand for the members it reached (design principles 5.6: a type
-        // pack takes apart the way a value pack does). They are bound in this case alone -- in the
-        // patterns and in the type the case gives -- and a name a type here already answers is that
-        // type, as a dimension name written once too often is a reference and not a new name (5.4).
+        // pack takes apart the way a value pack does). A case that writes an array whose dims pack
+        // it names (`case E[...Dims]`) or leaves anonymous (`case E[...]`) takes an array type apart
+        // the same way: `E` is the element type and `Dims` the dimensions after it. They are bound
+        // in this case alone -- in the patterns and in the type the case gives -- and a name a type
+        // here already answers is that type, as a dimension name written once too often is a
+        // reference and not a new name (5.4).
+        const auto &patterns          = caseLoad->patterns();
         std::vector<std::string> written;
-        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
-            packPatternNamesOf(pattern.type, written);
+        std::vector<bool> takesArrayApart(patterns.size(), false);
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            packPatternNamesOf(patterns[i].type, written);
+            // The element name is decided here, before the scope holds it: a name that is already
+            // a type here would make the case an identity pattern, which selects one type.
+            const AST::DimGroup *dims = arrayPatternDimsOf(patterns[i].type);
+            const std::string element =
+                dims != nullptr ? writtenNameOf(patterns[i].type->at(0)) : std::string();
+            if (dims != nullptr && !element.empty() && patternNameIsNew(element, written)) {
+                written.push_back(element);
+                takesArrayApart[i] = true;
+            }
         }
+        // The dimensions a case binds are the case's own: the pattern binds the pack and the type
+        // the case gives may put it back (`E[?, ...Dims]`) or ask how many there are (`int[Dims]`),
+        // and nothing outside the case sees either.
+        struct CaseDimsScope {
+            Builder &self;
+            std::shared_ptr<std::set<std::string>> packs;
+            bool bind;
+            bool entered = false;
+            ~CaseDimsScope() {
+                if (entered) {
+                    self.dimPacks_       = std::move(packs);
+                    self.dimBindAllowed_ = bind;
+                }
+            }
+        } caseDimsScope{*this, dimPacks_, dimBindAllowed_};
         struct PatternScope {
             Builder &self;
             scope_ptr_t<Reference, Type *> outer;
@@ -7629,11 +7679,22 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
                 typeScope_->insert(Reference(name), TypeVarType::create(name, false));
             }
         }
-        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
-            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            const AST::TypeCasePattern &pattern = patterns[i];
+            const GCT::TypeCaseKind kind        = static_cast<GCT::TypeCaseKind>(pattern.kind);
             if (kind == GCT::TypeCaseKind::Identity) {
                 if (isPackPattern(pattern.type)) {
                     arm.packPatterns.push_back(visitType(pattern.type));
+                } else if (takesArrayApart[i]) {
+                    // The pack name is this case's to bind; the dims it stands for are read from
+                    // the subject when the case selects it (`takeArrayApart`).
+                    caseDimsScope.entered = true;
+                    dimPacks_ = dimPacks_ != nullptr
+                                    ? std::make_shared<std::set<std::string>>(*dimPacks_)
+                                    : std::make_shared<std::set<std::string>>();
+                    const bool binding  = std::exchange(dimBindAllowed_, true);
+                    arm.arrayPatterns.push_back(visitType(pattern.type));
+                    dimBindAllowed_ = binding;
                 } else if (Type *identity = visitType(pattern.type)) {
                     arm.identities.push_back(identity);
                 }
@@ -7967,6 +8028,13 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
             if (dimUses_ != nullptr) {
                 ++(*dimUses_)[name];
             }
+            return ExtentForm::linear({{name, 1}});
+        }
+        if (dimPacks_ != nullptr && dimPacks_->contains(name)) {
+            // A dimension pack written where an extent stands is how many dimensions it stands for
+            // -- the count `indices` walks in the value layer, spelled with the name the type
+            // already gave the pack: `int[rest]` is the array of the rank `rest` reaches, and a
+            // `match type` case that binds `Dims` writes `int[Dims]` (design principles 5.4).
             return ExtentForm::linear({{name, 1}});
         }
         if (dimBindAllowed_ && dimNames_ != nullptr) {

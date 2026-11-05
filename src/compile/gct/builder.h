@@ -414,6 +414,15 @@ class Builder {
     /// `bound`, the names the case has already written: a name a type here already answers is that
     /// type and not a new binding.
     void packPatternNamesOf(const AST::node_ptr_t &typeAst, std::vector<std::string> &bound);
+    /// The dims group of an array-type case pattern that writes a dims pack and no extent before it
+    /// (`case E[...Dims]`, `case E[...]`), or nullptr when the pattern does not have that shape.
+    /// Such a pattern takes an array type apart: the element binds the name it writes, and the
+    /// pack is the dimensions after it (design principles 5.4, where `...s` is a dimension pack).
+    static const AST::DimGroup *arrayPatternDimsOf(const AST::node_ptr_t &typeAst);
+    /// Whether the name a case pattern writes is a new name the case binds: one it has not written
+    /// yet, and one no type here already answers (a name a type here already answers is a
+    /// reference, the rule a dimension name written once too often follows, design principles 5.4).
+    bool patternNameIsNew(const std::string &name, const std::vector<std::string> &bound) const;
     /// The extents of one `[...]` as linear forms (design principles 5.4). An unknown extent
     /// (`?`, or the empty `[]`) is `ExtentForm::unknown()`; nullptr with a diagnostic reported.
     std::shared_ptr<const std::vector<camel::core::type::ExtentForm>>

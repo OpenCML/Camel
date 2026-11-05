@@ -62,6 +62,30 @@ export type KeyOf<T>
 /// @example is_same::<ValueOf<Map<string, int[]>>, int[]>()    // true
 export type ValueOf<T>
 
+/// The shape a type states, as the list of its extents: `int[2]` for `float[2, 3]` and `int[1]`
+/// for `float[]` (the rank is stated), `int[]` for `float[...]` (it is open), and `int[0]` for a
+/// type that states no dimension at all -- a scalar, which is a tensor of rank zero and has the
+/// empty shape.
+///
+/// The rank is what the case's dims pack reaches: `case E[...Dims]` takes an array whose rank is
+/// stated apart and binds its dimensions to `Dims`, and a dims pack written where an extent stands
+/// is how many dimensions it stands for (design principles 5.4, the count `indices` walks in the
+/// value layer). So `shape` answers a value whose length is known, and a value of `T[...]` answers
+/// the open list.
+///
+/// The last arm is a default, and it is one because a `match type` case has no guard position: the
+/// type layer cannot ask whether a leaf type is a number, so `ShapeOf<string>` answers the empty
+/// shape as a scalar does (docs/handover/reviews/questions-2026-10-30-match-type-guard.md: a guard
+/// on a `case` is a language shape the author decides, not a line to add here).
+/// @example is_same::<ShapeOf<float[2, 3]>, int[2]>()    // true
+/// @example is_same::<ShapeOf<float[...]>, int[]>()    // true
+/// @example is_same::<ShapeOf<int>, int[0]>()    // true
+export type ShapeOf<T> = match type T {
+    case E[...Dims] => int[Dims]
+    case E[...] => int[]
+    case _ => int[0]
+}
+
 /// The ordinary parameters of a function type, as a type pack: `..ParamsOf<F>` writes them where a
 /// list of types is (the elements of a tuple); the `constas` parameters are not among them.
 /// @example is_same::<(...ParamsOf<(a: int, b: string) => bool>), (int, string)>()    // true
