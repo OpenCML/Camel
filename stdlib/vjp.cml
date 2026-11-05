@@ -4,14 +4,22 @@
 /*
  * The derivative, as a library (design 4.4, `docs/design/program-transforms/README.cn.md`).
  *
- *     vjp(f) = transpose(split(jvp(f)))
- *     grad(f)              -- `vjp` read at one number, the seed 1
+ *     vjp(f)  = transpose(split(jvp(f)))
+ *     grad(f) = vjp(first_with_as_param(f)) read at the seed 1, its first cotangent
+ *     has_aux(f) = the same lift read forward, the pair's value member taken
  *
- * The design writes the first line `transpose(split(reinterp<jvp>(f)))` (design principles 9.9:
- * `reinterp<H>(f)` gives every primitive the meaning `H` gives it). `reinterp<jvp>(f)` is
- * `jvp(f)`: the kind is the operator's own name, because a pass cannot answer a function value and
- * a call cannot write a rule set in its angle brackets. So the line above is the same statement in
- * a spelling a reader can type -- the design's name is not a name in this tree.
+ * The first line is the design's assembly (design principles 9.9, design 4.4) with its middle step
+ * written as the call that performs it: `jvp(f)` is the forward transform as an operator of the
+ * `transforms` module (`stdlib/signatures/transforms.cml`), because a pass cannot answer a function
+ * value and a call cannot name a rule set in its angle brackets.
+ *
+ * `grad` differentiates the first `with` parameter (design principles 9.9), and a reverse transform
+ * differentiates the ordinary parameters, so the weight has to be moved onto that list before `vjp`
+ * sees the function. The move is the signature reinterpretation `first_with_as_param`
+ * (`stdlib/signatures/transforms.cml`): it reclassifies one port and copies the body unchanged, and
+ * it puts the weight **first** among the parameters, so the first member of the pullback's answer is
+ * its cotangent. `GradientOf<F>` (`stdlib/types.cml`) is that shape -- the weight, then `F`'s own
+ * parameters.
  *
  * This is the assembly the design asks for, written out rather than described. `split(jvp(f))`
  * answers the forward half, and the forward half called at the point answers `(value, lin)`: the
@@ -50,8 +58,8 @@
 
 import rulesets.jvp
 import rulesets.transpose
-import { is_function, Vjp } from types
-import { jvp, split, transpose } from transforms
+import { is_function, GradientOf, Vjp } from types
+import { first_with_as_param, jvp, split, transpose } from transforms
 
 /// The reverse transform, in JAX's order (author's ruling of 2026-11-01): `vjp(f)(x)` gives the pair
 /// `(y, pullback)`, and `pullback(ct)` gives the cotangents of `f`'s parameters, `ct`'s own weight one
@@ -94,17 +102,22 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
         (y, transpose(lin))
     }
 }
-/// The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
-/// one member a one-parameter pullback answers read out by position --
-/// `grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
-/// the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
-/// `vjp`, not as a second transform.
+/// The gradient of a function with respect to its first `with` parameter (design principles 9.9):
+/// `grad(f)` takes the weight first and `f`'s own parameters after it, and answers the weight's
+/// cotangent -- `grad(weighted)(3.0, 2.0)` for `<x: float> func weighted(y) = x*y + x`.
+///
+/// It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
+/// taken. The weight is on the ordinary list because that is the list `vjp` differentiates, so the
+/// step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
+/// port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
+/// differentiated body reads a `with` value that would need a direction of its own.
+/// `GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let slope = grad(f)
-export func grad(f: (x: float) => float): (x: float) => float {
-    let reading = vjp(f)
-    return (x: float) => {
-        let (value, pullback) = reading(x)
+export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
+    let reading = vjp(first_with_as_param(f))
+    return (...xs) => {
+        let (value, pullback) = reading(...xs)
         let _ = value
         let cotangents = pullback(1.0)
         cotangents.0
@@ -130,6 +143,16 @@ export func grad(f: (x: float) => float): (x: float) => float {
 /// test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
 /// direction needs, so the composition that reads all three numbers is the one above.
 ///
+/// The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+/// read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
+/// the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
+/// member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph
+/// of `(t) => lin(t).0` needs a transposed graph for `lin`, `lin` is a value and not a named callee,
+/// and the pass stops with `transforms: transpose has no transpose for this function: this call's
+/// callee has no transpose of its own, so the call cannot be turned around`. The wall is
+/// `transpose`'s (a written body whose callee arrives as a value), not this composition's, so this
+/// name stays forward and the backward spelling waits for that rule.
+///
 /// The pair is carried and the auxiliary value is not differentiated: `frozen(w) = (1.0, w*w)`
 /// answers a gradient of 0.0 with an auxiliary value of 9.0. The tangent's second member is the
 /// auxiliary value's own slope; it is built (the lift answers the whole pair's direction) and not
@@ -137,9 +160,9 @@ export func grad(f: (x: float) => float): (x: float) => float {
 /// the numbers it happens to print.
 ///
 /// The shape is written once, for a weight of one `float` and a result of two, the way `grad` above
-/// is written once for one parameter; the declarations whose parameters and results are packs
-/// (`Gradient<F>`, `stdlib/types.cml`) are what the generic form is written with when the library
-/// takes it, and this name keeps answering that shape until then.
+/// is written once for one parameter; the declarations whose parameters and results are packs are
+/// what the generic form is written with when the library takes it, and this name keeps answering
+/// that shape until then.
 /// @example-fragment `loss` must be a function of one parameter whose result is a pair, and that takes a declaration, so the example is a fragment of a program that declares it
 /// @example let step = has_aux(loss)
 export func has_aux(f: (w: float) => (float, float)): (w: float) => ((float, float), float) {

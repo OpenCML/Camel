@@ -1618,14 +1618,19 @@ derivative there, one member per parameter.
 #### `grad`
 
 ```camel
-grad: (f: (x: float) => float) => (x: float) => float
+grad: (f: F) => GradientOf<F> when is_function::<F>()
 ```
 
-The gradient of a function of one parameter: `vjp` with the seed 1, its second half taken, and the
-one member a one-parameter pullback answers read out by position --
-`grad(f)(x)` is `vjp(f)(x).1(1.0).0` (author's ruling of 2026-11-01 14:30, the 06:50 formula with
-the `.0` added: the pullback always answers a tuple). Read `grad(f)` as a name for that reading of
-`vjp`, not as a second transform.
+The gradient of a function with respect to its first `with` parameter (design principles 9.9):
+`grad(f)` takes the weight first and `f`'s own parameters after it, and answers the weight's
+cotangent -- `grad(weighted)(3.0, 2.0)` for `<x: float> func weighted(y) = x*y + x`.
+
+It is a composition and not a second transform: `vjp` read at the seed 1, its first cotangent
+taken. The weight is on the ordinary list because that is the list `vjp` differentiates, so the
+step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
+port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
+differentiated body reads a `with` value that would need a direction of its own.
+`GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`
@@ -1657,6 +1662,16 @@ to `vjp` is refused rather than guessed at (`has_aux_vjp_pair` in
 test/cases/modules/autodiff/). A pair **does** have a tangent space, which is what the forward
 direction needs, so the composition that reads all three numbers is the one above.
 
+The backward spelling of this body was tried and **refused by name** (2026-11-05): `split(jvp(f))`
+read for `(pair, lin)`, the value member built as `(t) => lin(t).0`, and that member transposed at
+the seed `1.0` -- the construction that does not invent a zero cotangent for the auxiliary
+member. `transpose` cannot turn around a body that calls a **function value**: the mirrored graph
+of `(t) => lin(t).0` needs a transposed graph for `lin`, `lin` is a value and not a named callee,
+and the pass stops with `transforms: transpose has no transpose for this function: this call's
+callee has no transpose of its own, so the call cannot be turned around`. The wall is
+`transpose`'s (a written body whose callee arrives as a value), not this composition's, so this
+name stays forward and the backward spelling waits for that rule.
+
 The pair is carried and the auxiliary value is not differentiated: `frozen(w) = (1.0, w*w)`
 answers a gradient of 0.0 with an auxiliary value of 9.0. The tangent's second member is the
 auxiliary value's own slope; it is built (the lift answers the whole pair's direction) and not
@@ -1664,9 +1679,9 @@ read, which is what makes "carried, not differentiated" a fact about the body ra
 the numbers it happens to print.
 
 The shape is written once, for a weight of one `float` and a result of two, the way `grad` above
-is written once for one parameter; the declarations whose parameters and results are packs
-(`Gradient<F>`, `stdlib/types.cml`) are what the generic form is written with when the library
-takes it, and this name keeps answering that shape until then.
+is written once for one parameter; the declarations whose parameters and results are packs are
+what the generic form is written with when the library takes it, and this name keeps answering
+that shape until then.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let step = has_aux(loss)`

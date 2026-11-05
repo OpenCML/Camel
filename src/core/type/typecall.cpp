@@ -35,6 +35,8 @@ constexpr std::string_view kTypeFunctions[] = {
     "ValueOf",
     "WithElement",
     "RowsOf",
+    "HeadOf",
+    "RestOf",
     "ParamsOf",
     "WithOf",
     "ResultOf",
@@ -89,6 +91,40 @@ bool TypeCallType::isTypeFunction(std::string_view name) {
 
 Type *TypeCallType::evaluate(
     std::string_view name, std::span<Type *const> arguments, std::string &error) {
+    // The two projections of a pack (`stdlib/types.cml#HeadOf`, `#RestOf`): the member at its head,
+    // and the pack of the members after it. They are read **before** the member-wise rule below,
+    // because their answer is about the pack itself and not about each member of it: mapped over
+    // the members, `HeadOf<(float, int)>` would ask `HeadOf<float>` for every one of them.
+    //
+    // They are primitives where `FirstOf<P>` is the `match type` a program writes, and the
+    // difference is not the answer -- both answer the type at the head -- but where the answer is
+    // *read*: a `match type` written into the result of a generic function leaves its two names
+    // (`W`, `Rest`) as type variables of that call, which no argument binds, so a library function
+    // whose answer moves a pack's first member onto another list cannot be called at all
+    // (`stdlib/vjp.cml#grad`). A primitive is evaluated with the pack in hand.
+    if (name == "HeadOf" || name == "RestOf") {
+        if (arguments.size() != 1 || arguments.front() == nullptr) {
+            error = "it takes one pack";
+            return nullptr;
+        }
+        Type *pack = arguments.front();
+        if (!TypeCallType::isPack(pack)) {
+            error = pack->toString() + " is not a pack (`..` of a type is a type expression)";
+            return nullptr;
+        }
+        const std::span<Type *const> members = TypeCallType::packMembers(pack);
+        if (name == "HeadOf") {
+            if (members.empty()) {
+                error = "the pack is empty: it has no first member";
+                return nullptr;
+            }
+            return members.front();
+        }
+        if (members.empty()) {
+            return makePack(std::vector<Type *>{});
+        }
+        return makePack(std::vector<Type *>(members.begin() + 1, members.end()));
+    }
     if (name == "WithElement") {
         if (arguments.size() != 2 || arguments[0] == nullptr || arguments[1] == nullptr) {
             error = "it takes an array type and an element type";
