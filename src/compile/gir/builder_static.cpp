@@ -99,10 +99,15 @@ bool sameShapeAs(const Type *head, const Type *walked) {
         !tree::isInternal(head) || !tree::isInternal(walked)) {
         return false;
     }
-    if (tree::arity(head) != tree::arity(walked)) {
+    size_t members    = 0;
+    size_t otherShape = 0;
+    // The empty answer is the answer to the question this function asks: two types that are not both
+    // structs or ordinary tuples do not have the same shape. (`isInternal` above has already refused
+    // those, so the branch is the function's own "no", not a case it skips.)
+    if (!tree::arityOf(head, members) || !tree::arityOf(walked, otherShape) || members != otherShape) {
         return false;
     }
-    for (size_t i = 0; i < tree::arity(head); ++i) {
+    for (size_t i = 0; i < members; ++i) {
         if (tree::childName(head, i) != tree::childName(walked, i)) {
             return false;
         }
@@ -803,7 +808,19 @@ node_handle_t Builder::visitStaticForNode(
     const std::string typeName  = gct->staticForTypeName();
     const std::string tagsName  = gct->staticForTagsName();
     const GCT::node_ptr_t body  = gct->staticForBody();
-    const size_t count          = tree::arity(subject);
+    // `isInternal(subject)` above has already refused a subject that is not a struct or a tuple with
+    // `StaticForNotComposite`; the count is asked again here through the no-answer form, and its
+    // empty value says the same thing in the same words instead of counting zero rounds.
+    // `isInternal(subject)` above has already refused a subject that is not a struct or a tuple with
+    // `StaticForNotComposite`; the count is asked again through the no-answer form, and its `false`
+    // says the same thing in the same words instead of counting zero rounds.
+    size_t count = 0;
+    if (!tree::arityOf(subject, count)) {
+        diags_->of(SemanticDiag::StaticForNotComposite)
+            .atOrigin(gct->origin())
+            .commit(subject->toString());
+        throw BuildAbortException();
+    }
     node_handle_t lastEffect{};
     if (shape != nullptr) {
         *shape = subject;
@@ -1033,11 +1050,13 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
     if (subject->type() == GCT::NodeKind::DREF) {
         if (const RestBinding *rest = restBindingNamed(subject->name())) {
             Type *tupleType = boundType(rest->tuple.type);
+            // A compile-time tuple is one that has positions to walk; asking the no-answer form is that
+            // question, and `false` means "not a sequence" rather than a sequence of no rounds.
+            size_t members = 0;
             if (tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
-                tree::isInternal(tupleType)) {
+                tree::isInternal(tupleType) && tree::arityOf(tupleType, members)) {
                 StaticSequence sequence;
-                const size_t arity = tree::arity(tupleType);
-                for (size_t i = 0; i < arity && i < rest->tuple.elements.size(); ++i) {
+                for (size_t i = 0; i < members && i < rest->tuple.elements.size(); ++i) {
                     sequence.elements.push_back(rest->tuple.elements[i]);
                 }
                 return sequence;
@@ -1243,7 +1262,16 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
     }
     Type *stateType = k == 1 ? stateTypes.front() : TupleType::create(stateTypes);
 
-    const size_t count = bySequence ? written->rounds() : tree::arity(subject);
+    // A subject that is not walked by a sequence is walked by its members, and both entrances above
+    // (the `ts` form at `StaticIndicesNotTuple`, the value form at `StaticForNotComposite`) have
+    // already refused a subject with none with the diagnostic its own branch owns. So the `false`
+    // cannot arrive here -- and it throws rather than running no rounds if that ever stops being true.
+    size_t count = 0;
+    if (bySequence) {
+        count = written->rounds();
+    } else if (!tree::arityOf(subject, count)) {
+        throw std::logic_error("static loop: the guarded subject has no members");
+    }
     for (size_t i = 0; i < count; ++i) {
         // The name of the walked entry: for `fields` the field's name and for `indices` the
         // position, both as the text the compile-time value bindings carry; for a sequence of

@@ -40,19 +40,26 @@ inline bool isInternal(const Type *type) {
 /// any other type**, and it used to answer one anyway -- every type that is not a `Struct` was cast to
 /// `TupleType` and its member count read out of that object's bytes, so `arity(f32[3])` answered
 /// `131961841501032` with no error and no default. A default can be argued with; another object's bytes
-/// cannot. Callers that may hold an array (or any non-tree type) ask `arityOf` and handle the refusal.
+/// cannot.
+///
+/// **This signature is on its way out** (author's ruling, 2026-11-05): it answers a number for a type
+/// that has none, so it is the defect itself and not a legacy helper. Three call sites still take it,
+/// all of them in `modules/transforms/transpose.cpp`, and that file is held by a lane that is editing
+/// the same lines; when it lands, `arity` becomes the no-answer form below and this definition goes,
+/// leaving one name in the tree. New code asks `arityOf`.
 inline size_t arity(const Type *type) {
     return type->code() == TypeCode::Struct ? static_cast<const StructType *>(type)->size()
                                             : static_cast<const TupleType *>(type)->size();
 }
 
 /// The number of children of `type`, when `type` is the kind of type that has children: `false` for
-/// everything else (an array, a function, a number, a string).
+/// everything else (an array, a function, a number, a string, `nullptr`).
 ///
 /// It exists because `arity` above answers a non-tree type with whatever its bytes say. The no-answer is
 /// a *return value*, not an `assert`, on purpose: **an `assert` is compiled out of the release build**
 /// (`NDEBUG`), so a guard written that way is loud on a developer's machine and absent for every user --
-/// which is worse than no guard, because the code then looks protected. `false` travels in every build.
+/// which is worse than no guard, because the code then looks protected. `false` travels in every build,
+/// and a caller cannot take `count` without saying what it does when there is none.
 inline bool arityOf(const Type *type, size_t &count) {
     if (type == nullptr) {
         return false;
@@ -94,11 +101,15 @@ inline std::string displayPath(const std::string &path) {
 
 /// Calls `visit(path, leafType)` for every leaf of `type`, in the canonical order.
 template <class Visit> void forEachLeaf(Type *type, Visit &&visit, const std::string &path = "") {
-    if (!isInternal(type)) {
+    size_t members = 0;
+    // The empty answer is the leaf, which is what this walk does with every type that has no members:
+    // the branch is the walk's own contract, not a case it skips. `isInternal` still decides which
+    // types that *do* have members are inner nodes -- a tagged or cell tuple has members and is a leaf.
+    if (!arityOf(type, members) || !isInternal(type)) {
         visit(path, type);
         return;
     }
-    for (size_t i = 0; i < arity(type); ++i)
+    for (size_t i = 0; i < members; ++i)
         forEachLeaf(childType(type, i), visit, childPath(path, type, i));
 }
 
@@ -117,11 +128,14 @@ std::optional<std::pair<std::string, Type *>> firstRejectedLeaf(Type *type, Acce
 /// `mapLeaf` returns nullptr for a leaf (it says why by itself).
 template <class MapLeaf>
 Type *mapLeaves(Type *type, MapLeaf &&mapLeaf, const std::string &path = "") {
-    if (!isInternal(type))
+    size_t members = 0;
+    // As in `forEachLeaf`: no members means the type is a leaf, and the tag/cell rule belongs to
+    // `isInternal`. `nullptr` takes the same branch instead of being dereferenced.
+    if (!arityOf(type, members) || !isInternal(type))
         return mapLeaf(path, type);
     if (type->code() == TypeCode::Struct) {
         StructTypeFactory fields;
-        for (size_t i = 0; i < arity(type); ++i) {
+        for (size_t i = 0; i < members; ++i) {
             Type *child = mapLeaves(childType(type, i), mapLeaf, childPath(path, type, i));
             if (!child)
                 return nullptr;
@@ -130,7 +144,7 @@ Type *mapLeaves(Type *type, MapLeaf &&mapLeaf, const std::string &path = "") {
         return fields.build();
     }
     type_vec_t fields;
-    for (size_t i = 0; i < arity(type); ++i) {
+    for (size_t i = 0; i < members; ++i) {
         Type *child = mapLeaves(childType(type, i), mapLeaf, childPath(path, type, i));
         if (!child)
             return nullptr;

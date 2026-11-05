@@ -480,7 +480,15 @@ class GctConstantEvaluator {
                 EvalProblem::Construct, {},
                 "it walks the fields of a type that is not a struct or a tuple");
         }
-        for (size_t i = 0; i < tree::arity(subject); ++i) {
+        // The two refusals above -- `TypeNotConcrete` above, and `Construct` for a type that is not a
+        // struct or an ordinary tuple -- have already answered this question. So the `false` cannot
+        // arrive here, and it throws if that ever stops being true, where a count of zero would quietly
+        // walk no fields.
+        size_t fields = 0;
+        if (!tree::arityOf(subject, fields)) {
+            throw std::logic_error("when: the guarded subject has no members");
+        }
+        for (size_t i = 0; i < fields; ++i) {
             round(
                 std::string(tree::childName(subject, i)),
                 i,
