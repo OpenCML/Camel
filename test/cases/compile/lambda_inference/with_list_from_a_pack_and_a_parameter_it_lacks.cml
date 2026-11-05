@@ -1,0 +1,21 @@
+// The other side of `with_list_from_a_pack_in_the_position.cml`: a position whose `with` list came
+// from a pack still says how many parameters it takes, and a lambda that writes one more than that
+// is refused at the parameter it does not reach -- named, with the expected type quoted -- rather
+// than accepted or crashed.
+//
+// `GradientAux<<w: float> () => float>` answers `<__pack_0_0: float> () => (float, float)`: one
+// `with` parameter and no ordinary ones, so `<w, ...rest> (x) => ...` has nowhere to put `x`.
+import { WithOf, ParamsOf } from types
+
+type GradientAux<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+
+with <w: float>
+func loss(): float {
+    return w
+}
+
+func main(): int sync {
+    let g: GradientAux<<w: float> () => float> = <w, ...rest> (x) => (x, 1.0)
+    println(`g ${g<2.0>()}`)
+    return 0
+}
