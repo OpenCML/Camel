@@ -291,6 +291,32 @@ this check cannot find them. And the check does not read every page: `RECORD_DIR
 `docs/handover/` can cite anything it likes and the denominator will not move -- the citation count
 is a reading about `docs/` and the code, not about our own record pages.
 
+## A `total` is a function of four things, and its command line is one of them
+
+`total` is `(tree, plan selection, tier, machine)`. Two runs that differ in any of the four are two
+readings, and neither corrects the other. Measured 2026-11-05 on one tree, one host, one shell:
+
+| command line | plans | `total` |
+| --- | --- | --- |
+| `npm run test` -- `smoke` + `test/plans/feat`, fast layer | 330 | 8858 |
+| `-Plan test/plans -Tier fast` -- the whole tree, fast layer | 336 | 8883 |
+
+The six plans between them are `test/plans/gpu`, which is not under `feat/**`. Both numbers are
+right; the difference is the selection. **A `total` quoted without its command line is an
+impression, not a reading** -- four people were bitten by this in one night, and every repair was
+"measure it again, with the command".
+
+Nor is there a conversion from a `declared` delta to a `total` delta: a `[[tests]]` entry runs once
+per back end in its `backends` list, plus once per extra `args` row. Three cases from one night:
+
+| lane | declared | total | why |
+| --- | --- | --- | --- |
+| `lane-truth3` | +2 | +2 | 1:1, one back end |
+| `lane-nextext` | +2 | +4 | 1:2, `nvm` and `fvm` |
+| `lane-extval` | +2 | +3 | 1:1.5, `nvm` + `fvm` for one entry and a single `std::gir` run for the other |
+
+So the delta is reported per batch, entry by entry, and never calculated.
+
 ## A fixture that writes a path into Camel source writes forward slashes
 
 The author's ruling of 2026-11-02 13:10, in response to the `interpreter_first_use` red: **a fixture
