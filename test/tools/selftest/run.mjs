@@ -41,6 +41,7 @@
 //     the only plan that runs the case, or the selection file records the shared case with a
 //      reason.
 import fs from 'fs'
+import os from 'os'
 import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
@@ -1053,6 +1054,48 @@ if (changedBase() !== 'origin/release') {
 }
 if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
+
+//  --- an empty selection says that it falls back to the layer ------------------------------
+// `--changed` with nothing to narrow by hands an empty target list to `run-tests.mjs`, whose
+// `loadPlans` reads "no target" as the whole plan tree: the run is the whole fast layer. That used
+// to be printed as "the whole fast layer ... is not run", a sentence the run contradicted -- the
+// host's `--changed-files` list is empty whenever a lane has no change against its base, so a
+// shared host ran 335 plans and the reading said it ran none. The fallback stays (a host run with
+// an empty list must still run something), but it names itself and its cause; and a selection that
+// really did select plans must print no such line, or the sentence would mean nothing.
+const changedScratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-changed-'))
+const fallbackLine = (output) =>
+    (output.match(/^\[WARN\] --changed:.*falling back to the whole fast layer \(\d+ plan file\(s\).*$/m) || [
+        '',
+    ])[0]
+const emptyChangedList = path.join(changedScratch, 'empty.txt')
+fs.writeFileSync(emptyChangedList, '')
+const emptySelection = runTestCli(['--changed', '--changed-files', emptyChangedList, '--list'])
+if (emptySelection.status !== 0) {
+    problems.push(`--changed on an empty list: exit ${emptySelection.status}, expected 0`)
+}
+if (!fallbackLine(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list did not say it falls back to the layer: ${emptySelection.output.trim()}`
+    )
+}
+if (!/\(the whole fast layer: smoke \+ feat\)/.test(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list did not print the layer it runs: ${emptySelection.output.trim()}`
+    )
+}
+const matchedChangedList = path.join(changedScratch, 'matched.txt')
+fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
+const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
+if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
+    problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+}
+if (fallbackLine(matchedSelection.output)) {
+    problems.push(
+        `--changed printed the fallback sentence for a selection that selected plans: ${matchedSelection.output.trim()}`
+    )
+}
+fs.rmSync(changedScratch, { recursive: true, force: true })
 
 // --- a benchmark whose timed pass fails --------------------------------------------------------
 // gives the `--timeit` failure payload no `mean_ms`; before the runner learnt to read it, the

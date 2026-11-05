@@ -3773,8 +3773,10 @@ async function main() {
     )
     if (testCount === 0 && options.targets.length > 0) {
         // A run that starts nothing is not a pass: every claim it could make is about tests it did
-        // not run. (No target at all is `scripts/test.js --changed` finding nothing to run, which is
-        // a legitimate no-op and says so, not a green run.) A target that reached no plan file at
+        // not run. (No target at all is not that zero: `loadPlans` reads it as the whole plan tree,
+        // so `scripts/test.js --changed` with an empty selection arrives here as the whole fast
+        // layer, and `test/runner.mjs#announceLayerFallback` is what makes that fallback a reading
+        // instead of a silent widening.) A target that reached no plan file at
         // all was already refused above: this is the other zero -- the plan files were read and
         // none of their entries belongs to this layer -- so the number is the count before the
         // filter (`plans` is the post-filter list and reads 0 here) and the flag that lifts it is

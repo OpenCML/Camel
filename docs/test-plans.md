@@ -504,13 +504,19 @@ way to run them is to name the plan file deliberately. The ordinary opt selectio
 `feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
 progen plan while `--tier all` runs it.
 
-Two ways the selection can come up empty are not the same answer and no longer read the same
+Three ways the selection can come up empty are not the same answer and no longer read the same
 either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
 a change that only touches a class the project keeps out of `--changed` (perf, GC stress, progen)
 -- and the widening is printed as a widening, with the files that caused it and the size of the layer
-it runs. A base branch or a rule file that cannot be **read** is refused with exit 2: the plans the
-change touches are unknown, so none is selected and no layer is run, and the refusal names the base
-(or the list, or the rules file) that failed and the layer it declines to run. `--tier all` combines
+it runs. A change with **no file in it** runs the whole fast layer as well, for a reason below the
+selection: an empty selection reaches `test/tools/run-tests.mjs#loadPlans` as "no target", and no
+target is the whole plan tree, which is exactly what a `--changed-files` list written for a lane
+with nothing changed hands over. That fallback is now printed with its cause and the size of the
+layer it runs; it used to say the opposite ("the whole fast layer ... is not run") while the run
+started every plan in it. A base branch, a changed-file list or a rule file that cannot be **read**
+is refused with exit 2: the plans the change touches are unknown, so none is selected and no layer
+is run, and the refusal names the base (or the list, or the rules file) that failed and the layer
+it declines to run. `--tier all` combines
 with `--changed` to run the slow tests of directory targets too; a layered plan then runs its slow
 cases, so `--tier all` is what reaches the autodiff/onnx comparisons. `--changed --list` prints the
 plan targets the changed files select without running them, and `--changed-files <path>` reads the
