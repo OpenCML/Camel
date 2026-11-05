@@ -23,6 +23,7 @@
 
 #include "module.h"
 
+#include "first_with_as_param_operator.h"
 #include "jvp.h"
 #include "jvp_operator.h"
 #include "remat_operator.h"
@@ -304,6 +305,9 @@ class TransformsExecutor : public Executor {
         for (auto &[name, kernel] : camel::transforms::rematOperatorKernels()) {
             all[name] = kernel;
         }
+        for (auto &[name, kernel] : camel::transforms::firstWithAsParamOperatorKernels()) {
+            all[name] = kernel;
+        }
         return all;
     }
 };
@@ -335,6 +339,12 @@ TransformsModule::TransformsModule(context_ptr_t ctx) : BuiltinModule("transform
     // the values are the function's, so the mark is a property of the graph and not a second
     // meaning of the call.
     for (const auto &group : camel::transforms::rematOperatorGroups()) {
+        exportEntity(group->name(), group);
+    }
+    // `first_with_as_param` reinterprets a signature: it answers a copy of the function's graph
+    // whose first `with` port is an ordinary one (first_with_as_param_operator.cpp).
+    camel::transforms::registerFirstWithAsParamOperatorMetadata();
+    for (const auto &group : camel::transforms::firstWithAsParamOperatorGroups()) {
         exportEntity(group->name(), group);
     }
 }
