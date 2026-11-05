@@ -224,6 +224,13 @@ desc = "The same program after std::opt::inline: every function is inlined into 
 # build prints it the same way every run, and the reasons it lists are the lowering's own -- a
 # lowering that moves it is a change this entry is meant to notice. The reading behind that, run by
 # run, is in docs/handover/reports/2026-11-05-rc04-answers-nothing-and-rc00-signals-under-gir-too.cn.md.
+# Pinned text is a prefix of what follows the colon, so a reason the summary gains *after* the last
+# one still leaves the needle green: a copy of this case whose `main` (test/cases/loops/compiled.cml#main)
+# took one more loop read `..., helper: the round contains OPER, helper: the state is a single
+# value, ...` and the entry above passed. The negative needle below is that same text followed by
+# the comma every further reason arrives behind, so the summary has to stop where the reading found
+# it; the reading, by the same two runs, is that `native rounds` is the only reason of main's that
+# repeats, so any comma at the end is a fifth reason and not a count of a fourth.
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
@@ -231,7 +238,7 @@ sweep = false
 args = ["-vv", "${case}", "std::opt::inline", "std::jit hot_threshold=0"]
 expect_exit = 0
 expect_output_contains = ["compiled & cached graph 'main' as framed code", "OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round contains OPER", "30", "21", "29"]
-expect_output_not_contains = ["compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
+expect_output_not_contains = ["OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round contains OPER,", "compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
 
 [[tests]]
 name = "framed.loops.moving"
