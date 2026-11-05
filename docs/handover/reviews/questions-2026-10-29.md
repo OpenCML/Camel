@@ -3250,3 +3250,13 @@ S2 改用 `grad` 等这一步落地后再做。
 2. **库层 `grad`**（16:40）：`grad(f) = vjp(first_with_as_param(f))` 取第一个余切；`has_aux` 改成反向写法；同一次合并删掉 `withIsPromoted` 一路，那三组手算的数是判据。
 
 两条各派一条车道，今天推进。
+
+## 负责人定（2026-11-05 19:20）：`match type` 拆数组维度
+
+负责人同意 22:45 那条方向：`match type` 的 `case E[...Dims]` 拆开数组类型的维度，`Dims` 是编译期的值包。已写进设计原则第 5 节（中英文同句）。随之要做的：
+- 在库里用它写 `ShapeOf<T>`，`tensor:shape` 的声明改成 `func shape::<T>(t: T): ShapeOf<T>`；
+- 删掉 `sumToInfer`、`shapeListType`、`shapeInfer` 三处 C++ 里说形状的代码；
+- `ElementOf`、`WithElement`、`RowsOf` 改用 GN 写在库里，删掉 `typecall.cpp` 里的登记；
+- 判据：那 8 条动态 batch 导出用例转绿。
+
+负责人另定：先由协调者把分支和车道清理干净，包括 `hold/fsh-dev`、`release` 两条的去留，由他按清理的结果处理。这期间决策者暂停定时检查；问题页照旧写进 `questions/`，恢复检查后当轮答。
