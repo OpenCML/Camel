@@ -1114,6 +1114,11 @@ void Context::pinRuntimeProgram(const camel::runtime::Program *program) {
     runtimeGraphMgr_->pin(program);
 }
 
+void Context::unpinRuntimeProgram(const camel::runtime::Program *program) {
+    GUARD(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
+    runtimeGraphMgr_->unpin(program);
+}
+
 void Context::releaseDetachedRuntimeGraphs() {
     GUARD(runtimeGraphMgr_ != nullptr, "Runtime graph manager is not initialized.");
     runtimeGraphMgr_->releaseDetached();

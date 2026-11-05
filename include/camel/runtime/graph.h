@@ -1286,10 +1286,10 @@ inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {
 /// when no root, no function value and no Program that copies it names it.
 ///
 /// What roots a Program: being the installed program of the context, a detached program a back
-/// end is running (trackDetached), a pinned one (operator definitions), a program the pipeline
-/// has made and not yet settled (reserve ... settle), and a program a running call was entered
-/// through (rootForRun). Everything else is reached from those: a Program traces its graphs, a
-/// graph its static values, a function value its Program.
+/// end is running (trackDetached), a pinned one (an operator definition, a draft group while the
+/// group lives), a program the pipeline has made and not yet settled (reserve ... settle), and a
+/// program a running call was entered through (rootForRun). Everything else is reached from
+/// those: a Program traces its graphs, a graph its static values, a function value its Program.
 ///
 /// Two collections free what is unreached, and both mark through the heap, so that a function
 /// value of a Program keeps it. Between passes (nothing runs) collect() has the heap marked
@@ -1352,9 +1352,20 @@ class GCGraphManager {
     /// answers for a view of the latest program (a dump, the debugger); whoever runs or
     /// rewrites a graph has the program it was given.
     const Program *programOf(const GCGraph *graph) const;
-    /// Keeps a program that belongs to no context program alive for as long as the manager:
-    /// the definition graphs of operators (camel/runtime/definitions.h).
+    /// Keeps a program whose holder keeps it outside the heap alive: the definition graphs of
+    /// operators, for as long as the context (camel/runtime/definitions.h), and a draft group's
+    /// program, for as long as the group (draft_session.h#GraphDraftGroup). A holder that is not
+    /// in the heap is a holder the collector cannot see, so the holder says so here; unpin() is
+    /// what says it is done, and the next sweep frees the program if nothing else reaches it.
+    ///
+    /// This is not a nicety: a program the collector does not reach is a program whose graphs it
+    /// does not trace, and a collection that falls in that window moves the values their static
+    /// areas hold and leaves the old addresses in the slots. Measured under --gc-check poison on
+    /// the two `modules.nn` cases: a reserved-but-unrooted draft group is a report, not a pass.
     void pin(const Program *program);
+    /// The holder is done: the program stops being a root. Frees nothing itself -- the sweep that
+    /// follows does, so a pin/unpin pair inside one collection window never leaves a hole.
+    void unpin(const Program *program);
 
     /// Frees the Programs and graph versions nothing reaches, marking from the roots and the
     /// heap. Does nothing while a program runs.
