@@ -3,11 +3,12 @@
  * the gradient of the first member, and the two seeds below are what separates it from a pullback that
  * never reached the weight at all.
  *
- * This case used to pin a refusal. `transpose` took only a result whose cotangent was a `float` or an
- * `f32`, so `vjp(loss)` for a pair-returning `loss` stopped inside the library with "takes a function
- * whose result has a cotangent" -- and that sentence was wrong: a pair has a cotangent, the pair of the
- * members' cotangents (design principles 9.9, author `f6ee4f5d0`). With the law asking the result's
- * tangent space instead of listing two type codes, the same call answers numbers.
+ * This case used to pin a refusal. `transpose` took only a result whose cotangent was one of the two
+ * scalar float widths, so `vjp(loss)` for a pair-returning `loss` stopped inside the library with
+ * "takes a function whose result has a cotangent" -- and that sentence was wrong: a pair has a
+ * cotangent, the pair of the members' cotangents (design principles 9.9, author `f6ee4f5d0`). With the
+ * law asking the result's tangent space instead of listing two type codes, the same call answers
+ * numbers.
  *
  * Why two seeds and not one. `grad=0.0` is a legal gradient, so a single zero would not tell a walk
  * that never distributed the cotangent from a function whose derivative really is zero. Seeding
