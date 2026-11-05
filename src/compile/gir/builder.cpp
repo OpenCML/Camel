@@ -1251,14 +1251,26 @@ FunctionType *Builder::completeLambdaSignature(
                     expectedTotal,
                     effectiveWith + funcType->normTypesCount()));
         }
-    } else if (expectedTotal < effectiveWith + restHole->index) {
+    } else if (restHole->index >= withCount &&
+               expectedFunc->normTypesCount() < restHole->index - withCount) {
+        // An ordinary rest parameter stands for the expected type's ordinary members from its own
+        // position on, and for however many there are -- none included -- so the one thing the
+        // position owes it is to reach it. The position is counted among the expected type's
+        // ordinary members: the lambda's `with` parameters are numbered before them, and a `with`
+        // list the lambda writes is never longer or shorter than the position's (only a pack
+        // absorbs a difference, and a pack has its own comparison above), so counting them here as
+        // well would demand `with` members' worth of ordinary ones that nothing stands in for.
+        //
+        // A pack among the `with` parameters is not this comparison's subject: it sits at a `with`
+        // index, so the position it needs in front of it is a number of `with` members, which the
+        // comparison above already states, and the members past that point are what it stands for.
         report(
             *restHole,
             std::format(
                 "the expected type '{}' ends before the rest parameter, which stands for the "
                 "parameters from position {} on",
                 expectedFunc->toString(),
-                restHole->index + 1));
+                restHole->index - withCount + 1));
     }
     const auto typeAt = [&](size_t index) -> Type * {
         return index < withCount ? funcType->withTypeAt(index)
@@ -1333,6 +1345,23 @@ FunctionType *Builder::completeLambdaSignature(
                     factory.addNormArg(base + "_" + std::to_string(k - i), expanded, false);
                 }
                 continue;
+            }
+            // A hole is filled from a member the position has. A rest parameter, or a pack among
+            // the `with` parameters, is the one shape where the lambda's list may be longer than
+            // what the comparison above measures -- that comparison is about the hole the shape
+            // stands for -- so a parameter written after it asks here whether the position reaches
+            // it at all. Reading past the end instead would take whatever lies next in the type's
+            // storage.
+            const size_t memberAt = i < withCount ? i : i - withCount;
+            const size_t members  = i < withCount ? expectedWith : expectedFunc->normTypesCount();
+            if (memberAt >= members) {
+                report(
+                    param,
+                    std::format(
+                        "the expected type '{}' ends before the parameter at position {}, which "
+                        "the lambda writes",
+                        expectedFunc->toString(),
+                        i + 1));
             }
             Type *const wanted                     = i < withCount
                                                          ? expectedFunc->withTypeAt(i)

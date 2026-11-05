@@ -1,0 +1,47 @@
+// The `with` list a lambda stands in can be a pack itself: a declared type writes the function
+// type's `with` prefix as `...WithOf<F>` (stdlib/types.cml#Gradient, and the `has_aux` result the
+// library owes), and instantiating it turns those into the members `F` has -- one parameter
+// named after nothing the source wrote (`<__pack_0_0: float>`). A lambda written `<w, ...rest>`
+// there takes the first `with` parameter by name and the pack takes the ones left over, exactly
+// the rule an ordinary rest parameter follows from the position (design principles 5.9).
+//
+//   one    `<w: float> () => float`                    the pack stands for none; `w` is the position's
+//   two    `<w: float, k: float> () => float`          `rest` stands for `k`, so the call that hands
+//                                                      two `with` arguments is the one the position
+//                                                      declares -- a lambda that had not absorbed `k`
+//                                                      would answer a type of one `with` parameter
+//                                                      and `two<2.0, 3.0>()` would not match it
+//   three  `<w: float> (x: float, y: float) => float`  the pack is empty and the ordinary parameters
+//                                                      still come from the position, one each
+//
+// Each line is the pair the result type names: the gradient-like first member and the auxiliary
+// second one, which is the shape `has_aux` needs from the library.
+import { WithOf, ParamsOf } from types
+
+type GradientAux<F> = <...WithOf<F>> (...ParamsOf<F>) => (float, float)
+
+with <w: float>
+func loss(): float {
+    return w
+}
+
+with <w: float, k: float>
+func loss2(): float {
+    return w * k
+}
+
+with <w: float>
+func loss3(x: float, y: float): float {
+    return w * x * y
+}
+
+func main(): int sync {
+    let one: GradientAux<<w: float> () => float> = <w, ...rest> () => (w, 1.0)
+    let two: GradientAux<<w: float, k: float> () => float> = <w, ...rest> () => (w, 1.0)
+    let three: GradientAux<<w: float> (x: float, y: float) => float> =
+        <w, ...rest> (x, y) => (w * x * y, 1.0)
+    println(`one ${one<2.0>()}`)
+    println(`two ${two<2.0, 3.0>()}`)
+    println(`three ${three<2.0>(3.0, 4.0)}`)
+    return 0
+}

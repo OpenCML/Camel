@@ -1,0 +1,15 @@
+// The contract the rest parameter's completion keeps: it stands for the parameters the expected
+// type has from its own position on, so the position has to reach that position -- and it may have
+// exactly as many as the lambda writes before the rest, no more and no fewer.
+//
+// `apply` expects `(a: float) => float`, so a lambda written `(a, b, ...xs)` asks for two ordinary
+// members and the position has one. The report names the rest parameter and the position it stands
+// at (3), rather than accepting the program or reading past the end of the expected type.
+func apply(g: (a: float) => float): float {
+    return g(1.0)
+}
+
+func main(): int sync {
+    println(apply((a, b, ...xs) => 0.0))
+    return 0
+}
