@@ -1508,8 +1508,8 @@ expect_output_contains = ["TRANSPOSE function=f skip=kind", "kind=8", "transpose
 expect_stdout_not_contains = ["f_pullback="]
 verify_script = """
 ({ input, assert }) => {
-const lines = input.normalized.stderr.split('\n').filter((l) => /^TRANSPOSE function=f skip=kind node=\\d+ kind=8$/.test(l))
-assert(lines.length === 1, `expected exactly one 'TRANSPOSE function=f skip=kind node=<n> kind=8' line, found ${lines.length} in: ${input.normalized.stderr}`)
+const hits = input.normalized.stderr.split('\n').map((l) => l.trim()).filter((l) => l.startsWith('TRANSPOSE function=f skip=kind node=') && l.endsWith(' kind=8'))
+assert(hits.length === 1, `expected exactly one 'TRANSPOSE function=f skip=kind node=<n> kind=8' line, found ${hits.length} in: ${input.normalized.stderr}`)
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
