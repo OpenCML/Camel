@@ -10,6 +10,8 @@
 | (b) 链位不动、边照写 | 分支前那条语句，但 join 仍拿 sync 入边 | 8521 / pass 5518 / **fail 2983**，forks 0 | 分支体**没人等**，`The branch has side effects but is never executed` 出现 **21** 次，`10_sync_block` 跑起来但只打出 `the body is a sync block` 和 `0` |
 | (c) 链位不动、边不写 | 分支前那条语句，值不写 sync 边 | 8521 / pass 5447 / **fail 3054**，forks 0 | 目标绿、警告 **6** 次（半一 10 次）；`linear.cml` 仍 2 条违例 |
 
+## 默认
+
 基线 `e26d8381d` 是 8515 / 4736 / 3759，`linear.cml` 3 条违例。**(c) 是唯一同时做到"目标绿 + 红更少 + 不丢副作用"的一组**，已落 `22c95bf3c`（半一 `8585d8de6` 之上）。
 
 ## 为什么这不是写法问题

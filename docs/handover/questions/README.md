@@ -70,7 +70,7 @@
 | [`2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects`](2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects.cn.md) | 放宽 `Float64` 这道闸门时，十余处写死的类型会在同一刻变成缺陷 |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ |
-| [`the-switch-that-reaches-no-target`](the-switch-that-reaches-no-target.md) | The switch that reaches no target |
+| [`the-switch-that-reaches-no-target`](../reviews/the-switch-that-reaches-no-target.md) | The switch that reaches no target |
 | [`2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier`](2026-11-02-is-a-chain-start-the-same-question-as-an-order-carrier.cn.md) | `nodeTakesAnOrder` 与 `isChainStatement`：一个问题还是两个？ |
 | [`2026-11-02-the-gc-soak-step-is-not-the-eq-rewrite`](2026-11-02-the-gc-soak-step-is-not-the-eq-rewrite.cn.md) | `gc_soak` 的那一跳不是 `!=` 改 `!(==)` 造成的 —— 作者 12:10 的机制假设被读数证伪，预算怎么办 |
 | [`2026-11-02-what-carries-the-residuals`](2026-11-02-what-carries-the-residuals.cn.md) | 残差用什么承载？ |
@@ -132,4 +132,4 @@
 | [`2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects`](2026-11-04-widening-the-float-guard-turns-ten-hardcoded-types-into-defects.cn.md) | 放宽 `Float64` 这道闸门时，十余处写死的类型会在同一刻变成缺陷 |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ |
-| [`the-switch-that-reaches-no-target`](the-switch-that-reaches-no-target.md) | The switch that reaches no target |
+| [`the-switch-that-reaches-no-target`](../reviews/the-switch-that-reaches-no-target.md) | The switch that reaches no target |
