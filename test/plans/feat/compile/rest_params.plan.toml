@@ -288,3 +288,14 @@ expect_exit = 1
 expect_output_contains = ["Unresolved reference: 'xs'"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 8000
+
+[[tests]]
+name = "lambda_rest_read_as_a_value"
+desc = "A lambda's rest parameter read as a value, not spread: `(...xs) => xs.[0] + xs.[1]`. Until 2026-11-05 the read killed the process at run time -- `Camel Invariant Violation: !normInputs.empty()`, `FILL node must have one source input` at `src/passes/sched/nodevm/nodevm.cpp` -- because the tuple the rest parameter stands for was built by linking its members as `With` inputs alone, and a FILL reads the shape it fills through its `Norm` input. Spreading never reached the scheduler (it is answered at build time), which is why the case written for spreading was green while reading the same pack was not. Two different callers, so the answer has to come from the arguments: 3.0 and 30.0."
+kind = "behavior"
+case = "../../../cases/compile/rest_params/lambda_rest_read_as_a_value.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "3.0\n30.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
