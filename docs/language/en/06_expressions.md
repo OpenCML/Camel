@@ -651,7 +651,7 @@ A function type is written `(x: T) => R`, and the parameters must be named: `(x:
   }
   ```
 
-A parameter that the expected type does not determine is an error (`SemanticDiag::LambdaParameterWithoutType`, located at that parameter): the lambda does not stand in such a position (`let g = (x) => x + 1`, `((x) => x)(1)`), the expected type is not a function type, the number of parameters differs, or the expected type still holds a type variable that this position does not bind. With no expected type it does not become an `any` (5.10): write the type.
+A parameter that the expected type does not determine is an error (`SemanticDiag::LambdaParameterWithoutType`, located at that parameter): the lambda does not stand in such a position (`let g = (x) => x + 1`, `((x) => x)(1)`), the expected type is not a function type, the number of parameters differs, the expected type ends before a parameter the lambda writes (it has fewer parameters than the position), or the expected type still holds a type variable that this position does not bind. With no expected type it does not become an `any` (5.10): write the type.
 
 **Functions are values.** The name of a function can be used wherever a value can be written: as an argument, as a `with` argument, in `let g = f`, in `return f`, as an element of an array or tuple, as the value of a branch arm.
 
