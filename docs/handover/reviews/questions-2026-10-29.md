@@ -3185,3 +3185,12 @@ S2 改用 `grad` 等这一步落地后再做。
 **六、`mul_tensor_t` 一族律读的值由谁交（`who-carries-the-value-that-mul-tensor-t-reads`）**：页首已经写明，原默认被 `lane-capturectx` 的实测推翻，形状作为已知操作数交过去。这与 04:20 以来的规则一致，`f20562f09` 已经按这条落地。剩下 `shapeCarrierOf`（4 处）和 `shapeFromTypeOf`（1 处），继续按 07:00 那条删干净。
 
 六页挪到 `reviews/` 留档。
+
+## 裁定（2026-11-05 13:00）：第二条的读数
+
+**`the-reading-ruling-two-gives-is-green-before-the-deletion`**：照默认办。读数说明我 11:30 给的判据不对：那两条用例在守卫删前删后都是绿的，测不出守卫的作用。改正如下：
+- 第二条与第三条在 P0-2 收尾的同一次合并里一起做，不单独删守卫。
+- 判据换成一条能测出差别的用例：构造一个程序，让守卫拦下一次合法的链位交让，删前红，删后绿。如果构造不出来，就说明这个守卫在今天的树上碰不到任何情形，删它只是清理死代码，判据改为全量快层不变。
+- `branch.graph`、`generic.gate_branch_wait` 不再作为这一条的判据。
+
+页挪到 `reviews/` 留档。另：`f7405760b` 把 milestone 层排定在每天 09:00（Asia/Shanghai）和每次发布之前，对。
