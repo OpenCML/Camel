@@ -1,0 +1,36 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// `sum_to` reduces the **leading** axes and only those (ruling 甲, `stdlib/tensor.cml#sum_to`): its
+// second argument is the target extents themselves, and they must be a suffix of the operand's
+// shape, so the axes in front of them are summed away and every axis the target states is kept as
+// it states it.
+//
+// Three targets on two operands, because the answers separate the three reductions a broadcast's
+// adjoint actually asks for. Each number is picked so that a different reading of the same call
+// cannot land on it:
+//
+//   * `[2, 3]` to `[3]` removes the leading axis: `[5, 7, 9]`, three numbers per answer, each the
+//     sum of the two elements in its column.
+//   * `[2, 3, 4]` to `[4]` removes the first **two** axes: `[66, 72, 78, 84]`, six numbers per
+//     answer -- and each one is a sum of six operand elements, not of three.
+//   * `[2, 3, 4]` to `[3, 4]` removes only the first axis: each answer is the sum of **two**
+//     elements, `14 + 2k` and so on. Nothing reduces this to a whole-tensor sum: the total of the
+//     operand is 300, and 300 is not one of these numbers.
+//
+// The refusal half of the same rule is beside this case: `sum_to_refuses_a_shape_it_cannot_reach.cml`
+// (a target that is not a suffix, refused by position) and
+// `sum_to_refuses_a_target_longer_than_its_operand.cml`.
+import { sum_to } from tensor
+
+func main(): int sync {
+    let m: float[2, 3] = [[1.0, 2.0, 3.0], [4.0, 5.0, 6.0]]
+    let c: float[2, 3, 4] = [
+        [[1.0, 2.0, 3.0, 4.0], [5.0, 6.0, 7.0, 8.0], [9.0, 10.0, 11.0, 12.0]],
+        [[13.0, 14.0, 15.0, 16.0], [17.0, 18.0, 19.0, 20.0], [21.0, 22.0, 23.0, 24.0]]
+    ]
+    println(`sum_to(m, [3]) = ${sum_to(m, [3]):.1f}`)
+    println(`sum_to(c, [4]) = ${sum_to(c, [4]):.1f}`)
+    println(`sum_to(c, [3, 4]) = ${sum_to(c, [3, 4]):.1f}`)
+    return 0
+}
