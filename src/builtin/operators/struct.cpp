@@ -65,7 +65,11 @@ slot_t __len_arr__(ArgsView &with, ArgsView &norm, Context &ctx) {
 // function takes is a value nobody has (author, 2026-11-03 17:55).
 //
 // So the language gets one function whose answer is a fact of its **type argument** and of nothing
-// else: `extent_of::<float[2, 3]>()` is `[2, 3]`, an `int[]`. A type that leaves an extent open
+// else: `extent_of::<float[2, 3]>()` is `[2, 3]`, an `int[]`. The extents are the type's own, one
+// level: `float[2][3]` is an array of arrays (three `float[2]` values), so it answers `[3]` -- the
+// list `shape` answers for a value of that type -- and `[2, 3]` is what the rank-2 `float[2, 3]`
+// answers; the element type's extent is the question `extent_of::<float[2]>()` answers. A type
+// that leaves an extent open
 // answers nothing and is refused where the call is instantiated (`extentOfResolver`), which is the
 // same rule `statedExtentsOf` (camel/core/type/composite/array.h) spells for every other reader.
 //
