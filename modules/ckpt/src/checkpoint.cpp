@@ -42,7 +42,7 @@ using tensor::Array;
 using utils::sha256Hex;
 
 // What a tree and a leaf are, and how a path is written: core::type::tree.
-using core::type::tree::arityOf;
+using core::type::tree::arity;
 using core::type::tree::childName;
 using core::type::tree::childPath;
 using core::type::tree::childType;
@@ -115,8 +115,8 @@ NativeNode snapshot(Type *type, slot_t value, const std::string &path, Checkpoin
         // `isInternal` has just established that the type is a struct or an ordinary tuple, so this
         // walk's refusal is about a type that has no members. It is still written out: a checkpoint
         // that cannot count its members must say so, not walk a count read out of another object.
-        size_t members = 0;
-        if (!arityOf(type, members))
+        const auto members = arity(type);
+        if (!members)
             mismatch(path, "a checkpoint member walk needs a struct or a tuple, got " + type->toString());
         node.spec["members"] = Json::array();
         for (size_t i = 0; i < members; ++i) {
@@ -172,12 +172,12 @@ NativeNode readNode(
         mismatch(path, "checkpoint type structure differs from requested type");
     if (isInternal(type)) {
         const auto &members = spec.at("members");
-        size_t count = 0;
-        if (!arityOf(type, count))
+        const auto count = arity(type);
+        if (!count)
             mismatch(path, "a checkpoint member walk needs a struct or a tuple, got " + type->toString());
-        if (!members.is_array() || members.size() != count)
+        if (!members.is_array() || members.size() != *count)
             mismatch(path, "member count differs");
-        for (size_t i = 0; i < count; ++i) {
+        for (size_t i = 0; i < *count; ++i) {
             const auto name = childName(type, i);
             if (members[i].at("name") != name)
                 mismatch(childPath(path, type, i), "member name or order differs");
@@ -238,13 +238,13 @@ NativeNode readNode(
 slot_t rebuild(Type *type, const NativeNode &node) {
     const auto tag = kind(type);
     if (isInternal(type)) {
-        size_t count = 0;
-        if (!arityOf(type, count))
+        const auto count = arity(type);
+        if (!count)
             mismatch("", "a checkpoint rebuild needs a struct or a tuple, got " + type->toString());
         const auto object = type->code() == TypeCode::Struct
-                                ? toSlot(::Struct::create(count, mm::autoSpace()))
-                                : toSlot(::Tuple::create(count, mm::autoSpace()));
-        for (size_t i = 0; i < count; ++i) {
+                                ? toSlot(::Struct::create(*count, mm::autoSpace()))
+                                : toSlot(::Tuple::create(*count, mm::autoSpace()));
+        for (size_t i = 0; i < *count; ++i) {
             const auto child = rebuild(childType(type, i), node.children[i]);
             if (type->code() == TypeCode::Struct)
                 fromSlot<::Struct *>(object)->set<slot_t>(

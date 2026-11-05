@@ -78,12 +78,12 @@ node_handle_t Builder::expandTreeCall(
     const auto walk = [&](auto &&self, Type *shape, node_handle_t value) -> void {
         // No members is the leaf, which is what this walk does with every type that has none; the
         // tag/cell rule stays `internal`'s (a tagged or cell tuple has members and is a leaf here).
-        size_t members = 0;
-        if (!tr::arityOf(shape, members) || !internal(shape)) {
+        const auto members = tr::arity(shape);
+        if (!members || !internal(shape)) {
             leaves.push_back(value);
             return;
         }
-        for (size_t i = 0; i < members; ++i) {
+        for (size_t i = 0; i < *members; ++i) {
             self(self, fieldType(shape, i), access(value, i));
         }
     };

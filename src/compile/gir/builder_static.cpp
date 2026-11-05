@@ -99,15 +99,15 @@ bool sameShapeAs(const Type *head, const Type *walked) {
         !tree::isInternal(head) || !tree::isInternal(walked)) {
         return false;
     }
-    size_t members    = 0;
-    size_t otherShape = 0;
+    const auto members    = tree::arity(head);
+    const auto otherShape = tree::arity(walked);
     // The empty answer is the answer to the question this function asks: two types that are not both
     // structs or ordinary tuples do not have the same shape. (`isInternal` above has already refused
     // those, so the branch is the function's own "no", not a case it skips.)
-    if (!tree::arityOf(head, members) || !tree::arityOf(walked, otherShape) || members != otherShape) {
+    if (!members || !otherShape || *members != *otherShape) {
         return false;
     }
-    for (size_t i = 0; i < members; ++i) {
+    for (size_t i = 0; i < *members; ++i) {
         if (tree::childName(head, i) != tree::childName(walked, i)) {
             return false;
         }
@@ -809,13 +809,10 @@ node_handle_t Builder::visitStaticForNode(
     const std::string tagsName  = gct->staticForTagsName();
     const GCT::node_ptr_t body  = gct->staticForBody();
     // `isInternal(subject)` above has already refused a subject that is not a struct or a tuple with
-    // `StaticForNotComposite`; the count is asked again here through the no-answer form, and its
-    // empty value says the same thing in the same words instead of counting zero rounds.
-    // `isInternal(subject)` above has already refused a subject that is not a struct or a tuple with
-    // `StaticForNotComposite`; the count is asked again through the no-answer form, and its `false`
-    // says the same thing in the same words instead of counting zero rounds.
-    size_t count = 0;
-    if (!tree::arityOf(subject, count)) {
+    // `StaticForNotComposite`; the count is asked again here through the no-answer form, and its empty
+    // value says the same thing in the same words instead of counting zero rounds.
+    const auto count = tree::arity(subject);
+    if (!count) {
         diags_->of(SemanticDiag::StaticForNotComposite)
             .atOrigin(gct->origin())
             .commit(subject->toString());
@@ -825,7 +822,7 @@ node_handle_t Builder::visitStaticForNode(
     if (shape != nullptr) {
         *shape = subject;
     }
-    for (size_t i = 0; i < count; ++i) {
+    for (size_t i = 0; i < *count; ++i) {
         const std::string entryName = tree::childName(subject, i);
         // `F` is looked up from the front of the bindings (findTypeBinding scans from there),
         // and the fields are walked in declaration order. `indices` binds no `F`: the round's
@@ -1051,12 +1048,14 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         if (const RestBinding *rest = restBindingNamed(subject->name())) {
             Type *tupleType = boundType(rest->tuple.type);
             // A compile-time tuple is one that has positions to walk; asking the no-answer form is that
-            // question, and `false` means "not a sequence" rather than a sequence of no rounds.
-            size_t members = 0;
-            if (tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
-                tree::isInternal(tupleType) && tree::arityOf(tupleType, members)) {
+            // question, and the empty value means "not a sequence" rather than a sequence of no rounds.
+            const auto members = tupleType != nullptr && tupleType->code() == TypeCode::Tuple &&
+                                         tree::isInternal(tupleType)
+                                     ? tree::arity(tupleType)
+                                     : std::nullopt;
+            if (members) {
                 StaticSequence sequence;
-                for (size_t i = 0; i < members && i < rest->tuple.elements.size(); ++i) {
+                for (size_t i = 0; i < *members && i < rest->tuple.elements.size(); ++i) {
                     sequence.elements.push_back(rest->tuple.elements[i]);
                 }
                 return sequence;
@@ -1264,13 +1263,17 @@ node_handle_t Builder::visitStaticLoopNode(const GCT::node_ptr_t &gct) {
 
     // A subject that is not walked by a sequence is walked by its members, and both entrances above
     // (the `ts` form at `StaticIndicesNotTuple`, the value form at `StaticForNotComposite`) have
-    // already refused a subject with none with the diagnostic its own branch owns. So the `false`
+    // already refused a subject with none with the diagnostic its own branch owns. So the empty answer
     // cannot arrive here -- and it throws rather than running no rounds if that ever stops being true.
     size_t count = 0;
     if (bySequence) {
         count = written->rounds();
-    } else if (!tree::arityOf(subject, count)) {
-        throw std::logic_error("static loop: the guarded subject has no members");
+    } else {
+        const auto members = tree::arity(subject);
+        if (!members) {
+            throw std::logic_error("static loop: the guarded subject has no members");
+        }
+        count = *members;
     }
     for (size_t i = 0; i < count; ++i) {
         // The name of the walked entry: for `fields` the field's name and for `indices` the

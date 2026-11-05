@@ -533,12 +533,12 @@ std::string resultCotangentRefusalImpl(const Type *result) {
         code == camel::core::type::TypeCode::Struct) {
         // Member by member, because that is how the addition of an aggregate is defined
         // (`accumulate`), and the member that fails is named with its index.
-        size_t count = 0;
-        if (!camel::core::type::tree::arityOf(result, count)) {
+        const auto count = camel::core::type::tree::arity(result);
+        if (!count) {
             return "`" + result->toString() + "` is not a type with members, and the cotangent of an " +
                    "aggregate is defined member by member";
         }
-        for (size_t i = 0; i < count; ++i) {
+        for (size_t i = 0; i < *count; ++i) {
             const Type *const memberType = camel::core::type::tree::childType(result, i);
             const std::string inner        = resultCotangentRefusalImpl(memberType);
             if (!inner.empty()) {
@@ -1544,15 +1544,15 @@ bool buildTransposeMember(
             if (space != nullptr &&
                 (space->code() == camel::core::type::TypeCode::Tuple ||
                  space->code() == camel::core::type::TypeCode::Struct)) {
-                size_t count = 0;
-                if (!camel::core::type::tree::arityOf(space, count)) {
+                const auto count = camel::core::type::tree::arity(space);
+                if (!count) {
                     // Not a type with members: the aggregate branch of this sum cannot run, and a
                     // count read out of another type's bytes would have made it run on nothing.
                     return rt::kInvalidNodeRef;
                 }
                 std::vector<gc_node_ref_t> parts;
-                parts.reserve(count);
-                for (size_t i = 0; i < count; ++i) {
+                parts.reserve(*count);
+                for (size_t i = 0; i < *count; ++i) {
                     Type *const memberType = camel::core::type::tree::childType(space, i);
                     const camel::core::TangentSpaceAnswer memberSpace =
                         memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
@@ -1768,7 +1768,8 @@ bool buildTransposeMember(
         // How many places a value of aggregate type has: a Fill knows its components, anything else
         // has to be asked its type -- a tuple's arity and a struct's field count are the same
         // question to `tree::arity`, and a struct parameter read by name is exactly the value that
-        // has no Fill of its own.
+        // has no Fill of its own. The condition is `arity`'s own domain, so `.value()` cannot throw
+        // here; a `0` fallback would have sized nothing and said nothing.
         const auto aggregateSlots = [&](gc_node_ref_t ref) -> size_t {
             const camel::runtime::GCNode *node = function->node(ref);
             if (node == nullptr) {
@@ -1781,7 +1782,7 @@ bool buildTransposeMember(
             return type != nullptr &&
                            (type->code() == camel::core::type::TypeCode::Tuple ||
                             type->code() == camel::core::type::TypeCode::Struct)
-                       ? camel::core::type::tree::arity(type)
+                       ? camel::core::type::tree::arity(type).value()
                        : 0;
         };
         // Whether a value can hold a cotangent at all. The type answers, through the same query `jvp`
@@ -3173,21 +3174,21 @@ bool buildTransposeMember(
                        << " why=no-tangent-space-for-the-parameter\n";
                     return false;
                 }
-                size_t arity = 0;
-                if (!camel::core::type::tree::arityOf(joinPrimal, arity)) {
+                const auto memberCount = camel::core::type::tree::arity(joinPrimal);
+                if (!memberCount) {
                     refuse(TransposeRefusalCause::Component);
                     os << " node=" << ref << " type=" << joinPrimal->toString()
                        << " why=not-a-type-with-members\n";
                     return false;
                 }
-                if (slots->second.size() > arity) {
+                if (slots->second.size() > *memberCount) {
                     refuse(TransposeRefusalCause::Component);
                     os << " node=" << ref << " slots=" << slots->second.size()
-                       << " arity=" << arity << '\n';
+                       << " arity=" << *memberCount << '\n';
                     return false;
                 }
                 std::vector<gc_node_ref_t> parts;
-                for (size_t i = 0; i < arity; ++i) {
+                for (size_t i = 0; i < *memberCount; ++i) {
                     Type *const memberType = camel::core::type::tree::childType(joinPrimal, i);
                     const camel::core::TangentSpaceAnswer memberSpace =
                         memberType != nullptr ? camel::core::tangentSpaceOf(memberType)
@@ -3360,7 +3361,7 @@ bool buildTransposeMember(
                            holderType != nullptr &&
                            (holderType->code() == camel::core::type::TypeCode::Tuple ||
                             holderType->code() == camel::core::type::TypeCode::Struct) &&
-                           member < camel::core::type::tree::arity(holderType)) {
+                           member < camel::core::type::tree::arity(holderType).value()) {
                     slotSpace =
                         cotangentTypeOfType(camel::core::type::tree::childType(holderType, member));
                 }
@@ -3393,12 +3394,13 @@ bool buildTransposeMember(
                     // name, never dropped.
                     //
                     // **How many members, and how one of them is read back.** A tuple or a struct
-                    // states both in its type: the count is `tree::arityOf`'s and member `i` is
+                    // states both in its type: the count is `tree::arity`'s and member `i` is
                     // `tree::childType(wholeType, i)`, taken at a place by an `Accs`
-                    // (`GCAccsKind::TupleIndex`/`StructKey`). An array states neither through
-                    // `tree::arity` -- that function reads one object's bytes as a tuple's layout
-                    // and answers `f32[3]` with 131961841501032 -- so its count is the extent the
-                    // type states (`statedExtentsOf`, rank one) and its member is the element
+                    // (`GCAccsKind::TupleIndex`/`StructKey`). An array states neither that way --
+                    // `tree::arity` answers nothing for it, and answered a count read out of another
+                    // object's bytes (`f32[3]` as 131961841501032) before the ruling `a2cc57100` -- so
+                    // its count is the extent the type states (`statedExtentsOf`, rank one) and its
+                    // member is the element
                     // the array's own index operator, `:op/idx_arr`, takes. **A member by place and
                     // an element by index are two different reads and not one spelled twice**: the
                     // `Accs` names a slot of an aggregate's layout and the array has no such slot
@@ -3408,21 +3410,16 @@ bool buildTransposeMember(
                     const auto parts          = function->withInputsOf(ref);
                     const gc_node_ref_t whole = cotangent[ref];
                     Type *const wholeType     = cotangentTypeOf(ref);
-                    size_t memberCount        = 0;
-                    bool membersByIndex       = false;
-                    // **Where the `arity` signature change lands.** The author's ruling
-                    // (`a2cc57100`) makes `tree::arity` itself answer no answer
-                    // (`std::optional<size_t>`) and deletes `arityOf`, so one name is left. This
-                    // site is written with `arityOf` because that is the tree it landed in; when
-                    // that change arrives the migration here is the unwrapping of that one answer
-                    // and nothing else in this case moves -- `if (!memberCountKnown)` becomes the
-                    // same test on `arity(wholeType).has_value()`. The file's other `arity` call
-                    // site (`buildTransposeMember`'s `Accs` case, `member <
-                    // tree::arity(holderType)`, guarded by a Tuple/Struct check on the holder's
-                    // type) migrates the same way.
-                    const bool memberCountKnown =
-                        camel::core::type::tree::arityOf(wholeType, memberCount);
-                    if (!memberCountKnown && wholeType != nullptr) {
+                    // **The arity ruling lands here** (`a2cc57100`): one name answers the count, and a
+                    // type the question does not apply to gets no answer rather than a number read out
+                    // of its bytes. "No member count" is not "zero members" -- the branch below asks the
+                    // type what extent it states instead, and a type that states neither is refused by
+                    // name below.
+                    const std::optional<size_t> memberCountByLayout =
+                        camel::core::type::tree::arity(wholeType);
+                    size_t memberCount  = memberCountByLayout.value_or(0);
+                    bool membersByIndex = false;
+                    if (!memberCountByLayout && wholeType != nullptr) {
                         const std::optional<std::vector<int64_t>> extents =
                             camel::core::type::statedExtentsOf(wholeType);
                         if (extents.has_value() && extents->size() == 1) {
@@ -3435,7 +3432,8 @@ bool buildTransposeMember(
                     // no operand at all (an empty construction of an unstated shape would otherwise
                     // pass a `0 == 0` and place nothing, silently).
                     if (whole == rt::kInvalidNodeRef || wholeType == nullptr ||
-                        !(memberCountKnown || membersByIndex) || memberCount != parts.size()) {
+                        !(memberCountByLayout.has_value() || membersByIndex) ||
+                        memberCount != parts.size()) {
                         refuse(TransposeRefusalCause::Kind);
                         // The two numbers the guard compared, so the line says *which* fact failed:
                         // `members=-` is a type that states no member count at all (the repair is a
@@ -3446,7 +3444,7 @@ bool buildTransposeMember(
                            << " type="
                            << (wholeType != nullptr ? wholeType->toString() : std::string("?"))
                            << " members=";
-                        if (memberCountKnown || membersByIndex) {
+                        if (memberCountByLayout || membersByIndex) {
                             os << memberCount;
                         } else {
                             os << '-';
