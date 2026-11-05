@@ -1,20 +1,19 @@
 /**
- * A function whose result is a pair, handed to the library's `vjp` with no named argument: the
- * library refuses, and the refusal is where the pair stops being a `float`.
+ * `vjp` over a function whose result is a pair: the pullback takes the pair's cotangent and answers
+ * the gradient of the first member, and the two seeds below are what separates it from a pullback that
+ * never reached the weight at all.
  *
- * `vjp(f)` is `transpose(split(jvp(f)))` written out (stdlib/vjp.cml). For a `float` result the
- * pair the cut hands out is `(value, lin)` and `transpose(lin)` is the pullback. For a result that
- * is itself a pair, the cotangent that goes into the transposed half would be the cotangent of a
- * pair, and `transpose` takes a function whose result has a cotangent -- a pair has none. So the
- * call is refused at that
- * step, inside the library's own file, and not by returning `(value, pullback)` with the pair's
- * first element silently differentiated: a library that guessed would answer a gradient for a
- * function nobody asked it to differentiate.
+ * This case used to pin a refusal. `transpose` took only a result whose cotangent was a `float` or an
+ * `f32`, so `vjp(loss)` for a pair-returning `loss` stopped inside the library with "takes a function
+ * whose result has a cotangent" -- and that sentence was wrong: a pair has a cotangent, the pair of the
+ * members' cotangents (design principles 9.9, author `f6ee4f5d0`). With the law asking the result's
+ * tangent space instead of listing two type codes, the same call answers numbers.
  *
- * This is the pair form's refusal on the library side; the parameter form
- * (`vjp(loss, has_aux: true)`) is test/cases/modules/autodiff/has_aux_vjp_named.cml, and the
- * composition that does reach all three numbers is
- * test/cases/modules/autodiff/has_aux_library.cml.
+ * Why two seeds and not one. `grad=0.0` is a legal gradient, so a single zero would not tell a walk
+ * that never distributed the cotangent from a function whose derivative really is zero. Seeding
+ * `(1.0, 0.0)` asks only the value half and must answer 6.0 (`d(x*x) = 2x` at 3); seeding
+ * `(0.0, 1.0)` asks only the auxiliary half and must answer 1.0 (`d(x + 10) = 1`). A pullback that
+ * handed back a zero for both, or that answered 6.0 twice, fails here rather than in a reader's head.
  */
 import { vjp } from vjp
 
@@ -24,8 +23,13 @@ func loss(x: float): (float, float) {
 
 func main(): int sync {
     let (y, pullback) = vjp(loss)(3.0)
-    let _ = y
-    let cotangents = pullback(1.0)
-    println(cotangents)
+    let value = y.0
+    let aux = y.1
+    let first = pullback((1.0, 0.0))
+    let second = pullback((0.0, 1.0))
+    println('has_aux_vjp_pair')
+    println('value={} aux={}'->format<value, aux>)
+    println('seed_value grad={}'->format<first.0>)
+    println('seed_aux grad={}'->format<second.0>)
     return 0
 }

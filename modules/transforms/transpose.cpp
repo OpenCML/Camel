@@ -503,31 +503,61 @@ std::string addUriFor(const camel::runtime::GCGraph *function, gc_node_ref_t ref
     return addUriOfSpace(addType);
 }
 
-/// Whether this transform has a cotangent for a result of type `result`: the cotangent is the
-/// result's tangent space (`tangentSpaceOf`), and every width this file can add is a width it can
-/// transpose at. Today that is the two scalars `float` and `f32` -- the arithmetic of the walk is the
-/// addition above and the rules the family files, and those are written for the widths the language's
-/// float operators come in (`:op/add_d`, `:op/add_f`). A result with no tangent space has no
-/// cotangent to take in at all; a reduced-precision float has one, and this file has no addition for
-/// it yet, so it is refused here instead of being answered with a `float` cotangent.
+/// Why this transform has no cotangent for a result of type `result`, in the words the call site's
+/// diagnosis uses; empty when it has one.
 ///
-/// The two widths in the `return` are **not** an oversight and must not be deleted as one: opening
-/// this to `bf16`/`f16` needs a case that transposes a `bf16` function, and today there is none -- the
-/// readings below the gate are already the space's own (`addUri`, `zero`, `zerosLikeUri` all come from
-/// the registry), so the code would very likely work, and "very likely works with nothing measuring
-/// it" is how the seventeen readings in this file were written in the first place. A lane that opens
-/// this brings the case that reads a `bf16` cotangent, in the same commit.
-bool hasResultCotangent(const Type *result) {
+/// **The law and its refusal are one function on purpose.** They used to be two: a `bool` gate here
+/// and a paragraph of prose in `transpose_operator.cpp` that spelled the gate's rule a second time,
+/// which is how "the result has no cotangent" came to be said about a pair that has one. A judgement
+/// and its message drift apart exactly when they are written twice.
+///
+/// The law, as the author rules it (`f6ee4f5d0`, and design principles 9.9): **every result type
+/// whose tangent space this file can add is accepted** -- a tuple or a struct when every member is,
+/// an array when its space registers an array addition (`:tangent/add_arr`, `tensor:add`), a float of
+/// any width when its space registers that width's addition (`:op/add_d`, `:op/add_f`). The cotangent
+/// the caller passes is that space, not a `float` the space would have to be read into.
+///
+/// A refusal names **the position that does not hold a cotangent**, because "this result type is not
+/// supported" is true of every failure and therefore says nothing: which member, and of which type.
+std::string resultCotangentRefusalImpl(const Type *result) {
     if (result == nullptr) {
-        return false;
+        return "the result type is not known here";
     }
     const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(result);
     if (!space.hasSpace() || space.space == nullptr) {
-        return false;
+        return "`" + result->toString() +
+               "` has no tangent space, and a value with no tangent space holds no cotangent";
     }
-    const camel::core::type::TypeCode width = space.space->code();
-    return width == camel::core::type::TypeCode::Float64 ||
-           width == camel::core::type::TypeCode::Float32;
+    const camel::core::type::TypeCode code = result->code();
+    if (code == camel::core::type::TypeCode::Tuple ||
+        code == camel::core::type::TypeCode::Struct) {
+        // Member by member, because that is how the addition of an aggregate is defined
+        // (`accumulate`), and the member that fails is named with its index.
+        const size_t count = camel::core::type::tree::arity(result);
+        for (size_t i = 0; i < count; ++i) {
+            const Type *const memberType = camel::core::type::tree::childType(result, i);
+            const std::string inner        = resultCotangentRefusalImpl(memberType);
+            if (!inner.empty()) {
+                return "member " + std::to_string(i) + " of the result (`" +
+                       (memberType != nullptr ? memberType->toString() : std::string("?")) +
+                       "`): " + inner;
+            }
+        }
+        return {};
+    }
+    if (addUriOfSpace(space.space).empty()) {
+        return "the cotangent space of `" + result->toString() + "` is `" +
+               space.space->toString() +
+               "`, which registers no addition (`TangentSpace::addUri` is empty), and a cotangent "
+               "that cannot be summed is not a cotangent this law can answer";
+    }
+    return {};
+}
+
+/// Whether this transform has a cotangent for a result of type `result`. The answer is the law's
+/// (`resultCotangentRefusal`), not a second spelling of it.
+bool hasResultCotangent(const Type *result) {
+    return resultCotangentRefusalImpl(result).empty();
 }
 
 /// The type a transposed function's cotangent input lives in: the cotangent of the result, which is
@@ -567,6 +597,15 @@ Type *resultCotangentType(const camel::runtime::GCGraph *function) {
 }
 
 } // namespace
+
+/// The law's refusal, asked from outside this file: the operator's call site (`transpose_operator.cpp`)
+/// reports the same sentence the gate above decided on. It is defined out here, and its body is the
+/// anonymous-namespace function, because a definition inside that namespace would be invisible to the
+/// other translation unit -- the module then links with an undefined symbol and fails to load, which is
+/// the whole stdlib refusing to import rather than one wrong answer.
+std::string resultCotangentRefusal(const Type *result) {
+    return resultCotangentRefusalImpl(result);
+}
 
 /// Whether `type` is `()`, the empty tuple. The distinction this draws is the one the whole answer
 /// shape turns on, and it is a difference of *types*, not of tangent spaces: an `int` parameter and a
@@ -3327,6 +3366,45 @@ bool buildTransposeMember(
                 // cotangent reached makes below.
                 const auto found = memberCotangents.find(ref);
                 if (found == memberCotangents.end()) {
+                    // The cotangent arrived **at the construction itself**, and the transpose of a
+                    // tuple construction is the member-wise projection: member `i` of the cotangent
+                    // goes to operand `i` (design principles 9.9; author `f6ee4f5d0`, `3ef068b95`).
+                    // Before this, the whole-cotangent case `break`ed and the contribution was
+                    // dropped -- the answer stayed at the zero its slot was initialised with, which
+                    // is indistinguishable from a lawful zero.
+                    //
+                    // The fallback below still stands for anything this projection cannot place: a
+                    // kind that reaches here with a cotangent and has no transpose is refused by
+                    // name, never dropped.
+                    const auto parts           = function->withInputsOf(ref);
+                    const gc_node_ref_t whole  = cotangent[ref];
+                    Type *const wholeType      = cotangentTypeOf(ref);
+                    if (whole == rt::kInvalidNodeRef || wholeType == nullptr ||
+                        camel::core::type::tree::arity(wholeType) != parts.size()) {
+                        refuse(TransposeRefusalCause::Kind);
+                        os << " node=" << ref << " kind=fill whole-cotangent node=" << ref << '\n';
+                        return false;
+                    }
+                    bool placedEveryMember = true;
+                    for (size_t i = 0; i < parts.size(); ++i) {
+                        if (isConstant(parts[i])) {
+                            continue;
+                        }
+                        Type *const memberType = camel::core::type::tree::childType(wholeType, i);
+                        if (memberType == nullptr) {
+                            placedEveryMember = false;
+                            break;
+                        }
+                        const gc_node_ref_t member =
+                            draft.addAccsNode(memberType, static_cast<uint32_t>(i));
+                        draft.setNormInputs(member, std::span<const gc_node_ref_t>(&whole, 1));
+                        addCotangent(parts[i], member);
+                    }
+                    if (!placedEveryMember) {
+                        refuse(TransposeRefusalCause::Kind);
+                        os << " node=" << ref << " kind=fill member-type node=" << ref << '\n';
+                        return false;
+                    }
                     break;
                 }
                 const auto parts = function->withInputsOf(ref);

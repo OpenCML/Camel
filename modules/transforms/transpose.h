@@ -266,6 +266,11 @@ camel::core::type::FunctionType *transposeSignature(
     std::vector<size_t> *answersOf = nullptr,
     const std::vector<size_t> *captures = nullptr);
 
+/// Why this transform has no cotangent for a result of type `result`, in the words the call site's
+/// diagnosis uses; empty when it has one. The call site asks this for its message and the gate asks it
+/// for its answer, so the judgement and the refusal cannot disagree.
+std::string resultCotangentRefusal(const camel::core::type::Type *result);
+
 /// Builds the graph of `transpose(f)` for the graph `function` of `program`. The graph `function`
 /// is read, never changed. `os` receives what was built: which rule every primitive on the path was
 /// transposed by, in the order the walk found them, and why it stopped when it did.
