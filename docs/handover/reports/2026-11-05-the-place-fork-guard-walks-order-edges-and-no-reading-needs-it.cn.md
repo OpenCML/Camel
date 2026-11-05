@@ -60,3 +60,20 @@ edges」这句话今天只对一半：那道绿现在由 `a1723fbb9` 解释；�
 代码在，形状对，且被走过（`order` 投过 16 条、750 条）；但没有任何一条读数是「它必须存在」。
 照规矩说清楚：**它是被遍历的，不是被判定的**。「走不到也要补」在这里的形态是「走到了，但今天不
 决定任何答案」——不许把它写成「已覆盖」，因为覆盖的证据本该是那 0 行的 `waits5=1 waits4=0`。
+
+## 这一轮的快层闸门
+
+`npm run test`（fast 层，`f56c65587` 的树加这一页）：
+
+```
+[SUMMARY] total: 8855, pass: 8736, fail: 46, skip: 41, known failures: 32
+```
+
+`killed` 是 0：`[SUMMARY]` 只有 `crashed > 0` 时才追加 `, killed by a signal: N`
+（`test/tools/run-tests.mjs#printRunSummary`），这里没有那一截。46 个红分在 14 个计划里
+（`modules.threads`、`consistency.new_values`、`modules.rules`、`tools.load_class`、
+`docs.links` 的 `docs.snippets_compile` 等），都不是这一页能碰到的：读 `docs/handover/reports`
+的计划只有 `test/plans/feat/showcase_s2.plan.toml`（这一层跑了，绿）与
+`test/plans/perf/showcase_c2.plan.toml`（perf 层，不在这一轮）。`docs.snippets_compile` 自己点名了
+它的两处（Windows 上绝对路径渲染成 `D:<file>`、教程 17 的一条 pending 片段），都不是这一页。
+`docs.links.questions_index` 在这一轮是 `[PASS]`——这一层在本机不是绿的，但红的位置与本车道无关。
