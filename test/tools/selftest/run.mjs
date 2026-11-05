@@ -1055,14 +1055,14 @@ if (changedBase() !== 'origin/release') {
 if (savedBase === undefined) delete process.env.CAMEL_TEST_BASE
 else process.env.CAMEL_TEST_BASE = savedBase
 
-//  --- an empty selection says that it falls back to the layer ------------------------------
-// `--changed` with nothing to narrow by hands an empty target list to `run-tests.mjs`, whose
-// `loadPlans` reads "no target" as the whole plan tree: the run is the whole fast layer. That used
-// to be printed as "the whole fast layer ... is not run", a sentence the run contradicted -- the
-// host's `--changed-files` list is empty whenever a lane has no change against its base, so a
-// shared host ran 335 plans and the reading said it ran none. The fallback stays (a host run with
-// an empty list must still run something), but it names itself and its cause; and a selection that
-// really did select plans must print no such line, or the sentence would mean nothing.
+//  --- a measured empty selection starts nothing, and says the count --------------------------
+// `--changed` with nothing to narrow by used to hand an empty target list to `run-tests.mjs`, whose
+// `loadPlans` reads "no target" as the whole plan tree: the run was the whole fast layer. So 0
+// changed files started 336 plan files and printed a `[SUMMARY]` with no failure -- the same three
+// numbers a correct selection of one plan prints, and the same exit code. The fallback is gone
+// (nothing is selected, so nothing starts), and the count is a line of its own: "changed: 0
+// target(s)" is the only thing that tells a zero from a layer in a log, and a selection that really
+// did select plans must not print it, or the line would mean nothing.
 const changedScratch = fs.mkdtempSync(path.join(os.tmpdir(), 'camel-changed-'))
 const fallbackLine = (output) =>
     (output.match(/^\[WARN\] --changed:.*falling back to the whole fast layer \(\d+ plan file\(s\).*$/m) || [
@@ -1074,21 +1074,43 @@ const emptySelection = runTestCli(['--changed', '--changed-files', emptyChangedL
 if (emptySelection.status !== 0) {
     problems.push(`--changed on an empty list: exit ${emptySelection.status}, expected 0`)
 }
-if (!fallbackLine(emptySelection.output)) {
+if (!/^\[INFO\] changed: 0 target\(s\)/m.test(emptySelection.output)) {
     problems.push(
-        `--changed on an empty list did not say it falls back to the layer: ${emptySelection.output.trim()}`
+        `--changed on an empty list did not print 'changed: 0 target(s)': ${emptySelection.output.trim()}`
     )
 }
-if (!/\(the whole fast layer: smoke \+ feat\)/.test(emptySelection.output)) {
+if (fallbackLine(emptySelection.output)) {
     problems.push(
-        `--changed on an empty list did not print the layer it runs: ${emptySelection.output.trim()}`
+        `--changed on an empty list still widens to the layer: ${emptySelection.output.trim()}`
     )
+}
+if (/\(the whole fast layer: smoke \+ feat\)/.test(emptySelection.output)) {
+    problems.push(
+        `--changed on an empty list says the layer is what it runs: ${emptySelection.output.trim()}`
+    )
+}
+// The run path, not only the listing: a zero has to reach the runner as a zero, or the widest
+// reading of `--changed` is the one nobody checked.
+const emptyRun = runRunner(['--selection-empty'])
+if (emptyRun.status !== 0) {
+    problems.push(`--selection-empty: exit ${emptyRun.status}, expected 0`)
+}
+if (!/discovered plans: 0/.test(emptyRun.output)) {
+    problems.push(`--selection-empty widened to the plan tree: ${summaryLine(emptyRun.output)}`)
+}
+if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(emptyRun.output)) {
+    problems.push(`--selection-empty: ${summaryLine(emptyRun.output)}`)
 }
 const matchedChangedList = path.join(changedScratch, 'matched.txt')
 fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
 const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
 if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
     problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+}
+if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
+    problems.push(
+        `--changed printed the zero-target line for a selection that selected plans: ${matchedSelection.output.trim()}`
+    )
 }
 if (fallbackLine(matchedSelection.output)) {
     problems.push(
