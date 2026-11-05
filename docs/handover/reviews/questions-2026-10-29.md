@@ -3095,3 +3095,31 @@ S2 改用 `grad` 等这一步落地后再做。
 - **D 类**：探针保留；`hold/fsh-dev` 和 `release` 两条先不动，留给负责人定。
 
 判据：A 类在今天之内清空，到达数回到每小时两位数。
+
+## 每日审查（2026-11-05）
+
+范围：过去 24 小时 `origin/develop` 上 165 笔非合并提交，分三组审：变换与求导；图、执行与遍；测试、工具、文档与其余库。下面各条都已对照 HEAD 核实。已在返工里的不重复列：`has_aux`/`grad` 的单签名写法、零载体、`tangentArgs`。
+
+### 高
+- **R1 返工：注释里写裁定日期、提交号、交接页路径**。目前的数量：`modules/transforms` 178 处、`src` 77 处、`stdlib/rulesets` 39 处、`modules/tensor` 16 处、`stdlib/vjp.cml` 12 处。例子有 `gradient_ops.cpp` 的 "(author, 2026-11-05)"/"ruling 甲"、`transpose.cpp:3414` 的 "`a2cc57100`"、`refusal_readings.h` 指向 `docs/handover/…`。设计原则 §1 原文："诊断、注释、文档不写任务编号、裁定日期或指向裁定记录的引用"。**修法**：注释只写规则和理由，日期和提交号留在提交信息里。按目录分几笔机械清理。**验收**：`git grep -nE "20[0-9]{2}-[0-9]{2}-[0-9]{2}|author's ruling|ruling 甲|docs/handover/" -- src include modules stdlib` 零命中（测试计划另算）。
+- **R2 返工：ONNX 导出里按猜测发 `Reshape`**（`modules/onnx/lowering_grad.cpp:199`、`:220`，"right whenever the list keeps every axis"）。前导轴需要归约时，导出的模型会悄悄算错。这就是"到界悄悄放行"。**修法**：归约的轴证不出来就拒绝导出，句子说明缺的是哪一个秩。`shape` 的长度落地以后，这条拒绝自然消失。**验收**：构造一个需要前导轴归约、秩未知的程序，导出给出具名拒绝，不再写出文件。
+- **R3 返工：`let _ = export_model(…)` 还在 8 条用例和官方示例里**（`examples/ml/export_onnx.cml`、`test/cases/modules/onnx/export_train_step_dynamic.cml` 等）。21:50 已定：改写法，不改运行时；`onnx.plan.toml:3282` 的 desc 也已经这么说了，用例却没改。**修法**：这些程序都改成用 `match`/`!!` 处理拒绝，`known_fail` 的理由改为引用真实的拒绝句。**验收**：`git grep "let _ = export_model"` 在 `test/cases`、`examples` 里零命中。
+- **R4 返工：`autodiff-migration-ledger.mjs` 的钉死常量**（`:212` 的 `LEDGER_RECORDED`；plan 的 desc 和期望里又写一遍）。这是 11-04 B11 的重复：读数一动就改常量，这样的"棘轮"什么也查不出来；按词数分类（数 `f32`、`[]`）还会被注释里的字样带偏（`05e1145a9`）。**修法**：删掉常量和分类器，只保留一个方向：通过数不下降，基准取上一次记录的运行。**验收**：脚本里没有写死的数，plan 不钉数字。
+- **R5 返工：`extent_of` 的属性在 C++ 里重述了一遍**（`builtin.cpp:673` `registry.set(":op/extent_of", {.pure…})`）。属性表只从实现表里登记，删掉内核后算子就成了"未声明"，于是又手写了一份。**修法**：属性来自算子声明（标准标签），登记表不再遍历实现表。**验收**：`builtin.cpp` 里没有逐个算子手写的属性。
+
+### 中
+- **R6 两个"有没有路径"的遍历**：`draft_inline.cpp:1367` `waitsOnAnyEdge` 和 `:1614` 的 lambda `waitsOn` 走的是同一种遍历。后者带 `1<<14` 的预算，用完就答"有路径"，这是到界悄悄放行。`generic.cpp:577` 的局部 `controlRegionOf` 和 `runtime::controlRegionOf`（`draft.cpp:1370`）也是两份。**修法**：在 `GraphDraft` 上只留一个 `reaches(from, to)`，走全部五类边，不设预算；控制区域的查询也只留一个。
+- **R7 拒绝原因有两套表，外加一条只给测试看的通道**：`refusal_readings.h` 的 16 项枚举、手写的 JSON、写到 stderr 的 `READING_REFUSAL`，再加上 `transpose.cpp:69` 的 `TransposeRefusalCause`，以及一个核对两者的 `check.py`。这是 11-04 B7 的延续。`transpose.cpp:2963/4633/4832` 打印的是 `kind=<枚举的整数>`，用例钉的是 `kind=8`。**修法**：jvp、split、vmap、transpose 只用一个拒绝类型，做成结构化诊断；用例断言诊断码；节点种类打印名字，不打印数字。**验收**：`READING_REFUSAL` 和 `check.py` 都删掉。
+- **R8 测试选择**：`--changed` 选不出东西时退回整层快测（`runner.mjs:617`），这是一条后备路径；`runner.mjs:25` 读环境变量 `CAMEL_TEST_BASE`（设计原则："设置不放在环境变量里"）；`plan-selection.json` 手写了一张"用例路径到计划"的表，内容就是各计划自己的 `case` 字段，所以还得另有自测去核对它。**修法**：选择由各计划的 `case` 字段推出；选不出就照实报出、什么也不跑；基准改成命令行参数。
+- **R9 过程工具在膨胀**：`check-plan-debt.mjs` 583 行，靠一张词表去读计划里的散文（`b775a3a0e` 为了不让词表命中，改了 tiles 计划里的一句注释）；`tier-report.mjs` 283 行，加 128 行文档。**修法**：状态只放在结构化的 `known_fail_reason` 里，由运行器校验，desc 里不写状态，词表检查删掉；层的两个数（写出的、派生的）并进运行器已有的那行输出，单独的脚本删掉。
+- **R10 为了迎合计数改代码**：`a03b0f9d5` 改了 `branchPlaceInChain` 的签名，只为让 `git grep -w GraphDraft` 的计数不动，提交信息自己也承认耦合原样未变。**修法**：这个计数要么改成量真实的依赖，要么删掉；签名按代码本身的需要定。
+- **R11 中英文语言参考不一致**：`46e13c1b1` 只收窄了英文版 4.4 那一句，中文版 `docs/language/04_execution_model.md:195` 还是旧的宽说法。**修法**：中文页同步改。
+
+### 低
+- `modules/transforms/transpose.h:13` 写着 "Straight-line code only, for now"，已经过时，而且有"for now"，按现状改写。
+- `tensor:shape` 的节点由 C++ 在三处手写成 `int64[rank]`（`shapeListType`）。等 `ShapeOf<T>` 落地，按 21:50 的裁定一并删掉，现在不动。
+- `stdlib/vjp.cml` 在 `vjp` 上方有一段重复的文档。
+
+**审过、判为没问题的**：`513956ecb` 类型包拆开；`f0dfafba6` 按值调用的提升；`d08bc5f63` 转置的结果类型与按成员投影；`0234078cb` 零常量来自登记；`7a240b250` 删掉占位并改提示；`bf12366ba` 防环检查走全部边类；`a366da869`、`b6631921e` 包的两处修复；`236c1bbc2`/`21de75c0a` 闸门入口；以及各条按诊断句断言的用例。
+
+**排程**：R2、R3 跟着 ONNX 那条车道走；R1 作为机械清理，可以和主线并行；R4 到 R11 排在第七节第 3 项（库层 `grad`）之后、删引擎之前。
