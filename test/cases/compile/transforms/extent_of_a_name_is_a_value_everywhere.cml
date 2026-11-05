@@ -1,0 +1,40 @@
+// A name whose call is already its own answer is a function wherever a name may stand, whether or
+// not the position states what function it wants: the answer is a fact of the type argument written
+// with the name, so the position has nothing left to settle.
+//
+// Six positions, one rule (`Builder::settledAnswerOf`), all of them `[2, 3]`-shaped answers:
+//
+//   no_expected_type       `let f = extent_of::<f32[2, 3]>`       -- no type says what f is
+//   gives_one()            `return extent_of::<f32[3]>`           -- the result type says it
+//   answers[0]             an array literal of such names         -- each element is a value
+//   takes_it(...)          handed to a parameter of function type -- what a call gives
+//   from_param::<f32[2,3]> the type argument is a name the enclosing declaration binds
+//
+// The last one is the general form the others are written in: nothing of `extent_of` is known
+// where the answer is made, so the type argument may as well be a parameter.
+
+import { is_array } from types
+
+func takes_it(f: () => int[]): int[] {
+    return f()
+}
+
+func from_param::<A>(): int[] when is_array::<A>() {
+    return extent_of::<A>()
+}
+
+func gives_one(): () => int[] {
+    return extent_of::<f32[3]>
+}
+
+func main(): int sync {
+    let no_expected_type = extent_of::<f32[2, 3]>
+    println(no_expected_type())
+    println(gives_one()())
+    let answers: (() => int[])[] = [extent_of::<f32[4]>, extent_of::<f32[2, 3]>]
+    println(answers[0]())
+    println(answers[1]())
+    println(takes_it(extent_of::<f32[2]>))
+    println(from_param::<f32[2, 3]>())
+    return 0
+}

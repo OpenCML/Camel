@@ -791,6 +791,41 @@ Builder::operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &o
     return graph;
 }
 
+std::optional<Builder::SettledAnswer> Builder::settledAnswerOf(
+    const oper_group_ptr_t &ops, const std::string &ruleUri,
+    const camel::core::type::type_vec_t &types, Type *knownType) {
+    if (types.empty()) {
+        // No type argument was written, so no rule can be asked what it answers about one: a call
+        // of it is a call, and a name of it is not yet a value of any particular type.
+        return std::nullopt;
+    }
+    for (const auto &[uri, rule] : ops->resolvers()) {
+        if (rule == nullptr || (!ruleUri.empty() && uri != ruleUri)) {
+            continue;
+        }
+        const std::optional<slot_t> answer = rule->valueFromTypeArgs(types);
+        if (!answer.has_value()) {
+            // This rule reads something a run has: a call of it is a node, and a name of it is a
+            // function that calls it. Not an answer, and not this rule's question.
+            continue;
+        }
+        // The answer is the call's result, so its type is the one `resolveForCall` promises for the
+        // same type arguments -- unless the call is already resolved and holds that type.
+        Type *answerType = knownType;
+        if (answerType == nullptr) {
+            const std::optional<FunctionType *> callType =
+                rule->resolveForCall(types, nullptr, {}, {}, static_args_t{});
+            answerType = callType.has_value() && *callType != nullptr ? (*callType)->exitType()
+                                                                      : nullptr;
+        }
+        if (answerType == nullptr) {
+            return std::nullopt;
+        }
+        return SettledAnswer{*answer, answerType};
+    }
+    return std::nullopt;
+}
+
 compile_graph_ptr_t Builder::answerValueGraphOf(
     Type *answerType, slot_t answer, const GCT::node_ptr_t &origin) {
     if (answerType == nullptr) {
@@ -974,20 +1009,18 @@ node_handle_t Builder::overloadValueFor(
             // A call that is already its own answer (`extent_of::<float[2, 3]>`) is a function of
             // no parameters that gives it, not a call of the operator: the answer is a fact of the
             // type arguments written with this name, and nothing in the graph or at run time reads
-            // them back (`FuncTypeResolver::valueFromTypeArgs`). Settled here as the two other
-            // places that take such a name as a value settle it.
-            for (const auto &[ruleUri, rule] : ops->resolvers()) {
-                if (ruleUri != chosen->uri() || rule == nullptr) {
-                    continue;
+            // them back. `settledAnswerOf` is where the rule is asked; this position builds the
+            // function that gives what it answers, as the two other positions that take such a
+            // name as a value do.
+            if (const auto settled = settledAnswerOf(
+                    ops,
+                    chosen->uri(),
+                    explicitTypes,
+                    chosen->funcType() != nullptr ? chosen->funcType()->exitType() : nullptr)) {
+                if (compile_graph_ptr_t graph =
+                        answerValueGraphOf(settled->type, settled->value, origin)) {
+                    return createFuncDataNode(graph, true, false);
                 }
-                if (const auto answer = rule->valueFromTypeArgs(explicitTypes);
-                    answer.has_value() && chosen->funcType() != nullptr) {
-                    if (compile_graph_ptr_t graph = answerValueGraphOf(
-                            chosen->funcType()->exitType(), *answer, origin)) {
-                        return createFuncDataNode(graph, true, false);
-                    }
-                }
-                break;
             }
             if (compile_graph_ptr_t graph = operatorValueGraphOf(chosen, origin)) {
                 return createFuncDataNode(graph, true, false);
@@ -3926,41 +3959,40 @@ if (ops->resolve(asWith, asNorm, statics).has_value()) {
             }
             if (!explicitTypes.empty()) {
                 // A call whose answer is a fact of the type arguments it names and which reads no
-                // operand (`extent_of::<float[2, 3]>()` is `[2, 3]`) is settled here, and by the
-                // rule itself rather than by its name: `FuncTypeResolver::valueFromTypeArgs` says
-                // a rule's answer exists and what it is. A node keeps the instantiated type of
-                // the call but not the type argument it was written with, so nothing at run time
-                // could answer it -- the graph holds the list itself, as a constant. That is also
-                // why such an operator carries no kernel (`src/builtin/operators/struct.cpp`, the
-                // `extent_of` section): this is the only place its answer is made.
+                // operand (`extent_of::<float[2, 3]>()` is `[2, 3]`) is settled here: the rule is
+                // asked what it answers about those arguments (`settledAnswerOf`), and the graph
+                // holds that answer. A node keeps the instantiated type of the call but not the
+                // type argument it was written with, so nothing at run time could answer it. That
+                // is also why such an operator carries no kernel
+                // (`src/builtin/operators/struct.cpp`): the answer exists before the node would.
                 //
-                // Nothing is invented: a type argument the rule cannot answer for was refused by
-                // the resolver before this point (`SemanticDiag::ExtentOfNeedsStatedShape`), so
-                // the answer exists exactly where the rule says it does.
-                for (const auto &[ruleUri, rule] : ops->resolvers()) {
-                    if (ruleUri != targetOperator->uri() || rule == nullptr) {
-                        continue;
-                    }
-                    const std::optional<slot_t> answer = rule->valueFromTypeArgs(explicitTypes);
-                    Type *answerType = targetOperator->funcType() != nullptr
-                                           ? targetOperator->funcType()->exitType()
-                                           : nullptr;
-                    if (!answer.has_value() || answerType == nullptr) {
-                        break;
-                    }
-                    if (isGCTraced(answerType->code()) && *answer != NullSlot) {
+                // Nothing is invented, and no rule is recognized by its name: a rule that answers
+                // nothing here is an ordinary operator and keeps its node. A type argument the
+                // rule cannot answer for was refused by the resolver before this point
+                // (`SemanticDiag::ExtentOfNeedsStatedShape`), so the answer exists exactly where
+                // the rule says it does.
+                if (const auto settled = settledAnswerOf(
+                        ops,
+                        targetOperator->uri(),
+                        explicitTypes,
+                        targetOperator->funcType() != nullptr
+                            ? targetOperator->funcType()->exitType()
+                            : nullptr)) {
+                    Type *answerType = settled->type;
+                    if (isGCTraced(answerType->code()) && settled->value != NullSlot) {
                         typeFoldedRoots_.emplace_back(
                             camel::core::mm::autoSpace(),
-                            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(*answer),
+                            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(
+                                settled->value),
                             answerType,
                             "gir.build.settled");
                     }
                     auto &draft = currGraph_->transaction().edit();
-                    node_handle_t settled = draft.ref(draft.materializeStaticValue(
-                        *answer, answerType, runtime::kGCNodeFlagConstant));
-                    registerNodeOrigin(context_, settled, gct->at(0), "gir.link.oper");
+                    node_handle_t settledNode = draft.ref(draft.materializeStaticValue(
+                        settled->value, answerType, runtime::kGCNodeFlagConstant));
+                    registerNodeOrigin(context_, settledNode, gct->at(0), "gir.link.oper");
                     LEAVE("LINK");
-                    return settled;
+                    return settledNode;
                 }
             }
             targetNode = currGraph_->addOperNode(targetOperator, 0);

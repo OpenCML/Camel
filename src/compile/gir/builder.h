@@ -2193,11 +2193,31 @@ class Builder {
     compile_graph_ptr_t
     operatorValueGraphOf(const oper_idx_ptr_t &op, const GCT::node_ptr_t &origin);
     /// A function of no parameters that gives `answer`: what a name whose call is already its own
-    /// answer (`extent_of::<float[2, 3]>`) stands for when it is used as a value. Its body is the
-    /// value itself -- there is no operator to call and no argument to read
-    /// (`FuncTypeResolver::valueFromTypeArgs`).
+    /// answer deserves when it is used as a value. Its body is the value itself -- there is no
+    /// operator to call and no argument to read (`FuncTypeResolver::valueFromTypeArgs`).
     compile_graph_ptr_t
     answerValueGraphOf(Type *answerType, slot_t answer, const GCT::node_ptr_t &origin);
+    /// The answer of a call that is a fact of the type arguments it names and of nothing a run
+    /// reads, together with the type that answer has: the rule says both itself
+    /// (`FuncTypeResolver::valueFromTypeArgs`, `FuncTypeResolver::resolveForCall`), and nothing
+    /// here knows which rule it is.
+    ///
+    /// This is the whole of the rule, and it is asked by the three places a name of such a builtin
+    /// can stand in: the call (`visitLinkNode`), the name of a position that states a function
+    /// type (`overloadValueFor`) and the name of a position that states none
+    /// (`functionValueOf`). Each of them builds what its position needs from the answer -- the
+    /// call a constant node, a name a function of no parameters that gives it
+    /// (`answerValueGraphOf`) -- so a second builtin whose value is a fact of its type arguments
+    /// adds its own declaration and no branch here or there. `ruleUri` selects among the rules of
+    /// `ops` where the call is already resolved to one ("" asks every rule in turn); `knownType`,
+    /// when given, is the result type that resolution already answered.
+    struct SettledAnswer {
+        slot_t value;
+        Type *type;
+    };
+    std::optional<SettledAnswer> settledAnswerOf(
+        const oper_group_ptr_t &ops, const std::string &ruleUri,
+        const camel::core::type::type_vec_t &types, Type *knownType = nullptr);
     /// `attempt(f)` (design principles 3.9): the function value whose parameters are `f`'s and
     /// whose result is `f`'s result plus `!`. It is a closure -- a graph of its own that captures
     /// `f` and whose body is one marked call of it -- so no node of the calling graph stands for
