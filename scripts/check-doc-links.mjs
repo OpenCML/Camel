@@ -807,7 +807,25 @@ function checkQuestionsHaveDefaults() {
         .filter((name) => name.endsWith('.cn.md'))
         .sort()
     if (pages.length === 0) {
-        console.log(`${QUESTIONS_DIR}: no page to check, so nothing here is a pass`)
+        // An empty queue is the normal end state, not a hole in the check: the author's process
+        // moves a page they have read whole into `reviews/`, so `questions/` empty while
+        // `reviews/` holds the pages that were read is the state this directory is meant to
+        // reach. A check that reds in its own success state is a permanent red -- and this one
+        // hangs off `scripts/release-gate.mjs`, so it would red the release on the day the work
+        // finished. Only "neither directory has a page" means nothing was ever written, which is
+        // the state the second half of the rule is about, and that stays a failure.
+        const reviewed = fs.existsSync(REVIEWS_DIR)
+            ? fs.readdirSync(REVIEWS_DIR).filter((name) => name.endsWith('.md')).length
+            : 0
+        if (reviewed > 0) {
+            console.log(
+                `0 pages: nothing is waiting for an answer, and ${reviewed} page(s) under reviews/ are the ones that were read`,
+            )
+            return 0
+        }
+        console.log(
+            `${QUESTIONS_DIR}: no page to check and no page under ${REVIEWS_DIR} either, so no question was ever written`,
+        )
         return 2
     }
     let checked = 0
