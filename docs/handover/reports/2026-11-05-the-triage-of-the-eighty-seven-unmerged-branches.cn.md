@@ -48,6 +48,35 @@ unmerged = 87   （= 本地分支总数 104 − 已合入 origin/develop 的 17�
 
 **每一条都要按「它有没有别处没有的内容」逐条量，判据与今晚清理 C 类时用的一样**：`git grep` 关键标识符（不是文件名）+ 逐行集合差（不用 `Compare-Object` 的箭头判方向）。**一条都不能凭名字判。**
 
+## 第一层量出来的结构
+
+对那五十二条逐条做 `git merge-tree --write-tree origin/develop <分支>`，**直接问「合进来树会不会变」**，而不是比较补丁、比较文件集、或者比较 blob 相等：
+
+```
+与 develop 无任何差异（merge-tree 结果树 = develop 的树）   1 条  lane-knownau
+合进来会改变树、且无冲突                                    15 条
+合进来与 develop 冲突                                       36 条  （含 release，属保留分支，不计）
+```
+
+**这个判据是今晚唯一一个没被误导过的**，因为它根本不做比较：它做一次真的合并，然后看结果树。`git cherry` 比的是补丁等价，`git diff --name-only` 比的是文件集，两者都答不了「这条分支有没有带来 `develop` 没有的东西」。
+
+**而它给出一个与预期相反的结果**：**没有一条是「内容已在 `develop`」的空壳分支。** 五十二条里除 `lane-knownau` 之外，**每一条合进来都会改变 `develop` 的树**──所以「未合分支」这个说法在数量上是准确的，不是账页夸大的。
+
+### `lane-knownau` 不能关，而三条判据都说它能关
+
+| 判据 | 读数 |
+|---|---|
+| `git rev-list --count origin/develop..lane-knownau` | 1 |
+| `git diff --name-only origin/develop...lane-knownau` | 0 个文件 |
+| `git cherry origin/develop lane-knownau` | 0 行（连 `-` 都没有） |
+| `git merge-tree --write-tree` 的结果树 | 与 `origin/develop` 的树完全相同 |
+
+四条都指向「它不带来任何东西」。**但 `git log -1 --format='%p'` 给出两个父提交 `7736cbf3c 52e969f83`，而它自己的说明是 `test merge: measure the pins lane-oneword moves (not for push)`。**
+
+**它是一条双亲合并提交，并且自报 `not for push`。** 清理协议里那条「`cherry` 无输出但 `ahead=1` 的是 merge 提交型，一律只列不删」正是为这件事写的。
+
+**两条判据问的不是一个问题**：四条读数问的是「它带来什么净内容」，协议问的是「这个提交是什么东西」。**在 `ahead=1` 这个数上，两者完全一样，而处置相反。** 所以本页把它归入探针保留，理由写「test merge、自报 not for push」，不予关闭。
+
 ## 两条纪律（都付过代价）
 
 1. **删任何分支前先 `git tag archive/<name> <sha>`。** 今晚 `statetypes-joint` 漏了这一步，唯一残存的指针是工作树 reflog，再晚一次 `gc --prune` 就不可恢复。
