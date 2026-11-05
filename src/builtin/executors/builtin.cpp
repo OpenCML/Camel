@@ -666,7 +666,10 @@ void registerBuiltinOperatorTraits() {
     // declares (`src/builtin/modules/globals.cpp#extentOfResolver`), so it states its purity like
     // every other one -- the loop above registers the operators that have an implementation, and
     // this one has none by design rather than by omission. It reads a type and nothing else, so it
-    // is pure, it is not elementwise, and a run never reaches it to fault.
+    // is pure, it is not elementwise, and a run never reaches it to fault. The three answers are
+    // one decision and not three defaults: if a kernel is ever written for this operator, `mayFault`
+    // becomes a guard that says nothing about a path that now exists unless all three are decided
+    // again together.
     registry.set(":op/extent_of", {.pure = true, .elementwise = false, .mayFault = false});
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
