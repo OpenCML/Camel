@@ -224,15 +224,30 @@ function technicalPages(directory = TECHNICAL) {
 // The pending table of docs/handover/questions lists the pages in that directory, and its header
 // says how many rows it has. Hand-kept counts went wrong three times in one night: a merge resolved
 // to their side dropped a row and the header still carried the old number. So both are derived here:
-// the rows of the pending table must be exactly the *.md files beside it (README.md aside), one row
-// each, and the header's number must equal the number of pages.
+// the rows of the pending table are the *.md files beside it (README.md aside), one row each, and
+// the header's number is the number of those pages.
 //
 // `--write` generates that table instead of checking it, and the author's 11:10 ruling is why the
 // generator exists at all: an index kept by hand and then compared against the directory is two
 // sources of truth for one fact, and the second one costs a merge conflict every night. One page,
-// one row, the page's own title as the sentence -- nothing here counts anything, so nothing here
-// can drift. With `--write` the file is written, and a caller that wants a gate runs the generator
-// and then `git diff --exit-code`: a diff means somebody edited the page by hand.
+// one row, the page's own title as the sentence. With `--write` the file is written, and a caller
+// that wants a gate runs the generator and then `git diff --exit-code`: a diff means somebody
+// edited the page by hand.
+//
+// THE FACT SOURCE IS THE UNION OF TWO SETS: the rows the file already has, and the pages in the
+// directory. It was the directory alone until 2026-11-05, and that read deletes rows: a page that
+// leaves `questions/` -- answered into `reviews/`, or dropped by a revert -- takes its row with it
+// on the next `--write`, and the check then passes on the smaller table, because the file and the
+// generator agree again. That is exactly what commit 56c0bf43e did (65 rows to 17, the deleted
+// rows still unanswered), and on the live tree at 43b775401 the same read gave "2 page(s) in the
+// directory" against 62 rows in the file: one `--write` would have deleted 61 rows and reported a
+// green check. So the generator only ever adds. A row whose page is gone is kept -- retargeted to
+// the page of the same name in `reviews/` when that is where it moved, and left as a bare name
+// with no link when the page is nowhere in the tree -- because "this question was asked" does not
+// stop being true when its page moves. Deleting a row is a human edit and it sticks: a row that is
+// neither in the file nor backed by a page in the directory has no source to come back from. The
+// cost is that a held row's sentence is not compared against a page (there is no page); every row
+// that is backed by a page is still rebuilt from that page, so a hand edit there is still a red.
 function pendingPageSentence(pageFile) {
     const text = fs.readFileSync(path.join(QUESTIONS_DIR, pageFile), 'utf8')
     const heading = text.match(/^#\s+(.+)$/m)
@@ -249,11 +264,63 @@ function pendingPageSentence(pageFile) {
     return sentence.length > 120 ? `${sentence.slice(0, 117)}...` : sentence
 }
 
+// The rows the file already has, in the order it writes them. Two shapes are read, because the
+// generator emits two: a pending row whose first cell is the stem linked to the page beside it, and
+// a kept row with a third cell saying where the page is. The first cell of a kept row whose page is
+// nowhere in the tree is a bare stem and no link, so a broken link is never written. A cell never
+// carries an unescaped `|` (the sentence escapes it), so the cells are read from both ends of the
+// line instead of by splitting on the pipe. (No example path is written here: this file is scanned
+// as a citation source too, and the first draft of this paragraph was reported as a citation it
+// never made -- a path needs only the backticks.)
+function questionsRowsInFile() {
+    const rows = []
+    if (!fs.existsSync(QUESTIONS_INDEX)) return rows
+    const text = fs.readFileSync(QUESTIONS_INDEX, 'utf8').replace(/\r\n/g, '\n')
+    for (const line of text.split('\n')) {
+        const linked = line.match(/^\|\s+\[`([^`]+)`\]\(([^)]+)\)\s+\|\s+(.*?)\s+\|(?:\s+.*?\s+\|)?$/)
+        if (linked !== null) {
+            rows.push({ stem: linked[1], target: linked[2], sentence: linked[3] })
+            continue
+        }
+        const bare = line.match(/^\|\s+`([^`]+)`\s+\|\s+(.*?)\s+\|\s+.*?\s+\|$/)
+        if (bare !== null) rows.push({ stem: bare[1], target: null, sentence: bare[2] })
+    }
+    return rows
+}
+
 function renderQuestionsIndex() {
     const pages = fs
         .readdirSync(QUESTIONS_DIR)
         .filter((name) => name.endsWith('.md') && name !== 'README.md')
         .sort()
+    const onDisk = new Set(pages.map(pageStem))
+    // Where a page that left the directory went. A same-name page in `reviews/` is the author's own
+    // record that he read it (the 18:30 ruling below), and the held row points at it rather than at
+    // a file that is not there; nothing else is guessed at, so a row for a page that is nowhere in
+    // the tree keeps its name and gets no link.
+    const movedTo = new Map()
+    if (fs.existsSync(REVIEWS_DIR)) {
+        for (const name of fs.readdirSync(REVIEWS_DIR).filter((n) => n.endsWith('.md')).sort()) {
+            const stem = pageStem(name)
+            if (!movedTo.has(stem)) movedTo.set(stem, name)
+        }
+    }
+    // The union, file first: a row whose page is back in the directory is rebuilt from that page
+    // (its title is the sentence, as before), every other row is carried over unchanged. One row
+    // per page: the file this replaced held two table bodies, and a duplicate stem is written once.
+    const kept = []
+    const seen = new Set()
+    for (const row of questionsRowsInFile()) {
+        if (onDisk.has(row.stem) || seen.has(row.stem)) continue
+        seen.add(row.stem)
+        const moved = movedTo.get(row.stem)
+        kept.push({
+            stem: row.stem,
+            sentence: row.sentence,
+            target: moved === undefined ? null : `../reviews/${moved}`,
+        })
+    }
+    kept.sort((a, b) => (a.stem < b.stem ? -1 : a.stem > b.stem ? 1 : 0))
     const lines = [
         '# 待裁索引',
         '',
@@ -270,18 +337,35 @@ function renderQuestionsIndex() {
     } else {
         lines.push('| 页 | 问什么 |', '| --- | --- |')
         for (const page of pages) {
-            const stem = page.replace(/\.cn\.md$|\.md$/, '')
+            const stem = pageStem(page)
             lines.push(`| [\`${stem}\`](${page}) | ${pendingPageSentence(page)} |`)
         }
     }
     lines.push('')
-    return { text: lines.join('\n'), count: pages.length }
+    if (kept.length > 0) {
+        lines.push(`## 生成器不会删的行：${kept.length} 行（页已不在 \`questions/\` 里）`, '')
+        lines.push(
+            '> 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。',
+            '> 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。',
+            '> 要删哪一行是作者的编辑，删掉之后生成器不会再把它写回来。',
+            '',
+            '| 页 | 问什么 | 页在哪 |',
+            '| --- | --- | --- |',
+        )
+        for (const row of kept) {
+            const cell = row.target === null ? `\`${row.stem}\`` : `[\`${row.stem}\`](${row.target})`
+            const where = row.target === null ? '页不在（`questions/` 与 `reviews/` 都没有）' : '在 `reviews/`'
+            lines.push(`| ${cell} | ${row.sentence} | ${where} |`)
+        }
+        lines.push('')
+    }
+    return { text: lines.join('\n'), pages: pages.length, kept: kept.length, rows: pages.length + kept.length }
 }
 
 function writeQuestionsIndex() {
-    const { text, count } = renderQuestionsIndex()
+    const { text, pages, kept } = renderQuestionsIndex()
     fs.writeFileSync(QUESTIONS_INDEX, text, 'utf8')
-    console.log(`wrote the pending table: ${count} page(s), one row each`)
+    console.log(`wrote the pending table: ${pages} page(s) in the directory, ${kept} kept row(s), one row each`)
     return 0
 }
 
@@ -294,10 +378,12 @@ function checkQuestionsIndex() {
         console.log('docs/handover/questions/README.md: no such file')
         return 2
     }
-    const { text: expected, count } = renderQuestionsIndex()
+    const { text: expected, pages, kept, rows } = renderQuestionsIndex()
     const actual = fs.readFileSync(QUESTIONS_INDEX, 'utf8').replace(/\r\n/g, '\n')
     if (actual === expected) {
-        console.log(`the pending table lists ${count} page(s), one row each, as the header says`)
+        console.log(
+            `the pending table lists ${rows} row(s): ${pages} page(s) in the directory and ${kept} kept row(s), one row each, as the header says`,
+        )
         return 0
     }
     const actualLines = actual.split('\n')
@@ -305,14 +391,14 @@ function checkQuestionsIndex() {
     const limit = Math.max(actualLines.length, expectedLines.length)
     for (let i = 0; i < limit; i += 1) {
         if (actualLines[i] !== expectedLines[i]) {
-            console.log(`docs/handover/questions/README.md:${i + 1}: the page is not what the directory generates`)
+            console.log(`docs/handover/questions/README.md:${i + 1}: the page is not what the generator writes`)
             console.log(`  generated: ${expectedLines[i] === undefined ? '(no line)' : expectedLines[i]}`)
             console.log(`  on disk:   ${actualLines[i] === undefined ? '(no line)' : actualLines[i]}`)
             break
         }
     }
     console.log(
-        `the pending table is hand-edited: run "node scripts/check-doc-links.mjs --questions-index --write" (${count} page(s) in the directory)`,
+        `the pending table is hand-edited: run "node scripts/check-doc-links.mjs --questions-index --write" (${pages} page(s) in the directory, ${kept} kept row(s))`,
     )
     return 1
 }
