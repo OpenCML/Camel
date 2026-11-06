@@ -301,6 +301,32 @@ TypeCode MatchTypeType::typeCode() {
     return code;
 }
 
+std::string matchShapeText(uint16_t shapes) {
+    const auto bit = [](unsigned shape) { return static_cast<uint16_t>(1u << shape); };
+    if ((shapes & bit(3)) != 0) {
+        return "_";
+    }
+    static constexpr std::pair<unsigned, const char *> names[] = {
+        {0, "struct"},
+        {1, "tuple"},
+        {2, "#leaf"},
+        {4, "func"},
+        {6, "array"},
+        {7, "nullable"},
+        {8, "fallible"},
+        {9, "map"},
+        {10, "set"},
+    };
+    std::string text;
+    for (const auto &[shape, name] : names) {
+        if ((shapes & bit(shape)) == 0) {
+            continue;
+        }
+        text += (text.empty() ? "" : " | ") + std::string(name);
+    }
+    return text.empty() ? "..." : text;
+}
+
 uint16_t typeShapeBits(const Type *type) {
     const auto bit = [](unsigned shape) { return static_cast<uint16_t>(1u << shape); };
     uint16_t bits  = bit(3); // the wildcard selects every type
@@ -441,7 +467,7 @@ std::string MatchTypeType::toString() const {
         const std::span<Type *const> arrays     = armArrayPatterns(i);
         text += " case ";
         if (identities.empty() && pack.empty() && arrays.empty()) {
-            text += "...";
+            text += matchShapeText(armShapes(i));
         }
         size_t written = 0;
         for (Type *identity : identities) {

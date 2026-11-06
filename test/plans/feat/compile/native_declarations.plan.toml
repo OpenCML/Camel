@@ -1157,12 +1157,12 @@ expect_exit = 0
 
 [[tests]]
 name = "native.rewrite_wrong_arity"
-desc = "A call of `rewrite` without its rule set is refused at the call, and the candidate in the message is the declaration's own, `stdlib/rewrite.cml`, not the C++ module: the rules and `strict` are with parameters, the function is the one ordinary argument."
+desc = "A call of `rewrite` without its rule set is refused at the call, and the candidate in the message is the declaration's own, `stdlib/rewrite.cml`, not the C++ module: the rules and the numeric, deletion-protection and matching choices are with parameters, the function is the one ordinary argument."
 kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool> (f: F) => F!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool, protect_effects: bool, protect_faults: bool, ordered: bool> (f: F) => F!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"

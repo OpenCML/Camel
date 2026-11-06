@@ -250,8 +250,8 @@ operator returned to the pipeline must have a value reader, named result or chai
 place. Permitted deletion cleans up orphan operators rather than disabling this
 admission invariant.
 
-`graph::check_pass_boundary(before, after)` explicitly selects the existing
-comparative check and returns `after` when accepted. It compares the enclosing
+`graph::check_pass_boundary` explicitly selects the existing comparative check
+for the graphs before and after a pass and returns `after` when accepted. It compares the enclosing
 program snapshots: standard ambient resource/access-mode sets and order of matched
 effect sites, as well as ordinary admission. It emits a named context diagnostic on refusal. Although it returns `F!`, catching
 the error value does not clear that diagnostic or recover outer execution; this is

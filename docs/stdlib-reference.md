@@ -6122,7 +6122,7 @@ located context diagnostic on refusal; catching the error value does not recover
 execution. Ordinary invocation and CLI wrappers use this same checking stage.
 
 - Failure: error value `PassBoundary` when the selected boundary check refuses.
-- Example: `check_pass_boundary((x: int) => x, (x: int) => x)`
+- Example: `check_pass_boundary`
 
 <a id="rewrite"></a>
 

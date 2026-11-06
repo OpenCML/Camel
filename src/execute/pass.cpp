@@ -1162,7 +1162,7 @@ const PassDescriptor &passParamsTestDescriptor() {
             {"n",
              PassParamType::Int,
              int64_t{5},
-             "an int whose default is a constant expression",
+             "an int with a constant expression default",
              false},
             {"ratio", PassParamType::Float, 1.5, "a float", false},
             {"label", PassParamType::String, std::string("x"), "a string", false},

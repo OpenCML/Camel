@@ -367,5 +367,5 @@ export func probe_handle::<F>(f: F): F! when is_function::<F>()
 /// located context diagnostic on refusal; catching the error value does not recover outer
 /// execution. Ordinary invocation and CLI wrappers use this same checking stage.
 /// @fails error value `PassBoundary` when the selected boundary check refuses
-/// @example check_pass_boundary((x: int) => x, (x: int) => x)
+/// @example check_pass_boundary
 export func check_pass_boundary::<F>(before: F, after: F): F! when is_function::<F>()

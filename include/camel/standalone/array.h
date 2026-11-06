@@ -84,12 +84,12 @@ template <typename T> class Array {
 
     /// A value of no rank: the one element *is* the value (design principles 5.4). A position whose
     /// type is `f32[..]` holds such a value when something is written into it, and the difference
-    /// between it and an array of one element is what `println` prints (`1.5` and `[1.5]`), so it is
-    /// made by its own constructor rather than by appending one element.
+    /// between it and an array of one element is what `println` prints (`1.5` and `[1.5]`), so it
+    /// is made by its own constructor rather than by appending one element.
     static Array element(T item) {
         Array out;
         out.push(std::move(item));
-        out.rep_->rank   = 0;
+        out.rep_->rank    = 0;
         out.rep_->zeroDim = true; // the value *is* that element, not an array of one
         return out;
     }
@@ -137,7 +137,8 @@ template <typename T> class Array {
     /// The elements of `source` from `offset` on, carrying the dimensions `source` states between
     /// `from` and `to` (`atRow` takes one dimension off a value). The elements are copied: the
     /// result is a value of its own, and writing it leaves `source` alone.
-    static Array window(const Array<T> &source, std::size_t offset, std::size_t from, std::size_t to) {
+    static Array
+    window(const Array<T> &source, std::size_t offset, std::size_t from, std::size_t to) {
         std::size_t count = 1;
         for (std::size_t i = from; i < to; ++i) {
             count *= source.extent(i);
@@ -199,11 +200,12 @@ template <typename T> class Array {
         // Growing a block of its own doubles it, so that adding one element at a time is
         // linear; a shared block is copied at the size asked for.
         const bool growing = rep_ != nullptr && rep_->references == 1;
-        Rep *fresh         = allocate(std::max(
-            {capacity, size(), growing ? rep_->capacity * 2 : std::size_t{0}, std::size_t{4}}));
+        Rep *fresh         = allocate(
+            std::max(
+                {capacity, size(), growing ? rep_->capacity * 2 : std::size_t{0}, std::size_t{4}}));
         if (rep_ != nullptr) {
             // The shape is the value's too: a block copied because it was shared keeps it.
-            fresh->rank = rep_->rank;
+            fresh->rank    = rep_->rank;
             fresh->zeroDim = rep_->zeroDim;
             for (std::size_t i = 0; i < rep_->rank; ++i) {
                 fresh->extents[i] = rep_->extents[i];
@@ -222,9 +224,10 @@ template <typename T> class Array {
 
     /// Adds `item` at the end, in place when the block is this array's alone.
     ///
-    /// An appended array is one dimension of what it holds, and it now says so: the rank is left at 0
-    /// only for a value that *is* the element (design principles 5.4), and a value of one element with
-    /// no rank is indistinguishable from it -- `println` would write `2.0` where the interpreter writes
+    /// An appended array is one dimension of what it holds, and it now says so: the rank is left at
+    /// 0 only for a value that *is* the element (design principles 5.4), and a value of one element
+    /// with no rank is indistinguishable from it -- `println` would write `2.0` where the
+    /// interpreter writes
     /// `[2.0]`. A value grown past one dimension keeps the extents it was given.
     void push(T item) {
         if (rep_ == nullptr || rep_->references != 1 || rep_->size == rep_->capacity) {
@@ -233,8 +236,8 @@ template <typename T> class Array {
         new (rep_->items() + rep_->size) T(std::move(item));
         ++rep_->size;
         if (rep_->rank <= 1) {
-            rep_->rank          = 1;
-            rep_->extents[0]    = rep_->size;
+            rep_->rank       = 1;
+            rep_->extents[0] = rep_->size;
         }
         rep_->zeroDim = false; // the dimension it just made is not the empty shape
     }
@@ -297,15 +300,16 @@ template <typename T> class Array {
         if (product != size()) {
             return;
         }
-        rep_->rank = static_cast<std::uint32_t>(rank);
+        rep_->rank    = static_cast<std::uint32_t>(rank);
         rep_->zeroDim = rank == 0;
         for (std::size_t i = 0; i < rank; ++i) {
             rep_->extents[i] = shape[i];
         }
     }
 
-    /// States the shape a value sliced along one dimension has (`sliceSub`): the source's dimensions,
-/// the sliced one replaced by the length the bounds gave it.
+    /// States the shape a value sliced along one dimension has (`sliceSub`): the source's
+    /// dimensions,
+    /// the sliced one replaced by the length the bounds gave it.
     void shapeSliced(const Array<T> &source, std::size_t axis, std::size_t count) {
         if (rep_ == nullptr || axis >= source.rank()) {
             return;
@@ -328,11 +332,12 @@ template <typename T> class Array {
     /// States the shape a reduction along one dimension leaves (`sumAxis`): the source's dimensions
     /// with the reduced one dropped, or written as one when the caller asked to keep it. The source
     /// may hold another element type, which is why this reads its shape and not its elements: an
-    /// argmax answers positions of the value it read. A value of one dimension leaves no dimension at
-    /// all -- the answer *is* the one element it reduced to (design principles 5.4) -- so rank zero is
-    /// recorded as the fact it is (`zeroDim`), and the answer prints as that element rather than as an
-    /// array of one.
-    template <typename U> void shapeReduced(const Array<U> &source, std::size_t axis, bool keepDims) {
+    /// argmax answers positions of the value it read. A value of one dimension leaves no dimension
+    /// at all -- the answer *is* the one element it reduced to (design principles 5.4) -- so rank
+    /// zero is recorded as the fact it is (`zeroDim`), and the answer prints as that element rather
+    /// than as an array of one.
+    template <typename U>
+    void shapeReduced(const Array<U> &source, std::size_t axis, bool keepDims) {
         if (rep_ == nullptr || axis >= source.rank()) {
             return;
         }
@@ -433,6 +438,10 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
     return xs[static_cast<std::size_t>(index)];
 }
 
+/// A scalar has the empty shape. This overload is selected only when the argument is not an
+/// `Array`; the array overload below reads the dimensions stored with the value.
+template <typename T> Array<int64_t> shapeOf(const T &) { return {}; }
+
 /// `shape(xs)` (:array/shape, :tensor/shape): the value's dimensions, one `int` per dimension, as
 /// the interpreter's `int[]` -- `[3, 2]` for a rank-2 value, `[4]` for one of a single dimension.
 /// It is a value, not a view: the array copies its extents into storage of its own, so a write to
@@ -440,9 +449,9 @@ template <typename T> T at(const Array<T> &xs, int64_t index, const Site &site) 
 ///
 /// The answer is itself one dimension of `rank` numbers, and it says so: a `shape` nobody shaped
 /// would print as an element when it holds one number (`2` for a value of 2) where the interpreter
-/// prints `[2]`, and `shape` of a value of no rank -- which *is* the element, and only `Array::element`
-/// makes one -- is the empty run. The rank is the test, not the element count: `push` gives every
-/// grown array the one dimension it has.
+/// prints `[2]`, and `shape` of a value of no rank -- which *is* the element, and only
+/// `Array::element` makes one -- is the empty run. The rank is the test, not the element count:
+/// `push` gives every grown array the one dimension it has.
 template <typename T> Array<int64_t> shapeOf(const Array<T> &xs) {
     Array<int64_t> out;
     const std::size_t rank = xs.rank();
@@ -506,31 +515,29 @@ template <typename T> Array<T> atRow(const Array<T> &xs, int64_t index, const Si
     return Array<T>::window(xs, static_cast<std::size_t>(index) * inner, 1, xs.rank());
 }
 
-/// `xs as f32[2, 3]` where the type states the shape (design principles 5.4: the conversion is where
-/// a shape is checked). The C++ value is the array either way, so the check is all there is to write:
-/// a value that does not hold the extents the type states is the fault the interpreter reports, in
-/// its own words and its own place -- `conversion to 'f32[2, 3]' failed: the array has shape [3, 2]`,
-/// which is what `ArrayType::castSlotFrom` writes (src/core/type/composite/array.cpp), so the
-/// program's report is the interpreter's byte for byte. A stated extent of -1 is one the type leaves
-/// open (`f32[?, 7]`) and is not checked.
+/// `xs as f32[2, 3]` where the type states the shape (design principles 5.4: the conversion is
+/// where a shape is checked). The C++ value is the array either way, so the check is all there is
+/// to write: a value that does not hold the extents the type states is the fault the interpreter
+/// reports, in its own words and its own place -- `conversion to 'f32[2, 3]' failed: the array has
+/// shape [3, 2]`, which is what `ArrayType::castSlotFrom` writes
+/// (src/core/type/composite/array.cpp), so the program's report is the interpreter's byte for byte.
+/// A stated extent of -1 is one the type leaves open (`f32[?, 7]`) and is not checked.
 template <typename T>
 Array<T> asShape(
-    const Array<T> &xs,
-    std::initializer_list<int64_t> extents,
-    const char *typeText,
+    const Array<T> &xs, std::initializer_list<int64_t> extents, const char *typeText,
     const Site &site) {
     const std::size_t rank = xs.rank();
     if (rank == 0 && xs.size() > 1) {
         // A value of several elements and no rank is one whose producer did not record a shape: the
-        // writer's own array constructions (`rt::Array<int>{{1, 2, 3}}`), a window, a comprehension.
-        // The interpreter's value has a shape, so the two cannot be compared here, and a program that
-        // is right must not stop because of a record that is missing: the conversion answers the
-        // value. Which producers those are is the next defect of this kind (design
-        // docs/design/cpp-standalone/README.cn.md 12.2), and the check below is the one that runs
-        // wherever the shape did travel with the value.
+        // writer's own array constructions (`rt::Array<int>{{1, 2, 3}}`), a window, a
+        // comprehension. The interpreter's value has a shape, so the two cannot be compared here,
+        // and a program that is right must not stop because of a record that is missing: the
+        // conversion answers the value. Which producers those are is the next defect of this kind
+        // (design docs/design/cpp-standalone/README.cn.md 12.2), and the check below is the one
+        // that runs wherever the shape did travel with the value.
         return xs;
     }
-    bool holds             = rank == extents.size();
+    bool holds = rank == extents.size();
     if (holds) {
         std::size_t i = 0;
         for (const int64_t stated : extents) {
@@ -549,7 +556,8 @@ Array<T> asShape(
         actual += "]";
         fault(
             site,
-            {std::string("conversion to '") + typeText + "' failed: the array has shape " + actual});
+            {std::string("conversion to '") + typeText + "' failed: the array has shape " +
+             actual});
     }
     return xs;
 }
@@ -557,23 +565,33 @@ Array<T> asShape(
 /// Copies the plane `index` along `axis` of `xs`, in the order the remaining dimensions run: the
 /// walk of `atAxis`, one element per combination of the other dimensions' positions.
 template <typename T>
-void gatherAxisPlane(Array<T> &out,
-                     const Array<T> &xs,
-                     std::size_t axis,
-                     std::size_t index,
-                     const std::size_t *stride,
-                     std::size_t dimension,
-                     std::size_t offset) {
+void gatherAxisPlane(
+    Array<T> &out, const Array<T> &xs, std::size_t axis, std::size_t index,
+    const std::size_t *stride, std::size_t dimension, std::size_t offset) {
     if (dimension == xs.rank()) {
         out.push(xs[offset]);
         return;
     }
     if (dimension == axis) {
-        gatherAxisPlane(out, xs, axis, index, stride, dimension + 1, offset + index * stride[dimension]);
+        gatherAxisPlane(
+            out,
+            xs,
+            axis,
+            index,
+            stride,
+            dimension + 1,
+            offset + index * stride[dimension]);
         return;
     }
     for (std::size_t i = 0; i < xs.extent(dimension); ++i) {
-        gatherAxisPlane(out, xs, axis, index, stride, dimension + 1, offset + i * stride[dimension]);
+        gatherAxisPlane(
+            out,
+            xs,
+            axis,
+            index,
+            stride,
+            dimension + 1,
+            offset + i * stride[dimension]);
     }
 }
 
@@ -635,8 +653,8 @@ template <typename T> Array<T> flatten(const Array<T> &xs) {
     return out;
 }
 
-/// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element converted
-/// by the C++ conversion, which is what the runtime's does (core/array_convert.h).
+/// A type name applied to an array (:op/atoi, :op/atol, :op/atof, :op/atod): every element
+/// converted by the C++ conversion, which is what the runtime's does (core/array_convert.h).
 template <typename To, typename From> Array<To> convertArray(const Array<From> &xs) {
     Array<To> out;
     out.reserve(xs.size());
@@ -694,25 +712,21 @@ Array<T> slice(const Array<T> &xs, int64_t start, int64_t end, const Site &site)
     return out;
 }
 
-/// `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[::-1]` and `slice(xs, 0, a, b, s)` (:op/slice_sub)
-/// as struct.cpp's __slice_sub__ reads them: `written` says which bounds the program wrote (bit 1
-/// the end, bit 2 the start), a step of 0 or an axis outside the value is InvalidArgument at
-/// `invalid` (values: "[]", what is wrong), and a bound that leaves the dimension is
-/// SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the length).
+/// `xs[a:b]`, `xs[a:b:s]`, `xs[:b]`, `xs[a:]`, `xs[::-1]` and `slice(xs, 0, a, b, s)`
+/// (:op/slice_sub) as struct.cpp's __slice_sub__ reads them: `written` says which bounds the
+/// program wrote (bit 1 the end, bit 2 the start), a step of 0 or an axis outside the value is
+/// InvalidArgument at `invalid` (values: "[]", what is wrong), and a bound that leaves the
+/// dimension is SliceOutOfRange at `outOfRange` (values: the start, the end, "an array", the
+/// length).
 ///
 /// One of a value's dimensions is what is sliced, and every other dimension is kept whole
 /// (design principles 5.4): `m[0:2]` of a rank-2 value is its first two rows, `m[:, 1]` its second
 /// column, and the dimension sliced takes the length the bounds give it. A negative axis counts
 /// from the last dimension, which for a value of one dimension is 0 either way.
-template <typename T> void sliceGatherPlane(Array<T> &out,
-                                           const Array<T> &xs,
-                                           std::size_t axis,
-                                           int64_t start,
-                                           int64_t step,
-                                           std::size_t count,
-                                           const std::size_t *stride,
-                                           std::size_t dimension,
-                                           std::size_t offset) {
+template <typename T>
+void sliceGatherPlane(
+    Array<T> &out, const Array<T> &xs, std::size_t axis, int64_t start, int64_t step,
+    std::size_t count, const std::size_t *stride, std::size_t dimension, std::size_t offset) {
     if (dimension == xs.rank()) {
         out.push(xs[offset]);
         return;
@@ -735,7 +749,15 @@ template <typename T> void sliceGatherPlane(Array<T> &out,
     }
     for (std::size_t i = 0; i < xs.extent(dimension); ++i) {
         sliceGatherPlane(
-            out, xs, axis, start, step, count, stride, dimension + 1, offset + i * stride[dimension]);
+            out,
+            xs,
+            axis,
+            start,
+            step,
+            count,
+            stride,
+            dimension + 1,
+            offset + i * stride[dimension]);
     }
 }
 
@@ -753,8 +775,8 @@ Array<T> sliceSub(
     if (axis == -1) {
         axis = severalDimensions ? static_cast<int64_t>(xs.rank()) - 1 : 0;
     }
-    if (severalDimensions &&
-        (axis < 0 || static_cast<std::size_t>(axis) >= xs.rank())) [[unlikely]] {
+    if (severalDimensions && (axis < 0 || static_cast<std::size_t>(axis) >= xs.rank()))
+        [[unlikely]] {
         fault(
             invalid,
             {"[]",
@@ -796,11 +818,20 @@ Array<T> sliceSub(
         }
         const auto dimension = static_cast<std::size_t>(axis);
         Array<T> shaped;
-        shaped.reserve(xs.extent(dimension) == 0
-                           ? 0
-                           : (xs.size() / xs.extent(dimension)) * static_cast<std::size_t>(count));
+        shaped.reserve(
+            xs.extent(dimension) == 0
+                ? 0
+                : (xs.size() / xs.extent(dimension)) * static_cast<std::size_t>(count));
         sliceGatherPlane(
-            shaped, xs, dimension, start, step, static_cast<std::size_t>(count), stride, 0, 0);
+            shaped,
+            xs,
+            dimension,
+            start,
+            step,
+            static_cast<std::size_t>(count),
+            stride,
+            0,
+            0);
         shaped.shapeSliced(xs, dimension, static_cast<std::size_t>(count));
         return shaped;
     }
@@ -948,7 +979,8 @@ template <typename Format> Array<int64_t> halfArgsort(const Array<Half<Format>> 
 /// does -- and a target that changes the element count is a fault at `site` before anything is
 /// read, with the input's own count in the message. `count` below zero asks nothing.
 template <typename T>
-Array<T> reshape(const Array<T> &xs, std::initializer_list<int64_t> shape, int64_t count, const Site &site) {
+Array<T>
+reshape(const Array<T> &xs, std::initializer_list<int64_t> shape, int64_t count, const Site &site) {
     if (count >= 0 && static_cast<int64_t>(xs.size()) != count) {
         fault(site, {std::to_string(xs.size())});
     }
@@ -1093,13 +1125,13 @@ template <typename T> int64_t numel(const Array<T> &xs) { return static_cast<int
 
 /// The lanes of a reduction along one dimension (modules/tensor/kernels/reduce.cpp, `AxisSplit`):
 /// `extent` elements `inner` apart, one lane per position of every other dimension, in row-major
-/// order of the answer. The lane is read where it lies -- no lane is gathered into a run of its own,
-/// and nothing is transposed first -- and the answer keeps the dimensions it did not reduce, or
-/// keeps the reduced one as a one when the caller asked for that. A value of one dimension is the
-/// case where there is nothing else: its one lane is the whole value, so the answer is of no
+/// order of the answer. The lane is read where it lies -- no lane is gathered into a run of its
+/// own, and nothing is transposed first -- and the answer keeps the dimensions it did not reduce,
+/// or keeps the reduced one as a one when the caller asked for that. A value of one dimension is
+/// the case where there is nothing else: its one lane is the whole value, so the answer is of no
 /// dimension and *is* the element it reduced to (design principles 5.4), which is why the walk runs
-/// over the rank the value has rather than over two or more. `R` is the answer's element type, which
-/// is not always the source's: an argmax answers positions.
+/// over the rank the value has rather than over two or more. `R` is the answer's element type,
+/// which is not always the source's: an argmax answers positions.
 template <typename T, typename R, typename Lane>
 Array<R> axisReduce(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const char *name, const Site &invalid,
@@ -1166,8 +1198,8 @@ Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site 
 /// divided by a count" written a second way -- it is the interpreter's own two steps, in its order.
 /// The lane's sum is the accumulation `sumAxis` uses: every float element type adds into a `double`
 /// from +0 in ascending order, an integer adds exactly in `uint64_t`; the *unrounded* total is then
-/// divided by the extent of the lane in `double`, and that quotient is rounded into the element type
-/// once. Rounding the sum first would give a different number for an `f32` lane, and so would
+/// divided by the extent of the lane in `double`, and that quotient is rounded into the element
+/// type once. Rounding the sum first would give a different number for an `f32` lane, and so would
 /// dividing in the element type.
 ///
 /// An integer lane answers `int(sum / numel)`, the conversion `int(·)` already has (toward zero):
@@ -1175,9 +1207,9 @@ Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site 
 /// principles; modules/math/mean.h), not a lost average -- a program that wants a floating mean
 /// writes `float(xs)` first. So the answer keeps the element type, as the whole form's does.
 ///
-/// A lane with no element is not refused here: the interpreter does not refuse it either, it divides
-/// `0.0` by `0.0` and answers the canonical NaN -- one per lane, so a `f32[2, 0]` reduced on axis 1
-/// answers `[nan, nan]`. That NaN is the arithmetic's, not a diagnostic's.
+/// A lane with no element is not refused here: the interpreter does not refuse it either, it
+/// divides `0.0` by `0.0` and answers the canonical NaN -- one per lane, so a `f32[2, 0]` reduced
+/// on axis 1 answers `[nan, nan]`. That NaN is the arithmetic's, not a diagnostic's.
 template <typename T>
 Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid) {
     return axisReduce<T, T>(
@@ -1193,8 +1225,7 @@ Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site
                     acc += static_cast<std::uint64_t>(static_cast<int64_t>(v[base + k * inner]));
                 }
                 return static_cast<T>(
-                    static_cast<double>(static_cast<int64_t>(acc)) /
-                    static_cast<double>(extent));
+                    static_cast<double>(static_cast<int64_t>(acc)) / static_cast<double>(extent));
             } else {
                 double acc = 0.0;
                 for (std::size_t k = 0; k < extent; ++k) {
@@ -1206,8 +1237,8 @@ Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site
 }
 
 /// IEEE 754-2019 maximum of two values (modules/math/minmax.h, `maxOf`): a NaN on either side gives
-/// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the values
-/// but returned as its own bits, so the sign of a zero survives.
+/// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the
+/// values but returned as its own bits, so the sign of a zero survives.
 template <typename T> T maxOf(T a, T b) {
     if constexpr (std::is_floating_point_v<T>) {
         if (a != a || b != b) {
@@ -1240,9 +1271,9 @@ template <typename T> T minOf(T a, T b) {
 }
 
 /// `tensor:max_axis` and `tensor:min_axis` (modules/tensor/kernels/reduce.cpp): each lane folded
-/// from the operation's identity -- -inf for a maximum of floats, +inf for a minimum, the lowest and
-/// the largest value otherwise -- so that one NaN element still makes the answer NaN. Nothing is
-/// rounded and no accumulator takes part. A lane with no element has no extreme: the interpreter
+/// from the operation's identity -- -inf for a maximum of floats, +inf for a minimum, the lowest
+/// and the largest value otherwise -- so that one NaN element still makes the answer NaN. Nothing
+/// is rounded and no accumulator takes part. A lane with no element has no extreme: the interpreter
 /// refuses it, and so does this.
 template <bool Maximum, typename T>
 Array<T> extremeAxis(
@@ -1271,11 +1302,11 @@ Array<T> extremeAxis(
                 best = Maximum ? -std::numeric_limits<T>::infinity()
                                : std::numeric_limits<T>::infinity();
             } else {
-                best = Maximum ? std::numeric_limits<T>::lowest()
-                               : std::numeric_limits<T>::max();
+                best = Maximum ? std::numeric_limits<T>::lowest() : std::numeric_limits<T>::max();
             }
             for (std::size_t k = 0; k < extent; ++k) {
-                best = Maximum ? maxOf(best, v[base + k * inner]) : minOf(best, v[base + k * inner]);
+                best =
+                    Maximum ? maxOf(best, v[base + k * inner]) : minOf(best, v[base + k * inner]);
             }
             return best;
         });
@@ -1319,8 +1350,8 @@ template <bool Maximum, typename T> bool beyondExtreme(T v, T best) {
 /// `tensor:argmax_axis` and `tensor:argmin_axis` (modules/tensor/kernels/reduce.cpp): the position
 /// of the first element of the lane that equals its maximum (minimum), or of its first NaN. The
 /// answer's element type is int64 whatever the source holds, so it is a value of positions and not
-/// of elements; a lane with no element has no position, and the interpreter refuses that. A value of
-/// one dimension answers one position, which is the answer itself (design principles 5.4).
+/// of elements; a lane with no element has no position, and the interpreter refuses that. A value
+/// of one dimension answers one position, which is the answer itself (design principles 5.4).
 template <bool Maximum, typename T>
 Array<int64_t> argExtremeAxis(
     const Array<T> &xs, int64_t axisArg, bool keepDims, const Site &invalid, const Site &empty) {
@@ -1527,8 +1558,8 @@ R zip(const Site &site, const Array<First> &first, const Array<Rest> &...rest) {
             site,
             {"zip",
              sizeof...(Rest) == 1
-                 ? "the two sequences have " + std::to_string(n) + " and " +
-                       std::to_string(size) + " elements, and they must have the same number"
+                 ? "the two sequences have " + std::to_string(n) + " and " + std::to_string(size) +
+                       " elements, and they must have the same number"
                  : "sequences 1 and " + std::to_string(index) + " have " + std::to_string(n) +
                        " and " + std::to_string(size) +
                        " elements, and all must have the same number"});
