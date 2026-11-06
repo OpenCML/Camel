@@ -2622,10 +2622,10 @@ bool passBoundaryViolation(
     }
     // Every effect in the program the pass returns stands on a read of its value or on a place
     // in its chain (design principles 3.1, 3.3 as amended). This is asked of the whole
-    // program, not of what the pass touched: an effect an earlier round left in no chain
-    // is as lost as one dropped now, and a pass that removes the last reader has to route
-    // the effect through something that reads it (`:op/keep`) rather than leave it to an
-    // edge of order alone.
+    // program, not only what the pass touched. An effect retained after removing its last
+    // reader still needs a credential; a preserving transformation may route it through
+    // a reader such as `:op/keep`. A selected intentional deletion may instead erase the
+    // genuinely undemanded node. Neither route may leave an orphan effect behind.
     const EffectCredentialViolation credential = effectCredentialViolation(program, ctx);
     if (!credential.text.empty()) {
         auto diag = ctx->rtmDiags()->of(RuntimeDiag::PassInternalError);
@@ -3281,14 +3281,9 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
             }
-            // The pass ended with a program: the effects on one **ambient** resource must still be
-            // in the order the program wrote them, which is the order its graph makes them wait for
-            // (design principles 3.3), and the rest of the boundary holds (`passBoundaryViolation`,
-            // which `applyRegisteredPass` calls too: a pass a pass runs by name is checked where it
-            // returns, not only here). What the check does not cover -- a `var` or a handle, an
-            // entry or an exit of a graph that is not the program's own, a copy that lost its
-            // inline call site -- is named on `passBoundaryViolation` and in the report that
-            // measured it (docs/handover/reports/p0-6-boundary-check-promises-vs-checks.cn.md).
+            // Generic admission checks ports, root entry/exit and effect credentials, as does
+            // applyRegisteredPass. Resource support and matched ordering are compared only by
+            // an explicitly selected checker; this function-to-function result implies neither.
             if (passBoundaryViolation(ctx, p, *program, effectsBefore)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
