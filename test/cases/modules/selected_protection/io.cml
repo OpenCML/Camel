@@ -1,0 +1,7 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// Candidate deletion with observable execution and a retained final print.
+
+func probe(a: int): int { return println(a) * 0 }
+func main(): int { return println(probe(41)) }

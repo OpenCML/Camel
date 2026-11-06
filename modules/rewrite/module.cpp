@@ -38,16 +38,16 @@
 #include "camel/core/rtdata/half.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/rtdata/struct.h"
-#include "camel/core/rtdata/variant.h"
 #include "camel/core/rtdata/tagged.h"
+#include "camel/core/rtdata/variant.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
-#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/core_facts.h"
 #include "camel/runtime/draft_session.h"
+#include "camel/runtime/operator_instance.h"
 #include "camel/runtime/program.h"
 #include "camel/runtime/reachable.h"
 #include "camel/runtime/rules.h"
@@ -60,8 +60,8 @@
 #include <bit>
 #include <chrono>
 #include <cmath>
-#include <cstdio>
 #include <cstdint>
+#include <cstdio>
 #include <cstring>
 #include <deque>
 #include <format>
@@ -89,7 +89,6 @@ using camel::compile::gir::RuleConditionAt;
 using camel::graphmod::Handle;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
-using camel::rewritemod::renderRows;
 using camel::rewritemod::CheckRow;
 using camel::rewritemod::kPropositionEquality;
 using camel::rewritemod::kPropositionErrorBound;
@@ -100,6 +99,7 @@ using camel::rewritemod::kVerdictSampled;
 using camel::rewritemod::linkAfter;
 using camel::rewritemod::linkBefore;
 using camel::rewritemod::ProofObject;
+using camel::rewritemod::renderRows;
 using camel::rewritemod::RewriteRecord;
 using camel::rewritemod::RuleObject;
 using camel::rewritemod::RuleType;
@@ -115,8 +115,8 @@ namespace data   = camel::core::data;
 /// parameters -- the values it was bound to. Both halves are the instance's key, so a reader of a
 /// report tells `add_tile<int>(tile = 3)` from `add_tile<int>(tile = 0)` by the name itself
 /// (design principles 5.4, 5.5).
-std::string instanceNameOf(
-    const RuleObject &rule, const camel::compile::gir::GenericRuleInstance &instance) {
+std::string
+instanceNameOf(const RuleObject &rule, const camel::compile::gir::GenericRuleInstance &instance) {
     if (instance.withText.empty()) {
         return std::format("{}<{}>", rule.name(), instance.typeText);
     }
@@ -150,7 +150,8 @@ data::data_ptr_t dataOfRuleValue(ArgsView &norm, size_t index) {
     case TypeCode::Float16:
     case TypeCode::BFloat16:
         return std::make_shared<data::HalfData>(
-            static_cast<uint16_t>(norm.get<rtdata::Int64>(index)), type);
+            static_cast<uint16_t>(norm.get<rtdata::Int64>(index)),
+            type);
     default:
         return nullptr;
     }
@@ -186,8 +187,8 @@ slot_t ruleWhenKernel(ArgsView &, ArgsView &norm, Context &) {
 
 /// `__rule_generic('name', two_way, needs, consts, id[, <the with values>])`: the maker of a rule
 /// that is instantiated -- one whose head declares type parameters or `with` parameters. What it is
-/// given is the id the rule's templates were registered under (the front end registers them while it
-/// builds this call) and the value of each `with` parameter, in the order the declaration writes
+/// given is the id the rule's templates were registered under (the front end registers them while
+/// it builds this call) and the value of each `with` parameter, in the order the declaration writes
 /// them: such a rule has no function values to hold, so it keeps the id and the values, and the
 /// engine makes its sides where it matches, one instance per type tuple and set of values.
 slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
@@ -196,7 +197,7 @@ slot_t genericRuleKernel(ArgsView &, ArgsView &norm, Context &) {
     for (size_t i = 5; i < norm.size(); ++i) {
         withValues.push_back(dataOfRuleValue(norm, i));
     }
-    auto *object    = RuleObject::create(
+    auto *object = RuleObject::create(
         name,
         norm.get<rtdata::Bool>(1),
         static_cast<camel::core::sem::PermissionMask>(norm.get<rtdata::Int64>(2)),
@@ -240,9 +241,9 @@ struct WhenCall {
     const camel::runtime::Program *program = nullptr;
     const camel::runtime::GCGraph *graph   = nullptr;
     /// The rule's own parameters, the condition's, and which of the rule's are `const`.
-    size_t own            = 0;
-    size_t arity          = 0;
-    uint64_t constParams  = 0;
+    size_t own           = 0;
+    size_t arity         = 0;
+    uint64_t constParams = 0;
     /// The name the messages use.
     std::string name;
 };
@@ -271,12 +272,10 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // description has carried those copies since.
     const RuleObject *rule = call.rule != nullptr ? call.rule->getAs<RuleObject>() : nullptr;
     const size_t arity =
-        rule != nullptr
-            ? static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount())
-            : call.arity;
-    const size_t own = rule != nullptr
-                           ? static_cast<size_t>(rule->lhs()->graph()->normPorts().size())
-                           : call.own;
+        rule != nullptr ? static_cast<size_t>(rule->when()->graph()->funcType()->normTypesCount())
+                        : call.arity;
+    const size_t own =
+        rule != nullptr ? static_cast<size_t>(rule->lhs()->graph()->normPorts().size()) : call.own;
     const uint64_t constParams = rule != nullptr ? rule->constParams() : call.constParams;
     // The rule's name, read where it is needed: an ordinary rule's object moves under the
     // collector, an instance's name is part of the call description.
@@ -318,11 +317,13 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
             if (isConst) {
                 const auto found = constantOf(i);
                 if (!found) {
-                    throw std::runtime_error(std::format(
-                        "Rule '{}': parameter {} of its condition is `const`, and the left side "
-                        "bound no constant there.",
-                        ruleName(),
-                        i + 1));
+                    throw std::runtime_error(
+                        std::format(
+                            "Rule '{}': parameter {} of its condition is `const`, and the left "
+                            "side "
+                            "bound no constant there.",
+                            ruleName(),
+                            i + 1));
                 }
                 roots.push_back(
                     found->second != nullptr && found->second->isGCTraced()
@@ -350,19 +351,21 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
         if (constParam == SIZE_MAX || !constantOf(constParam)) {
             // A `const` parameter the left side does not use has no node to hand over: a node the
             // condition could read does not exist, and the rule says nothing about the program.
-            throw camel::runtime::RuleCompileError(std::format(
-                "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
-                "(`node_of`), but the left side binds no node for it.",
-                ruleName(),
-                i + 1));
+            throw camel::runtime::RuleCompileError(
+                std::format(
+                    "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
+                    "(`node_of`), but the left side binds no node for it.",
+                    ruleName(),
+                    i + 1));
         }
         const camel::runtime::gc_node_ref_t bound = match.vars[constParam];
         if (bound == camel::runtime::kInvalidNodeRef) {
-            throw camel::runtime::RuleCompileError(std::format(
-                "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
-                "(`node_of`), and the left side bound no node there.",
-                ruleName(),
-                i + 1));
+            throw camel::runtime::RuleCompileError(
+                std::format(
+                    "Rule '{}': parameter {} of its condition is the node of a `const` parameter "
+                    "(`node_of`), and the left side bound no node there.",
+                    ruleName(),
+                    i + 1));
         }
         Handle *handle = nodeHandleOf(writings, bound);
         roots.push_back(
@@ -376,8 +379,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // each slot names where the collector put it, or the constant's bits.
     for (size_t i = 0; i < arity; ++i) {
         if (i < own && i < 64 && ((constParams >> i) & 1) != 0) {
-            args.push_back(
-                roots[i] != nullptr ? toSlot(roots[i]->get()) : constantOf(i)->first);
+            args.push_back(roots[i] != nullptr ? toSlot(roots[i]->get()) : constantOf(i)->first);
             continue;
         }
         args.push_back(toSlot(roots[i]->getAs<Handle>()));
@@ -385,7 +387,7 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
     // A call can move the objects: the condition is read from the rooted rule after the last
     // allocation and immediately before the call. An instance's condition is the graph the context
     // published for it, which no safepoint moves.
-    ::Function *when = rule != nullptr ? rule->when() : nullptr;
+    ::Function *when                           = rule != nullptr ? rule->when() : nullptr;
     const camel::runtime::Program *whenProgram = when != nullptr ? when->program() : call.program;
     const camel::runtime::GCGraph *whenGraph   = when != nullptr ? when->graph() : call.graph;
     ASSERT(
@@ -405,7 +407,9 @@ bool callWhen(const WhenCall &call, const camel::runtime::Match &match) {
             // takes them without `const`; an instance's condition graph is the context's, and no
             // other reader holds it.
             return call.vm->callGraph(
-                whenProgram, const_cast<camel::runtime::GCGraph *>(whenGraph), args);
+                whenProgram,
+                const_cast<camel::runtime::GCGraph *>(whenGraph),
+                args);
         } catch (const camel::core::error::FactQueryNoValue &) {
             // A fact query inside the condition named parts that are no value's operands: the
             // condition is false -- this rule does not apply here -- and not a failure of the pass.
@@ -442,9 +446,7 @@ sourceOf(const RuleObject &rule, uint16_t id, const std::shared_ptr<WhenCall> &c
         source.whenNodesStart = static_cast<uint32_t>(rule.lhs()->graph()->normPorts().size());
         // The closure keeps the rooted rule (`call`), never its address: the engine holds it across
         // the safepoints of every condition the application evaluates, and the rule moves under it.
-        source.when = [call](const camel::runtime::Match &match) {
-            return callWhen(*call, match);
-        };
+        source.when = [call](const camel::runtime::Match &match) { return callWhen(*call, match); };
     }
     return source;
 }
@@ -520,9 +522,9 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
                 type->code() == TypeCode::Never) {
                 continue;
             }
-            const bool known = std::any_of(
-                types.begin(), types.end(),
-                [&](const Type *seen) { return seen == type || seen->equals(type); });
+            const bool known = std::any_of(types.begin(), types.end(), [&](const Type *seen) {
+                return seen == type || seen->equals(type);
+            });
             if (!known) {
                 types.push_back(type);
             }
@@ -534,8 +536,9 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
 /// The type tuples a generic rule is instantiated at, one per type parameter: for a rule of one
 /// parameter the types themselves, and for a rule of more the product of the types over its
 /// parameters, capped at `kCheckTupleCap` tuples in a fixed order. The types are those of every
-/// value the program being rewritten has, each once, in the order the graphs write them. It binds the rule's type variables from the nodes it
-/// matches, so the types are the program's own (not the registered meta-types `check` adds).
+/// value the program being rewritten has, each once, in the order the graphs write them. It binds
+/// the rule's type variables from the nodes it matches, so the types are the program's own (not the
+/// registered meta-types `check` adds).
 ///
 /// A tuple is kept only when the rule's condition admits it at the type level (`ruleConditionAt`),
 /// which is the same filter `check` applies before it tries a tuple. A rule's condition is what
@@ -546,8 +549,8 @@ std::vector<Type *> programValueTypes(const camel::runtime::Program &program) {
 /// condition is asked before the cap counts the tuple, so the cap is spent on tuples the law can
 /// have. A tuple that cannot be written for is remembered as one that did not come about, and the
 /// engine skips it.
-std::vector<std::vector<Type *>> tuplesOf(
-    Context &ctx, const camel::runtime::Program &program, uint64_t ruleId, size_t arity) {
+std::vector<std::vector<Type *>>
+tuplesOf(Context &ctx, const camel::runtime::Program &program, uint64_t ruleId, size_t arity) {
     const std::vector<Type *> types = programValueTypes(program);
     std::vector<std::vector<Type *>> tuples;
     if (types.empty()) {
@@ -636,8 +639,8 @@ std::vector<std::vector<Type *>> tuplesHolding(const Type *type, size_t arity) {
 /// The compiled rules of one instance of a generic rule, made now if this is the first read and
 /// kept in the entry: the instance is compiled once, so a second application of the same rule at
 /// the same types pays nothing.
-const std::vector<camel::runtime::Rule> &instanceRules(
-    Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, size_t index) {
+const std::vector<camel::runtime::Rule> &
+instanceRules(Context &ctx, const RuleObject &rule, GenericRuleEntry &entry, size_t index) {
     static const std::vector<camel::runtime::Rule> none;
     if (entry.compiled == nullptr) {
         entry.compiled = std::make_shared<CompiledInstances>();
@@ -678,8 +681,8 @@ const std::vector<camel::runtime::Rule> &instanceRules(
 /// Compiling a rule makes constants and can collect: the array is read again from the argument,
 /// which the collector keeps up to date, each time. A generic rule has no sides of its own: it
 /// contributes one instance per type tuple of the program it is applied to, made once and kept.
-std::vector<camel::runtime::Rule> engineRules(
-    Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
+std::vector<camel::runtime::Rule>
+engineRules(Context &ctx, ArgsView &norm, size_t argument, const camel::runtime::Program *base) {
     std::vector<camel::runtime::Rule> out;
     auto vm            = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
     uint16_t next      = 1;
@@ -692,20 +695,24 @@ std::vector<camel::runtime::Rule> engineRules(
                 continue;
             }
             // The rule's own number of type parameters decides how many types a tuple has: a law of
-            // two is instantiated at a pair of the program's types, not at one of them (the ruleeneric-rule-instantiation assumes one type per value, and asking a
-            // two-parameter rule for one type is what left such a law with no instance at all).
+            // two is instantiated at a pair of the program's types, not at one of them (the
+            // ruleeneric-rule-instantiation assumes one type per value, and asking a two-parameter
+            // rule for one type is what left such a law with no instance at all).
             GenericRuleEntry *entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
             const size_t arity      = entry != nullptr ? entry->typeParams.size() : 1;
             for (const std::vector<Type *> &types : tuplesOf(ctx, *base, ruleId, arity)) {
                 const size_t index = camel::compile::gir::genericRuleInstance(
-                    ctx, ruleId, types, rule->withValues());
+                    ctx,
+                    ruleId,
+                    types,
+                    rule->withValues());
                 // Making an instance builds a body and encodes graphs: the value is read again
                 // from the array, and the entry again from the context, after it.
                 entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
                 if (entry == nullptr || index >= entry->instances.size() ||
                     !entry->instances[index].made) {
-                    // A type tuple the rule cannot be written for says nothing: the rule keeps a failed instantiation quiet, and `why_not` is where the
-                    // reason is read.
+                    // A type tuple the rule cannot be written for says nothing: the rule keeps a
+                    // failed instantiation quiet, and `why_not` is where the reason is read.
                     continue;
                 }
                 RuleObject *current = norm.get<Array *>(argument)->get<RuleObject *>(i);
@@ -771,8 +778,8 @@ ProofType *ProofType::get() {
     static std::once_flag once;
     std::call_once(once, [] {
         const TypeCode code = registerOtherType("rewrite::Proof", TypeFlag::GC_Traced);
-        instance            = static_cast<ProofType *>(TypeTable::instance().internOther(
-            code, std::span<const uintptr_t>(), [&]() -> Type * {
+        instance            = static_cast<ProofType *>(
+            TypeTable::instance().internOther(code, std::span<const uintptr_t>(), [&]() -> Type            *{
                 void *mem = mm::permSpace().alloc(sizeof(ProofType), alignof(ProofType));
                 ASSERT(mem != nullptr, "Failed to allocate ProofType from permSpace");
                 return new (mem) ProofType(code);
@@ -781,9 +788,7 @@ ProofType *ProofType::get() {
     return instance;
 }
 
-bool ProofType::is(const Type *type) {
-    return type != nullptr && type->code() == get()->code();
-}
+bool ProofType::is(const Type *type) { return type != nullptr && type->code() == get()->code(); }
 
 Type *ProofType::clone(bool) const { return get(); }
 
@@ -826,11 +831,11 @@ std::string propositionOf(camel::core::sem::PermissionMask needs) {
     return kPropositionEquality;
 }
 
-/// The stream one rule's samples are drawn from: the seed is derived from the rule's identity -- its name together
-/// with the type tuple of the instance, `add_zero<i32>` -- and not from its place in the array the
-/// caller passed, so the same rule draws the same samples in any call, whatever else is checked
-/// beside it. `seed` stays the caller's knob: the identity decides *which* stream, the seed *where*
-/// in it.
+/// The stream one rule's samples are drawn from: the seed is derived from the rule's identity --
+/// its name together with the type tuple of the instance, `add_zero<i32>` -- and not from its place
+/// in the array the caller passed, so the same rule draws the same samples in any call, whatever
+/// else is checked beside it. `seed` stays the caller's knob: the identity decides *which* stream,
+/// the seed *where* in it.
 uint64_t sampleStreamOf(uint64_t seed, std::string_view identity) {
     uint64_t hash = 1469598103934665603ull; // FNV-1a, 64 bit
     for (const char c : identity) {
@@ -839,7 +844,6 @@ uint64_t sampleStreamOf(uint64_t seed, std::string_view identity) {
     }
     return seed ^ (hash * 1000003ull);
 }
-
 
 /// The function an engine is applied to (`f` of `f->rewrite<rules>`), read again from the
 /// arguments each time it is used: a rule's condition is Camel code, and a safepoint, so the
@@ -853,8 +857,8 @@ uint64_t sampleStreamOf(uint64_t seed, std::string_view identity) {
     ::Function *subject = subjectOf(norm, index);
     const auto id       = subject->graphId();
     mm::NoCollectionScope noCollection;
-    auto *function = static_cast<::Function *>(
-        subject->clone(mm::autoSpace(), norm.type(index), false));
+    auto *function =
+        static_cast<::Function *>(subject->clone(mm::autoSpace(), norm.type(index), false));
     function->rebind(committed, committed->graph(id) != nullptr ? id : committed->root()->id());
     return function;
 }
@@ -880,21 +884,21 @@ struct Application {
 Application applyRewrite(
     Context &ctx, const camel::runtime::Program *base, camel::runtime::GCGraph *subject,
     std::span<const camel::runtime::Rule> compiled, camel::core::sem::NumericPolicy policy,
-    size_t maxRounds, RewriteRecord *record = nullptr) {
+    size_t maxRounds, RewriteRecord *record = nullptr,
+    camel::runtime::DeletionProtection protection = {}) {
     camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base, subject);
     camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
     camel::runtime::RewriteStats total;
-    total.fixpoint = true;
+    total.fixpoint                  = true;
     camel::runtime::RewriteLog *log = record != nullptr ? &record->steps : nullptr;
-    for (camel::runtime::GCGraph *graph :
-         camel::runtime::collectReachableGraphs(*base, subject)) {
+    for (camel::runtime::GCGraph *graph : camel::runtime::collectReachableGraphs(*base, subject)) {
         if (isRuleSide(*graph)) {
             continue;
         }
         auto &transaction = session.edit(graph);
         auto &draft       = transaction.edit();
-        camel::runtime::DraftWritings writings(transaction, policy);
-        const size_t from = log != nullptr ? log->size() : 0;
+        camel::runtime::DraftWritings writings(transaction, policy, protection);
+        const size_t from                        = log != nullptr ? log->size() : 0;
         const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds, log);
         if (log != nullptr) {
             for (size_t i = from; i < log->size(); ++i) {
@@ -929,12 +933,17 @@ slot_t rewriteKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *base            = subjectOf(norm)->program();
     const bool strict           = with.size() > 1 && with.get<Bool>(1);
     try {
-        const auto compiled = engineRules(ctx, with, 0, base);
+        const auto compiled           = engineRules(ctx, with, 0, base);
         const Application application = applyRewrite(
-            ctx, base, subjectOf(norm)->graph(), compiled,
+            ctx,
+            base,
+            subjectOf(norm)->graph(),
+            compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
                    : camel::core::sem::NumericPolicy::relaxed(),
-            16);
+            16,
+            nullptr,
+            {with.get<Bool>(2), with.get<Bool>(3)});
         return makeOk(toSlot(functionOver(norm, 0, application.program)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
@@ -979,13 +988,19 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         const auto start    = std::chrono::steady_clock::now();
         const auto compiled = engineRules(ctx, with, 0, base);
         RewriteRecord record;
-        record.strict = strict;
-        record.input  = base;
+        record.strict                 = strict;
+        record.protection             = {with.get<Bool>(4), with.get<Bool>(5)};
+        record.input                  = base;
         const Application application = applyRewrite(
-            ctx, base, subjectOf(norm)->graph(), compiled,
+            ctx,
+            base,
+            subjectOf(norm)->graph(),
+            compiled,
             strict ? camel::core::sem::NumericPolicy::strict()
                    : camel::core::sem::NumericPolicy::relaxed(),
-            rounds < 0 ? 0 : static_cast<size_t>(rounds), explain ? &record : nullptr);
+            rounds < 0 ? 0 : static_cast<size_t>(rounds),
+            explain ? &record : nullptr,
+            record.protection);
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         // The function the run produced is rooted while the struct is made: that allocation can
@@ -1006,10 +1021,8 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         if (explain) {
             // The proof allocation can collect; the run is rooted, and the program it produced is
             // already in its first slot, so both survive while the proof is made.
-            ProofObject *proof =
-                ProofObject::create(record, application.stats, mm::autoSpace());
-            mm::RootHandle proofRoot(
-                mm::autoSpace(), proof, ProofType::get(), "rewrite.proof");
+            ProofObject *proof = ProofObject::create(record, application.stats, mm::autoSpace());
+            mm::RootHandle proofRoot(mm::autoSpace(), proof, ProofType::get(), "rewrite.proof");
             run->set(7, makeSome(toSlot(proof), proofType));
         }
         return makeOk(toSlot(root.getAs<Struct>()), resultType);
@@ -1072,7 +1085,9 @@ ProofObject::Chain findChain(
         chain.none = std::format(
             "the two values are in different graphs (%{} in graph {} and %{} in graph {}): no "
             "rewrite connects them",
-            a->index(), camel::runtime::toText(a->graph()), b->index(),
+            a->index(),
+            camel::runtime::toText(a->graph()),
+            b->index(),
             camel::runtime::toText(b->graph()));
         return chain;
     }
@@ -1138,7 +1153,8 @@ ProofObject::Chain findChain(
         chain.none = std::format(
             "no chain of rewrites connects {} and {}: the run made no step that turns one into the "
             "other, directly or through a value it rewrote in between",
-            chain.from, chain.to);
+            chain.from,
+            chain.to);
         return chain;
     }
     // At most this many equally short chains are printed; a run that ties more often than this is
@@ -1169,7 +1185,8 @@ ProofObject::Chain findChain(
     };
     walk(*goalDraft);
     std::sort(
-        paths.begin(), paths.end(),
+        paths.begin(),
+        paths.end(),
         [](const ProofObject::ChainPath &x, const ProofObject::ChainPath &y) {
             for (size_t i = 0; i < std::min(x.size(), y.size()); ++i) {
                 if (x[i].step != y[i].step) {
@@ -1201,7 +1218,7 @@ slot_t explainAllKernel(ArgsView &, ArgsView &norm, Context &) {
     }
     const TupleType *resultType = TupleType::fallible(ProofType::get());
     auto *full                  = fromSlot<ProofObject *>(nullablePayload(field));
-    ProofObject *copy           = ProofObject::create(full->record(), full->stats(), mm::autoSpace());
+    ProofObject *copy = ProofObject::create(full->record(), full->stats(), mm::autoSpace());
     mm::RootHandle root(mm::autoSpace(), copy, ProofType::get(), "rewrite.proof");
     return makeOk(toSlot(copy), resultType);
 }
@@ -1223,13 +1240,14 @@ slot_t explainKernel(ArgsView &with, ArgsView &norm, Context &) {
     if (a == nullptr || b == nullptr || a->kind() != camel::graphmod::HandleKind::Node ||
         b->kind() != camel::graphmod::HandleKind::Node) {
         return makeError(
-            "InvalidArgument", "explain reads two nodes of the function the run produced",
+            "InvalidArgument",
+            "explain reads two nodes of the function the run produced",
             "<rewrite::explain>");
     }
-    auto *full = fromSlot<ProofObject *>(nullablePayload(field));
+    auto *full                             = fromSlot<ProofObject *>(nullablePayload(field));
     const camel::runtime::Program *program = fromSlot<::Function *>(run->slotAt(0))->program();
-    const camel::runtime::Program *input = full->input();
-    const auto known                      = [&](const camel::graphmod::Handle *h) {
+    const camel::runtime::Program *input   = full->input();
+    const auto known                       = [&](const camel::graphmod::Handle *h) {
         return h->program() == program || (input != nullptr && h->program() == input);
     };
     if (!known(a) || !known(b)) {
@@ -1267,7 +1285,8 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     const auto *value = with.get<const camel::graphmod::Handle *>(1);
     if (value == nullptr || value->kind() != camel::graphmod::HandleKind::Node) {
         return makeError(
-            "InvalidArgument", "why_not reads a node of the function the run produced",
+            "InvalidArgument",
+            "why_not reads a node of the function the run produced",
             "<rewrite::why_not>");
     }
     if (value->program() != fromSlot<::Function *>(run->slotAt(0))->program()) {
@@ -1294,25 +1313,29 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     // from the frame again wherever a collecting call stands between the read and the use; and the
     // value's graph and index are read once, as numbers.
     mm::RootHandle ruleRoot(
-        mm::autoSpace(), const_cast<RuleObject *>(rule), RuleType::get(), "rewrite.whyNotRule");
-    const auto ruleNow = [&ruleRoot]() { return ruleRoot.getAs<RuleObject>(); };
-    const auto runNow  = [&norm]() { return norm.get<Struct *>(0); };
+        mm::autoSpace(),
+        const_cast<RuleObject *>(rule),
+        RuleType::get(),
+        "rewrite.whyNotRule");
+    const auto ruleNow    = [&ruleRoot]() { return ruleRoot.getAs<RuleObject>(); };
+    const auto runNow     = [&norm]() { return norm.get<Struct *>(0); };
     const auto programNow = [&runNow]() {
         return fromSlot<::Function *>(runNow()->slotAt(0))->program();
     };
     const camel::runtime::GraphId graphId = value->graph();
     const uint32_t valueIndex             = value->index();
-    const auto draftNode = draftNodeOf(record, nullptr, programNow(), value);
-    const TupleType *resultType = TupleType::fallible(Type::String());
-    const auto answer = [&](std::string text) -> slot_t {
+    const auto draftNode                  = draftNodeOf(record, nullptr, programNow(), value);
+    const TupleType *resultType           = TupleType::fallible(Type::String());
+    const auto answer                     = [&](std::string text) -> slot_t {
         String *out = String::from(std::move(text), mm::autoSpace());
         mm::RootHandle root(mm::autoSpace(), out, Type::String(), "rewrite.why_not");
         return makeOk(toSlot(out), resultType);
     };
     if (!draftNode) {
-        return answer(std::format(
-            "the run made no rewrite at %{}: the value is not one any step matched or produced",
-            valueIndex));
+        return answer(
+            std::format(
+                "the run made no rewrite at %{}: the value is not one any step matched or produced",
+                valueIndex));
     }
     // A value the run produced has a step behind it: the question "why not" is answered by saying
     // which rewrite did happen, and by which rule.
@@ -1323,27 +1346,42 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             const std::string before =
                 step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
             if (step.rule == ruleNow()->name()) {
-                return answer(std::format(
-                    "the rule fired here in round {} of graph {}: {} was made from {}",
-                    step.round, step.graph, step.producedText, before));
+                return answer(
+                    std::format(
+                        "the rule fired here in round {} of graph {}: {} was made from {}",
+                        step.round,
+                        step.graph,
+                        step.producedText,
+                        before));
             }
             if (step.rule.starts_with(std::string(ruleNow()->name()) + "<")) {
                 // The step came from an instance of this generic rule: the answer names it, since
                 // which types an instance was made for is the one thing a generic rule's report
                 // has to say.
-                return answer(std::format(
-                    "the rule fired here in round {} of graph {} as `{}`: {} was made from {}",
-                    step.round, step.graph, step.rule, step.producedText, before));
+                return answer(
+                    std::format(
+                        "the rule fired here in round {} of graph {} as `{}`: {} was made from {}",
+                        step.round,
+                        step.graph,
+                        step.rule,
+                        step.producedText,
+                        before));
             }
-            return answer(std::format(
-                "another rule fired here in round {} of graph {}: {} was made from {} by `{}`",
-                step.round, step.graph, step.producedText, before, step.rule));
+            return answer(
+                std::format(
+                    "another rule fired here in round {} of graph {}: {} was made from {} by `{}`",
+                    step.round,
+                    step.graph,
+                    step.producedText,
+                    before,
+                    step.rule));
         }
     }
     if (programNow() == nullptr || programNow()->graph(graphId) == nullptr) {
-        return answer(std::format(
-            "the graph {} the value belongs to is not in the program the run produced",
-            camel::runtime::toText(graphId)));
+        return answer(
+            std::format(
+                "the graph {} the value belongs to is not in the program the run produced",
+                camel::runtime::toText(graphId)));
     }
     try {
         if (ruleNow()->ruleId() != 0) {
@@ -1351,14 +1389,14 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             // and the question is about it. Which types the rule was instantiated at, and what came
             // of each, is what a reader of a generic rule needs to know.
             const camel::runtime::GCGraph *graph = programNow()->graph(graphId);
-            const Type *type =
-                graph != nullptr ? graph->node(valueIndex)->dataType() : nullptr;
+            const Type *type = graph != nullptr ? graph->node(valueIndex)->dataType() : nullptr;
             if (type == nullptr) {
-                return answer(std::format(
-                    "`{}` is a generic rule, and the type of this value is not known here",
-                    ruleNow()->name()));
+                return answer(
+                    std::format(
+                        "`{}` is a generic rule, and the type of this value is not known here",
+                        ruleNow()->name()));
             }
-const uint64_t ruleId = ruleNow()->ruleId();
+            const uint64_t ruleId = ruleNow()->ruleId();
             // What the messages below say about the type is read before the instance is made:
             // making it runs the compiler, which can collect, and `type` is an address on the GC
             // heap.
@@ -1375,13 +1413,15 @@ const uint64_t ruleId = ruleNow()->ruleId();
             const size_t arity = entry != nullptr ? entry->typeParams.size() : 0;
             std::string firstTuple;
             std::string firstWhy;
-            size_t tried = 0;
-            const std::vector<std::vector<Type *>> candidates =
-                tuplesHolding(type, arity);
+            size_t tried                                      = 0;
+            const std::vector<std::vector<Type *>> candidates = tuplesHolding(type, arity);
             for (const std::vector<Type *> &tuple : candidates) {
                 ++tried;
                 const size_t index = camel::compile::gir::genericRuleInstance(
-                    ctx, ruleId, tuple, ruleNow()->withValues());
+                    ctx,
+                    ruleId,
+                    tuple,
+                    ruleNow()->withValues());
                 // Making an instance can collect: the rule value, the entry and the types are read
                 // from where they live, again.
                 entry = camel::compile::gir::genericRuleEntry(ctx, ruleId);
@@ -1404,67 +1444,89 @@ const uint64_t ruleId = ruleNow()->ruleId();
                 const std::vector<camel::runtime::Rule> &compiled =
                     instanceRules(ctx, *ruleNow(), *entry, index);
                 if (compiled.empty()) {
-                    return answer(
-                        std::format("`{}` compiles to no rule", instanceText));
+                    return answer(std::format("`{}` compiles to no rule", instanceText));
                 }
-                camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
+                camel::runtime::RuntimeGraphDraftSession session(
+                    ctx.shared_from_this(),
+                    programNow());
                 auto &transaction = session.edit(
                     const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
                 auto &draft = transaction.edit();
                 camel::runtime::DraftWritings writings(
-                    transaction, record.strict ? camel::core::sem::NumericPolicy::strict()
-                                               : camel::core::sem::NumericPolicy::relaxed());
+                    transaction,
+                    record.strict ? camel::core::sem::NumericPolicy::strict()
+                                  : camel::core::sem::NumericPolicy::relaxed());
                 const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
-                return answer(std::format(
-                    "`{}` did not fire at {}: {}",
-                    instanceText,
-                    writings.textOf(*draftNode),
-                    miss.detail));
+                return answer(
+                    std::format(
+                        "`{}` did not fire at {}: {}",
+                        instanceText,
+                        writings.textOf(*draftNode),
+                        miss.detail));
             }
             if (firstWhy.empty()) {
-                return answer(std::format(
-                    "`{}` is a generic rule, and no instance of it could be made for '{}'",
-                    ruleNow()->name(), typeText));
+                return answer(
+                    std::format(
+                        "`{}` is a generic rule, and no instance of it could be made for '{}'",
+                        ruleNow()->name(),
+                        typeText));
             }
             if (arity <= 1) {
                 // One type parameter: the tuple the value's type makes is the tuple, and the reason
                 // is the whole answer.
-                return answer(std::format(
-                    "`{}` is a generic rule, and no instance of it could be made for '{}': {}",
-                    ruleNow()->name(), typeText, firstWhy));
+                return answer(
+                    std::format(
+                        "`{}` is a generic rule, and no instance of it could be made for '{}': {}",
+                        ruleNow()->name(),
+                        typeText,
+                        firstWhy));
             }
             // Two or more: the question gave one value, and which tuple of the registered types
             // that value stood at is what the reader has to be told to judge the reason.
-            return answer(std::format(
-                "`{}` is a generic rule, and no instance of it could be made for '{}': "
-                "`{}<{}>` is the first of the {} type tuple(s) that could hold it, and it did not "
-                "come about: {}",
-                ruleNow()->name(), typeText, ruleNow()->name(), firstTuple, tried, firstWhy));
+            return answer(
+                std::format(
+                    "`{}` is a generic rule, and no instance of it could be made for '{}': "
+                    "`{}<{}>` is the first of the {} type tuple(s) that could hold it, and it did "
+                    "not "
+                    "come about: {}",
+                    ruleNow()->name(),
+                    typeText,
+                    ruleNow()->name(),
+                    firstTuple,
+                    tried,
+                    firstWhy));
         }
         std::shared_ptr<WhenCall> call;
         if (ruleNow()->when() != nullptr) {
             call       = std::make_shared<WhenCall>();
             call->rule = std::make_shared<mm::RootHandle>(
-                mm::autoSpace(), const_cast<RuleObject *>(ruleNow()), RuleType::get(),
+                mm::autoSpace(),
+                const_cast<RuleObject *>(ruleNow()),
+                RuleType::get(),
                 "rewrite.whyNotRule");
             call->vm = std::make_shared<NodeVMSchedPass>(ctx.shared_from_this());
         }
-        const camel::runtime::RuleSource source = sourceOf(*ruleNow(), 1, call);
+        const camel::runtime::RuleSource source    = sourceOf(*ruleNow(), 1, call);
         std::vector<camel::runtime::Rule> compiled = camel::runtime::compileRule(ctx, source);
         if (compiled.empty()) {
             return answer(std::format("`{}` compiles to no rule", ruleNow()->name()));
         }
         camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), programNow());
-        auto &transaction = session.edit(
-            const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
+        auto &transaction =
+            session.edit(const_cast<camel::runtime::GCGraph *>(programNow()->graph(graphId)));
         auto &draft = transaction.edit();
         camel::runtime::DraftWritings writings(
-            transaction, record.strict ? camel::core::sem::NumericPolicy::strict()
-                                       : camel::core::sem::NumericPolicy::relaxed());
+            transaction,
+            record.strict ? camel::core::sem::NumericPolicy::strict()
+                          : camel::core::sem::NumericPolicy::relaxed(),
+            record.protection);
         const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
-        return answer(std::format(
-            "`{}` did not fire at {}: {}", ruleNow()->name(), writings.textOf(*draftNode),
-            miss.detail));
+        return answer(
+            std::format(
+                "`{}` did not fire at {}: {}",
+                ruleNow()->name(),
+                writings.textOf(*draftNode),
+                miss.detail));
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::why_not>");
     } catch (const mm::MemoryExhausted &) {
@@ -1485,7 +1547,9 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     try {
         const auto compiled = engineRules(ctx, with, 0, base);
         camel::runtime::RuntimeGraphDraftSession session(
-            ctx.shared_from_this(), base, subjectOf(norm)->graph());
+            ctx.shared_from_this(),
+            base,
+            subjectOf(norm)->graph());
         session.setGraphState(camel::runtime::GraphState::Tabled);
         // A condition is Camel code, and so is a safepoint: every draft this session has opened
         // must keep its static values relocatable until the commit reads them again, not only the
@@ -1503,7 +1567,8 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             camel::runtime::DraftWritings writings(
                 transaction,
                 strict ? camel::core::sem::NumericPolicy::strict()
-                       : camel::core::sem::NumericPolicy::relaxed());
+                       : camel::core::sem::NumericPolicy::relaxed(),
+                {with.get<Bool>(3), with.get<Bool>(4)});
             writings.build();
             writings.saturate(compiled, budget);
             writings.save();
@@ -1529,7 +1594,8 @@ class CamelCostModel final : public camel::runtime::CostModel {
         : vm_(std::make_shared<NodeVMSchedPass>(ctx.shared_from_this())),
           cost_(mm::autoSpace(), cost, costType, "rewrite.cost") {}
 
-    double nodeCost(const camel::runtime::CostContext &, camel::runtime::gc_node_ref_t) const override {
+    double
+    nodeCost(const camel::runtime::CostContext &, camel::runtime::gc_node_ref_t) const override {
         return 1.0;
     }
 
@@ -1548,13 +1614,16 @@ class CamelCostModel final : public camel::runtime::CostModel {
         if (bytes.size() < sizeof(camel::runtime::GCOperBody)) {
             return own + inputsTotal;
         }
-        const auto oper =
-            reinterpret_cast<const camel::runtime::GCOperBody *>(bytes.data())->oper;
+        const auto oper = reinterpret_cast<const camel::runtime::GCOperBody *>(bytes.data())->oper;
         // The operator handle is rooted while the array of the input costs is made: that
         // allocation can collect.
         auto *op = camel::graphmod::Handle::create(
-            camel::graphmod::HandleKind::Op, nullptr, camel::runtime::GraphId::Invalid, oper,
-            nullptr, mm::autoSpace());
+            camel::graphmod::HandleKind::Op,
+            nullptr,
+            camel::runtime::GraphId::Invalid,
+            oper,
+            nullptr,
+            mm::autoSpace());
         mm::RootHandle opRoot(
             mm::autoSpace(),
             op,
@@ -1585,7 +1654,11 @@ slot_t extractKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
     try {
         CamelCostModel model(ctx, with.get<::Function *>(0), with.type(0));
         const camel::runtime::Program *extracted = camel::runtime::extractWritings(
-            ctx.shared_from_this(), base, model, /*detached=*/true, subjectOf(norm)->graph());
+            ctx.shared_from_this(),
+            base,
+            model,
+            /*detached=*/true,
+            subjectOf(norm)->graph());
         return makeOk(toSlot(functionOver(norm, 0, extracted)), resultType);
     } catch (const std::logic_error &e) {
         return makeError("NoCostModel", e.what(), "<rewrite::extract>");
@@ -1606,9 +1679,9 @@ struct TensorSample {
 /// A value of a parameter type, as the operators read it. `tensor` is set for a tensor type, whose
 /// slot is made afresh right before each call (`Sampler::materialize`).
 struct Sample {
-    TypeCode code       = TypeCode::Void;
-    slot_t slot         = 0;
-    double asDouble     = 0.0;
+    TypeCode code   = TypeCode::Void;
+    slot_t slot     = 0;
+    double asDouble = 0.0;
     std::shared_ptr<TensorSample> tensor;
 };
 
@@ -1756,7 +1829,7 @@ struct RefValue {
     static RefValue ofTensor(RefTensor value) {
         RefValue out;
         out.tensor = true;
-        out.t = std::move(value);
+        out.t      = std::move(value);
         return out;
     }
 };
@@ -1815,7 +1888,7 @@ RefValue refBinary(
     const std::vector<int64_t> aStrides = refStrides(aShape);
     const std::vector<int64_t> bStrides = refStrides(bShape);
     RefTensor out;
-    out.shape = outShape;
+    out.shape     = outShape;
     int64_t count = 1;
     for (int64_t extent : outShape) {
         count *= extent;
@@ -1844,8 +1917,8 @@ size_t refAxis(int64_t axis, size_t rank) {
     int64_t normalized = axis < 0 ? axis + static_cast<int64_t>(rank) : axis;
     if (normalized < 0 || normalized >= static_cast<int64_t>(rank)) {
         throw std::invalid_argument(
-            "axis " + std::to_string(axis) + " is out of range for a rank-" +
-            std::to_string(rank) + " tensor");
+            "axis " + std::to_string(axis) + " is out of range for a rank-" + std::to_string(rank) +
+            " tensor");
     }
     return static_cast<size_t>(normalized);
 }
@@ -1878,9 +1951,10 @@ RefValue refReduce(const RefTensor &x, int64_t axisArg, bool keep, RefReduce kin
     out.values.resize(static_cast<size_t>(outer * inner));
     for (int64_t o = 0; o < outer; ++o) {
         for (int64_t i = 0; i < inner; ++i) {
-            long double value = kind == RefReduce::Max   ? -std::numeric_limits<long double>::infinity()
-                : kind == RefReduce::Min                 ? std::numeric_limits<long double>::infinity()
-                                                         : 0.0L;
+            long double value =
+                kind == RefReduce::Max   ? -std::numeric_limits<long double>::infinity()
+                : kind == RefReduce::Min ? std::numeric_limits<long double>::infinity()
+                                         : 0.0L;
             for (int64_t e = 0; e < extent; ++e) {
                 const long double element =
                     x.values[static_cast<size_t>(o * extent * inner + e * inner + i)];
@@ -1890,12 +1964,14 @@ RefValue refReduce(const RefTensor &x, int64_t axisArg, bool keep, RefReduce kin
                     value += element;
                     break;
                 case RefReduce::Max:
-                    value = std::isnan(value) || std::isnan(element) ? std::numeric_limits<long double>::quiet_NaN()
-                                                            : std::max(value, element);
+                    value = std::isnan(value) || std::isnan(element)
+                                ? std::numeric_limits<long double>::quiet_NaN()
+                                : std::max(value, element);
                     break;
                 case RefReduce::Min:
-                    value = std::isnan(value) || std::isnan(element) ? std::numeric_limits<long double>::quiet_NaN()
-                                                            : std::min(value, element);
+                    value = std::isnan(value) || std::isnan(element)
+                                ? std::numeric_limits<long double>::quiet_NaN()
+                                : std::min(value, element);
                     break;
                 }
             }
@@ -1952,7 +2028,7 @@ RefValue refSoftmax(const RefTensor &x, int64_t axisArg, bool logarithm) {
 /// to exactly, which is the value the operator the reference is a reference for computes on.
 RefTensor tensorOfSample(const TensorSample &sample) {
     RefTensor out;
-    out.shape = sample.shape;
+    out.shape    = sample.shape;
     size_t count = 1;
     for (int64_t extent : sample.shape) {
         count *= static_cast<size_t>(extent < 0 ? 0 : extent);
@@ -1970,8 +2046,8 @@ RefTensor tensorOfSample(const TensorSample &sample) {
     return out;
 }
 
-/// `value` rounded once into `element`: the value the element type's own arithmetic would hold, so a
-/// step whose exact result leaves the type's range reads as the infinity (or the zero) it becomes
+/// `value` rounded once into `element`: the value the element type's own arithmetic would hold, so
+/// a step whose exact result leaves the type's range reads as the infinity (or the zero) it becomes
 /// there. The reduced-precision types are rounded through f32 and their own two bytes, exactly as
 /// the sampler rounds a drawn value into a parameter's type.
 long double roundToElement(long double value, TypeCode element) {
@@ -2004,7 +2080,8 @@ long double roundToElement(long double value, TypeCode element) {
  */
 class RefEvaluator {
   public:
-    RefEvaluator(const camel::runtime::GCGraph &graph, const std::vector<Sample> &args,
+    RefEvaluator(
+        const camel::runtime::GCGraph &graph, const std::vector<Sample> &args,
         std::optional<TypeCode> element = std::nullopt)
         : graph_(graph), args_(args), element_(element),
           ports_(graph.normPorts().begin(), graph.normPorts().end()) {}
@@ -2084,7 +2161,8 @@ class RefEvaluator {
         if (const auto shape = camel::runtime::fact::shapeOfType(type)) {
             const auto *array = fromSlot<Array *>(slot);
             if (array == nullptr) {
-                throw std::runtime_error("the reference reads a tensor constant that is not an array");
+                throw std::runtime_error(
+                    "the reference reads a tensor constant that is not an array");
             }
             TensorSample sample;
             sample.dtype = array->dtype();
@@ -2110,8 +2188,7 @@ class RefEvaluator {
             // A constant of a reduced-precision type is the f32 it widens to, exactly: the
             // reference holds more precision than the element type, which is the one thing an
             // accuracy comparison needs of it.
-            return RefValue::ofScalar(
-                static_cast<long double>(halfToFloat<BFloat16>(slot)));
+            return RefValue::ofScalar(static_cast<long double>(halfToFloat<BFloat16>(slot)));
         case TypeCode::Float16:
             return RefValue::ofScalar(static_cast<long double>(halfToFloat<Float16>(slot)));
         default:
@@ -2137,9 +2214,11 @@ class RefEvaluator {
     }
 
     RefValue operate(camel::runtime::gc_node_ref_t ref) {
-        const camel::runtime::KernelArguments arguments = camel::runtime::kernelArgumentsOf(graph_, ref);
+        const camel::runtime::KernelArguments arguments =
+            camel::runtime::kernelArgumentsOf(graph_, ref);
         if (!arguments.with.empty() || !graph_.ctrlInputsOf(ref).empty()) {
-            throw std::runtime_error("the reference cannot read an operator with a context argument");
+            throw std::runtime_error(
+                "the reference cannot read an operator with a context argument");
         }
         const auto *body = graph_.nodeBodyAs<camel::runtime::GCOperBody>(ref);
         std::vector<RefValue> in;
@@ -2149,36 +2228,40 @@ class RefEvaluator {
         const std::string uri(body->uri());
         const auto unary = [&](auto &&fn) {
             if (in.size() != 1) {
-                throw std::runtime_error("the reference reads an operator with the wrong number of inputs");
+                throw std::runtime_error(
+                    "the reference reads an operator with the wrong number of inputs");
             }
             return refMap(in[0], fn);
         };
         const auto binary = [&](auto &&fn) {
             if (in.size() != 2) {
-                throw std::runtime_error("the reference reads an operator with the wrong number of inputs");
+                throw std::runtime_error(
+                    "the reference reads an operator with the wrong number of inputs");
             }
-            return refBinary(
-                in[0],
-                in[1],
-                [&](long double a, long double b) { return fn(a, b); });
+            return refBinary(in[0], in[1], [&](long double a, long double b) { return fn(a, b); });
         };
-        // The element type a side is written in decides the operator's uri, and the reduced-precision
-        // types have stems of their own -- `_bf` for bfloat16, `_f6` for float16
-        // (src/builtin/modules/globals.cpp) -- so a rule instantiated at bf16 or f16 is read exactly
-        // as one at f32 or f64 is. `_f` is f32's stem and `_d` is f64's.
-        if (uri == ":op/add_f" || uri == ":op/add_d" || uri == ":op/add_bf" || uri == ":op/add_f6") {
+        // The element type a side is written in decides the operator's uri, and the
+        // reduced-precision types have stems of their own -- `_bf` for bfloat16, `_f6` for float16
+        // (src/builtin/modules/globals.cpp) -- so a rule instantiated at bf16 or f16 is read
+        // exactly as one at f32 or f64 is. `_f` is f32's stem and `_d` is f64's.
+        if (uri == ":op/add_f" || uri == ":op/add_d" || uri == ":op/add_bf" ||
+            uri == ":op/add_f6") {
             return binary([](long double a, long double b) { return a + b; });
         }
-        if (uri == ":op/sub_f" || uri == ":op/sub_d" || uri == ":op/sub_bf" || uri == ":op/sub_f6") {
+        if (uri == ":op/sub_f" || uri == ":op/sub_d" || uri == ":op/sub_bf" ||
+            uri == ":op/sub_f6") {
             return binary([](long double a, long double b) { return a - b; });
         }
-        if (uri == ":op/mul_f" || uri == ":op/mul_d" || uri == ":op/mul_bf" || uri == ":op/mul_f6") {
+        if (uri == ":op/mul_f" || uri == ":op/mul_d" || uri == ":op/mul_bf" ||
+            uri == ":op/mul_f6") {
             return binary([](long double a, long double b) { return a * b; });
         }
-        if (uri == ":op/div_f" || uri == ":op/div_d" || uri == ":op/div_bf" || uri == ":op/div_f6") {
+        if (uri == ":op/div_f" || uri == ":op/div_d" || uri == ":op/div_bf" ||
+            uri == ":op/div_f6") {
             return binary([](long double a, long double b) { return a / b; });
         }
-        if (uri == ":op/neg_f" || uri == ":op/neg_d" || uri == ":op/neg_bf" || uri == ":op/neg_f6") {
+        if (uri == ":op/neg_f" || uri == ":op/neg_d" || uri == ":op/neg_bf" ||
+            uri == ":op/neg_f6") {
             return unary([](long double a) { return -a; });
         }
         if (uri == "math:sqrt") {
@@ -2245,20 +2328,22 @@ class RefEvaluator {
                 throw std::runtime_error("the reference reads a reduction without its axis");
             }
             const bool keep = in.size() > 2 && !in[2].tensor && in[2].scalar != 0.0L;
-            const auto kind = uri == "tensor:sum_axis"    ? RefReduce::Sum
-                : uri == "tensor:max_axis"                ? RefReduce::Max
-                : uri == "tensor:min_axis"                ? RefReduce::Min
-                                                          : RefReduce::Mean;
+            const auto kind = uri == "tensor:sum_axis"   ? RefReduce::Sum
+                              : uri == "tensor:max_axis" ? RefReduce::Max
+                              : uri == "tensor:min_axis" ? RefReduce::Min
+                                                         : RefReduce::Mean;
             return refReduce(in[0].t, static_cast<int64_t>(in[1].scalar), keep, kind);
         }
         if (uri == "tensor:softmax" || uri == "tensor:log_softmax") {
             if (in.empty() || !in[0].tensor) {
                 throw std::runtime_error("the reference reads a softmax without its tensor");
             }
-            const int64_t axis = in.size() > 1 && !in[1].tensor ? static_cast<int64_t>(in[1].scalar) : -1;
+            const int64_t axis =
+                in.size() > 1 && !in[1].tensor ? static_cast<int64_t>(in[1].scalar) : -1;
             return refSoftmax(in[0].t, axis, uri == "tensor:log_softmax");
         }
-        throw std::runtime_error("the check has no higher-precision reference for operator '" + uri + "'");
+        throw std::runtime_error(
+            "the check has no higher-precision reference for operator '" + uri + "'");
     }
 
     const camel::runtime::GCGraph &graph_;
@@ -2276,8 +2361,8 @@ class RefEvaluator {
 long double refScalarError(long double native, long double reference) {
     if (std::isnan(native) || std::isnan(reference)) {
         return std::isnan(native) && std::isnan(reference)
-            ? 0.0L
-            : std::numeric_limits<long double>::infinity();
+                   ? 0.0L
+                   : std::numeric_limits<long double>::infinity();
     }
     if (std::isinf(native) || std::isinf(reference)) {
         return native == reference ? 0.0L : std::numeric_limits<long double>::infinity();
@@ -2346,11 +2431,11 @@ double refErrorRatio(long double left, long double right, TypeCode code) {
 
 /// What the check reports for one sample of a rule that carries `refine_accuracy`.
 struct AccuracyResult {
-    bool ok = true;
+    bool ok                 = true;
     bool referenceAvailable = true;
-    long double leftError = 0.0L;
-    long double rightError = 0.0L;
-    double ratio = 0.0;
+    long double leftError   = 0.0L;
+    long double rightError  = 0.0L;
+    double ratio            = 0.0;
     std::string reason;
 };
 
@@ -2369,22 +2454,22 @@ AccuracyResult compareAgainstReference(
     try {
         const RefValue referenceLeft  = realValueOf(lhsGraph, values);
         const RefValue referenceRight = realValueOf(rhsGraph, values);
-        result.leftError  = refSampleError(left, referenceLeft);
-        result.rightError = refSampleError(right, referenceRight);
+        result.leftError              = refSampleError(left, referenceLeft);
+        result.rightError             = refSampleError(right, referenceRight);
     } catch (const std::exception &e) {
-        result.ok               = false;
+        result.ok                 = false;
         result.referenceAvailable = false;
-        result.reason           = e.what();
+        result.reason             = e.what();
         return result;
     }
     result.ratio = refErrorRatio(result.leftError, result.rightError, code);
-    result.ok = refNotWorse(result.leftError, result.rightError, code);
+    result.ok    = refNotWorse(result.leftError, result.rightError, code);
     return result;
 }
 
 AccuracyResult compareBeforeAfter(
-    const camel::runtime::GCGraph &graph, const std::vector<Sample> &values,
-    const Sample &before, const Sample &after, TypeCode code) {
+    const camel::runtime::GCGraph &graph, const std::vector<Sample> &values, const Sample &before,
+    const Sample &after, TypeCode code) {
     AccuracyResult result;
     try {
         const RefValue reference = realValueOf(graph, values);
@@ -2397,7 +2482,7 @@ AccuracyResult compareBeforeAfter(
         return result;
     }
     result.ratio = refErrorRatio(result.leftError, result.rightError, code);
-    result.ok = refNotWorse(result.leftError, result.rightError, code);
+    result.ok    = refNotWorse(result.leftError, result.rightError, code);
     return result;
 }
 
@@ -2495,7 +2580,8 @@ class Sampler {
         const TensorSample &t = *sample.tensor;
         const Type *element   = tensorElementType(t.dtype);
         if (element == nullptr) {
-            throw std::invalid_argument("a tensor parameter has an element type the check cannot make");
+            throw std::invalid_argument(
+                "a tensor parameter has an element type the check cannot make");
         }
         auto *arrayType = ArrayType::create(const_cast<Type *>(element));
         Array *array    = Array::create(mm::autoSpace(), arrayType, t.shape, true);
@@ -2525,10 +2611,9 @@ class Sampler {
     /// rank is a vector of three and an unknown extent is two. A type with a large known shape is
     /// sampled in the same rank at two elements per extent (elementwise laws do not depend on
     /// the extents, and the check stays small).
-    Sample tensor(
-        const camel::runtime::fact::TensorShape &shape, bool constant, size_t rankHint) {
-        auto sample  = std::make_shared<TensorSample>();
-        sample->dtype = shape.dtype.value_or(TypeCode::Float32);
+    Sample tensor(const camel::runtime::fact::TensorShape &shape, bool constant, size_t rankHint) {
+        auto sample          = std::make_shared<TensorSample>();
+        sample->dtype        = shape.dtype.value_or(TypeCode::Float32);
         const TypeCode dtype = sample->dtype;
         const Type *element  = tensorElementType(dtype);
         if (element == nullptr) {
@@ -2589,7 +2674,7 @@ class Sampler {
             // rest of the domain is sampled as before.
             if (!usedFarApartProbe_ && needs_ == camel::core::sem::kRefineAccuracy &&
                 values.size() == 3) {
-                values = {-1e-16f, 27.004f, -33.563f};
+                values             = {-1e-16f, 27.004f, -33.563f};
                 usedFarApartProbe_ = true;
             }
             sample->bytes.resize(values.size() * sizeof(float));
@@ -2603,10 +2688,10 @@ class Sampler {
             // into the element type, exactly as a bf16 or f16 literal is.
             sample->bytes.resize(static_cast<size_t>(elements) * 2);
             for (int64_t i = 0; i < elements; ++i) {
-                const float drawn = static_cast<float>(pickFloat(false, dtype));
+                const float drawn   = static_cast<float>(pickFloat(false, dtype));
                 const uint16_t bits = dtype == TypeCode::BFloat16
-                    ? halfBitsOfSlot(halfFromFloat<BFloat16>(drawn))
-                    : halfBitsOfSlot(halfFromFloat<Float16>(drawn));
+                                          ? halfBitsOfSlot(halfFromFloat<BFloat16>(drawn))
+                                          : halfBitsOfSlot(halfFromFloat<Float16>(drawn));
                 std::memcpy(sample->bytes.data() + static_cast<size_t>(i) * 2, &bits, 2);
             }
             break;
@@ -2685,9 +2770,9 @@ class Sampler {
             specials.push_back(1e30);
             specials.push_back(1e-40); // subnormal
             if (accuracy) {
-                specials.push_back(code == TypeCode::BFloat16 ? 1e-41 : 1e-45); // least subnormal
+                specials.push_back(code == TypeCode::BFloat16 ? 1e-41 : 1e-45);   // least subnormal
                 specials.push_back(code == TypeCode::BFloat16 ? 3.3e38 : 3.4e38); // near overflow
-                specials.push_back(100.0);  // exp overflows f32 here (e^100 = 2.7e43)
+                specials.push_back(100.0); // exp overflows f32 here (e^100 = 2.7e43)
                 specials.push_back(-100.0);
                 specials.push_back(1000.0);
                 specials.push_back(-1000.0);
@@ -2719,7 +2804,7 @@ class Sampler {
             specials.push_back(1e300);
             specials.push_back(1e-310); // subnormal
             if (accuracy) {
-                specials.push_back(1e-320); // smallest subnormal
+                specials.push_back(1e-320);  // smallest subnormal
                 specials.push_back(1.7e308); // near overflow
                 specials.push_back(1000.0);
                 specials.push_back(-1000.0);
@@ -2763,11 +2848,11 @@ class Sampler {
 /// element type the two values are of (`f32`, `f64`, `bf16` or `f16`): it decides both the bit
 /// pattern an exact comparison compares and the epsilon a bounded one is measured in, so a
 /// reduced-precision instance is never judged with f32's tolerance. `needs` decides what an exact
-/// comparison looks at: `no_signed_zeros` says a zero's sign is not observable, so the two zeros are
-/// one bit pattern under it, where a rule without the licence has the sign as part of its bits.
-bool agreeFloat(double x, double y, TypeCode element,
-    const camel::core::sem::RewriteErrorBound &bound, double scale,
-    camel::core::sem::PermissionMask needs) {
+/// comparison looks at: `no_signed_zeros` says a zero's sign is not observable, so the two zeros
+/// are one bit pattern under it, where a rule without the licence has the sign as part of its bits.
+bool agreeFloat(
+    double x, double y, TypeCode element, const camel::core::sem::RewriteErrorBound &bound,
+    double scale, camel::core::sem::PermissionMask needs) {
     if (std::isnan(x) || std::isnan(y)) {
         return std::isnan(x) && std::isnan(y);
     }
@@ -2781,10 +2866,10 @@ bool agreeFloat(double x, double y, TypeCode element,
         // A bf16 or an f16 widens to its f32 exactly (camel/core/rtdata/half.h), so comparing the
         // widened f32 bits compares the two-byte patterns: the two paths are one comparison.
         return element == TypeCode::Float64
-            ? std::bit_cast<uint64_t>(x) == std::bit_cast<uint64_t>(y)
-            : std::bit_cast<uint32_t>(static_cast<float>(x)) ==
-                      std::bit_cast<uint32_t>(static_cast<float>(y)) &&
-                  std::signbit(x) == std::signbit(y);
+                   ? std::bit_cast<uint64_t>(x) == std::bit_cast<uint64_t>(y)
+                   : std::bit_cast<uint32_t>(static_cast<float>(x)) ==
+                             std::bit_cast<uint32_t>(static_cast<float>(y)) &&
+                         std::signbit(x) == std::signbit(y);
     }
     if (std::isinf(x) || std::isinf(y)) {
         return x == y;
@@ -2792,8 +2877,8 @@ bool agreeFloat(double x, double y, TypeCode element,
     const double eps       = checkEpsilon(element);
     const double magnitude = std::abs(x) + std::abs(y) + scale;
     // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
-    const double smallest  = smallestSubnormalOf(element);
-    const double allowed   = (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
+    const double smallest = smallestSubnormalOf(element);
+    const double allowed  = (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
     return std::abs(x - y) <= allowed;
 }
 
@@ -2809,9 +2894,9 @@ double tensorElement(const TensorSample &t, size_t at) {
 /// precision ones included, so an instance at `bf16` is measured with bf16's epsilon and not with
 /// a byte comparison (which would fail a legal rounding) nor with f32's (which would call an
 /// illegal one equal).
-bool agreeTensor(const TensorSample &a, const TensorSample &b,
-    const camel::core::sem::RewriteErrorBound &bound, double scale,
-    camel::core::sem::PermissionMask needs) {
+bool agreeTensor(
+    const TensorSample &a, const TensorSample &b, const camel::core::sem::RewriteErrorBound &bound,
+    double scale, camel::core::sem::PermissionMask needs) {
     if (a.dtype != b.dtype || a.shape != b.shape || a.bytes.size() != b.bytes.size()) {
         return false;
     }
@@ -2819,10 +2904,9 @@ bool agreeTensor(const TensorSample &a, const TensorSample &b,
         return a.bytes == b.bytes;
     }
     const size_t elementBytes = elementBytesOf(a.dtype);
-    const size_t count = elementBytes == 0 ? 0 : a.bytes.size() / elementBytes;
+    const size_t count        = elementBytes == 0 ? 0 : a.bytes.size() / elementBytes;
     for (size_t i = 0; i < count; ++i) {
-        if (!agreeFloat(
-                tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale, needs)) {
+        if (!agreeFloat(tensorElement(a, i), tensorElement(b, i), a.dtype, bound, scale, needs)) {
             return false;
         }
     }
@@ -2879,13 +2963,14 @@ bool realComparable(TypeCode code) {
     return code == TypeCode::Float32 || code == TypeCode::Float64;
 }
 
-/// Whether two real values are the same number under the rule's numeric contract: the comparison the
-/// element type's own results used to get (`agreeFloat`), applied to the values the reference
-/// computed. The contract stays the rule's -- a rule whose own syntax rounds (`c1 + c2` folded in the
-/// element type is one rounding the permission covers) may differ by that rounding -- but the
+/// Whether two real values are the same number under the rule's numeric contract: the comparison
+/// the element type's own results used to get (`agreeFloat`), applied to the values the reference
+/// computed. The contract stays the rule's -- a rule whose own syntax rounds (`c1 + c2` folded in
+/// the element type is one rounding the permission covers) may differ by that rounding -- but the
 /// cancellation that inflates two element-type results is no longer in the comparison at all.
-bool refScalarsAgree(long double x, long double y, bool single,
-    const camel::core::sem::RewriteErrorBound &bound, double scale) {
+bool refScalarsAgree(
+    long double x, long double y, bool single, const camel::core::sem::RewriteErrorBound &bound,
+    double scale) {
     if (std::isnan(x) || std::isnan(y)) {
         return std::isnan(x) && std::isnan(y);
     }
@@ -2901,14 +2986,15 @@ bool refScalarsAgree(long double x, long double y, bool single,
     const long double eps       = single ? 1.2e-7L : 2.3e-16L;
     const long double magnitude = std::fabs(x) + std::fabs(y) + scale;
     // The smallest subnormal: a rounding in the subnormal range is absolute, not relative.
-    const long double smallest  = single ? 1.4e-45L : 4.9e-324L;
+    const long double smallest = single ? 1.4e-45L : 4.9e-324L;
     const long double allowed =
         (bound.ulps * eps + bound.relative) * magnitude + bound.ulps * smallest;
     return std::fabs(x - y) <= allowed;
 }
 
 /// Whether two reference values are the same number, elementwise for tensors.
-bool refValuesAgree(const RefValue &a, const RefValue &b, bool single,
+bool refValuesAgree(
+    const RefValue &a, const RefValue &b, bool single,
     const camel::core::sem::RewriteErrorBound &bound, double scale) {
     if (a.tensor != b.tensor) {
         return false;
@@ -2929,8 +3015,8 @@ bool refValuesAgree(const RefValue &a, const RefValue &b, bool single,
 
 /// Whether the two natives are both zeros of different sign: a special value the element type's own
 /// bits decide and the real model does not have. A zero against a nonzero is not this case -- an
-/// underflowed zero and a subnormal are both roundings of one real value, and the licence covers the
-/// path that lost the value.
+/// underflowed zero and a subnormal are both roundings of one real value, and the licence covers
+/// the path that lost the value.
 bool zeroSignsDiffer(const Sample &a, const Sample &b) {
     if (a.tensor != nullptr || b.tensor != nullptr) {
         if (a.tensor == nullptr || b.tensor == nullptr) {
@@ -2960,15 +3046,15 @@ bool zeroSignsDiffer(const Sample &a, const Sample &b) {
 
 /// Whether a licence of the rule puts this point outside the domain the rule claims. A rule that
 /// asks for `no_infs` or `no_nans` assumes that no value is an infinity or a NaN, the intermediate
-/// results of its own sides included (design principles 7.2), so a point where a step of either side
-/// produces one is not a counterexample to it: the check leaves that point out instead of refusing
-/// the rule with it. Both sides are evaluated in the element type they are written in, so a step that
-/// leaves the type's range reads as the infinity it becomes there. One side the reference cannot read
-/// is not evidence about the licence and does not keep a point the other side puts outside it; when
-/// neither side can be read the caller judges the point as it did before.
-bool outsideLicensedDomain(const camel::runtime::GCGraph &leftGraph,
-    const camel::runtime::GCGraph &rightGraph, const std::vector<Sample> &values, TypeCode element,
-    camel::core::sem::PermissionMask needs) {
+/// results of its own sides included (design principles 7.2), so a point where a step of either
+/// side produces one is not a counterexample to it: the check leaves that point out instead of
+/// refusing the rule with it. Both sides are evaluated in the element type they are written in, so
+/// a step that leaves the type's range reads as the infinity it becomes there. One side the
+/// reference cannot read is not evidence about the licence and does not keep a point the other side
+/// puts outside it; when neither side can be read the caller judges the point as it did before.
+bool outsideLicensedDomain(
+    const camel::runtime::GCGraph &leftGraph, const camel::runtime::GCGraph &rightGraph,
+    const std::vector<Sample> &values, TypeCode element, camel::core::sem::PermissionMask needs) {
     const bool noInfs = (needs & camel::core::sem::kNoInfs) != 0;
     const bool noNans = (needs & camel::core::sem::kNoNans) != 0;
     if (!noInfs && !noNans) {
@@ -3019,11 +3105,11 @@ struct RealComparison {
 /// bit for bit on a special value. `leftGraph` and `rightGraph` are the two sides over the same
 /// arguments (`values`), and `leftValue` / `rightValue` the two element-type results the VM made of
 /// them -- the special half is read off those, the finite half off the reference.
-RealComparison propositionComparison(const std::string &proposition,
-    const camel::runtime::GCGraph &leftGraph, const camel::runtime::GCGraph &rightGraph,
-    const std::vector<Sample> &values, const Sample &leftValue, const Sample &rightValue,
-    camel::core::sem::PermissionMask needs, const camel::core::sem::RewriteErrorBound &bound,
-    double scale) {
+RealComparison propositionComparison(
+    const std::string &proposition, const camel::runtime::GCGraph &leftGraph,
+    const camel::runtime::GCGraph &rightGraph, const std::vector<Sample> &values,
+    const Sample &leftValue, const Sample &rightValue, camel::core::sem::PermissionMask needs,
+    const camel::core::sem::RewriteErrorBound &bound, double scale) {
     RealComparison result;
     if (outsideLicensedDomain(leftGraph, rightGraph, values, elementCodeOf(leftValue), needs)) {
         result.outsideDomain = true;
@@ -3057,7 +3143,11 @@ RealComparison propositionComparison(const std::string &proposition,
         return result;
     }
     result.agree = refValuesAgree(
-        referenceLeft, referenceRight, elementCodeOf(leftValue) == TypeCode::Float32, bound, scale);
+        referenceLeft,
+        referenceRight,
+        elementCodeOf(leftValue) == TypeCode::Float32,
+        bound,
+        scale);
     result.why = "the real values differ by more than the permission's rounding";
     return result;
 }
@@ -3065,14 +3155,13 @@ RealComparison propositionComparison(const std::string &proposition,
 std::string sampleText(const Sample &s) {
     if (s.tensor != nullptr) {
         const TensorSample &t = *s.tensor;
-        std::string text       = std::format("tensor<{}>", typeCodeToString(t.dtype));
+        std::string text      = std::format("tensor<{}>", typeCodeToString(t.dtype));
         text += " [";
         for (size_t i = 0; i < t.shape.size(); ++i) {
             text += (i == 0 ? "" : ", ") + std::to_string(t.shape[i]);
         }
         text += "] {";
-        const size_t count =
-            t.bytes.size() / elementBytesOf(t.dtype);
+        const size_t count = t.bytes.size() / elementBytesOf(t.dtype);
         const size_t shown = std::min<size_t>(count, 8);
         for (size_t i = 0; i < shown; ++i) {
             if (i != 0) {
@@ -3090,8 +3179,9 @@ std::string sampleText(const Sample &s) {
                 break;
             case TypeCode::BFloat16:
             case TypeCode::Float16:
-                // The text of the element is the element type's own (design principles 7.7): the shortest digits that
-                // read back as the same bf16 or f16, not the f32 text of the value it widens to.
+                // The text of the element is the element type's own (design principles 7.7): the
+                // shortest digits that read back as the same bf16 or f16, not the f32 text of the
+                // value it widens to.
                 text += halfTextOf(t, i);
                 break;
             default:
@@ -3154,8 +3244,7 @@ Sample resultOf(slot_t slot, const Type *type) {
             static_cast<double>(halfToFloat<BFloat16>(slot)),
             nullptr};
     case TypeCode::Float16:
-        return {
-            TypeCode::Float16, slot, static_cast<double>(halfToFloat<Float16>(slot)), nullptr};
+        return {TypeCode::Float16, slot, static_cast<double>(halfToFloat<Float16>(slot)), nullptr};
     default:
         return {type->code(), slot, fromSlot<Bool>(slot) ? 1.0 : 0.0, nullptr};
     }
@@ -3188,8 +3277,8 @@ double declaredUlpsOf(const camel::runtime::GCGraph &graph) {
 }
 
 /// The index of `ref` among the graph's form ports, the function's parameters.
-std::optional<size_t> portIndexIn(
-    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
+std::optional<size_t>
+portIndexIn(const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     const auto ports = graph.normPorts();
     for (size_t i = 0; i < ports.size(); ++i) {
         if (ports[i] == ref) {
@@ -3204,8 +3293,8 @@ std::optional<size_t> portIndexIn(
 /// integer operand is an axis and can give the tensor a rank the axis fits.
 bool takesAxisAt(std::string_view uri, size_t &index) {
     if (uri == "tensor:sum_axis" || uri == "tensor:mean_axis" || uri == "tensor:max_axis" ||
-        uri == "tensor:min_axis" || uri == "tensor:argmax_axis" ||
-        uri == "tensor:argmin_axis" || uri == "tensor:softmax" || uri == "tensor:log_softmax") {
+        uri == "tensor:min_axis" || uri == "tensor:argmax_axis" || uri == "tensor:argmin_axis" ||
+        uri == "tensor:softmax" || uri == "tensor:log_softmax") {
         index = 1;
         return true;
     }
@@ -3225,9 +3314,8 @@ std::vector<uint8_t> axisPortsOf(const camel::runtime::GCGraph &graph) {
         if (node->kind != camel::runtime::GCNodeKind::Oper || !node->hasPayload()) {
             continue;
         }
-        const std::string_view uri =
-            graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
-        size_t index = 0;
+        const std::string_view uri = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)->uri();
+        size_t index               = 0;
         if (!takesAxisAt(uri, index)) {
             continue;
         }
@@ -3276,7 +3364,8 @@ uint64_t constMaskOf(const camel::runtime::RuleSource &source) {
 /// (docs/design/rewrite/plan-verification.cn.md, S0): the verdict, what it is about, and the
 /// evidence or the reason it is what it is. With no solver in the build a rule
 /// whose two sides agree on every sample is `sampled`, never `proved`: the check compared samples,
-/// and `proved` is reserved for a licence's proposition being established (the rule on `verification-licence-to-precondition`).
+/// and `proved` is reserved for a licence's proposition being established (the rule on
+/// `verification-licence-to-precondition`).
 void checkOneRule(
     Context &ctx, const camel::runtime::RuleSource &source, int64_t samples, uint64_t stream,
     std::string_view instance, std::vector<CheckRow> &rows) {
@@ -3284,21 +3373,24 @@ void checkOneRule(
     // the law's name without the type tuple the instance adds: the engine names an instance
     // `int_add_zero<int>`, and the row says `int_add_zero` and `int` (the rendering puts them back
     // together, so the name a reader sees is the one the engine, `explain` and the old report use).
-    std::string ruleName = source.name;
+    std::string ruleName             = source.name;
     const std::string instanceSuffix = std::format("<{}>", instance);
     if (!instance.empty() && ruleName.ends_with(instanceSuffix)) {
         ruleName.resize(ruleName.size() - instanceSuffix.size());
     }
-    const std::string proposition              = propositionOf(source.needs);
+    const std::string proposition                = propositionOf(source.needs);
     const bool conditional                       = source.when != nullptr;
     const camel::core::sem::PermissionMask needs = source.needs;
     // What the translation layer made of this rule's two sides
     // (docs/design/rewrite/plan-verification.cn.md, S1). The sides are read once, here: the same
     // two sides are the rule's own graphs, whatever the instance. A rule the
-    // layer cannot translate is `sampled` with the reason written in the coverage column (the rule on `verification-verdict-surface`, 3).
+    // layer cannot translate is `sampled` with the reason written in the coverage column (the rule
+    // on `verification-verdict-surface`, 3).
     const std::string coverage = camel::verify::translate(source).column();
-    const auto addRow = [&](std::string_view verdict, std::string evidence, std::string reason,
-                            std::string detail) {
+    const auto addRow          = [&](std::string_view verdict,
+                                     std::string evidence,
+                                     std::string reason,
+                                     std::string detail) {
         CheckRow row;
         row.rule        = ruleName;
         row.instance    = std::string(instance);
@@ -3310,17 +3402,16 @@ void checkOneRule(
         row.coverage    = coverage;
         rows.push_back(std::move(row));
     };
-    const uint64_t constParams                   = constMaskOf(source);
-    const camel::runtime::Program *program       = source.program;
-    const camel::runtime::GraphId lhsId          = source.lhs;
-    const camel::runtime::GraphId rhsId          = source.rhs;
+    const uint64_t constParams              = constMaskOf(source);
+    const camel::runtime::Program *program  = source.program;
+    const camel::runtime::GraphId lhsId     = source.lhs;
+    const camel::runtime::GraphId rhsId     = source.rhs;
     const camel::runtime::GCGraph *lhsGraph = program->graph(lhsId);
     const auto *lhsType                     = lhsGraph->funcType();
     const size_t params                     = lhsType->normTypesCount();
     const Type *resultType                  = lhsType->exitType();
-    const size_t steps = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
-    const double declaredUlps =
-        declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
+    const size_t steps                      = stepsOf(*lhsGraph) + stepsOf(*program->graph(rhsId));
+    const double declaredUlps = declaredUlpsOf(*lhsGraph) + declaredUlpsOf(*program->graph(rhsId));
     // The bound is the numeric contract of the permissions the rule needs, read together
     // with the operators' declarations (not one uniform rounding bound).
     const camel::core::sem::RewriteErrorBound bound =
@@ -3329,7 +3420,7 @@ void checkOneRule(
     // The rule's own operators say which integer parameters are axes. The rank of an
     // otherwise unshaped tensor follows the axis it is reduced over, and rotates through 1,
     // 2 and 3 so that a vector, a matrix and a rank-3 tensor are all sampled.
-    std::vector<uint8_t> axisPorts = axisPortsOf(*lhsGraph);
+    std::vector<uint8_t> axisPorts          = axisPortsOf(*lhsGraph);
     const std::vector<uint8_t> rhsAxisPorts = axisPortsOf(*program->graph(rhsId));
     for (size_t i = 0; i < axisPorts.size() && i < rhsAxisPorts.size(); ++i) {
         axisPorts[i] = static_cast<uint8_t>(axisPorts[i] | rhsAxisPorts[i]);
@@ -3351,7 +3442,7 @@ void checkOneRule(
             // The axis is an operand, not a free constant: cycle through the axes the rule's
             // shapes need (rank 1, a matrix, a rank-3 reduction) and the last axis.
             static constexpr int64_t kAxisCycle[] = {0, 1, 2, -1};
-            int64_t axis = kAxisCycle[sampleIndex % 4];
+            int64_t axis                          = kAxisCycle[sampleIndex % 4];
             if (knownRank && *knownRank > 0) {
                 axis = std::min<int64_t>(axis, static_cast<int64_t>(*knownRank) - 1);
             }
@@ -3368,7 +3459,7 @@ void checkOneRule(
                 continue;
             }
             const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
-            drawn[i] = sampler.value(lhsType->normTypeAt(i), isConst, rankHint);
+            drawn[i]           = sampler.value(lhsType->normTypeAt(i), isConst, rankHint);
         }
         return drawn;
     };
@@ -3455,10 +3546,16 @@ void checkOneRule(
                 }
             }
         } else {
-            const double sampleScale =
-                std::min(scale * scale, std::numeric_limits<double>::max());
+            const double sampleScale  = std::min(scale * scale, std::numeric_limits<double>::max());
             const RealComparison real = propositionComparison(
-                proposition, *lhsGraph, *program->graph(rhsId), values, left, right, needs, bound,
+                proposition,
+                *lhsGraph,
+                *program->graph(rhsId),
+                values,
+                left,
+                right,
+                needs,
+                bound,
                 sampleScale);
             if (real.outsideDomain) {
                 continue; // a licence of the rule leaves this point outside what it claims
@@ -3471,18 +3568,17 @@ void checkOneRule(
                     at += (i == 0 ? "" : ", ") + sampleText(values[i]);
                 }
                 failureEvidence = "counterexample";
-                failure         = real.compared
-                    ? std::format(
-                          "the two sides differ at ({}): {} and {} ({})",
-                          at,
-                          sampleText(left),
-                          sampleText(right),
-                          real.why)
-                    : std::format(
-                          "the two sides differ at ({}): {} and {}",
-                          at,
-                          sampleText(left),
-                          sampleText(right));
+                failure         = real.compared ? std::format(
+                                                      "the two sides differ at ({}): {} and {} ({})",
+                                                      at,
+                                                      sampleText(left),
+                                                      sampleText(right),
+                                                      real.why)
+                                                : std::format(
+                                                      "the two sides differ at ({}): {} and {}",
+                                                      at,
+                                                      sampleText(left),
+                                                      sampleText(right));
             }
         }
     }
@@ -3506,8 +3602,7 @@ void checkOneRule(
                 ctx.shared_from_this(),
                 program,
                 const_cast<camel::runtime::GCGraph *>(lhsGraph));
-            auto &transaction =
-                session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
+            auto &transaction = session.edit(const_cast<camel::runtime::GCGraph *>(lhsGraph));
             auto &draft       = transaction.edit();
             const std::vector<camel::runtime::gc_node_ref_t> ports(
                 draft.normPorts().begin(),
@@ -3518,7 +3613,7 @@ void checkOneRule(
             for (size_t i = 0; i < params; ++i) {
                 const bool isConst = i < 64 && ((constParams >> i) & 1) != 0;
                 Type *type         = lhsType->normTypeAt(i);
-                scale = std::max(scale, std::abs(values[i].asDouble) + 1.0);
+                scale              = std::max(scale, std::abs(values[i].asDouble) + 1.0);
                 if (isConst) {
                     const auto constant = draft.materializeStaticValue(values[i].slot, type);
                     draft.replaceAllValueUses(ports[i], constant);
@@ -3531,7 +3626,7 @@ void checkOneRule(
             }
             ++fired;
             const camel::runtime::Program *rewritten = session.commitChecked();
-            const auto fillArgs = [&] {
+            const auto fillArgs                      = [&] {
                 args.resize(values.size());
                 for (size_t i = 0; i < values.size(); ++i) {
                     args[i] = sampler.materialize(values[i]);
@@ -3593,21 +3688,21 @@ void checkOneRule(
                     }
                     failureEvidence = "counterexample";
                     failure         = real.compared
-                        ? std::format(
-                              "the rewritten left side differs at ({}): {} and {} ({})",
-                              at,
-                              sampleText(before),
-                              sampleText(after),
-                              real.why)
-                        : std::format(
-                              "the rewritten left side differs at ({}): {} and {} "
-                              "(bound {} ulps, {} relative, scale {})",
-                              at,
-                              sampleText(before),
-                              sampleText(after),
-                              bound.ulps,
-                              bound.relative,
-                              scale * scale);
+                                          ? std::format(
+                                                "the rewritten left side differs at ({}): {} and {} ({})",
+                                                at,
+                                                sampleText(before),
+                                                sampleText(after),
+                                                real.why)
+                                          : std::format(
+                                                "the rewritten left side differs at ({}): {} and {} "
+                                                "(bound {} ulps, {} relative, scale {})",
+                                                at,
+                                                sampleText(before),
+                                                sampleText(after),
+                                                bound.ulps,
+                                                bound.relative,
+                                                scale * scale);
                 }
             }
         }
@@ -3617,8 +3712,8 @@ void checkOneRule(
             // reason says what happened; the verdict is still `refuted`, because a rule the engine
             // cannot fire on its own left side must not pass a check that guards the library.
             failureEvidence = "none";
-            failureReason   = std::format(
-                "the rule never fired on its own left side in {} tries", tried);
+            failureReason =
+                std::format("the rule never fired on its own left side in {} tries", tried);
             failure = "the rule never fired on its own left side";
         }
     }
@@ -3641,8 +3736,8 @@ void checkOneRule(
         }
         const std::string ratio =
             std::isinf(worstRatio) ? "inf" : std::format("{:.3g}", worstRatio);
-        std::string detail = std::format(
-            "worst error ratio {}, fired {} of {}", ratio, fired, tried);
+        std::string detail =
+            std::format("worst error ratio {}, fired {} of {}", ratio, fired, tried);
         if (!shapesText.empty()) {
             detail += ", shapes " + shapesText;
         }
@@ -3688,8 +3783,11 @@ void checkGenericRule(
     const uint64_t ruleId = rule.ruleId();
     const std::string name(rule.name());
     auto root = std::make_shared<mm::RootHandle>(
-        mm::autoSpace(), &rule, RuleType::get(), "rewrite.checkGenericRule");
-    const auto live = [&]() { return root->getAs<RuleObject>(); };
+        mm::autoSpace(),
+        &rule,
+        RuleType::get(),
+        "rewrite.checkGenericRule");
+    const auto live  = [&]() { return root->getAs<RuleObject>(); };
     const auto whole = [&](const std::string &reason) {
         CheckRow row;
         row.rule        = name;
@@ -3721,9 +3819,9 @@ void checkGenericRule(
     // every reading the check had before the parameter existed.
     std::vector<Type *> universe = camel::compile::gir::ruleInstanceTypes();
     for (Type *type : programTypes) {
-        const bool known = std::any_of(
-            universe.begin(), universe.end(),
-            [&](const Type *seen) { return seen == type || seen->equals(type); });
+        const bool known = std::any_of(universe.begin(), universe.end(), [&](const Type *seen) {
+            return seen == type || seen->equals(type);
+        });
         if (!known) {
             universe.push_back(type);
         }
@@ -3784,8 +3882,10 @@ void checkGenericRule(
         row.verdict     = kVerdictSampled;
         row.proposition = propositionOf(live()->needs());
         row.evidence    = "none";
-        row.reason = std::format(
-            "more type tuples than the check walks, so {} of {} were taken", tuples.size(), total);
+        row.reason      = std::format(
+            "more type tuples than the check walks, so {} of {} were taken",
+            tuples.size(),
+            total);
         row.detail = takenText;
         rows.push_back(std::move(row));
     }
@@ -3800,8 +3900,8 @@ void checkGenericRule(
             continue;
         }
         const GenericRuleInstance &instance = current->instances[place];
-        const std::string instanceName = std::format("{}<{}>", name, instance.typeText);
-        const auto *lhsType = instance.lhs->funcType();
+        const std::string instanceName      = std::format("{}<{}>", name, instance.typeText);
+        const auto *lhsType                 = instance.lhs->funcType();
         // The seed follows the instance's identity, not its place in the array the caller passed.
         const uint64_t stream = sampleStreamOf(seed, instanceName);
         Sampler probe(stream, live()->needs());
@@ -3813,8 +3913,9 @@ void checkGenericRule(
                 break;
             }
         }
-        // The rule source is built before the sampler is asked anything: the translation layer reads
-        // the same two sides, and its answer belongs on the row even when no value could be made.
+        // The rule source is built before the sampler is asked anything: the translation layer
+        // reads the same two sides, and its answer belongs on the row even when no value could be
+        // made.
         std::shared_ptr<WhenCall> call;
         if (instance.when != nullptr) {
             call              = std::make_shared<WhenCall>();
@@ -3826,7 +3927,7 @@ void checkGenericRule(
             call->constParams = live()->constParams();
             call->name        = instanceName;
         }
-        const RuleObject &currentRule = *live();
+        const RuleObject &currentRule           = *live();
         const camel::runtime::RuleSource source = instanceOf(currentRule, 1, instance, call);
         if (!cannot.empty()) {
             CheckRow row;
@@ -3878,11 +3979,12 @@ slot_t reportValue(Type *reportType, const std::vector<CheckRow> &rows) {
         out->set(0, toSlot(String::from(row.rule, mm::autoSpace())));
         out->set(1, toSlot(String::from(row.instance, mm::autoSpace())));
         out->set(
-            2, toSlot(Variant::create(index(kVerdictWords, 3, row.verdict), 0, mm::autoSpace())));
+            2,
+            toSlot(Variant::create(index(kVerdictWords, 3, row.verdict), 0, mm::autoSpace())));
         out->set(
             3,
-            toSlot(Variant::create(
-                index(kPropositionWords, 3, row.proposition), 0, mm::autoSpace())));
+            toSlot(
+                Variant::create(index(kPropositionWords, 3, row.proposition), 0, mm::autoSpace())));
         out->set(4, toSlot(String::from(row.evidence, mm::autoSpace())));
         out->set(5, toSlot(String::from(row.reason, mm::autoSpace())));
         out->set(6, toSlot(String::from(row.coverage, mm::autoSpace())));
@@ -3928,9 +4030,9 @@ std::vector<CheckRow> rowsOfReport(const Struct *report) {
 ///
 /// It answers a `CheckReport` (docs/design/rewrite/plan-verification.cn.md, S0): the verdict
 /// table, one row per rule or per instance of a generic law, each row carrying the rule, the
-/// instance, the verdict, what the verdict is about and the evidence or the reason (the rule on `verification-verdict-surface`, 2: the verdict is published by `check` and
-/// the text output is the fixed rendering of that table, which is what a reader -- and the
-/// acceptance -- reads).
+/// instance, the verdict, what the verdict is about and the evidence or the reason (the rule on
+/// `verification-verdict-surface`, 2: the verdict is published by `check` and the text output is
+/// the fixed rendering of that table, which is what a reader -- and the acceptance -- reads).
 slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
     // `samples` and `seed` are the whole `with` list of both overloads of `check`, in that order:
     // the two declarations name each `with` position the same way, which is what lets a named
@@ -3959,8 +4061,9 @@ slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
         RuleObject *made = norm.get<Array *>(0)->get<RuleObject *>(index);
         if (made->ruleId() != 0) {
             // A generic rule has no two sides of its own: it is checked once per instance its
-            // condition admits over the types the operator groups registered (the rule on `generic-rule-check-surface-and-multi-parameter-instances`). The index
-            // is not passed: the seed of a rule follows its identity, not its place in this array.
+            // condition admits over the types the operator groups registered (the rule on
+            // `generic-rule-check-surface-and-multi-parameter-instances`). The index is not passed:
+            // the seed of a rule follows its identity, not its place in this array.
             checkGenericRule(ctx, *made, samples, seed, programTypes, rows);
             continue;
         }
@@ -3983,7 +4086,12 @@ slot_t checkRules(ArgsView &with, ArgsView &norm, Context &ctx, bool over) {
         const camel::runtime::RuleSource source = sourceOf(*rule, 1, call);
         // The seed follows the rule's own name.
         checkOneRule(
-            ctx, source, samples, sampleStreamOf(seed, std::string_view(source.name)), "", rows);
+            ctx,
+            source,
+            samples,
+            sampleStreamOf(seed, std::string_view(source.name)),
+            "",
+            rows);
     }
     return reportValue(norm.resultType(), rows);
 }
@@ -4053,8 +4161,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {6, {false, false, false, false, false, false}}},
                       "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F) => "
                       "Rule",
-                      [](const type_vec_t &, const type_vec_t &norm)
-                          -> std::optional<Type *> {
+                      [](const type_vec_t &, const type_vec_t &norm) -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
                               norm[2]->code() != TypeCode::Int64 ||
@@ -4073,8 +4180,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {7, {false, false, false, false, false, false, false}}},
                       "(name: string, two_way: bool, needs: int, consts: int, lhs: F, rhs: F, "
                       "when: F) => Rule",
-                      [](const type_vec_t &, const type_vec_t &norm)
-                          -> std::optional<Type *> {
+                      [](const type_vec_t &, const type_vec_t &norm) -> std::optional<Type *> {
                           if (norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
                               norm[2]->code() != TypeCode::Int64 ||
@@ -4089,8 +4195,8 @@ class RewriteModule final : public BuiltinModule {
                               return std::nullopt;
                           return RuleType::get();
                       })}}));
-        // `__rule_generic`: the maker of a rule that is instantiated -- one whose head declares type
-        // parameters or `with` parameters. The front end writes it instead of `__rule` /
+        // `__rule_generic`: the maker of a rule that is instantiated -- one whose head declares
+        // type parameters or `with` parameters. The front end writes it instead of `__rule` /
         // `__rule_when`: the sides are generic functions (or functions of a `constas` parameter),
         // which have no value, so the maker is given the id of their templates after `consts`, and
         // then the value of each `with` parameter, one argument per parameter.
@@ -4101,9 +4207,9 @@ class RewriteModule final : public BuiltinModule {
                 {{"rewrite:rule_generic",
                   DynamicFuncTypeResolver::create(
                       {{0, {}}, {-1, {}}},
-                      "(name: string, two_way: bool, needs: int, consts: int, id: int, ...) => Rule",
-                      [](const type_vec_t &, const type_vec_t &norm)
-                          -> std::optional<Type *> {
+                      "(name: string, two_way: bool, needs: int, consts: int, id: int, ...) => "
+                      "Rule",
+                      [](const type_vec_t &, const type_vec_t &norm) -> std::optional<Type *> {
                           if (norm.size() < 5 || norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::Bool ||
                               norm[2]->code() != TypeCode::Int64 ||
@@ -4144,8 +4250,7 @@ class RewriteModule final : public BuiltinModule {
                       {{0, {}}, {-1, {}}},
                       "(name: string, types: string, initial: F, join: F, meet: F, widen: F, "
                       "narrow: F, withCount: int, ...) => T",
-                      [](const type_vec_t &, const type_vec_t &norm)
-                          -> std::optional<Type *> {
+                      [](const type_vec_t &, const type_vec_t &norm) -> std::optional<Type *> {
                           if (norm.size() < 9 || norm[0]->code() != TypeCode::String ||
                               norm[1]->code() != TypeCode::String) {
                               return std::nullopt;
@@ -4175,8 +4280,7 @@ class RewriteModule final : public BuiltinModule {
                                   return std::nullopt;
                               }
                           }
-                          const auto *initial =
-                              static_cast<const FunctionType *>(norm[2]);
+                          const auto *initial = static_cast<const FunctionType *>(norm[2]);
                           if (initial->exitType() == nullptr) {
                               return std::nullopt;
                           }
@@ -4193,7 +4297,7 @@ class RewriteModule final : public BuiltinModule {
         context_->registerExecutorFactory("rewrite", [ctx = context_]() {
             return std::make_shared<RewriteExecutor>(ctx);
         });
-// The readers are pure, and so is what builds a rule: making a rule value changes nothing
+        // The readers are pure, and so is what builds a rule: making a rule value changes nothing
         // outside the program. The makers and `fact` are declared below with the fact that
         // keeps a pass from folding them, which is a different question from the effect.
         camel::core::OperatorTable::instance().declare(
@@ -4220,7 +4324,8 @@ class RewriteModule final : public BuiltinModule {
         // static area does not trace, and a fact declaration's facts are installed where the
         // program writes the declaration.
         camel::core::OperatorTable::instance().declareUnfoldable(
-            "rewrite", {"rule", "rule_when", "rule_generic", "fact"});
+            "rewrite",
+            {"rule", "rule_when", "rule_generic", "fact"});
         loaded_ = true;
         return true;
     }
@@ -4231,4 +4336,3 @@ class RewriteModule final : public BuiltinModule {
 extern "C" Module *camel_module_create(Context *ctx) {
     return new RewriteModule(ctx->shared_from_this());
 }
-

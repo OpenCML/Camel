@@ -89,7 +89,7 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             {
                 "PassBoundaryResources",
                 "Pass '{0}' changed the ambient resources the program touches: before {1}, after {2}.",
-                "An effect is written once and stays where the program put it. A rewrite may move code, copy it, or delete what nothing needs, but the ambient resources a graph touches -- stdout, stderr, stdin, clock, env, fs, rng -- are the program's effects, and the pass list must leave them the same. This is a defect of the pass named, not of the program.",
+                "This invocation selected a pass boundary check requiring equal standard ambient resource/access-mode support. The before and after programs differ under that check. Equal support does not establish equal event counts, payloads, or full observational behavior.",
             },
         },
         {
