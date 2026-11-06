@@ -8,8 +8,8 @@
  */
 
 #include "builder.h"
-#include "builder_support.h"
 #include "builder_helpers.h"
+#include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/primary.h"
@@ -118,9 +118,11 @@ data_ptr_t dataOfStaticValue(Type *type, slot_t value) {
     using namespace camel::core::rtdata;
     switch (type->code()) {
     case TypeCode::Int32:
-        return tt::as_shared<Data>(std::make_shared<PrimaryData<int32_t>>(fromSlot<int32_t>(value)));
+        return tt::as_shared<Data>(
+            std::make_shared<PrimaryData<int32_t>>(fromSlot<int32_t>(value)));
     case TypeCode::Int64:
-        return tt::as_shared<Data>(std::make_shared<PrimaryData<int64_t>>(fromSlot<int64_t>(value)));
+        return tt::as_shared<Data>(
+            std::make_shared<PrimaryData<int64_t>>(fromSlot<int64_t>(value)));
     case TypeCode::Float32:
         return tt::as_shared<Data>(std::make_shared<PrimaryData<float>>(fromSlot<float>(value)));
     case TypeCode::Float64:
@@ -280,8 +282,8 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         const std::string name = child->name();
         if (child->nativeDeclaration()) {
             // A body-less declaration is a rule of an operator, generic or not; a generic one is
-            // instantiated by its resolver when it is called, not from a template (design principles
-            // 10.4).
+            // instantiated by its resolver when it is called, not from a template (design
+            // principles 10.4).
             continue;
         }
         Type *type = child->at(0)->dataType();
@@ -305,15 +307,15 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
         auto tmpl = std::make_shared<GenericTemplate>();
         // An operator's template is named as the program writes it (`operator +`), in its
         // diagnostics and in the names of its instances.
-        tmpl->name           = isOperator ? displayNameOf(name) : name;
-        tmpl->func           = child;
-        tmpl->funcType       = tt::as_ptr<FunctionType>(boundType(type));
+        tmpl->name     = isOperator ? displayNameOf(name) : name;
+        tmpl->func     = child;
+        tmpl->funcType = tt::as_ptr<FunctionType>(boundType(type));
         if (const auto *head = GCT::Tree::of(child)->headTypeParamsOf(child)) {
             tmpl->headParams = *head;
         }
-        tmpl->outerBindings  = typeBindings_;
-        tmpl->ownerGraph     = currGraph_;
-        tmpl->module         = module_;
+        tmpl->outerBindings = typeBindings_;
+        tmpl->ownerGraph    = currGraph_;
+        tmpl->module        = module_;
         // The tags written before the declaration belong to it, as they do for a function that is
         // not generic (a generic pass names the tags it reads).
         if (!isOperator) {
@@ -447,8 +449,8 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
               "has no function value";
         return nullptr;
     }
-    const size_t withCount  = signature->withTypesCount();
-    const size_t normCount  = signature->normTypesCount();
+    const size_t withCount = signature->withTypesCount();
+    const size_t normCount = signature->normTypesCount();
     if (withCount != expected->withTypesCount() || normCount != expected->normTypesCount()) {
         why = std::format(
             "it takes {} parameter(s) and {} context parameter(s), and a function of type '{}' "
@@ -601,8 +603,14 @@ void Builder::settleGenericRuleMaker(
         name.resize(side);
     }
     const uint64_t ruleId = registerGenericRule(
-        *context_, static_cast<void *>(this), std::move(name), typeParameterNames(sides[0]),
-        withParams, sides[0], sides[1], sides.size() == 3 ? sides[2] : nullptr);
+        *context_,
+        static_cast<void *>(this),
+        std::move(name),
+        typeParameterNames(sides[0]),
+        withParams,
+        sides[0],
+        sides[1],
+        sides.size() == 3 ? sides[2] : nullptr);
     if (GenericRuleEntry *entry = genericRuleEntry(*context_, ruleId); entry != nullptr) {
         // Where the rule is written: a report about its condition points here from wherever the
         // instance that revealed the effect is made.
@@ -617,9 +625,12 @@ void Builder::settleGenericRuleMaker(
     // called with them: what a rule that is instantiated holds is not a function of the program
     // being built, so nothing of the declaration enters this graph but those (design principles
     // 5.5; the rule on generic-rule-instantiation).
-    std::vector<Argument> values(normInputs.begin() + static_cast<ptrdiff_t>(firstValue), normInputs.end());
+    std::vector<Argument> values(
+        normInputs.begin() + static_cast<ptrdiff_t>(firstValue),
+        normInputs.end());
     std::vector<Type *> valueTypes(
-        normTypes.begin() + static_cast<ptrdiff_t>(firstValue), normTypes.end());
+        normTypes.begin() + static_cast<ptrdiff_t>(firstValue),
+        normTypes.end());
     normInputs.resize(kFixed + 1 + values.size());
     normInputs[kFixed] = Argument{idNode, call, std::nullopt};
     for (size_t i = 0; i < values.size(); ++i) {
@@ -637,8 +648,8 @@ void Builder::settleGenericRuleMaker(
 void Builder::settleRuleMaker(
     std::vector<Argument> &normInputs, type_vec_t &normTypes, const GCT::node_ptr_t &call) {
     // `__rule('name', two_way, needs, consts, <the sides>)`: the sides are ordinary functions, so
-    // they have values and the maker keeps them -- the rule value is an ordinary rule, id 0, and the
-    // rewrite engines go on reading it as they did. What is added here is a fact for the
+    // they have values and the maker keeps them -- the rule value is an ordinary rule, id 0, and
+    // the rewrite engines go on reading it as they did. What is added here is a fact for the
     // *transforms*: the rule's two graphs are registered in the table of rule templates, with no
     // type parameters and the one instance the declaration already is, so a transform that picks
     // between the laws of a key can find a law whose parameter types name a type
@@ -670,7 +681,11 @@ void Builder::settleRuleMaker(
         name.resize(side);
     }
     const uint64_t ruleId = registerMonomorphicRule(
-        *context_, static_cast<void *>(this), std::move(name), sides[0], sides[1],
+        *context_,
+        static_cast<void *>(this),
+        std::move(name),
+        sides[0],
+        sides[1],
         sides.size() == 3 ? sides[2] : nullptr);
     if (GenericRuleEntry *entry = genericRuleEntry(*context_, ruleId); entry != nullptr) {
         entry->where = call->origin();
@@ -766,7 +781,7 @@ void Builder::settleGenericFactMaker(
     }
     // What the type arguments are: the fact's key reads them, and the engine makes one fact per
     // key (`buildDefinition`), so the instances of two types never share a value or a kind.
-    const data_ptr_t written = tt::as_shared<Data>(std::make_shared<StringData>(arguments));
+    const data_ptr_t written      = tt::as_shared<Data>(std::make_shared<StringData>(arguments));
     const node_handle_t typesNode = currGraph_->addStaticDataNode(written);
     rememberConstant(typesNode, written);
     registerNodeOrigin(context_, typesNode, call, "gir.fact.types");
@@ -820,7 +835,7 @@ bool Builder::instantiateRuleTemplates(
             value.valueType = bound != nullptr ? bound->type() : nullptr;
             // The declaration's own value stays as the rule value holds it: what the instance does
             // with the constant -- putting it in its parameter's type -- is the instance's own.
-            value.data = bound != nullptr ? bound->clone() : nullptr;
+            value.data                    = bound != nullptr ? bound->clone() : nullptr;
             constas[entry.withParams[at]] = std::move(value);
             if (bound != nullptr) {
                 if (const auto extent = constasExtentOf(bound); extent.has_value()) {
@@ -841,9 +856,9 @@ bool Builder::instantiateRuleTemplates(
     const GCT::node_ptr_t origin = lhsTemplate->func;
     const bool inModule          = this->inModule(lhsTemplate->module, [&] {
         SpeculativeInstantiation quiet(*this);
-        lhs = instantiateGeneric(lhsTemplate, bindings, extents, constas, origin);
-        rhs = lhs != nullptr ? instantiateGeneric(rhsTemplate, bindings, extents, constas, origin)
-                             : nullptr;
+        lhs  = instantiateGeneric(lhsTemplate, bindings, extents, constas, origin);
+        rhs  = lhs != nullptr ? instantiateGeneric(rhsTemplate, bindings, extents, constas, origin)
+                              : nullptr;
         when = lhs != nullptr && rhs != nullptr && whenTemplate != nullptr
                    ? instantiateGeneric(whenTemplate, bindings, extents, constas, origin)
                    : nullptr;
@@ -854,7 +869,7 @@ bool Builder::instantiateRuleTemplates(
     });
     if (!inModule) {
         lhs = rhs = when = nullptr;
-        why = "the module that declared it is not in this builder any more";
+        why              = "the module that declared it is not in this builder any more";
         return false;
     }
     if (lhs == nullptr || rhs == nullptr) {
@@ -869,7 +884,7 @@ bool Builder::instantiateRuleTemplates(
     }
     if (whenTemplate != nullptr && when == nullptr) {
         lhs = rhs = when = nullptr;
-        why = said.empty() ? "the condition has no operator for this type" : said;
+        why              = said.empty() ? "the condition has no operator for this type" : said;
         return false;
     }
     // The instance is made and nobody asked whether making it was allowed: a condition that writes
@@ -918,7 +933,11 @@ RuleConditionAt Builder::ruleConditionVerdict(
         SpeculativeInstantiation quiet(*this);
         try {
             verdict = evaluateWhenCondition(
-                whenTemplate->func->at(1), whenTemplate->funcType, bindings, {}, whenTemplate);
+                whenTemplate->func->at(1),
+                whenTemplate->funcType,
+                bindings,
+                {},
+                whenTemplate);
         } catch (const BuildAbortException &) {
             // The compiler made a verdict this question cannot carry (a call the condition's
             // predicate makes that is not a compile-time one, an incomplete return type): the
@@ -942,9 +961,11 @@ RuleConditionAt Builder::ruleConditionVerdict(
     // Everything else -- a condition whose rest reads the values it matches, and a condition the
     // compiler cannot answer at all -- keeps the tuple: a condition the check cannot ask must not
     // take an instance away (`why` carries what the compiler said), and a value-dependent one is an
-    // instance whose firing is measured sample by sample, as it is for an ordinary conditional rule.
-    why = !verdict.detail.empty() ? verdict.detail
-                                  : (!said.empty() ? said : "the condition is not a compile-time one");
+    // instance whose firing is measured sample by sample, as it is for an ordinary conditional
+    // rule.
+    why = !verdict.detail.empty()
+              ? verdict.detail
+              : (!said.empty() ? said : "the condition is not a compile-time one");
     return RuleConditionAt::ValueDependent;
 }
 
@@ -991,7 +1012,10 @@ Builder::genericValueFor(node_handle_t node, Type *expected, const GCT::node_ptr
         for (const auto &candidate : candidates) {
             std::string reason;
             if (compile_graph_ptr_t graph = instantiateGenericAs(
-                    candidate, tt::as_ptr<FunctionType>(expected), origin, reason);
+                    candidate,
+                    tt::as_ptr<FunctionType>(expected),
+                    origin,
+                    reason);
                 graph != nullptr) {
                 return createFuncDataNode(graph, true, false);
             }
@@ -1210,8 +1234,8 @@ std::vector<generic_template_ptr_t> Builder::genericOverloadsOf(node_handle_t no
 
 generic_template_ptr_t Builder::chooseGenericOverload(
     const std::vector<generic_template_ptr_t> &candidates, const std::vector<Argument> &withInputs,
-    const std::vector<Argument> &normInputs, const type_vec_t &withTypes, const type_vec_t &normTypes,
-    const GCT::node_ptr_t &call) {
+    const std::vector<Argument> &normInputs, const type_vec_t &withTypes,
+    const type_vec_t &normTypes, const GCT::node_ptr_t &call) {
     // A candidate named by its signature -- which the siblings of one name share -- and by the
     // condition it wrote, which is what tells two arms of that name apart (design principles 4.4:
     // the call site lists the candidates with the conditions each of them holds under).
@@ -1278,8 +1302,8 @@ generic_template_ptr_t Builder::chooseGenericOverload(
             if (signature->normIsConstasAt(i)) {
                 continue;
             }
-            const size_t at  = written++;
-            Type *pattern    = signature->normTypeAt(i);
+            const size_t at = written++;
+            Type *pattern   = signature->normTypeAt(i);
             unifyTypeVars(pattern, valueTypeOf(normTypes[at]), bindings);
             Type *wanted = substituteTypeVars(pattern, bindings);
             Type *actual = valueTypeOf(normTypes[at]);
@@ -1359,7 +1383,8 @@ generic_template_ptr_t Builder::chooseGenericOverload(
         // 类型不匹配分开报"). Sorted, for the reason the ambiguity above is sorted.
         std::sort(unmetConditions.begin(), unmetConditions.end());
         unmetConditions.erase(
-            std::unique(unmetConditions.begin(), unmetConditions.end()), unmetConditions.end());
+            std::unique(unmetConditions.begin(), unmetConditions.end()),
+            unmetConditions.end());
         yieldToPipe(call);
         diags_->of(SemanticDiag::WhenConditionUnmet)
             .atOrigin(call->origin())
@@ -1381,7 +1406,13 @@ compile_graph_ptr_t Builder::resolveGenericCall(
     std::vector<Argument> &normInputs, type_vec_t &withTypes, type_vec_t &normTypes,
     const GCT::node_ptr_t &call, Type *expectedResult) {
     return instantiateForCall(
-        tmpl, withInputs, normInputs, withTypes, normTypes, call, expectedResult);
+        tmpl,
+        withInputs,
+        normInputs,
+        withTypes,
+        normTypes,
+        call,
+        expectedResult);
 }
 
 compile_graph_ptr_t Builder::instantiateForCall(
@@ -1485,18 +1516,27 @@ compile_graph_ptr_t Builder::instantiateForCall(
         if (normTypes.size() < declaredNormCount && signature->normIsConstasAt(normTypes.size())) {
             diags_->of(SemanticDiag::ConstasArgumentMissing)
                 .atOrigin(call->origin())
-                .commit(std::string(
-                    signature->argNameAt(declaredWithCount + normTypes.size())));
+                .commit(std::string(signature->argNameAt(declaredWithCount + normTypes.size())));
             throw BuildAbortException();
         }
-        reject(std::format(
-            "it takes {} argument(s) and {} were given", declaredNormCount, normTypes.size()));
+        reject(
+            std::format(
+                "it takes {} argument(s) and {} were given",
+                declaredNormCount,
+                normTypes.size()));
     }
     ConstasValues constas;
     ExtentValues extents;
     takeConstasValues(
-        signature, withInputs, &withTypes, normInputs, &normTypes, call, constas, extents);
-    const auto inputAt      = [&](size_t i) -> Argument      &{
+        signature,
+        withInputs,
+        &withTypes,
+        normInputs,
+        &normTypes,
+        call,
+        constas,
+        extents);
+    const auto inputAt = [&](size_t i) -> Argument & {
         return i < withCount ? withInputs[i] : normInputs[i - withCount];
     };
     const auto typeAt = [&](size_t i) -> Type *& {
@@ -1518,10 +1558,9 @@ compile_graph_ptr_t Builder::instantiateForCall(
     const auto actualAt = [&](size_t i) { return valueTypeOf(typeAt(i)); };
     const auto describe = [&](size_t i) {
         const size_t signatureIndex = signatureIndexAt(i);
-        const std::string paramName =
-            signatureIndex < signature->argNamesCount()
-                ? std::string(signature->argNameAt(signatureIndex))
-                : "?";
+        const std::string paramName = signatureIndex < signature->argNamesCount()
+                                          ? std::string(signature->argNameAt(signatureIndex))
+                                          : "?";
         return std::format(
             "{} {} {}, but its parameter '{}: {}'",
             i < withCount ? "with-argument" : "argument",
@@ -1617,7 +1656,9 @@ compile_graph_ptr_t Builder::instantiateForCall(
     if (expectedResult != nullptr && expectedResult->code() != TypeCode::Void &&
         signature->hasExitType()) {
         unifyTypeVars(
-            substituteExtentValues(signature->exitType(), extents), expectedResult, bindings);
+            substituteExtentValues(signature->exitType(), extents),
+            expectedResult,
+            bindings);
     }
     // 4. The literals: what they are written as fills a variable nothing else fixed and does not
     // override the type the position gave it.
@@ -1732,7 +1773,8 @@ compile_graph_ptr_t Builder::instantiateForCall(
         // position).
         const std::optional<literal::Value> written = literalValueOfExpr(inputAt(i).expr);
         const bool literalEnters =
-            (written.has_value() && wanted->isPrimitive() && literal::kindEnters(*written, wanted)) ||
+            (written.has_value() && wanted->isPrimitive() &&
+             literal::kindEnters(*written, wanted)) ||
             compositeLiteralEntersIn(inputAt(i).node, wanted, inputAt(i).expr);
         if (literalEnters) {
             if (node_handle_t entered = checkValue(inputAt(i).node, wanted, inputAt(i).expr)) {
@@ -1758,22 +1800,24 @@ compile_graph_ptr_t Builder::instantiateForCall(
         }
         const std::string name(signature->argNameAt(p));
         ConstasValue &value = constas.at(name);
-        Type *declaredType = inWith ? signature->withTypeAt(p)
-                                    : signature->normTypeAt(p - declaredWithCount);
-        Type *wanted =
-            substituteTypeVars(substituteExtentValues(declaredType, extents), bindings);
+        Type *declaredType =
+            inWith ? signature->withTypeAt(p) : signature->normTypeAt(p - declaredWithCount);
+        Type *wanted = substituteTypeVars(substituteExtentValues(declaredType, extents), bindings);
         if (containsTypeVar(wanted)) {
-            reject(std::format(
-                "the 'constas' parameter '{}' leaves a type variable without a type", name));
+            reject(
+                std::format(
+                    "the 'constas' parameter '{}' leaves a type variable without a type",
+                    name));
         }
         if (!wanted->assignableFrom(value.valueType) &&
             !entersImplicitly(wanted, value.valueType)) {
-            reject(std::format(
-                "the value given for the 'constas' parameter '{}' is '{}', but its parameter "
-                "is '{}'",
-                name,
-                value.valueType->toString(),
-                wanted->toString()));
+            reject(
+                std::format(
+                    "the value given for the 'constas' parameter '{}' is '{}', but its parameter "
+                    "is '{}'",
+                    name,
+                    value.valueType->toString(),
+                    wanted->toString()));
         }
         if (!wanted->equals(value.valueType)) {
             if (data_ptr_t converted = value.data->convertTo(wanted); converted != nullptr) {
@@ -1968,13 +2012,13 @@ void Builder::settleGenericOperatorArguments(
             return;
         }
         const generic_template_ptr_t tmpl = genericDrefs_.find(arg.node)->second.one();
-        FunctionType *signature   = tmpl->funcType;
-        const size_t params       = signature->normTypesCount();
+        FunctionType *signature           = tmpl->funcType;
+        const size_t params               = signature->normTypesCount();
         std::vector<std::string> names;
         collectTypeVars(signature, names);
         std::string tried;
-        // The instances the types of the other arguments suggest are candidates, not the answer: one
-        // whose body does not compile for the types it was tried with is simply not one this
+        // The instances the types of the other arguments suggest are candidates, not the answer:
+        // one whose body does not compile for the types it was tried with is simply not one this
         // operator accepts, so the bodies tried are quiet and what they said is reported only when
         // the name cannot stand for any of them (SpeculativeInstantiation).
         SpeculativeInstantiation quiet(*this);
@@ -2133,7 +2177,7 @@ void Builder::rejectInvalidCollectionKey(Type *type, const GCT::node_ptr_t &at) 
     camel::source::origin_id_t fieldOrigin = camel::source::kInvalidOriginId;
     std::string fieldLabel;
     std::string problem = collectionKeyProblem(keyType, &fieldOrigin, &fieldLabel);
-    auto diag = diags_->of(SemanticDiag::CollectionKeyNotAllowed).atOrigin(at->origin());
+    auto diag           = diags_->of(SemanticDiag::CollectionKeyNotAllowed).atOrigin(at->origin());
     if (fieldOrigin != camel::source::kInvalidOriginId) {
         // A field of an enum is what keeps the enum from being a key: point at its declaration.
         diag.relatedOrigin(fieldOrigin, fieldLabel + " is declared here");
@@ -2154,9 +2198,9 @@ compile_graph_ptr_t Builder::instantiateGeneric(
     const std::vector<std::string> ownNames = typeParameterNames(tmpl);
     type_bindings_t bindings;
     for (const auto &binding : callBindings) {
-        const bool own = std::find(ownNames.begin(), ownNames.end(), binding.first) !=
-                             ownNames.end() &&
-                         findTypeBinding(tmpl->outerBindings, binding.first) == nullptr;
+        const bool own =
+            std::find(ownNames.begin(), ownNames.end(), binding.first) != ownNames.end() &&
+            findTypeBinding(tmpl->outerBindings, binding.first) == nullptr;
         const bool seen = findTypeBinding(bindings, binding.first) != nullptr;
         if (own && !seen) {
             bindings.push_back(binding);
@@ -2265,14 +2309,13 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         constasText +=
             (constasText.empty() ? "" : ", ") + name + " = " + constasTextOf(found->second.data);
     }
-    const std::string instanceArguments =
-        bindingsText.empty() ? constasText
-                             : constasText.empty() ? bindingsText
-                                                   : bindingsText + ", " + constasText;
-    const std::string instanceTypes =
-        typeText.empty() ? constasValues
-                         : constasValues.empty() ? typeText : typeText + ", " + constasValues;
-    const std::string instanceName = std::format("{}<{}>", tmpl->name, instanceTypes);
+    const std::string instanceArguments = bindingsText.empty()  ? constasText
+                                          : constasText.empty() ? bindingsText
+                                                                : bindingsText + ", " + constasText;
+    const std::string instanceTypes     = typeText.empty()        ? constasValues
+                                          : constasValues.empty() ? typeText
+                                                                  : typeText + ", " + constasValues;
+    const std::string instanceName      = std::format("{}<{}>", tmpl->name, instanceTypes);
     // A type argument built out of the one an instance on the call cycle already holds asks for
     // an instance at every level (`T`, then `T[]`, then `T[][]`), so the family of instances has
     // no fixed point and no count of them is what bounds it. This is refused where the growth
@@ -2287,8 +2330,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         }
         for (const auto &[name, type] : bindings) {
             Type *earlier = findTypeBinding(open.bindings, name);
-            if (earlier == nullptr || earlier->equals(type) ||
-                !typeHasProperPart(type, earlier)) {
+            if (earlier == nullptr || earlier->equals(type) || !typeHasProperPart(type, earlier)) {
                 continue;
             }
             diags_->of(SemanticDiag::GenericTypeArgumentGrows)
@@ -2352,10 +2394,10 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
               bindings(b.typeBindings_), extents(b.extentBindings_), constas(b.constasBindings_),
-              synced(b.synced_), varied(b.varied_),
-              declaresVariable(b.declaresVariable_), calleeAllowed(b.genericCalleeAllowed_),
-              lastSynced(b.lastSyncedNode_), module(b.module_), namespacePath(b.namespacePath_),
-              usingFrames(b.usingFrames_), opened(t) {
+              synced(b.synced_), varied(b.varied_), declaresVariable(b.declaresVariable_),
+              calleeAllowed(b.genericCalleeAllowed_), lastSynced(b.lastSyncedNode_),
+              module(b.module_), namespacePath(b.namespacePath_), usingFrames(b.usingFrames_),
+              opened(t) {
             ++self.instantiationDepth_;
             ++opened.openInstances;
         }
@@ -2383,8 +2425,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
 
     // Whatever the body of this instance says goes to the scope's sink while it is built: a body
     // that does not compile for the types it was tried with may belong to a candidate nobody wants,
-    // and it is the one thing a search is allowed to hold back (`SpeculativeInstantiation`). With no
-    // scope open this changes nothing.
+    // and it is the one thing a search is allowed to hold back (`SpeculativeInstantiation`). With
+    // no scope open this changes nothing.
     BodyDiagnostics bodyDiags(*this);
     const size_t instanceIndex = tmpl->instances.size();
     const size_t diagsBefore   = diags_->count();
@@ -2415,8 +2457,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         templateScope_  = tmpl->templateScope;
         typeBindings_   = tmpl->outerBindings;
         typeBindings_.insert(typeBindings_.end(), bindings.begin(), bindings.end());
-        extentBindings_ = extents;
-        constasBindings_ = constas;
+        extentBindings_       = extents;
+        constasBindings_      = constas;
         synced_               = false;
         varied_               = false;
         declaresVariable_     = false;
@@ -2424,10 +2466,10 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         lastSyncedNode_       = {};
 
         FunctionType *funcType = instantiateFunctionType(tmpl->funcType, bindings, &extents);
-        const auto graphId = context_->graphIds().allocate();
-        graph              = tmpl->name.empty()
-                                 ? createCompileGraph(graphId, funcType, currGraph_)
-                                 : createCompileGraph(graphId, funcType, currGraph_, instanceName);
+        const auto graphId     = context_->graphIds().allocate();
+        graph = tmpl->name.empty()
+                    ? createCompileGraph(graphId, funcType, currGraph_)
+                    : createCompileGraph(graphId, funcType, currGraph_, instanceName);
         if (const auto declaring = units_.find(tmpl->module.get());
             declaring != units_.end() && !tmpl->name.empty()) {
             // Shown with the module that declares it (design principles 10.2).
@@ -2475,8 +2517,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         // every instance, and they were resolved once (tagFactsOf remembers by node).
         const TagFacts tags = tagFactsOf(tmpl->func, camel::core::tag::Func);
         if (camel::core::tag::declaresMacro(tags.declaration)) {
-            graph->edit().setFlags(static_cast<uint8_t>(
-                graph->view().flags() | camel::runtime::kGraphFlagMacro));
+            graph->edit().setFlags(
+                static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
         }
         buildFuncBody(tmpl->func, graph, funcType, instanceName, tags);
         leaveScope();
@@ -2484,8 +2526,8 @@ compile_graph_ptr_t Builder::instantiateGeneric(
         markFailed();
         // A body that does not compile for the types it was tried with is not a function this
         // position necessarily wants: inside a scope the attempt is answered with "no instance" and
-        // what the body said stays in the scope's sink (`SpeculativeInstantiation`). Outside one the
-        // diagnostic stands and the build aborts, as it always did.
+        // what the body said stays in the scope's sink (`SpeculativeInstantiation`). Outside one
+        // the diagnostic stands and the build aborts, as it always did.
         if (speculative_ != nullptr) {
             return nullptr;
         }
@@ -2526,11 +2568,14 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
     // `valueUsedGraphs_` -- are erased with the graph, and the graph is not registered as a body
     // of the unit, so no pass over the built bodies ever judges it.
     const compile_graph_ptr_t scratch = createCompileGraph(
-        context_->graphIds().allocate(), FunctionType::create(), nullptr, "__typeof__");
+        context_->graphIds().allocate(),
+        FunctionType::create(),
+        nullptr,
+        "__typeof__");
     scratch->setOuterGraph(currGraph_);
-    std::erase_if(
-        unit_->builtBodies,
-        [&](const compile_graph_ptr_t &known) { return known.get() == scratch.get(); });
+    std::erase_if(unit_->builtBodies, [&](const compile_graph_ptr_t &known) {
+        return known.get() == scratch.get();
+    });
 
     const compile_graph_ptr_t savedGraph       = currGraph_;
     const node_handle_t savedSynced            = lastSyncedNode_;
@@ -2547,7 +2592,9 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
     // evaluated. The sink is what tells "nothing to report" apart from "the expression is not a
     // value", the way a speculative instantiation keeps what it learns about the bodies it tries.
     auto sink = std::make_shared<Diagnostics>(
-        diags_->moduleName(), diags_->modulePath(), diags_->sourceContext());
+        diags_->moduleName(),
+        diags_->modulePath(),
+        diags_->sourceContext());
 
     // The scopes and the chain of the graph the type is used in are restored as a whole: an
     // inference that stops halfway leaves nothing of itself behind in either.
@@ -2582,19 +2629,20 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
             self.capturedValues_.erase(scratch);
             self.valueUsedGraphs_.erase(scratch);
         }
-    } restore{*this,
-              savedGraph,
-              savedSynced,
-              savedChained,
-              savedSyncedFlag,
-              savedVaried,
-              savedDeclares,
-              savedNodes,
-              savedGraphs,
-              savedDecorated,
-              savedTemplate,
-              savedDiags,
-              scratch.get()};
+    } restore{
+        *this,
+        savedGraph,
+        savedSynced,
+        savedChained,
+        savedSyncedFlag,
+        savedVaried,
+        savedDeclares,
+        savedNodes,
+        savedGraphs,
+        savedDecorated,
+        savedTemplate,
+        savedDiags,
+        scratch.get()};
 
     diags_ = sink;
     enterGraphScope(scratch, "__typeof__");
@@ -2649,6 +2697,30 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
         std::function<Type *(Type *)> resolveTypeOfs = [&](Type *held) -> Type * {
             if (held->code() == TypeCode::TypeOf) {
                 return resolveTypeNode(held, at);
+            }
+            if (held->code() == MatchTypeType::typeCode()) {
+                // A `match type` finds its subject where a type stands, so a `typeof` written
+                // there is resolved the same way (`ElementOf<typeof xs>` is a `match type` whose
+                // subject is the `typeof`). The subject is also what a case may name in its
+                // result (`case set => KeyOf<T>` holds the `typeof` too), so every part of the
+                // type is resolved; once the subject is the type `typeof` stood for, the case
+                // that selects it is the one the `match type` is (typevar.cpp
+                // `substituteTypeVars`).
+                auto *match = tt::as_ptr<MatchTypeType>(held);
+                std::vector<Type *> params;
+                bool changed = false;
+                for (Type *param : match->paramsSpan()) {
+                    Type *resolved = resolveTypeOfs(param);
+                    changed        = changed || resolved != param;
+                    params.push_back(resolved);
+                }
+                if (!changed) {
+                    return held;
+                }
+                // No binding is in play here: `expandTypePacks` is the substitution that asks a
+                // type to evaluate with nothing bound, which is what the subject being the type
+                // `typeof` stood for makes possible.
+                return expandTypePacks(match->cloneWithParams(params));
             }
             if (held->code() != TypeCallType::typeCode()) {
                 return held;

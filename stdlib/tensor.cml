@@ -23,7 +23,7 @@
 // convention, so no `#op` tag is needed.
 
 
-import { is_float, is_numeric, is_plain, is_same } from types
+import { is_float, is_numeric, is_plain, is_same, ShapeOf } from types
 
 // Every signature here writes the element type of its operand as an explicit type variable of
 // the head -- `func f::<T>(x: T[...]) when is_numeric::<T>()` -- and the call site's argument type
@@ -59,10 +59,12 @@ import { is_float, is_numeric, is_plain, is_same } from types
 
 // ---- shape and reshaping ----
 
-/// The extents of a tensor, in order.
+/// The extents of a tensor, in order: as many as the type states dimensions, so a tensor whose
+/// shape the type fixes has a list whose length is fixed too (`ShapeOf`); a scalar is a tensor of
+/// rank zero and answers the empty list.
 /// @pure
 /// @example shape([[1.0, 2.0], [3.0, 4.0]] as float[2, 2])    // [2, 2]
-export func shape::<T>(t: T[...]): int[] when is_numeric::<T>()
+export func shape::<T>(t: T): ShapeOf<T>
 
 /// The number of elements in a tensor: the product of its extents.
 /// @pure

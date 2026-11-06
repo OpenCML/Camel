@@ -227,3 +227,49 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
   ；
 - 涉及 `BRCH`/`JOIN` 时，一个节点属于哪条臂由它的区域决定（`nodeRegion`、`armRegionOf`）；加节点时给对区域，
   提交时的校验会拦住读了另一条臂、或等待 `BRCH` 却不在任何臂里的节点。
+
+## Caller-selected deletion and boundary checks
+
+`rewrite`, `run` and `saturate` accept `protect_effects` and `protect_faults`, both
+true by default. These local deletion guards are independent of numeric `strict`.
+A wrapper forwards them explicitly. Unknown calls and control-region summaries
+are conservative; sharing can make a local refusal unnecessary for actual execution.
+The guards do not certify equivalence, movement, duplication, reordering or termination.
+
+`DraftWritings` admits candidates using these guards, transfers named anchors and
+waits, and removes permitted unread nodes without an automatic keeper. Remaining
+users and synchronization can still demand a computation. Saturation applies the
+same admission checks. Extraction chooses from admitted alternatives, preserves
+structural roots and live dependencies, and trims undemanded operators; it cannot
+retrospectively restore a disabled protection. `Proof` records a derivation under
+supplied rules and guards, not a proof of full observational equality.
+
+The generic pipeline always checks ports, entry/exit and effect credentials;
+transactions also retain type, handle ownership and region checks. An effect
+operator returned to the pipeline must have a value reader, named result or chain
+place. Permitted deletion cleans up orphan operators rather than disabling this
+admission invariant.
+
+`graph::check_pass_boundary` explicitly selects the existing comparative check
+for the graphs before and after a pass and returns `after` when accepted. It compares the enclosing
+program snapshots: standard ambient resource/access-mode sets and order of matched
+effect sites, as well as ordinary admission. It emits a named context diagnostic on refusal. Although it returns `F!`, catching
+the error value does not clear that diagnostic or recover outer execution; this is
+a refusing checking stage, not a recoverable predicate.
+It does not compare traces, event counts, payloads or faults. Deleting one of two
+stdout writes may pass; deleting the only stdout write fails. Generic invocation
+and a wrapper omitting this check do not infer preservation from `(f: F) => F!`.
+The optimizer's internal `checkPassBoundary` calls retain their selected check.
+
+The support comparison sorts and deduplicates `(standard resource name, access mode)`
+from `collectEffects` over every graph, not only the invoked function's reachable body.
+The order matcher keys sites by origin, inline copy site and operator URI. It requires
+exactly one occurrence of the key before; it takes the first matching occurrence after
+and skips subsequent ones. For matched sites sharing an ambient resource, an order
+established before must still be established after. Unmatched sites are not compared.
+These are the implemented correspondence limits, not a general event bijection.
+
+The credential admission test applies to effect operators with external resources,
+ambient access, or non-read access. An operator has a credential if it has a normal
+or with user, is the graph exit/output/return, or has a sync predecessor/user or control
+input/user. This is a syntactic admission check, not a reachability or trace analysis.

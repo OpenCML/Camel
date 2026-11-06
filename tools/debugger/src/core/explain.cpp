@@ -95,14 +95,14 @@ std::string counted(size_t n, const char *one, const char *many) {
 std::string positions(const camel::runtime::RewriteStep &step) {
     const std::string matched =
         step.matched.empty() ? std::string("%?") : "%" + std::to_string(step.matched.front());
-    const std::string produced =
-        step.produced == camel::runtime::kInvalidNodeRef ? std::string("%?")
-                                                        : "%" + std::to_string(step.produced);
+    const std::string produced = step.produced == camel::runtime::kInvalidNodeRef
+                                     ? std::string("%?")
+                                     : "%" + std::to_string(step.produced);
     return matched + " -> " + produced;
 }
 
 nlohmann::json proofJson(const camel::rewritemod::ProofObject &proof) {
-    const auto &record = proof.record();
+    const auto &record   = proof.record();
     nlohmann::json steps = nlohmann::json::array();
     for (const camel::runtime::RewriteStep &step : record.steps) {
         nlohmann::json matched = nlohmann::json::array();
@@ -169,8 +169,9 @@ nlohmann::json proofJson(const camel::rewritemod::ProofObject &proof) {
     return answer;
 }
 
-/// The chain as `a = ... = b`, one line per rewrite, with the rule and both node positions. This
-/// is the library's print with the positions made explicit; the library's own line is the same.
+/// The chain as `a ~> ... ~> b`, one line per rewrite, with the rule and both node positions.
+/// This is the library's print with the positions made explicit; the library's own line is the
+/// same.
 std::string chainText(const camel::rewritemod::ProofObject &proof) {
     const auto &chain = *proof.chain();
     if (chain.same) {
@@ -182,7 +183,7 @@ std::string chainText(const camel::rewritemod::ProofObject &proof) {
     }
     std::string out;
     if (chain.paths.size() == 1) {
-        out += "chain " + chain.from + " = " + chain.to + ": " +
+        out += "chain " + chain.from + " ~> " + chain.to + ": " +
                counted(chain.paths.front().size(), "rewrite", "rewrites") + "\n";
     } else {
         out += counted(chain.paths.size(), "chain", "chains") + " of the same length from " +
@@ -191,14 +192,15 @@ std::string chainText(const camel::rewritemod::ProofObject &proof) {
     const auto &steps = proof.record().steps;
     for (size_t p = 0; p < chain.paths.size(); ++p) {
         const auto &path = chain.paths[p];
-        const std::string indent = chain.paths.size() == 1 ? "  " : "  " + std::to_string(p + 1) + ". ";
+        const std::string indent =
+            chain.paths.size() == 1 ? "  " : "  " + std::to_string(p + 1) + ". ";
         out += indent + chain.from + "\n";
         for (const camel::rewritemod::ProofObject::Link &link : path) {
             if (link.step >= steps.size()) {
                 continue;
             }
             const camel::runtime::RewriteStep &step = steps[link.step];
-            out += indent + "  = " + camel::rewritemod::linkAfter(step, link.reverse) + "  by " +
+            out += indent + "  ~> " + camel::rewritemod::linkAfter(step, link.reverse) + "  by " +
                    step.rule;
             if (link.reverse) {
                 out += "  (backwards)";
@@ -228,7 +230,7 @@ std::string recordText(const camel::rewritemod::ProofObject &proof) {
         const std::string before =
             step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
         out += "  " + step.graph + " round " + std::to_string(step.round) + ": " + before + "\n";
-        out += "  = " + step.producedText + "  by " + step.rule + "  (" + positions(step) + ")\n";
+        out += "  ~> " + step.producedText + "  by " + step.rule + "  (" + positions(step) + ")\n";
         out += "    matched";
         for (const std::string &text : step.matchedText) {
             out += " " + text + ";";
@@ -293,8 +295,7 @@ json DebugCore::evaluationFailure(const ShadowFrame &f, const std::string &why) 
     };
 }
 
-DebugCore::CallAnswer
-DebugCore::callAtFrame(
+DebugCore::CallAnswer DebugCore::callAtFrame(
     ShadowFrame &f, const std::string &uri, const std::vector<std::string> &arguments,
     const std::vector<std::string> &withArguments) {
     CallAnswer answer;
@@ -331,7 +332,8 @@ DebugCore::callAtFrame(
         }
         if (!resolved.evaluated) {
             answer.diagnostic = locatedDiagnostic(
-                f, "'" + resolved.variable.name + "' has no value yet: " + resolved.variable.note);
+                f,
+                "'" + resolved.variable.name + "' has no value yet: " + resolved.variable.note);
             return answer;
         }
         values.push_back(resolved.view);
@@ -373,9 +375,12 @@ DebugCore::callAtFrame(
         slots.push_back(value.slot);
         types.push_back(value.type);
         if (value.type != nullptr && value.type->isGCTraced() && value.slot != NullSlot) {
-            roots.push_back(std::make_unique<mm::RootHandle>(
-                mm::autoSpace(), rtdata::fromSlot<rtdata::Object *>(value.slot), value.type,
-                "debugger.argument"));
+            roots.push_back(
+                std::make_unique<mm::RootHandle>(
+                    mm::autoSpace(),
+                    rtdata::fromSlot<rtdata::Object *>(value.slot),
+                    value.type,
+                    "debugger.argument"));
         }
     }
     // A collection may have run while the type rule was resolved (it allocates types): read the
@@ -405,7 +410,9 @@ DebugCore::callAtFrame(
         try {
             if (auto reporter = context->runtimeErrorReporter()) {
                 auto site = camel::core::error::makeGraphExecutionSite(
-                    context->sourceContext(), f.graph, stack_.size());
+                    context->sourceContext(),
+                    f.graph,
+                    stack_.size());
                 if (f.origin != 0) {
                     site.cachedOrigin = f.origin;
                 }
@@ -447,7 +454,9 @@ json DebugCore::explainJson(const json &args) {
         return fail("explain: give the run, or the run and two values");
     }
     const CallAnswer answer = callAtFrame(
-        f, all ? "rewrite:explain_all" : "rewrite:explain", std::vector<std::string>{run},
+        f,
+        all ? "rewrite:explain_all" : "rewrite:explain",
+        std::vector<std::string>{run},
         all ? std::vector<std::string>{} : std::vector<std::string>{a, b});
     if (!answer.ok) {
         return json{
@@ -458,7 +467,9 @@ json DebugCore::explainJson(const json &args) {
     std::unique_ptr<mm::RootHandle> root;
     if (answer.type != nullptr && answer.type->isGCTraced() && answer.slot != NullSlot) {
         root = std::make_unique<mm::RootHandle>(
-            mm::autoSpace(), rtdata::fromSlot<rtdata::Object *>(answer.slot), answer.type,
+            mm::autoSpace(),
+            rtdata::fromSlot<rtdata::Object *>(answer.slot),
+            answer.type,
             "debugger.proof");
     }
     if (answer.fallibleError) {
@@ -478,8 +489,8 @@ json DebugCore::explainJson(const json &args) {
     }
     return json{
         {"ok", true},
-        {"text", (all ? "explain_all: " : "explain: ") +
-                     (all ? recordText(*proof) : chainText(*proof))},
+        {"text",
+         (all ? "explain_all: " : "explain: ") + (all ? recordText(*proof) : chainText(*proof))},
         {"proof", proofJson(*proof)},
     };
 }
@@ -488,15 +499,18 @@ json DebugCore::whyNotJson(const json &args) {
     if (stack_.empty()) {
         return fail("no frame");
     }
-    ShadowFrame &f                 = stack_.back();
-    const std::string run          = args.value("run", std::string());
-    const std::string rule         = args.value("rule", std::string());
-    const std::string value        = args.value("value", std::string());
+    ShadowFrame &f          = stack_.back();
+    const std::string run   = args.value("run", std::string());
+    const std::string rule  = args.value("rule", std::string());
+    const std::string value = args.value("value", std::string());
     if (run.empty() || rule.empty() || value.empty()) {
         return fail("why_not: the run, the rule and the value are required");
     }
-    const CallAnswer answer =
-        callAtFrame(f, "rewrite:why_not", std::vector<std::string>{run}, std::vector<std::string>{rule, value});
+    const CallAnswer answer = callAtFrame(
+        f,
+        "rewrite:why_not",
+        std::vector<std::string>{run},
+        std::vector<std::string>{rule, value});
     if (!answer.ok) {
         return json{
             {"ok", false},
@@ -506,19 +520,22 @@ json DebugCore::whyNotJson(const json &args) {
     std::unique_ptr<mm::RootHandle> root;
     if (answer.type != nullptr && answer.type->isGCTraced() && answer.slot != NullSlot) {
         root = std::make_unique<mm::RootHandle>(
-            mm::autoSpace(), rtdata::fromSlot<rtdata::Object *>(answer.slot), answer.type,
+            mm::autoSpace(),
+            rtdata::fromSlot<rtdata::Object *>(answer.slot),
+            answer.type,
             "debugger.why_not");
     }
     if (answer.fallibleError) {
         return json{
-            {"ok", true}, {"text", "why_not: " + answer.errorText}, {"error", answer.errorText}};
+            {"ok", true},
+            {"text", "why_not: " + answer.errorText},
+            {"error", answer.errorText}};
     }
     const auto *tuple = dynamic_cast<const type::TupleType *>(answer.type);
     if (tuple == nullptr || tuple->payloadType() != type::Type::String()) {
         return fail("the operator did not answer a reason");
     }
-    const auto *text =
-        rtdata::fromSlot<const String *>(rtdata::falliblePayload(answer.slot));
+    const auto *text = rtdata::fromSlot<const String *>(rtdata::falliblePayload(answer.slot));
     if (text == nullptr) {
         return fail("the operator answered no reason");
     }

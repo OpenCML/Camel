@@ -1212,12 +1212,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "rules.explain_chains_forward"
-desc = "8.7's question is `why are these two values equal`, not `what did the run do`: `explain(r, a, b)` prints the shortest chain between the addition the input had and the addition that replaced it, one step with its rule, round and graph, and nothing else of the record."
+desc = "The record answers how supplied rules connected these two values: `explain(r, a, b)` prints the shortest chain between the addition the input had and the addition that replaced it, one step with its rule, round and graph, and nothing else of the record."
 kind = "behavior"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::chain_forward", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["chain %2 :op/add_l : int = %4 :op/add_l : int: 1 rewrite", "by zero_to_one", "round 1, graph f", "\n6\n"]
+expect_stdout_contains = ["chain %2 :op/add_l : int ~> %4 :op/add_l : int: 1 rewrite", "by zero_to_one", "round 1, graph f", "\n6\n"]
 expect_output_not_contains = ["nodes visited"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
@@ -1229,14 +1229,14 @@ kind = "behavior"
 case = "../../../cases/modules/rules/explain_target.cml"
 args = ["${case}", "explain_pass::chain_through", "std::nvm"]
 expect_exit = 0
-expect_stdout_contains = ["2 rewrites", "= %4 :op/add_l : int  by zero_to_one", "= %6 :op/add_l : int  by bump_one", "\n7\n"]
+expect_stdout_contains = ["2 rewrites", "~> %4 :op/add_l : int  by zero_to_one", "~> %6 :op/add_l : int  by bump_one", "\n7\n"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout
 const count = (text, needle) => text.split(needle).length - 1
-assert(count(out, '  = ') === 2, `a two-step chain prints two equations: ${JSON.stringify(out)}`)
-const mid = out.indexOf('= %4 :op/add_l : int  by zero_to_one')
-const last = out.indexOf('= %6 :op/add_l : int  by bump_one')
+assert(count(out, '  ~> ') === 2, `a two-step chain prints two derivation steps: ${JSON.stringify(out)}`)
+const mid = out.indexOf('~> %4 :op/add_l : int  by zero_to_one')
+const last = out.indexOf('~> %6 :op/add_l : int  by bump_one')
 assert(mid >= 0 && last >= 0, `both steps must be in the chain: ${JSON.stringify(out)}`)
 assert(mid < last, `the chain runs from the input value to the result: ${JSON.stringify(out)}`)
 }

@@ -415,7 +415,7 @@ for (const root of ['src', 'modules']) {
         const named = (text.match(/PassParam\{/g) || []).length
         const aggregate =
             relative === 'src/execute/pass.cpp'
-                ? (text.match(/^\s*\{"[a-z_]+", PassParamType::/gm) || []).length
+                ? (text.match(/\{\s*"[a-z_]+"\s*,\s*PassParamType::/g) || []).length
                 : 0
         const count = named + aggregate
         if (count === 0) {

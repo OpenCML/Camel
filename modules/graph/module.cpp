@@ -20,10 +20,14 @@
 #include "camel/core/module/builtin.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/resource_semantics.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/core/rtdata/tagged.h"
 #include "camel/core/rtdata/variant.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
 #include "camel/execute/executor.h"
+#include "camel/execute/pass/base.h"
 #include "camel/runtime/graph.h"
 #include "camel/runtime/program.h"
 
@@ -32,13 +36,13 @@
 using namespace camel::core::context;
 using namespace camel::core::module;
 using namespace camel::core::type;
+using camel::graphmod::effectsType;
+using camel::graphmod::factKernels;
 using camel::graphmod::HandleKind;
 using camel::graphmod::HandleType;
-using camel::graphmod::effectsType;
 using camel::graphmod::nodeKindType;
-using camel::graphmod::regionKindType;
-using camel::graphmod::factKernels;
 using camel::graphmod::readKernels;
+using camel::graphmod::regionKindType;
 using camel::graphmod::txnKernels;
 
 namespace {
@@ -76,10 +80,29 @@ slot_t idKernel(ArgsView &, ArgsView &norm, Context &) {
                                             : static_cast<int64_t>(handle->index()));
 }
 
+/// Explicitly selected pass preservation comparison. Generic invocation does not infer it
+/// from a function-to-function type. Structural and effect-credential admission remain active.
+slot_t checkPassBoundaryKernel(ArgsView &, ArgsView &norm, Context &ctx) {
+    const auto *before = norm.get<::Function *>(0)->program();
+    const auto *after  = norm.get<::Function *>(1)->program();
+    if (checkPassBoundary(
+            ctx.shared_from_this(),
+            "graph::check_pass_boundary (selected)",
+            *before,
+            *after)) {
+        return rtdata::makeError(
+            "PassBoundary",
+            "selected pass boundary check failed",
+            "<graph::check_pass_boundary>");
+    }
+    return rtdata::makeOk(
+        rtdata::toSlot(norm.get<::Function *>(1)),
+        TupleType::fallible(norm.type(1)));
+}
+
 class GraphExecutor final : public Executor {
   public:
-    explicit GraphExecutor(context_ptr_t ctx)
-        : Executor(std::move(ctx), kernels()) {}
+    explicit GraphExecutor(context_ptr_t ctx) : Executor(std::move(ctx), kernels()) {}
 
   private:
     static std::unordered_map<std::string, operator_t> kernels() {
@@ -89,6 +112,7 @@ class GraphExecutor final : public Executor {
         out.emplace("eq", eqKernel);
         out.emplace("ne", neKernel);
         out.emplace("id", idKernel);
+        out.emplace("check_pass_boundary", checkPassBoundaryKernel);
         return out;
     }
 };
@@ -97,7 +121,10 @@ class GraphModule final : public BuiltinModule {
   public:
     explicit GraphModule(context_ptr_t ctx) : BuiltinModule("graph", std::move(ctx)) {
         for (HandleKind kind : kHandleKinds) {
-            camel::core::type::registerNativeType("graph", camel::graphmod::handleKindName(kind), HandleType::get(kind));
+            camel::core::type::registerNativeType(
+                "graph",
+                camel::graphmod::handleKindName(kind),
+                HandleType::get(kind));
         }
         camel::core::type::registerNativeType("graph", "NodeKind", nodeKindType());
         camel::core::type::registerNativeType("graph", "RegionKind", regionKindType());
@@ -134,6 +161,7 @@ class GraphModule final : public BuiltinModule {
             {
                 // the reads: a Program is not changed by them
                 {"graphs_of", true},
+                {"check_pass_boundary", true},
                 {"name", true},
                 {"nodes", true},
                 {"inputs", true},
@@ -194,7 +222,8 @@ class GraphModule final : public BuiltinModule {
             using camel::core::sem::operandAccess;
             using camel::core::sem::ResourceClass;
             camel::core::sem::ResourceSpec onTxn;
-            onTxn.accesses = {operandAccess(ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, "graph::Txn")};
+            onTxn.accesses = {
+                operandAccess(ResourceClass::Handle, 0, AccessMode::ReadModifyWrite, "graph::Txn")};
             table.declareResources(
                 "graph",
                 {
