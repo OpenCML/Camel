@@ -885,7 +885,7 @@ Application applyRewrite(
     Context &ctx, const camel::runtime::Program *base, camel::runtime::GCGraph *subject,
     std::span<const camel::runtime::Rule> compiled, camel::core::sem::NumericPolicy policy,
     size_t maxRounds, RewriteRecord *record = nullptr,
-    camel::runtime::DeletionProtection protection = {}) {
+    camel::runtime::DeletionProtection protection = {}, bool ordered = false) {
     camel::runtime::RuntimeGraphDraftSession session(ctx.shared_from_this(), base, subject);
     camel::runtime::RuntimeGraphDraftSession::RootScope draftRoots(session);
     camel::runtime::RewriteStats total;
@@ -897,7 +897,7 @@ Application applyRewrite(
         }
         auto &transaction = session.edit(graph);
         auto &draft       = transaction.edit();
-        camel::runtime::DraftWritings writings(transaction, policy, protection);
+        camel::runtime::DraftWritings writings(transaction, policy, protection, ordered);
         const size_t from                        = log != nullptr ? log->size() : 0;
         const camel::runtime::RewriteStats stats = writings.rewrite(compiled, maxRounds, log);
         if (log != nullptr) {
@@ -943,7 +943,8 @@ slot_t rewriteKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                    : camel::core::sem::NumericPolicy::relaxed(),
             16,
             nullptr,
-            {with.get<Bool>(2), with.get<Bool>(3)});
+            {with.get<Bool>(2), with.get<Bool>(3)},
+            with.get<Bool>(4));
         return makeOk(toSlot(functionOver(norm, 0, application.program)), resultType);
     } catch (const camel::runtime::RuleCompileError &e) {
         return makeError("RuleInvalid", e.what(), "<rewrite::rewrite>");
@@ -989,6 +990,7 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
         const auto compiled = engineRules(ctx, with, 0, base);
         RewriteRecord record;
         record.strict                 = strict;
+        record.ordered                = with.get<Bool>(6);
         record.protection             = {with.get<Bool>(4), with.get<Bool>(5)};
         record.input                  = base;
         const Application application = applyRewrite(
@@ -1000,7 +1002,8 @@ slot_t runKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                    : camel::core::sem::NumericPolicy::relaxed(),
             rounds < 0 ? 0 : static_cast<size_t>(rounds),
             explain ? &record : nullptr,
-            record.protection);
+            record.protection,
+            record.ordered);
         const double seconds =
             std::chrono::duration<double>(std::chrono::steady_clock::now() - start).count();
         // The function the run produced is rooted while the struct is made: that allocation can
@@ -1455,7 +1458,9 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 camel::runtime::DraftWritings writings(
                     transaction,
                     record.strict ? camel::core::sem::NumericPolicy::strict()
-                                  : camel::core::sem::NumericPolicy::relaxed());
+                                  : camel::core::sem::NumericPolicy::relaxed(),
+                    record.protection,
+                    record.ordered);
                 const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
                 return answer(
                     std::format(
@@ -1519,7 +1524,8 @@ slot_t whyNotKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
             transaction,
             record.strict ? camel::core::sem::NumericPolicy::strict()
                           : camel::core::sem::NumericPolicy::relaxed(),
-            record.protection);
+            record.protection,
+            record.ordered);
         const camel::runtime::RuleMiss miss = writings.whyNot(compiled.front(), *draftNode);
         return answer(
             std::format(
@@ -1568,7 +1574,8 @@ slot_t saturateKernel(ArgsView &with, ArgsView &norm, Context &ctx) {
                 transaction,
                 strict ? camel::core::sem::NumericPolicy::strict()
                        : camel::core::sem::NumericPolicy::relaxed(),
-                {with.get<Bool>(3), with.get<Bool>(4)});
+                {with.get<Bool>(3), with.get<Bool>(4)},
+                with.get<Bool>(5));
             writings.build();
             writings.saturate(compiled, budget);
             writings.save();

@@ -46,7 +46,8 @@ struct RewriteRecord {
         nodeRefsByGraph;
     /// The numeric policy the run applied the rules with: `why_not` matches under the same one,
     /// so a permission the run did not grant is not granted to its answer either.
-    bool strict = false;
+    bool strict  = false;
+    bool ordered = false;
     camel::runtime::DeletionProtection protection;
     /// The program the run started from. A decoded draft keeps each node's runtime id as its draft
     /// id (draft.cpp, GraphDraft::decode), so a node handle into this program names a step of the

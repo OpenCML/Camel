@@ -6142,10 +6142,12 @@ no callable Camel name, so they are not declared here.
 #### `rewrite`
 
 ```camel
-rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies `rules` until no rule changes the function, and gives the rewritten function.
+`ordered: true` preserves operand positions throughout the pattern, including after guard
+rejection. The default also searches declared commutative and exact associative alternatives.
 `protect_effects` and `protect_faults` select conservative local deletion guards. Disabling
 one permits its deletion; remaining users and synchronization can still demand the input.
 These choices do not disable structural validation or prove whole-program equivalence.
@@ -6157,13 +6159,15 @@ These choices do not disable structural validation or prove whole-program equiva
 #### `saturate`
 
 ```camel
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
 every writing the saturation found; `extract` chooses among them. The deletion protections
 select candidate admission. Extraction cannot restore protection disabled during saturation.
 The resulting alternatives are derivations under the rules, not full observational equalities.
+`ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
+remain searchable, and an explicit commutativity rule may still add exchanged writings.
 
 - Failure: error value `RuleInvalid` when a rule does not compile.
 - Example (a fragment, not compiled): `f->saturate<rules, rounds: 20>`
@@ -6184,7 +6188,7 @@ a writing is `cost(o, inputs)`: the operator and the costs of the writings of it
 #### `run`
 
 ```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 ```
 
 Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
@@ -6192,6 +6196,7 @@ what the application cost. This is `rewrite` with the round budget explicit and 
 `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
 the shortest chain between two values, and `explain_all` every rewrite that was made.
 Recording is off unless it is asked for, so a plain application pays nothing for it.
+`ordered` selects positional pattern binding as in `rewrite` and is retained by the proof.
 
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example (a fragment, not compiled): `f->run<rules, rounds: 8, explain: true>`

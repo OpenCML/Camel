@@ -436,16 +436,18 @@ struct DraftWritings::Index {
 };
 
 DraftWritings::DraftWritings(
-    GraphDraft &draft, camel::core::sem::NumericPolicy policy, DeletionProtection protection)
+    GraphDraft &draft, camel::core::sem::NumericPolicy policy, DeletionProtection protection,
+    bool ordered)
     : draft_(draft), ownedTransaction_(GraphTransaction::borrow(draft)),
       transaction_(ownedTransaction_.get()), policy_(policy), protection_(protection),
-      store_(draft_.writings()), index_(std::make_unique<Index>()) {}
+      ordered_(ordered), store_(draft_.writings()), index_(std::make_unique<Index>()) {}
 
 DraftWritings::DraftWritings(
     GraphTransaction &transaction, camel::core::sem::NumericPolicy policy,
-    DeletionProtection protection)
+    DeletionProtection protection, bool ordered)
     : draft_(transaction.edit()), transaction_(&transaction), policy_(policy),
-      protection_(protection), store_(draft_.writings()), index_(std::make_unique<Index>()) {}
+      protection_(protection), ordered_(ordered), store_(draft_.writings()),
+      index_(std::make_unique<Index>()) {}
 
 DraftWritings::~DraftWritings() = default;
 
@@ -2190,7 +2192,7 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                     bind,
                     bound,
                     &matchedWaits,
-                    true,
+                    !ordered_,
                     [&] {
                         if (!chosen &&
                             (!rule.when || rule.when(Match{*this, node, bind, remainder}))) {
@@ -2494,7 +2496,7 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
             // failed and the operator's semantics say the exchange keeps the value (rewrite
             // design 2.2). The answer tries the same two orders, so a rule that does fire
             // commuted is not reported as a mismatch.
-            if (inputs.size() == 2 && declaredCommutative(p.oper, header->dataType)) {
+            if (!ordered_ && inputs.size() == 2 && declaredCommutative(p.oper, header->dataType)) {
                 Binds exchanged = binds;
                 if (!attempt(true, exchanged)) {
                     binds = std::move(exchanged);
@@ -2620,7 +2622,7 @@ SaturateStats DraftWritings::saturate(std::span<const Rule> rules, const Budget 
                     bind,
                     bound,
                     nullptr,
-                    !rule.twoWay,
+                    !ordered_ && !rule.twoWay,
                     [&] {
                         if (!rule.when || rule.when(Match{*this, node, bind, remainder})) {
                             // Saturation uses the same selected admission guards as greedy

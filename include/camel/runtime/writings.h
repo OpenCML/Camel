@@ -418,14 +418,14 @@ class DraftWritings : private WritingObserver {
     explicit DraftWritings(
         GraphDraft &draft,
         camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed(),
-        DeletionProtection protection          = {});
+        DeletionProtection protection = {}, bool ordered = false);
     /// The writings of the draft a transaction owns. The transaction is recorded, so the draft
     /// has an owner that is not a handle: a handle in a draft names this transaction and nothing
     /// else.
     explicit DraftWritings(
         GraphTransaction &transaction,
         camel::core::sem::NumericPolicy policy = camel::core::sem::NumericPolicy::relaxed(),
-        DeletionProtection protection          = {});
+        DeletionProtection protection = {}, bool ordered = false);
     ~DraftWritings();
     DraftWritings(const DraftWritings &)            = delete;
     DraftWritings &operator=(const DraftWritings &) = delete;
@@ -550,7 +550,7 @@ class DraftWritings : private WritingObserver {
     /// what a law that wrote only one order needs, so a two-way rule passes false. (Trying it as
     /// well only doubled the matches of the rearranging laws: `rules::saturate_all` went from about
     /// half a second to past the 20 s timeout.) A one-way rule (`=>`) has no reverse and
-    /// passes true.
+    /// permits the fallback unless the invocation selects ordered matching.
     ///
     /// An operator whose own declaration says exchanging its operands and regrouping its chain
     /// give the same value (`BinaryLaw.commutative` and `exactAssociative`, per element type) is
@@ -581,6 +581,7 @@ class DraftWritings : private WritingObserver {
     bool greedy_ = false; // rewrite(): nodes are replaced, so nothing is looked up by key
     camel::core::sem::NumericPolicy policy_;
     DeletionProtection protection_;
+    bool ordered_; // operand positions are preserved at every pattern node
     WritingStore store_;
     std::unique_ptr<Index> index_;
     std::vector<gc_node_ref_t> pending_;
