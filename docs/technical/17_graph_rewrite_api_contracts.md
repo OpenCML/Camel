@@ -253,7 +253,9 @@ admission invariant.
 `graph::check_pass_boundary(before, after)` explicitly selects the existing
 comparative check and returns `after` when accepted. It compares the enclosing
 program snapshots: standard ambient resource/access-mode sets and order of matched
-effect sites, as well as ordinary admission. It emits a named diagnostic on refusal.
+effect sites, as well as ordinary admission. It emits a named context diagnostic on refusal. Although it returns `F!`, catching
+the error value does not clear that diagnostic or recover outer execution; this is
+a refusing checking stage, not a recoverable predicate.
 It does not compare traces, event counts, payloads or faults. Deleting one of two
 stdout writes may pass; deleting the only stdout write fails. Generic invocation
 and a wrapper omitting this check do not infer preservation from `(f: F) => F!`.

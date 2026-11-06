@@ -6113,7 +6113,8 @@ Explicitly checks standard ambient resource/access-mode support and matched effe
 between two functions, plus the normal port, entry/exit and effect-credential admission checks.
 Returns `after` on success. This comparison is not an observational-equivalence proof:
 equal support does not count events or compare their payloads. The selected check emits a
-located pipeline diagnostic on refusal; ordinary invocation and CLI wrappers use this API.
+located context diagnostic on refusal; catching the error value does not recover outer
+execution. Ordinary invocation and CLI wrappers use this same checking stage.
 
 - Failure: error value `PassBoundary` when the selected boundary check refuses.
 - Example: `check_pass_boundary((x: int) => x, (x: int) => x)`
