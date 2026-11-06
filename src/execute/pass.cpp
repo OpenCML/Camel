@@ -4,57 +4,58 @@
 #include "camel/execute/pass.h"
 #include "camel/common/scope.h"
 #include "camel/core/array/block_selftest.h"
-#include "camel/core/type/array_type_selftest.h"
-#include "camel/core/type/type_identity_selftest.h"
 #include "camel/core/debug_breakpoint.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/mm.h"
-#include "camel/core/module/module.h"
-#include "camel/core/node_attrs.h"
-#include "camel/core/operator_table.h"
-#include "camel/runtime/effect_liveness.h"
-#include "camel/runtime/graph_exit_type.h"
-#include "camel/runtime/resources.h"
-#include "camel/core/tags.h"
 #include "camel/core/mm/block.h"
 #include "camel/core/mm/foreign_handle.h"
 #include "camel/core/mm/profiler.h"
+#include "camel/core/module/module.h"
+#include "camel/core/node_attrs.h"
+#include "camel/core/operator_table.h"
 #include "camel/core/process_exit.h"
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
+#include "camel/core/tags.h"
+#include "camel/core/type/array_type_selftest.h"
+#include "camel/core/type/type_identity_selftest.h"
 #include "camel/execute/entry_args.h"
 #include "camel/execute/observer.h"
-#include "camel_pass.h"
+#include "camel/passes/test/arm_loop_regions.h"
+#include "camel/passes/test/bounds.h"
+#include "camel/passes/test/broken_boundary.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/contexts.h"
+#include "camel/passes/test/control.h"
 #include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/draft_node_owner.h"
 #include "camel/passes/test/edges.h"
-#include "camel/passes/test/graph_release.h"
-#include "camel/passes/test/broken_boundary.h"
-#include "camel/passes/test/keepfn.h"
-#include "camel/passes/test/bounds.h"
-#include "camel/passes/test/inlineuse.h"
-#include "camel/passes/test/keepshape.h"
-#include "camel/passes/test/rules.h"
-#include "camel/passes/test/saturate.h"
-#include "camel/passes/test/writings.h"
-#include "camel/runtime/writings.h"
-#include "camel/passes/test/control.h"
-#include "camel/passes/test/loop_collect.h"
-#include "camel/passes/test/keepnode.h"
-#include "camel/passes/test/exhaust_perm_space.h"
-#include "camel/passes/test/throw_bad_alloc.h"
 #include "camel/passes/test/exec_plan.h"
+#include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/graph_faces.h"
+#include "camel/passes/test/graph_release.h"
+#include "camel/passes/test/inlineuse.h"
+#include "camel/passes/test/keepfn.h"
+#include "camel/passes/test/keepnode.h"
+#include "camel/passes/test/keepshape.h"
+#include "camel/passes/test/loop_collect.h"
+#include "camel/passes/test/loop_inputs.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
-#include "camel/passes/test/arm_loop_regions.h"
-#include "camel/passes/test/loop_inputs.h"
+#include "camel/passes/test/rules.h"
+#include "camel/passes/test/saturate.h"
+#include "camel/passes/test/tangent_space.h"
+#include "camel/passes/test/throw_bad_alloc.h"
+#include "camel/passes/test/writings.h"
 #include "camel/passes/trans/cml/cml.h"
 #include "camel/passes/trans/json/gir.h"
+#include "camel/runtime/effect_liveness.h"
+#include "camel/runtime/graph_exit_type.h"
+#include "camel/runtime/resources.h"
+#include "camel/runtime/writings.h"
+#include "camel_pass.h"
 #include "macro/macro.h"
 #include "pass_declarations.h"
 #include "pass_spec.h"
@@ -80,12 +81,11 @@
 #include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/test/tags.h"
-#include "camel/passes/test/tangent_space.h"
 #include "passes/trans/cpp/cpp_export.h"
 #include "passes/trans/dot/graphviz.h"
 #include "passes/trans/profile/profile.h"
-#include "passes/trans/stats/stats.h"
 #include "passes/trans/rulesets/rulesets.h"
+#include "passes/trans/stats/stats.h"
 #include "passes/trans/tns/topo_node_seq.h"
 
 #include "camel/utils/log.h"
@@ -113,7 +113,6 @@ NullGraphIRPass::apply(const camel::runtime::Program *program, std::ostream &os)
     (void)os;
     return nullptr;
 }
-
 
 namespace {
 
@@ -280,8 +279,7 @@ class ArrayTypeSelfTestPass final : public GraphIRPass {
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << "ARRAY_TYPE_SELFTEST ok "
-           << camel::core::type::debugRunArrayTypeSelfTest() << "\n";
+        os << "ARRAY_TYPE_SELFTEST ok " << camel::core::type::debugRunArrayTypeSelfTest() << "\n";
         return program;
     }
 };
@@ -292,8 +290,8 @@ class TypeIdentitySelfTestPass final : public GraphIRPass {
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        os << "TYPE_IDENTITY_SELFTEST ok "
-           << camel::core::type::debugRunTypeIdentitySelfTest() << "\n";
+        os << "TYPE_IDENTITY_SELFTEST ok " << camel::core::type::debugRunTypeIdentitySelfTest()
+           << "\n";
         return program;
     }
 };
@@ -329,24 +327,24 @@ class GcTupleMembersPass final : public GraphIRPass {
 
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override {
-        // The collector trusts a value's static type, so a value carrying more members than its type
-        // declares is a memory-safety bug. The reading that put this guard here had five members
-        // against a type that declared zero (a residuals tuple typed by the operator resolver's
-        // empty placeholder); here the disagreement is three against two, which is the same bug
-        // without depending on `split`.
+        // The collector trusts a value's static type, so a value carrying more members than its
+        // type declares is a memory-safety bug. The reading that put this guard here had five
+        // members against a type that declared zero (a residuals tuple typed by the operator
+        // resolver's empty placeholder); here the disagreement is three against two, which is the
+        // same bug without depending on `split`.
         //
-        // The pass has two modes and the case runs both. `agree` is the control: two members, a type
-        // of two, the walk runs and the program goes on. `mismatch` is the guard: it must stop the
-        // process with the two counts in the message, and must not return -- a guard that reports a
-        // disagreement and then reads anyway is worse than none, because the read it allows may be
-        // taken as data.
+        // The pass has two modes and the case runs both. `agree` is the control: two members, a
+        // type of two, the walk runs and the program goes on. `mismatch` is the guard: it must stop
+        // the process with the two counts in the message, and must not return -- a guard that
+        // reports a disagreement and then reads anyway is worse than none, because the read it
+        // allows may be taken as data.
         const type::TupleType *pair = type::TupleType::create(
             std::vector<type::Type *>{type::Type::Float(), type::Type::Float()});
         const size_t members = mismatch_ ? 3 : 2;
-        ::Tuple *value = ::Tuple::create(members, camel::core::mm::autoSpace());
-        const auto relocate = [](camel::core::rtdata::Object *object,
-                                 const camel::core::type::Type *,
-                                 const camel::core::rtdata::RefTraceInfo &) { return object; };
+        ::Tuple *value       = ::Tuple::create(members, camel::core::mm::autoSpace());
+        const auto relocate  = [](camel::core::rtdata::Object *object,
+                                  const camel::core::type::Type *,
+                                  const camel::core::rtdata::RefTraceInfo &) { return object; };
         value->updateRefs(relocate, pair);
         os << "{\"ok\":true,\"kind\":\"gc.tuple_members\",\"members\":" << members
            << ",\"declared\":2}\n";
@@ -434,12 +432,10 @@ PassMaker makeGraphVizPass(GraphVizDumpConfig config) {
 }
 
 template <class Pass, class... Args> PassMaker makePass(Args &&...args) {
-    return [arguments = std::tuple<Args...>(std::forward<Args>(args)...)](
-               const context_ptr_t &ctx, const PassArgs &) {
+    return [arguments = std::tuple<Args...>(
+                std::forward<Args>(args)...)](const context_ptr_t &ctx, const PassArgs &) {
         return std::apply(
-            [&](const auto &...unpacked) {
-                return std::make_unique<Pass>(ctx, unpacked...);
-            },
+            [&](const auto &...unpacked) { return std::make_unique<Pass>(ctx, unpacked...); },
             arguments);
     };
 }
@@ -470,33 +466,36 @@ PassMaker optimizePass() {
 PassMaker defunctionalizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DefunctionalizeRewritePass>(
-            ctx, args.getBool("report"), args.getBool("debug"));
+            ctx,
+            args.getBool("report"),
+            args.getBool("debug"));
     };
 }
 
 PassMaker inlinePass(std::optional<InlineTargetStrategy> strategy, std::string passName) {
-    return [strategy, passName = std::move(passName)](
-               const context_ptr_t &ctx, const PassArgs &args) {
-        InlineRewriteConfig config{};
-        if (strategy) {
-            config.inlineStrategy = *strategy;
-        }
-        return std::make_unique<InlineRewritePass>(
-            ctx, config, growthBudgetOf(args, passName));
-    };
+    return
+        [strategy, passName = std::move(passName)](const context_ptr_t &ctx, const PassArgs &args) {
+            InlineRewriteConfig config{};
+            if (strategy) {
+                config.inlineStrategy = *strategy;
+            }
+            return std::make_unique<InlineRewritePass>(ctx, config, growthBudgetOf(args, passName));
+        };
 }
 
 PassMaker specializePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<SpecializeRewritePass>(
-            ctx, growthBudgetOf(args, "std::opt::specialize"));
+            ctx,
+            growthBudgetOf(args, "std::opt::specialize"));
     };
 }
 
 PassMaker devirtualizePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<DevirtualizeRewritePass>(
-            ctx, growthBudgetOf(args, "std::opt::devirtualize"));
+            ctx,
+            growthBudgetOf(args, "std::opt::devirtualize"));
     };
 }
 
@@ -519,7 +518,9 @@ PassMaker foldPass() {
 PassMaker saturatePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         return std::make_unique<OptimizeSaturatePass>(
-            ctx, args.getInt("rounds"), args.getBool("strict"));
+            ctx,
+            args.getInt("rounds"),
+            args.getBool("strict"));
     };
 }
 
@@ -563,10 +564,10 @@ PassMaker algebraPass() {
 PassMaker profilePass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         camel::profile::ReportOptions options;
-        const int64_t top = args.getInt("top");
-        options.top       = top < 0 ? 0 : static_cast<size_t>(top);
-        options.hints     = args.getBool("hints");
-        options.report    = args.getBool("report");
+        const int64_t top     = args.getInt("top");
+        options.top           = top < 0 ? 0 : static_cast<size_t>(top);
+        options.hints         = args.getBool("hints");
+        options.report        = args.getBool("report");
         const int64_t gcStats = args.getInt("gc_stats");
         return std::make_unique<ProfilePass>(
             ctx,
@@ -595,15 +596,15 @@ PassMaker fastVmPass(bool jit) {
 PassMaker taskflowPass() {
     return [](const context_ptr_t &ctx, const PassArgs &args) {
         TaskflowOptions options;
-        options.linear    = args.getBool("linear");
-        options.fanOutAll = args.getBool("fanout_all");
-        options.diag      = args.getBool("diag");
-        options.segments  = args.getBool("segments");
-        options.bytecode  = args.getBool("bytecode");
-        options.gcStats   = static_cast<int>(args.getInt("gc_stats"));
-        options.gcStress  = args.getBool("gc_stress");
+        options.linear         = args.getBool("linear");
+        options.fanOutAll      = args.getBool("fanout_all");
+        options.diag           = args.getBool("diag");
+        options.segments       = args.getBool("segments");
+        options.bytecode       = args.getBool("bytecode");
+        options.gcStats        = static_cast<int>(args.getInt("gc_stats"));
+        options.gcStress       = args.getBool("gc_stress");
         options.blockingLeaves = args.getBool("blocking_leaves");
-        auto pass         = std::make_unique<TaskflowExecSchedPass>(ctx);
+        auto pass              = std::make_unique<TaskflowExecSchedPass>(ctx);
         pass->setOptions(options);
         return pass;
     };
@@ -631,21 +632,21 @@ void registerCoreKernels() {
     registerCoreKernel("rgir", makeGraphVizPass(GraphVizDumpConfig{.rich = true}));
     registerCoreKernel("gir_regions", makeGraphVizPass(GraphVizDumpConfig{.regions = true}));
     registerCoreKernel(
-        "rgir_regions", makeGraphVizPass(GraphVizDumpConfig{.rich = true, .regions = true}));
+        "rgir_regions",
+        makeGraphVizPass(GraphVizDumpConfig{.rich = true, .regions = true}));
     registerCoreKernel("jgir", jgirPass());
     registerCoreKernel("cml", cmlPass());
     registerCoreKernel("agir", makeGraphVizPass(GraphVizDumpConfig{.annotateRoles = true}));
     registerCoreKernel(
-        "argir", makeGraphVizPass(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
+        "argir",
+        makeGraphVizPass(GraphVizDumpConfig{.rich = true, .annotateRoles = true}));
     registerCoreKernel("stats", makePass<GraphStatsPass>());
-    registerCoreKernel(
-        "rulesets",
-        [](const context_ptr_t &ctx, const PassArgs &args) {
-            return std::make_unique<RulesetsPass>(
-                ctx,
-                args.isNull("query") ? std::string() : args.getString("query"),
-                args.getBool("forward"));
-        });
+    registerCoreKernel("rulesets", [](const context_ptr_t &ctx, const PassArgs &args) {
+        return std::make_unique<RulesetsPass>(
+            ctx,
+            args.isNull("query") ? std::string() : args.getString("query"),
+            args.getBool("forward"));
+    });
     registerCoreKernel("profile", profilePass());
     registerCoreKernel("cpp", makePass<CppDumpPass>());
     registerCoreKernel("cpp::module_file", makePass<CppModuleDumpPass>());
@@ -681,10 +682,12 @@ void registerCoreKernels() {
     registerCoreKernel("opt", optimizePass());
     registerCoreKernel("opt::inline", inlinePass(std::nullopt, "std::opt::inline"));
     registerCoreKernel(
-        "opt::small", inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small"));
+        "opt::small",
+        inlinePass(InlineTargetStrategy::Small, "std::opt::inline::small"));
     registerCoreKernel("opt::arm", inlinePass(InlineTargetStrategy::Arm, "std::opt::inline::arm"));
     registerCoreKernel(
-        "opt::hybrid", inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid"));
+        "opt::hybrid",
+        inlinePass(InlineTargetStrategy::Hybrid, "std::opt::inline::hybrid"));
     registerCoreKernel("opt::devirtualize", devirtualizePass());
     registerCoreKernel("opt::specialize", specializePass());
     registerCoreKernel("opt::fold", foldPass());
@@ -751,7 +754,7 @@ const std::map<std::string, std::string> passAliases = {
     {"std::gcmajor", "std::gc::major"},
     {"std::gcconfig", "std::gc::config"},
     {"std::gcsummary", "std::gc::summary"},
-        {"std::gcblocks", "std::gc::blocks"},
+    {"std::gcblocks", "std::gc::blocks"},
     {"std::gcviews", "std::gc::views"},
     {"std::gcviews_escape", "std::gc::views_escape"},
     {"std::gcremembered", "std::gc::remembered_set"},
@@ -950,7 +953,7 @@ void setPassWarningHandler(PassWarningHandler handler, void *userData) {
 
 void registerModulePass(const std::string &path, PassDescriptor descriptor) {
     const bool readsTags = descriptor.readsTags;
-    auto &registry = passImplementations();
+    auto &registry       = passImplementations();
     {
         std::lock_guard lock(registry.mutex);
         registry.passes.insert_or_assign(path, std::move(descriptor));
@@ -1156,7 +1159,11 @@ const PassDescriptor &passParamsTestDescriptor() {
         PassDescriptor d;
         d.params = {
             {"flag", PassParamType::Bool, false, "a parameter that must be given", true},
-            {"n", PassParamType::Int, int64_t{5}, "an int whose default is a constant expression", false},
+            {"n",
+             PassParamType::Int,
+             int64_t{5},
+             "an int whose default is a constant expression",
+             false},
             {"ratio", PassParamType::Float, 1.5, "a float", false},
             {"label", PassParamType::String, std::string("x"), "a string", false},
             {"count", PassParamType::Int, int64_t{7}, "another int", false},
@@ -1243,7 +1250,7 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
         if (function.empty()) {
             return std::nullopt;
         }
-        const std::string path = module + "::" + function;
+        const std::string path    = module + "::" + function;
         const auto implementation = findImplementation(path);
         const auto *declaration =
             camel::execute::detail::findPassDeclaration(module, function, ctx);
@@ -1324,8 +1331,8 @@ struct ResolvedPass {
 };
 
 /// Resolves one specification: the pass name and its `key=value` words. Prints nothing.
-std::optional<camel::execute::detail::ParamProblem> valueProblem(
-    const std::string &name, const PassArgs &args);
+std::optional<camel::execute::detail::ParamProblem>
+valueProblem(const std::string &name, const PassArgs &args);
 
 ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
     ResolvedPass result;
@@ -1343,9 +1350,8 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
             const std::string bare = resolvedName.substr(5);
             if (findImplementation(resolvedName) &&
                 camel::execute::detail::findPassDeclaration("std", bare, ctx) == nullptr) {
-                result.known = true;
-                const std::string path =
-                    camel::execute::detail::moduleDeclarationPath("std", ctx);
+                result.known           = true;
+                const std::string path = camel::execute::detail::moduleDeclarationPath("std", ctx);
                 if (!path.empty()) {
                     result.problem =
                         std::format("module 'std' declares no pass '{}' in {}", bare, path);
@@ -1393,28 +1399,27 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         result.paramProblem = std::move(problem);
         return result;
     }
-    result.factory =
-        [make = descriptor->descriptor.make, args = std::move(args)](const context_ptr_t &ctx) {
-            return make(ctx, args);
-        };
+    result.factory = [make = descriptor->descriptor.make,
+                      args = std::move(args)](const context_ptr_t &ctx) { return make(ctx, args); };
     return result;
 }
 
 /// A value the declaration's type accepted and the pass cannot use: checked while the pipeline is
 /// read, so the report has a position and the pass is never built with a value it refuses.
-std::optional<camel::execute::detail::ParamProblem> valueProblem(
-    const std::string &name, const PassArgs &args) {
+std::optional<camel::execute::detail::ParamProblem>
+valueProblem(const std::string &name, const PassArgs &args) {
     using camel::execute::detail::ParamProblem;
     using camel::execute::detail::ParamProblemKind;
     // `std::opt settle_runs`: the bound the rewrite engine reports at. It is an internal bound
     // (see settleRunsOf), and 0 is refused rather than read as "never report".
     if (name == "std::opt" && args.given("settle_runs") && args.getInt("settle_runs") < 1) {
         ParamProblem problem;
-        problem.kind = ParamProblemKind::OutOfRange;
-        problem.name = "settle_runs";
-        problem.found = args.text("settle_runs");
+        problem.kind     = ParamProblemKind::OutOfRange;
+        problem.name     = "settle_runs";
+        problem.found    = args.text("settle_runs");
         problem.expected = "at least 1";
-        problem.text = std::format("settle_runs must be at least 1, got {}", args.text("settle_runs"));
+        problem.text =
+            std::format("settle_runs must be at least 1, got {}", args.text("settle_runs"));
         return problem;
     }
     return std::nullopt;
@@ -1456,18 +1461,17 @@ Diagnostic parameterDiagnostic(
     }
     // The whole specification for a problem that has no narrower place (a required parameter
     // left out, a specification that is not a call).
-    const size_t length =
-        problem.length > 0 ? problem.length : std::max<size_t>(spec.size(), 1);
-    diag.range      = CharRange{{line, problem.column}, {line, problem.column + length}};
-    diag.modulePath = "<pipeline>";
-    diag.moduleName = "pipeline";
+    const size_t length = problem.length > 0 ? problem.length : std::max<size_t>(spec.size(), 1);
+    diag.range          = CharRange{{line, problem.column}, {line, problem.column + length}};
+    diag.modulePath     = "<pipeline>";
+    diag.moduleName     = "pipeline";
     return diag;
 }
 
-/// The `help` of a pass specification whose module did not load, in place of the paragraph about how
-/// a pass specification is written (rule, "pass-unavailable-diagnostics" 1). The
-/// user did not write the name wrongly: the module the name needs is not there to be loaded, and
-/// the diagnostic's message already carries the loader's own first reason. What the help owes the
+/// The `help` of a pass specification whose module did not load, in place of the paragraph about
+/// how a pass specification is written (rule, "pass-unavailable-diagnostics" 1). The user did not
+/// write the name wrongly: the module the name needs is not there to be loaded, and the
+/// diagnostic's message already carries the loader's own first reason. What the help owes the
 /// reader is that fact, said plainly, so that the paragraph about `key=value` words — the answer to
 /// a different problem — is not what they act on.
 ///
@@ -1478,7 +1482,8 @@ std::string moduleLoadFailureHelp(const std::string &module, const std::string &
         "this command line is a parameter problem. Fix what the loader reported about the module "
         "first — its file, its build, or the runtime libraries it needs — and run the pipeline "
         "again.",
-        module, reason);
+        module,
+        reason);
 }
 
 /// Whether a pass specification's problem is that the module it names did not load, as opposed to
@@ -1539,10 +1544,8 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
     ensureCorePasses();
     std::ostream &help = std::cerr;
     help << std::format("Pass <{}> not found, available passes are:\n", name);
-    for (const auto &declaration :
-         camel::execute::detail::passDeclarations("std", ctx)) {
-        printPass(
-            help, "std::" + declaration.name, declaration.doc, declaration.params);
+    for (const auto &declaration : camel::execute::detail::passDeclarations("std", ctx)) {
+        printPass(help, "std::" + declaration.name, declaration.doc, declaration.params);
     }
     {
         auto &registry = passImplementations();
@@ -1562,8 +1565,8 @@ void listAvailablePasses(const std::string &name, const context_ptr_t &ctx) {
             const size_t separator     = path.find("::");
             const std::string module   = path.substr(0, separator);
             const std::string function = path.substr(separator + 2);
-            const auto declaration = camel::execute::detail::findPassDeclaration(
-                module, function, ctx);
+            const auto declaration =
+                camel::execute::detail::findPassDeclaration(module, function, ctx);
             printPass(
                 help,
                 path,
@@ -1612,7 +1615,7 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
     if (passes.empty()) {
         return "no passes";
     }
-    std::string text       = passes.size() == 1 ? "the pass " : "the passes ";
+    std::string text = passes.size() == 1 ? "the pass " : "the passes ";
     std::string separator;
     for (const auto &pass : passes) {
         text += separator;
@@ -1630,8 +1633,8 @@ std::string providedPassesText(const std::vector<std::string> &passes) {
 ///     the passes it does provide, so that a name that is simply wrong does not read like a
 ///     compiler that lost the module;
 ///   - a name with no module behind it: unknown, followed by the list of passes that exist.
-[[noreturn]] void
-throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved, size_t line, const context_ptr_t &ctx) {
+[[noreturn]] void throwUnresolvedPass(
+    const std::string &spec, const ResolvedPass &resolved, size_t line, const context_ptr_t &ctx) {
     if (resolved.paramProblem) {
         throw parameterDiagnostic(spec, *resolved.paramProblem, line);
     }
@@ -1642,10 +1645,9 @@ throwUnresolvedPass(const std::string &spec, const ResolvedPass &resolved, size_
         const auto &missing        = *resolved.missingPass;
         const std::string provided = providedPassesText(missing.provided);
         setPipelineStage("pass:" + specName(spec));
-        const RuntimeDiag code = missing.declaresUnexported
-                                     ? RuntimeDiag::PassNotExportedByModule
-                                     : RuntimeDiag::PassNotProvidedByModule;
-        auto diag = DiagnosticBuilder::of(code).commit(missing.module, missing.function, provided);
+        const RuntimeDiag code = missing.declaresUnexported ? RuntimeDiag::PassNotExportedByModule
+                                                            : RuntimeDiag::PassNotProvidedByModule;
+        auto diag  = DiagnosticBuilder::of(code).commit(missing.module, missing.function, provided);
         diag.stage = "pass:" + specName(spec);
         setPipelineStage("");
         throw diag;
@@ -1703,7 +1705,12 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
     std::optional<DiagLabel> errorLocation;
     camel::execute::MissingCamelPass missing;
     camel::execute::registerCamelPass(
-        ctx, name.substr(0, sep), name.substr(sep + 2), problem, &errorLocation, &missing);
+        ctx,
+        name.substr(0, sep),
+        name.substr(sep + 2),
+        problem,
+        &errorLocation,
+        &missing);
     resolved = resolvePass(spec, ctx);
     if (!resolved.factory) {
         if (!problem.empty()) {
@@ -1711,7 +1718,9 @@ ResolvedPass resolvePassWithModule(const std::string &spec, const context_ptr_t 
             resolved.errorLocation = errorLocation;
         } else if (missing.moduleHasNoSuchPass) {
             resolved.missingPass = ResolvedPass::MissingPass{
-                name.substr(0, sep), name.substr(sep + 2), std::move(missing.provided),
+                name.substr(0, sep),
+                name.substr(sep + 2),
+                std::move(missing.provided),
                 missing.declaresUnexported};
         }
     }
@@ -1726,8 +1735,7 @@ namespace {
 /// `rules::simplify`, `std::opt::saturate` its `opt::saturate`), and that inner pass
 /// commits its result and releases the program the outer one was given
 /// (`Context::settleRuntimeGraphs`). The old program is not read after `pass->apply` returns.
-std::unordered_map<uint32_t, uint64_t>
-graphRevisionsOf(const camel::runtime::Program *program) {
+std::unordered_map<uint32_t, uint64_t> graphRevisionsOf(const camel::runtime::Program *program) {
     std::unordered_map<uint32_t, uint64_t> revisions;
     for (camel::runtime::GCGraph *graph : program->graphs()) {
         if (graph != nullptr) {
@@ -1818,7 +1826,7 @@ struct EffectSite {
     /// a body gives the copy the origin of the node it copied, so the origin alone names both the
     /// copy and the node it came from; this is what tells them apart across the boundary, and it is
     /// read from the region the node sits in, which every frozen graph carries.
-    uint64_t copySite    = 0;
+    uint64_t copySite = 0;
     /// The node itself, and its place in its own graph's order: what the consistency check below
     /// reads to be sure a place it names is a place that holds the node.
     camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
@@ -1940,24 +1948,25 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
 /// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control one),
-/// so a place in it is a sync or control edge either way. The chain is read as edges, not as the
-/// `kGCNodeFlagSyncStatement` mark: a mark is anybody's to set (`markSyncStatement` in
+/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control
+/// one), so a place in it is a sync or control edge either way. The chain is read as edges, not as
+/// the `kGCNodeFlagSyncStatement` mark: a mark is anybody's to set (`markSyncStatement` in
 /// `passes/opt/generic/rewrite.h`), so it says someone believed the node is in a chain, not that
 /// anything holds it there (the mark was a credential until 2026-11-01; the author struck it).
 ///
-/// An order edge is not one of them: it orders two nodes that both run and makes neither of them run
-/// (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read this
-/// way, this predicate is what refuses such a graph -- `test::order_only_effect` builds one on
+/// An order edge is not one of them: it orders two nodes that both run and makes neither of them
+/// run (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read
+/// this way, this predicate is what refuses such a graph -- `test::order_only_effect` builds one on
 /// purpose by stripping every other edge of an effect, and the refusal names what is missing.
 ///
-/// An effect with none of these is in the graph and in no chain: nothing makes it run, which is what
-/// a rewrite that removes its last reader and forgets to hand its place on leaves behind.
+/// An effect with none of these is in the graph and in no chain: nothing makes it run, which is
+/// what a rewrite that removes its last reader and forgets to hand its place on leaves behind.
 bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t ref) {
     if (!graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty()) {
         return true;
     }
-    if (graph.exitNodeRef() == ref || graph.outputNodeRef() == ref || graph.returnNodeRef() == ref) {
+    if (graph.exitNodeRef() == ref || graph.outputNodeRef() == ref ||
+        graph.returnNodeRef() == ref) {
         return true;
     }
     return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
@@ -1982,7 +1991,8 @@ ProgramEffects collectEffects(const camel::runtime::Program &program) {
                 continue;
             }
             effects.ownerOf[static_cast<size_t>(camel::runtime::toValue(region->inlineOf))] = {
-                order.id, region->callSite};
+                order.id,
+                region->callSite};
         }
         for (size_t position = 0; position < order.nodes.size(); ++position) {
             const gc_node_ref_t ref = order.nodes[position];
@@ -2038,8 +2048,8 @@ std::string effectKey(const EffectSite &site) {
 /// order between the clones would be a guess, and this function does not guess. That is narrower
 /// than the audit's wording ("被内联复制过的不比较") and wider than the comment that stood here
 /// until 2026-11-02, which said copies were not compared at all.
-std::vector<std::pair<size_t, size_t>> matchedEffects(
-    const ProgramEffects &before, const ProgramEffects &after) {
+std::vector<std::pair<size_t, size_t>>
+matchedEffects(const ProgramEffects &before, const ProgramEffects &after) {
     std::unordered_map<std::string, size_t> beforeOccurrences;
     std::unordered_map<std::string, size_t> beforeAt;
     beforeOccurrences.reserve(before.sites.size());
@@ -2141,8 +2151,8 @@ std::string describeEffect(const EffectSite &site) {
         site.position);
 }
 
-std::string describeMoves(const EffectSite &a, const EffectSite &runsA, const EffectSite &b,
-                          const EffectSite &runsB) {
+std::string describeMoves(
+    const EffectSite &a, const EffectSite &runsA, const EffectSite &b, const EffectSite &runsB) {
     std::string moves;
     const auto appendMove = [&](const EffectSite &was, const EffectSite &is) {
         if (was.graph == is.graph) {
@@ -2163,10 +2173,10 @@ std::string describeMoves(const EffectSite &a, const EffectSite &runsA, const Ef
     return moves.empty() ? "both stayed in their graphs" : moves;
 }
 
-/// Where the place of a graph is, when it is not the graph itself: the graph that carries it and the
-/// place in that graph of the node that runs it. A graph a pass inlined into another one has its
-/// place at the call it replaced, so an effect in it runs at that call, not wherever its own graph
-/// would have been laid out.
+/// Where the place of a graph is, when it is not the graph itself: the graph that carries it and
+/// the place in that graph of the node that runs it. A graph a pass inlined into another one has
+/// its place at the call it replaced, so an effect in it runs at that call, not wherever its own
+/// graph would have been laid out.
 struct GraphPlace {
     bool found      = false;
     size_t graph    = 0;
@@ -2199,10 +2209,10 @@ GraphPlace placeOfGraph(const ProgramEffects &effects, size_t graph) {
 /// What one question of the order found: whether the one waits for the other, and, when it took a
 /// lift to ask, the graph the answer was read in and the call that lifted them there.
 struct OrderVerdict {
-    bool ordered    = false;
-    bool lifted     = false;
-    size_t graph    = 0;
-    uint64_t call   = 0; // source origin of the call the lift went through, 0 for none
+    bool ordered  = false;
+    bool lifted   = false;
+    size_t graph  = 0;
+    uint64_t call = 0; // source origin of the call the lift went through, 0 for none
 };
 
 /// Whether the place an effect is asked about is a place that holds a node: the effect's own graph
@@ -2231,9 +2241,8 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
         }
         const GraphPlace place = placeOfGraph(effects, later.graph);
         if (place.found) {
-            const auto holder = effects.graphAt.find(place.graph);
-            const GraphOrder &order =
-                effects.graphs[holder->second];
+            const auto holder       = effects.graphAt.find(place.graph);
+            const GraphOrder &order = effects.graphs[holder->second];
             if (place.position >= order.nodes.size()) {
                 return verdict;
             }
@@ -2247,7 +2256,7 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
         if (!earlierPlace.found) {
             return verdict;
         }
-        const auto holder = effects.graphAt.find(earlierPlace.graph);
+        const auto holder       = effects.graphAt.find(earlierPlace.graph);
         const GraphOrder &order = effects.graphs[holder->second];
         if (earlierPlace.position >= order.nodes.size()) {
             return verdict;
@@ -2267,14 +2276,14 @@ OrderVerdict orderedInProgram(const ProgramEffects &effects, EffectSite earlier,
 /// 1. The order the program wrote, read from the one topological order of the graph the two effects
 ///    shared before the pass, and the chain of edges that made the one wait for the other. A pair
 ///    the program did not put in an order is not a pair to break: two effects with no chain between
-///    them are placed by whichever order the graph was written out in, and a pass that writes it out
-///    again may place them the other way without having reordered anything.
+///    them are placed by whichever order the graph was written out in, and a pass that writes it
+///    out again may place them the other way without having reordered anything.
 /// 2. The graph each of them is in after the pass. A pass that pulls an effect's node into another
 ///    graph takes its order with it, and a check that only read the order of a graph sees nothing:
 ///    the node is still in the program, it is the graph it runs in that moved.
 /// The ambient resources the program touches must be the same before and after a pass. A pass moves
-/// code, copies it, inlines a body, or deletes what nothing needs; none of that may add or remove an
-/// effect on state the program does not own.
+/// code, copies it, inlines a body, or deletes what nothing needs; none of that may add or remove
+/// an effect on state the program does not own.
 ///
 /// The boundary is the set of standard ambient resources *and the way each is used*: a pass that
 /// turns a write of `stdout` into a read of it has changed what the program does to state it does
@@ -2328,7 +2337,8 @@ std::string useListText(const std::vector<std::string> &uses) {
 /// program does not own.
 ///
 /// Returns nothing for a pass that kept them, or the two lists the diagnostic names.
-std::vector<std::string> effectResourcesViolation(const ProgramEffects &before, const ProgramEffects &after) {
+std::vector<std::string>
+effectResourcesViolation(const ProgramEffects &before, const ProgramEffects &after) {
     const std::vector<std::string> was = ambientUsesOf(before);
     const std::vector<std::string> is  = ambientUsesOf(after);
     if (was == is) {
@@ -2367,25 +2377,25 @@ std::string entryExitViolation(const camel::runtime::Program &program) {
     return {};
 }
 
-/// Every operator node still matches the declaration it names: an operator the table knows, ordinary
-/// ports that are live nodes with a type, and no more of them than the declaration's operands. A
-/// port the declaration does not have, a port pointing at a dead node or at one without a type, or a
-/// port whose node is gone is a call nothing can run.
+/// Every operator node still matches the declaration it names: an operator the table knows,
+/// ordinary ports that are live nodes with a type, and no more of them than the declaration's
+/// operands. A port the declaration does not have, a port pointing at a dead node or at one without
+/// a type, or a port whose node is gone is a call nothing can run.
 ///
 /// One half of the last case is not seen here. A port naming a node that does not exist at all is
 /// refused earlier, by the commit that would have to write it down
 /// (`RuntimeGraphDraftSession::validateDraftPorts`): the graph version cannot be encoded around a
-/// reference to nothing, and the encoder used to read through it and crash before this function ever
-/// ran. What reaches this function is a graph that exists, so it covers the node that is dead (erased,
-/// still referenced) and the node that has no type.
+/// reference to nothing, and the encoder used to read through it and crash before this function
+/// ever ran. What reaches this function is a graph that exists, so it covers the node that is dead
+/// (erased, still referenced) and the node that has no type.
 ///
 /// Returns nothing, or the graph, the node and what is wrong with it.
 std::vector<std::string> portDeclarationViolation(const camel::runtime::Program &program) {
-    using camel::runtime::GCNodeKind;
     using camel::runtime::gc_node_ref_t;
+    using camel::runtime::GCNodeKind;
     for (camel::runtime::GCGraph *graph : program.graphs()) {
         for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            const gc_node_ref_t ref = it.ref();
+            const gc_node_ref_t ref              = it.ref();
             const camel::runtime::GCNode *record = graph->node(ref);
             if (record == nullptr || record->kind != GCNodeKind::Oper) {
                 continue;
@@ -2423,21 +2433,23 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
     }
     return {};
 }
-/// Whether running the node is something the program observes: it touches state the program does not
-/// own (an ambient resource: stdout, the filesystem, the clock, the environment, the generator) or it
-/// writes state the program does own (a cell, an object, a handle -- a write nothing reads afterwards
-/// is a write the program lost). Reading a variable is not one of them, and neither is a computation
-/// whose value nobody reads: dropping one changes nothing the program can see, which is exactly what
-/// a pass is allowed to do with it. This is the line the check below draws, and it is what makes it a
-/// check about *effects* rather than about every node: without it the invariant would ask a pure
-/// operation for a credential it never needs, and the first graph a program builds would fail it.
+/// Whether running the node is something the program observes: it touches state the program does
+/// not own (an ambient resource: stdout, the filesystem, the clock, the environment, the generator)
+/// or it writes state the program does own (a cell, an object, a handle -- a write nothing reads
+/// afterwards is a write the program lost). Reading a variable is not one of them, and neither is a
+/// computation whose value nobody reads: dropping one changes nothing the program can see, which is
+/// exactly what a pass is allowed to do with it. This is the line the check below draws, and it is
+/// what makes it a check about *effects* rather than about every node: without it the invariant
+/// would ask a pure operation for a credential it never needs, and the first graph a program builds
+/// would fail it.
 bool nodeRunsForItsEffect(
     const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
     camel::runtime::gc_node_ref_t ref) {
     if (!nodeHasEffect(graph, ref)) {
         return false;
     }
-    const camel::runtime::NodeResources resources = camel::runtime::resourcesOf(program, graph, ref);
+    const camel::runtime::NodeResources resources =
+        camel::runtime::resourcesOf(program, graph, ref);
     if (resources.external) {
         return true;
     }
@@ -2450,10 +2462,10 @@ bool nodeRunsForItsEffect(
     return false;
 }
 
-/// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives an
-/// effect: a read of its value (a normal or `with` input of another node, or the graph's own result,
-/// which whoever runs the graph reads), or a place in its block's chain, in the spellings the graphs
-/// carry the chain in while the migration runs (`effectStandsOnSomething`).
+/// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives
+/// an effect: a read of its value (a normal or `with` input of another node, or the graph's own
+/// result, which whoever runs the graph reads), or a place in its block's chain, in the spellings
+/// the graphs carry the chain in while the migration runs (`effectStandsOnSomething`).
 ///
 /// An effect that stands on neither is in the graph and in no chain: nothing makes it run, so the
 /// program the pass returned is not the program it was given (3.1, 3.3). That is the whole check --
@@ -2470,8 +2482,8 @@ struct EffectCredentialViolation {
     uint64_t origin = 0;
 };
 
-EffectCredentialViolation effectCredentialViolation(
-    const camel::runtime::Program &program, const context_ptr_t &context) {
+EffectCredentialViolation
+effectCredentialViolation(const camel::runtime::Program &program, const context_ptr_t &context) {
     for (const camel::runtime::GCGraph *graph : program.graphs()) {
         if (graph == nullptr) {
             continue;
@@ -2488,9 +2500,10 @@ EffectCredentialViolation effectCredentialViolation(
                 continue;
             }
             EffectCredentialViolation violation;
-            violation.origin = graph->nodeOrigin(ref);
+            violation.origin      = graph->nodeOrigin(ref);
             std::string writtenAt = std::format("origin {}", violation.origin);
-            if (violation.origin != 0 && context != nullptr && context->sourceContext() != nullptr) {
+            if (violation.origin != 0 && context != nullptr &&
+                context->sourceContext() != nullptr) {
                 const auto range = context->sourceContext()->resolveOrigin(violation.origin);
                 writtenAt        = std::format(
                     "{}:{}:{}",
@@ -2528,7 +2541,7 @@ std::string effectOrderViolation(
             const EffectSite &later       = writtenFirst ? second : first;
             const EffectSite &runsEarlier = writtenFirst ? runsFirst : runsSecond;
             const EffectSite &runsLater   = writtenFirst ? runsSecond : runsFirst;
-            const OrderVerdict written = orderedInProgram(before, earlier, later);
+            const OrderVerdict written    = orderedInProgram(before, earlier, later);
             if (!written.ordered) {
                 continue; // no chain before the pass: the program did not put them in this order
             }
@@ -2537,8 +2550,7 @@ std::string effectOrderViolation(
                 continue; // the program's order still holds, in one graph or through the calls
             }
             const std::string moves = describeMoves(earlier, runsEarlier, later, runsLater);
-            const char *writtenIn   = written.lifted ? " (read through the call that runs it)"
-                                                     : "";
+            const char *writtenIn   = written.lifted ? " (read through the call that runs it)" : "";
             if (runsEarlier.graph != runsLater.graph) {
                 // The pass left them in two graphs, and the calls that hold these graphs do not
                 // make the one wait for the other either: the written order is gone.
@@ -2569,32 +2581,27 @@ std::string effectOrderViolation(
     return {};
 }
 
-/// The check every pass ends with: the program a pass returns still carries the effect order on
-/// one resource, the same resources the program it was given touched, the operator ports the
-/// declarations name, an entry and an exit, and the effect credentials. One function with two
-/// call sites -- `applyPassesDetailed`, for a pass the pipeline runs, and `applyRegisteredPass`,
-/// for a pass that a pass runs by name: that is how `std::opt::saturate`, `rules::simplify` and
-/// the `std::opt` rounds are reached. The second site had **no** check at all until 2026-11-02,
-/// while the comment on the first said "no pass of the pipeline, nested or listed, ends without
-/// it": a nested pass never reached the code that did it.
+/// Every generic pass, including a registered nested pass, checks operator ports, entry/exit
+/// and effect credentials. The comparative resource-support and matched-order predicates run
+/// only when selected: by the optimizer's internal checks or graph::check_pass_boundary.
+/// A function-to-function type does not select preservation by itself.
 ///
 /// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
-    const ProgramEffects &effectsBefore) {
+    const ProgramEffects &effectsBefore, bool preserveEffects = false) {
     const ProgramEffects effectsAfter = collectEffects(program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
-    const std::string violation =
-        effectOrderViolation(effectsBefore, effectsAfter, pairs);
-    if (!violation.empty()) {
+    const std::string violation = effectOrderViolation(effectsBefore, effectsAfter, pairs);
+    if (preserveEffects && !violation.empty()) {
         ctx->rtmDiags()->of(RuntimeDiag::PassInternalError).commit(spec, violation);
         CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect order)", spec);
         return true;
     }
     const std::vector<std::string> resources =
         effectResourcesViolation(effectsBefore, effectsAfter);
-    if (!resources.empty()) {
+    if (preserveEffects && !resources.empty()) {
         ctx->rtmDiags()
             ->of(RuntimeDiag::PassBoundaryResources)
             .commit(spec, resources[0], resources[1]);
@@ -2603,28 +2610,23 @@ bool passBoundaryViolation(
     }
     const std::vector<std::string> ports = portDeclarationViolation(program);
     if (!ports.empty()) {
-        ctx->rtmDiags()
-            ->of(RuntimeDiag::PassBoundaryPorts)
-            .commit(spec, ports[1], ports[2]);
+        ctx->rtmDiags()->of(RuntimeDiag::PassBoundaryPorts).commit(spec, ports[1], ports[2]);
         CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (ports)", spec);
         return true;
     }
     const std::string boundary = entryExitViolation(program);
     if (!boundary.empty()) {
-        ctx->rtmDiags()
-            ->of(RuntimeDiag::PassBoundaryNodes)
-            .commit(spec, "graph", boundary);
+        ctx->rtmDiags()->of(RuntimeDiag::PassBoundaryNodes).commit(spec, "graph", boundary);
         CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (entry/exit)", spec);
         return true;
     }
     // Every effect in the program the pass returns stands on a read of its value or on a place
     // in its chain (design principles 3.1, 3.3 as amended). This is asked of the whole
-    // program, not of what the pass touched: an effect an earlier round left in no chain
-    // is as lost as one dropped now, and a pass that removes the last reader has to route
-    // the effect through something that reads it (`:op/keep`) rather than leave it to an
-    // edge of order alone.
-    const EffectCredentialViolation credential =
-        effectCredentialViolation(program, ctx);
+    // program, not only what the pass touched. An effect retained after removing its last
+    // reader still needs a credential; a preserving transformation may route it through
+    // a reader such as `:op/keep`. A selected intentional deletion may instead erase the
+    // genuinely undemanded node. Neither route may leave an orphan effect behind.
+    const EffectCredentialViolation credential = effectCredentialViolation(program, ctx);
     if (!credential.text.empty()) {
         auto diag = ctx->rtmDiags()->of(RuntimeDiag::PassInternalError);
         if (credential.origin != 0) {
@@ -2666,7 +2668,9 @@ void reportPassFailure(const context_ptr_t &ctx, const std::string &name, const 
                 diag.atOrigin(mismatch->origin());
             }
             diag.commit(
-                mismatch->graphName(), mismatch->valueType(), mismatch->declaredType(),
+                mismatch->graphName(),
+                mismatch->valueType(),
+                mismatch->declaredType(),
                 mismatch->whereInGraph());
         } catch (const camel::core::error::DiagnosticsLimitExceededBaseException &) {
             // The diagnostic is recorded; the limit is what throws (see below).
@@ -2688,9 +2692,10 @@ void reportPassFailure(const context_ptr_t &ctx, const std::string &name, const 
 
 /// Build a pass, and receive what its construction reports.
 ///
-/// Construction is where a pass's parameters are checked: `std::opt settle_runs=0` is refused in the
-/// maker, with `RuntimeDiag::InvalidArgument` naming the pass and the value. That diagnostic is
-/// committed to the context like any other, and at the context's diagnostics limit the commit throws
+/// Construction is where a pass's parameters are checked: `std::opt settle_runs=0` is refused in
+/// the maker, with `RuntimeDiag::InvalidArgument` naming the pass and the value. That diagnostic is
+/// committed to the context like any other, and at the context's diagnostics limit the commit
+/// throws
 /// -- which, escaping from a construction site, reached the driver and became `std::terminate` with
 /// exit code 134, for a program the compiler had refused correctly.
 ///
@@ -2734,7 +2739,7 @@ PassRunResult applyRegisteredPass(
     const bool publishes = ctx && ctx->currentRuntimeProgram() == program;
     // The old program's content is read here, before the pass runs (graphRevisionsOf).
     const std::unordered_map<uint32_t, uint64_t> beforeRevisions = graphRevisionsOf(program);
-    auto pass = constructPass(ctx, spec);
+    auto pass                                                    = constructPass(ctx, spec);
     if (!pass) {
         // Construction reported: the diagnostic is recorded, and the caller prints it.
         return {nullptr, true};
@@ -2754,7 +2759,8 @@ PassRunResult applyRegisteredPass(
             // went on as if the pass had succeeded. Nothing reaches this branch today (both call
             // sites pass `this`), and the branch is here so that a future one cannot be silent.
             if (ctx) {
-                ctx->rtmDiags()->of(RuntimeDiag::PassInternalError)
+                ctx->rtmDiags()
+                    ->of(RuntimeDiag::PassInternalError)
                     .commit(
                         spec,
                         "the pass ended with an error value and the caller that ran it has none to "
@@ -2769,8 +2775,7 @@ PassRunResult applyRegisteredPass(
     // The check every pass ends with, for a pass a pass runs by name. Before 2026-11-02 this
     // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
     // through here, and a graph they broke reached the next pass unchecked.
-    if (ctx != nullptr &&
-        passBoundaryViolation(ctx, spec, *produced, effectsBefore)) {
+    if (ctx != nullptr && passBoundaryViolation(ctx, spec, *produced, effectsBefore)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -2792,7 +2797,7 @@ PassRunResult applyRegisteredPass(
 bool checkPassBoundary(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &before,
     const camel::runtime::Program &after) {
-    return passBoundaryViolation(ctx, spec, after, collectEffects(before));
+    return passBoundaryViolation(ctx, spec, after, collectEffects(before), true);
 }
 
 namespace {
@@ -2830,14 +2835,15 @@ constexpr FixedLoweringStep fixedLoweringSteps[] = {
 };
 
 /// The plan the pipeline runs: `passes` with each fixed step inserted ahead of the pass it belongs
-/// before, unless the writer named it already, and nothing at all when the pass it belongs before is
-/// not in the plan -- the pipeline runs what the program asked for, plus the steps that pass needs.
+/// before, unless the writer named it already, and nothing at all when the pass it belongs before
+/// is not in the plan -- the pipeline runs what the program asked for, plus the steps that pass
+/// needs.
 std::vector<std::string> expandFixedLoweringSteps(const std::vector<std::string> &passes) {
     std::vector<std::string> plan = passes;
     for (const FixedLoweringStep &step : fixedLoweringSteps) {
-        const auto target = std::find_if(
-            plan.begin(), plan.end(),
-            [&](const std::string &spec) { return specName(spec) == step.before; });
+        const auto target = std::find_if(plan.begin(), plan.end(), [&](const std::string &spec) {
+            return specName(spec) == step.before;
+        });
         if (target == plan.end()) {
             continue;
         }
@@ -2922,8 +2928,8 @@ passesNeverRunWarning(const std::vector<std::string> &passes, const context_ptr_
     warning.stage = "pass:" + specName(passes[*consumer]);
     return warning;
 }
-std::optional<Diagnostic> jitWithoutCodeGeneratorWarning(
-    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+std::optional<Diagnostic>
+jitWithoutCodeGeneratorWarning(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     (void)ctx;
 #if ENABLE_FASTVM_JIT
     (void)passes;
@@ -2933,7 +2939,7 @@ std::optional<Diagnostic> jitWithoutCodeGeneratorWarning(
         if (resolveAlias(specName(spec)) != "std::fastvm::jit") {
             continue;
         }
-        auto warning = DiagnosticBuilder::of(RuntimeDiag::JitWithoutCodeGenerator).commit();
+        auto warning  = DiagnosticBuilder::of(RuntimeDiag::JitWithoutCodeGenerator).commit();
         warning.stage = "pass:" + specName(spec);
         return warning;
     }
@@ -2947,8 +2953,8 @@ namespace {
 /// they name: a pass written in Camel reads tags by saying so, the counterpart of a C++
 /// module's `read_by` (design principles 6.2). The module is loaded here because the warning
 /// is computed before the pipeline builds the passes.
-std::map<std::string, std::vector<std::string>> declaredReadersOf(
-    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+std::map<std::string, std::vector<std::string>>
+declaredReadersOf(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     std::map<std::string, std::vector<std::string>> readers;
     for (const auto &spec : passes) {
         const std::string pass = resolveAlias(specName(spec));
@@ -2971,8 +2977,7 @@ std::map<std::string, std::vector<std::string>> declaredReadersOf(
             if (facts == camel::core::attr::kNoAttrs) {
                 continue;
             }
-            const auto value =
-                camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
+            const auto value = camel::core::attr::valueOf(facts, camel::core::attr::key("reads"));
             if (value == camel::core::attr::kNoValue) {
                 continue;
             }
@@ -3017,8 +3022,8 @@ bool pipelineNamesProfile(const std::vector<std::string> &passes) {
     return false;
 }
 
-std::vector<Diagnostic> tagsNeverReadWarnings(
-    const std::vector<std::string> &passes, const context_ptr_t &ctx) {
+std::vector<Diagnostic>
+tagsNeverReadWarnings(const std::vector<std::string> &passes, const context_ptr_t &ctx) {
     std::vector<Diagnostic> warnings;
     if (!ctx) {
         return warnings;
@@ -3080,9 +3085,9 @@ std::vector<Diagnostic> tagsNeverReadWarnings(
         for (const std::string &reader : readers) {
             readersText += (readersText.empty() ? "" : ", ") + reader;
         }
-        auto warning = DiagnosticBuilder::of(SemanticDiag::TagHasNoReader)
-                           .atOrigin(use.origin)
-                           .commit(use.name, readersText);
+        auto warning  = DiagnosticBuilder::of(SemanticDiag::TagHasNoReader)
+                            .atOrigin(use.origin)
+                            .commit(use.name, readersText);
         warning.stage = "tag:" + use.name;
         warnings.push_back(std::move(warning));
     }
@@ -3136,8 +3141,7 @@ PassApplyResult applyPassesDetailed(
             struct StageScope {
                 explicit StageScope(std::string stage) { setPipelineStage(std::move(stage)); }
                 ~StageScope() { setPipelineStage(""); }
-            } stageScope(
-                schedules ? std::string("run") : "pass:" + specName(p));
+            } stageScope(schedules ? std::string("run") : "pass:" + specName(p));
             // A program runs only when every parameter of `main` has a value. Parameters
             // left open are fine for rewriting and translation (they are the inputs of what
             // is translated); nothing may execute with a slot nobody filled.
@@ -3203,8 +3207,9 @@ PassApplyResult applyPassesDetailed(
                 return {nullptr, PassApplyStatus::Consumed};
             } catch (const camel::core::mm::MemoryExhausted &e) {
                 // A memory space is at its limit, or the host has no memory left. This is a
-                // limit the program (or what the pass made of it) ran into: it is reported with the space, the usage, the limit and the
-                // setting that raises it, at the graph that was being built when one is known.
+                // limit the program (or what the pass made of it) ran into: it is reported with the
+                // space, the usage, the limit and the setting that raises it, at the graph that was
+                // being built when one is known.
                 setPipelineStage("pass:" + specName(p));
                 auto diag = ctx->rtmDiags()->of(RuntimeDiag::MemoryExhausted);
                 // The allocator names a source only when the caller told it one (the loop
@@ -3276,14 +3281,9 @@ PassApplyResult applyPassesDetailed(
                 CAMEL_LOG_INFO_S("Pass", "run | passes | OK {} -> consumed", p);
                 return {nullptr, PassApplyStatus::Consumed};
             }
-            // The pass ended with a program: the effects on one **ambient** resource must still be
-            // in the order the program wrote them, which is the order its graph makes them wait for
-            // (design principles 3.3), and the rest of the boundary holds (`passBoundaryViolation`,
-            // which `applyRegisteredPass` calls too: a pass a pass runs by name is checked where it
-            // returns, not only here). What the check does not cover -- a `var` or a handle, an entry
-            // or an exit of a graph that is not the program's own, a copy that lost its inline call
-            // site -- is named on `passBoundaryViolation` and in the report that measured it
-            // (docs/handover/reports/p0-6-boundary-check-promises-vs-checks.cn.md).
+            // Generic admission checks ports, root entry/exit and effect credentials, as does
+            // applyRegisteredPass. Resource support and matched ordering are compared only by
+            // an explicitly selected checker; this function-to-function result implies neither.
             if (passBoundaryViolation(ctx, p, *program, effectsBefore)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
@@ -3311,11 +3311,3 @@ PassApplyResult applyPassesDetailed(
     EXEC_WHEN_DEBUG({ camel::DebugBreakpoint::Hit("GIR-Z", program ? program->root() : nullptr); });
     return {program, PassApplyStatus::Transformed};
 }
-
-
-
-
-
-
-
-

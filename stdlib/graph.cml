@@ -359,3 +359,13 @@ export func operator ==(a: Tag, b: Tag): bool
 /// not, then `REGION_PROBE body region of node 0: 0` and, instead of a third answer, the abort the
 /// region guard raises -- 0 is the body, so a node that is not there has no region to be given.
 export func probe_handle::<F>(f: F): F! when is_function::<F>()
+
+/// Explicitly checks standard ambient resource/access-mode support and matched effect ordering
+/// between two functions, plus the normal port, entry/exit and effect-credential admission checks.
+/// Returns `after` on success. This comparison is not an observational-equivalence proof:
+/// equal support does not count events or compare their payloads. The selected check emits a
+/// located context diagnostic on refusal; catching the error value does not recover outer
+/// execution. Ordinary invocation and CLI wrappers use this same checking stage.
+/// @fails error value `PassBoundary` when the selected boundary check refuses
+/// @example check_pass_boundary((x: int) => x, (x: int) => x)
+export func check_pass_boundary::<F>(before: F, after: F): F! when is_function::<F>()

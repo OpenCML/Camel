@@ -6098,6 +6098,27 @@ Drops the transaction.
 
 - Example: `abort(open((x: int): int => x + 1))`
 
+### Comparison
+
+`==` of the handle types (design principles 4.3): a library defines the operators of its own
+types. Two handles are equal when they name the same thing of the same function.
+
+#### `check_pass_boundary`
+
+```camel
+check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
+```
+
+Explicitly checks standard ambient resource/access-mode support and matched effect ordering
+between two functions, plus the normal port, entry/exit and effect-credential admission checks.
+Returns `after` on success. This comparison is not an observational-equivalence proof:
+equal support does not count events or compare their payloads. The selected check emits a
+located context diagnostic on refusal; catching the error value does not recover outer
+execution. Ordinary invocation and CLI wrappers use this same checking stage.
+
+- Failure: error value `PassBoundary` when the selected boundary check refuses.
+- Example: `check_pass_boundary((x: int) => x, (x: int) => x)`
+
 <a id="rewrite"></a>
 
 ## `rewrite`: rules applied to a program
@@ -6121,10 +6142,15 @@ no callable Camel name, so they are not declared here.
 #### `rewrite`
 
 ```camel
-rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies `rules` until no rule changes the function, and gives the rewritten function.
+`ordered: true` preserves operand positions throughout the pattern, including after guard
+rejection. The default also searches declared commutative and exact associative alternatives.
+`protect_effects` and `protect_faults` select conservative local deletion guards. Disabling
+one permits its deletion; remaining users and synchronization can still demand the input.
+These choices do not disable structural validation or prove whole-program equivalence.
 
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example (a fragment, not compiled): `f->rewrite<rules>`
@@ -6133,11 +6159,15 @@ Applies `rules` until no rule changes the function, and gives the rewritten func
 #### `saturate`
 
 ```camel
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
-every writing the saturation found; `extract` chooses among them.
+every writing the saturation found; `extract` chooses among them. The deletion protections
+select candidate admission. Extraction cannot restore protection disabled during saturation.
+The resulting alternatives are derivations under the rules, not full observational equalities.
+`ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
+remain searchable, and an explicit commutativity rule may still add exchanged writings.
 
 - Failure: error value `RuleInvalid` when a rule does not compile.
 - Example (a fragment, not compiled): `f->saturate<rules, rounds: 20>`
@@ -6158,7 +6188,7 @@ a writing is `cost(o, inputs)`: the operator and the costs of the writings of it
 #### `run`
 
 ```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 ```
 
 Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and
@@ -6166,6 +6196,7 @@ what the application cost. This is `rewrite` with the round budget explicit and 
 `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
 the shortest chain between two values, and `explain_all` every rewrite that was made.
 Recording is off unless it is asked for, so a plain application pays nothing for it.
+`ordered` selects positional pattern binding as in `rewrite` and is retained by the proof.
 
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
 - Example (a fragment, not compiled): `f->run<rules, rounds: 8, explain: true>`
@@ -6244,7 +6275,7 @@ explain: <a: Node, b: Node> (r: Run<F>) => Proof!
 ```
 
 The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
-derivation `a = ... = b`: only that chain, not every step the run made. Each line names the
+derivation `a ~> ... ~> b`: only that chain, not every step the run made. Each line names the
 rule and whether the step is read backwards; a chain through a value that was later rewritten
 away names it too. When two chains are equally short both are printed, in the order the
 rewrites were made.

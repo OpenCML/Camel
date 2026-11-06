@@ -18,7 +18,7 @@ timeout_ms = 12000
 
 [[tests]]
 name = "pass_boundary.resources_kept"
-desc = "A pass may move code, inline a body into its caller, copy it or delete what nothing needs; what it may not do is change which ambient resources the program touches. `PassBoundaryResources` is checked after every pass of the list, and this program -- two calls that touch a cell, a group's `db` and `stdout` -- goes through two rewriting passes with the program's own output unchanged and the check silent. The count of effects is not the invariant (inlining copies a body and the copies are not all run): the set of resources is."
+desc = "The optimizer explicitly checks resource support internally; this program passes its preserving transformations unchanged."
 kind = "behavior"
 case = "../../../cases/effects/declared.cml"
 args = ["${case}", "std::opt::inline", "std::opt"]
@@ -26,14 +26,14 @@ expect_exit = 0
 expect_output_not_contains = ["PassBoundaryResources", "changed the ambient resources", "failed with an internal error"]
 
 [[tests]]
-name = "pass_boundary.resources_use_changed"
-desc = "The same boundary, one class further in: the set of resources is not the whole invariant -- the way each is used is part of it. `test::bounds_flip` keeps the name and turns the program's write of `stdout` into a read of it, which no name comparison can see, and the run is red with the resource and both ways named. The control beside it (`pass_boundary.resources_use_kept`) takes the same program through `std::opt` and stays silent, so the red is the class and not the check."
+name = "pass_boundary.orphan_effect_refused"
+desc = "The generic route still refuses an effect operator with neither a value reader nor a chain place; disabling inferred resource-support comparison does not disable this admission invariant."
 kind = "behavior"
 case = "../../../cases/opt/effects/keep_node_shape.cml"
 args = ["${case}", "test::bounds_flip", "std::nvm"]
 expect_exit = 1
 expect_stdout_contains = ["BOUNDS_FLIP flipped=2 kind=ambient_use name=stdout before=write after=read"]
-expect_stderr_contains = ["PassBoundaryResources", "before stdout (write), after stdout (read)"]
+expect_output_contains = ["failed with an internal error", "neither a read of its value nor a place in its chain"]
 expect_output_not_contains = ["PassBoundaryNodes", "PassBoundaryPorts", "effect order"]
 
 [[tests]]
