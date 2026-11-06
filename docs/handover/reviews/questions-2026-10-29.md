@@ -3058,3 +3058,33 @@ S2 改用 `grad` 等这一步落地后再做。
 `c85abd277` 把门打开了，`transpose` 已能逐成员处理元组结果，`second_order_refused_vjp` 转绿，对。关于两个候选，先看代码能排除什么：`transpose.cpp` 里 `noteZero` 的七处调用都在 `!hasTangentSpace(...)` 之后，或者只对没有切空间的操作数调用（2935 那一处先判 `anyReceiver`）。所以第二个候选，即"缺一条律、余切被记成零"，按代码读不成立。缺律时走的是拒绝表，三句真话。读数里如果出现一条 `contribution=0`、而它的 `type` 有切空间，那才是缺陷。
 
 要查的是第一个候选：构造元组（`FILL`）的转置。按 9.9，构造元组的转置把余切的第 i 个成员交给第 i 个操作数，是一次逐成员的投影；读成员（`.0`）的转置则是把余切放进第 0 个成员，其余成员不收余切，不造零。看 `lin` 返回 `(v_dot, aux_dot)` 的那个 `FILL`，余切到它那里时有没有按成员分给两个操作数。按页里给的读数量一次就能定。判据：`has_aux` 那组数答出 6.0，`frozen` 仍是 0.0。旁边那条非零用例照你们记下的规矩补上。
+
+## 每日审查（2026-11-06）
+
+范围：过去 24 小时 `origin/develop` 上 45 笔非合并提交，分代码与测试/工具/文档两组审。下面各条都已对照 HEAD 核实。
+
+先记一笔进展：`6666c5317` 删掉了 `withIsPromoted` 一路（约 290 行），`grad` 写成 `vjp(first_with_as_param(f))` 的组合，这是第七节第 3 项的核心一步，对。
+
+### 高
+- **R1 返工：`HeadOf`/`RestOf` 又做成了 C++ 原语**（`typecall.cpp:38-39, 105-116`），另有一个与 `Gradient<F>` 近乎重复的 `GradientOf<F>`（`types.cml:152`、`:180`），`grad` 的返回类型用的是后者。这和 11-04 `FirstOf` 的返工是同一件事：理由是"泛型结果位置上的 `match type` 绑不出 `W`/`Rest`"，而 17:20 第三条已经定了，要修的是这处绑定，不是加原语。`fccc020b6` 的 `FirstWithAsParam<F>` 就在结果位置上用了 `match type`，可见这条路走得通。**修法**：修好 `match type` 在泛型结果位置上的名字绑定；删掉 `HeadOf`、`RestOf` 及其在 `typecall.cpp` 的登记；`GradientOf` 合并回 `Gradient<F>`，只留一个。**验收**：`typecall.cpp` 里没有这两个名字；`grad` 的返回类型是 `Gradient<F>`；17:20 那个 `RestOnly<Loss>` 探针答 `true`。
+- **R2 返工：沿轴归约的规则键靠一张例外表，再加一条全局的平局规则**。`forward.cpp:48` 的 `kRuleKeyExceptions` 从 2 项涨到 8 项，每个 `*_axis` 一行；`rule_expand.cpp:245-252` 又加了一条"端口最多者胜"，作用于所有算子，只为把 `jvp_sum` 和 `jvp_sum_axis` 分开。根在于：名字已经只剩 `mean<axis, keepdims>` 一个，内部却还留着 `tensor:mean_axis` 这些单独的算子 URI。**修法**：每个归约只有一个算子，`with <axis, keepdims>` 是它的 `with` 参数，规则按这一个名字和参数类型挑（"一个规则键下多条规则，按参数类型区分"已有现成的机制）；例外表里这 6 行和那条平局规则一起删掉。**验收**：`kRuleKeyExceptions` 只剩 `idx_arr` 那类真正没有词法名字的；`rule_expand.cpp` 里没有按端口数挑的分支。
+- **R3 返工（第三次）：`let _ = export_model`，以及钉在症状上的 `known_fail_msg`**。`onnx.plan.toml:540/578/791/1854/2149/3022` 钉的是 "ENOENT"、"NO_SUCHFILE"、"FileNotFoundError"，也就是"文件不存在"这个下游症状，而 9 个用例和 `examples/ml/export_onnx.cml` 仍写着 `let _ = export_model`。照这样钉，任何让模型文件缺失的别的缺陷也都算"预期失败"。**修法**：照 11-05 R3，程序改成处理拒绝；`known_fail_msg` 钉真实的拒绝句（`tensor:matmul_grad_lhs: the rank of an operand is not known statically`）。**验收**：`git grep "let _ = export_model"` 在 `test/cases`、`examples` 里零命中；这几个 `known_fail_msg` 里没有文件不存在类的句子。
+
+### 中
+- **R4 常开读数又添一处**：`first_with_as_param_operator.cpp:315` 写 `readings()`（即 stderr），与 `remat_operator.cpp:183` 同一形状。照 11-05 R7 一起改，不再新增。
+- **R5 同一段复制粘贴出现三份**：`first_with_as_param_operator.cpp:~245-300` 照抄了 `remat_operator.cpp:128-185` 的"复制图并发布"，连同闭包节点的重新声明和对元组类型的 `const_cast`；vmap 里还有第三份。**修法**：抽成一个"复制图并改端口分类"的公共函数，三处共用。
+- **R6 台账常量第三次手改**：`autodiff-migration-ledger.mjs:255` 的 `LEDGER_RECORDED`，上方注释里写着按日期记的变动史，计划里又复写一遍。照 11-05 R4 删掉常量，只留"通过数不下降"。
+- **R7 为满足 4 倍余量规则抬超时**（`06edc92cb`）：`stdlib_registry` 的超时已经抬过两次（180000→240000→360000）。一条用例里逐个跑 575 个示例、每个起一个进程，这种用例应拆成分片，每片有一个小的界；不要靠抬超时。
+- **R8 新增的注释又带裁定日期**：`jvp.cpp:220/241/1590`、`types.cml:172/177`、`vjp.cml:146`、`reduction_ops.cpp:157`、`forward.cpp:47`、`rule_expand.cpp:243`、`rulesets/jvp.cml:~289`。这些并入 11-05 R1 的清理，新提交不许再加。
+- **R9 整数转文本有两条路**（`cast.cpp:141-152`）：Int32/Int64 走新的快路，其余宽度仍走流，两份规则并存。**修法**：快路放进 `printSlot` 的整数分支，所有宽度、所有调用方共用一条规则。
+
+### 低
+- `runtime.cpp:236` 的诊断帮助里写死了律的名字和一个具体输出，会过期；帮助只说规则。
+- `GraphDraftGroup` 没有禁用拷贝，`pin` 又会去重，拷贝一次就会多 `unpin` 一次，把计数错位藏起来。禁用拷贝。`f06f256a7` 本身只修了一半：两条 `*_large_bytecode` 仍是 `rc=134`，继续按 17:20 第二条修，不标 `known_fail`。
+- `agents/test.md:320-321`、`docs/test-plans.md:520` 钉了计划数和条目数，下一次加计划就过期。只写规则。
+- `stdlib-reference.mjs:2659` 给 `grad` 的文档示例加了一条例外，跳过检查。给示例补上声明，让它能被检查，然后删掉这条例外。
+- `has_aux` 仍是单签名的前向写法（02:30 那条返工），等 `Gradient<F>` 修好后按反向写法改。
+
+**审过、判为没问题的**：`cd3ac08dd` 三份合一；`c2b807bad` 空选择不再退回整层快测；`3c5770946` 改名本身（去掉 `*_axis` 写法）；`998da8c54`、`978444a74`、`a0b94a946` 收紧断言；`fccc020b6` 算子本体。
+
+**排程**：R1、R2 是第七节第 3 项的收尾，排在最前面；R3 跟着 ONNX 那条车道；其余照 11-05 的排程。
