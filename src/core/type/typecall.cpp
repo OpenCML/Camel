@@ -29,12 +29,9 @@ TypeCode TypeCallType::typeCode() {
 namespace {
 
 constexpr std::string_view kTypeFunctions[] = {
-    "ElementOf",
     "PayloadOf",
     "KeyOf",
     "ValueOf",
-    "WithElement",
-    "RowsOf",
     "HeadOf",
     "RestOf",
     "ParamsOf",
@@ -58,8 +55,8 @@ constexpr std::string_view kLengthsTag = "$lengths:";
 Type *tangentSpaceOf(Type *type) {
     if (type->code() == TypeCode::Struct || type->code() == TypeCode::Tuple) {
         const bool structure = type->code() == TypeCode::Struct;
-        const size_t size = structure ? tt::as_ptr<StructType>(type)->size()
-                                      : tt::as_ptr<TupleType>(type)->size();
+        const size_t size =
+            structure ? tt::as_ptr<StructType>(type)->size() : tt::as_ptr<TupleType>(type)->size();
         StructTypeFactory factory;
         std::vector<Type *> elements;
         for (size_t i = 0; i < size; ++i) {
@@ -72,9 +69,8 @@ Type *tangentSpaceOf(Type *type) {
                 elements.push_back(space);
             }
         }
-        return structure
-                   ? static_cast<Type *>(factory.build())
-                   : static_cast<Type *>(TupleType::create(std::move(elements)));
+        return structure ? static_cast<Type *>(factory.build())
+                         : static_cast<Type *>(TupleType::create(std::move(elements)));
     }
     if (Type *space = camel::core::machineryTangentTypeOf(type); space != nullptr) {
         return space;
@@ -125,22 +121,11 @@ Type *TypeCallType::evaluate(
         }
         return makePack(std::vector<Type *>(members.begin() + 1, members.end()));
     }
-    if (name == "WithElement") {
-        if (arguments.size() != 2 || arguments[0] == nullptr || arguments[1] == nullptr) {
-            error = "it takes an array type and an element type";
-            return nullptr;
-        }
-        if (arguments[0]->code() != TypeCode::Array) {
-            error = arguments[0]->toString() + " is not an array";
-            return nullptr;
-        }
-        return static_cast<ArrayType *>(arguments[0])->withElementType(arguments[1]);
-    }
     // A pack is a list of types, and taking it apart is the `match type` case the language writes
-    // (design principles 5.6: `case (W, ...Rest)` in a type position binds the member at the head of
-    // the pack and the rest of it). No primitive of this file does it: a type function that takes a
-    // pack apart is the case written in the standard library, so a program that writes the pattern
-    // gets the same answer the library's name gives.
+    // (design principles 5.6: `case (W, ...Rest)` in a type position binds the member at the head
+    // of the pack and the rest of it). No primitive of this file does it: a type function that
+    // takes a pack apart is the case written in the standard library, so a program that writes the
+    // pattern gets the same answer the library's name gives.
     if (arguments.size() != 1 || arguments.front() == nullptr) {
         error = "it takes one type";
         return nullptr;
@@ -148,11 +133,11 @@ Type *TypeCallType::evaluate(
     Type *type = arguments.front();
     // A type function applied to a pack of known members is applied to each member, and the pack of
     // the answers is its answer: `Tangent<ParamsOf<F>>` is one tangent per parameter of `F`, and
-    // `..Tangent<ParamsOf<F>>` in a parameter list is one parameter per member (design 5.6). Without
-    // this rule the pack arrives as a single type that is neither a float nor a tuple, and the empty
-    // tuple -- the tangent of an integer -- is the answer for every parameter of `F`; a function
-    // whose parameters are arrays then declares no tangent at all, and the call that was typed by
-    // this rule is refused for the wrong reason.
+    // `..Tangent<ParamsOf<F>>` in a parameter list is one parameter per member (design 5.6).
+    // Without this rule the pack arrives as a single type that is neither a float nor a tuple, and
+    // the empty tuple -- the tangent of an integer -- is the answer for every parameter of `F`; a
+    // function whose parameters are arrays then declares no tangent at all, and the call that was
+    // typed by this rule is refused for the wrong reason.
     if (TypeCallType::isPack(type)) {
         const std::span<Type *const> members = TypeCallType::packMembers(type);
         std::vector<Type *> mapped;
@@ -203,36 +188,6 @@ Type *TypeCallType::evaluate(
         }
         return makePack(members);
     }
-    if (name == "ElementOf") {
-        if (type->code() == TypeCode::Array) {
-            return static_cast<ArrayType *>(type)->elemType();
-        }
-        if (const CollectionType *collection = asCollectionType(type);
-            collection != nullptr && !collection->isMap()) {
-            return collection->keyType();
-        }
-        error = type->toString() + " is neither an array nor a set";
-        return nullptr;
-    }
-    if (name == "RowsOf") {
-        // The array whose first-dimension elements are `type`: one dimension more, its length not
-        // known (a batch), the dimensions the argument states kept as they are. This is the
-        // inverse of ArrayType::firstDimensionElement(), which is the rule `x[i]` and `for x in
-        // xs` follow (design principles 5.4), so `x[i]` on `RowsOf<T>` is a `T` again. A type with
-        // no dimension (`f32`, a struct) is one element of the batch: `f32[?]`.
-        const ArrayType *array = asArrayType(type);
-        if (array == nullptr) {
-            return ArrayType::create(type);
-        }
-        std::vector<ExtentForm> forms;
-        forms.reserve(array->rank() + 1);
-        forms.push_back(ExtentForm::unknown());
-        forms.insert(forms.end(), array->extents().begin(), array->extents().end());
-        if (array->anyRank()) {
-            return ArrayType::openRank(array->elemType(), forms);
-        }
-        return ArrayType::create(array->elemType(), forms, array->packName());
-    }
     if (name == "PayloadOf") {
         if (TupleType *tagged = asTagged(type)) {
             return tagged->payloadType();
@@ -242,8 +197,15 @@ Type *TypeCallType::evaluate(
     }
     if (name == "KeyOf" || name == "ValueOf") {
         const CollectionType *collection = asCollectionType(type);
-        if (collection == nullptr || !collection->isMap()) {
-            error = type->toString() + " is not a map";
+        // A map has keys and values; a set has keys and nothing else -- its elements are its keys
+        // (`CollectionType::keyType` is the element type of either). So `KeyOf` answers the element
+        // type of a set, and `ValueOf` has nothing to answer for one.
+        const bool answers = collection != nullptr && collection->complete() &&
+                             (name == "KeyOf" || collection->isMap());
+        if (!answers) {
+            const bool isSet = collection != nullptr && collection->complete();
+            error = type->toString() +
+                    (isSet ? " is a set, which has keys and no values" : " is not a map");
             return nullptr;
         }
         return name == "KeyOf" ? collection->keyType() : collection->valueType();
@@ -319,22 +281,14 @@ std::string TypeCallType::mangle() const {
     return text;
 }
 
-Type *TypeCallType::clone(bool) const {
-    return const_cast<TypeCallType *>(this);
-}
+Type *TypeCallType::clone(bool) const { return const_cast<TypeCallType *>(this); }
 
-bool TypeCallType::equals(Type *type) const {
-    return type == this;
-}
+bool TypeCallType::equals(Type *type) const { return type == this; }
 
-bool TypeCallType::assignableFrom(Type *sourceType) const {
-    return sourceType == this;
-}
+bool TypeCallType::assignableFrom(Type *sourceType) const { return sourceType == this; }
 
 // A call is not the type of any value: nothing converts to it.
-CastSafety TypeCallType::castSafetyFrom(Type *) const {
-    return CastSafety::Forbidden;
-}
+CastSafety TypeCallType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
 
 OtherType *TypeCallType::cloneWithParams(std::span<Type *const> params) const {
     return create(*name_, params);
@@ -392,14 +346,17 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
     std::vector<uint16_t> shapes;
     std::vector<uint32_t> identityCounts;
     std::vector<uint32_t> packCounts;
+    std::vector<uint32_t> arrayCounts;
     std::vector<uintptr_t> key{typeKeyWord(TypeTable::instance().canonical(subject))};
     for (const MatchTypeArm &arm : arms) {
         shapes.push_back(arm.shapes);
         identityCounts.push_back(static_cast<uint32_t>(arm.identities.size()));
         packCounts.push_back(static_cast<uint32_t>(arm.packPatterns.size()));
+        arrayCounts.push_back(static_cast<uint32_t>(arm.arrayPatterns.size()));
         key.push_back(arm.shapes);
         key.push_back(arm.identities.size());
         key.push_back(arm.packPatterns.size());
+        key.push_back(arm.arrayPatterns.size());
         for (Type *identity : arm.identities) {
             params.push_back(identity);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(identity)));
@@ -407,6 +364,13 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
         for (Type *pattern : arm.packPatterns) {
             params.push_back(pattern);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(pattern)));
+        }
+        // An array pattern's identity is the object itself, not its canonical twin: the twin
+        // erases the pack name, and the name is what the case binds (`E[...Dims]` and `E[...]`
+        // are one shape and two different cases).
+        for (Type *pattern : arm.arrayPatterns) {
+            params.push_back(pattern);
+            key.push_back(typeKeyWord(pattern));
         }
         params.push_back(arm.result);
         key.push_back(typeKeyWord(TypeTable::instance().canonical(arm.result)));
@@ -417,14 +381,14 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
             void *mem   = mm::permSpace().alloc(sizeof(MatchTypeType), alignof(MatchTypeType));
             GUARD(mem != nullptr, "Failed to allocate MatchTypeType from permSpace");
             return new (mem)
-                MatchTypeType(shapes, identityCounts, packCounts, params.size(), copy);
+                MatchTypeType(shapes, identityCounts, packCounts, arrayCounts, params.size(), copy);
         }));
 }
 
 size_t MatchTypeType::firstParamOf(size_t arm) const {
     size_t at = 1;
     for (size_t i = 0; i < arm; ++i) {
-        at += identityCounts_[i] + packCounts_[i] + 1;
+        at += identityCounts_[i] + packCounts_[i] + arrayCounts_[i] + 1;
     }
     return at;
 }
@@ -435,11 +399,38 @@ std::span<Type *const> MatchTypeType::armIdentities(size_t arm) const {
 
 std::span<Type *const> MatchTypeType::armPackPatterns(size_t arm) const {
     return std::span<Type *const>(
-        params_ + firstParamOf(arm) + identityCounts_[arm], packCounts_[arm]);
+        params_ + firstParamOf(arm) + identityCounts_[arm],
+        packCounts_[arm]);
+}
+
+std::span<Type *const> MatchTypeType::armArrayPatterns(size_t arm) const {
+    return std::span<Type *const>(
+        params_ + firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm],
+        arrayCounts_[arm]);
+}
+
+void MatchTypeType::armBoundNames(size_t arm, std::vector<std::string> &names) const {
+    const auto add = [&names](std::string_view name) {
+        if (!name.empty() && std::find(names.begin(), names.end(), name) == names.end()) {
+            names.emplace_back(name);
+        }
+    };
+    // A pack pattern is written out of type variables -- `(W, ...Rest)` -- and the ones it holds
+    // are the ones taking it apart binds. An array pattern binds the type variable written where
+    // the element stands, and the pack it names for the dimensions.
+    for (Type *pattern : armPackPatterns(arm)) {
+        collectTypeVars(pattern, names);
+    }
+    for (Type *pattern : armArrayPatterns(arm)) {
+        collectTypeVars(pattern, names);
+        if (const ArrayType *array = asArrayType(pattern)) {
+            add(array->packName());
+        }
+    }
 }
 
 Type *MatchTypeType::armResult(size_t arm) const {
-    return params_[firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm]];
+    return params_[firstParamOf(arm) + identityCounts_[arm] + packCounts_[arm] + arrayCounts_[arm]];
 }
 
 std::string MatchTypeType::toString() const {
@@ -447,8 +438,9 @@ std::string MatchTypeType::toString() const {
     for (size_t i = 0; i < armCount(); ++i) {
         const std::span<Type *const> identities = armIdentities(i);
         const std::span<Type *const> pack       = armPackPatterns(i);
+        const std::span<Type *const> arrays     = armArrayPatterns(i);
         text += " case ";
-        if (identities.empty() && pack.empty()) {
+        if (identities.empty() && pack.empty() && arrays.empty()) {
             text += "...";
         }
         size_t written = 0;
@@ -456,6 +448,9 @@ std::string MatchTypeType::toString() const {
             text += (written++ == 0 ? "" : " | ") + identity->toString();
         }
         for (Type *pattern : pack) {
+            text += (written++ == 0 ? "" : " | ") + pattern->toString();
+        }
+        for (Type *pattern : arrays) {
             text += (written++ == 0 ? "" : " | ") + pattern->toString();
         }
         text += " => " + armResult(i)->toString() + ";";
@@ -467,30 +462,25 @@ std::string MatchTypeType::mangle() const {
     std::string text = "MT" + subject()->mangle();
     for (size_t i = 0; i < armCount(); ++i) {
         text += "_" + std::to_string(shapes_[i]) + "_" + std::to_string(identityCounts_[i]) + "_" +
-                std::to_string(packCounts_[i]);
+                std::to_string(packCounts_[i]) + "_" + std::to_string(arrayCounts_[i]);
         for (Type *pattern : armPackPatterns(i)) {
             text += "P" + pattern->mangle();
+        }
+        for (Type *pattern : armArrayPatterns(i)) {
+            text += "A" + pattern->mangle();
         }
         text += "_" + armResult(i)->mangle();
     }
     return text;
 }
 
-Type *MatchTypeType::clone(bool) const {
-    return const_cast<MatchTypeType *>(this);
-}
+Type *MatchTypeType::clone(bool) const { return const_cast<MatchTypeType *>(this); }
 
-bool MatchTypeType::equals(Type *type) const {
-    return type == this;
-}
+bool MatchTypeType::equals(Type *type) const { return type == this; }
 
-bool MatchTypeType::assignableFrom(Type *sourceType) const {
-    return sourceType == this;
-}
+bool MatchTypeType::assignableFrom(Type *sourceType) const { return sourceType == this; }
 
-CastSafety MatchTypeType::castSafetyFrom(Type *) const {
-    return CastSafety::Forbidden;
-}
+CastSafety MatchTypeType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
 
 OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
     std::vector<MatchTypeArm> arms;
@@ -503,6 +493,9 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
         }
         for (uint32_t k = 0; k < packCounts_[i]; ++k) {
             arm.packPatterns.push_back(params[at++]);
+        }
+        for (uint32_t k = 0; k < arrayCounts_[i]; ++k) {
+            arm.arrayPatterns.push_back(params[at++]);
         }
         arm.result = params[at++];
         arms.push_back(std::move(arm));
@@ -619,7 +612,7 @@ bool containsTypeCall(Type *type) {
     }
     case TypeCode::Function: {
         // A function type is a type like a tuple is: what it is computed from is computed too.
-        auto *func = static_cast<FunctionType *>(type);
+        auto *func       = static_cast<FunctionType *>(type);
         const auto withs = func->withTypesSpan();
         const auto norms = func->normTypesSpan();
         return std::any_of(withs.begin(), withs.end(), containsTypeCall) ||

@@ -90,6 +90,19 @@ struct MatchTypeArm {
     /// writes stand for those members. The head of a pack is this pattern in the standard library
     /// and nothing else (`stdlib/types.cml` declares it as a `match type`).
     std::vector<Type *> packPatterns;
+    /// The patterns the case writes to take an *array* type apart, one for each alternative of `|`
+    /// (`case E[...Dims]`, `case E[...]`): an array type with no extent before its dimensions pack
+    /// whose element type is the name the case binds (an array whose first dimension is an array
+    /// is still one array, so `E` is that element and `Dims` the dimensions after it).
+    ///
+    /// The two spellings select the two things a shape states. A *named* pack (`case E[...Dims]`)
+    /// binds the dimensions themselves, so it selects an array whose rank is stated: the name
+    /// stands for the dimensions as a dimension pack, and, where an extent is written, for how
+    /// many there are -- what `ShapeOf<T>` needs (`int[Dims]` is `int[<the rank>]`). An
+    /// *anonymous* pack (`case E[...]`) is the open rank: the value's rank is not stated, so there
+    /// is nothing to bind and nothing to count. Design principles 5.4: `T[...]` is the type of
+    /// every rank, and a dimension pack is the dimensions a type does not name.
+    std::vector<Type *> arrayPatterns;
     /// The type the case gives.
     Type *result = nullptr;
 };
@@ -109,7 +122,14 @@ class MatchTypeType final : public OtherType {
     std::span<Type *const> armIdentities(size_t arm) const;
     /// The patterns the case writes to take a pack apart; empty when it writes none.
     std::span<Type *const> armPackPatterns(size_t arm) const;
+    /// The patterns the case writes to take an array type apart; empty when it writes none.
+    std::span<Type *const> armArrayPatterns(size_t arm) const;
     Type *armResult(size_t arm) const;
+    /// The names one case binds: what its patterns write for the subject's members -- the element
+    /// type and the dimensions of an array pattern, the members and the rest of a pack pattern.
+    /// They stand for what the case reached and are not type variables of the type the `match
+    /// type` is part of (typevar.cpp `collectTypeVars`).
+    void armBoundNames(size_t arm, std::vector<std::string> &names) const;
 
     bool typeArguments() const override { return true; }
     std::string toString() const override;
@@ -123,15 +143,18 @@ class MatchTypeType final : public OtherType {
   private:
     MatchTypeType(
         std::vector<uint16_t> shapes, std::vector<uint32_t> identityCounts,
-        std::vector<uint32_t> packCounts, size_t paramCount, Type **params)
+        std::vector<uint32_t> packCounts, std::vector<uint32_t> arrayCounts, size_t paramCount,
+        Type **params)
         : OtherType(typeCode(), paramCount, params), shapes_(std::move(shapes)),
-          identityCounts_(std::move(identityCounts)), packCounts_(std::move(packCounts)) {}
+          identityCounts_(std::move(identityCounts)), packCounts_(std::move(packCounts)),
+          arrayCounts_(std::move(arrayCounts)) {}
 
     size_t firstParamOf(size_t arm) const;
 
     std::vector<uint16_t> shapes_;
     std::vector<uint32_t> identityCounts_;
     std::vector<uint32_t> packCounts_;
+    std::vector<uint32_t> arrayCounts_;
 };
 
 /// Whether a type computed from types (a primitive application or a `match type`) occurs
