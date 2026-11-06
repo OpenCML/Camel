@@ -1,190 +1,46 @@
 # Refactor Rules
 
-> **Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first** (English translation: [`design-principles.en.md`](../docs/design-principles.en.md)). It is the language author's normative statement of what Camel is and of its execution model; it prevails over code and other documents, and questions it leaves undecided go to the language author.
+Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first. It is normative and prevails over code, tests and other documents. Do not make an undecided semantic choice ad hoc.
 
-## Design Direction
-- Prefer large, structural, end-state-oriented redesigns over incremental compatibility-preserving migration when a subsystem boundary is fundamentally wrong.
-- Do not optimize for short-term safety or staged coexistence if that leaves behind temporary scaffolding, bridge layers, or cleanup debt.
-- Treat transitional adapters, compatibility shims, dual-track APIs, and temporary fallback code as a last resort.
-- If a compatibility bridge is unavoidable, keep it minimal, explicitly documented, and scheduled for deletion in the same refactor stream.
+## Design and structure
 
-## Implementation Quality
-- Favor elegance and correctness first.
-- Maintain strong commentary and documentation discipline in English.
-- Add comments for non-trivial or opaque logic, especially around invariants, ownership, and edge cases.
-- Keep headers in `include/` and implementations in `src/`.
-- Avoid implementation logic in headers unless strictly necessary.
-- If a single file grows beyond 800 lines, evaluate decomposition.
-- Every hand-written source file starts with the two-line header (`// Copyright (c) the OpenCML Organization` / `// SPDX-License-Identifier: MIT`), then a blank line and a short responsibility comment; `node scripts/headers.mjs --fix` writes it and `--check` verifies it. No author, dates or funding lines.
+- Prefer the correct end state over a compatibility-preserving series of partial designs. Do not leave parallel implementations, adapters, bridge layers or migration scaffolding without a deletion path.
+- One fact has one source and one implementation. Read operator, resource, effect, type and declaration properties rather than comparing module or operator names.
+- Reuse the existing generic mechanism before adding a special case. A generic layer never knows a concrete module, operator or type name.
+- Name responsibilities precisely. Keep functions small, interfaces coherent and storage ownership explicit. Decompose files that exceed about 800 lines when that improves the boundary.
+- Delete dead and speculative code, unused flags and unreachable compatibility paths. Accepted syntax or options must work; otherwise reject them at the earliest meaningful point.
+- Headers declare interfaces in `include/`; implementations live in `src/`. Every hand-written source file starts with the two-line SPDX header and a short responsibility comment. `node scripts/headers.mjs --check` verifies this.
 
-## The Bar a Change Must Meet
-Code is read far more often than it is written, and this repository will be public. A change is
-returned for rework when it misses any of these, however well it tests:
-- **One way to do a thing.** Reuse the existing helper, rule or construct; a second near-copy (a
-  per-type duplicate, a parallel code path, a local re-implementation of a library function) is a
-  defect, not a shortcut. A question that several passes or back ends ask (can this node be
-  dropped? which overload? what does `as` allow?) has one implementation that all of them call;
-  copies drift apart and then disagree.
-- **Names say what a thing is.** No `tmp`, `data2`, `handleStuff`, `doIt`; no abbreviations that
-  are not already used in the surrounding code. A function's name and signature should make its
-  comment short.
-- **Small, single-purpose functions.** A function that needs section comments to be followed is
-  several functions. Deep nesting is a smell: return early, extract, or use the language's own
-  constructs (`loop … while`, `match`, pipelines in Camel).
-- **No dead or speculative code.** No commented-out code, unused parameters, "just in case"
-  branches, flags nothing reads, or abstractions with one user and no second in sight.
-- **Comments state current facts and reasons**, not history ("used to", "after the rewrite") and not a
-  narration of the code. Task numbers, test names and measured counts appear in reports and notes,
-  never in code or comments.
-- **Storage that is read as an object must have a live object on it.** A sentinel is constructed
-  with placement new, not left as raw bytes, and the room for it is proved by a guard around the
-  bump that installs it, not by the size of the struct. Both halves are argued before the code is
-  written, because they fail differently: an object that was never constructed is an invalid vptr
-  (a member written through a `reinterpret_cast` onto nothing), while an object constructed and
-  never destroyed is a leak or an unregistered root. The discriminator for a sweep is whether the
-  target type is polymorphic -- only then is the defect both provable by a sanitizer and fatal to a
-  virtual call; raw storage read as a plain header or a slot array is a milder class, and leaving
-  that class alone is a classification, not an omission.
-- **Errors are values or located diagnostics**, never silent fallbacks, magic sentinels or
-  swallowed exceptions (see the next section).
-- **Tests assert behaviour that matters** (a property, a graph shape, an exact output), not
-  counters that move with unrelated changes.
-- **Camel code** follows `docs/stdlib-conventions.cn.md` section 6.5 and is formatter output.
-- **A change made of several steps lands as one commit only when each step can say where it stands.**
-  Name the steps, and for each one say whether it is in the tree, in flight, or not started; a
-  slice whose steps cannot be placed one by one cannot be debugged when it fails, because nothing
-  tells you which step failed. The steps are reported while the work is in flight, not only with the
-  finished commit: "it is nearly there" is not a location.
-- **Each step's acceptance is one reading that can be pasted.** A step of a slice lands when there is
-  an output line, a diagnostic or a test result that says what it did, before and after. A step whose
-  acceptance is a sentence ("the type layer is ready") is not a step: it hides the boundary that the
-  next failure will cross.
-- **"Only f32 is supported" is not one switch, it is forty tests.** Count the sites before starting a
-  second element type, and turn the type comparisons into one exhaustive mapping rather than editing
-  each site by hand: a back end that looks like it is "almost there" is a back end whose per-site
-  guesses have not been counted yet.
-- **A red reading is worth more than "basically working".** When a run cannot produce the reading a
-  step promised, report the red one with the line it failed at. Red locates the failure; "basically
-  working" leaves the next reader to find it again.
-- **The first refusal on a chain moves as the layers before it are fixed, so name it again every
-  round.** A line number or a message quoted last round is evidence about last round's tree; carrying
-  it forward is how a fixed site keeps being "the reason". Re-run, quote what the tree says now, and
-  if the message cannot tell two layers apart, say so and make it tell.
-- **Documents cite files and symbols, never line numbers.** A line number moves with every edit; cite `src/compile/gir/builder.cpp` and the function, type or test name instead.
+## Correctness invariants
 
-- **Documentation moves with the code.** A commit that changes a module's behaviour or invariants updates that module's page under `docs/internals/` (or, until the reorganisation lands, its page under `docs/technical/`) and the affected `docs/reference/` (today `docs/language/`) sections in the same commit. Those pages say what is true now: responsibilities, core data structures, invariants, interfaces, where the code lives — no history, no task numbers, no line numbers.
+- Errors are values or located diagnostics, never silent fallbacks, magic sentinels or swallowed exceptions. Catch only what the layer can handle.
+- Purity includes the inability to fault. Dropping, moving or merging a faulting computation changes observable behavior and is not a legal optimization.
+- Exported, printed and converted values have the same meaning as execution. If the target cannot express the semantics, emit the necessary check or refuse with a location.
+- Switches belong to documented options or pass parameters, not implicit environment variables.
+- Caches are keyed by identity, not text, address or a partial hash. Process-wide state is registered and released per owner.
+- GC and graph lifetimes are explicit. Objects stored as live objects must actually be alive, and C++-only holders of programs or graph versions must pin and unpin them correctly. Do not hide a lifetime defect by rooting everything forever.
+- Do not hard-code an element type. Instantiate supported types exhaustively and reject unsupported combinations.
 
-## Rules That Cross Subsystems
-These mistakes recur in every subsystem. Each one yields a program that runs and gives another
-answer, so a test that merely passes does not catch it.
-- **A refusal is said, never a silent fallback.** A limit, an unsupported case or a failed load
-  that quietly takes another path hides the cause and changes the result. Wrong: a cap is reached,
-  one log line is written, the work continues serially (or with the next candidate). Right: a
-  located diagnostic naming the limit or the case. A fallback exists only where the language
-  defines it.
-- **"Pure" means pure and cannot fault.** Whether an operator can fault is as much its property as
-  its effects; dropping, moving, merging or reordering a node that can fault changes whether the
-  program fails. Wrong: delete `let r = 5 / z` because it has no effect. Right: one predicate in
-  the core reads the effect and fault properties of the operator, and every pass calls it.
-- **What is exported, printed or converted means what it means when it runs.** If the target
-  cannot express the semantics, reproduce them with an explicit check, or refuse. Wrong: lower a
-  division to a back end's `Div` that drops the zero-divisor fault; print `int?[]` (the grammar
-  rejects it) or `(x: int) => int[]` for an array of functions (it parses as another type). Right:
-  the same fault, or a refusal naming the operator; a printed type parses back to the same type.
-- **No environment-variable switches.** A switch that changes behaviour is invisible in the
-  command line and the source, untestable, and usually reads garbage as "off" or "unlimited".
-  Wrong: `CAMEL_X_ISA=avx2` picks a kernel; `CAMEL_X_LIMIT_MB=2GB` silently means no limit. Right:
-  a documented option or pass parameter that rejects invalid values. The variables the design
-  principles name are the only environment input.
-- **Catch only what you can handle.** A broad `catch` turns internal errors into user-facing ones
-  and hides them. Wrong: `catch (const std::exception &)` reports a logic error or out-of-memory as
-  "macro evaluation failed". Right: catch the diagnostic and fault types that step defines; anything
-  else propagates as the internal error it is.
-- **A cache is keyed by identity.** Not by printed text, an address, or a hash of a part. Types use
-  the canonical id; declarations use the declaration plus its arguments. Wrong: key = fact name +
-  printed `with` value (two modules' facts collide); key = `Type *` (two spellings of one type
-  miss). Right: the canonical id, through the one channel every instance uses. Never cache a
-  result computed from something still being defined.
-- **Process-wide state is registered per owner and released per owner.** Wrong: the allocator
-  keeps one root set that each `Context` overwrites and clears when it is destroyed. Right:
-  `register(owner, …)` and `unregister(owner)`, and the holder walks every registration.
-- **A generic layer never knows a name.** Behaviour that depends on a name is a declaration or an
-  operator trait. Wrong: the compiler special-cases `"stream::tee"`; the module loader tests
-  `moduleName == "python"`; an autodiff engine hard-codes `tensor:where`. Right: the module
-  declares the property and the layer reads it.
-- **Accepted means works.** Wrong: an option that is parsed and never read; syntax the parser
-  takes and a later phase calls "unsupported". Right: implement it, or delete it so it is an
-  unknown name or a syntax error at the earliest point.
-- **Do not hard-code an element type.** Wrong: a gradient kernel reads `dataAs<float>()` for every
-  tensor, so an f64 tensor is read as f32; a shape rule answers f32 whatever the input. Right:
-  instantiate per supported element type and refuse the rest.
-- **A transposition law's head states every position as a type parameter.** A law is matched against
-  a node whose operand types are known only when a program reaches it, so a concrete type in the head
-  is a type nothing can fill in. Wrong: `export rule sum_axis_stated_t::<T, X, E>(t: X, axis: int,
-  keepdims: bool, extents: E)`. It compiles, the rule is filed, and the refusal arrives at the last
-  transposition of a program already lowered, naming neither the law nor the parameter:
-  `TRANSPOSE ... skip=parameter-shape uri=tensor:sum_axis_stated node=12 param=0
-  param-type=float[...]`, followed by `The transpose of '<graph>' needs the shape of the parameter at
-  position 1, and the type 'float[...]' does not state it`. Right: `(t: X, axis: A, keepdims: K,
-  extents: E)` with the left side binding the three, which is how every neighbouring law is written.
-  The criterion: **a concrete type is the one the walk cannot hand a shape back for; a type variable
-  is filled in from the node.** Measured 2026-11-04: both `stated_sum_axis_gradient` cases are green
-  on the type-variable form and red on the concrete one, and nothing between the parser and the
-  transpose mentions the difference -- so the reading of the case, not the reading of the build, is
-  what decides it.
-- **The two legs of a rule do not count the same number, and the head must be written to the count it
-  is asked for.** A **forward** (`jvp`) rule is asked for one type parameter per *free variable in
-  the operand types* -- `(float[], int, int)` asks for 1, so `jvp_idx_arr::<T>(xs: T[], i: int)` is
-  right to spell its index concretely. A **transposition law** is asked for one per operand *plus*
-  the cotangent's element type -- `pick_at_t::<T, X, P, L>` over three operands, `sum_axis_stated_t::<T,
-  X, A, K, E>` over four. The bullet above says a transposition head must not spell a position
-  concretely; this one says the *number* is a different arithmetic on each leg, and getting either
-  wrong is refused in the same breath as a missing rule:
-  `REINTERP jvp function=read skip=rule uri=tensor:pick_at reason=it takes 4 type parameter(s), and
-  it was asked for 1` (measured 2026-11-04, writing `jvp_pick_at::<T, X, P, L>`), and
-  `jvp has no forward rule for 'tensor:pick_at'` on the surface. Criterion: **count what the matcher
-  counts.** Neither error is caught by a build: both rules compile and file; only a program that
-  reaches the rule reds.
-- **Fix the cause, in the layer that causes it.** When a fix has been prescribed and it cannot be
-  written, the prescription was wrong about where the defect lives: report the measured cause and
-  change the layer that holds it. Wrong: a type rule is bent so one case stops failing, or a
-  conversion is widened so two shapes fit. Right: name the layer (`a computed leaf is read flat
-  because the position asks for a flat value`), change it there, add the case that shows the
-  original report was right, and keep the case that must still be refused. Two types of the same
-  rank that are not the same type never merge: a rule that merges them changes the language to
-  make a report go away.
+## Rewrite and transform rules
 
-- **Delete code by matching it, not by counting lines.** A script that says "remove lines 900..901"
-  is decided against a listing that may already be stale by the time it runs, and the damage is
-  silent: it compiles nowhere, or worse, it compiles. Wrong: `Get-Content | Select-Object -Skip 899 |
-  Select-Object -First 2` and a hand-rolled index per file. Right: the exact text of the lines being
-  removed, matched once, plus a diff read before committing. This happened on 2026-11-02: a removal
-  by line number took `Parts`' closing brace, the `open_` field, three comment lines and a
-  `halves.closure = closure;` assignment with it, in files that then still had to compile. Every one
-  of those was found by reading the diff, not by the compiler.
-## Architecture Reporting
-- During major refactors, identify the primary structural contradiction early.
-- If a deeper dependency blocks progress, surface that blocker directly instead of only cleaning peripheral symptoms.
-- Record important decisions and rationale in both code comments and docs when the refactor changes semantics.
-- **A default argument belongs in the declaration, not in both.** `transposeSignature` was one
-  function: a definition in `transpose.cpp` and a declaration in `transpose.h`. Adding the fourth
-  parameter *with a default* to the definition only turned the two into two overloads, and the
-  three-argument call sites became `error: call to 'transposeSignature' is ambiguous` -- at
-  `transposeSignature` in `transpose.cpp`, a line the change never touched. Right: add the parameter to the
-  declaration with its default and leave the definition without one. A build that reports
-  ambiguity at a line you did not edit is telling you a declaration and a definition stopped being
-  the same function.
+- Preserve order and ownership through every edit. A replacement, inline or extraction carries the relevant data, synchronization and order edges; low-level APIs cannot silently bypass them.
+- A refusal is relaxed only after the rejected class is proven correct. Include the reading that proves it; fix the graph producer rather than deleting the guard that exposed the defect.
+- Do not duplicate reachability, control-region, refusal or type queries. Use one structured diagnostic with a stable name and location rather than integer-coded or test-only side channels.
+- A transposition law's head uses type variables for every position. Forward and transposed rules have different type-argument counts; do not concretely pin a position that the walk cannot supply.
+- Match types bind their case-local names. A concrete subject with no selectable case is `TypeFunctionNotApplicable`, not an uninstantiated generic type.
+- Graph and source round trips preserve semantics, region structure and all tags needed by later passes. Readability is secondary to a correct recompilation.
 
+## Comments and documentation
 
-## A page says first which sentence in it is already true
+- Comments state current facts and invariants, not history, task numbers, dates, measured counts or links to old handover pages.
+- Cite symbols as `path/file.cpp#Symbol`, not line numbers. Do not repeat the same rule in code, review pages and generated documents; keep one authoritative source.
+- Update the module's technical page and affected language reference in the same change as its behavior. Describe what the code does now, not what used to happen.
+- Keep implementation commentary in English. Do not add comments that merely narrate the code.
 
-A question page is written to be acted on, and the reader who acts on it may be repeating work that was
-already done -- three times on 2026-11-02 a page or a dispatch note carried a sentence that read like an
-instruction and was a description of what the code already does (`replaceRootIfCurrent` already rebuilds
-the root table; a "sync the root table here" would have been a second rebuild). The page now opens with
-that sentence quoted, marked "already true, do not redo", before the finding it frames.
+## Tests and acceptance
 
-The rule: **when a page or a ruling names a place to change, its first paragraph says which part of that
-naming is already the code's behaviour**, with the file and line. A page that starts with the problem and
-only later admits "this part is fine" spends the reader's trust twice: once to send them to the wrong
-file, once to call them back.
+- Each change includes relevant behavioral tests. Test a property, graph shape, exact diagnostic or output, not a count that can change for unrelated reasons.
+- Give each structural step a checkable outcome and identify what is done, in flight or not started. A red reading locates the next issue; do not replace it with "basically working".
+- Cover every affected backend and the C++ translator, ONNX, autodiff and macro expansion when they consume the changed construct. Unsupported paths must refuse explicitly.
+- Run the relevant plans and the repository's static checks. Use actual execution to confirm behavior, not only compilation or a textual search.
+- Before finishing, review the whole diff for unrelated reverts, duplicated logic and stale comments. The common purpose of the staged set must be clear.
