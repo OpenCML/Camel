@@ -633,6 +633,11 @@ bool containsTypeVar(Type *type) {
     default:
         break;
     }
+    if (type->code() == MatchTypeType::typeCode()) {
+        std::vector<std::string> names;
+        collectTypeVars(type, names);
+        return !names.empty();
+    }
     if (type->isOtherType()) {
         const auto params = static_cast<OtherType *>(type)->paramsSpan();
         return std::any_of(params.begin(), params.end(), containsTypeVar);
@@ -864,6 +869,15 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                     return substituteTypeVars(match->armResult(arm), bindings);
                 }
             }
+            // No case selected. Substitute the unchosen arms too: their result types may still
+            // mention the function's parameters, but they must not make this concrete refusal look
+            // like a match still waiting for a type binding.
+            std::vector<Type *> params;
+            params.reserve(match->paramCount());
+            for (Type *param : match->paramsSpan()) {
+                params.push_back(substituteTypeVars(param, bindings));
+            }
+            return match->cloneWithParams(params);
         }
     }
     if (OtherType *applied = asTypeApplication(type)) {
