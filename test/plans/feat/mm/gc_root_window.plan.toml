@@ -1,0 +1,50 @@
+id = "mm.gc_root_window"
+order = 366
+tier = "milestone"
+tags = ["feat", "mm", "gc", "program"]
+
+[[tests]]
+name = "root_window.gru_lite.poison"
+desc = "A pass-created Program and the graph versions reachable from it stay alive while its C++ holder needs them."
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["--gc-check", "poison", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["gru_lite metrics"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "root_window.gru_lite.moving_stress"
+desc = "The same holder remains valid when moving collection runs at every safepoint without poison."
+tier = "fast"
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["--gc", "generational", "--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["gru_lite metrics"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "root_window.residual_mlp.poison"
+desc = "A different model exercises the same unrooted Program lifetime window."
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["--gc-check", "poison", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["residual_mlp start"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000
+
+[[tests]]
+name = "root_window.residual_mlp.moving_stress"
+desc = "The residual model remains valid under ordinary moving collection without poison."
+tier = "fast"
+kind = "behavior"
+case = "../../../cases/modules/nn/residual_mlp.cml"
+args = ["--gc", "generational", "--gc-stress", "safepoint=1,kind=minor", "--gc-check", "verify=both", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+expect_exit = 0
+expect_stdout_contains = ["residual_mlp start"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 120000

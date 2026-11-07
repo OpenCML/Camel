@@ -247,7 +247,12 @@ root tracers), and nothing read before a call is used after it.
   next minor collection and scanned when a typed reference reaches it, so its creator may fill
   it with plain stores (rule 6). After that collection it is an ordinary old object.
 - The write barrier remembers old objects that point at young ones (or at objects born old
-  since the last minor collection), with their type.
+  since the last minor collection), with their type. The remembered set also retains an old object
+  that names a graph carrier through `graph`, `graph-edge` or `program`. In particular, an old
+  `Function` is scanned at every minor collection even after its closure has aged, so the
+  `Program` it names and that Program's static values stay reachable and relocatable. Every
+  graph-space sweep then drops remembered entries whose current references no longer need a minor
+  scan: once a `Program` is freed, its old Function values cannot leave stale entries behind.
 
 ## 6. Checking a module
 
