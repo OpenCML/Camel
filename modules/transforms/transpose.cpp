@@ -167,7 +167,7 @@ RuleChoice chooseTransposedRule(
         Type *element = const_cast<Type *>(cotangentType);
         if (element->code() == camel::core::type::TypeCode::Array) {
             if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(element)) {
-                if (Type *zero = array->rankZeroType()) {
+                if (Type *zero = array->elemType()) {
                     element = zero;
                 }
             }
@@ -1339,7 +1339,7 @@ bool buildTransposeMember(
             Type *ctElement = ctType;
             if (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array) {
                 if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(ctType)) {
-                    if (Type *zero = array->rankZeroType()) {
+                    if (Type *zero = array->elemType()) {
                         ctElement = zero;
                     }
                 }
