@@ -8,6 +8,7 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
@@ -39,9 +40,10 @@ constexpr std::string_view kTypeFunctions[] = {
     "ResultOf",
     "Tangent"};
 
-constexpr std::string_view kPackName   = "$pack";
-constexpr std::string_view kExpandName = "$expand";
-constexpr std::string_view kLengthsTag = "$lengths:";
+constexpr std::string_view kPackName      = "$pack";
+constexpr std::string_view kExpandName    = "$expand";
+constexpr std::string_view kLengthsTag    = "$lengths:";
+constexpr std::string_view kTypeApplyName = "$type_function";
 
 /// The tangent space of a value (design principles 9.9): a float and a tensor of floats are their
 /// own tangent space; a tuple and a struct are the tangent space of each member in the member's
@@ -87,6 +89,25 @@ bool TypeCallType::isTypeFunction(std::string_view name) {
 
 Type *TypeCallType::evaluate(
     std::string_view name, std::span<Type *const> arguments, std::string &error) {
+    if (name == kTypeApplyName) {
+        // A source type function whose arguments included `typeof` was kept as an application
+        // instead of being applied before the expression's type was known. Its declaration is the
+        // first, internal parameter; the written arguments follow it.
+        if (arguments.empty() || arguments.front() == nullptr ||
+            arguments.front()->code() != TypeCode::TypeFunc) {
+            error = "its type function declaration is missing";
+            return nullptr;
+        }
+        auto *function = static_cast<TypeFunctionType *>(arguments.front());
+        if (arguments.size() != function->params().size() + 1) {
+            error = "it takes " + std::to_string(function->params().size()) +
+                    " type argument(s), and " + std::to_string(arguments.size() - 1) +
+                    " were given";
+            return nullptr;
+        }
+        const type_vec_t written(arguments.begin() + 1, arguments.end());
+        return function->apply(written);
+    }
     // The two projections of a pack (`stdlib/types.cml#HeadOf`, `#RestOf`): the member at its head,
     // and the pack of the members after it. They are read **before** the member-wise rule below,
     // because their answer is about the pack itself and not about each member of it: mapped over
@@ -259,6 +280,16 @@ TypeCallType *TypeCallType::create(std::string_view name, std::span<Type *const>
         }));
 }
 
+TypeCallType *
+TypeCallType::makeTypeFunctionCall(TypeFunctionType *function, std::span<Type *const> arguments) {
+    GUARD(function != nullptr, "A deferred type application needs its declaration.");
+    type_vec_t deferred;
+    deferred.reserve(arguments.size() + 1);
+    deferred.push_back(function);
+    deferred.insert(deferred.end(), arguments.begin(), arguments.end());
+    return create(kTypeApplyName, deferred);
+}
+
 std::string TypeCallType::toString() const {
     if (*name_ == kExpandName) {
         return "..." + (params_[0] != nullptr ? params_[0]->toString() : std::string("?"));
@@ -266,9 +297,14 @@ std::string TypeCallType::toString() const {
     if (name_->starts_with(kLengthsTag)) {
         return name_->substr(kLengthsTag.size());
     }
-    std::string text = (*name_ == kPackName ? std::string("pack") : *name_) + "<";
-    for (size_t i = 0; i < paramCount_; ++i) {
-        text += (i > 0 ? ", " : "") + (params_[i] != nullptr ? params_[i]->toString() : "?");
+    const bool deferred = *name_ == kTypeApplyName;
+    std::string text    = deferred && paramCount_ > 0 && params_[0] != nullptr &&
+                                  params_[0]->code() == TypeCode::TypeFunc
+                              ? static_cast<TypeFunctionType *>(params_[0])->name() + "<"
+                              : (*name_ == kPackName ? std::string("pack") : *name_) + "<";
+    const size_t first  = deferred ? 1 : 0;
+    for (size_t i = first; i < paramCount_; ++i) {
+        text += (i > first ? ", " : "") + (params_[i] != nullptr ? params_[i]->toString() : "?");
     }
     return text + ">";
 }
@@ -533,7 +569,7 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
     if (type == nullptr) {
         return false;
     }
-    const auto concrete = [](Type *t) { return !containsTypeVar(t); };
+    const auto concrete = [](Type *t) { return !containsTypeVar(t) && !containsTypeOf(t); };
     if (type->code() == TypeCallType::typeCode()) {
         const auto *call = static_cast<TypeCallType *>(type);
         if (call->name().starts_with(kLengthsTag)) {
@@ -594,6 +630,8 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
     switch (type->code()) {
     case TypeCode::Array:
         return describeUnevaluatedTypeCall(static_cast<ArrayType *>(type)->elemType(), what, why);
+    case TypeCode::Stream:
+        return describeUnevaluatedTypeCall(static_cast<StreamType *>(type)->elemType(), what, why);
     case TypeCode::Tuple:
         for (Type *member : static_cast<TupleType *>(type)->types()) {
             if (describeUnevaluatedTypeCall(member, what, why)) {
@@ -601,6 +639,16 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
             }
         }
         return false;
+    case TypeCode::Struct: {
+        auto *record     = static_cast<StructType *>(type);
+        const auto types = record->named() ? record->typeArgs() : record->types();
+        for (Type *member : types) {
+            if (describeUnevaluatedTypeCall(member, what, why)) {
+                return true;
+            }
+        }
+        return false;
+    }
     case TypeCode::Function: {
         // A function type holds types too -- the `with` list, the parameters and the one it
         // answers -- and a type function left unevaluated in any of them is a type the program did
@@ -632,8 +680,15 @@ bool containsTypeCall(Type *type) {
     switch (type->code()) {
     case TypeCode::Array:
         return containsTypeCall(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Stream:
+        return containsTypeCall(static_cast<StreamType *>(type)->elemType());
     case TypeCode::Tuple: {
         const auto types = static_cast<TupleType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), containsTypeCall);
+    }
+    case TypeCode::Struct: {
+        auto *record     = static_cast<StructType *>(type);
+        const auto types = record->named() ? record->typeArgs() : record->types();
         return std::any_of(types.begin(), types.end(), containsTypeCall);
     }
     case TypeCode::Function: {

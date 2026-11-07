@@ -811,7 +811,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     if (type->code() == MatchTypeType::typeCode()) {
         // A `match type` in a type position: with a concrete subject it is the result of the
         // first case that selects the subject, by shape or by identity, and nothing else of it is
-        // looked at; with a type variable still in the subject it waits.
+        // looked at; with a type variable or an unresolved `typeof` still in the subject it waits.
         auto *match   = static_cast<MatchTypeType *>(type);
         Type *subject = substituteTypeVars(match->subject(), bindings);
         if (TypeCallType::isPack(subject)) {
@@ -835,7 +835,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                 return TypeCallType::makePack(mapped);
             }
         }
-        if (!containsTypeVar(subject)) {
+        if (!containsTypeVar(subject) && !containsTypeOf(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
             for (size_t arm = 0; arm < match->armCount(); ++arm) {
                 // A case that takes the pack apart selects it by the pattern it writes, and its
@@ -893,9 +893,11 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         }
         const std::span<Type *const> arguments(params.data(), params.size());
         if (type->code() == TypeCallType::typeCode() &&
-            std::none_of(params.begin(), params.end(), containsTypeVar)) {
+            std::none_of(params.begin(), params.end(), containsTypeVar) &&
+            std::none_of(params.begin(), params.end(), containsTypeOf)) {
             // A type function whose arguments are all concrete is the type it computes (one it
-            // does not accept stays a call, and is reported where the type is used).
+            // does not accept stays a call, and is reported where the type is used). An unresolved
+            // `typeof` is not a concrete leaf: the graph builder resolves it before this call.
             std::string error;
             if (Type *computed = TypeCallType::evaluate(
                     static_cast<TypeCallType *>(type)->name(),

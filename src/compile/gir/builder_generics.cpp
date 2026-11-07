@@ -2513,6 +2513,18 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             graph,
             sharedName ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))
                        : instanceName);
+        if (funcType->hasExitType() && containsTypeOf(funcType->exitType())) {
+            // A result type may be computed from the parameters (`AdamState<typeof(params)>`).
+            // Their ports exist now, so `typeof` inference reads their instance types and the
+            // open signature receives the resolved result before the body checks against it.
+            try {
+                graph->setExitType(resolveTypeNode(funcType->exitType(), tmpl->func));
+                funcType = graph->funcType();
+            } catch (...) {
+                leaveScope();
+                throw;
+            }
+        }
         // The body keeps the `on nodes` tags of the generic declaration: they are the same for
         // every instance, and they were resolved once (tagFactsOf remembers by node).
         const TagFacts tags = tagFactsOf(tmpl->func, camel::core::tag::Func);
@@ -2567,9 +2579,20 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
     // (3) The entries this builder keeps keyed by a graph's address -- `capturedValues_`,
     // `valueUsedGraphs_` -- are erased with the graph, and the graph is not registered as a body
     // of the unit, so no pass over the built bodies ever judges it.
+    const compile_graph_ptr_t savedGraph = currGraph_;
+    // Resolving a declaration's result type happens before its body has inserted the parameter
+    // names. In that one case the scratch graph takes the signature too, so the expression reads
+    // the same parameter ports the body will have. Inside a body the enclosing scope already
+    // provides them and the scratch graph stays without a signature, as before.
+    const bool signatureScope =
+        savedGraph != nullptr && savedGraph->funcType() != nullptr &&
+        savedGraph->funcType()->withTypesCount() + savedGraph->funcType()->normTypesCount() > 0 &&
+        !bodyStates_.contains(savedGraph.get());
+    FunctionType *scratchSignature =
+        signatureScope ? OpenFunctionType::copyOf(savedGraph->funcType()) : FunctionType::create();
     const compile_graph_ptr_t scratch = createCompileGraph(
         context_->graphIds().allocate(),
-        FunctionType::create(),
+        scratchSignature,
         nullptr,
         "__typeof__");
     scratch->setOuterGraph(currGraph_);
@@ -2577,7 +2600,6 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
         return known.get() == scratch.get();
     });
 
-    const compile_graph_ptr_t savedGraph       = currGraph_;
     const node_handle_t savedSynced            = lastSyncedNode_;
     const auto savedChained                    = chainedNodes_;
     const bool savedSyncedFlag                 = synced_;
@@ -2644,8 +2666,39 @@ Type *Builder::inferTypeOf(const GCT::node_ptr_t &expression) {
         savedDiags,
         scratch.get()};
 
+    std::vector<node_handle_t> signatureVariables;
+    struct VariableRestore {
+        Builder &self;
+        std::vector<node_handle_t> &nodes;
+        ~VariableRestore() {
+            for (const node_handle_t node : nodes) {
+                self.variables_.erase(node);
+            }
+        }
+    } variableRestore{*this, signatureVariables};
+
     diags_ = sink;
     enterGraphScope(scratch, "__typeof__");
+    if (signatureScope) {
+        const auto withPorts = scratch->view().withPorts();
+        for (size_t i = 0; i < withPorts.size(); ++i) {
+            const node_handle_t port = scratch->view().ref(withPorts[i]);
+            insertNode(scratch->nodePortName(port), port);
+            if (scratchSignature->withIsVarAt(i)) {
+                variables_.insert(port);
+                signatureVariables.push_back(port);
+            }
+        }
+        const auto normPorts = scratch->view().normPorts();
+        for (size_t i = 0; i < normPorts.size(); ++i) {
+            const node_handle_t port = scratch->view().ref(normPorts[i]);
+            insertNode(scratch->nodePortName(port), port);
+            if (scratchSignature->normIsVarAt(i)) {
+                variables_.insert(port);
+                signatureVariables.push_back(port);
+            }
+        }
+    }
     lastSyncedNode_ = {};
     chainedNodes_.clear();
     Type *type = nullptr;
@@ -2719,16 +2772,41 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
                 }
                 // No binding is in play here: `expandTypePacks` is the substitution that asks a
                 // type to evaluate with nothing bound, which is what the subject being the type
-                // `typeof` stood for makes possible.
-                return expandTypePacks(match->cloneWithParams(params));
+                // `typeof` stood for makes possible. A selected result is itself a type
+                // expression, so resolving the subject does not stop at the match's boundary.
+                Type *expanded = expandTypePacks(match->cloneWithParams(params));
+                return expanded == held || !containsTypeOf(expanded) ? expanded
+                                                                     : resolveTypeOfs(expanded);
             }
-            if (held->code() != TypeCallType::typeCode()) {
+            if (held->code() == TypeCode::Struct) {
+                auto *record = tt::as_ptr<StructType>(held);
+                if (!record->named()) {
+                    return held;
+                }
+                // Applying a named struct's type function leaves its declaration and arguments
+                // in the instance. Resolve those arguments just as the arguments of any other
+                // type function, and instantiate the same declaration anew (`AdamState<typeof
+                // params>` is `AdamState<P>` once the expression's type is known). An unnamed
+                // struct is not such an application and keeps the ordinary whole-type rule.
+                std::vector<Type *> arguments;
+                bool changed = false;
+                for (Type *argument : record->typeArgs()) {
+                    Type *resolved = resolveTypeOfs(argument);
+                    changed        = changed || resolved != argument;
+                    arguments.push_back(resolved);
+                }
+                return changed ? StructType::get(record->decl(), arguments) : held;
+            }
+            if (!held->isOtherType()) {
                 return held;
             }
-            const auto *call = tt::as_ptr<TypeCallType>(held);
+            auto *applied = static_cast<OtherType *>(held);
+            if (!applied->typeArguments()) {
+                return held;
+            }
             std::vector<Type *> arguments;
             bool changed = false;
-            for (Type *argument : call->paramsSpan()) {
+            for (Type *argument : applied->paramsSpan()) {
                 Type *resolved = resolveTypeOfs(argument);
                 changed        = changed || resolved != argument;
                 arguments.push_back(resolved);
@@ -2736,13 +2814,23 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             if (!changed) {
                 return held;
             }
-            // The arguments are concrete now, so the function is one the type it computes
-            // stands for; one it does not accept stays a call and is reported where it is used.
-            std::string error;
-            if (Type *computed = TypeCallType::evaluate(call->name(), arguments, error)) {
-                return computed;
+            if (held->code() == TypeCallType::typeCode() &&
+                std::all_of(arguments.begin(), arguments.end(), [](Type *argument) {
+                    return !containsTypeVar(argument) && !containsTypeOf(argument);
+                })) {
+                // The arguments are concrete now, so the function is one the type it computes
+                // stands for; one it does not accept stays a call and is reported where it is
+                // used. The computed type may expose another type expression, which is resolved
+                // here too rather than being left for the outer whole-type check. A type variable
+                // still waits for `boundType` below, just as the `typeof` waited for this walk.
+                const auto *call = tt::as_ptr<TypeCallType>(held);
+                std::string error;
+                if (Type *computed = TypeCallType::evaluate(call->name(), arguments, error)) {
+                    return computed == held || !containsTypeOf(computed) ? computed
+                                                                         : resolveTypeOfs(computed);
+                }
             }
-            return TypeCallType::create(call->name(), arguments);
+            return applied->cloneWithParams(arguments);
         };
         type = resolveTypeOfs(type);
     }

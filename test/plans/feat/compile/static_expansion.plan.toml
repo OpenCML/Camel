@@ -1274,3 +1274,14 @@ assert(errors === 1, `${errors} errors are reported, not one`)
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "typeof.derived_type_argument"
+desc = "A `typeof` used as a named derived type's argument is resolved before the declaration is checked, in both a generic instance and an ordinary function. Nested type functions wait for it too: `Tangent<Pair<P, typeof(q)>>` does not apply the empty-tangent leaf rule to the placeholder, either in a local type argument or in the generic result signature."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_derived_type.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "3\n4\n6\ntrue\ntrue\n12.0\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 10000
