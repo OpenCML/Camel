@@ -205,8 +205,8 @@ RuleChoice chooseTransposedRule(
         Type *element = const_cast<Type *>(cotangentType);
         if (element->code() == camel::core::type::TypeCode::Array) {
             if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(element)) {
-                if (Type *zero = array->rankZeroType()) {
-                    element = zero;
+                if (Type *elementType = array->elemType()) {
+                    element = elementType;
                 }
             }
         }
@@ -413,8 +413,8 @@ std::vector<Type *> lawInstanceTypes(
     Type *sole = types.front();
     if (sole->code() == camel::core::type::TypeCode::Array) {
         if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(sole)) {
-            if (Type *zero = array->rankZeroType()) {
-                sole = zero;
+            if (Type *elementType = array->elemType()) {
+                sole = elementType;
             }
         }
     }
@@ -2032,14 +2032,14 @@ bool buildTransposeMember(
             // The cotangent's own type first: a law that covers two shapes of one operator writes
             // `(ct: T[..])`, and `T` has to be the type the cotangent really has -- a number here,
             // an array there -- or the right side's operator is resolved for the wrong one.
-            // `T` is the law's *element* type: a cotangent whose type is a rank-zero array type is
-            // the element itself (5.4), and the law writes `T[..]` around it. Handing the rank-zero
-            // type in as `T` would ask for `float[..][..]`.
+            // `T` is the law's *element* type: an array cotangent contributes its element type,
+            // whether its rank is open or fixed. The law writes `T[..]` around that element, so
+            // handing it the whole array type would incorrectly add another array nesting.
             Type *ctElement = ctType;
             if (ctType != nullptr && ctType->code() == camel::core::type::TypeCode::Array) {
                 if (auto *array = tt::as_ptr<camel::core::type::ArrayType>(ctType)) {
-                    if (Type *zero = array->rankZeroType()) {
-                        ctElement = zero;
+                    if (Type *elementType = array->elemType()) {
+                        ctElement = elementType;
                     }
                 }
             }
