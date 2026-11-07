@@ -33,7 +33,7 @@ Read [`../docs/design-principles.cn.md`](../docs/design-principles.cn.md) first.
 ## Comments and documentation
 
 - Comments state current facts and invariants, not history, task numbers, dates, measured counts or links to old handover pages.
-- Cite symbols as `path/file.cpp#Symbol`, not line numbers. Do not repeat the same rule in code, review pages and generated documents; keep one authoritative source.
+- Cite symbols as `modules/graph/module.cpp#neKernel`, not line numbers. Do not repeat the same rule in code, review pages and generated documents; keep one authoritative source.
 - Update the module's technical page and affected language reference in the same change as its behavior. Describe what the code does now, not what used to happen.
 - Keep implementation commentary in English. Do not add comments that merely narrate the code.
 
