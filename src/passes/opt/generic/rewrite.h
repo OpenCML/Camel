@@ -40,10 +40,11 @@ inline bool isComputedAfter(
     }
     std::vector<gc_node_ref_t> work;
     std::vector<bool> seen(draft.nodeSlotCount(), false);
-    for (auto group : {draft.normInputsOf(node),
-                       draft.withInputsOf(node),
-                       draft.ctrlInputsOf(node),
-                       draft.syncInputsOf(node)}) {
+    for (auto group :
+         {draft.normInputsOf(node),
+          draft.withInputsOf(node),
+          draft.ctrlInputsOf(node),
+          draft.syncInputsOf(node)}) {
         work.insert(work.end(), group.begin(), group.end());
     }
     while (!work.empty() && maxWork > 0) {
@@ -56,10 +57,11 @@ inline bool isComputedAfter(
             continue;
         }
         seen[n] = true;
-        for (auto group : {draft.normInputsOf(n),
-                           draft.withInputsOf(n),
-                           draft.ctrlInputsOf(n),
-                           draft.syncInputsOf(n)}) {
+        for (auto group :
+             {draft.normInputsOf(n),
+              draft.withInputsOf(n),
+              draft.ctrlInputsOf(n),
+              draft.syncInputsOf(n)}) {
             for (gc_node_ref_t input : group) {
                 --maxWork;
                 work.push_back(input);
@@ -69,49 +71,33 @@ inline bool isComputedAfter(
     return false;
 }
 
-/// Records on `node` that a `sync` block wrote it as a statement, which is what a sync edge has to
-/// join at both ends (docs/design/effects/edges.cn.md 4.6).
-/// Took a draft while its callers did (`handOverSyncWait`, `replaceNode`); both name the owner now,
-/// so it names it too and asks it for the draft it writes.
-inline void markSyncStatement(
-    camel::runtime::GraphTransaction &transaction, gc_node_ref_t node) {
-    auto &draft        = transaction.edit();
-    const auto *header = draft.header(node);
-    if (header != nullptr) {
-        draft.setNodeRuntimeFlags(
-            node,
-            static_cast<uint8_t>(header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
-    }
-}
-
 /// Hand a wait a removed node carried through a `sync` block's chain to a consumer, in the kind it
-/// had: a wait is copied kind for kind (docs/handover/README.cn.md 5.21 item 4), so a consumer that
-/// is itself a statement of the block follows the predecessor through the sync edge rather than
-/// through the control edge that names the same pair beside it. Written only where the chain can
-/// take it -- both ends are statements of the block, the consumer is not written after anything yet
-/// and the predecessor has no other follower, because a chain never forks
-/// (docs/design/effects/edges.cn.md 4.6). Returns whether the wait was written; a caller that gets
-/// `false` hands it on the way it did before.
-/// Took a draft while `replaceNode` and `bypassValueGate` did; both name the owner now, so the wait
-/// is handed on through the transaction too -- and to `markSyncStatement` in the same form.
+/// had. Written only where the chain can take it: the predecessor is a statement exit or a chain
+/// head, the consumer is a statement entry or the block's value, and the link cannot fork.
+/// Returns whether the wait was written; a caller that gets `false` keeps its conservative
+/// fallback.
 inline bool handOverSyncWait(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t pred, gc_node_ref_t user) {
     auto &draft = transaction.edit();
     if (!draft.alive(pred) || !draft.alive(user) || pred == user) {
         return false;
     }
+    const auto *predHeader = draft.header(pred);
     const auto *userHeader = draft.header(user);
-    if (userHeader == nullptr ||
-        (userHeader->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0) {
+    if (predHeader == nullptr || userHeader == nullptr) {
         return false;
     }
-    if (!draft.syncInputsOf(user).empty() || !draft.syncUsersOf(pred).empty() ||
-        draft.nodeRegion(pred) != draft.nodeRegion(user)) {
+    const bool entryCanFollow =
+        camel::runtime::isChainStatement(draft, user) ||
+        (userHeader->kind != camel::runtime::GCNodeKind::Join && draft.syncUsersOf(user).empty() &&
+         camel::runtime::isBlockValue(draft, user));
+    const bool exitCanPrecede =
+        camel::runtime::isChainExit(draft, pred) ||
+        (predHeader->kind != camel::runtime::GCNodeKind::Join && draft.syncInputsOf(pred).empty());
+    if (!entryCanFollow || !exitCanPrecede || !draft.syncInputsOf(user).empty() ||
+        !draft.syncUsersOf(pred).empty() || draft.nodeRegion(pred) != draft.nodeRegion(user)) {
         return false;
     }
-    const auto mark = [&](gc_node_ref_t node) { markSyncStatement(transaction, node); };
-    mark(pred);
-    mark(user);
     const gc_node_ref_t only[1] = {pred};
     draft.setSyncInputs(user, only);
     const auto ctrl = draft.ctrlInputsOf(user);
@@ -125,11 +111,13 @@ inline bool handOverSyncWait(
 /// `std::opt::algebra neutral_only=true`. The algebraic laws themselves are the rules library's
 /// (`rules::simplify`, registered as `std::opt::algebra`); this residual exists only because the
 /// library has no neutral-only mode, and does nothing without `neutralOnly`.
-size_t algebraDraft(camel::runtime::GraphTransaction &transaction, bool safeFp = false, bool neutralOnly = false);
+size_t algebraDraft(
+    camel::runtime::GraphTransaction &transaction, bool safeFp = false, bool neutralOnly = false);
 
 /// Bypass a non-anchor forwarding gate by putting its waits on mandatory consumers.
 /// Conditional value consumers and costly shared barriers stay gates; edgeBudget bounds growth.
-bool bypassValueGate(camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget);
+bool bypassValueGate(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t &edgeBudget);
 
 /// URI of an OPER node, or an empty view for other nodes. For messages: passes recognise an
 /// operator by operIdOf.
@@ -182,7 +170,8 @@ bool isDeadWhenUnread(const camel::runtime::GraphTransaction &transaction, gc_no
 bool isReplaceable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /// True when `to` is reachable from `from` along value or control edges (to is downstream).
-bool reaches(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t from, gc_node_ref_t to);
+bool reaches(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t from, gc_node_ref_t to);
 
 /**
  * The ordered nodes `id`'s value is computed from: walking up its value inputs, and the control
@@ -191,7 +180,8 @@ bool reaches(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
  * alone, which replacing `id` by a constant, or inlining a call that ignores an argument,
  * removes.
  */
-std::vector<gc_node_ref_t> orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
+std::vector<gc_node_ref_t>
+orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /**
  * True when nothing the value of `id` is computed from reads a slot the program writes: walking up
@@ -260,7 +250,11 @@ gc_node_ref_t keepThroughValue(
  * cycle (predecessors run before `id`, which runs before its users). The caller must ensure
  * `replacement` is not downstream of `id` (see reaches()).
  */
-void replaceNode(camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement);
+void replaceNode(
+    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement);
+
+/// Removes chain GATEs left with no value user, no sync successor, and no block result.
+size_t eraseOrphanedChainGates(camel::runtime::GraphTransaction &transaction);
 
 /**
  * The graphs the passes of one run found nothing to rewrite in. What a pass of this file does to
@@ -300,7 +294,8 @@ bool mayReduceOrder(const camel::runtime::GCGraph &graph);
  */
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
-    std::string_view passName, const std::function<size_t(camel::runtime::GraphTransaction &)> &rewrite,
+    std::string_view passName,
+    const std::function<size_t(camel::runtime::GraphTransaction &)> &rewrite,
     size_t *rewrites = nullptr, RewriteMemo *memo = nullptr,
     bool (*mayRewrite)(const camel::runtime::GCGraph &) = nullptr, bool checkScreens = false);
 

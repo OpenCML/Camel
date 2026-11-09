@@ -198,11 +198,11 @@ expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/kee
 # order edge is left to lean on, not a chain place.
 [[tests]]
 name = "keep_shapes.real_pipeline"
-desc = "The optimizer's own rewrite: `std::opt` over an existing effect case writes two `:op/keep` nodes, neither of them for a node with a chain place, and the program still prints what it printed."
+desc = "The optimizer's own rewrite: the pure subtraction leaves the chain, while the print it contains stays reached through the block's GATE. No redundant `:op/keep` is needed, and the program still prints what it printed."
 case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
 args = ["${case}", "std::opt", "test::keepinspect", "${backend}"]
 expect_exit = 7
-expect_stdout_exact = "KEEPSPOTS keeps=2 in_chain=0 out_of_chain=2 waited=0\n5\n"
+expect_stdout_exact = "KEEPSPOTS keeps=0 in_chain=0 out_of_chain=0 waited=0\n5\n"
 
 [[tests]]
 name = "keep_shapes.no_order_edge"
@@ -212,28 +212,15 @@ args = ["${case}", "test::keepshape", "test::keepinspect", "${backend}"]
 expect_exit = 99
 expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
 
-# "Is an operator the passes write still reachable?" is a number, and the number is pinned by name
-# for the whole family: `:op/keep` over `test/cases/opt/effects` (four cases, two nodes each),
-# `:enum/tag` and `:enum/field` over `test/cases/opt/defun`, and `:enum/make` pinned to zero because
-# no case reaches that path of the defunctionalizer today -- an empty set with an owner, so a case
-# that starts holding one is a red line and not a surprise. One more case means a rule started
-# writing the operator, one fewer means a rule stopped, and the names are what says which.
-#
-# The fourth `:op/keep` case, `inline_reduce_in_folded_arm.cml`, is the one the reading in
-# `check.mjs` explains: `std::opt` prunes the branch and removes the last use of the
-# `:mark/reduce_arr` node the inlined `sum` computed, so the removal hands that use to `:op/keep`
-# (its only input is that effect, its only reader the block's GATE). It arrived with the conversion
-# registration (`dae15cc28`), measured by counting `:op/keep` in `std::opt std::jgir` at five
-# commits: 0 at `76f910062`, 0 at `9e00900e1`, 0 at `bd975f57d`, 2 at `dae15cc28`, 2 at `78a012c65`.
-#
-# The assertion names the numerator only (`cases=4 nodes=8`) while the reading prints the
-# denominator too (`of 9`, `of 10`). The denominator is every case of the corpus directory, so it
-# moves whenever anyone adds one there -- the merged tree reads `of 6` for `opt/effects` because
-# another lane put a case in the same directory -- and a red on it would say nothing about the
-# passes. The population may grow; the finding is what may not move.
+# "Is an operator the passes write still reachable?" is a number pinned by name: `:op/keep` over
+# `test/cases/opt/effects` (two cases, two nodes each), `:enum/tag` and `:enum/field` over
+# `test/cases/opt/defun`, and `:enum/make` pinned to zero. A case whose effects the statement chain
+# already reaches needs no redundant keeper; that is not the same as losing an effect credential.
+# One more case means a rule started writing the operator, one fewer means a rule stopped.
+# The denominator is the whole corpus and may grow; the finding is what may not move.
 [[tests]]
 name = "pass_written.inventory"
-desc = "The operators the passes write, counted by case and pinned by name: `:op/keep` (four of the effect cases), `:enum/tag` and `:enum/field` (six and four of the defun cases), and `:enum/make` pinned to zero with the writer it would have."
+desc = "The operators the passes write, counted by case and pinned by name: `:op/keep` (two of the effect cases), `:enum/tag` and `:enum/field` (six and four of the defun cases), and `:enum/make` pinned to zero with the writer it would have."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/opt/pass_written/check.mjs"
@@ -241,7 +228,7 @@ args = ["${case}"]
 # One run: the check runs the binary itself over the cases it names.
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["[FAMILY] :op/keep cases=4 nodes=8", "[FAMILY] :enum/tag cases=6 nodes=6", "[FAMILY] :enum/field cases=4 nodes=5", "[FAMILY] :enum/make cases=0 nodes=0", "[FAMILY] ok"]
+expect_stdout_contains = ["[FAMILY] :op/keep cases=2 nodes=4", "[FAMILY] :enum/tag cases=6 nodes=6", "[FAMILY] :enum/field cases=4 nodes=5", "[FAMILY] :enum/make cases=0 nodes=0", "[FAMILY] ok"]
 expect_output_not_contains = ["[FAMILY] RED"]
 timeout_ms = 300000
 # The three dumps of the same graph, read for content and not for "it did not crash". Before the

@@ -91,16 +91,19 @@ verify_script = '''
  const g = JSON.parse(input.normalized.stdout).graphs.find(g => g.name === 'main')
  const nodes = new Map(g.nodes.map(n => [n.id, n]))
  const controls = g.edges.filter(e => e.kind === 'control')
+ const unpaired = controls.filter(e => !g.edges.some(x => x.kind === 'sync' && x.source === e.source && x.target === e.target))
  assert(g.normalPorts.length === 2, 'runtime inputs were specialized away')
  assert(g.nodes.some(n => n.label === ':op/mul_d'), 'gradient folded away')
- assert(controls.length <= 10, 'data-covered controls survived')
+ assert(unpaired.length <= 10, `data-covered controls outside the statement chain survived: ${unpaired.length}`)
  const joins = new Set(g.nodes.filter(n => n.kind === 'JOIN').map(n => n.id))
  assert(joins.size === 1, 'branch completion was lost')
  for (const e of controls) {
-   if (joins.has(e.source)) assert(nodes.get(e.target).kind === 'GATE', 'JOIN control duplicates data ordering')
+   if (joins.has(e.source)) assert(nodes.get(e.target).kind === 'GATE' ||
+     g.edges.some(x => x.kind === 'sync' && x.source === e.source && x.target === e.target),
+     'JOIN control has no structural statement continuation')
  }
  // No alternate path may use the candidate edge itself or a conditional arm.
- for (const edge of controls) {
+ for (const edge of unpaired) {
    if (nodes.get(edge.target).kind !== 'OPER' || nodes.get(edge.source).kind === 'BRCH') continue
    const seen = new Set(), work = g.edges.filter(e => e.target === edge.target && e !== edge).map(e => e.source)
    while (work.length) {

@@ -23,10 +23,11 @@
 #include <atomic>
 #include <cstdlib>
 #include <cstring>
+#include <format>
 #include <limits>
 #include <ranges>
-#include <format>
 #include <stdexcept>
+#include <unordered_set>
 
 namespace camel::runtime {
 
@@ -128,24 +129,24 @@ void initializeNodeStorage(
     GraphDraft *owner, DraftNode *draftNode, gc_node_ref_t id, const DraftNodeInit &init,
     DraftNodeStorageClass storageClass, uint32_t capacityBytes) {
     ASSERT(draftNode != nullptr, "Draft node storage initialization requires a non-null node.");
-    draftNode->header.owner        = owner;
-    draftNode->header.selfId       = id;
-    draftNode->header.dataIndex    = init.dataIndex;
-    draftNode->header.payloadBytes = static_cast<uint32_t>(init.payload.size_bytes());
-    draftNode->header.capacityBytes  = capacityBytes;
-    draftNode->header.dataType       = init.dataType;
-    draftNode->header.normInputCount = static_cast<gc_cnt_t>(init.normInputs.size());
-    draftNode->header.withInputCount = static_cast<gc_cnt_t>(init.withInputs.size());
+    draftNode->header.owner           = owner;
+    draftNode->header.selfId          = id;
+    draftNode->header.dataIndex       = init.dataIndex;
+    draftNode->header.payloadBytes    = static_cast<uint32_t>(init.payload.size_bytes());
+    draftNode->header.capacityBytes   = capacityBytes;
+    draftNode->header.dataType        = init.dataType;
+    draftNode->header.normInputCount  = static_cast<gc_cnt_t>(init.normInputs.size());
+    draftNode->header.withInputCount  = static_cast<gc_cnt_t>(init.withInputs.size());
     draftNode->header.ctrlInputCount  = static_cast<gc_cnt_t>(init.ctrlInputs.size());
     draftNode->header.orderInputCount = static_cast<gc_cnt_t>(init.orderInputs.size());
     draftNode->header.syncInputCount  = static_cast<gc_cnt_t>(init.syncInputs.size());
-    draftNode->header.kind           = init.kind;
-    draftNode->header.runtimeFlags   = init.runtimeFlags;
-    draftNode->header.origin         = init.origin;
-    draftNode->header.permissions    = init.permissions;
-    draftNode->header.attrs          = init.attrs;
-    draftNode->header.name           = init.name;
-    draftNode->header.storageCls     = storageClass;
+    draftNode->header.kind            = init.kind;
+    draftNode->header.runtimeFlags    = init.runtimeFlags;
+    draftNode->header.origin          = init.origin;
+    draftNode->header.permissions     = init.permissions;
+    draftNode->header.attrs           = init.attrs;
+    draftNode->header.name            = init.name;
+    draftNode->header.storageCls      = storageClass;
 
     if (capacityBytes != 0) {
         ASSERT(draftNode->tail != nullptr, "Draft node storage requires a tail allocation.");
@@ -280,16 +281,18 @@ std::span<const gc_node_ref_t> &initSlot(DraftNodeInit &init, DraftEdgeSlot slot
 std::span<std::byte> DraftNodeView::payload(DraftNode *node) {
     GUARD(
         node != nullptr,
-        std::string("taking the payload view of a null draft node: there is no header to say how many "
-                    "payload bytes it has"));
+        std::string(
+            "taking the payload view of a null draft node: there is no header to say how many "
+            "payload bytes it has"));
     return {tailBytes(node), node->header.payloadBytes};
 }
 
 std::span<const std::byte> DraftNodeView::payload(const DraftNode *node) {
     GUARD(
         node != nullptr,
-        std::string("taking the payload view of a null draft node: there is no header to say how many "
-                    "payload bytes it has"));
+        std::string(
+            "taking the payload view of a null draft node: there is no header to say how many "
+            "payload bytes it has"));
     return {tailBytes(node), node->header.payloadBytes};
 }
 
@@ -587,8 +590,9 @@ std::span<const gc_node_ref_t> GraphDraft::dataPortsOf(const DraftNode *nodePtr)
     }
     // The ports are stored normal first, context second, and are contiguous: the frozen graph
     // stores one data run with the same role boundary (GCNode::inBegin .. withBegin .. ctrlBegin).
-    const auto all = edgeSpan(slotBase(nodePtr), nodePtr->header.normInputCount +
-                                                    nodePtr->header.withInputCount);
+    const auto all = edgeSpan(
+        slotBase(nodePtr),
+        nodePtr->header.normInputCount + nodePtr->header.withInputCount);
     ASSERT(all.data() == ports.data(), "The data port runs of a draft node are not contiguous.");
     (void)ports;
     return all;
@@ -798,7 +802,8 @@ gc_node_ref_t GraphDraft::translateNodeRef(
     GUARD(
         sourceRef < sourceToDraft.size(),
         std::format(
-            "translating source node {} of a graph being decoded, but the map built from that graph "
+            "translating source node {} of a graph being decoded, but the map built from that "
+            "graph "
             "covers only {} of its nodes",
             sourceRef,
             sourceToDraft.size()));
@@ -838,9 +843,9 @@ DraftNode *GraphDraft::createDecodedNode(
             "(its kind and inputs are being read)",
             sourceRef));
 
-    const auto normInputs  = graph->normInputsOf(sourceRef);
-    const auto withInputs  = graph->withInputsOf(sourceRef);
-    const auto ctrlInputs  = graph->ctrlInputsOf(sourceRef);
+    const auto normInputs = graph->normInputsOf(sourceRef);
+    const auto withInputs = graph->withInputsOf(sourceRef);
+    const auto ctrlInputs = graph->ctrlInputsOf(sourceRef);
 
     // Order edges are a side array of the graph (GCGraph::orderPredsOf); a draft holds them in
     // the tail of the user, like its other predecessors.
@@ -926,15 +931,15 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
         "Decode begin for graph '{}' with {} nodes.",
         graph->name(),
         graph->nodeCount());
-    auto draft       = std::make_unique<GraphDraft>();
-    draft->id_       = graph->id();
+    auto draft                     = std::make_unique<GraphDraft>();
+    draft->id_                     = graph->id();
     draft->outerGraphId_           = graph->outerGraphId();
     draft->program_                = &program;
     draft->typeSpecializationRoot_ = graph->typeSpecializationRoot();
     draft->flags_                  = graph->flags();
     draft->implKernelUri_          = graph->implKernelUri();
     draft->declarationFacts_       = graph->declarationFacts();
-    draft->funcType_ = graph->funcType();
+    draft->funcType_               = graph->funcType();
     draft->captureNames_.assign(graph->captureNames().begin(), graph->captureNames().end());
     if (const auto *layout = graph->runtimeDataType()) {
         draft->setRuntimeSlotTypes(layout->types());
@@ -966,12 +971,13 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
     draft->base_    = graph;
     for (gc_node_ref_t sourceRef = 0; sourceRef < graph->nodeCount(); ++sourceRef) {
         GUARD(
-        sourceRef < sourceToDraft.size(),
-        std::format(
-            "decoding source node {} into the draft, but the map being filled covers only {} nodes: "
-            "the graph grew while it was being decoded",
-            sourceRef,
-            sourceToDraft.size()));
+            sourceRef < sourceToDraft.size(),
+            std::format(
+                "decoding source node {} into the draft, but the map being filled covers only {} "
+                "nodes: "
+                "the graph grew while it was being decoded",
+                sourceRef,
+                sourceToDraft.size()));
         const gc_node_ref_t draftId = static_cast<gc_node_ref_t>(draft->nodesById_.size());
         sourceToDraft[sourceRef]    = draftId;
         draft->draftIdsBySourceRef_[sourceRef] = draftId;
@@ -991,7 +997,9 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
             static_cast<int>((*it)->kind));
         draft->nodesById_[draftId] = draft->createDecodedNode(graph, sourceRef, sourceToDraft);
         // The users of a node are those the frozen graph's use index lists, in its order.
-        const auto decodeUsers = [&](DraftEdgeKind kind, std::span<const gc_node_ref_t> users,
+        const auto decodeUsers = [&](DraftEdgeKind kind,
+                                     std::span<const gc_node_ref_t>
+                                         users,
                                      PortRole role = PortRole::Normal) {
             if (users.empty()) {
                 return;
@@ -1043,14 +1051,15 @@ std::unique_ptr<GraphDraft> GraphDraft::decode(const Program &program, const GCG
 
     // The regions, with their node references in the draft's numbering.
     if (graph->regionCount() != 0) {
-        draft->regions_.assign(graph->nodePayload()->regionTable,
-                               graph->nodePayload()->regionTable + graph->regionCount());
+        draft->regions_.assign(
+            graph->nodePayload()->regionTable,
+            graph->nodePayload()->regionTable + graph->regionCount());
         for (GCRegion &region : draft->regions_) {
             region.owner    = translateNodeRef(region.owner, sourceToDraft);
             region.result   = translateNodeRef(region.result, sourceToDraft);
             region.callSite = translateNodeRef(region.callSite, sourceToDraft);
         }
-        const auto* ports = graph->nodePayload()->regionPorts;
+        const auto *ports = graph->nodePayload()->regionPorts;
         for (size_t i = 0; i < graph->nodePayload()->regionPortCount; ++i) {
             draft->regionPorts_.push_back(translateNodeRef(ports[i], sourceToDraft));
         }
@@ -1093,7 +1102,9 @@ DraftNode *GraphDraft::rebuildNode(gc_node_ref_t id, const DraftNodeInit &init) 
         std::vector<gc_node_ref_t> normInputsCopy(init.normInputs.begin(), init.normInputs.end());
         std::vector<gc_node_ref_t> withInputsCopy(init.withInputs.begin(), init.withInputs.end());
         std::vector<gc_node_ref_t> ctrlInputsCopy(init.ctrlInputs.begin(), init.ctrlInputs.end());
-        std::vector<gc_node_ref_t> orderInputsCopy(init.orderInputs.begin(), init.orderInputs.end());
+        std::vector<gc_node_ref_t> orderInputsCopy(
+            init.orderInputs.begin(),
+            init.orderInputs.end());
         std::vector<gc_node_ref_t> syncInputsCopy(init.syncInputs.begin(), init.syncInputs.end());
         DraftNodeInit copiedInit{
             .dataIndex    = init.dataIndex,
@@ -1166,7 +1177,7 @@ void GraphDraft::removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdge
         return;
     }
     DraftUserLists &lists = *users_[id];
-    const auto eraseOne = [&](DraftEdgeSlot which) {
+    const auto eraseOne   = [&](DraftEdgeSlot which) {
         auto &items = lists.of(which);
         if (auto *place = lists.index(which)) {
             const auto found = place->find(userId);
@@ -1176,8 +1187,8 @@ void GraphDraft::removeUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdge
             const uint32_t at = found->second;
             place->erase(found);
             if (at + 1 != items.size()) {
-                items[at]              = items.back();
-                (*place)[items[at]]    = at;
+                items[at]           = items.back();
+                (*place)[items[at]] = at;
             }
             items.pop_back();
             return;
@@ -1198,7 +1209,7 @@ void GraphDraft::appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdge
     }
     inheritRegion(id, userId);
     const auto appendUnique = [&](DraftEdgeSlot which) {
-        auto &items = userListOf(id, which);
+        auto &items           = userListOf(id, which);
         DraftUserLists &lists = *users_[id];
         if (!items.empty() && items.back() == userId) {
             return;
@@ -1249,11 +1260,18 @@ camel::core::sem::PermissionMask GraphDraft::nodePermissions(gc_node_ref_t id) c
     return h ? h->permissions : 0;
 }
 
-void GraphDraft::setNodePermissions(gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
+void GraphDraft::setNodePermissions(
+    gc_node_ref_t id, camel::core::sem::PermissionMask permissions) {
     requireOneWriting("setNodePermissions");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set the permissions of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set the permissions of draft node {}, which this graph does not have (it holds {} "
+            "nodes)",
+            id,
+            nodesById_.size()));
     draftNode->header.permissions = permissions;
 }
 
@@ -1265,7 +1283,13 @@ uint32_t GraphDraft::nodeAttrs(gc_node_ref_t id) const {
 void GraphDraft::setNodeAttrs(gc_node_ref_t id, uint32_t attrs) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set the attributes of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set the attributes of draft node {}, which this graph does not have (it holds {} "
+            "nodes)",
+            id,
+            nodesById_.size()));
     draftNode->header.attrs = attrs;
 }
 
@@ -1277,14 +1301,24 @@ uint32_t GraphDraft::nodeName(gc_node_ref_t id) const {
 void GraphDraft::setNodeName(gc_node_ref_t id, uint32_t name) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set the name of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set the name of draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     draftNode->header.name = name;
 }
 
 void GraphDraft::setNodeOrigin(gc_node_ref_t id, uint64_t origin) {
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set the origin of draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set the origin of draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     draftNode->header.origin = origin;
 }
 
@@ -1297,7 +1331,7 @@ gc_node_ref_t GraphDraft::addNode(const DraftNodeInit &init) {
     touchRefs();
     nodesById_.push_back(rebuildNode(id, init));
     // Constants and ports are not executed: they belong to the body, whatever arm is being written.
-    const bool bodyKind = init.kind == GCNodeKind::Data || init.kind == GCNodeKind::Port;
+    const bool bodyKind           = init.kind == GCNodeKind::Data || init.kind == GCNodeKind::Port;
     nodesById_[id]->header.region = init.region != 0 ? init.region : bodyKind ? 0 : insertRegion_;
     sourceRefsById_.push_back(kInvalidNodeRef);
     noteNodeKind(id, init.kind);
@@ -1358,8 +1392,8 @@ void GraphDraft::appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_n
     // `slotOffset` is in bytes; `base` counts entries, and so does the memmove below. The new
     // entry goes after the ones the run already holds: a run keeps the order it was written in
     // (`(x, x)` and the port order of a call both depend on it).
-    const size_t at = (slotOffset(h, slot) - h.payloadBytes) / sizeof(gc_node_ref_t) +
-                      static_cast<size_t>(slotCount(h, slot));
+    const size_t at    = (slotOffset(h, slot) - h.payloadBytes) / sizeof(gc_node_ref_t) +
+                         static_cast<size_t>(slotCount(h, slot));
     const size_t total = static_cast<size_t>(h.normInputCount) + h.withInputCount +
                          h.ctrlInputCount + h.orderInputCount + h.syncInputCount;
     std::memmove(base + at + 1, base + at, (total - at) * sizeof(gc_node_ref_t));
@@ -1396,6 +1430,63 @@ bool sameSyncBlock(const GraphDraft &draft, gc_node_ref_t a, gc_node_ref_t b) {
     return statementRegionOf(draft, a) == statementRegionOf(draft, b);
 }
 
+namespace {
+
+struct ChainPlaceEnds {
+    gc_node_ref_t entry = kInvalidNodeRef;
+    gc_node_ref_t exit  = kInvalidNodeRef;
+};
+
+ChainPlaceEnds prepareChainPlace(
+    GraphDraft &draft, gc_node_ref_t replacement, std::span<const gc_node_ref_t> preds,
+    std::span<const gc_node_ref_t> users);
+
+bool reachesBlockValue(const GraphDraft &draft, gc_node_ref_t id) {
+    const auto isOwnBlockValue = [&](gc_node_ref_t current) {
+        const uint32_t actual = statementRegionOf(draft, current);
+        if (actual == 0 && (draft.exitNode() == current || draft.outputNode() == current ||
+                            draft.returnNode() == current)) {
+            return true;
+        }
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            const GCRegion &record = draft.region(region);
+            if (record.kind == GCRegionKind::Dead || record.result != current) {
+                continue;
+            }
+            uint32_t block = region;
+            while (block != 0 && draft.region(block).kind == GCRegionKind::Inline) {
+                block = draft.region(block).parent;
+            }
+            if (block == actual) {
+                return true;
+            }
+        }
+        return false;
+    };
+    std::vector<gc_node_ref_t> work{id};
+    std::unordered_set<gc_node_ref_t> seen;
+    while (!work.empty()) {
+        const gc_node_ref_t current = work.back();
+        work.pop_back();
+        if (!seen.insert(current).second || !draft.alive(current)) {
+            continue;
+        }
+        if (isOwnBlockValue(current)) {
+            return true;
+        }
+        for (auto users : {draft.normUsersOf(current), draft.withUsersOf(current)}) {
+            work.insert(work.end(), users.begin(), users.end());
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+bool GraphDraft::chainReachesBlockValue(gc_node_ref_t id) const {
+    return reachesBlockValue(*this, id);
+}
+
 void GraphDraft::closeChainOver(gc_node_ref_t id) {
     requireOneWriting("closeChainOver");
     ++mutations_;
@@ -1408,6 +1499,10 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // cannot either: an ordering joins two statements of one block, so the successor heads its own
     // block's chain instead (docs/design/effects/edges.cn.md 4.6).
     const auto survives = [&](gc_node_ref_t pred, gc_node_ref_t user) {
+        pred = chainExitOf(*this, pred);
+        if (header(id)->kind == GCNodeKind::Join && chainEntryOf(*this, id) == pred) {
+            return false;
+        }
         return pred != user && pred != id && alive(pred) && nodeRegion(pred) == nodeRegion(user);
     };
     // While the control kind still exists it names the same pair beside the sync edge: the two
@@ -1425,27 +1520,44 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
         if (user == id || !alive(user)) {
             continue;
         }
-// A sync edge joins two statements of one block, so a predecessor of the node this chain
-        // closes over that belongs to another block cannot become the successor's predecessor: the
-        // successor heads its own block's chain instead (docs/design/effects/edges.cn.md 4.6). The
-        // code a splice moved into this block (the body of an inlined call) is a statement of it
-        // (section 5.7), so the region a node was annotated with is looked through and the block a
-        // statement is written in is what decides (statementRegionOf). The node the chain closes
-        // over, and the user itself, are no predecessors of the user either.
+        // A predecessor in another block cannot become this successor's predecessor. A splice
+        // makes the inlined body a statement of the caller's block, so the structural statement
+        // region decides rather than the annotation on the node (edges.cn.md 4.6 and 5.7).
         std::vector<gc_node_ref_t> kept;
         for (gc_node_ref_t pred : syncInputs) {
+            pred = chainExitOf(*this, pred);
+            if (header(id)->kind == GCNodeKind::Join && chainEntryOf(*this, id) == pred) {
+                continue;
+            }
             if (pred != user && pred != id && alive(pred) && sameSyncBlock(*this, pred, user)) {
                 kept.push_back(pred);
             }
         }
-        setSyncInputs(user, kept);
-        // The control edge names the same pair beside the sync edge: every consumer of the chain
-        // that reads only that kind has to keep reading it, and the seal check reads the sync edge
-        // back against the control one (src/runtime/graph_edges.cpp, `checkSyncEdges`). The edge is
-        // written rather than inferred, because the path through the node this chain closes over is
-        // the one about to disappear.
+        setSyncInputs(user, {});
+        if (kept.empty()) {
+            continue;
+        }
+        const std::vector<gc_node_ref_t> following(
+            syncUsersOf(user).begin(),
+            syncUsersOf(user).end());
+        const ChainPlaceEnds place  = prepareChainPlace(*this, user, kept, following);
+        const DraftNodeHeader *exit = header(place.exit);
+        if (exit == nullptr) {
+            continue;
+        }
+        const bool canEnd =
+            (isChainStatement(*this, place.entry) || isChainExit(*this, place.exit)) &&
+            (exit->kind != GCNodeKind::Gate || !syncUsersOf(place.exit).empty() ||
+             reachesBlockValue(*this, place.exit));
+        if (!canEnd) {
+            continue;
+        }
         for (gc_node_ref_t pred : kept) {
-            nameControlPair(user, pred);
+            if (syncInputsOf(place.entry).empty()) {
+                const gc_node_ref_t only[1] = {pred};
+                setSyncInputs(place.entry, only);
+            }
+            nameControlPair(place.entry, pred);
         }
     }
     // An ordering is not lost when the node that carried it goes: what the node this chain closes
@@ -1453,8 +1565,8 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     // it, and the shortcut beside the path the graph already had (`pred -> id -> user`). That is
     // the design's rule for deleting a node, which reconnects the order edges through it
     // (docs/design/effects/edges.cn.md 4: `A -> B -> C` keeps `A -> C` once `B` goes). It is
-    // written in the control kind, which carries no `sync` statement mark of its own and is what
-    // the paths that have not moved onto the sync edge yet write a wait in. A node that keeps a
+    // written in the control kind for the paths that have not moved onto the sync edge yet. A node
+    // that keeps a
     // wait of its own is left alone. A GATE is what this was first needed for: the commit refuses
     // one that waits for nothing (src/runtime/graph.cpp, the GATE check). What the node waited on
     // through neither kind -- a read of a `var` reads its writer through the data port alone -- is
@@ -1496,24 +1608,132 @@ void GraphDraft::closeChainOver(gc_node_ref_t id) {
     }
 }
 
+namespace {
+
+ChainPlaceEnds prepareChainPlace(
+    GraphDraft &draft, gc_node_ref_t replacement, std::span<const gc_node_ref_t> preds,
+    std::span<const gc_node_ref_t> users) {
+    gc_node_ref_t entry  = chainEntryOf(draft, replacement);
+    gc_node_ref_t exit   = chainExitOf(draft, replacement);
+    const bool statement = isChainStatement(draft, entry) || isChainExit(draft, exit);
+    const bool hasPreds =
+        std::ranges::any_of(
+            preds,
+            [&](gc_node_ref_t pred) { return pred != replacement && pred != entry; }) ||
+        !draft.syncInputsOf(entry).empty();
+    // A pure replacement may reach the block's value through data rather than another sync edge.
+    // It then needs a GATE to carry the chain to that value instead of ending on the pure node.
+    const bool hasUsers =
+        !users.empty() || !draft.syncUsersOf(exit).empty() || reachesBlockValue(draft, replacement);
+    if (statement || !hasPreds || !hasUsers) {
+        return {entry, exit};
+    }
+
+    const DraftNodeHeader *value = draft.header(replacement);
+    GUARD(value != nullptr, "A chain place requires a live replacement value.");
+    const gc_node_ref_t gate = draft.addNode(
+        DraftNodeInit{
+            .dataIndex  = value->dataIndex,
+            .dataType   = value->dataType,
+            .kind       = GCNodeKind::Gate,
+            .region     = draft.nodeRegion(replacement),
+            .normInputs = std::span<const gc_node_ref_t>(&replacement, 1),
+        });
+    const std::vector<gc_node_ref_t> oldPreds(
+        draft.syncInputsOf(entry).begin(),
+        draft.syncInputsOf(entry).end());
+    if (!oldPreds.empty()) {
+        draft.setSyncInputs(gate, oldPreds);
+        draft.setSyncInputs(entry, {});
+    }
+    const std::vector<gc_node_ref_t> oldUsers(
+        draft.syncUsersOf(exit).begin(),
+        draft.syncUsersOf(exit).end());
+    for (gc_node_ref_t user : oldUsers) {
+        const gc_node_ref_t only[1] = {gate};
+        draft.setSyncInputs(user, only);
+    }
+    return {gate, gate};
+}
+
+} // namespace
+
+size_t GraphDraft::normalizeChainPlaces() {
+    requireOneWriting("normalizeChainPlaces");
+    size_t made             = 0;
+    const gc_node_ref_t end = static_cast<gc_node_ref_t>(nodeSlotCount());
+    for (gc_node_ref_t id = 0; id < end; ++id) {
+        if (!alive(id) || isChainStatement(*this, id) || isChainExit(*this, id) ||
+            syncInputsOf(id).empty() || syncUsersOf(id).empty()) {
+            continue;
+        }
+        const std::vector<gc_node_ref_t> predecessors(
+            syncInputsOf(id).begin(),
+            syncInputsOf(id).end());
+        const std::vector<gc_node_ref_t> users(syncUsersOf(id).begin(), syncUsersOf(id).end());
+        const auto otherBlock = [&](gc_node_ref_t other) {
+            return !sameSyncBlock(*this, id, other);
+        };
+        if (std::ranges::any_of(predecessors, otherBlock) ||
+            std::ranges::any_of(users, otherBlock)) {
+            continue;
+        }
+        const ChainPlaceEnds place = prepareChainPlace(*this, id, predecessors, users);
+        if (place.entry == id || place.entry != place.exit) {
+            continue;
+        }
+        for (gc_node_ref_t pred : predecessors) {
+            appendControlEdge(place.entry, pred);
+        }
+        for (gc_node_ref_t user : users) {
+            appendControlEdge(user, place.exit);
+        }
+        ++made;
+    }
+    made += eraseOrphanedChainGates();
+    mutations_ += made;
+    return made;
+}
+
+gc_node_ref_t GraphDraft::appendChainStatement(gc_node_ref_t id, gc_node_ref_t predecessor) {
+    requireOneWriting("appendChainStatement");
+    if (id == predecessor || id == chainExitOf(*this, predecessor) || !alive(id) ||
+        !alive(predecessor) || !syncInputsOf(id).empty()) {
+        return kInvalidNodeRef;
+    }
+    ++mutations_;
+    const gc_node_ref_t entry = chainEntryOf(*this, predecessor);
+    const std::vector<gc_node_ref_t> preds(syncInputsOf(entry).begin(), syncInputsOf(entry).end());
+    const gc_node_ref_t users[1] = {id};
+    const ChainPlaceEnds place   = prepareChainPlace(*this, predecessor, preds, users);
+    if (!syncUsersOf(place.exit).empty()) {
+        return kInvalidNodeRef;
+    }
+    const gc_node_ref_t only[1] = {place.exit};
+    setSyncInputs(id, only);
+    const auto ctrl = ctrlInputsOf(id);
+    if (std::ranges::find(ctrl, place.exit) == ctrl.end()) {
+        appendControlEdge(id, place.exit);
+    }
+    return place.exit;
+}
+
 void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how) {
     requireOneWriting("handChainPlaceTo");
     if (id == tail || node(id) == nullptr || node(tail) == nullptr) {
         return;
     }
     ++mutations_;
-    const std::vector<gc_node_ref_t> preds(syncInputsOf(id).begin(), syncInputsOf(id).end());
-    const std::vector<gc_node_ref_t> users(syncUsersOf(id).begin(), syncUsersOf(id).end());
-    const auto markStatement = [&](gc_node_ref_t n) {
-        const DraftNodeHeader *h = header(n);
-        if (h != nullptr) {
-            setNodeRuntimeFlags(
-                n, static_cast<uint8_t>(h->runtimeFlags | kGCNodeFlagSyncStatement));
-        }
-    };
-    const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
-        markStatement(user);
-        markStatement(pred);
+    const gc_node_ref_t oldEntry = chainEntryOf(*this, id);
+    const gc_node_ref_t oldExit  = chainExitOf(*this, id);
+    const std::vector<gc_node_ref_t> preds(
+        syncInputsOf(oldEntry).begin(),
+        syncInputsOf(oldEntry).end());
+    const std::vector<gc_node_ref_t> users(
+        syncUsersOf(oldExit).begin(),
+        syncUsersOf(oldExit).end());
+    const ChainPlaceEnds place = prepareChainPlace(*this, tail, preds, users);
+    const auto chainTo         = [&](gc_node_ref_t user, gc_node_ref_t pred) {
         const gc_node_ref_t only[1] = {pred};
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
@@ -1521,43 +1741,22 @@ void GraphDraft::handChainPlaceTo(gc_node_ref_t id, gc_node_ref_t tail, PlaceHan
             appendControlEdge(user, pred);
         }
     };
-    markStatement(tail);
-    // The statements written after `id` are written after the code that replaced it: they were
-    // waiting on the place `id` had, and that place is `tail`'s now. The edge is written in both
-    // kinds the ordering is carried as (src/runtime/graph_edges.cpp, `checkSyncEdges`).
-    //
-    // A sync edge joins two statements of one block (docs/design/effects/edges.cn.md 4.6), and the
-    // judgement of whether these two are in one block is about the graph as it is committed, not
-    // about the regions of the draft half way through the rewrite. A caller that keeps the replacing
-    // code's block -- an inlined body, whose last statement may sit inside a branch arm -- leaves the
-    // statement written after `id` in another block, and that statement does not run whenever a
-    // statement of the arm runs (src/runtime/branch_arms.cpp refuses exactly that graph). It heads
-    // its own block's chain instead, the sentence `closeChainOver` above applies to a predecessor of
-    // another block, and what still orders it against the arm's code is the order edge the splice
-    // wrote beside the call (src/runtime/draft_inline.cpp, `addSpliceOrderEdges`) plus the control
-    // edge it already carries. A caller that dissolves the block in the same rewrite says so
-    // (`PlaceHandover::DissolvedIntoIdsBlock`) and the place is handed over as it reads: by the time
-    // the graph is committed, `eraseNode` has re-parented the arm's regions and the two are one block.
     const bool keepsItsBlock = how == PlaceHandover::KeepsItsBlock;
     for (gc_node_ref_t user : users) {
-        if (user == tail || !alive(user)) {
+        if (user == place.exit || !alive(user)) {
             continue;
         }
-        if (!keepsItsBlock || sameSyncBlock(*this, user, tail)) {
-            chainTo(user, tail);
+        if (!keepsItsBlock || sameSyncBlock(*this, user, place.exit)) {
+            chainTo(user, place.exit);
             continue;
         }
         setSyncInputs(user, {});
     }
-    // The replacing code is entered from where `id` stood: with no chain of its own, `tail` heads
-    // the chain of the block it joined. A tail that already stands in a chain keeps its place, and a
-    // tail of another block than the predecessor heads its own block's chain instead (`id`'s place
-    // cannot enter a region from outside the block that holds it).
-    if (syncInputsOf(tail).empty()) {
+    if (syncInputsOf(place.entry).empty()) {
         for (gc_node_ref_t pred : preds) {
-            if (pred != tail && alive(pred) &&
-                (!keepsItsBlock || sameSyncBlock(*this, tail, pred))) {
-                chainTo(tail, pred);
+            if (pred != place.entry && alive(pred) &&
+                (!keepsItsBlock || sameSyncBlock(*this, place.entry, pred))) {
+                chainTo(place.entry, pred);
                 break;
             }
         }
@@ -1574,7 +1773,9 @@ void GraphDraft::replaceOrderEdgesAt(gc_node_ref_t oldId, gc_node_ref_t newId) {
     // What ordered the replaced node orders its replacer (docs/design/effects/edges.cn.md 4). An
     // ordering never leaves the region that holds it, so a predecessor of another region is not
     // moved; the replacer heads the ordering of its own region instead.
-    const std::vector<gc_node_ref_t> preds(orderInputsOf(oldId).begin(), orderInputsOf(oldId).end());
+    const std::vector<gc_node_ref_t> preds(
+        orderInputsOf(oldId).begin(),
+        orderInputsOf(oldId).end());
     for (gc_node_ref_t pred : preds) {
         if (pred == newId || !alive(pred) || nodeRegion(pred) != region) {
             continue;
@@ -1648,56 +1849,62 @@ void GraphDraft::takeStatementPlace(gc_node_ref_t oldId, gc_node_ref_t newId) {
     if (oldHeader == nullptr || newHeader == nullptr) {
         return;
     }
-    const bool sameRegion = nodeRegion(oldId) == nodeRegion(newId);
-    if (sameRegion) {
-        // The replaced node's order edges are part of what it hands over (docs/design/effects/
-        // edges.cn.md 4), whether or not it also stood in a `sync` block's chain.
-        replaceOrderEdgesAt(oldId, newId);
-    }
-    if ((oldHeader->runtimeFlags & kGCNodeFlagSyncStatement) == 0) {
-        // Nothing stood in a chain, so there is no chain place to take.
+    const bool sameRegion        = nodeRegion(oldId) == nodeRegion(newId);
+    const gc_node_ref_t oldEntry = chainEntryOf(*this, oldId);
+    const gc_node_ref_t oldExit  = chainExitOf(*this, oldId);
+    const std::vector<gc_node_ref_t> preds(
+        syncInputsOf(oldEntry).begin(),
+        syncInputsOf(oldEntry).end());
+    const std::vector<gc_node_ref_t> users(
+        syncUsersOf(oldExit).begin(),
+        syncUsersOf(oldExit).end());
+    if (preds.empty() && users.empty()) {
+        if (sameRegion) {
+            replaceOrderEdgesAt(oldId, newId);
+        }
         return;
     }
     if (!sameSyncBlock(*this, oldId, newId)) {
-        // The replacer is not a statement of the block the replaced one was written in: the chain
-        // closes over the replaced node instead (closeChainOver).
+        if (sameRegion) {
+            replaceOrderEdgesAt(oldId, newId);
+        }
         return;
     }
-    if (!syncInputsOf(newId).empty() || !syncUsersOf(newId).empty()) {
-        // A node already written somewhere in a chain keeps that place: moving a second one onto it
-        // would fork the chain.
+    if (!syncInputsOf(chainEntryOf(*this, newId)).empty() ||
+        !syncUsersOf(chainExitOf(*this, newId)).empty()) {
+        if (sameRegion) {
+            replaceOrderEdgesAt(oldId, newId);
+        }
         return;
     }
     ++mutations_;
-    // The replacer is the block's statement now (docs/design/effects/edges.cn.md 1.5): the seal
-    // check reads the flag back, and a sync edge may only join statements of the block
-    // (docs/design/effects/edges.cn.md 4.6).
-    setNodeRuntimeFlags(
-        newId, static_cast<uint8_t>(newHeader->runtimeFlags | kGCNodeFlagSyncStatement));
-    const std::vector<gc_node_ref_t> preds(syncInputsOf(oldId).begin(), syncInputsOf(oldId).end());
-    const std::vector<gc_node_ref_t> users(syncUsersOf(oldId).begin(), syncUsersOf(oldId).end());
+    const ChainPlaceEnds place = prepareChainPlace(*this, newId, preds, users);
+    if (sameRegion) {
+        replaceOrderEdgesAt(oldId, place.entry);
+    }
     std::vector<gc_node_ref_t> kept;
     for (gc_node_ref_t pred : preds) {
-        if (alive(pred) && nodeRegion(pred) == nodeRegion(newId)) {
+        if (alive(pred) && nodeRegion(pred) == nodeRegion(place.entry)) {
             kept.push_back(pred);
         }
     }
-    setSyncInputs(newId, kept);
+    setSyncInputs(place.entry, kept);
     for (gc_node_ref_t pred : kept) {
-        const auto ctrl = ctrlInputsOf(newId);
+        const auto ctrl = ctrlInputsOf(place.entry);
         if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-            appendControlEdge(newId, pred);
+            appendControlEdge(place.entry, pred);
         }
     }
     for (gc_node_ref_t user : users) {
-        if (user == newId || !alive(user) || !sameSyncBlock(*this, user, newId)) {
+        if (user == place.entry || user == place.exit || !alive(user) ||
+            !sameSyncBlock(*this, user, place.exit)) {
             continue;
         }
-        const gc_node_ref_t only[1] = {newId};
+        const gc_node_ref_t only[1] = {place.exit};
         setSyncInputs(user, only);
         const auto ctrl = ctrlInputsOf(user);
-        if (std::ranges::find(ctrl, newId) == ctrl.end()) {
-            appendControlEdge(user, newId);
+        if (std::ranges::find(ctrl, place.exit) == ctrl.end()) {
+            appendControlEdge(user, place.exit);
         }
     }
 }
@@ -1706,7 +1913,12 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     requireOneWriting("eraseNode");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("erase draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "erase draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     if (draftNode->header.kind == GCNodeKind::Brch || draftNode->header.kind == GCNodeKind::Loop) {
         dissolveRegionsOf(id);
     }
@@ -1714,16 +1926,16 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     const auto copy = [](std::span<const gc_node_ref_t> refs) {
         return std::vector<gc_node_ref_t>(refs.begin(), refs.end());
     };
-    const std::vector<gc_node_ref_t> normInputs = copy(DraftNodeView::normInputs(draftNode));
-    const std::vector<gc_node_ref_t> withInputs = copy(DraftNodeView::withInputs(draftNode));
-    const std::vector<gc_node_ref_t> ctrlInputs = copy(DraftNodeView::ctrlInputs(draftNode));
+    const std::vector<gc_node_ref_t> normInputs  = copy(DraftNodeView::normInputs(draftNode));
+    const std::vector<gc_node_ref_t> withInputs  = copy(DraftNodeView::withInputs(draftNode));
+    const std::vector<gc_node_ref_t> ctrlInputs  = copy(DraftNodeView::ctrlInputs(draftNode));
     const std::vector<gc_node_ref_t> orderInputs = copy(DraftNodeView::orderInputs(draftNode));
-    const std::vector<gc_node_ref_t> syncInputs = copy(DraftNodeView::syncInputs(draftNode));
-    const std::vector<gc_node_ref_t> normUsers  = copy(usersOf(id, DraftEdgeSlot::NormalPorts));
-    const std::vector<gc_node_ref_t> withUsers  = copy(usersOf(id, DraftEdgeSlot::ContextPorts));
-    const std::vector<gc_node_ref_t> ctrlUsers  = copy(usersOf(id, DraftEdgeSlot::Ctrl));
-    const std::vector<gc_node_ref_t> orderUsers = copy(usersOf(id, DraftEdgeSlot::Order));
-    const std::vector<gc_node_ref_t> syncUsers  = copy(usersOf(id, DraftEdgeSlot::Sync));
+    const std::vector<gc_node_ref_t> syncInputs  = copy(DraftNodeView::syncInputs(draftNode));
+    const std::vector<gc_node_ref_t> normUsers   = copy(usersOf(id, DraftEdgeSlot::NormalPorts));
+    const std::vector<gc_node_ref_t> withUsers   = copy(usersOf(id, DraftEdgeSlot::ContextPorts));
+    const std::vector<gc_node_ref_t> ctrlUsers   = copy(usersOf(id, DraftEdgeSlot::Ctrl));
+    const std::vector<gc_node_ref_t> orderUsers  = copy(usersOf(id, DraftEdgeSlot::Order));
+    const std::vector<gc_node_ref_t> syncUsers   = copy(usersOf(id, DraftEdgeSlot::Sync));
     // The block's chain closes over a statement the graph loses: its successors follow what it
     // followed, and the control edge naming the same pair is written beside the sync edge.
     closeChainOver(id);
@@ -1748,7 +1960,8 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     }
     // Whoever reads the node stops reading it, as often as it did. The lists of users are
     // kept in step with the inputs, so nothing else needs looking at.
-    const auto unlinkAll = [&](DraftEdgeKind kind, const std::vector<gc_node_ref_t> &users,
+    const auto unlinkAll = [&](DraftEdgeKind kind,
+                               const std::vector<gc_node_ref_t> &users,
                                PortRole role = PortRole::Normal) {
         for (gc_node_ref_t userId : users) {
             if (userId != id && alive(userId)) {
@@ -1788,7 +2001,12 @@ void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setNormInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set norm inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set norm inputs for draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
@@ -1806,7 +2024,12 @@ void GraphDraft::setWithInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setWithInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set with inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set with inputs for draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::withInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::ContextPorts);
     }
@@ -1824,7 +2047,12 @@ void GraphDraft::setCtrlInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setCtrlInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set ctrl inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set ctrl inputs for draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::ctrlInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::Ctrl);
     }
@@ -1842,7 +2070,13 @@ void GraphDraft::setOrderInputs(gc_node_ref_t id, std::span<const gc_node_ref_t>
     requireOneWriting("setOrderInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set order inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set order inputs for draft node {}, which this graph does not have (it holds {} "
+            "nodes)",
+            id,
+            nodesById_.size()));
     for (gc_node_ref_t input : inputs) {
         if (input == id) {
             throw std::logic_error("An order edge cannot order a node after itself.");
@@ -1865,7 +2099,12 @@ void GraphDraft::setSyncInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> 
     requireOneWriting("setSyncInputs");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set sync inputs for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set sync inputs for draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     for (gc_node_ref_t input : inputs) {
         if (input == id) {
             throw std::logic_error("A sync edge cannot chain a node to itself.");
@@ -1923,7 +2162,12 @@ void GraphDraft::setPorts(
     requireOneWriting("setPorts");
     ++mutations_;
     DraftNode *draftNode = node(id);
-    GUARD(draftNode != nullptr, std::format("set ports for draft node {}, which this graph does not have (it holds {} nodes)", id, nodesById_.size()));
+    GUARD(
+        draftNode != nullptr,
+        std::format(
+            "set ports for draft node {}, which this graph does not have (it holds {} nodes)",
+            id,
+            nodesById_.size()));
     for (gc_node_ref_t oldInput : DraftNodeView::normInputs(draftNode)) {
         removeUserRef(oldInput, id, DraftEdgeSlot::NormalPorts);
     }
@@ -1954,7 +2198,9 @@ void GraphDraft::replaceUsesInList(
             continue;
         }
         DraftNodeInit init = makeInitFromNode(userNode);
-        std::vector<gc_node_ref_t> replaced(initSlot(init, slot).begin(), initSlot(init, slot).end());
+        std::vector<gc_node_ref_t> replaced(
+            initSlot(init, slot).begin(),
+            initSlot(init, slot).end());
         for (gc_node_ref_t &item : replaced) {
             if (item == oldId) {
                 item = newId;
@@ -2064,6 +2310,98 @@ void GraphDraft::dropUncalledGraphs(std::span<const GraphId> graphs) {
     touchRefs();
 }
 
+size_t GraphDraft::eraseOrphanedChainGates() {
+    size_t removed = 0;
+    for (gc_node_ref_t id = 0; id < nodeSlotCount(); ++id) {
+        const DraftNodeHeader *header = this->header(id);
+        if (header != nullptr && header->kind == GCNodeKind::Gate && syncInputsOf(id).size() == 1 &&
+            syncUsersOf(id).empty()) {
+            const gc_node_ref_t pred = syncInputsOf(id).front();
+            gc_node_ref_t duplicate  = kInvalidNodeRef;
+            for (gc_node_ref_t user : ctrlUsersOf(id)) {
+                const DraftNodeHeader *userHeader = this->header(user);
+                if (userHeader == nullptr || userHeader->kind != GCNodeKind::Gate ||
+                    !syncUsersOf(user).empty() || !isBlockValue(*this, user) ||
+                    !sameSyncBlock(*this, id, user) || syncInputsOf(user).size() != 1 ||
+                    syncInputsOf(user).front() != pred) {
+                    continue;
+                }
+                if (duplicate != kInvalidNodeRef) {
+                    duplicate = kInvalidNodeRef;
+                    break;
+                }
+                duplicate = user;
+            }
+            if (duplicate != kInvalidNodeRef) {
+                const gc_node_ref_t only[1] = {id};
+                setSyncInputs(duplicate, only);
+                continue;
+            }
+        }
+        if (header == nullptr || header->kind != GCNodeKind::Gate || syncInputsOf(id).empty() ||
+            !syncUsersOf(id).empty() || reachesBlockValue(*this, id)) {
+            continue;
+        }
+        const gc_node_ref_t value =
+            normInputsOf(id).empty() ? kInvalidNodeRef : normInputsOf(id).back();
+        const std::vector<gc_node_ref_t> predecessors(
+            syncInputsOf(id).begin(),
+            syncInputsOf(id).end());
+        std::vector<gc_node_ref_t> users;
+        for (auto group : {normUsersOf(id), withUsersOf(id), ctrlUsersOf(id)}) {
+            for (gc_node_ref_t user : group) {
+                if (user != id && alive(user) && std::ranges::find(users, user) == users.end()) {
+                    users.push_back(user);
+                }
+            }
+        }
+        gc_node_ref_t completionUser = kInvalidNodeRef;
+        for (gc_node_ref_t user : users) {
+            const DraftNodeHeader *userHeader = this->header(user);
+            if (userHeader == nullptr || userHeader->kind != GCNodeKind::Gate ||
+                !syncUsersOf(user).empty() || !isBlockValue(*this, user) ||
+                !sameSyncBlock(*this, id, user)) {
+                continue;
+            }
+            if (completionUser != kInvalidNodeRef) {
+                completionUser = kInvalidNodeRef;
+                break;
+            }
+            completionUser = user;
+        }
+        if (completionUser != kInvalidNodeRef &&
+            appendChainStatement(completionUser, id) != kInvalidNodeRef) {
+            continue;
+        }
+        for (gc_node_ref_t user : users) {
+            for (gc_node_ref_t pred : predecessors) {
+                if (pred == user || !alive(pred)) {
+                    continue;
+                }
+                const DraftNodeHeader *userHeader = this->header(user);
+                const bool terminalGate = userHeader != nullptr &&
+                                          userHeader->kind == GCNodeKind::Gate &&
+                                          syncUsersOf(user).empty() && !isBlockValue(*this, user);
+                if (isChainStatement(*this, user) && !terminalGate && syncInputsOf(user).empty() &&
+                    sameSyncBlock(*this, user, pred)) {
+                    (void)appendChainStatement(user, pred);
+                    continue;
+                }
+                const auto ctrl = ctrlInputsOf(user);
+                if (std::ranges::find(ctrl, pred) == ctrl.end()) {
+                    appendControlEdge(user, pred);
+                }
+            }
+        }
+        if (value != kInvalidNodeRef) {
+            replaceAllValueUses(id, value);
+        }
+        eraseNode(id);
+        ++removed;
+    }
+    return removed;
+}
+
 size_t GraphDraft::dissolveUnorderedGates() {
     size_t removed = 0;
     for (bool changed = true; changed;) {
@@ -2093,11 +2431,11 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // value the gate carried, so nothing stops running (src/compile/gir/graph_encode.cpp
             // quotes the answer that settled it). A gate with no data user and no wait forwards
             // nothing -- the value is read by this node alone -- so dissolving it takes the last
-            // **read** of whatever computed that value, and an effect that stands on a read (a call,
-            // an operator with effects, a computation that may fault, design principles 3.1) is then
-            // in the graph and in no chain. `std::opt::inline` splices an inlined body's tail as a
-            // GATE and the fold prunes the branch whose chain entered it, which leaves exactly this
-            // gate standing where the branch's arm stood.
+            // **read** of whatever computed that value, and an effect that stands on a read (a
+            // call, an operator with effects, a computation that may fault, design principles 3.1)
+            // is then in the graph and in no chain. `std::opt::inline` splices an inlined body's
+            // tail as a GATE and the fold prunes the branch whose chain entered it, which leaves
+            // exactly this gate standing where the branch's arm stood.
             //
             // What such a gate holds is not a value but a **place**: it is where the code after it
             // waits. That place is what the erase would take with it, so it is handed to what the
@@ -2115,23 +2453,23 @@ size_t GraphDraft::dissolveUnorderedGates() {
             // 2. One rule, not two. `pruneBranch` already treats the JOIN's successors this way
             //    (`handChainPlaceTo`): the code that stood after the branch follows the arm's tail.
             //    The same rule for the nodes that must survive inside the arm is what this does; a
-            //    second rule is exactly the shape of the defect this fixes -- two paths, only one of
-            //    which keeps the observed run.
+            //    second rule is exactly the shape of the defect this fixes -- two paths, only one
+            //    of which keeps the observed run.
             // 3. The arm's tail cannot be the anchor here. When the tail is this gate -- the shape
-            //    `std::opt::inline` leaves, the arm's value being what the gate forwards -- ordering
-            //    the effect after `armTail` is ordering it after the gate that reads it, which is a
-            //    cycle of inputs. The place it stood in is therefore handed to the effect itself,
-            //    and the successors wait on the effect: the equivalent form of "put it where the
-            //    branch's arm left its place", and the one that has no cycle in it.
+            //    `std::opt::inline` leaves, the arm's value being what the gate forwards --
+            //    ordering the effect after `armTail` is ordering it after the gate that reads it,
+            //    which is a cycle of inputs. The place it stood in is therefore handed to the
+            //    effect itself, and the successors wait on the effect: the equivalent form of "put
+            //    it where the branch's arm left its place", and the one that has no cycle in it.
             //
             // The case that locks this is test/cases/opt/effects/inline_reduce_in_folded_arm.cml,
             // with its entries in test/plans/feat/opt/effects_kept.plan.toml -- that plan's subject
             // is "a pass never changes which effects run", which is this defect; the `trans` plans
             // are dumps and traces and do not run programs.
-            // The guard asks the pass layer's own question -- `carriesOrdering` with the shape rule,
-            // the predicate `pruneBranch` and `replaceNode` read: a node another reader keeps is not
-            // the one this erase endangers, and a node whose running the program does not observe has
-            // no place to lose.
+            // The guard asks the pass layer's own question -- `carriesOrdering` with the shape
+            // rule, the predicate `pruneBranch` and `replaceNode` read: a node another reader keeps
+            // is not the one this erase endangers, and a node whose running the program does not
+            // observe has no place to lose.
             const bool holdsEffectPlace =
                 normUsersOf(id).empty() && withUsersOf(id).empty() &&
                 normUsersOf(value).size() + withUsersOf(value).size() == 1 &&
@@ -2234,8 +2572,7 @@ void GraphDraft::setStaticSlot(size_t index, slot_t value) {
     staticSlots_[index] = value;
 }
 
-void GraphDraft::relocateStaticValues(
-    const camel::core::rtdata::Object::RefRelocator &relocate) {
+void GraphDraft::relocateStaticValues(const camel::core::rtdata::Object::RefRelocator &relocate) {
     for (size_t i = 0; i < staticSlots_.size(); ++i) {
         const camel::core::type::Type *type =
             i < staticSlotTypes_.size() ? staticSlotTypes_[i] : nullptr;
@@ -2306,8 +2643,7 @@ void GraphDraft::addLiftedFromRef(GraphId graph) {
     ++mutations_;
     touchRefs();
     if (isValid(graph) &&
-        std::find(liftedFromRefs_.begin(), liftedFromRefs_.end(), graph) ==
-            liftedFromRefs_.end()) {
+        std::find(liftedFromRefs_.begin(), liftedFromRefs_.end(), graph) == liftedFromRefs_.end()) {
         liftedFromRefs_.push_back(graph);
     }
 }
@@ -2344,7 +2680,8 @@ GraphId GraphDraft::calleeIdOf(gc_node_ref_t id) const {
     GUARD(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func,
         std::format(
-            "reading the callee of node {}, whose kind is {}: a callee is a GCFuncRef payload, which "
+            "reading the callee of node {}, whose kind is {}: a callee is a GCFuncRef payload, "
+            "which "
             "only a FUNC node (kind 10) carries, so what this node holds is not a graph index",
             id,
             draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
@@ -2363,7 +2700,8 @@ void GraphDraft::setCalleeGraph(gc_node_ref_t id, GraphId callee) {
     GUARD(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Func,
         std::format(
-            "pointing node {}, whose kind is {}, at a callee: the payload slot holds a GCFuncRef only "
+            "pointing node {}, whose kind is {}, at a callee: the payload slot holds a GCFuncRef "
+            "only "
             "when the node is a FUNC node (kind 10)",
             id,
             draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
@@ -2376,7 +2714,8 @@ GCLoopBody GraphDraft::loopGraphsOf(gc_node_ref_t id) const {
     GUARD(
         draftNode != nullptr && draftNode->header.kind == GCNodeKind::Loop,
         std::format(
-            "reading the loop of node {}, whose kind is {}: a loop payload is a GCLoopRef, which only "
+            "reading the loop of node {}, whose kind is {}: a loop payload is a GCLoopRef, which "
+            "only "
             "a LOOP node carries",
             id,
             draftNode == nullptr ? -1 : static_cast<int>(draftNode->header.kind)));
@@ -2416,6 +2755,5 @@ GCGraph *GraphDraft::encode(const std::string &mangledName, const std::string &n
         [&](GCGraphPayloadArena &payload) { emitDraftNativePayload(*this, payload); },
         staticSlots_);
 }
-
 
 } // namespace camel::runtime

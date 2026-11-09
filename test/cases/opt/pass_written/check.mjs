@@ -45,9 +45,9 @@ const env = {
     CAMEL_HOME: process.env.CAMEL_HOME || path.join(REPO_ROOT, 'out', 'latest')
 }
 
-/// One entry per operator: the corpus that answers the question for it, and what was measured on
-/// 2026-11-01, by file. An operator pinned to nothing is pinned to zero (`names` empty): that is a
-/// reading too, and the owner line says who would write it.
+/// One entry per operator: the corpus that answers the question for it, pinned by file. An
+/// operator pinned to nothing is pinned to zero (`names` empty): that is a reading too, and the
+/// owner line says who would write it.
 const FAMILY = [
     {
         uri: ':op/keep',
@@ -57,26 +57,7 @@ const FAMILY = [
             'with no sync user that takes a last read',
         names: {
             'branch_keeps_outer_effect.cml': 2,
-            'dce_effect_under_pure_arithmetic.cml': 2,
-            'fold_keeps_arm_effect.cml': 2,
-            // The keeper inside a folded arm, and why it is due: `std::opt` prunes the branch and
-            // removes the last use of the `:mark/reduce_arr` node the inlined `sum` computed, so
-            // `keepThroughValue` stands `:op/keep` where the value stood -- its only input is that
-            // effect node and its only reader is the block's GATE. Design principles 9.7 (the
-            // effect still executes after the rewrite) and 3.3 as the author ruled it on 2026-11-01
-            // (effect keeping is data keeping: the use a removal takes is handed to `:op/keep`, not
-            // to an order edge -- docs/handover/s1-keep-readings.cn.md records that ruling, and that
-            // 3.3's own sentence still carries the older GATE wording). `inline`+`fold` alone writes
-            // no keeper, and the program prints the same either way.
-            //
-            // It arrived with the conversion registration (dae15cc28: a conversion's purity and
-            // faulting marks now come from where it is registered, `.mayFault =
-            // !kNeverFaults.contains(key)`, instead of from the letters of its name -- and that is
-            // what `isObservedRun` asks), not with A6/A7 and not with a change to the passes:
-            // `std::opt std::jgir` over this case counts 0 keeps at 76f910062, 0 at 9e00900e1 (A6
-            // and A7), 0 at bd975f57d, 2 at dae15cc28, and the two dumps' node labels differ by the
-            // two `:op/keep` occurrences and by nothing else.
-            'inline_reduce_in_folded_arm.cml': 2
+            'fold_keeps_arm_effect.cml': 2
         }
     },
     {

@@ -27,9 +27,9 @@
 #include "camel/utils/log.h"
 #include "camel/utils/pointer_set.h"
 
+#include "camel/core/error/diagnostics.h"
 #include <algorithm>
 #include <format>
-#include "camel/core/error/diagnostics.h"
 #include <functional>
 #include <optional>
 #include <stdexcept>
@@ -39,11 +39,11 @@
 
 namespace {
 
-using camel::runtime::GCRegion;
-using camel::runtime::GCRegionKind;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
+using camel::runtime::GCRegion;
+using camel::runtime::GCRegionKind;
 using camel::runtime::kInvalidNodeRef;
 
 constexpr size_t kRuntimeRewriteApplyBudget = 256;
@@ -86,8 +86,8 @@ bool nodeCameFromInlineSplice(const GCGraph *graph, uint32_t region) {
 /// The source position `ref` is written at, as a key that tells it apart from other positions:
 /// the span its origin resolves to, or the origin itself when the span is not known, and 0 when the
 /// node has no origin. Spans and origins are ids of their own, so the high bit keeps them apart.
-uint64_t originKeyOf(
-    const GCGraph *graph, const camel::source::SourceContext *source, gc_node_ref_t ref) {
+uint64_t
+originKeyOf(const GCGraph *graph, const camel::source::SourceContext *source, gc_node_ref_t ref) {
     const uint64_t origin = graph->nodeOrigin(ref);
     if (origin == 0) {
         return 0;
@@ -110,18 +110,18 @@ uint64_t originKeyOf(
 ///
 /// What the language writes as one operator is one computation, even where the front end builds it
 /// from several nodes at one source position: `a ?? b` is a tag_is_null, a tag_null_value and the
-/// branch and join that choose between them (camel/core/operator_table.h), and counting each of them
-/// made `main` of test/cases/modules/onnx/export_loop.cml -- three prints, one `??`, one export_model
-/// call -- read as nine and be refused as too big to inline, which stopped the export. The nodes of
-/// that lowering count once (the coalesce positions this function collects first); every other node
-/// counts for itself, so a function is measured by the compute nodes it is written as.
+/// branch and join that choose between them (camel/core/operator_table.h), and counting each of
+/// them made `main` of test/cases/modules/onnx/export_loop.cml -- three prints, one `??`, one
+/// export_model call -- read as nine and be refused as too big to inline, which stopped the export.
+/// The nodes of that lowering count once (the coalesce positions this function collects first);
+/// every other node counts for itself, so a function is measured by the compute nodes it is written
+/// as.
 ///
 /// The count is read off the graph the round began with -- the draft's `calleeGraphOf` answers the
 /// committed graph, not the draft -- so what a round splices or folds cannot move it: the same
 /// function answers the same twice in one round, and its answer changes only when a round commits a
 /// change to that function.
-size_t inlinedComputeNodeCount(
-    const GCGraph *graph, const camel::source::SourceContext *source) {
+size_t inlinedComputeNodeCount(const GCGraph *graph, const camel::source::SourceContext *source) {
     if (!graph) {
         return 0;
     }
@@ -133,9 +133,8 @@ size_t inlinedComputeNodeCount(
             continue;
         }
         const auto *body = graph->nodeBodyAs<camel::runtime::GCOperBody>(it.ref());
-        if (body == nullptr ||
-            (body->oper != camel::core::oper::TagIsNull &&
-             body->oper != camel::core::oper::TagNullValue)) {
+        if (body == nullptr || (body->oper != camel::core::oper::TagIsNull &&
+                                body->oper != camel::core::oper::TagNullValue)) {
             continue;
         }
         if (const uint64_t span = originKeyOf(graph, source, it.ref()); span != 0) {
@@ -194,8 +193,8 @@ size_t inlinedNodeCount(const GCGraph *graph) {
 /// True when running `graph` has a node that is not freely schedulable (camel/runtime/graph.h): an
 /// effect, an operator that may fault, a conversion that can fail, a call of a function value
 /// (callee unknown here), or a graph it reaches that has one. A body like that runs after the
-/// effects its arguments waited for, and must keep doing so once it is spliced in. A cycle of graphs
-/// is free when none of its members has such a node of its own.
+/// effects its arguments waited for, and must keep doing so once it is spliced in. A cycle of
+/// graphs is free when none of its members has such a node of its own.
 bool bodyNeedsOrder(
     const camel::runtime::Program &program, const GCGraph *graph,
     std::unordered_set<const GCGraph *> &seen) {
@@ -269,8 +268,8 @@ bool returnsClosure(const GCGraph *graph) {
 
 /// The callee of each direct call in `graph`, read from the session's draft where the graph is
 /// being edited (calls of graphs created in this session exist only there).
-std::vector<const GCGraph *> directCallees(
-    const camel::runtime::RuntimeGraphDraftSession &session, const GCGraph *graph) {
+std::vector<const GCGraph *>
+directCallees(const camel::runtime::RuntimeGraphDraftSession &session, const GCGraph *graph) {
     std::vector<const GCGraph *> callees;
     if (const auto *transaction = session.tryDraft(graph)) {
         const auto &draft = transaction->graph();
@@ -299,10 +298,11 @@ std::vector<bool> upstreamOf(
     const auto &draft = transaction.graph();
     std::vector<bool> seen(draft.nodeSlotCount(), false);
     std::vector<gc_node_ref_t> work;
-    for (auto inputs : {draft.normInputsOf(id),
-                        draft.withInputsOf(id),
-                        draft.ctrlInputsOf(id),
-                        draft.syncInputsOf(id)}) {
+    for (auto inputs :
+         {draft.normInputsOf(id),
+          draft.withInputsOf(id),
+          draft.ctrlInputsOf(id),
+          draft.syncInputsOf(id)}) {
         work.insert(work.end(), inputs.begin(), inputs.end());
     }
     while (!work.empty()) {
@@ -312,10 +312,11 @@ std::vector<bool> upstreamOf(
             continue;
         }
         seen[n] = true;
-        for (auto inputs : {draft.normInputsOf(n),
-                            draft.withInputsOf(n),
-                            draft.ctrlInputsOf(n),
-                            draft.syncInputsOf(n)}) {
+        for (auto inputs :
+             {draft.normInputsOf(n),
+              draft.withInputsOf(n),
+              draft.ctrlInputsOf(n),
+              draft.syncInputsOf(n)}) {
             work.insert(work.end(), inputs.begin(), inputs.end());
         }
     }
@@ -717,8 +718,8 @@ class CallBook {
         std::vector<DeclinedCall> declined;
     };
     struct Slot {
-        size_t calls   = 0;
-        bool counted   = false;
+        size_t calls = 0;
+        bool counted = false;
         // Monotone, so that the sum of the ones a stamp reads changes exactly when one of them
         // does: `own` counts rewrites of the graph, `version` changes of its call count.
         uint64_t own     = 0;
@@ -836,8 +837,7 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (!runtimeGraph) {
                         continue;
                     }
-                    for (auto it = runtimeGraph->nodes().begin();
-                         it != runtimeGraph->nodes().end();
+                    for (auto it = runtimeGraph->nodes().begin(); it != runtimeGraph->nodes().end();
                          ++it) {
                         const auto *node = *it;
                         if (!node || node->kind != GCNodeKind::Func) {
@@ -926,9 +926,14 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                         break; // out of growth budget: a specialization is a copy of the callee
                     }
                     if (camel::runtime::specializeDirectFuncInDraft(
-                            session, transaction, funcNodeId, config.specializeOnFunctionValues)) {
-                        changed        = true;
-                        if (lastChangedOut) { *lastChangedOut = nextGraph; }
+                            session,
+                            transaction,
+                            funcNodeId,
+                            config.specializeOnFunctionValues)) {
+                        changed = true;
+                        if (lastChangedOut) {
+                            *lastChangedOut = nextGraph;
+                        }
                         roundChanged   = true;
                         graphRewritten = true;
                         // The callee after the rewrite is the copy (counted in full even when
@@ -944,16 +949,18 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     if (!draft.alive(callNodeId)) {
                         continue;
                     }
-                    // A callee projected out of a branch JOIN stays in the branch's own graph: the arms
-                    // are regions of this graph, so the exporter evaluates the branch and calls an
-                    // arm's closure inside its If. No rewrite across the branch is needed, and the
-                    // sibling JOINs such a rewrite would add are not executable.
+                    // A callee projected out of a branch JOIN stays in the branch's own graph: the
+                    // arms are regions of this graph, so the exporter evaluates the branch and
+                    // calls an arm's closure inside its If. No rewrite across the branch is needed,
+                    // and the sibling JOINs such a rewrite would add are not executable.
                     if (camel::runtime::devirtualizeStaticCallInDraft(
                             session,
                             transaction,
                             callNodeId)) {
-                        changed        = true;
-                        if (lastChangedOut) { *lastChangedOut = nextGraph; }
+                        changed = true;
+                        if (lastChangedOut) {
+                            *lastChangedOut = nextGraph;
+                        }
                         roundChanged   = true;
                         graphRewritten = true;
                     }
@@ -1087,8 +1094,10 @@ const camel::runtime::Program *applyRuntimeOptimizeRewrite(
                     continue;
                 }
                 growthSpent += copied;
-                changed      = true;
-                if (lastChangedOut) { *lastChangedOut = nextGraph; }
+                changed = true;
+                if (lastChangedOut) {
+                    *lastChangedOut = nextGraph;
+                }
                 roundChanged = true;
                 appliedInlineCount++;
                 restartRound = true;
@@ -1293,6 +1302,8 @@ camel::runtime::DraftInlineResult inlineCallInOrder(
             camel::runtime::appendControlDependency(transaction, source, user);
         }
     }
+    (void)draft.eraseOrphanedChainGates();
+    camel::runtime::resolvePlaceForks(draft);
     return inlineResult;
 }
 
@@ -1368,7 +1379,8 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         GUARD(
             config.settleStreak != nullptr,
             std::format(
-                "the rewrite engine counts the runs in a row that changed a graph, and this run was "
+                "the rewrite engine counts the runs in a row that changed a graph, and this run "
+                "was "
                 "given no state to count them in (OptimizeRewriteConfig::settleStreak): graph '{}' "
                 "changed, so the rewrite cannot settle, and the bound `settle_runs` ({}) that says "
                 "so has nowhere to reach",
@@ -1387,7 +1399,8 @@ const camel::runtime::Program *applyOptimizeRewritePass(
                 .commit(
                     "std::opt",
                     std::format(
-                        "the rewrite of graph '{}' did not settle: {} consecutive runs each changed "
+                        "the rewrite of graph '{}' did not settle: {} consecutive runs each "
+                        "changed "
                         "the program",
                         lastChangedGraph->name(),
                         config.settleRuns));
@@ -1407,10 +1420,10 @@ const camel::runtime::Program *applyOptimizeRewritePass(
         context->setPassFact(kInlineReportFactKey, std::move(report));
     }
     if (hadBudget && growthSpent >= growthBudget) {
-        const std::string where = config.growthBudget.passName.empty()
-                                      ? std::string("the growth_budget parameter")
-                                      : "the growth_budget parameter of " +
-                                            config.growthBudget.passName;
+        const std::string where =
+            config.growthBudget.passName.empty()
+                ? std::string("the growth_budget parameter")
+                : "the growth_budget parameter of " + config.growthBudget.passName;
         CAMEL_LOG_WARN_S(
             "OptimizePass",
             "Growth budget of {} nodes reached ({}): the remaining calls are neither "

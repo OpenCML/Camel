@@ -132,17 +132,17 @@ struct DraftNodeHeader {
     /// run, so that adding them moved no existing offset either.
     gc_cnt_t syncInputCount = 0;
 
-    GCNodeKind kind                  = GCNodeKind::Data;
-    uint8_t runtimeFlags             = 0;
+    GCNodeKind kind      = GCNodeKind::Data;
+    uint8_t runtimeFlags = 0;
     /// Which of a FUNC node's arguments are tangents, one bit per argument position: bit `i` is set
     /// when the call's i-th argument is a tangent. A rule's right side is
-    /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and the
-    /// tangents are the lambda's own parameters, so the expansion knows the positions and records them
-    /// here, on the call it produces. One source: the rule. Nothing re-derives the boundary from a name
-    /// or a spelling, and a reader that needs it (`transpose`, at a call inside a branch arm) reads the
-    /// node. A rule may write a tangent anywhere its right side writes one -- `index_into(dxs, i)` puts
-    /// one first -- so the record is a set of positions, not a count of trailing ones. 0 for every node
-    /// that is not a rule's tangent call.
+    /// `(dx, dw) => mul_tangent(x, w, dx, dw)`: the values are the captures the expansion bound and
+    /// the tangents are the lambda's own parameters, so the expansion knows the positions and
+    /// records them here, on the call it produces. One source: the rule. Nothing re-derives the
+    /// boundary from a name or a spelling, and a reader that needs it (`transpose`, at a call
+    /// inside a branch arm) reads the node. A rule may write a tangent anywhere its right side
+    /// writes one -- `index_into(dxs, i)` puts one first -- so the record is a set of positions,
+    /// not a count of trailing ones. 0 for every node that is not a rule's tangent call.
     uint16_t tangentArgs             = 0;
     DraftNodeStorageClass storageCls = DraftNodeStorageClass::Slab64;
     // The numeric permissions the program granted to the node with the standard permission
@@ -182,15 +182,15 @@ struct DraftNode {
 };
 
 struct DraftNodeInit {
-    gc_slot_idx_t dataIndex           = 0;
-    camel::core::type::Type *dataType = nullptr;
-    GCNodeKind kind                   = GCNodeKind::Data;
-    uint8_t runtimeFlags              = 0;
-    uint64_t origin                   = 0;
+    gc_slot_idx_t dataIndex                      = 0;
+    camel::core::type::Type *dataType            = nullptr;
+    GCNodeKind kind                              = GCNodeKind::Data;
+    uint8_t runtimeFlags                         = 0;
+    uint64_t origin                              = 0;
     camel::core::sem::PermissionMask permissions = 0; // see DraftNodeHeader::permissions
-    uint32_t attrs                    = 0; // see DraftNodeHeader::attrs
-    uint32_t region                   = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
-    uint32_t name                     = 0; // see DraftNodeHeader::name; 0 on a rewrite: kept
+    uint32_t attrs                               = 0; // see DraftNodeHeader::attrs
+    uint32_t region = 0; // see DraftNodeHeader::region; 0 on a rewrite: kept
+    uint32_t name   = 0; // see DraftNodeHeader::name; 0 on a rewrite: kept
     std::span<const std::byte> payload{};
     /// The ports of the one data edge kind, by role (the normal ports, then the context ports).
     std::span<const gc_node_ref_t> normInputs{};
@@ -324,27 +324,31 @@ uint64_t nextDraftEpoch();
 /// fact `handChainPlaceTo` cannot read off the draft, because it is about the graph the rewrite is
 /// making rather than the graph it is holding. It is a parameter type and not a member of
 /// `GraphDraft` so that a caller stating it does not name the type: the direct-connection ledger
-/// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction, and
-/// a caller that passes a value is not one of them.
+/// (test/cases/runtime/graph_draft_ledger) counts who names `GraphDraft` outside the transaction,
+/// and a caller that passes a value is not one of them.
 ///
 /// The judgement is not read off the graph, it is declared by the caller: the graph has no quantity
 /// that separates the two cases. The draft does hold the region and its owner, so the tempting
 /// predicate is "the tail stands in an arm whose owner is still alive -- refuse". Measured, that is
-/// the wrong question: `src/passes/opt/generic/generic.cpp#pruneBranch` hands the place over while the
-/// branch it is pruning is still alive and its arm is still an arm (the probe reads
-/// `tkind=1 owner=15 ownerAlive=1 same=0`), and a predicate read that way refuses the handover that
-/// rewrite must make. Only the caller knows whether the region outlives the rewrite, so it says.
+/// the wrong question: `src/passes/opt/generic/generic.cpp#pruneBranch` hands the place over while
+/// the branch it is pruning is still alive and its arm is still an arm (the probe reads `tkind=1
+/// owner=15 ownerAlive=1 same=0`), and a predicate read that way refuses the handover that rewrite
+/// must make. Only the caller knows whether the region outlives the rewrite, so it says.
 ///
-/// The default is the conservative side: a call site that does not say gets `KeepsItsBlock`, so a new
-/// caller that forgets is stricter than it needs to be, never looser. A guard whose default was the
-/// permissive side would be worse than no guard, because it would look like one.
+/// The default is the conservative side: a call site that does not say gets `KeepsItsBlock`, so a
+/// new caller that forgets is stricter than it needs to be, never looser. A guard whose default was
+/// the permissive side would be worse than no guard, because it would look like one.
 enum class PlaceHandover {
-    /// The code the place is handed to keeps a block of its own (the body an inline splice moved in).
-    /// A statement of another block does not run whenever a statement of that block runs, so it heads
+    /// The code the place is handed to keeps a block of its own (the body an inline splice moved
+    /// in).
+    /// A statement of another block does not run whenever a statement of that block runs, so it
+    /// heads
     /// its own block's chain instead of following that block's tail.
     KeepsItsBlock,
-    /// The block the place is handed to is dissolved into `id`'s block by the same rewrite (a pruned
-    /// branch, whose arm's code becomes the block's code when `eraseNode` re-parents its regions), so
+    /// The block the place is handed to is dissolved into `id`'s block by the same rewrite (a
+    /// pruned
+    /// branch, whose arm's code becomes the block's code when `eraseNode` re-parents its regions),
+    /// so
     /// by the time the graph is committed the two ends are statements of one block.
     DissolvedIntoIdsBlock,
 };
@@ -460,8 +464,8 @@ class GraphDraft {
     /// the version it becomes names its nodes as the graph did. Past half the places dead,
     /// or for a draft that was built and not decoded, the nodes are numbered anew.
     bool keepsNodeIds() const {
-        return decoded_ && 2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <=
-                               nodesById_.size();
+        return decoded_ &&
+               2 * static_cast<size_t>(nodesById_.size() - liveNodeCount_) <= nodesById_.size();
     }
     /// Counts the calls that may have changed the draft since it was decoded (every call of a
     /// member that is not const): a draft of none is the graph it was decoded from.
@@ -503,7 +507,7 @@ class GraphDraft {
 
     std::span<const slot_t> staticSlots() const { return staticSlots_; }
     std::span<camel::core::type::Type *const> staticSlotTypes() const { return staticSlotTypes_; }
-/// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
+    /// Writes the relocated value of static slot `index`. A collection at a safepoint may move a
     /// value a draft holds; the graph's content does not change, so this is not an edit (it does
     /// not count a mutation or change what the draft refers to).
     void relocateStaticSlot(size_t index, slot_t value) {
@@ -642,8 +646,8 @@ class GraphDraft {
     GraphId calleeIdOf(gc_node_ref_t id) const;
     GCGraph *calleeGraphOf(gc_node_ref_t id) const;
     void setCalleeGraph(gc_node_ref_t id, GraphId callee);
-    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names no
-    /// graph -- the condition and the body are regions of the graph it is written in (design
+    /// What LOOP node `id` is: its form, its iterable form and its collection count. A loop names
+    /// no graph -- the condition and the body are regions of the graph it is written in (design
     /// principles 3.10).
     GCLoopBody loopGraphsOf(gc_node_ref_t id) const;
     /// The graphs the payloads of FUNC and LOOP nodes index (GCFuncRef, GCLoopRef): the
@@ -654,9 +658,9 @@ class GraphDraft {
     uint32_t payloadGraphIndexOf(GraphId graph);
     /// `tangentArgs` is which of the call's arguments are tangents, one bit per argument position
     /// (bit `i` = the i-th argument is a tangent), when the caller knows (see
-    /// DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures it
-    /// bound and the tangents are the lambda's own parameters. A position, not a trailing count: the
-    /// rule writes a tangent where its right side writes it. 0 for a call that is not one.
+    /// DraftNodeHeader::tangentArgs): a rule's expansion does, because the values are the captures
+    /// it bound and the tangents are the lambda's own parameters. A position, not a trailing count:
+    /// the rule writes a tangent where its right side writes it. 0 for a call that is not one.
     gc_node_ref_t addFuncNode(
         GraphId calleeGraph, camel::core::type::Type *type, uint8_t runtimeFlags = 0,
         gc_slot_idx_t dataIndex = 0, uint32_t writtenCaptures = 0, uint16_t tangentArgs = 0);
@@ -665,8 +669,8 @@ class GraphDraft {
     /// hands on carries the new version of each (camel::runtime::GCFuncRef::reserved).
     uint32_t funcWriteMaskOf(gc_node_ref_t id) const;
     void setFuncWriteMask(gc_node_ref_t id, uint32_t writtenCaptures);
-    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form. The
-    /// caller links its inputs and writes the body's regions on the draft it is made in.
+    /// A LOOP node (camel/runtime/loop.h): its form, its collection count and its iterable form.
+    /// The caller links its inputs and writes the body's regions on the draft it is made in.
     gc_node_ref_t
     addLoopNode(const GCLoopBody &body, camel::core::type::Type *type, gc_slot_idx_t dataIndex = 0);
     gc_node_ref_t addOperNode(
@@ -690,8 +694,8 @@ class GraphDraft {
     /// written after `tail`, and `tail` is written after what `id` followed when it stands in no
     /// chain of its own (docs/design/effects/edges.cn.md 4 and 5.7). The node that takes the place
     /// is the last statement of the code that replaces `id` -- the tail of a taken branch arm or of
-    /// an inlined body: what the block's value reads, or, when that value carries no chain of its own
-    /// (a void block, a constant), the last statement of that block's chain
+    /// an inlined body: what the block's value reads, or, when that value carries no chain of its
+    /// own (a void block, a constant), the last statement of that block's chain
     /// (docs/design/effects/edges.cn.md 5.3).
     ///
     /// A rewrite that replaces a statement by a node of the same region can call takeStatementPlace
@@ -702,23 +706,23 @@ class GraphDraft {
     /// (docs/design/effects/edges.cn.md 2), and closing the chain over `id` steps over that code.
     ///
     /// `how` says whether that block survives the rewrite. A caller splicing code it keeps -- an
-    /// inlined body -- keeps it, and then a statement of *another* block cannot follow `tail`: it does
-    /// not run whenever `tail` runs (src/runtime/branch_arms.cpp refuses exactly that graph,
+    /// inlined body -- keeps it, and then a statement of *another* block cannot follow `tail`: it
+    /// does not run whenever `tail` runs (src/runtime/branch_arms.cpp refuses exactly that graph,
     /// docs/technical/17_graph_rewrite_api_contracts.md 4.1), so it heads its own block's chain
     /// instead -- the same sentence `closeChainOver` applies to a predecessor of another block. A
     /// caller that dissolves the block in the same rewrite -- a pruned branch, whose arm's code
     /// becomes the block's code when `eraseNode` re-parents its regions -- hands the place over
-    /// normally, because by the time the graph is committed the two ends are statements of one block.
-    /// The distinction is the caller's to make: it is the only place that knows whether the region
-    /// outlives the rewrite, and it says so with `PlaceHandover`.
+    /// normally, because by the time the graph is committed the two ends are statements of one
+    /// block. The distinction is the caller's to make: it is the only place that knows whether the
+    /// region outlives the rewrite, and it says so with `PlaceHandover`.
     void handChainPlaceTo(
         gc_node_ref_t id, gc_node_ref_t tail, PlaceHandover how = PlaceHandover::KeepsItsBlock);
     /// The node `newId` takes the place `oldId` had in its block's chain: the statements written
     /// after `oldId` are written after `newId`, and `newId` is written after what `oldId` followed
     /// (docs/design/effects/edges.cn.md 4: a replacement transfers the replaced node's orderings to
-    /// its replacer). `newId` is marked as a statement of that block. A rewrite that puts a node it
-    /// built where a statement stood calls this before erasing the statement; a node already
-    /// written somewhere in a chain keeps that place.
+    /// its replacer). A non-statement value between a predecessor and a successor is wrapped in a
+    /// GATE that takes the chain place. A rewrite that puts a node it built where a statement stood
+    /// calls this before erasing the statement; a node already in a chain keeps that place.
     ///
     /// The same clause covers the order edges that met at `oldId`: they meet at `newId` instead,
     /// in both directions (replaceOrderEdgesAt). A node that stood in no chain still hands its
@@ -759,6 +763,13 @@ class GraphDraft {
     /// Makes `predecessor` the statement written before `id` in the same `sync` block; refuses a
     /// self edge. A node has at most one: the block is a chain.
     bool setSyncPredecessor(gc_node_ref_t id, gc_node_ref_t predecessor);
+    /// Joins two chain fragments. A non-statement value that already has a predecessor hands the
+    /// continuation to a GATE instead of becoming a non-statement in the middle of the chain.
+    /// Returns the predecessor's actual exit, which is that GATE when one was needed.
+    gc_node_ref_t appendChainStatement(gc_node_ref_t id, gc_node_ref_t predecessor);
+    /// Moves a pure value out of the middle of a chain, putting its incoming and outgoing waits
+    /// on a GATE that reads it. A terminal block value keeps its own incoming wait.
+    size_t normalizeChainPlaces();
     /// `role` says which port of the one data edge kind the input is (the default is the ordinary
     /// argument role); every other kind ignores it.
     void appendInput(
@@ -776,8 +787,8 @@ class GraphDraft {
         DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t inputId,
         PortRole role = PortRole::Normal);
     void replaceInput(
-        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId, gc_node_ref_t newInputId,
-        PortRole role = PortRole::Normal);
+        DraftEdgeKind kind, gc_node_ref_t userId, gc_node_ref_t oldInputId,
+        gc_node_ref_t newInputId, PortRole role = PortRole::Normal);
     void replaceAllNormUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllWithUses(gc_node_ref_t oldId, gc_node_ref_t newId);
     void replaceAllCtrlUses(gc_node_ref_t oldId, gc_node_ref_t newId);
@@ -789,6 +800,9 @@ class GraphDraft {
     /// head or tail of a branch arm is kept; when it waits on nothing it is made to wait on its
     /// BRCH. Returns the number removed.
     size_t dissolveUnorderedGates();
+    bool chainReachesBlockValue(gc_node_ref_t id) const;
+    /// Removes chain GATEs left with no value user, no sync successor, and no block result.
+    size_t eraseOrphanedChainGates();
     void setNodeDataType(gc_node_ref_t id, camel::core::type::Type *type);
     void setNodeDataIndex(gc_node_ref_t id, gc_slot_idx_t dataIndex);
     void setNodeRuntimeFlags(gc_node_ref_t id, uint8_t runtimeFlags);
@@ -874,13 +888,13 @@ class GraphDraft {
     /// Ends the region `id` (unless `keepRegion`) and the regions inside it; nodes that are still
     /// in them go to the region around.
     void retireRegion(uint32_t id, bool keepRegion = false);
-    /// The join a BRCH node names. **No validation**: a draft is allowed to be inconsistent while it
-    /// is being written -- a rewrite may move the branch before it moves the join, or build the two
-    /// in either order -- so the refusal happens where the graph is published, in
+    /// The join a BRCH node names. **No validation**: a draft is allowed to be inconsistent while
+    /// it is being written -- a rewrite may move the branch before it moves the join, or build the
+    /// two in either order -- so the refusal happens where the graph is published, in
     /// `encodeDraftGraph`, which runs `camel::runtime::checkGraphCrossReferences` on the graph the
-    /// draft produced (and `EdgeChecker` runs the same four checks on a frozen graph). A setter that
-    /// refused here would become a fifth answer to "is this join sound", and the draft needs to be
-    /// able to hold the state in between.
+    /// draft produced (and `EdgeChecker` runs the same four checks on a frozen graph). A setter
+    /// that refused here would become a fifth answer to "is this join sound", and the draft needs
+    /// to be able to hold the state in between.
     void setBrchJoin(gc_node_ref_t brch, gc_node_ref_t join);
     /// The region a node is put in when it is added without one (0: the body). The front end
     /// sets it to the arm it is writing; passes leave it alone.
@@ -925,7 +939,8 @@ class GraphDraft {
     uint32_t nodeAttrs(gc_node_ref_t id) const;
     void setNodeAttrs(gc_node_ref_t id, uint32_t attrs);
     /// The source name of the value at node `id` (camel::core::SymId), camel::core::kEmptySym
-    /// when it has none. Cold metadata: it never enters a frozen graph's columns (GCGraph::nodeName).
+    /// when it has none. Cold metadata: it never enters a frozen graph's columns
+    /// (GCGraph::nodeName).
     uint32_t nodeName(gc_node_ref_t id) const;
     void setNodeName(gc_node_ref_t id, uint32_t name);
     void rewriteNode(gc_node_ref_t id, const DraftNodeInit &init);
@@ -989,8 +1004,7 @@ class GraphDraft {
     std::span<const gc_node_ref_t>
     inputsOf(gc_node_ref_t id, DraftEdgeKind kind, PortRole role) const;
     void setInputs(
-        gc_node_ref_t id, DraftEdgeKind kind, PortRole role,
-        std::span<const gc_node_ref_t> inputs);
+        gc_node_ref_t id, DraftEdgeKind kind, PortRole role, std::span<const gc_node_ref_t> inputs);
     /// Adds `inputId` at the end of the `slot` inputs of `userId`, in place when the node's
     /// storage has room.
     void appendInputEntry(gc_node_ref_t userId, DraftEdgeSlot slot, gc_node_ref_t inputId);
@@ -1004,13 +1018,13 @@ class GraphDraft {
     /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
     void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
-    GraphId id_                                = kInvalidGraphId;
-    GraphId outerGraphId_                      = kInvalidGraphId;
-    const Program *program_                    = nullptr;
-    GraphId typeSpecializationRoot_            = kInvalidGraphId;
-    uint8_t flags_                             = 0;
+    GraphId id_                     = kInvalidGraphId;
+    GraphId outerGraphId_           = kInvalidGraphId;
+    const Program *program_         = nullptr;
+    GraphId typeSpecializationRoot_ = kInvalidGraphId;
+    uint8_t flags_                  = 0;
     std::string implKernelUri_;
-    uint32_t declarationFacts_ = 0; // see declarationFacts()
+    uint32_t declarationFacts_                 = 0; // see declarationFacts()
     camel::core::type::FunctionType *funcType_ = nullptr;
     std::vector<camel::core::SymId> captureNames_;
     // The frame layout, by slot. It becomes a tuple type only when the draft is encoded, inside
@@ -1024,8 +1038,8 @@ class GraphDraft {
     std::vector<DraftNode *> nodesById_;
     std::vector<std::unique_ptr<DraftUserLists>> users_; // by node id; null: no users
     std::vector<GCRegion> regions_; // region 0 (the body), made with the draft, then the others
-    uint32_t insertRegion_    = 0;
-    bool inheritsRegions_     = true;
+    uint32_t insertRegion_ = 0;
+    bool inheritsRegions_  = true;
     std::vector<gc_node_ref_t> regionPorts_;
     std::vector<WritingUnion> writings_;
     uint32_t writingScope_ = 0;
@@ -1106,9 +1120,18 @@ bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byS
 
 /// `isChainStatement` (camel/runtime/graph.h) asked of a node of a draft: the operator from the
 /// node's payload, a cast's types from its input, and whether it owns a region from the draft's
-/// own regions. The builder writes a `sync` block's chain by this, so it is the same rule the seal
-/// check's census reads.
+/// own regions.
 bool isChainStatement(const GraphDraft &draft, gc_node_ref_t id);
+/// The entry and exit of the statement `id` names. A JOIN maps back to its BRCH at the entry; a
+/// BRCH maps to its JOIN at the exit. Every other node is its own entry and exit.
+gc_node_ref_t chainEntryOf(const GraphDraft &draft, gc_node_ref_t id);
+gc_node_ref_t chainExitOf(const GraphDraft &draft, gc_node_ref_t id);
+bool isChainExit(const GraphDraft &draft, gc_node_ref_t id);
+/// Whether `id` occupies a chain position rather than only receiving a chain tail as a block value.
+/// A terminal GATE is a block-value carrier, not a continuation of the chain.
+bool occupiesChainPlace(const GraphDraft &draft, gc_node_ref_t id);
+/// Whether `id` is the value the draft's graph or one of its live regions hands on.
+bool isBlockValue(const GraphDraft &draft, gc_node_ref_t id);
 
 /// `nodeMayFault` (camel/runtime/graph.h) asked of a node of a draft, with the same `byShape`
 /// reading of an elementwise operator. It is the fault half of `nodeIsFreelySchedulable` above,
@@ -1145,4 +1168,3 @@ inline gc_node_ref_t ungated(const GraphDraft &draft, gc_node_ref_t node) {
 }
 
 } // namespace camel::runtime
-

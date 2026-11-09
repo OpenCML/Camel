@@ -156,10 +156,15 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             std::vector<size_t> holeSlots = holes;
             if (position != nullptr && !containsTypeVar(position)) {
                 positioned = compositeWithHolesInType(
-                    data, position, gct, refNames, refTypes, holes, holeSlots);
+                    data,
+                    position,
+                    gct,
+                    refNames,
+                    refTypes,
+                    holes,
+                    holeSlots);
             }
-            if (positioned == nullptr && dataType->code() == TypeCode::Array &&
-                !refTypes.empty()) {
+            if (positioned == nullptr && dataType->code() == TypeCode::Array && !refTypes.empty()) {
                 // The element type of the literal: what its literal elements fixed (`[x, 5]` is
                 // an `int[]`), else what the computed elements join to (`[x, null]`, `[a, b]` with
                 // an `int` and an `int?`; design principles 3.8, 5.1). An element that is not of
@@ -209,12 +214,12 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                     throw BuildAbortException();
                 }
             }
-            auto filledType = positioned != nullptr
-                                  ? position
-                                  : (dataType->resolved()
-                                         ? dataType
-                                         : tt::as_ptr<CompositeType>(dataType->clone())
-                                               ->resolve(refTypes));
+            auto filledType =
+                positioned != nullptr
+                    ? position
+                    : (dataType->resolved()
+                           ? dataType
+                           : tt::as_ptr<CompositeType>(dataType->clone())->resolve(refTypes));
             // The literal part of the array takes the element type the computed part gave the
             // array: a constant element written as an unnamed struct in another order is copied
             // into the named type it enters (design principles 5.2), so every slot is of the
@@ -254,7 +259,8 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
             };
             for (size_t h = 0; h < holeSlots.size() && h < refNodes.size(); ++h) {
                 Type *slotType = filledSlotType(holeSlots[h]);
-                Type *elementType = slotType != nullptr ? valueTypeOf(nodeTypeOf(refNodes[h])) : nullptr;
+                Type *elementType =
+                    slotType != nullptr ? valueTypeOf(nodeTypeOf(refNodes[h])) : nullptr;
                 if (slotType == nullptr || elementType == nullptr) {
                     continue;
                 }
@@ -270,10 +276,10 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                 // fill put a `{ v: f32 }` where the field is `Inner`, and the read of the field
                 // read a value of another type. The copy is field by field, the same one a
                 // position makes for an unnamed struct value.
-                if (slotType->code() == TypeCode::Struct && elementType->code() == TypeCode::Struct &&
-                    !slotType->equals(elementType)) {
-                    auto *slotStruct     = tt::as_ptr<StructType>(slotType);
-                    auto *elementStruct  = tt::as_ptr<StructType>(elementType);
+                if (slotType->code() == TypeCode::Struct &&
+                    elementType->code() == TypeCode::Struct && !slotType->equals(elementType)) {
+                    auto *slotStruct    = tt::as_ptr<StructType>(slotType);
+                    auto *elementStruct = tt::as_ptr<StructType>(elementType);
                     if (slotStruct != nullptr && elementStruct != nullptr && slotStruct->named() &&
                         !elementStruct->named()) {
                         if (node_handle_t copied = convertStructValue(refNodes[h], slotStruct, gct);
@@ -283,7 +289,7 @@ node_handle_t Builder::visitDataNode(const GCT::node_ptr_t &gct) {
                     }
                 }
             }
-            auto payload    = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
+            auto payload = runtime::makeFillPayload(fillKindForType(filledType), holeSlots);
             node_handle_t srcNode = currGraph_->addStaticDataNode(literalData, filledType);
             node                  = currGraph_->addFillNode(filledType, payload);
             linkNodes(LinkType::Norm, srcNode, node);
@@ -413,8 +419,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     // A cell whose value is written where the declaration stands: the child is the type the cell
     // holds (`typeof <the first write>`), not a value, so there is no initializer to evaluate
     // here (design principles 5.4).
-    const bool typedCell =
-        gct->size() > 0 && gct->at(0)->type() == GCT::NodeKind::TYPE;
+    const bool typedCell = gct->size() > 0 && gct->at(0)->type() == GCT::NodeKind::TYPE;
     node_handle_t node{};
     try {
         if (Type *declared = GCT::Tree::of(gct)->nativeValueTypeOf(gct)) {
@@ -577,14 +582,15 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         // meets it is the region's own, and the region can order it.
         std::vector<VariableUse> pending;
         const camel::runtime::GCNodeKind exitKind = nodeKindOf(exit);
-        const bool regionExit = exitKind == camel::runtime::GCNodeKind::Join ||
-                                exitKind == camel::runtime::GCNodeKind::Loop;
+        const bool regionExit                     = exitKind == camel::runtime::GCNodeKind::Join ||
+                                                    exitKind == camel::runtime::GCNodeKind::Loop;
         for (const VariableUse &use : uses) {
             // A read of the cell is the `:var/get` and the call that read a captured variable
             // (docs/design/effects/edges.cn.md 5.6: both are reads). The write written after
             // either of them is ordered after it, so the read sees the cell as it was before the
             // write changed it.
-            const bool read = use.isRead || nodeKindOf(use.node) == camel::runtime::GCNodeKind::Call;
+            const bool read =
+                use.isRead || nodeKindOf(use.node) == camel::runtime::GCNodeKind::Call;
             if (!read || !sameGraph(use.node, currGraph_)) {
                 // An operation that used the variable itself and is not a read -- the JOIN of a
                 // branch that touched it -- is not ordered by a write: it stays pending so that
@@ -596,8 +602,7 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
                 continue;
             }
             if (regionExit) {
-                if (!hasDirectDataDependency(use.node, exit) &&
-                    !dataPathReaches(use.node, exit)) {
+                if (!hasDirectDataDependency(use.node, exit) && !dataPathReaches(use.node, exit)) {
                     writeControlLink(use.node, exit);
                     continue;
                 }
@@ -613,8 +618,8 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         }
         uses = std::move(pending);
     }
-    // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the builder
-    // did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
+    // A store is one of the cell's known users (collapseNonEscapingVariableReads): a user the
+    // builder did not record -- a:var/take, a call handed the `var` -- makes the cell escape.
     knownCellUsers_.insert(exit);
     // The write before this one is ordered before it, and it is not this write's value: every
     // write of a variable takes the cell :var/new made as its position, never the write before it
@@ -671,7 +676,7 @@ uint32_t Builder::captureWriteMaskOf(const compile_graph_ptr_t &callee) const {
     // the run time reads the versions from (GCFuncRef::reserved). Only a variable is written, so
     // a capture of anything else never has its bit set.
     const std::set<node_handle_t> written = capturedWritesOf(callee.get());
-    uint32_t mask                        = 0;
+    uint32_t mask                         = 0;
     for (size_t k = 0; k < table->second.size(); ++k) {
         if (!written.contains(table->second[k].origin)) {
             continue;
@@ -785,7 +790,9 @@ node_handle_t Builder::valueVersionOf(node_handle_t variable) {
         if (!wrapped) {
             return *modifier;
         }
-        return callValuePartOf(*modifier, static_cast<uint32_t>(value->second.hasReturn ? 1 + k : k));
+        return callValuePartOf(
+            *modifier,
+            static_cast<uint32_t>(value->second.hasReturn ? 1 + k : k));
     }
     // The call is this variable's writer -- recordWrite recorded it through the callee -- but the
     // parts of the call's value say nothing about it: the parts come from the callee's
@@ -872,8 +879,8 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
         // A DREF the compiler made for an operator it knows by id: the group is the built-in
         // module's, which registered it; no name of the program takes part.
         ENTER("DREF");
-        genericCalleeAllowed_ = false;
-        refOrigin_            = gct->origin();
+        genericCalleeAllowed_        = false;
+        refOrigin_                   = gct->origin();
         const oper_group_ptr_t group = internalOperatorGroup(*oper);
         node_handle_t drefNode{currGraph_->addDrefNode(
             std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{group})};
@@ -960,7 +967,7 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
     // a call of an `#impl` function is a call of its kernel, anywhere else the name is the
     // function value, which is the semantic body (design principles 10.4).
     const bool calleePosition = std::exchange(genericCalleeAllowed_, false);
-    refOrigin_            = gct->origin();
+    refOrigin_                = gct->origin();
     if (camel::core::isOverloadableOperatorGroup(written)) {
         // An operator (`a + b` is `__add__(a, b)`): its overloads from every layer are one
         // set (design principles 10.2), not those of the first layer that has the name.
@@ -1063,8 +1070,7 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             // name is the function value, which is the body graph (a pass differentiating,
             // fusing or exporting sees the semantics, not the kernel).
             if (calleePosition && !insideImplBody()) {
-                if (std::optional<ImplKernel> kernel = implKernelOf(graphs);
-                    kernel.has_value()) {
+                if (std::optional<ImplKernel> kernel = implKernelOf(graphs); kernel.has_value()) {
                     node_handle_t drefNode{graph->addDrefNode(
                         std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                             kernel->group})};
@@ -1218,8 +1224,8 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             node_handle_t drefNode = graph->addDrefNode(
                 std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                     std::make_shared<graph_set_t>()});
-            genericDrefs_[drefNode] = generic_ref_t(std::make_shared<GenericGroup>(
-                genericTemplatesOfEntity(e)));
+            genericDrefs_[drefNode] =
+                generic_ref_t(std::make_shared<GenericGroup>(genericTemplatesOfEntity(e)));
             registerNodeOrigin(context_, drefNode, gct, "gir.dref.generic");
             LEAVE("DREF");
             return drefNode;
@@ -1229,8 +1235,7 @@ std::any Builder::resolveDRefNode(const GCT::node_ptr_t &gct) {
             // kernels are the same compile graphs in this program): the exported function is
             // the kernel's name for callers, while its value stays the semantic body.
             if (calleePosition && !insideImplBody()) {
-                if (std::optional<ImplKernel> kernel = implKernelOf(graphs);
-                    kernel.has_value()) {
+                if (std::optional<ImplKernel> kernel = implKernelOf(graphs); kernel.has_value()) {
                     node_handle_t drefNode{graph->addDrefNode(
                         std::variant<graph_vec_ptr_t, oper_group_ptr_t, graph_ptr_t>{
                             kernel->group})};
@@ -1356,7 +1361,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     // A type written as `typeof e` (`let a: typeof(f()) = g()`, `x as typeof(f)`) is inferred
     // before anything is built with it, so that the expected type a literal takes is the inferred
     // one, and so that `e` is not evaluated by being written there (design principles 5.4).
-    Type *written      = gct->targetType();
+    Type *written       = gct->targetType();
     const bool inferred = written != nullptr && written->code() == TypeCode::TypeOf;
     if (inferred) {
         written = resolveTypeNode(written, gct);
@@ -1523,7 +1528,8 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
                 // element there (design principles 5.4), and a position converts its literal in
                 // one place (`Builder::coerceTo`). Refusing here would refuse a value the
                 // declaration itself makes, so the position is asked first.
-                if (node_handle_t entered = coerceTo(valueNode, targetType, gct->at(0)); entered != nullptr) {
+                if (node_handle_t entered = coerceTo(valueNode, targetType, gct->at(0));
+                    entered != nullptr) {
                     LEAVE("CAST");
                     return entered;
                 }
@@ -1571,9 +1577,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     // A conversion that can fail is a statement of a `sync` block like a call: it runs where it
     // is written, in the chain, with or without a reader of its value (design principles 3.4).
     if (synced_ && camel::runtime::castMayFault(targetType, sourceType)) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, castNode)) {
-            writeControlLink(lastSyncedNode_, castNode);
-        }
+        linkSyncStatement(lastSyncedNode_, castNode);
         lastSyncedNode_ = castNode;
         chainedNodes_.insert(castNode);
     }
@@ -1583,10 +1587,10 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
 
 node_handle_t Builder::visitVariNode(const GCT::node_ptr_t &gct) {
     ENTER("VARI");
-    bool old          = varied_;
-    bool oldDeclares  = declaresVariable_;
-    varied_           = true;
-    declaresVariable_ = true;
+    bool old           = varied_;
+    bool oldDeclares   = declaresVariable_;
+    varied_            = true;
+    declaresVariable_  = true;
     node_handle_t node = valueNodeOf(visit(gct->at(0)));
     varied_            = old;
     declaresVariable_  = oldDeclares;
@@ -1633,9 +1637,9 @@ node_handle_t Builder::variableOperator(camel::core::OperId oper, node_handle_t 
 
 node_handle_t Builder::variableAfterCall(node_handle_t variable, node_handle_t call) {
     // The variable as it stands after `call`: `:var/after(cell, call)`. Its second argument is the
-    // call, whose value may be `void` and is not read -- the edge is what makes the call run when the
-    // read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the cell
-    // itself, so the read above it is a read of the variable after that write.
+    // call, whose value may be `void` and is not read -- the edge is what makes the call run when
+    // the read takes this version (docs/design-principles.cn.md 3.1, 3.5) -- and its result is the
+    // cell itself, so the read above it is a read of the variable after that write.
     //
     // Its first argument is the version the variable had before that call when there was one: the
     // write written before a call through a function value must keep running, because the call is
@@ -1690,8 +1694,7 @@ node_handle_t Builder::readVariable(node_handle_t variable) {
     return readVariableThrough(variable, camel::core::oper::VarGet);
 }
 
-node_handle_t Builder::readVariableThrough(
-    node_handle_t variable, camel::core::OperId oper) {
+node_handle_t Builder::readVariableThrough(node_handle_t variable, camel::core::OperId oper) {
     // The version of the variable the last write made: that write's own value. Every write
     // produces one (valueVersionOf): an assignment gives the cell it wrote into, and a call that
     // wrote a captured variable gives the access node of the part of its value that is that
@@ -1707,12 +1710,13 @@ node_handle_t Builder::readVariableThrough(
         // The conservative writer set may have counted a call of this graph as a possible writer of
         // the variable before this graph had captured it (a call through a function value writes a
         // variable this body had not touched yet): the read written after that call takes the
-        // variable as it stands after it. Program order is what says "after": the builder writes the
-        // body in the order it is written, so a claim met here was made by a call written before
-        // this read.
-        const auto origin = captureOriginOf_.find(variable);
+        // variable as it stands after it. Program order is what says "after": the builder writes
+        // the body in the order it is written, so a claim met here was made by a call written
+        // before this read.
+        const auto origin           = captureOriginOf_.find(variable);
         const node_handle_t claimed = claimedWriterOf(
-            currGraph_.get(), origin == captureOriginOf_.end() ? variable : origin->second);
+            currGraph_.get(),
+            origin == captureOriginOf_.end() ? variable : origin->second);
         if (claimed != nullptr && sameGraph(claimed, currGraph_)) {
             version = variableAfterCall(variable, claimed);
         }
@@ -1729,19 +1733,18 @@ node_handle_t Builder::readVariableThrough(
             }
         }
     }
-    // SSA (collapseNonEscapingVariableReads): this read may later take its value from the write that
-    // made it instead of from the cell, so the writer it belongs to is recorded here, while the
-    // builder still knows it. The read node counts as one of the cell's known users.
+    // SSA (collapseNonEscapingVariableReads): this read may later take its value from the write
+    // that made it instead of from the cell, so the writer it belongs to is recorded here, while
+    // the builder still knows it. The read node counts as one of the cell's known users.
     if (sameGraph(variable, currGraph_)) {
         variableReadSource_[value] = VariableRead{version, variable};
         knownCellUsers_.insert(value);
     }
     // A read is not a statement of a sync block: it does not join the chain. What orders it is the
     // version it takes as its data port and the writes recorded after it (design principles 3.5,
-    // docs/design/effects/edges.cn.md 5.5), so the statement written before it keeps its own place
-    // on the chain when the read is folded into its version. The exception is a `var` parameter:
-    // it may be the caller's variable passed twice, a name the callee cannot tell from another, so
-    // only the place the read is written in orders it against the writes of the other name.
+    // docs/design/effects/edges.cn.md 5.5). A `var` parameter may alias the caller's other
+    // argument, so its read also waits on the preceding statement without taking over that
+    // statement's place.
     if (synced_ && lastIndirectCall_ != nullptr && sameGraph(lastIndirectCall_, currGraph_) &&
         linkCheek(lastIndirectCall_, value) && nodeTakesAnOrder(value) &&
         nodeTakesAnOrder(lastIndirectCall_) && !hasDirectDataDependency(lastIndirectCall_, value)) {
@@ -1752,12 +1755,11 @@ node_handle_t Builder::readVariableThrough(
         // takes its place from the version it reads, so the link the chain would write here is not
         // written at all.
         syncedReads_.push_back(value);
-        if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port) {
+        const bool hasCaptureVersion = version != variable && captureOriginOf_.contains(variable);
+        if (nodeKindOf(variable) == camel::runtime::GCNodeKind::Port && !hasCaptureVersion) {
             if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, value)) {
                 writeControlLink(lastSyncedNode_, value);
             }
-            lastSyncedNode_ = value;
-            chainedNodes_.insert(value);
         }
     }
     return value;
@@ -1805,8 +1807,10 @@ void Builder::collapseNonEscapingVariableReads() {
             }
             bool used = false;
             for (const auto &users :
-                 {graphDraft.normUsersOf(readId), graphDraft.withUsersOf(readId),
-                  graphDraft.ctrlUsersOf(readId), graphDraft.syncUsersOf(readId)}) {
+                 {graphDraft.normUsersOf(readId),
+                  graphDraft.withUsersOf(readId),
+                  graphDraft.ctrlUsersOf(readId),
+                  graphDraft.syncUsersOf(readId)}) {
                 used = used || !users.empty();
             }
             if (!used) {
@@ -1842,8 +1846,8 @@ void Builder::collapseNonEscapingVariableReads() {
             continue;
         }
         // Every user of the cell must be one this builder recorded: one of its reads, or one of its
-        // stores. Any other user -- a `:var/take`, a call the `var` was handed to, a capture port --
-        // is a use this conversion does not model, so the cell keeps its cell.
+        // stores. Any other user -- a `:var/take`, a call the `var` was handed to, a capture port
+        // -- is a use this conversion does not model, so the cell keeps its cell.
         bool known = true;
         for (auto users : {normUsersOf(cell), withUsersOf(cell), ctrlUsersOf(cell)}) {
             for (draft_node_ref_t user : users) {
@@ -1859,7 +1863,8 @@ void Builder::collapseNonEscapingVariableReads() {
         if (!known) {
             continue;
         }
-        // The value of a cell nothing has written yet is the one it was made with (:var/new's input).
+        // The value of a cell nothing has written yet is the one it was made with (:var/new's
+        // input).
         const auto cellInputs = draft.normInputsOf(cellId);
         for (auto &[read, source] : reads) {
             const camel::runtime::gc_node_ref_t readId = nodeIdOf(read);
@@ -1896,8 +1901,7 @@ void Builder::collapseNonEscapingVariableReads() {
             // GATE check; docs/design/effects/edges.cn.md 5.3 gives the GATE the statement before
             // it as its wait). The read stays, and it reads what it read before.
             bool waitedOnByGate = false;
-            for (const auto &users :
-                 {draft.ctrlUsersOf(readId), draft.syncUsersOf(readId)}) {
+            for (const auto &users : {draft.ctrlUsersOf(readId), draft.syncUsersOf(readId)}) {
                 for (camel::runtime::gc_node_ref_t user : users) {
                     const camel::runtime::DraftNodeHeader *userHeader = draft.header(user);
                     if (userHeader != nullptr &&
@@ -1978,12 +1982,12 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             typeApplicationWithNames_ = *written;
         }
     }
-    any targetNodeRes = visit(gct->at(0));
+    any targetNodeRes           = visit(gct->at(0));
     typeApplicationWithWritten_ = outerWithWritten;
     typeApplicationWithNames_   = outerWithNames;
     typeApplicationWithTypes_   = outerWithTypes;
     ruleBindingCallee_          = outerRuleBindingCallee;
-    genericCalleeAllowed_             = false;
+    genericCalleeAllowed_       = false;
     // As in visitLinkNode: a lambda written in place gives its graph.
     node_handle_t targetNode = valueNodeOf(targetNodeRes);
     // Whether the value bound here is the callee of the call being built (`withArgsOfCall_`).
@@ -1994,7 +1998,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // lambda and the literal take their types there. A name is not deferred: a generic function
     // or a set of overloads bound as a with-argument stays a name until the callee resolves it.
     vector<Argument> inputs;
-    FunctionType *argumentSignature = signatureForArgumentContext(targetNode, gct->size() - 1);
+    FunctionType *argumentSignature     = signatureForArgumentContext(targetNode, gct->size() - 1);
     const bool parameterTypesFollowCall = inCall && argumentSignature != nullptr;
     // A call of a rest function is expanded at the call (inlineRestCall), so a with-argument
     // that names a generic function or a set of overloads stays a compile-time callable: every
@@ -2002,8 +2006,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
     // `tree_map<bump>`). Making it a function value here would need the one type it does not
     // have yet, and a set of overloads has no single value at all.
     const auto restInfo = genericDrefs_.find(targetNode);
-    const bool restCall = restInfo != genericDrefs_.end() &&
-                          restInfo->second.one() != nullptr &&
+    const bool restCall = restInfo != genericDrefs_.end() && restInfo->second.one() != nullptr &&
                           restInfo->second.one()->funcType->hasRest();
     const auto isCallableName = [&](node_handle_t node) {
         if (genericDrefs_.contains(node)) {
@@ -2074,12 +2077,12 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             expectedValueType_,
             wanted && !containsTypeVar(wanted) ? wanted : nullptr);
         const std::optional<std::string> name =
-            withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1]
-                                                              : std::nullopt;
+            withNames != nullptr && i - 1 < withNames->size() ? (*withNames)[i - 1] : std::nullopt;
         if (gct->at(i)->type() == GCT::NodeKind::SPRD) {
             // `..ws` among the `with` arguments: the pack's elements are `with` arguments of their
-            // own, exactly as `..e` gives the ordinary arguments of a call. `f<..ws>(..xs)` is how a
-            // pack is forwarded to another function's pack, so the elements stand where they stand.
+            // own, exactly as `..e` gives the ordinary arguments of a call. `f<..ws>(..xs)` is how
+            // a pack is forwarded to another function's pack, so the elements stand where they
+            // stand.
             if (i + 1 != gct->size()) {
                 const GCT::node_ptr_t operand = gct->at(i)->at(0);
                 diags_->of(SemanticDiag::RestArgumentNotLast)
@@ -2108,10 +2111,9 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             // before: nothing about it waits for the call.
             bool deferred = kind == GCT::NodeKind::DATA;
             if (!deferred && kind == GCT::NodeKind::FUNC) {
-                const auto &lambda = gct->at(i);
-                const auto *unwritten =
-                    GCT::Tree::of(lambda)->unwrittenParamsOf(lambda);
-                deferred = unwritten == nullptr || !unwritten->empty();
+                const auto &lambda    = gct->at(i);
+                const auto *unwritten = GCT::Tree::of(lambda)->unwrittenParamsOf(lambda);
+                deferred              = unwritten == nullptr || !unwritten->empty();
             }
             if (parameterTypesFollowCall && deferred && wanted != nullptr &&
                 containsTypeVar(wanted)) {
@@ -2131,7 +2133,8 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
                                       ? visitInPosition(gct->at(i), wanted)
                                       : visitOperand(gct->at(i), gct);
             if (concrete && kind != GCT::NodeKind::DATA && built != nullptr &&
-                asTagged(wanted) != nullptr && asTagged(valueTypeOf(nodeTypeOf(built))) == nullptr &&
+                asTagged(wanted) != nullptr &&
+                asTagged(valueTypeOf(nodeTypeOf(built))) == nullptr &&
                 !valueTypeOf(nodeTypeOf(built))->equals(wanted)) {
                 if (node_handle_t entered = coerceTo(built, wanted, gct->at(i))) {
                     built = entered;
@@ -2141,7 +2144,7 @@ node_handle_t Builder::visitWithNode(const GCT::node_ptr_t &gct) {
             refuseNonConstant(slot, inputs.back());
             continue;
         }
-        any res              = visit(gct->at(i));
+        any res               = visit(gct->at(i));
         node_handle_t argNode = res.type() == typeid(graph_ptr_t)
                                     ? createFuncDataNode(any_cast<graph_ptr_t>(res), true, false)
                                     : valueNodeOf(res);
@@ -2218,8 +2221,8 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     switch (tgtType->code()) {
     case TypeCode::Tuple: {
         const auto &tupleType = tt::as_ptr<TupleType>(tgtType);
-        const auto *gctTree     = GCT::Tree::of(gct);
-        const size_t names      = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
+        const auto *gctTree   = GCT::Tree::of(gct);
+        const size_t names    = gctTree != nullptr ? gctTree->unpackCount(gct) : 0;
         // A destructuring declaration binds one name per element: `let (x, y) = t` needs a tuple of
         // two, whichever way the count is wrong (design principles 3.9). Reported here, at the
         // declaration, and not as an element read past the end -- a name too few used to drop the
@@ -2227,9 +2230,7 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         // wrote.
         // One answer per declaration: every name of it carries the count, and the first reports.
         if (names != 0 && gct->accessIndex() == 0 && names != tupleType->size()) {
-            diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
-                .atOrigin(gct->origin())
-                .commit();
+            diags_->of(SemanticDiag::TupleUnpackingCountMismatch).atOrigin(gct->origin()).commit();
             throw BuildAbortException();
         }
         // A tuple has a fixed length: an element past its end is a compile-time error (it was
@@ -2255,10 +2256,10 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
     case TypeCode::Struct: {
         const auto *strTy = tt::as_ptr<camel::core::type::StructType>(tgtType);
         if (gct->accessByIndex()) {
-            // `.N` is a tuple's element; a struct's members are read by name. Asking for the name of a
-            // positional access dereferences the name it does not have -- a null pointer the assert
-            // above guards in a debug build and release builds dropped, which is how `p.1` on a struct
-            // segfaulted the compiler instead of being refused.
+            // `.N` is a tuple's element; a struct's members are read by name. Asking for the name
+            // of a positional access dereferences the name it does not have -- a null pointer the
+            // assert above guards in a debug build and release builds dropped, which is how `p.1`
+            // on a struct segfaulted the compiler instead of being refused.
             diags_->of(SemanticDiag::InvalidAccessIndex)
                 .atOrigin(gct->origin())
                 .commit(std::to_string(gct->accessIndex()));
@@ -2275,13 +2276,14 @@ node_handle_t Builder::visitAccsNode(const GCT::node_ptr_t &gct) {
         break;
     }
     default:
-        // A composite that is none of the three above has no element to read: a function value is the
-        // case that reaches here, and it is not a corner -- `split` answers the forward half, so
-        // `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type whose
-        // members are parameters, not elements (`(float, float) => float`). This used to be a
-        // `runtime_error`, which the driver reports as a defect of the compiler; a program that asks
-        // a function for its element is a program with a mistake in it, and it is told which type it
-        // asked (2026-11-02, the split ABI: sixteen cases in test/cases/transforms reached it).
+        // A composite that is none of the three above has no element to read: a function value is
+        // the case that reaches here, and it is not a corner -- `split` answers the forward half,
+        // so `let (y, lin) = split(f)` destructures a *function*, and the read lands on a type
+        // whose members are parameters, not elements (`(float, float) => float`). This used to be a
+        // `runtime_error`, which the driver reports as a defect of the compiler; a program that
+        // asks a function for its element is a program with a mistake in it, and it is told which
+        // type it asked (2026-11-02, the split ABI: sixteen cases in test/cases/transforms reached
+        // it).
         diags_->of(SemanticDiag::TypeNotIndexable)
             .atOrigin(gct->origin())
             .commit(tgtType->toString());

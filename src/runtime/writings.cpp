@@ -1205,8 +1205,8 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
             // (docs/design/effects/edges.cn.md 4, the rule for the three kinds): the statements
             // written after the writing being folded away wait for the writing that takes its value
             // instead of losing the edge with the node, and it is entered from where the folded
-            // writing stood. The marks the sync kind needs and the control edge beside it are
-            // `handChainPlaceTo`'s, the same call the branch dissolve makes
+            // writing stood. The chain place and its neighboring dependencies are handed over by
+            // `handChainPlaceTo`, the same call the branch dissolve makes
             // (src/passes/opt/generic/generic.cpp); a node a chain does not hold is erased as it
             // was.
             const gc_node_ref_t replacement = multi[node] ? chosen[classOf[node]] : node;

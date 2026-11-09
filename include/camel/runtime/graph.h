@@ -171,10 +171,6 @@ enum class PortRole : uint8_t {
 enum GCNodeFlag : uint8_t {
     kGCNodeFlagMacro    = 1 << 0,
     kGCNodeFlagConstant = 1 << 1,
-    /// The node is a statement written directly in one `sync` block, or the block's value: the
-    /// only nodes a sync edge may join (docs/design/effects/edges.cn.md 4.6). The seal check reads
-    /// it; nothing at run time does, and a `sync` block that is inlined into another graph keeps it.
-    kGCNodeFlagSyncStatement = 1 << 2,
 };
 
 /// Whether converting a value of type `source` to `target` when a CAST runs can fail: every
@@ -227,27 +223,18 @@ bool nodeMayFault(
 /// extents are all constants.
 bool shapesAreFixed(const camel::core::type::Type *type);
 
-/// Whether a node of this kind is a statement of a chain -- one a `sync` block's chain has to
-/// order (design principles 3.4; the author's ruling of 2026-11-03, 01:10): an operator that has an
-/// effect or may fault, a cast whose conversion may fail, a call, a branch or a loop that owns a
-/// control region, and a `GATE` -- the block's value is handed on behind one, so the wait reaches
-/// it (docs/design/effects/edges.cn.md 5.3). What is not: a `Func`, an operator or cast that is
-/// pure and cannot fault (an operator declared un-recomputable included -- "can this be moved" and
-/// "does the chain order this" are two questions, and `may_be_rearranged` answers the first), and a
-/// `Data`, `Port`, `Copy`, `Fill`, `Accs` or `Join`: the model lets a pass arrange those freely, so
-/// none of them is something the chain orders.
-///
-/// This is the answer to that question and nothing else, and there is one implementation of it: the
-/// seal check's census and the builder's sync-chain link both ask here, so "written" and "derived"
-/// cannot answer differently. `standsForRegion` is `nodeStandsForItsRegion` where the caller has a
-/// graph; without it a `Brch` or a `Loop` is not known to carry anything.
+/// Whether a node of this kind is a statement of a chain: an operator that has an effect or may
+/// fault, a cast whose conversion may fail, a CALL, a BRCH or LOOP that owns a control region, or a
+/// GATE. A JOIN is not an independent statement. A direct FUNC call has the same possible effects
+/// and faults as a CALL. A pure, infallible operator or cast is not one either;
+/// `may_be_rearranged` answers the separate question of whether a pass may move it.
+/// `standsForRegion` is `nodeStandsForItsRegion` where the caller has a graph.
 namespace graph {
 bool is_chain_statement(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false);
 } // namespace graph
 
-/// The same question, under the name the call sites write it under.
 inline bool isChainStatement(
     GCNodeKind kind, camel::core::OperId oper, const camel::core::type::Type *castTarget = nullptr,
     const camel::core::type::Type *castSource = nullptr, bool standsForRegion = false) {
@@ -270,10 +257,13 @@ inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
 /// reads its operands and types.
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 
-/// `isChainStatement` of a node of a graph: the operator from the node's body, a cast's types from
-/// its input, and whether it owns a region from `nodeStandsForItsRegion`.
 namespace graph {
 bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
+/// The exit of the statement `ref` names: a branch's JOIN, or `ref` itself for every other kind.
+gc_node_ref_t chain_exit(const GCGraph &graph, gc_node_ref_t ref);
+/// Whether `ref` can hand a chain to the next statement, either as a statement or as the JOIN of a
+/// structural statement. A JOIN gets no independent chain place of its own.
+bool is_chain_exit(const GCGraph &graph, gc_node_ref_t ref);
 } // namespace graph
 
 inline bool isChainStatement(const GCGraph &graph, gc_node_ref_t ref) {
@@ -314,7 +304,8 @@ enum GCGraphFlag : uint8_t {
     /// lists the graphs that carry it.
     kGraphFlagImplBody = 1 << 3,
     /// A call of the graph may be *recomputed* on the backward pass instead of kept: the same
-    /// values, with nothing of the body carried across a cut that can compute it again. `remat` sets
+    /// values, with nothing of the body carried across a cut that can compute it again. `remat`
+    /// sets
     /// the bit (`transforms:remat`, stdlib/signatures/transforms.cml) on a copy of the function's
     /// graph, so the body a program runs is unchanged; a step that cuts a graph in two reads it
     /// (`split`, modules/transforms/split.cpp) and keeps only what cannot be recomputed -- the
@@ -322,8 +313,6 @@ enum GCGraphFlag : uint8_t {
     /// the same call, so no number moves.
     kGraphFlagRecomputeBackward = 1 << 4,
 };
-
-
 
 /// kWritingDerived: congruence closure found the equivalence, it need not be stored.
 inline constexpr uint8_t kWritingDerived = 1 << 0;
@@ -335,9 +324,9 @@ struct WritingUnion {
     gc_node_ref_t b = kInvalidNodeRef;
     /// The numeric permissions the equivalence needs (0: it holds bit for bit).
     camel::core::sem::PermissionMask perms = 0;
-    uint8_t flags = 0;
+    uint8_t flags                          = 0;
     /// The rule that asserted it (0: none, congruence).
-    uint16_t rule = 0;
+    uint16_t rule                               = 0;
     bool operator==(const WritingUnion &) const = default;
 };
 static_assert(std::is_trivially_copyable_v<WritingUnion>);
@@ -358,8 +347,8 @@ inline constexpr size_t kTangentArgumentBits = sizeof(uint16_t) * 8;
 /// are one run of it. The same-resource order between two effects and the order between two
 /// writes of one `var` are what a graph stores here.
 struct GCGraphOrderEdge {
-    gc_node_ref_t user = kInvalidNodeRef;
-    gc_node_ref_t pred = kInvalidNodeRef;
+    gc_node_ref_t user                              = kInvalidNodeRef;
+    gc_node_ref_t pred                              = kInvalidNodeRef;
     bool operator==(const GCGraphOrderEdge &) const = default;
 };
 static_assert(std::is_trivially_copyable_v<GCGraphOrderEdge>);
@@ -371,8 +360,8 @@ static_assert(std::is_trivially_copyable_v<GCGraphOrderEdge>);
 /// Like an order edge it lives in its own array of the graph, sorted by user, so that the sync
 /// predecessors of a node are one run of it.
 struct GCGraphSyncEdge {
-    gc_node_ref_t user = kInvalidNodeRef;
-    gc_node_ref_t pred = kInvalidNodeRef;
+    gc_node_ref_t user                             = kInvalidNodeRef;
+    gc_node_ref_t pred                             = kInvalidNodeRef;
     bool operator==(const GCGraphSyncEdge &) const = default;
 };
 static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
@@ -380,16 +369,16 @@ static_assert(std::is_trivially_copyable_v<GCGraphSyncEdge>);
 /// One node of a frozen graph: a fixed 28-byte record (docs/design/graph-model, 4.1). Its inputs
 /// and its payload are found through the graph (GCGraph::normInputsOf, nodeBodyAs).
 struct GCNode {
-    GCNodeKind kind         = GCNodeKind::Data;
-    uint8_t flags           = 0;
+    GCNodeKind kind = GCNodeKind::Data;
+    uint8_t flags   = 0;
     /// Which of a FUNC node's arguments are tangents, as one bit per argument position: bit `i` is
     /// set when the call's i-th normal input is a tangent. What a rule's expansion recorded on the
-    /// call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The rule is
-    /// the one source of which arguments are values and which are tangents, and a rule may write a
-    /// tangent wherever its right side writes one -- `mul_tangent(x, w, dx, dw)` ends with its two,
-    /// `index_into(dxs, i)` begins with one -- so the record is a set of positions and not a count of
-    /// trailing ones. `transpose` reads the positions off the node rather than deriving them again.
-    /// 0 for every other node, and for a call that is not a rule's tangent function.
+    /// call it produced (`DraftNodeHeader::tangentArgs`, `addFuncNode's last argument`). The rule
+    /// is the one source of which arguments are values and which are tangents, and a rule may write
+    /// a tangent wherever its right side writes one -- `mul_tangent(x, w, dx, dw)` ends with its
+    /// two, `index_into(dxs, i)` begins with one -- so the record is a set of positions and not a
+    /// count of trailing ones. `transpose` reads the positions off the node rather than deriving
+    /// them again. 0 for every other node, and for a call that is not a rule's tangent function.
     uint16_t tangentArgs    = 0;
     gc_slot_idx_t dataIndex = 0;
     /// The type of the node's value (camel/core/type/intern.h); kNoTypeId when it has none.
@@ -446,24 +435,24 @@ static_assert(std::is_trivially_copyable_v<GCFuncRef>);
 /// Payload of a LOOP node in a frozen graph: its form, how many values the loop collects into
 /// arrays (its collection slots; 0 for a loop the source wrote, which has none), and where its
 /// elements come from (camel::core::LoopIterableForm: an array, or the pair of the interval's two
-/// bounds). A loop is its body *region* -- the condition and the body are two control regions of the
-/// same graph, sharing the frame of the computation around them (design principles 3.10) -- so the
-/// node names no graph at all.
+/// bounds). A loop is its body *region* -- the condition and the body are two control regions of
+/// the same graph, sharing the frame of the computation around them (design principles 3.10) -- so
+/// the node names no graph at all.
 struct GCLoopRef {
-    camel::core::LoopKind kind                        = camel::core::LoopKind::While;
-    camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
-    uint16_t reserved1                                = 0;
-    uint32_t collectionCount                          = 0;
+    camel::core::LoopKind kind                 = camel::core::LoopKind::While;
+    camel::core::LoopIterableForm iterableForm = camel::core::LoopIterableForm::Array;
+    uint16_t reserved1                         = 0;
+    uint32_t collectionCount                   = 0;
 };
 static_assert(std::is_trivially_copyable_v<GCLoopRef>);
 static_assert(sizeof(GCLoopRef) == 8, "A LOOP payload is one word.");
 
 /// What a LOOP node is, as values: the payload's fields.
 struct GCLoopBody {
-    camel::core::LoopKind kind                        = camel::core::LoopKind::While;
-    camel::core::LoopIterableForm iterableForm        = camel::core::LoopIterableForm::Array;
-    uint16_t reserved1                                = 0;
-    uint32_t collectionCount                          = 0; // the typed collection slots (LoopView)
+    camel::core::LoopKind kind                 = camel::core::LoopKind::While;
+    camel::core::LoopIterableForm iterableForm = camel::core::LoopIterableForm::Array;
+    uint16_t reserved1                         = 0;
+    uint32_t collectionCount                   = 0; // the typed collection slots (LoopView)
 };
 static_assert(std::is_trivially_copyable_v<GCLoopBody>);
 
@@ -565,27 +554,27 @@ inline constexpr uint32_t kNodeChunkNodes = 1u << kNodeChunkShift;
 /// Region 0 is the function body; the table of a graph that has no other region is empty.
 enum class GCRegionKind : uint8_t {
     Root     = 0,
-    Arm      = 1, // an arm of a BRCH node (owner), `index` the arm
-    LoopCond = 2, // the condition of a LOOP node (owner)
-    LoopBody = 3, // the body of a LOOP node (owner)
-    Inline   = 4, // the body of a function inlined here: inlineOf, called at callSite
-    Block    = 5, // a block that carries tags or a decorator
+    Arm      = 1,   // an arm of a BRCH node (owner), `index` the arm
+    LoopCond = 2,   // the condition of a LOOP node (owner)
+    LoopBody = 3,   // the body of a LOOP node (owner)
+    Inline   = 4,   // the body of a function inlined here: inlineOf, called at callSite
+    Block    = 5,   // a block that carries tags or a decorator
     Dead     = 255, // the place of a region a rewrite removed (ids are not reused)
 };
 
 struct GCRegion {
-    GCRegionKind kind    = GCRegionKind::Root;
-    uint8_t reserved0    = 0;
-    uint16_t reserved1   = 0;
-    uint32_t parent      = 0;                // the region it is in; 0 for the body
-    gc_node_ref_t owner  = kInvalidNodeRef;  // control regions: the BRCH or LOOP node
-    uint32_t index       = 0;                // Arm: which arm
-    gc_node_ref_t result = kInvalidNodeRef;  // the node whose value the region yields, if any
-    uint32_t portBegin   = 0;                // its form ports: regionPorts[portBegin ..< +portCount]
-    uint32_t portCount   = 0;
-    uint32_t origin      = 0;                // source origin (0: none)
-    uint32_t attrs       = 0;                // the tag set of the region (camel/core/node_attrs.h)
-    GraphId inlineOf     = kInvalidGraphId;  // Inline: the function whose body this is
+    GCRegionKind kind      = GCRegionKind::Root;
+    uint8_t reserved0      = 0;
+    uint16_t reserved1     = 0;
+    uint32_t parent        = 0;               // the region it is in; 0 for the body
+    gc_node_ref_t owner    = kInvalidNodeRef; // control regions: the BRCH or LOOP node
+    uint32_t index         = 0;               // Arm: which arm
+    gc_node_ref_t result   = kInvalidNodeRef; // the node whose value the region yields, if any
+    uint32_t portBegin     = 0; // its form ports: regionPorts[portBegin ..< +portCount]
+    uint32_t portCount     = 0;
+    uint32_t origin        = 0;               // source origin (0: none)
+    uint32_t attrs         = 0;               // the tag set of the region (camel/core/node_attrs.h)
+    GraphId inlineOf       = kInvalidGraphId; // Inline: the function whose body this is
     gc_node_ref_t callSite = kInvalidNodeRef; // Inline: the call it replaced; Arm: the call of the
                                               // graph that is the arm, until it is inlined
     // The names and types of the form ports, in order, as the arguments of a function type (the
@@ -602,8 +591,8 @@ struct GCNodeChunk {
     uint32_t *origins         = nullptr; // nodeCount source origins (0: none)
     uint32_t *regions         = nullptr; // nodeCount regions of the nodes; null when all are 0
     camel::core::sem::PermissionMask *permissions = nullptr; // nodeCount numeric permissions
-    uint32_t *attrs           = nullptr; // nodeCount attribute sets; null when all are 0
-    gc_node_ref_t *edges      = nullptr; // edgeCount entries: the input runs of the nodes in order
+    uint32_t *attrs            = nullptr; // nodeCount attribute sets; null when all are 0
+    gc_node_ref_t *edges       = nullptr; // edgeCount entries: the input runs of the nodes in order
     gc_payload_word_t *payload = nullptr; // payloadWordCount words
 
     /// The node records, which follow the header: nodeCount of them.
@@ -617,9 +606,9 @@ struct GCGraphNativePayload {
     // chunks are blocks of their own, released with the last graph version that holds them.
     GCNodeChunk **chunks       = nullptr; // chunkCount chunks
     gc_cnt_t chunkCount        = 0;
-    bool hasPermissions        = false; // some node has numeric permissions
-    bool hasAttrs              = false; // some node has attributes
-    bool hasRegions            = false; // some node is in a region other than the body
+    bool hasPermissions        = false;   // some node has numeric permissions
+    bool hasAttrs              = false;   // some node has attributes
+    bool hasRegions            = false;   // some node is in a region other than the body
     GCRegion *regionTable      = nullptr; // regionCount regions; region 0 is the body
     gc_cnt_t regionCount       = 0;       // 0 when the graph has no region but the body
     gc_node_ref_t *regionPorts = nullptr;
@@ -666,7 +655,8 @@ class GCUseIndex {
     /// edge is not a port.
     std::span<const gc_node_ref_t> sync(gc_node_ref_t ref) const { return group(ref, 3); }
     /// The users an order edge names: the nodes `ref` must run before when both run, along an edge
-    /// that carries no "used" (GCGraphOrderEdge). Also a side array, so also beside the port groups.
+    /// that carries no "used" (GCGraphOrderEdge). Also a side array, so also beside the port
+    /// groups.
     std::span<const gc_node_ref_t> order(gc_node_ref_t ref) const { return group(ref, 4); }
 
   private:
@@ -917,22 +907,23 @@ class GCGraph : public camel::core::rtdata::Object {
     uint16_t callTangentArgsOf(gc_node_ref_t ref) const;
     /// Whether argument `index` of FUNC node `ref` is a tangent: bit `index` of
     /// `callTangentArgsOf(ref)`. The one entry a reader asks instead of counting a run of trailing
-    /// arguments -- a rule writes a tangent where its right side writes it, and `index_into(dxs, i)`
-    /// writes one first and a value last. False for a node that is not a FUNC node, and for an index
-    /// past the record's `kTangentArgumentBits` positions (a call that long is refused where the rule
-    /// is expanded).
+    /// arguments -- a rule writes a tangent where its right side writes it, and `index_into(dxs,
+    /// i)` writes one first and a value last. False for a node that is not a FUNC node, and for an
+    /// index past the record's `kTangentArgumentBits` positions (a call that long is refused where
+    /// the rule is expanded).
     bool isTangentArgument(gc_node_ref_t ref, size_t index) const;
     /// The graph a function constant of the static area names, with the reason when it names none.
     ///
     /// `calleeIdOf` answers for a FUNC node -- a call written by name. A function value kept in a
     /// `let` or passed as an argument arrives as a DATA node holding a static function, and this is
     /// the one entry that turns such a value into a graph id. It refuses rather than guesses, and
-    /// the reason says which check refused: a static slot is never read as an id. The node has to be
-    /// a DATA node of function type (`not-a-data-node`, `no-static-slot`, `not-a-function-type`),
-    /// its slot has to hold a function value that names a graph (`no-function-value`,
-    /// `function-names-no-graph`), and that graph has to be one this graph records as a static
-    /// reference (`not-a-static-reference`) -- a value whose graph is not in the reference table is
-    /// a value from another program, and following it would run a graph this one does not call.
+    /// the reason says which check refused: a static slot is never read as an id. The node has to
+    /// be a DATA node of function type (`not-a-data-node`, `no-static-slot`,
+    /// `not-a-function-type`), its slot has to hold a function value that names a graph
+    /// (`no-function-value`, `function-names-no-graph`), and that graph has to be one this graph
+    /// records as a static reference (`not-a-static-reference`) -- a value whose graph is not in
+    /// the reference table is a value from another program, and following it would run a graph this
+    /// one does not call.
     GCStaticFunctionAnswer staticFunctionGraphOf(gc_node_ref_t ref) const;
     /// LOOP node `ref`: its form. The node must be a LOOP node.
     camel::core::LoopKind loopKindOf(gc_node_ref_t ref) const {
@@ -953,8 +944,8 @@ class GCGraph : public camel::core::rtdata::Object {
     /// are the bounds (the FILL's Norm input is the static template of the pair). Nothing when
     /// `ref` is not such a pair. The interval's value in any other position is an `int[]`
     /// (design principles 4.2), not this pair.
-    std::optional<std::pair<gc_node_ref_t, gc_node_ref_t>> intervalBoundsOf(
-        gc_node_ref_t ref) const {
+    std::optional<std::pair<gc_node_ref_t, gc_node_ref_t>>
+    intervalBoundsOf(gc_node_ref_t ref) const {
         const GCNode *n = node(ref);
         if (n == nullptr || n->kind != GCNodeKind::Fill) {
             return std::nullopt;
@@ -1214,10 +1205,14 @@ class GCGraph : public camel::core::rtdata::Object {
         }
         const Edge *begin = edges;
         const Edge *end   = begin + count;
-        const auto lower  = std::lower_bound(
-            begin, end, ref, [](const Edge &edge, gc_node_ref_t user) { return edge.user < user; });
-        const auto upper = std::lower_bound(
-            lower, end, ref, [](const Edge &edge, gc_node_ref_t user) { return edge.user <= user; });
+        const auto lower =
+            std::lower_bound(begin, end, ref, [](const Edge &edge, gc_node_ref_t user) {
+                return edge.user < user;
+            });
+        const auto upper =
+            std::lower_bound(lower, end, ref, [](const Edge &edge, gc_node_ref_t user) {
+                return edge.user <= user;
+            });
         return {lower, static_cast<size_t>(upper - lower)};
     }
 
@@ -1228,11 +1223,11 @@ class GCGraph : public camel::core::rtdata::Object {
         GraphId outerGraph, GraphId *refs, uint8_t *refRoles, gc_cnt_t refCount,
         const GCGraphNativePayload &payload, ::Tuple *staticArea);
 
-    GraphId id_                                    = kInvalidGraphId;
-    GraphId typeSpecializationRoot_                = kInvalidGraphId; // see typeSpecializationRoot()
-    uint8_t flags_                                 = 0;               // see flags()
-    GCGraphDebugRecord *debug_                     = nullptr;
-    camel::core::type::FunctionType *funcType_     = nullptr;
+    GraphId id_                                = kInvalidGraphId;
+    GraphId typeSpecializationRoot_            = kInvalidGraphId; // see typeSpecializationRoot()
+    uint8_t flags_                             = 0;               // see flags()
+    GCGraphDebugRecord *debug_                 = nullptr;
+    camel::core::type::FunctionType *funcType_ = nullptr;
     camel::core::type::TupleType *runtimeDataType_ = nullptr;
     camel::core::type::TupleType *staticDataType_  = nullptr;
     camel::core::type::TupleType *closureType_     = nullptr;
@@ -1417,4 +1412,3 @@ class GCGraphManager {
 };
 
 } // namespace camel::runtime
-

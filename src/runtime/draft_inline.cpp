@@ -109,8 +109,8 @@ camel::core::type::Type *instanceParameterType(
     // nobody wrote sits too (`[]`, whose element is `Void`).
     // The shape is not a type variable, whatever the argument's own shape is.
     Type *element = formalArray->elemType();
-    if (!relaxNames && (element == nullptr || containsTypeVar(element) ||
-                        element->code() == TypeCode::Void)) {
+    if (!relaxNames &&
+        (element == nullptr || containsTypeVar(element) || element->code() == TypeCode::Void)) {
         if (actualArray != nullptr && actualArray->elemType() != nullptr &&
             actualArray->elemType()->code() != TypeCode::Void) {
             element = actualArray->elemType();
@@ -137,8 +137,7 @@ camel::core::type::Type *instanceParameterType(
     bool anyRank   = formalArray->anyRank();
     bool packBound = false;
     if (anyRank && !relaxNames && !formalArray->packName().empty() && actualArray != nullptr &&
-        !actualArray->anyRank() &&
-        actualArray->extents().size() >= formalArray->extents().size()) {
+        !actualArray->anyRank() && actualArray->extents().size() >= formalArray->extents().size()) {
         // `T[n, ..rest]`: the pack is a dimension name the declaration writes, and the argument
         // fixes it to the dimensions it had after the prefix. An open rank with no name (`T[..]`,
         // `Tensor`) states no dimension to bind: the argument's rank is a property of its value.
@@ -263,7 +262,8 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
             scanInputs(sourceGraph->ctrlInputsOf(sourceRef));
         }
         if (!hasNonDataPortInput) {
-            for (const camel::runtime::GCGraphSyncEdge &edge : sourceGraph->syncPredsOf(sourceRef)) {
+            for (const camel::runtime::GCGraphSyncEdge &edge :
+                 sourceGraph->syncPredsOf(sourceRef)) {
                 const GCNode *inputNode = sourceGraph->node(edge.pred);
                 if (inputNode && inputNode->kind != GCNodeKind::Data &&
                     inputNode->kind != GCNodeKind::Port) {
@@ -347,7 +347,7 @@ std::vector<gc_node_ref_t> collectExecutableEntryRoots(
 
 std::vector<gc_node_ref_t>
 orderedFuncActualInputs(const GraphTransaction &transaction, gc_node_ref_t funcNodeId) {
-    const auto &draft      = transaction.graph();
+    const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> inputs;
     const auto normInputs = draft.normInputsOf(funcNodeId);
     const auto withInputs = draft.withInputsOf(funcNodeId);
@@ -376,8 +376,8 @@ DraftNodeInit snapshotNodeInit(const GraphDraft &draft, gc_node_ref_t nodeId) {
         // a rewrite that replaces it and drops them loses where it stood -- the statement written
         // before it in its block's chain, and what ordered it -- and the chain it was part of dies
         // with it (a devirtualized call used to take the whole `sync` block's effects down).
-        .orderInputs  = draft.orderInputsOf(nodeId),
-        .syncInputs   = draft.syncInputsOf(nodeId),
+        .orderInputs = draft.orderInputsOf(nodeId),
+        .syncInputs  = draft.syncInputsOf(nodeId),
     };
 }
 
@@ -444,8 +444,7 @@ orderedClonedDirectCallFormalNodes(const DraftGraphCloneResult &cloned, const GC
     return formals;
 }
 
-std::vector<std::pair<FormalKind, gc_node_ref_t>>
-orderedClonedDirectCallFormalNodes(
+std::vector<std::pair<FormalKind, gc_node_ref_t>> orderedClonedDirectCallFormalNodes(
     const DraftGraphCloneResult &cloned, const GraphTransaction &transaction) {
     const auto &draft = transaction.graph();
     std::vector<std::pair<FormalKind, gc_node_ref_t>> formals;
@@ -715,10 +714,11 @@ std::vector<DraftFormalBinding> collectDirectFuncSpecializations(
         onCallCycle(*draft.program(), calleeGraph)) {
         // Only a constant (or an object) bound here unrolls, so only a call that binds one loses
         // its value bindings.
-        const bool bindsOtherValues = std::ranges::any_of(bindings, [](const DraftFormalBinding &b) {
-            return b.bindsValue() && b.staticValue.type != nullptr &&
-                   b.staticValue.type->code() != camel::core::type::TypeCode::Function;
-        });
+        const bool bindsOtherValues =
+            std::ranges::any_of(bindings, [](const DraftFormalBinding &b) {
+                return b.bindsValue() && b.staticValue.type != nullptr &&
+                       b.staticValue.type->code() != camel::core::type::TypeCode::Function;
+            });
         if (bindsOtherValues) {
             std::erase_if(bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); });
         }
@@ -796,7 +796,8 @@ RuntimeSpecializationKey makeRuntimeSpecializationKey(
             binding.runtimeFlags};
     };
     std::sort(
-        key.bindings.begin(), key.bindings.end(),
+        key.bindings.begin(),
+        key.bindings.end(),
         [&orderOf](const auto &lhs, const auto &rhs) { return orderOf(lhs) < orderOf(rhs); });
     return key;
 }
@@ -941,9 +942,9 @@ void bindPortValueUses(
 gc_node_ref_t remapFormalNodeToActual(
     gc_node_ref_t nodeId, const DraftGraphCloneResult &cloned, const GCGraph *calleeGraph,
     const GraphTransaction *calleeTransaction, std::span<const gc_node_ref_t> boundActualInputs) {
-    const auto formalNodes =
-        calleeTransaction ? orderedClonedDirectCallFormalNodes(cloned, *calleeTransaction)
-                          : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
+    const auto formalNodes = calleeTransaction
+                                 ? orderedClonedDirectCallFormalNodes(cloned, *calleeTransaction)
+                                 : orderedClonedDirectCallFormalNodes(cloned, calleeGraph);
     for (size_t actualIndex = 0; actualIndex < formalNodes.size(); ++actualIndex) {
         if (formalNodes[actualIndex].second == nodeId) {
             ASSERT(
@@ -1006,7 +1007,8 @@ gc_node_ref_t resolveInlineValueExit(
             calleeGraph,
             calleeTransaction,
             boundActualInputs);
-        if (const gc_node_ref_t resolved = resolveValueCandidate(transaction, current, boundActualInputs);
+        if (const gc_node_ref_t resolved =
+                resolveValueCandidate(transaction, current, boundActualInputs);
             resolved != kInvalidNodeRef) {
             return resolved;
         }
@@ -1018,7 +1020,7 @@ gc_node_ref_t resolveInlineCtrlExit(
     const GraphTransaction &transaction, const DraftGraphCloneResult &cloned,
     const GCGraph *calleeGraph, const GraphTransaction *calleeTransaction,
     std::span<const gc_node_ref_t> boundActualInputs) {
-    const auto &draft = transaction.graph();
+    const auto &draft     = transaction.graph();
     gc_node_ref_t current = cloned.exitNode != kInvalidNodeRef     ? cloned.exitNode
                             : cloned.returnNode != kInvalidNodeRef ? cloned.returnNode
                                                                    : cloned.outputNode;
@@ -1037,8 +1039,9 @@ gc_node_ref_t resolveInlineCtrlExit(
 } // namespace
 
 bool specializeDirectFuncInDraft(
-    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId, bool functionValuesOnly) {
-    auto &draft = transaction.edit();
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
+    bool functionValuesOnly) {
+    auto &draft                       = transaction.edit();
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
     if (!funcHeader || funcHeader->kind != GCNodeKind::Func) {
         return false;
@@ -1066,18 +1069,19 @@ bool specializeDirectFuncInDraft(
     // when they do not, the call still specializes.
     const GraphId instanceRoot = draft.typeSpecializationRoot();
     if (std::ranges::none_of(
-            bindings, [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
+            bindings,
+            [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
         isValid(instanceRoot) && instanceRoot == calleeGraph->id()) {
         std::vector<gc_node_ref_t> ports(draft.normPorts().begin(), draft.normPorts().end());
         const auto withPorts = draft.withPorts();
         ports.insert(ports.end(), withPorts.begin(), withPorts.end());
         const std::vector<gc_node_ref_t> actuals = orderedFuncActualInputs(transaction, funcNodeId);
-        bool accepts = ports.size() == actuals.size();
+        bool accepts                             = ports.size() == actuals.size();
         for (size_t i = 0; accepts && i < ports.size(); ++i) {
             const DraftNodeHeader *port   = draft.header(ports[i]);
             const DraftNodeHeader *actual = draft.header(actuals[i]);
-            accepts = port && actual && port->dataType && actual->dataType &&
-                      port->dataType->assignableFrom(actual->dataType);
+            accepts                       = port && actual && port->dataType && actual->dataType &&
+                                            port->dataType->assignableFrom(actual->dataType);
         }
         if (accepts) {
             draft.setCalleeGraph(funcNodeId, draft.id());
@@ -1097,8 +1101,7 @@ bool specializeDirectFuncInDraft(
             [](const DraftFormalBinding &b) { return b.bindsValue(); }) &&
         onCallCycle(*draft.program(), calleeGraph);
     if (boundedTypeSpecialization &&
-        !session.findSpecialization(
-            makeRuntimeSpecializationKey(calleeGraph, bindings))) {
+        !session.findSpecialization(makeRuntimeSpecializationKey(calleeGraph, bindings))) {
         const GraphId root = isValid(calleeGraph->typeSpecializationRoot())
                                  ? calleeGraph->typeSpecializationRoot()
                                  : calleeGraph->id();
@@ -1110,11 +1113,13 @@ bool specializeDirectFuncInDraft(
                 calleeGraph->name(),
                 toText(root),
                 kTypeSpecializationFixedPointGuard);
-            throw std::runtime_error(std::format(
-                "the type specialization of '{}' did not reach a fixed point: {} instances, each "
-                "with a key the one before it did not have",
-                calleeGraph->name(),
-                kTypeSpecializationFixedPointGuard));
+            throw std::runtime_error(
+                std::format(
+                    "the type specialization of '{}' did not reach a fixed point: {} instances, "
+                    "each "
+                    "with a key the one before it did not have",
+                    calleeGraph->name(),
+                    kTypeSpecializationFixedPointGuard));
         }
         session.noteTypeSpecialization(root);
     }
@@ -1158,17 +1163,18 @@ bool specializeDirectFuncInDraft(
     // value it hands on is the same tuple of their new versions, typed for this callee.
     const uint32_t writtenCaptures = draft.funcWriteMaskOf(funcNodeId);
     GCFuncRef newBody{
-        .ref = draft.payloadGraphIndexOf(specializedGraph->id()), .reserved = writtenCaptures};
+        .ref      = draft.payloadGraphIndexOf(specializedGraph->id()),
+        .reserved = writtenCaptures};
     std::array<std::byte, sizeof(GCFuncRef)> newPayload{};
     std::memcpy(newPayload.data(), &newBody, sizeof(newBody));
-    init.payload    = std::span<const std::byte>(newPayload.data(), newPayload.size());
-    init.normInputs = normInputs;
-    init.withInputs = withInputs;
+    init.payload     = std::span<const std::byte>(newPayload.data(), newPayload.size());
+    init.normInputs  = normInputs;
+    init.withInputs  = withInputs;
     const auto *type = specializedGraph->funcType();
     if (type != nullptr) {
-        camel::core::type::Type *value =
-            writtenCaptures != 0 ? callValueTypeOf(*specializedGraph, writtenCaptures)
-                                 : (type->hasExitType() ? type->exitType() : nullptr);
+        camel::core::type::Type *value = writtenCaptures != 0
+                                             ? callValueTypeOf(*specializedGraph, writtenCaptures)
+                                             : (type->hasExitType() ? type->exitType() : nullptr);
         if (value != nullptr) {
             init.dataType = value;
         }
@@ -1283,21 +1289,22 @@ GCGraph *liftClosureGraph(RuntimeGraphDraftSession &session, GCGraph *base, size
         normTypes.emplace_back(draft->header(capture)->dataType, false);
     }
     draft->setFuncType(
-        camel::core::type::FunctionType::create(
-            withTypes,
-            normTypes,
-            type->exitType()));
+        camel::core::type::FunctionType::create(withTypes, normTypes, type->exitType()));
     draft->setClosureType(nullptr);
     GCGraph *lifted = encodeSpecializedGraph(session, *draft, base, "lift", nonce);
     session.rememberSpecialization(std::move(key), lifted);
     return lifted;
 }
 
+} // namespace
+
+namespace {
+
 /// A CALL of a closure built by FILL in this graph becomes a direct FUNC of the lifted graph.
 bool devirtualizeClosureCallInDraft(
     RuntimeGraphDraftSession &session, camel::runtime::GraphTransaction &transaction,
     gc_node_ref_t callNodeId, gc_node_ref_t fillNodeId) {
-    auto &draft = transaction.edit();
+    auto &draft      = transaction.edit();
     const auto *fill = reinterpret_cast<const GCFillBody *>(draft.payloadOf(fillNodeId).data());
     if (fill->fillKind != GCFillKind::FunctionClosure ||
         draft.normInputsOf(fillNodeId).size() != 1) {
@@ -1388,10 +1395,8 @@ bool waitsOnAnyEdge(const GraphDraft &draft, gc_node_ref_t from, gc_node_ref_t t
     return false;
 }
 
-/// A node whose work is inside the regions it owns (the arms of a branch, the parts of a loop):
-/// it carries no computation of its own to order, and what its regions hold is in them before it
-/// is. Ordering such a node would order the region as a whole, which is not what 5.7 asks for and
-/// what a back end cannot lay out -- the region's own nodes are ordered one by one instead.
+/// A region owner has no computation of its own to order. An incoming wait is written on the owner;
+/// the code in its arms or parts is reached through its control region, not by an edge into it.
 bool nodeOwnsRegions(GCNodeKind kind) {
     return kind == GCNodeKind::Brch || kind == GCNodeKind::Join || kind == GCNodeKind::Loop;
 }
@@ -1403,8 +1408,7 @@ bool nodeOwnsRegions(GCNodeKind kind) {
 bool splicedBodyNeedsOrder(const GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft             = transaction.graph();
     const DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind == GCNodeKind::Dead ||
-        nodeOwnsRegions(header->kind)) {
+    if (header == nullptr || header->kind == GCNodeKind::Dead || nodeOwnsRegions(header->kind)) {
         return false;
     }
     return !nodeIsFreelySchedulable(draft, id);
@@ -1425,10 +1429,10 @@ gc_node_ref_t spliceChainAnchor(
     }
     const DraftNodeHeader *valueHeader = draft.header(value);
     const DraftNodeInit gateInit{
-        .dataIndex = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
-        .dataType  = valueHeader ? valueHeader->dataType : nullptr,
-        .kind      = GCNodeKind::Gate,
-        .region    = region,
+        .dataIndex  = valueHeader ? valueHeader->dataIndex : static_cast<gc_slot_idx_t>(0),
+        .dataType   = valueHeader ? valueHeader->dataType : nullptr,
+        .kind       = GCNodeKind::Gate,
+        .region     = region,
         .normInputs = std::span<const gc_node_ref_t>(&value, 1),
     };
     return draft.addNode(gateInit);
@@ -1444,8 +1448,8 @@ gc_node_ref_t spliceChainAnchor(
 /// Only the body's nodes in the block the call itself is a statement of are ordered: what the body
 /// does inside a region of its own (the parts of a loop, the arms of a branch) is laid out by that
 /// region's rules (5.2 and the Join/Loop layout), and an ordering never leaves the region that
-/// holds it (4.6) -- ordering an inner-region node after a statement outside it would order the
-/// region's work against the region, which the layout cannot honour.
+/// holds it (4.6). A BRCH or LOOP takes the incoming wait itself; no edge reaches into an arm or
+/// part from outside.
 void addSpliceOrderEdges(
     GraphTransaction &transaction, size_t slotsBefore, uint32_t blockRegion,
     const std::vector<gc_node_ref_t> &before, const std::vector<gc_node_ref_t> &after) {
@@ -1455,19 +1459,25 @@ void addSpliceOrderEdges(
     }
     for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
          ++id) {
-        if (!draft.alive(id) || !splicedBodyNeedsOrder(transaction, id) ||
+        const DraftNodeHeader *header = draft.header(id);
+        const bool ownsRegion         = header != nullptr && (header->kind == GCNodeKind::Brch ||
+                                                              header->kind == GCNodeKind::Loop);
+        if (!draft.alive(id) || (!ownsRegion && !splicedBodyNeedsOrder(transaction, id)) ||
             controlRegionOf(draft, id) != blockRegion) {
             continue;
         }
         for (gc_node_ref_t pred : before) {
-            if (draft.alive(pred) && controlRegionOf(draft, pred) == blockRegion) {
+            pred = chainExitOf(draft, pred);
+            if (pred != id && draft.alive(pred) && controlRegionOf(draft, pred) == blockRegion) {
                 draft.appendOrderDependency(id, pred);
             }
         }
         for (gc_node_ref_t user : after) {
-            if (draft.alive(user) && splicedBodyNeedsOrder(transaction, user) &&
+            const gc_node_ref_t exit = chainExitOf(draft, id);
+            if (exit != user && draft.alive(exit) && draft.alive(user) &&
+                splicedBodyNeedsOrder(transaction, user) &&
                 controlRegionOf(draft, user) == blockRegion) {
-                draft.appendOrderDependency(user, id);
+                draft.appendOrderDependency(user, exit);
             }
         }
     }
@@ -1582,35 +1592,32 @@ bool devirtualizeStaticCallInDraft(
 
 /// A statement of a block follows one other statement of it at most, and is followed by one: a
 /// block's statements are one chain (docs/design/effects/edges.cn.md 5.3). A chain that forks is
-/// therefore not a chain, yet a splice can leave one: it reads the end of the body's chain while the
-/// body's own calls are still to be spliced, so the statement written after the call is written after
-/// a statement that gains a follower later, when the code the call stands for is spliced in turn.
-/// The place is resolved again here, after the code is in -- reading which statement ends the chain
-/// that grows from the one it was written after, rather than the snapshot the splice took.
+/// therefore not a chain, yet a splice can leave one: it reads the end of the body's chain while
+/// the body's own calls are still to be spliced, so the statement written after the call is written
+/// after a statement that gains a follower later, when the code the call stands for is spliced in
+/// turn. The place is resolved again here, after the code is in -- reading which statement ends the
+/// chain that grows from the one it was written after, rather than the snapshot the splice took.
 void resolvePlaceForks(GraphDraft &draft) {
-    const auto isStatement = [&](gc_node_ref_t n) {
-        const DraftNodeHeader *header = draft.header(n);
-        return draft.alive(n) && header != nullptr &&
-               (header->runtimeFlags & kGCNodeFlagSyncStatement) != 0;
-    };
-    const auto inBlock = [&](gc_node_ref_t a, gc_node_ref_t b) {
+    const auto isStatement = [&](gc_node_ref_t n) { return occupiesChainPlace(draft, n); };
+    const auto inBlock     = [&](gc_node_ref_t a, gc_node_ref_t b) {
         return sameSyncBlock(draft, a, b);
     };
-    // Does `from` wait on `target`, directly or through any edge kind? The place is moved only where
-    // the answer is no: a statement's place may not be one that waits on the statement itself (the
-    // graph would lie on a cycle of inputs). An exhausted walk answers yes, because not proving it
-    // free does not make it safe to move.
+    // Does `from` wait on `target`, directly or through any edge kind? The place is moved only
+    // where the answer is no: a statement's place may not be one that waits on the statement itself
+    // (the graph would lie on a cycle of inputs). An exhausted walk answers yes, because not
+    // proving it free does not make it safe to move.
     //
-    // Every kind of input is walked, the order ones included. An order edge is as real an ordering as
-    // a sync one (docs/design/effects/edges.cn.md 1), and the check the frozen graph gets walks it
-    // beside them (graph_edges.cpp, `findCycle`: "every edge kind takes part, the sync and order ones
-    // included"). Walking four of the five kinds was not a narrowing that stayed safe: a chain end
-    // whose only way back to the statement runs along an order edge -- the edge a write to a `var`
-    // leaves on the read before it, the edge a spliced body leaves on the statement after the call --
-    // looked free when it was not. `rc04_seed72` (test/cases/opt/adb67e081) is the program that
-    // showed it: the move closed a cycle through the chain end's order input, and the seal then
-    // reported a cycle of inputs -- the wrong defect, at the wrong node -- where the truth was that
-    // the statement has no place in that chain, and refusing the move leaves a graph the pass runs.
+    // Every kind of input is walked, the order ones included. An order edge is as real an ordering
+    // as a sync one (docs/design/effects/edges.cn.md 1), and the check the frozen graph gets walks
+    // it beside them (graph_edges.cpp, `findCycle`: "every edge kind takes part, the sync and order
+    // ones included"). Walking four of the five kinds was not a narrowing that stayed safe: a chain
+    // end whose only way back to the statement runs along an order edge -- the edge a write to a
+    // `var` leaves on the read before it, the edge a spliced body leaves on the statement after the
+    // call -- looked free when it was not. `rc04_seed72` (test/cases/opt/adb67e081) is the program
+    // that showed it: the move closed a cycle through the chain end's order input, and the seal
+    // then reported a cycle of inputs -- the wrong defect, at the wrong node -- where the truth was
+    // that the statement has no place in that chain, and refusing the move leaves a graph the pass
+    // runs.
     const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
         std::vector<gc_node_ref_t> work{from};
         std::unordered_set<gc_node_ref_t> seen;
@@ -1641,17 +1648,45 @@ void resolvePlaceForks(GraphDraft &draft) {
         }
         return false;
     };
+    for (gc_node_ref_t gate = 0; gate < draft.nodeSlotCount(); ++gate) {
+        const DraftNodeHeader *header = draft.header(gate);
+        if (header == nullptr || header->kind != GCNodeKind::Gate ||
+            draft.syncInputsOf(gate).size() != 1 || !draft.syncUsersOf(gate).empty() ||
+            !draft.chainReachesBlockValue(gate)) {
+            continue;
+        }
+        const gc_node_ref_t pred = draft.syncInputsOf(gate).front();
+        std::vector<gc_node_ref_t> statements;
+        for (gc_node_ref_t user : draft.syncUsersOf(pred)) {
+            if (user != gate && isStatement(user) && inBlock(user, pred)) {
+                statements.push_back(user);
+            }
+        }
+        if (statements.size() != 1) {
+            continue;
+        }
+        if (waitsOn(statements.front(), gate)) {
+            draft.setSyncInputs(statements.front(), {});
+            continue;
+        }
+        const gc_node_ref_t only[1] = {statements.front()};
+        draft.setSyncInputs(gate, only);
+        const auto ctrl = draft.ctrlInputsOf(gate);
+        if (std::ranges::find(ctrl, statements.front()) == ctrl.end()) {
+            draft.appendControlEdge(gate, statements.front());
+        }
+    }
     // Every statement of a block that follows a statement a second statement of the block follows.
     std::vector<gc_node_ref_t> forked;
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
-        if (!isStatement(n)) {
-            continue;
-        }
         const auto inputs = draft.syncInputsOf(n);
         if (inputs.size() != 1) {
             continue;
         }
         const gc_node_ref_t pred = inputs.front();
+        if (!isStatement(n)) {
+            continue;
+        }
         if (pred == n || !isStatement(pred) || !inBlock(n, pred)) {
             continue;
         }
@@ -1678,9 +1713,9 @@ void resolvePlaceForks(GraphDraft &draft) {
         std::unordered_set<gc_node_ref_t> seen{pred};
         bool moved = true;
         while (moved) {
-            moved = false;
+            moved              = false;
             gc_node_ref_t next = kInvalidNodeRef;
-            size_t count      = 0;
+            size_t count       = 0;
             for (gc_node_ref_t user : draft.syncUsersOf(tail)) {
                 if (user == n || !isStatement(user) || !inBlock(user, pred)) {
                     continue;
@@ -1709,7 +1744,7 @@ void resolvePlaceForks(GraphDraft &draft) {
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
     bool asArm) {
-    auto &draft              = transaction.edit();
+    auto &draft = transaction.edit();
     DraftInlineResult result{.callNode = funcNodeId};
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice begin for draft node {}.", funcNodeId);
     const DraftNodeHeader *funcHeader = draft.header(funcNodeId);
@@ -1788,10 +1823,10 @@ DraftInlineResult inlineCallableInDraft(
             ctrlPreds.push_back(syncPred);
         }
     }
-    ctrlPreds                  = controlFrontier(transaction, ctrlPreds);
+    ctrlPreds = controlFrontier(transaction, ctrlPreds);
     // What this splice asks about the call's place: the predecessors are the wait the call carries
-    // today, and whether the call sat on a block's chain is a fact of its own. A structural reading,
-    // written where it is read -- `EffectLivenessFacts` no longer carries a wait field
+    // today, and whether the call sat on a block's chain is a fact of its own. A structural
+    // reading, written where it is read -- `EffectLivenessFacts` no longer carries a wait field
     // (camel/runtime/effect_liveness.h says why). Read once, so that a later change moves the
     // decision below without moving the reading. Note that the wait here is the *frontier* of the
     // predecessors, not the raw control inputs: a splice waits on what is left after the frontier,
@@ -1807,7 +1842,8 @@ DraftInlineResult inlineCallableInDraft(
     // that followed the call. Read now, because replacing the call's uses below is what makes them
     // the body's successors.
     std::vector<gc_node_ref_t> callFollowers(
-        draft.ctrlUsersOf(funcNodeId).begin(), draft.ctrlUsersOf(funcNodeId).end());
+        draft.ctrlUsersOf(funcNodeId).begin(),
+        draft.ctrlUsersOf(funcNodeId).end());
     for (gc_node_ref_t syncUser : draft.syncUsersOf(funcNodeId)) {
         if (std::ranges::find(callFollowers, syncUser) == callFollowers.end()) {
             callFollowers.push_back(syncUser);
@@ -1817,9 +1853,11 @@ DraftInlineResult inlineCallableInDraft(
     // The order edges the call stood in: a read written before it is ordered before the body's
     // writes, and the reads written after it after them, as they were before the call (5.7).
     const std::vector<gc_node_ref_t> callOrderInputs(
-        draft.orderInputsOf(funcNodeId).begin(), draft.orderInputsOf(funcNodeId).end());
+        draft.orderInputsOf(funcNodeId).begin(),
+        draft.orderInputsOf(funcNodeId).end());
     const std::vector<gc_node_ref_t> callOrderUsers(
-        draft.orderUsersOf(funcNodeId).begin(), draft.orderUsersOf(funcNodeId).end());
+        draft.orderUsersOf(funcNodeId).begin(),
+        draft.orderUsersOf(funcNodeId).end());
 
     // The body goes in a region of its own, inside the region of the call: where the code
     // came from stays recorded after the call is gone. The body of an arm of a branch is the
@@ -1845,11 +1883,9 @@ DraftInlineResult inlineCallableInDraft(
                                      ? calleeGraph->typeSpecializationRoot()
                                      : calleeGraph->id();
     const uint32_t inlineRegion =
-        intoArm ? draft.nodeRegion(funcNodeId)
-                : draft.addInlineRegion(
-                      draft.nodeRegion(funcNodeId),
-                      inlineSource,
-                      kInvalidNodeRef);
+        intoArm
+            ? draft.nodeRegion(funcNodeId)
+            : draft.addInlineRegion(draft.nodeRegion(funcNodeId), inlineSource, kInvalidNodeRef);
     draft.setRegionOrigin(inlineRegion, static_cast<uint32_t>(draft.nodeOrigin(funcNodeId)));
     if (intoArm) {
         draft.setRegionInline(inlineRegion, kInvalidGraphId, kInvalidNodeRef);
@@ -1881,12 +1917,12 @@ DraftInlineResult inlineCallableInDraft(
         clonedFormalNodes.size() == formalNodes.size(),
         "Runtime inline formal-node planning diverged between source and cloned graphs.");
 
-    // An argument the body never reads still runs. The call is where the argument is evaluated, and it
-    // takes its effects with it (design principles 3.4): `h(5, println(9))` prints `9` although `h`
-    // ignores its second parameter. Binding no use to the port left the actual reached by nothing
-    // once the call was gone, and the effect stopped running with it (9.7). The body waits on the
-    // argument instead -- on the same nodes the call's own predecessors are waited for on -- so the
-    // effect runs where the call stood and before the body does.
+    // An argument the body never reads still runs. The call is where the argument is evaluated, and
+    // it takes its effects with it (design principles 3.4): `h(5, println(9))` prints `9` although
+    // `h` ignores its second parameter. Binding no use to the port left the actual reached by
+    // nothing once the call was gone, and the effect stopped running with it (9.7). The body waits
+    // on the argument instead -- on the same nodes the call's own predecessors are waited for on --
+    // so the effect runs where the call stood and before the body does.
     std::vector<gc_node_ref_t> unreadArgumentEffects;
     for (size_t i = 0; i < clonedFormalNodes.size() && i < actualInputs.size(); ++i) {
         const gc_node_ref_t port = clonedFormalNodes[i].second;
@@ -1895,17 +1931,17 @@ DraftInlineResult inlineCallableInDraft(
             continue;
         }
         const gc_node_ref_t actual = actualInputs[i];
-        if (!draft.alive(actual) || actual == funcNodeId ||
-            !carriesOrdering(draft, actual, true)) {
+        if (!draft.alive(actual) || actual == funcNodeId || !carriesOrdering(draft, actual, true)) {
             continue;
         }
         // Only the argument whose call was its last reader is lost: one another node reads keeps
         // running where that node is, and does not have to be pulled here as well.
         bool readOnlyHere = true;
-        for (auto group : {draft.normUsersOf(actual),
-                           draft.withUsersOf(actual),
-                           draft.ctrlUsersOf(actual),
-                           draft.syncUsersOf(actual)}) {
+        for (auto group :
+             {draft.normUsersOf(actual),
+              draft.withUsersOf(actual),
+              draft.ctrlUsersOf(actual),
+              draft.syncUsersOf(actual)}) {
             for (gc_node_ref_t user : group) {
                 readOnlyHere = readOnlyHere && user == funcNodeId;
             }
@@ -1977,13 +2013,30 @@ DraftInlineResult inlineCallableInDraft(
     // such a body reads them, so the predecessors ended at nodes nothing followed.) A body with
     // several roots used to get one SYNC node standing for the predecessors, which the model
     // deletes (docs/design/effects/edges.cn.md 5.3): the wait is written on the roots themselves.
+    bool calleeHasSyncChain = false;
+    for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
+         ++id) {
+        calleeHasSyncChain = calleeHasSyncChain ||
+                             (draft.alive(id) &&
+                              (!draft.syncInputsOf(id).empty() || !draft.syncUsersOf(id).empty()));
+    }
     std::vector<gc_node_ref_t> gateCtrl = waitPreds;
     if (!entryRoots.empty()) {
         result.ctrlEntry = entryRoots.front();
         for (gc_node_ref_t targetId : entryRoots) {
-            const std::vector<gc_node_ref_t> mergedCtrlInputs =
-                appendUniqueRefs(draft.ctrlInputsOf(targetId), waitPreds);
-            draft.setCtrlInputs(targetId, mergedCtrlInputs);
+            for (gc_node_ref_t pred : waitPreds) {
+                if (calleeHasSyncChain && draft.alive(pred) && draft.alive(targetId) &&
+                    isChainStatement(draft, targetId) && sameSyncBlock(draft, targetId, pred) &&
+                    draft.syncInputsOf(targetId).empty() && draft.syncUsersOf(pred).empty()) {
+                    (void)draft.appendChainStatement(targetId, pred);
+                } else if (splicedBodyNeedsOrder(transaction, targetId)) {
+                    if (controlRegionOf(draft, targetId) == controlRegionOf(draft, pred)) {
+                        (void)draft.appendOrderDependency(targetId, pred);
+                    } else {
+                        (void)appendControlDependency(transaction, pred, targetId);
+                    }
+                }
+            }
         }
     }
     // A gate waits on the predecessors themselves; never on an entry root, which may read the gate.
@@ -2094,9 +2147,7 @@ DraftInlineResult inlineCallableInDraft(
             draft.setNodeRegion(id, spliceRegion);
         }
     }
-    if (intoArm) {
-        draft.setRegionResult(inlineRegion, result.valueExit);
-    }
+    draft.setRegionResult(inlineRegion, result.valueExit);
 
     // Value users and control users observing the call result now observe the
     // inlined output/completion anchor instead.
@@ -2107,9 +2158,7 @@ DraftInlineResult inlineCallableInDraft(
     // `takeStatementPlace` writes that place (and the control edge naming the same pairs beside it,
     // for as long as the chain of a block is written as control edges) when the replacer is a
     // statement of the block the call was written in. It runs here, before `eraseNode` closes the
-    // chain over the call: the call has to be alive for its place to be read. A call with no such
-    // place -- every call of today's corpus, whose block writes its chain as control edges --
-    // has nothing to hand over, and nothing is added to the graph for it.
+    // chain over the call: the call has to be alive for its place to be read.
     //
     // A body that carries a chain of its own stands where the call stood as the statement the call
     // was: its head is written after the statement the call was written after, and the statements
@@ -2122,18 +2171,14 @@ DraftInlineResult inlineCallableInDraft(
     const bool callHasChainPlace = !draft.syncInputsOf(funcNodeId).empty() ||
                                    !draft.syncUsersOf(funcNodeId).empty() ||
                                    !draft.orderInputsOf(funcNodeId).empty();
+    const bool callHasSyncPlace =
+        !draft.syncInputsOf(funcNodeId).empty() || !draft.syncUsersOf(funcNodeId).empty();
     const auto inCallBlock = [&](gc_node_ref_t id) {
         return id >= static_cast<gc_node_ref_t>(slotsBefore) && draft.alive(id) &&
                controlRegionOf(draft, id) == callBlockRegion;
     };
-    // A statement of the block as the chain reads it: the flag the builder writes when it chains a
-    // statement (`markSyncStatement`), read back over the code this splice added.
     const auto isBodyStatement = [&](gc_node_ref_t id) {
-        if (id == funcNodeId || !inCallBlock(id)) {
-            return false;
-        }
-        const DraftNodeHeader *h = draft.header(id);
-        return h != nullptr && (h->runtimeFlags & kGCNodeFlagSyncStatement) != 0;
+        return id != funcNodeId && inCallBlock(id) && occupiesChainPlace(draft, id);
     };
     struct BodyChain {
         gc_node_ref_t head = kInvalidNodeRef;
@@ -2145,25 +2190,23 @@ DraftInlineResult inlineCallableInDraft(
     // follows heads a chain, and one nothing in the block is written after ends it.
     const auto scanBodyChain = [&]() {
         BodyChain chain;
-        for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore);
-             id < draft.nodeSlotCount();
+        for (gc_node_ref_t id = static_cast<gc_node_ref_t>(slotsBefore); id < draft.nodeSlotCount();
              ++id) {
             if (!isBodyStatement(id)) {
                 continue;
             }
             bool bodyFollows = false;
             for (gc_node_ref_t user : draft.syncUsersOf(id)) {
-                if (inCallBlock(user)) {
+                if (isBodyStatement(user)) {
                     bodyFollows = true;
                     break;
                 }
             }
             if (draft.syncInputsOf(id).empty()) {
-                if (bodyFollows) {
-                    chain.head = id;
-                    ++chain.heads;
-                }
-            } else if (!bodyFollows) {
+                chain.head = id;
+                ++chain.heads;
+            }
+            if (!bodyFollows) {
                 chain.tail = id;
                 ++chain.tails;
             }
@@ -2194,9 +2237,12 @@ DraftInlineResult inlineCallableInDraft(
             // The nearest statement this one reads: walking back over the value ports only, so the
             // link written below is one the body's data edges already order.
             std::vector<gc_node_ref_t> todo(
-                draft.normInputsOf(head).begin(), draft.normInputsOf(head).end());
+                draft.normInputsOf(head).begin(),
+                draft.normInputsOf(head).end());
             todo.insert(
-                todo.end(), draft.withInputsOf(head).begin(), draft.withInputsOf(head).end());
+                todo.end(),
+                draft.withInputsOf(head).begin(),
+                draft.withInputsOf(head).end());
             std::unordered_set<gc_node_ref_t> seen{head};
             gc_node_ref_t pred = kInvalidNodeRef;
             while (!todo.empty() && pred == kInvalidNodeRef) {
@@ -2222,23 +2268,14 @@ DraftInlineResult inlineCallableInDraft(
             if (pred == kInvalidNodeRef || pred == head) {
                 continue;
             }
-            // The pair the block's chain is written with: the sync edge naming the order and the
-            // control edge the same pair beside it, as the builder writes them (writeSyncStatement).
-            // Both ends are statements of the block from here on because the chain names them; no
-            // mark is written beside the edge (the `kGCNodeFlagSyncStatement` retirement).
-            const gc_node_ref_t only[1] = {pred};
-            draft.setSyncInputs(head, only);
-            const auto ctrl = draft.ctrlInputsOf(head);
-            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendControlEdge(head, pred);
-            }
+            (void)draft.appendChainStatement(head, pred);
         }
         bodyChain = scanBodyChain();
     }
-    gc_node_ref_t bodyHead            = bodyChain.head;
-    gc_node_ref_t bodyTail            = bodyChain.tail;
-    const size_t bodyHeads            = bodyChain.heads;
-    const size_t bodyTails            = bodyChain.tails;
+    gc_node_ref_t bodyHead = bodyChain.head;
+    gc_node_ref_t bodyTail = bodyChain.tail;
+    const size_t bodyHeads = bodyChain.heads;
+    const size_t bodyTails = bodyChain.tails;
     // One head and one tail, or the body's chain is not one statement of the block -- a chain that
     // forks or breaks keeps the gate carrying the place rather than half of it moving.
     const bool bodyHasChain = bodyHeads == 1 && bodyTails == 1;
@@ -2247,28 +2284,33 @@ DraftInlineResult inlineCallableInDraft(
         bodyTail = kInvalidNodeRef;
     }
     const std::vector<gc_node_ref_t> callSyncInputs(
-        draft.syncInputsOf(funcNodeId).begin(), draft.syncInputsOf(funcNodeId).end());
+        draft.syncInputsOf(funcNodeId).begin(),
+        draft.syncInputsOf(funcNodeId).end());
     const std::vector<gc_node_ref_t> callSyncUsers(
-        draft.syncUsersOf(funcNodeId).begin(), draft.syncUsersOf(funcNodeId).end());
+        draft.syncUsersOf(funcNodeId).begin(),
+        draft.syncUsersOf(funcNodeId).end());
     if (callHasChainPlace && !bodyHasChain) {
-        const gc_node_ref_t chainAnchor =
-            spliceChainAnchor(transaction, slotsBefore, result.valueExit, draft.nodeRegion(funcNodeId));
+        const gc_node_ref_t chainAnchor = spliceChainAnchor(
+            transaction,
+            slotsBefore,
+            result.valueExit,
+            draft.nodeRegion(funcNodeId));
         draft.takeStatementPlace(funcNodeId, chainAnchor);
-        // 5.7: the caller's chain reaches the body's result by a sync edge. The body's statements are
-        // reached from the graph's result through that chain (2), so the place the call had is handed
-        // to the tail of the body's chain -- the statement the body's value reads, or the last
-        // statement that stands in the body's chain -- rather than closed over the call. Closing it
-        // over the call steps over the body, and a body whose value nothing reads (a call whose result
-        // is unused) then keeps its statements reached by nothing.
+        // 5.7: the caller's chain reaches the body's result by a sync edge. The body's statements
+        // are reached from the graph's result through that chain (2), so the place the call had is
+        // handed to the tail of the body's chain -- the statement the body's value reads, or the
+        // last statement that stands in the body's chain -- rather than closed over the call.
+        // Closing it over the call steps over the body, and a body whose value nothing reads (a
+        // call whose result is unused) then keeps its statements reached by nothing.
         const auto inBody  = [&](gc_node_ref_t n) { return n >= slotsBefore; };
         const auto related = [&](gc_node_ref_t n) {
             return draft.regionWithin(draft.nodeRegion(n), draft.nodeRegion(funcNodeId)) ||
                    draft.regionWithin(draft.nodeRegion(funcNodeId), draft.nodeRegion(n));
         };
-        // The body's result reads the tail of the body's chain: with the value standing in a chain of
-        // its own, the caller's chain reaches the value itself and the body's tail stays on it
-        // (edges.cn.md 5.3). A value that carries no chain (a constant) leaves the chain ending at the
-        // body's last statement, so that statement takes the place instead.
+        // The body's result reads the tail of the body's chain: with the value standing in a chain
+        // of its own, the caller's chain reaches the value itself and the body's tail stays on it
+        // (edges.cn.md 5.3). A value that carries no chain (a constant) leaves the chain ending at
+        // the body's last statement, so that statement takes the place instead.
         gc_node_ref_t bodyTail = kInvalidNodeRef;
         bool valueInChain      = false;
         for (gc_node_ref_t pred : draft.syncInputsOf(result.valueExit)) {
@@ -2283,9 +2325,7 @@ DraftInlineResult inlineCallableInDraft(
         for (gc_node_ref_t n = static_cast<gc_node_ref_t>(slotsBefore);
              bodyTail == kInvalidNodeRef && n < draft.nodeSlotCount();
              ++n) {
-            const auto *h = draft.header(n);
-            if (!draft.alive(n) || !related(n) || h == nullptr ||
-                (h->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0) {
+            if (!draft.alive(n) || !related(n) || !occupiesChainPlace(draft, n)) {
                 continue;
             }
             bool followed = false;
@@ -2307,12 +2347,12 @@ DraftInlineResult inlineCallableInDraft(
     // they are written in: the call is gone, so they follow what the call followed. They do not
     // follow the body's anchor instead -- that anchor is a node of the region the body was given,
     // and a sync edge never leaves the region of its block. `closeChainOver` writes that place, and
-    // the control edge that names the same pair beside it; it runs here rather than inside eraseNode
-    // below because the users have to be known before the call's own edges go.
+    // the control edge that names the same pair beside it; it runs here rather than inside
+    // eraseNode below because the users have to be known before the call's own edges go.
     //
     // What the body ordered before those statements used to be carried as one order edge into the
-    // body's anchor as well (7ca495665). It is gone: an order edge only orders something that has an
-    // order, and the following statement is a plain statement of the block, not an effect
+    // body's anchor as well (7ca495665). It is gone: an order edge only orders something that has
+    // an order, and the following statement is a plain statement of the block, not an effect
     // (docs/design/effects/edges.cn.md 1.5, 4.6). The ordering it named is what the body's region
     // carries once it stands on the chain as one statement of the block.
     draft.closeChainOver(funcNodeId);
@@ -2334,8 +2374,8 @@ DraftInlineResult inlineCallableInDraft(
     }
     addSpliceOrderEdges(transaction, slotsBefore, callBlockRegion, orderPreds, orderFollowers);
     // 5.7: the chain the body brought with it stands where the call stood. Written here, after the
-    // body's statements are laid out and the data edges of the reads it holds are final: a read of a
-    // captured `var` keeps the place its nearest write gave it, and the chain is joined around it
+    // body's statements are laid out and the data edges of the reads it holds are final: a read of
+    // a captured `var` keeps the place its nearest write gave it, and the chain is joined around it
     // rather than taking the read with it (docs/design/effects/edges.cn.md 2, 5.6).
     //
     // The place the call stood in is its `sync` predecessor, or -- while a block's chain is still
@@ -2347,14 +2387,15 @@ DraftInlineResult inlineCallableInDraft(
     if (placePreds.empty()) {
         // A block's chain link is left out where the statement reads, as a value, the node the link
         // would run from (docs/design/effects/edges.cn.md 5.7; src/compile/gir/builder_helpers.h,
-        // `chainLinkSaysSomething`): the data edge orders the two already. The statement the call is
-        // written after is then the argument the call reads, not that argument's own predecessor.
-        // Handing the body the control frontier instead writes the body's head *beside* the
-        // argument, and the block's chain forks -- two statements follow the same one. The fork
-        // resolution below (`resolvePlaceForks`) then moves the argument's place onto the body's
-        // tail, so the argument is written after the code that reads it, and the commit refuses the
-        // graph on a cycle of inputs (4.2 rule 1). A body that reads the argument through a
-        // parameter GATE is where this shows: the splice itself made the body wait on that GATE.
+        // `chainLinkSaysSomething`): the data edge orders the two already. The statement the call
+        // is written after is then the argument the call reads, not that argument's own
+        // predecessor. Handing the body the control frontier instead writes the body's head
+        // *beside* the argument, and the block's chain forks -- two statements follow the same one.
+        // The fork resolution below (`resolvePlaceForks`) then moves the argument's place onto the
+        // body's tail, so the argument is written after the code that reads it, and the commit
+        // refuses the graph on a cycle of inputs (4.2 rule 1). A body that reads the argument
+        // through a parameter GATE is where this shows: the splice itself made the body wait on
+        // that GATE.
         std::vector<gc_node_ref_t> argumentPlace;
         for (gc_node_ref_t argument : draft.normInputsOf(funcNodeId)) {
             if (argument == funcNodeId || !draft.alive(argument) ||
@@ -2368,9 +2409,8 @@ DraftInlineResult inlineCallableInDraft(
         // before it, and the call follows the last of them.
         gc_node_ref_t nearest = kInvalidNodeRef;
         for (gc_node_ref_t candidate : argumentPlace) {
-            if (nearest == kInvalidNodeRef ||
-                (!waitsOnAnyEdge(draft, nearest, candidate) &&
-                 waitsOnAnyEdge(draft, candidate, nearest))) {
+            if (nearest == kInvalidNodeRef || (!waitsOnAnyEdge(draft, nearest, candidate) &&
+                                               waitsOnAnyEdge(draft, candidate, nearest))) {
                 nearest = candidate;
             }
         }
@@ -2381,14 +2421,14 @@ DraftInlineResult inlineCallableInDraft(
     if (placePreds.empty()) {
         placePreds = ctrlPreds;
     }
-    // The statement written after the call is the one its sync edge names, and only that one: a sync
-    // edge is what says one statement is written directly after another of its block
+    // The statement written after the call is the one its sync edge names, and only that one: a
+    // sync edge is what says one statement is written directly after another of its block
     // (docs/design/effects/edges.cn.md 1.5, 4.6), and a block's statements are one chain (5.3). The
     // call can have more nodes waiting on it than that -- a read of a `var` it writes, a gate
-    // carrying the block's value, the tuple a `let` takes apart -- and those wait on it as an order,
-    // not as the block's next statement: `replaceAllCtrlUses` above has already given each of them
-    // the body's completion to wait on, so they keep their place and are not written into the
-    // chain. Taking them from the control side as well hands the body's tail several sync
+    // carrying the block's value, the tuple a `let` takes apart -- and those wait on it as an
+    // order, not as the block's next statement: `replaceAllCtrlUses` above has already given each
+    // of them the body's completion to wait on, so they keep their place and are not written into
+    // the chain. Taking them from the control side as well hands the body's tail several sync
     // followers, and a statement with two followers is a chain that forks, which is no chain. The
     // control side is what names the successors only for a call that has no sync edge either way,
     // where there is nothing else to read them from.
@@ -2396,45 +2436,56 @@ DraftInlineResult inlineCallableInDraft(
     if (placePreds.empty() && placeUsers.empty()) {
         placeUsers = callFollowers;
     }
-    if (bodyHasChain && !placePreds.empty() && draft.alive(bodyHead) && draft.alive(bodyTail)) {
-        const auto markStatement = [&](gc_node_ref_t node) {
-            const DraftNodeHeader *header = draft.header(node);
-            if (header != nullptr) {
-                draft.setNodeRuntimeFlags(
-                    node, static_cast<uint8_t>(header->runtimeFlags | kGCNodeFlagSyncStatement));
-            }
-        };
-        const auto nameControlPair = [&](gc_node_ref_t user, gc_node_ref_t pred) {
-            const auto ctrl = draft.ctrlInputsOf(user);
-            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                draft.appendControlEdge(user, pred);
-            }
-        };
-        // The statements written after the call follow the body's tail. `closeChainOver` closed the
-        // chain over the call above, so they follow what the call followed until this takes that
-        // place back from it.
+    if (callHasSyncPlace && bodyHasChain && draft.alive(bodyHead) && draft.alive(bodyTail)) {
+        gc_node_ref_t afterBody = bodyTail;
         for (gc_node_ref_t user : placeUsers) {
-            if (user == funcNodeId || !draft.alive(user) || user == bodyHead || user == bodyTail) {
+            if (user == funcNodeId || !draft.alive(user) || user == bodyHead || user == bodyTail ||
+                !sameSyncBlock(draft, user, afterBody)) {
                 continue;
             }
-            markStatement(user);
-            markStatement(bodyTail);
-            const gc_node_ref_t only[1] = {bodyTail};
-            draft.setSyncInputs(user, only);
-            nameControlPair(user, bodyTail);
+            if (result.ctrlExit == result.valueExit &&
+                draft.header(user)->kind == GCNodeKind::Gate &&
+                draft.header(result.valueExit)->kind == GCNodeKind::Gate &&
+                draft.syncInputsOf(user).size() == 1 &&
+                draft.syncInputsOf(user).front() == funcNodeId &&
+                !draft.syncInputsOf(result.valueExit).empty() &&
+                sameSyncBlock(draft, user, result.valueExit)) {
+                const std::vector<gc_node_ref_t> successors(
+                    draft.syncUsersOf(user).begin(),
+                    draft.syncUsersOf(user).end());
+                draft.replaceAllValueUses(user, result.valueExit);
+                draft.replaceAllCtrlUses(user, result.valueExit);
+                draft.setSyncInputs(user, {});
+                draft.eraseNode(user);
+                for (gc_node_ref_t successor : successors) {
+                    if (successor == funcNodeId || !draft.alive(successor) ||
+                        !sameSyncBlock(draft, successor, result.valueExit)) {
+                        continue;
+                    }
+                    draft.setSyncInputs(successor, {});
+                    (void)draft.appendChainStatement(successor, result.valueExit);
+                }
+                afterBody = result.valueExit;
+                continue;
+            }
+            draft.setSyncInputs(user, {});
+            afterBody = draft.appendChainStatement(user, afterBody);
+            if (afterBody == kInvalidNodeRef) {
+                break;
+            }
         }
-        // The body's head is written after the statement the call was written after.
-        const gc_node_ref_t callPred = placePreds.front();
-        if (callPred != bodyHead && callPred != bodyTail && draft.alive(callPred)) {
-            markStatement(bodyHead);
-            markStatement(callPred);
-            const gc_node_ref_t only[1] = {callPred};
-            draft.setSyncInputs(bodyHead, only);
-            nameControlPair(bodyHead, callPred);
+        if (!placePreds.empty()) {
+            const gc_node_ref_t callPred = placePreds.front();
+            if (callPred != bodyHead && callPred != bodyTail && draft.alive(callPred) &&
+                sameSyncBlock(draft, bodyHead, callPred)) {
+                (void)draft.appendChainStatement(bodyHead, callPred);
+            }
         }
     }
 
     draft.eraseNode(funcNodeId);
+    resolvePlaceForks(draft);
+    (void)draft.eraseOrphanedChainGates();
     resolvePlaceForks(draft);
     CAMEL_LOG_INFO_S("DraftInline", "Inline splice finished for draft node {}.", funcNodeId);
     return result;
