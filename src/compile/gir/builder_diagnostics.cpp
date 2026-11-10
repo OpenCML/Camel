@@ -262,8 +262,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
     case runtime::GCNodeKind::Join: {
         // The branch is an effect when what an arm gives depends on one inside the arm.
-        const auto &draft                = graph->transaction().graph();
-        const draft_node_ref_t join      = nodeIdOf(node);
+        const auto &draft           = graph->transaction().graph();
+        const draft_node_ref_t join = nodeIdOf(node);
         const auto *body =
             reinterpret_cast<const runtime::GCJoinBody *>(draft.payloadOf(join).data());
         std::vector<uint32_t> arms;
@@ -322,8 +322,7 @@ void Builder::settleEffectfulGraphs() {
 
 void Builder::reportResourceViolation(
     const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
-    const camel::core::sem::ResourceSignature &measured,
-    camel::source::origin_id_t noteOrigin) {
+    const camel::core::sem::ResourceSignature &measured, camel::source::origin_id_t noteOrigin) {
     // What the clause does not promise, said in the terms the clause is written in: the caller of
     // this function can see only the clause, so the report names the resources the body reaches
     // that the clause leaves out.
@@ -333,8 +332,8 @@ void Builder::reportResourceViolation(
             std::any_of(promised.ambient.begin(), promised.ambient.end(), [&](const auto &other) {
                 return other.name == use.name;
             });
-        const bool anyPromised = std::any_of(
-            promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
+        const bool anyPromised =
+            std::any_of(promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
                 return cls == sem::ResourceClass::Unknown;
             });
         if (!promisedUse && !anyPromised) {
@@ -342,8 +341,8 @@ void Builder::reportResourceViolation(
         }
     }
     for (const auto &use : measured.params) {
-        const bool promisedUse = std::any_of(
-            promised.params.begin(), promised.params.end(), [&](const auto &other) {
+        const bool promisedUse =
+            std::any_of(promised.params.begin(), promised.params.end(), [&](const auto &other) {
                 return other.index == use.index;
             });
         if (!promisedUse && !use.name.empty()) {
@@ -372,10 +371,9 @@ void Builder::reportResourceViolation(
     unnamed.erase(std::unique(unnamed.begin(), unnamed.end()), unnamed.end());
     builder.commit(
         graph->funcType()->toString(),
-        unnamed.empty() ? std::string("an effect outside the program")
-                        : strutil::join(unnamed, ", ", [](const std::string &name) {
-                              return name;
-                          }));
+        unnamed.empty()
+            ? std::string("an effect outside the program")
+            : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
 }
 
 void Builder::reportDroppedEffectsOfBodies() {
@@ -452,7 +450,9 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             const draft_node_ref_t id = stack.back();
             stack.pop_back();
             for (auto users :
-                 {draft.normUsersOf(id), draft.withUsersOf(id), draft.ctrlUsersOf(id),
+                 {draft.normUsersOf(id),
+                  draft.withUsersOf(id),
+                  draft.ctrlUsersOf(id),
                   draft.syncUsersOf(id)}) {
                 for (draft_node_ref_t user : users) {
                     if (!seen.insert(user).second) {
@@ -553,7 +553,7 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
         return conditions;
     }
     auto sourceContext = context_ ? context_->sourceContext() : nullptr;
-    const auto &draft = graph->transaction().graph();
+    const auto &draft  = graph->transaction().graph();
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         if (!draft.alive(id)) {
             continue;
@@ -598,9 +598,10 @@ std::vector<Builder::RuleCondition> Builder::ruleConditionsIn(
             const auto arguments = draft.normInputsOf(id);
             const std::optional<slot_t> id =
                 arguments.empty() ? std::nullopt : staticValueOf(draft.ref(arguments.back()));
-            const GenericRuleEntry *entry = id.has_value() && context_ != nullptr
-                                                ? genericRuleEntry(*context_, static_cast<uint64_t>(*id))
-                                                : nullptr;
+            const GenericRuleEntry *entry =
+                id.has_value() && context_ != nullptr
+                    ? genericRuleEntry(*context_, static_cast<uint64_t>(*id))
+                    : nullptr;
             if (entry != nullptr) {
                 conditions.push_back(RuleCondition{nullptr, where, entry});
             }
@@ -680,7 +681,7 @@ std::string Builder::describeEffect(
         // function, and the report says which one so that the condition is still found.
         subject = std::format("{} in the function '{}'", subject, inside->name());
     }
-return subject;
+    return subject;
 }
 
 bool Builder::calleeIsGeneric(const std::string &name) const {
@@ -807,16 +808,15 @@ void Builder::reportEffectfulConditions() {
         }
         return rule;
     };
-    const auto report = [&](const std::string &subject, const std::string &rule,
+    const auto report = [&](const std::string &subject,
+                            const std::string &rule,
                             camel::source::origin_id_t origin,
                             camel::source::origin_id_t where) {
-        auto diagnostic =
-            diags_->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
+        auto diagnostic = diags_->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
         if (where != camel::source::kInvalidOriginId) {
             // Where the rule is written: the effect is what the report is about, and the rule is
             // what makes it one, so an editor offers both places.
-            diagnostic.relatedOrigin(
-                where, std::format("the rule '{}' is declared here", rule));
+            diagnostic.relatedOrigin(where, std::format("the rule '{}' is declared here", rule));
         }
         diagnostic.commit(subject, rule);
     };
@@ -885,7 +885,7 @@ void Builder::reportEffectInRuleInstance(
     if (effect == nullptr) {
         return;
     }
-    auto sourceContext   = context_ ? context_->sourceContext() : nullptr;
+    auto sourceContext                = context_ ? context_->sourceContext() : nullptr;
     camel::source::origin_id_t origin = nodeDraftOf(effect)->nodeOrigin(nodeIdOf(effect));
     if (origin == camel::source::kInvalidOriginId && sourceContext) {
         origin = sourceContext->debugMap().graphOrigin(inside->graphId());
@@ -900,7 +900,8 @@ void Builder::reportEffectInRuleInstance(
     auto diagnostic = sink->of(SemanticDiag::EffectInRuleCondition).atOrigin(origin);
     if (entry.where != camel::source::kInvalidOriginId) {
         diagnostic.relatedOrigin(
-            entry.where, std::format("the rule '{}' is declared here", entry.name));
+            entry.where,
+            std::format("the rule '{}' is declared here", entry.name));
     }
     Diagnostic reported =
         diagnostic.commit(describeEffect(inside, effect, inside != condition), entry.name);
@@ -1016,8 +1017,7 @@ void Builder::reportUnusedFallibleValues() {
             }
             // "Ordered" here means a statement of a `sync` block: the edge that says so is a
             // sync edge, and the old control edge still carries it where one is left.
-            const bool ordered =
-                !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
+            const bool ordered = !draft.ctrlUsersOf(id).empty() || !draft.syncUsersOf(id).empty();
             if (nodeIsKind(node, runtime::GCNodeKind::Join) &&
                 isVoidGraphExitType(nodeTypeOf(node)) && (ordered || isExit(id))) {
                 // An `if` without `else`: the join takes nothing, so what an arm gives is
@@ -1035,8 +1035,8 @@ void Builder::reportUnusedFallibleValues() {
                 }
                 continue;
             }
-            if (isExit(id) || !draft.normUsersOf(id).empty() ||
-                !draft.withUsersOf(id).empty() || discardedValues_.contains(node) ||
+            if (isExit(id) || !draft.normUsersOf(id).empty() || !draft.withUsersOf(id).empty() ||
+                discardedValues_.contains(node) ||
                 (!ordered && nodeIsKind(node, runtime::GCNodeKind::Join))) {
                 // A branch whose value nothing takes is answered where its arms end -- their
                 // exits are reported, and an `if` without `else` is answered above -- so what is
@@ -1047,7 +1047,11 @@ void Builder::reportUnusedFallibleValues() {
                 // A statement something is ordered after runs, in a sync block as anywhere else;
                 // one nothing depends on does not, and then the warning says both that the value
                 // is lost and that the statement that would have given it never runs.
-                warn(graph, node, type, ordered ? "" : " (nothing depends on it, so it does not run)");
+                warn(
+                    graph,
+                    node,
+                    type,
+                    ordered ? "" : " (nothing depends on it, so it does not run)");
             }
         }
     }
@@ -1111,6 +1115,12 @@ void Builder::markNonRetainingReads() {
     //     array: a number, a bool, a string or nothing (`len`, `contains`, `==`, `<`, `[]`
     //     of an array of numbers, `format`). A call, a branch, a closure, a literal holding
     //     the value, a `let` used later by such a node: any of them keeps `r` a `:var/get`.
+    //     Two things are read through rather than counted, and only where `r` can hand an array
+    //     out: a pure computation that stands off the chain (5.3 leaves it off, so its place in
+    //     the chain says nothing about when it runs -- its own readers are the ones that count),
+    //     and a GATE, which forwards a value into the chain without observing it and is built at
+    //     the chain's end. A value copied by value has no array to hand out, so for it every user
+    //     is counted as before.
     //  4. No node made between `r` and its last user may write the variable: no operator
     //     that is neither pure nor state-only (the assignments, `:op/assn_owned` among them,
     //     effects), no call and no branch (their bodies may write it through a capture). The
@@ -1180,15 +1190,66 @@ void Builder::markNonRetainingReads() {
         draft_node_ref_t lastUser = id;
         bool keeps                = false;
         size_t users              = 0;
+        // The nodes that decide the read: the nodes reading it, and -- through a pure computation
+        // that reads it -- the nodes reading that computation, because such a node runs when its
+        // own readers need it and its result is consumed where they are (design principles 3.1;
+        // edges.cn.md 5.3 keeps a pure infallible computation off the chain, so standing off the
+        // chain says nothing about when it runs). Both are walked so that condition 4 counts the
+        // last reader of the *result*, not the last node that happens to name the read: a `len`
+        // read by a `println` written after the next append is consumed after it.
+        //
+        // What a node reached this way can do is order, not observe: a reader of a computation
+        // that hands out no reference cannot hold the array, so it decides nothing here, and a
+        // GATE forwards a value into the block's chain without observing it -- `closeChainOver`
+        // builds it at the chain's end, so counting it would place the last reader after every
+        // writer in the block. A node that reads the array itself is the one that decides it, and
+        // only a pure computation is not an observer.
+        //
+        // All of this is about a value that can hand an array out. A value copied by value has
+        // nothing to hand out, and there the read keeps the form it always had.
+        const bool handsOutReference = !referenceFree(nodeTypeOf(read));
+        std::vector<std::pair<draft_node_ref_t, bool>> pending;
         for (auto inputs : {normUsersOf(read), withUsersOf(read)}) {
             for (draft_node_ref_t userId : inputs) {
-                node_handle_t user = draft.ref(userId);
-                ++users;
-                lastUser = std::max(lastUser, userId);
-                if (!nodeIsKind(user, runtime::GCNodeKind::Oper) || !chainedNodes_.contains(user) ||
-                    !table.isPure(nodeGraphOf(user)->operTarget(user)->uri()) ||
-                    !referenceFree(nodeTypeOf(user))) {
-                    keeps = true; // condition 3
+                pending.emplace_back(userId, false);
+            }
+        }
+        std::vector<draft_node_ref_t> seen;
+        while (!pending.empty() && !keeps) {
+            const auto [userId, reached] = pending.back();
+            pending.pop_back();
+            if (std::ranges::find(seen, userId) != seen.end()) {
+                continue;
+            }
+            seen.push_back(userId);
+            node_handle_t user = draft.ref(userId);
+            if (handsOutReference && nodeIsKind(user, runtime::GCNodeKind::Gate)) {
+                for (auto inputs : {normUsersOf(user), withUsersOf(user)}) {
+                    for (draft_node_ref_t next : inputs) {
+                        pending.emplace_back(next, true);
+                    }
+                }
+                continue;
+            }
+            ++users;
+            lastUser               = std::max(lastUser, userId);
+            const bool computation = nodeIsKind(user, runtime::GCNodeKind::Oper) &&
+                                     table.isPure(nodeGraphOf(user)->operTarget(user)->uri()) &&
+                                     referenceFree(nodeTypeOf(user));
+            if (!computation) {
+                keeps = keeps || !reached; // condition 3: a node reading the array itself
+                continue;
+            }
+            if (chainedNodes_.contains(user)) {
+                continue; // a pure computation the chain holds: it runs where it stands
+            }
+            if (!handsOutReference) {
+                keeps = true; // condition 3, as it always was for a value copied by value
+                continue;
+            }
+            for (auto inputs : {normUsersOf(user), withUsersOf(user)}) {
+                for (draft_node_ref_t next : inputs) {
+                    pending.emplace_back(next, true);
                 }
             }
         }
@@ -1695,8 +1756,8 @@ namespace {
 /// type", which names neither the length nor the side that wrote it, for a literal whose elements
 /// all fit.
 std::string arrayLengthReason(const data_ptr_t &data, Type *type) {
-    const auto *stated  = type != nullptr ? tt::as_ptr<ArrayType>(type) : nullptr;
-    const auto written  = data != nullptr ? std::dynamic_pointer_cast<ArrayData>(data) : nullptr;
+    const auto *stated = type != nullptr ? tt::as_ptr<ArrayType>(type) : nullptr;
+    const auto written = data != nullptr ? std::dynamic_pointer_cast<ArrayData>(data) : nullptr;
     if (stated == nullptr || written == nullptr) {
         return {};
     }
@@ -1725,8 +1786,8 @@ void Builder::rejectLiteralData(
         reason = reasonGiven;
     } else if (const std::string notFit = literalNotFitReason(data, type); !notFit.empty()) {
         reason = notFit;
-    } else if (const std::string lengthMismatch = arrayLengthReason(data, type);
-               !lengthMismatch.empty()) {
+    } else if (
+        const std::string lengthMismatch = arrayLengthReason(data, type); !lengthMismatch.empty()) {
         reason = lengthMismatch;
     } else if (data->type()->isPrimitive() && isIntegerType(type)) {
         // A decimal literal in an integer type: `int(1.9)` loses the fraction, `int(1.0e30)`
@@ -1943,7 +2004,9 @@ Builder::SpeculativeInstantiation::SpeculativeInstantiation(Builder &builder)
     // it holds is bounded by the body, not by the program the rule is applied to; the only reader
     // takes the first error and looks no further.
     inner_ = std::make_shared<Diagnostics>(
-        outer_->moduleName(), outer_->modulePath(), outer_->sourceContext());
+        outer_->moduleName(),
+        outer_->modulePath(),
+        outer_->sourceContext());
     self_.speculative_ = this;
 }
 
@@ -2007,8 +2070,8 @@ void Builder::SpeculativeInstantiation::attach() {
 Builder::BodyDiagnostics::BodyDiagnostics(Builder &builder)
     : self_(builder), scope_(builder.speculative_) {
     if (scope_ != nullptr) {
-        outer_        = self_.diags_;
-        self_.diags_  = scope_->inner_;
+        outer_       = self_.diags_;
+        self_.diags_ = scope_->inner_;
     }
 }
 
