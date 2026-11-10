@@ -1,6 +1,6 @@
-# 派生链位还没接上的三处
+# 派生链位还没接上的两处（第三处已修）
 
-`refactor(runtime): derive a statement's chain place from the graph's structure`（`6b105528a`）换了链位的来源：一条语句在块里的位置不再由构建器打的标记给出，而是由图的形状读出来（`docs/design/effects/edges.cn.md` 2、3.1、4.6、5.3、5.7）。`test/cases/opt/generic/static_branches.cml` 的 `tick 1` 因此修好，`test/plans/feat/opt` 1185/1185 全绿。快速层在 `6ba46ba81` 之后还剩三处是这次改动带来的，都测到了根因，都还没有修：它们要动的东西互不相同，任何一个都不是"顺手改一行"。
+`refactor(runtime): derive a statement's chain place from the graph's structure`（`6b105528a`）换了链位的来源：一条语句在块里的位置不再由构建器打的标记给出，而是由图的形状读出来（`docs/design/effects/edges.cn.md` 2、3.1、4.6、5.3、5.7）。`test/cases/opt/generic/static_branches.cml` 的 `tick 1` 因此修好，`test/plans/feat/opt` 1185/1185 全绿。快速层在 `6ba46ba81` 之后还剩三处是这次改动带来的；其中 `new_values.peek_loop.graph` 已由 `c667b6b6f` 修好（下面第二节记的是修法与它定下的判据），另外两处都测到了根因，都还没有修：它们要动的东西互不相同，任何一个都不是"顺手改一行"。
 
 读法：每处三句——**症状**（能复现的原话）、**量到的**（探针读数，含文件与行）、**下一步**（先动哪儿，以及为什么试过的两条路不通）。
 
@@ -47,25 +47,29 @@ append refused: place entry=17 exit=17 exitUsers=1
 
 ---
 
-## 二、`new_values.peek_loop.graph`：读的用户不再是链上节点，`:var/peek` 判不出来
+## 二、`new_values.peek_loop.graph`：已修（`c667b6b6f`）
 
-**症状**
+**症状**（修之前）
 
 ```
 [FAIL] new_values.peek_loop.graph   stdout does not contain ':var/peek'
 ```
 
-`test/cases/consistency/new_values/peek_loop.cml` 的存在意义就是钉住"`len(out)` 的读留不住数组，于是每轮 `append` 原地做、循环是线性的"。现在图里是 `:var/get` + `:struct/append_arr_in_place` 之外还多一次拷贝，判据不成立。
+`test/cases/consistency/new_values/peek_loop.cml` 的存在意义就是钉住"`len(out)` 的读留不住数组，于是每轮 `append` 原地做、循环是线性的"。当时图里是 `:var/get`，每轮 `append` 都拷贝，20000 轮的循环成了二次方。
 
 **量到的**
 
-`Builder::markNonRetainingReads`（`src/compile/gir/builder_diagnostics.cpp`，1188 行起的条件 3）要求读的**每个直接用户**都在 `chainedNodes_` 里。`__g_49__` 里这个读的用户是 `:struct/len_arr`——纯运算，按 5.3 已经不是链上语句，于是判据失败，读保持 `:var/get`。临时探针（已回退）读出 `read=15 -> keep`、`read=18 -> keep`，正是这一条。
+`Builder::markNonRetainingReads`（`src/compile/gir/builder_diagnostics.cpp`）的条件 3 要求读的**每个直接用户**都在 `chainedNodes_` 里。`__g_49__` 里这个读的用户是 `:struct/len_arr`——纯运算，按 5.3 已经不是链上语句，于是判据失败，读保持 `:var/get`。探针读出 `read=15 -> keep`、`read=18 -> keep`，正是这一条。
 
-**下一步**
+**修法**
 
-条件 3 想说的是"读的值在变量被再次写之前就用完了"，而"用户是链上语句"只是它在前一个模型里的写法。在现在的模型里它是一条**顺序**问题：值必须被链上某条语句消费，且那条语句在变量下一次写之前。构建器手里只有 `chainedNodes_` 这个集合，没有顺链的顺序，所以要么在 `markNonRetainingReads` 里把顺序读出来（遍那边有 `isComputedAfter` 一类现成的走法），要么干脆把"纯的、结果不含引用的计算"钉到链上——后者是设计问题，不在这里定。
+条件 3 想说的是"读的值在变量被再次写之前就用完了"，"用户是链上语句"只是它在前一个模型里的写法。`c667b6b6f` 把用户的读取从"读一遍直接用户"改成一次走查：
 
-试过并被回退的写法：把条件 3 从"直接用户"放宽成"值能到达的所有节点，链上语句即钉住，纯且无引用的运算继续往下走"。`peek_loop` 因此变成 `:var/peek`，但 `new_values.peek.*` 六个后端一起红：`n0 = len(acc)` 的 `len` 被推迟到最后那个 `println` 才跑，读到的是几次 `append` 之后的数组，期望 `1` 打出 `2`。这条路的教训就是上面那句：**不是"能到达链"，而是"在下次写之前到达链"**。
+- 走过**纯的、结果不含引用的运算**（5.3 把它留在链外，所以它在不在链上不说明它什么时候跑），也走过 **`GATE`**（它只把值送进链，不观察值，而 `closeChainOver` 把门建在链的末端）；
+- 这样到达的节点只能定顺序、不可能抓住数组，所以它延长条件 4 的"最后一次读"射程，却**不**让读退回 `:var/get`——这就是 `len(out)` 能留在 `:var/peek` 的原因，也是"晚到的 `println` 照样拦住 peek"的原因（`n0 = len(acc)` 被推迟到最后那个 `println` 时，写落在读与最后读者之间，条件 4 仍然拒绝）；
+- 两件事**故意不变**：直接读数组的节点（`println(v)`、`var` 实参）照样让它退回 `:var/get`，正如设计里"传参、放进容器即 `:var/get`"那句；而按值复制的值（`int` 等）没有什么是抓得住的，它的读保持原样——`cse_subject`、`written_variable` 的契约因此一个字没动。
+
+走过的弯路记在这里：先把条件 3 放宽成"值能到达的节点里有链上语句"，`peek_loop` 变成 `:var/peek`，但 `new_values.peek.*` 六个后端一起红——`len` 被推迟到最后一个 `println` 才跑，读到的是几次 `append` 之后的数组，期望 `1` 打出 `2`。教训是"不是能到达链，而是在下次写之前到达链"，而这一点靠的是条件 4 的 `lastUser`，不是条件 3 的放宽。
 
 ---
 
@@ -104,3 +108,4 @@ indirect call ref=2 with=1 kind=0 form=0 closureKind=0
 
 - `stream.generators_shapes_consumed.{nvm,fvm,jit,prl}`、`match.complete.prl`、`capacity.growth_nvm_gc_stress`、`registry.*`（5 个）、`gate.conformance_matrix`、`transpose.call_of_a_body_closure.function_value_argument_is_not_read_as_the_callee.nvm` 在满载并发跑快速层时红过，单独跑或换一轮负载就绿——是并发噪声，不是这次改动带来的。
 - 本轮已经随 `46785728e`、`6ba46ba81` 修好的：`entering.graph_*`、`partial_application.graph`、`generic_values.graph`、`comprehension.graph_*`、`tutorial.examples.13_graph_rgir`（六张图加一对 `SYNC`+`CTRL`，即 4.6 的"调用是语句"）、`rename.{env,process}_graph_identity` 与 `poison` 里那份拷贝（摘要重录）、`framed.loops.regions.{lowered,compiled.inline}`（`ticks` 的 helper 理由从 `the round contains OPER` 换成 `the round makes the state tuple anew every round`，两条都是真的，行为不变）。
+- `c667b6b6f` 之后快速层是 8862 通过 / 20 红：其中 14 条是本机基线，4 条是上面那类并发噪声（`stream` 那个计划单独跑 147/147 全绿），剩下 2 条就是本文第一节和第三节。
