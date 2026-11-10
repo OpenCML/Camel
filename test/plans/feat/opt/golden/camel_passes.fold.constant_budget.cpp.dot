@@ -16,6 +16,8 @@ digraph GraphIR {
         N02 -> N03 [label="0|2", type="NORM"];
         N03 -> N04 [label="0|0", type="NORM"];
         N04 -> N05 [label="0|0", type="NORM"];
+        N03 -> N05 [label="0|0", type="CTRL"];
+        N03 -> N05 [label="SYNC", type="SYNC"];
         N06 -> N07 [label="0|0", type="NORM"];
         N05 -> N07 [label="0|0", type="CTRL"];
         N05 -> N07 [label="SYNC", type="SYNC"];

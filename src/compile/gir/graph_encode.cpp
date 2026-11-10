@@ -38,15 +38,15 @@
 #include <cstdio>
 #include <cstring>
 #include <format>
+#include <iostream>
 #include <memory>
 #include <optional>
 #include <ranges>
-#include <iostream>
 #include <span>
+#include <stdexcept>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
-#include <stdexcept>
 
 namespace camel::compile::gir {
 
@@ -274,7 +274,9 @@ class EncodeSession {
             }
             for (auto &prepared : prepared_) {
                 CAMEL_LOG_INFO_S(
-                    "GIREncode", "Finalize runtime graph '{}'.", prepared.source->name());
+                    "GIREncode",
+                    "Finalize runtime graph '{}'.",
+                    prepared.source->name());
                 finalizeRuntimeGraph(prepared);
                 prepared.constructed = true;
             }
@@ -291,8 +293,8 @@ class EncodeSession {
                 if (prepared.runtime == nullptr) {
                     continue;
                 }
-                const auto transaction = camel::runtime::GraphTransaction::borrow(
-                    prepared.source->view());
+                const auto transaction =
+                    camel::runtime::GraphTransaction::borrow(prepared.source->view());
                 const DraftGraphRead draftFace(*transaction, prepared.liveNodes);
                 const FrozenGraphRead frozenFace(*prepared.runtime);
                 const std::string difference = firstDifference(draftFace, frozenFace);
@@ -404,6 +406,7 @@ class EncodeSession {
         // Whether an effect was dropped beside it is reportDroppedEffects' to say, not this
         // structural check's. A gate that still waits -- on the sync chain's tail or on a control
         // input -- and one with no value input are not this case and keep their node.
+        graph->edit().normalizeChainPlaces();
         graph->edit().dissolveUnorderedGates();
 
         // The runtime graph is the part of the draft that its roots reach; the draft keeps the
@@ -426,8 +429,7 @@ class EncodeSession {
                         sourceId));
             }
         }
-        prepared.payloadShape =
-            describeDraftNativePayload(graph->view(), liveNodesOf(prepared));
+        prepared.payloadShape = describeDraftNativePayload(graph->view(), liveNodesOf(prepared));
         CAMEL_LOG_INFO_S(
             "GIREncode",
             "Prepared compile graph '{}' with {} draft nodes.",
@@ -580,8 +582,8 @@ class EncodeSession {
             auto *arrayType = static_cast<ArrayType *>(type);
             // As in draft_session's cloneStaticSlot: the copy is of the whole value's shape, which
             // is part of the value (design principles 5.4), and holds every element.
-            auto *cloned = ::Array::create(
-                camel::core::mm::autoSpace(), arrayType, array->shapeSpan());
+            auto *cloned =
+                ::Array::create(camel::core::mm::autoSpace(), arrayType, array->shapeSpan());
             objectCache.emplace(object, cloned);
             for (size_t i = 0; i < array->numel(); ++i) {
                 cloned->set<slot_t>(
@@ -815,7 +817,8 @@ class EncodeSession {
             prepared.bytes,
             prepared.runtimeId,
             camel::runtime::GCGraphDerivation{
-                camel::runtime::kInvalidGraphId, source->view().flags()},
+                camel::runtime::kInvalidGraphId,
+                source->view().flags()},
             debugRecord,
             source->view().funcType(),
             source->view().frameSlotTypes(),

@@ -122,17 +122,17 @@ class EdgeChecker {
 
   private:
     /**
-     * The four references a graph's numbering can break -- see camel::runtime::checkGraphCrossReferences,
-     * which this calls. It lives outside this class because the encoder runs the same four checks on
-     * the graph it is about to publish: a draft can hold a number that its own graph cannot resolve,
-     * and a frozen graph that is refused here and encoded there would be two answers.
+     * The four references a graph's numbering can break -- see
+     * camel::runtime::checkGraphCrossReferences, which this calls. It lives outside this class
+     * because the encoder runs the same four checks on the graph it is about to publish: a draft
+     * can hold a number that its own graph cannot resolve, and a frozen graph that is refused here
+     * and encoded there would be two answers.
      */
     void checkBranchBackReferences() {
         for (const std::string &violation : camel::runtime::checkGraphCrossReferences(graph_)) {
             violations_.push_back(violation);
         }
     }
-
 
     /**
      * Every type id a frozen node names came from the type table's interning path, and the debug
@@ -247,31 +247,97 @@ class EdgeChecker {
         return type->code() == TypeCode::Ref || type->code() == TypeCode::TypeVar;
     }
 
-    static bool isWaitingCarrier(const GCNode *node) {
-        return (node->flags & kGCNodeFlagSyncStatement) != 0;
-    }
-    /// The same question at a sync edge's end: a `GATE` may stand there instead of a statement,
-    /// because a block's value node may be one the block does not own (edges.cn.md 5.3).
-    static bool isWaitingCarrierOrGate(const GCNode *node) {
-        return isWaitingCarrier(node) || node->kind == GCNodeKind::Gate;
+    static bool canStartSyncEdge(const GCGraph &graph, gc_node_ref_t ref) {
+        if (graph::is_chain_exit(graph, ref)) {
+            return true;
+        }
+        const GCNode *node = graph.node(ref);
+        if (node != nullptr && node->kind == GCNodeKind::Func) {
+            return !graph.syncUsersOf(ref).empty() || graph.syncPredsOf(ref).empty();
+        }
+        return node != nullptr && node->kind != GCNodeKind::Join && graph.syncPredsOf(ref).empty();
     }
 
+    std::optional<uint32_t> ownBlockValueRegion(gc_node_ref_t ref) const {
+        const uint32_t actual = controlBlockOf(ref);
+        if (actual == 0 && (graph_.exitNodeRef() == ref || graph_.outputNodeRef() == ref ||
+                            graph_.returnNodeRef() == ref)) {
+            return 0;
+        }
+        for (uint32_t id = 1; id < graph_.regionCount(); ++id) {
+            const GCRegion *record = graph_.region(id);
+            if (record == nullptr || record->kind == GCRegionKind::Dead || record->result != ref) {
+                continue;
+            }
+            uint32_t block = id;
+            while (block != 0) {
+                const GCRegion *enclosing = graph_.region(block);
+                if (enclosing == nullptr) {
+                    break;
+                }
+                if (enclosing->kind != GCRegionKind::Inline) {
+                    break;
+                }
+                block = enclosing->parent;
+            }
+            if (block == actual) {
+                return block;
+            }
+        }
+        return std::nullopt;
+    }
 
-    /// The other half of the structural rule of 4.6: a sync edge joins two statements one `sync`
-    /// block writes directly -- or the block's chain tail to the block's value -- and nothing else.
-    /// The builder records that fact on each node it chains (kGCNodeFlagSyncStatement), so the
-    /// check is: both ends are such a node, they are not the same node and not a node a rewrite
-    /// removed, and one statement is written directly after one other (the tail that reaches the
-    /// block's value is the one node that two sync edges leave). The other direction -- one
-    /// statement two statements follow -- is `checkSyncChainForks` below.
-    ///
-    /// A `GATE` is the exception on the user end, and it is not a relaxation for a test:
-    /// docs/design/effects/edges.cn.md 5.3 gives the GATE "一个数据端口读那个值、一个同步前驱是
-    /// 链尾" -- one data port for the value and one sync predecessor, the chain's tail -- because
-    /// the block's value node may be one this block does not own, so the wait is carried by a gate
-    /// of the block's own. A GATE is never a statement itself, so it cannot carry the flag; what
-    /// makes its predecessor a legal edge is that the predecessor is a statement of the block, and
-    /// that is what the `pred` test below still asks.
+    bool reachesOwnBlockValue(gc_node_ref_t ref) const {
+        std::vector<bool> seen(graph_.nodeCount(), false);
+        std::vector<gc_node_ref_t> work{ref};
+        while (!work.empty()) {
+            const gc_node_ref_t current = work.back();
+            work.pop_back();
+            if (!graph_.containsNodeRef(current) || seen[current]) {
+                continue;
+            }
+            seen[current] = true;
+            if (ownBlockValueRegion(current).has_value()) {
+                return true;
+            }
+            for (auto users : {graph_.normUsersOf(current), graph_.withUsersOf(current)}) {
+                for (gc_node_ref_t user : users) {
+                    if (graph_.containsNodeRef(user) && !seen[user]) {
+                        work.push_back(user);
+                    }
+                }
+            }
+        }
+        return false;
+    }
+
+    bool canEndSyncEdge(const GCGraph &graph, gc_node_ref_t ref) const {
+        const GCNode *node = graph.node(ref);
+        if (node == nullptr) {
+            return false;
+        }
+        if (node->kind == GCNodeKind::Gate) {
+            return !graph.syncUsersOf(ref).empty() || reachesOwnBlockValue(ref);
+        }
+        if (node->kind == GCNodeKind::Func) {
+            return true;
+        }
+        if (node->kind == GCNodeKind::Join) {
+            return graph::is_chain_exit(graph, ref);
+        }
+        if (graph::is_chain_statement(graph, ref)) {
+            return true;
+        }
+        return graph.syncUsersOf(ref).empty() && ownBlockValueRegion(ref).has_value();
+    }
+
+    static bool continuesSyncChain(const GCGraph &graph, gc_node_ref_t ref) {
+        const GCNode *node = graph.node(ref);
+        return node != nullptr &&
+               (!graph.syncUsersOf(ref).empty() ||
+                (node->kind != GCNodeKind::Gate && graph::is_chain_exit(graph, ref)));
+    }
+
     void checkSyncEdges() {
         if (!graph_.hasSyncEdges()) {
             return;
@@ -300,48 +366,33 @@ class EdgeChecker {
                 bad("chains a node to itself");
                 continue;
             }
-            if (!isWaitingCarrierOrGate(user)) {
+            if (!canEndSyncEdge(graph_, edge.user)) {
                 bad(std::format(
-                    "ends on a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    "ends on a node that is not a statement, a chain GATE, or the block's value "
+                    "(kind {}, data type '{}')",
                     static_cast<int>(user->kind),
-                    user->flags,
                     user->dataType() != nullptr ? user->dataType()->toString() : "-"));
                 continue;
             }
-            if (!isWaitingCarrier(pred)) {
+            if (!canStartSyncEdge(graph_, edge.pred)) {
                 bad(std::format(
-                    "starts at a node no `sync` block wrote (kind {}, flags {}, data type '{}')",
+                    "starts at a node that is not a statement, a structural statement's JOIN, or "
+                    "a chain head (kind {}, data type '{}')",
                     static_cast<int>(pred->kind),
-                    pred->flags,
                     pred->dataType() != nullptr ? pred->dataType()->toString() : "-"));
                 continue;
             }
-            // Census, not a refusal (author ruling 2026-11-02): an edge the marker calls a chain
-            // tail, whose end the graph cannot derive as one, is counted here and nowhere else --
-            // it is not refused and it is not removed. The count is read at log level info and
-            // above, so a default run is unchanged; it never writes to the program's stdout, which
-            // is what a case asserts.
-            {
-                const bool endIsStatement = isChainStatement(graph_, edge.user);
-                // Region 0 is the graph itself -- the block a statement sits in when nothing
-                // wraps it (control_regions.h: `0 when it is in none`) -- so an end and its tail
-                // in the same region are in one block, and the value of that block is an end the
-                // graph can derive.
-                const bool sameBlockValue =
-                    graph_.nodeRegion(edge.user) == graph_.nodeRegion(edge.pred);
-                if (!endIsStatement && !sameBlockValue && user->kind != GCNodeKind::Gate) {
-                    static std::set<std::pair<gc_node_ref_t, gc_node_ref_t>> seen;
-                    if (seen.insert(std::make_pair(edge.user, edge.pred)).second) {
-                        CAMEL_LOG_INFO_S(
-                            "SyncCensus",
-                            "sync census: n={} end={} tail={} kind={} region={}",
-                            seen.size(),
-                            static_cast<unsigned>(edge.user),
-                            static_cast<unsigned>(edge.pred),
-                            static_cast<int>(user->kind),
-                            static_cast<unsigned>(graph_.nodeRegion(edge.user)));
-                    }
-                }
+            const bool terminalValueGate = user->kind == GCNodeKind::Gate &&
+                                           graph_.syncUsersOf(edge.user).empty() &&
+                                           ownBlockValueRegion(edge.user).has_value();
+            if (controlBlockOf(edge.user) != controlBlockOf(edge.pred) && !terminalValueGate) {
+                bad(std::format(
+                    "joins two blocks: {} is in the block of region {} and {} in region {}",
+                    edge.pred,
+                    controlBlockOf(edge.pred),
+                    edge.user,
+                    controlBlockOf(edge.user)));
+                continue;
             }
             if (graph_.syncPredsOf(edge.user).size() > 1) {
                 bad("is the second predecessor of one statement");
@@ -349,9 +400,9 @@ class EdgeChecker {
         }
     }
 
-    /// The block a statement is written in: the innermost region that holds code of its own, with the
-    /// region an inline splice gave the code it moved looked through -- that code is the code of the
-    /// block it was moved into (docs/design/effects/edges.cn.md 5.7), which is exactly what
+    /// The block a statement is written in: the innermost region that holds code of its own, with
+    /// the region an inline splice gave the code it moved looked through -- that code is the code
+    /// of the block it was moved into (docs/design/effects/edges.cn.md 5.7), which is exactly what
     /// `statementRegionOf` reads back on the draft (src/runtime/draft.cpp, beside
     /// `sameSyncBlock`). Nothing else is looked through: a region that holds code of its own -- an
     /// arm, a part of a loop, a block written as a statement -- separates blocks, and its chain is
@@ -376,17 +427,18 @@ class EdgeChecker {
     /// prints once. The owner of this rule is the finished graph, executed by the seal check at
     /// commit, not the draft's writers.
     ///
-    /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is not
-    /// on the chain at all (3.4: a sync block orders its effects, and a node that is pure and cannot
-    /// fault has no order to keep), so an edge forking there is nothing to report. A GATE is where a
-    /// chain's tail hands its value on (5.3) -- an end of the chain, not a continuation of it --
-    /// and a value that several nested blocks hand on is reached from the one tail by one GATE each.
+    /// What counts is the chain 5.3 and 3.4 make. A node the model lets a pass arrange freely is
+    /// not on the chain at all (3.4: a sync block orders its effects, and a node that is pure and
+    /// cannot fault has no order to keep), so an edge forking there is nothing to report. A GATE is
+    /// where a chain's tail hands its value on (5.3) -- an end of the chain, not a continuation of
+    /// it -- and a value that several nested blocks hand on is reached from the one tail by one
+    /// GATE each.
     ///
     /// The splice resolves a statement's place again once the body's code is in
     /// (`resolvePlaceForks`, src/runtime/draft_inline.cpp) and moves a statement that finds itself
-    /// following one a second statement follows to the end of the chain growing from it. The move is
-    /// refused when that end waits on the statement being moved -- moving it would put the graph on
-    /// a cycle of inputs -- and the fork then stands: the splice has no other place to put the
+    /// following one a second statement follows to the end of the chain growing from it. The move
+    /// is refused when that end waits on the statement being moved -- moving it would put the graph
+    /// on a cycle of inputs -- and the fork then stands: the splice has no other place to put the
     /// statement, so the graph it would leave is one the model does not have. No such graph is
     /// frozen: this names the statement the two follow, which is where the defect is looked for,
     /// instead of leaving a chain the layout may walk one way and silently drop the other.
@@ -404,17 +456,11 @@ class EdgeChecker {
             if (user->kind == GCNodeKind::Dead || pred->kind == GCNodeKind::Dead) {
                 continue; // reported by checkSyncEdges
             }
-            if (!isWaitingCarrier(user) || !isWaitingCarrier(pred)) {
-                continue; // reported by checkSyncEdges
+            if (!continuesSyncChain(graph_, edge.user) || !canStartSyncEdge(graph_, edge.pred)) {
+                continue; // a block value receives the tail but does not continue the chain
             }
             if (controlBlockOf(edge.user) != controlBlockOf(edge.pred)) {
-                continue; // not one block's chain, which checkSyncEdges does not allow either
-            }
-            if (user->kind == GCNodeKind::Gate) {
-                continue; // the chain's end, not its continuation
-            }
-            if (isFreelySchedulable(edge.user)) {
-                continue; // not a statement of a chain at all (3.4)
+                continue; // reported by checkSyncEdges
             }
             followers[edge.pred].push_back(edge.user);
         }
@@ -431,10 +477,11 @@ class EdgeChecker {
             }
             violations_.push_back(
                 std::format(
-                    "graph '{}': sync chain forks at node {}: statements {} follow it, and a "
-                    "block's statements are one chain (docs/design/effects/edges.cn.md 5.3)",
+                    "graph '{}': sync chain forks at node {} (kind {}): statements {} follow it, "
+                    "and a block's statements are one chain (docs/design/effects/edges.cn.md 5.3)",
                     graph_.name(),
                     pred,
+                    static_cast<int>(graph_.node(pred)->kind),
                     named));
         }
     }
@@ -482,18 +529,18 @@ class EdgeChecker {
         }
     }
 
-    /// The control region an order edge would cross, 0 when it crosses none. The owner of this rule is
-    /// the finished graph, executed by the seal check at commit, not the draft's writers. An order edge orders
-    /// two nodes that both run, and an arm or a part of a loop runs as a whole with the node that
-    /// owns it: the order such a region has with the code around it is an order on the owner (the
-    /// `BRCH` or the `LOOP`), never one that reaches inside the region (docs/design/effects/
-    /// edges.cn.md 4.6; the builder puts them there in Builder::rehomeOrderEdges). A region that only
-    /// records where code came from -- an inlined body, a tagged block -- is looked through: it
-    /// holds no execution of its own (section 5.8).
+    /// The control region an order edge would cross, 0 when it crosses none. The owner of this rule
+    /// is the finished graph, executed by the seal check at commit, not the draft's writers. An
+    /// order edge orders two nodes that both run, and an arm or a part of a loop runs as a whole
+    /// with the node that owns it: the order such a region has with the code around it is an order
+    /// on the owner (the `BRCH` or the `LOOP`), never one that reaches inside the region
+    /// (docs/design/effects/ edges.cn.md 4.6; the builder puts them there in
+    /// Builder::rehomeOrderEdges). A region that only records where code came from -- an inlined
+    /// body, a tagged block -- is looked through: it holds no execution of its own (section 5.8).
     uint32_t crossedControlRegion(gc_node_ref_t pred, gc_node_ref_t user) const {
         const std::vector<uint32_t> predChain = controlRegionChain(pred);
         const std::vector<uint32_t> userChain = controlRegionChain(user);
-        size_t common                          = 0;
+        size_t common                         = 0;
         while (common < predChain.size() && common < userChain.size() &&
                predChain[common] == userChain[common]) {
             ++common;
@@ -540,26 +587,11 @@ class EdgeChecker {
     /// Whether a node owns a control region of this graph, and so stands on the outside for what
     /// runs inside it (docs/design/effects/edges.cn.md 4.6): an arm or a part of a loop runs as a
     /// whole with the node that owns it, so the order the region has with the code around it is an
-    /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the region.
-    /// Such a node computes nothing itself, and still carries an order edge, which is why the rule
-    /// "a pure node carries none" reads it out here.
+    /// order on that node -- the `BRCH` or the `LOOP` -- and not one that reaches inside the
+    /// region. Such a node computes nothing itself, and still carries an order edge, which is why
+    /// the rule "a pure node carries none" reads it out here.
     bool standsForItsRegion(gc_node_ref_t ref) const { return nodeStandsForItsRegion(graph_, ref); }
 
-    /// The rule of 4.6's third clause, read off the shared classification so that the seal check
-    /// and the passes that write order edges cannot drift: only a node the model lets a pass
-    /// arrange freely -- pure *and* unable to fault (design principles 3.4) -- refuses one.
-    bool isFreelySchedulable(gc_node_ref_t ref) const {
-        // Whether a conversion can fail depends on the types it converts between, and a pass that
-        // refines the types (specialization, inlining) can make a conversion that was ordered when
-        // it was written one that cannot fail. The order it was given then stays: dropping it is
-        // the passes' choice, and an edge on such a node is not a defect of the graph. The owner of
-        // this rule is the finished graph, executed by the seal check at commit, not the draft's writers.
-        const GCNode *node = graph_.node(ref);
-        if (node != nullptr && node->kind == GCNodeKind::Cast) {
-            return false;
-        }
-        return nodeIsFreelySchedulable(graph_, ref);
-    }
     /// The equivalences between nodes (the Tabled state): a graph validated as another state has
     /// none; in this one each names two nodes that compute a value of the same type, in the same
     /// region, and the graph says so by its flag.
@@ -641,9 +673,10 @@ class EdgeChecker {
     }
 
     /// The judgement the draft's check makes, on the frozen graph (camel/runtime/cycle.h): every
-    /// edge kind takes part, the sync and order ones included. Each of them makes one node run after
-    /// another -- a sync edge is a real ordering (docs/design/effects/edges.cn.md, section 1) -- so a
-    /// cycle of them is a graph no back end can run, and it is refused here rather than handed on.
+    /// edge kind takes part, the sync and order ones included. Each of them makes one node run
+    /// after another -- a sync edge is a real ordering (docs/design/effects/edges.cn.md, section 1)
+    /// -- so a cycle of them is a graph no back end can run, and it is refused here rather than
+    /// handed on.
     void findCycle() {
         FrozenCycleEdges edges(graph_);
         std::vector<gc_node_ref_t> path;
@@ -665,24 +698,19 @@ class EdgeChecker {
         switch (node.kind) {
         case GCNodeKind::Copy:
             if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type)) {
-                report(
-                    ref,
-                    std::format("copies a {} as a {}", show(typeOf(norm[0])), show(type)));
+                report(ref, std::format("copies a {} as a {}", show(typeOf(norm[0])), show(type)));
             }
             break;
         case GCNodeKind::Gate:
-            if (!norm.empty() && type && typeOf(norm.back()) && !compatible(typeOf(norm.back()), type)) {
+            if (!norm.empty() && type && typeOf(norm.back()) &&
+                !compatible(typeOf(norm.back()), type)) {
                 report(
                     ref,
-                    std::format(
-                        "forwards a {} as a {}",
-                        show(typeOf(norm.back())),
-                        show(type)));
+                    std::format("forwards a {} as a {}", show(typeOf(norm.back())), show(type)));
             }
             break;
         case GCNodeKind::Cast:
-            if (norm.size() == 1 && type && typeOf(norm[0]) &&
-                !compatible(typeOf(norm[0]), type) &&
+            if (norm.size() == 1 && type && typeOf(norm[0]) && !compatible(typeOf(norm[0]), type) &&
                 type->castSafetyFrom(typeOf(norm[0])) == CastSafety::Forbidden) {
                 report(
                     ref,
@@ -755,8 +783,9 @@ class EdgeChecker {
         const auto normPorts = callee->normPorts();
         const auto withPorts = callee->withPorts();
         const auto compare   = [&](std::span<const gc_node_ref_t> args,
-                                 std::span<const gc_node_ref_t> ports,
-                                 const char *kind) {
+                                   std::span<const gc_node_ref_t>
+                                       ports,
+                                   const char *kind) {
             for (size_t i = 0; i < args.size() && i < ports.size(); ++i) {
                 const GCNode *port = callee->node(ports[i]);
                 Type *want         = port ? port->dataType() : nullptr;
@@ -830,7 +859,6 @@ void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, Gra
     throw std::runtime_error(text);
 }
 
-
 /// The two questions the seal check asks of an order edge's user, kept here so that the check and
 /// the writers that carry order edges across a rewrite ask one question and not two.
 bool nodeStandsForItsRegion(const GCGraph &graph, gc_node_ref_t ref) {
@@ -866,8 +894,8 @@ namespace camel::runtime {
 /**
  * A branch and its join name each other, and the owner and result a region carries are nodes of
  * this graph. Both are the numbers a lift renumbers: a graph copied into a draft and back keeps its
- * own numbering, and a copy that takes one of these numbers with it reads a node that is not the one
- * it meant -- another branch's join, or a result past the end. Optional references
+ * own numbering, and a copy that takes one of these numbers with it reads a node that is not the
+ * one it meant -- another branch's join, or a result past the end. Optional references
  * (`kInvalidNodeRef`) are allowed and left alone.
  *
  * One function, two callers: the frozen-graph check (`EdgeChecker`) and the encoder
@@ -876,7 +904,7 @@ namespace camel::runtime {
  */
 std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     std::vector<std::string> violations;
-    const auto nodeCount = graph.nodeCount();
+    const auto nodeCount      = graph.nodeCount();
     const auto regionKindText = [](const GCGraph &g, uint32_t id) {
         const GCRegion *one = g.region(id);
         if (one == nullptr) {
@@ -903,7 +931,7 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
         const GCRegion *one = g.region(id);
         return one == nullptr ? id : one->parent;
     };
-    const auto inRange   = [&](gc_node_ref_t ref) {
+    const auto inRange = [&](gc_node_ref_t ref) {
         return ref == kInvalidNodeRef || (ref >= 0 && static_cast<uint32_t>(ref) < nodeCount);
     };
     const auto kindOf = [&](gc_node_ref_t ref) {
@@ -1011,10 +1039,10 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     // in the body), so the widening was measuring its own misreading.
     //
     // The owner's read was then narrowed to the region's exit (author ruling 2026-11-03 08:10): the
-    // rule is written on the port -- is this the value the region ends in -- and not on the reader's
-    // identity or on the exit's node kind, because a body ending in `do s` and one ending in
-    // `do s + 1` are the same thing to the loop. So `regionIsVisibleFrom` is handed the port, and
-    // the owner reading any other port of its own region is refused with everything else.
+    // rule is written on the port -- is this the value the region ends in -- and not on the
+    // reader's identity or on the exit's node kind, because a body ending in `do s` and one ending
+    // in `do s + 1` are the same thing to the loop. So `regionIsVisibleFrom` is handed the port,
+    // and the owner reading any other port of its own region is refused with everything else.
     //
     // A region's own ports are recorded in the region itself (a port belongs to the graph and is
     // written into the region it serves), so `regionIsVisibleFrom` answers for them by the same
@@ -1026,10 +1054,13 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
             continue;
         }
         std::array<std::span<const gc_node_ref_t>, 3> readGroups{
-            graph.normInputsOf(ref), graph.withInputsOf(ref), graph.ctrlInputsOf(ref)};
+            graph.normInputsOf(ref),
+            graph.withInputsOf(ref),
+            graph.ctrlInputsOf(ref)};
         for (const std::span<const gc_node_ref_t> &reads : readGroups) {
             for (gc_node_ref_t input : reads) {
-                if (!inRange(input) || input == kInvalidNodeRef || kindOf(input) != GCNodeKind::Port) {
+                if (!inRange(input) || input == kInvalidNodeRef ||
+                    kindOf(input) != GCNodeKind::Port) {
                     continue;
                 }
                 const uint32_t portRegion = graph.nodeRegion(input);

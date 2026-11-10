@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 #include "builder.h"
-#include "builder_support.h"
 #include "builder_helpers.h"
+#include "builder_support.h"
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
@@ -15,10 +15,10 @@
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 
-#include <iostream>
 #include "camel/utils/str.h"
 #include "camel/utils/type.h"
 #include "core/module/entity_internal.h"
+#include <iostream>
 
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/collection.h"
@@ -45,7 +45,10 @@ void Builder::ensureRootGraph() {
         return;
     }
     rootGraph_ = createCompileGraph(
-        context_->graphIds().allocate(), FunctionType::create(), nullptr, "__root__");
+        context_->graphIds().allocate(),
+        FunctionType::create(),
+        nullptr,
+        "__root__");
     if (auto sourceContext = context_ ? context_->sourceContext() : nullptr) {
         rootGraph_->setExtra<camel::source::SourceContext, kSourceContextExtraIndex>(
             sourceContext.get());
@@ -69,8 +72,8 @@ void Builder::buildEntryCall() {
             if (GenericGroup *templates = genericGroupOf(group.value()); templates != nullptr) {
                 for (const generic_template_ptr_t &tmpl : *templates) {
                     std::string why;
-                    if (compile_graph_ptr_t instance = instantiateGenericAs(
-                            tmpl, libraryEntryExpected_, tmpl->func, why)) {
+                    if (compile_graph_ptr_t instance =
+                            instantiateGenericAs(tmpl, libraryEntryExpected_, tmpl->func, why)) {
                         entryGraph = instance;
                         break;
                     }
@@ -126,8 +129,7 @@ void Builder::buildEntryCall() {
                 Type *type             = entryType->withTypeAt(i);
                 rootTypeFactory.addWithArg(name, type, isVar);
                 entryWithArgs.push_back(
-                    rootGraph_
-                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, true));
+                    rootGraph_->addPortNode(isVar ? TupleType::cell(type) : type, name, true));
             }
             for (size_t i = 0; i < entryType->normTypesCount(); ++i) {
                 const std::string name = nameAt(entryType->withTypesCount() + i, "__n", i);
@@ -135,8 +137,7 @@ void Builder::buildEntryCall() {
                 Type *type             = entryType->normTypeAt(i);
                 rootTypeFactory.addNormArg(name, type, isVar);
                 entryNormArgs.push_back(
-                    rootGraph_
-                        ->addPortNode(isVar ? TupleType::cell(type) : type, name, false));
+                    rootGraph_->addPortNode(isVar ? TupleType::cell(type) : type, name, false));
             }
             if (!libraryEntryFunction_.empty()) {
                 // A library built as a program of its own has the signature of the function it
@@ -201,11 +202,12 @@ namespace {
 /// regions that only record where code came from -- an inlined body, a tagged block -- are looked
 /// through: they hold no execution of their own (docs/design/effects/edges.cn.md 5.8), so they
 /// separate nothing. Region 0, the body, is not in the chain either: its code runs with the graph.
-std::vector<uint32_t> controlRegionChainOf(
-    const runtime::GraphTransaction &transaction, draft_node_ref_t id) {
+std::vector<uint32_t>
+controlRegionChainOf(const runtime::GraphTransaction &transaction, draft_node_ref_t id) {
     const auto &draft = transaction.graph();
     std::vector<uint32_t> chain;
-    for (uint32_t region = draft.nodeRegion(id); region != 0; region = draft.region(region).parent) {
+    for (uint32_t region = draft.nodeRegion(id); region != 0;
+         region          = draft.region(region).parent) {
         const runtime::GCRegionKind kind = draft.region(region).kind;
         if (kind == runtime::GCRegionKind::Arm || kind == runtime::GCRegionKind::LoopCond ||
             kind == runtime::GCRegionKind::LoopBody) {
@@ -225,13 +227,13 @@ bool orderEndsOnOneRegion(
     draft_node_ref_t &predOut, draft_node_ref_t &userOut) {
     const std::vector<uint32_t> predChain = controlRegionChainOf(transaction, pred);
     const std::vector<uint32_t> userChain = controlRegionChainOf(transaction, user);
-    size_t common                          = 0;
+    size_t common                         = 0;
     while (common < predChain.size() && common < userChain.size() &&
            predChain[common] == userChain[common]) {
         ++common;
     }
-    predOut = pred;
-    userOut = user;
+    predOut             = pred;
+    userOut             = user;
     const auto handOver = [&](draft_node_ref_t &end, const std::vector<uint32_t> &chain) {
         if (common >= chain.size()) {
             return true; // the end is in the region both share
@@ -278,7 +280,8 @@ void Builder::rehomeOrderEdges(const compile_graph_ptr_t &graph) {
             continue;
         }
         const std::vector<draft_node_ref_t> written(
-            draft.orderInputsOf(id).begin(), draft.orderInputsOf(id).end());
+            draft.orderInputsOf(id).begin(),
+            draft.orderInputsOf(id).end());
         if (written.empty()) {
             continue;
         }
@@ -327,7 +330,11 @@ compile_graph_ptr_t Builder::enterScope(
     if (name.empty()) {
         const bool atRoot = currGraph_ == rootGraph_;
         currGraph_        = createCompileGraph(
-            context_->graphIds().allocate(), funcType, currGraph_, "", parameterOrigins);
+            context_->graphIds().allocate(),
+            funcType,
+            currGraph_,
+            "",
+            parameterOrigins);
         if (atRoot) {
             rootSubGraphOwners_[currGraph_.get()] = unit_;
         }
@@ -348,7 +355,11 @@ compile_graph_ptr_t Builder::enterScope(
         }
         if (!found) {
             found = createCompileGraph(
-                context_->graphIds().allocate(), funcType, currGraph_, name, parameterOrigins);
+                context_->graphIds().allocate(),
+                funcType,
+                currGraph_,
+                name,
+                parameterOrigins);
             insertGraph(name, found);
             if (currGraph_ == rootGraph_) {
                 rootSubGraphOwners_[found.get()] = unit_;
@@ -434,8 +445,8 @@ void Builder::rejectRedeclaredFunction(
     // signature are (design principles 4.4: "同一检查适用于所有带 `when` 的同名重载（有函数体的
     // 普通函数也一样），不是 `#impl` 声明的特例"): the same separation the loop below asks about
     // ordinary functions, asked here about two generic ones.
-    if (auto group = templateScope_->get(name, false); group.has_value() &&
-        !genericGroupOf(group.value())->empty()) {
+    if (auto group = templateScope_->get(name, false);
+        group.has_value() && !genericGroupOf(group.value())->empty()) {
         const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
         for (const auto &other : *genericGroupOf(group.value())) {
             if (other == nullptr || !sameGenericSignature(other->funcType, funcType)) {
@@ -450,7 +461,12 @@ void Builder::rejectRedeclaredFunction(
                         otherWhen->condition,
                         [&](const camel::core::type::type_bindings_t &bindings) {
                             return evaluateWhenCondition(
-                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                                ownWhen->condition,
+                                funcType,
+                                bindings,
+                                {},
+                                nullptr,
+                                unit_);
                         },
                         [&](const camel::core::type::type_bindings_t &bindings) {
                             return evaluateWhenCondition(
@@ -529,7 +545,12 @@ void Builder::rejectRedeclaredFunction(
                         other->second.condition,
                         [&](const camel::core::type::type_bindings_t &bindings) {
                             return evaluateWhenCondition(
-                                ownWhen->condition, funcType, bindings, {}, nullptr, unit_);
+                                ownWhen->condition,
+                                funcType,
+                                bindings,
+                                {},
+                                nullptr,
+                                unit_);
                         },
                         [&](const camel::core::type::type_bindings_t &bindings) {
                             return evaluateWhenCondition(
@@ -546,7 +567,8 @@ void Builder::rejectRedeclaredFunction(
                     }
                     if (separation == ConditionSeparation::NotComputable &&
                         ownWhen->text != other->second.text) {
-                        continue; // two conditions on a value: the call that meets both is ambiguous
+                        continue; // two conditions on a value: the call that meets both is
+                                  // ambiguous
                     }
                     if (separation == ConditionSeparation::Overlapping) {
                         redeclaredFuncTypes_.insert(funcType);
@@ -555,8 +577,7 @@ void Builder::rejectRedeclaredFunction(
                             .commit(
                                 name,
                                 overlappingType,
-                                graph->funcType()->toString() + " — when " +
-                                    other->second.text,
+                                graph->funcType()->toString() + " — when " + other->second.text,
                                 funcType->toString() + " — when " + ownWhen->text);
                         throw BuildAbortException();
                     }
@@ -663,7 +684,6 @@ bool Builder::isPoisonedName(const std::string &name) const {
     }
     return false;
 }
-
 
 void Builder::recordDeclaration(
     const std::string &name, node_handle_t node, const GCT::node_ptr_t &decl) {
@@ -853,13 +873,10 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
         declared != nullptr && declared->normTypesCount() != 1) {
         return false;
     }
-    const std::string parameter =
-        text.substr(prefix.size(), text.size() - prefix.size() - 3);
-    return !parameter.empty() && std::all_of(
-                                     parameter.begin(), parameter.end(), [](char c) {
-                                         return std::isalnum(static_cast<unsigned char>(c)) ||
-                                                c == '_';
-                                     });
+    const std::string parameter = text.substr(prefix.size(), text.size() - prefix.size() - 3);
+    return !parameter.empty() && std::all_of(parameter.begin(), parameter.end(), [](char c) {
+        return std::isalnum(static_cast<unsigned char>(c)) || c == '_';
+    });
 }
 
 /// Whether the module implements the operator this body-less declaration names (`#op`, or the
@@ -868,7 +885,7 @@ bool Builder::isPassDeclaration(const GCT::node_ptr_t &gct) {
 /// the pass takes the function), and then the operator is the declaration that writes `#op`.
 bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
     const std::string &declared = unit_->module->declaredName();
-    std::string uri = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
+    std::string uri   = (declared.empty() ? unit_->module->name() : declared) + ":" + gct->name();
     const auto tagged = nativeOperatorUri(gct);
     if (tagged.has_value()) {
         uri = *tagged;
@@ -879,7 +896,7 @@ bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
     if (tagged.has_value()) {
         return true;
     }
-    size_t same = 0;
+    size_t same                                              = 0;
     const std::function<void(const GCT::node_ptr_t &)> count = [&](const GCT::node_ptr_t &node) {
         if (node->type() == GCT::NodeKind::DECL && node->nativeDeclaration() &&
             node->name() == gct->name()) {
@@ -895,8 +912,8 @@ bool Builder::declarationHasOperator(const GCT::node_ptr_t &gct) {
     return same <= 1;
 }
 
-std::vector<camel::source::origin_id_t> parameterPortOrigins(
-    const context_ptr_t &context, const GCT::node_ptr_t &gct);
+std::vector<camel::source::origin_id_t>
+parameterPortOrigins(const context_ptr_t &context, const GCT::node_ptr_t &gct);
 
 void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     ENTER("DECL");
@@ -939,8 +956,7 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
         // those written on the fields of the struct it writes (design principles 6.2). They are
         // read from C++ with tag::ofDeclaration / tag::ofField.
         const TagFacts tags = tagFactsOf(gct, camel::core::tag::Type);
-        camel::core::tag::attachToDeclaration(
-            *module_, Reference(gct->name()), tags.declaration);
+        camel::core::tag::attachToDeclaration(*module_, Reference(gct->name()), tags.declaration);
         recordFieldTags(gct);
         LEAVE("DECL");
         return nullptr;
@@ -983,8 +999,8 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
 /// declaration is read from and the node its body is built from may be entered in either order,
 /// and the parameter list was parsed once, under the declaration they both come from. So the walk
 /// follows the derivation chain and takes the first bundle that numbers its parameters.
-std::vector<camel::source::origin_id_t> parameterPortOrigins(
-    const context_ptr_t &context, const GCT::node_ptr_t &gct) {
+std::vector<camel::source::origin_id_t>
+parameterPortOrigins(const context_ptr_t &context, const GCT::node_ptr_t &gct) {
     std::vector<camel::source::origin_id_t> origins;
     if (!context || !gct) {
         return origins;
@@ -1049,12 +1065,18 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         camel::core::isOverloadableOperatorGroup(name) ? funcType->toString() : std::string{};
     if (!name.empty() && tags.declaration != camel::core::attr::kNoAttrs) {
         camel::core::tag::attachToDeclaration(
-            *module_, Reference(name), signature, tags.declaration);
+            *module_,
+            Reference(name),
+            signature,
+            tags.declaration);
     }
     if (!name.empty()) {
         // What the declaration grants: the permission tags written before it.
         camel::core::tag::attachPermissionsToDeclaration(
-            *module_, Reference(name), signature, tags.permissions);
+            *module_,
+            Reference(name),
+            signature,
+            tags.permissions);
     }
     if (isGenericHere(type, gct)) {
         // A generic function: registered as a template when its block was entered
@@ -1069,8 +1091,9 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         funcType = instantiateFunctionType(funcType, typeBindings_);
     }
     // The signature as the source wrote it, kept for the body: once a lambda's unwritten parameters
-    // are filled and its rest parameter expanded, `funcType` no longer carries the one name the body
-    // writes (`xs` for `xs_0`, `xs_1`, ...), and the tuple that name stands for is built there.
+    // are filled and its rest parameter expanded, `funcType` no longer carries the one name the
+    // body writes (`xs` for `xs_0`, `xs_1`, ...), and the tuple that name stands for is built
+    // there.
     const FunctionType *const written = funcType;
     if (name.empty()) {
         // A lambda's parameters that write no type take it from the function type of the
@@ -1099,8 +1122,8 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
         }
     }
     if (camel::core::tag::declaresMacro(tags.declaration)) {
-        graph->edit().setFlags(static_cast<uint8_t>(
-            graph->view().flags() | camel::runtime::kGraphFlagMacro));
+        graph->edit().setFlags(
+            static_cast<uint8_t>(graph->view().flags() | camel::runtime::kGraphFlagMacro));
     }
     buildFuncBody(gct, graph, funcType, name, tags, written);
     // A declaration tag whose argument names a function (`#vjp(cube_rule)`) keeps that graph
@@ -1159,8 +1182,9 @@ FunctionType *Builder::completeLambdaSignature(
     }
     if (withPack) {
         holes.push_back({funcType->withTypesCount() - 1, gct->origin(), true});
-        std::stable_sort(
-            holes.begin(), holes.end(), [](const auto &a, const auto &b) { return a.index < b.index; });
+        std::stable_sort(holes.begin(), holes.end(), [](const auto &a, const auto &b) {
+            return a.index < b.index;
+        });
     }
     if (holes.empty()) {
         return funcType;
@@ -1184,14 +1208,15 @@ FunctionType *Builder::completeLambdaSignature(
             .commit(
                 name,
                 std::format(
-                    "the type expected here, '{}', is not a function type", expected->toString()));
+                    "the type expected here, '{}', is not a function type",
+                    expected->toString()));
         throw BuildAbortException();
     }
     const auto *expectedFunc = tt::as_ptr<FunctionType>(expected);
     const size_t withCount   = funcType->withTypesCount();
     const size_t total       = withCount + funcType->normTypesCount();
     const auto report        = [&](const GCT::Tree::UnwrittenParam &param,
-                           const std::string &reason) -> void {
+                                   const std::string &reason) -> void {
         const std::string name(funcType->argNameAt(param.index));
         diags_->of(SemanticDiag::LambdaParameterWithoutType)
             .atOrigin(param.origin)
@@ -1213,24 +1238,22 @@ FunctionType *Builder::completeLambdaSignature(
     // A lambda takes the `with` list it does not write from the position it stands in as well
     // (design principles 5.9: the types it does not write come from the function type of the
     // position). A transform's result declares the differentiated function's own `with` list --
-    // `Vjp<F>` is `<..WithOf<F>> (..ParamsOf<F>) => ...` -- and the library's `vjp` answers a lambda
-    // written `(..xs) => ...`, so this is the one place the two lists differ: without adopting the
-    // position's list the value would answer `(..ParamsOf<F>)` while the declaration promises the
-    // `with` prefix too, and `vjp(f)<2.0>(3.0)` would pass a `with` argument to a function with no
-    // `with` port. A lambda that *writes* a `with` list of its own keeps it, and one that writes a
-    // different number of them than the position has is told so below.
+    // `Vjp<F>` is `<..WithOf<F>> (..ParamsOf<F>) => ...` -- and the library's `vjp` answers a
+    // lambda written `(..xs) => ...`, so this is the one place the two lists differ: without
+    // adopting the position's list the value would answer `(..ParamsOf<F>)` while the declaration
+    // promises the `with` prefix too, and `vjp(f)<2.0>(3.0)` would pass a `with` argument to a
+    // function with no `with` port. A lambda that *writes* a `with` list of its own keeps it, and
+    // one that writes a different number of them than the position has is told so below.
     const size_t expectedWith = expectedFunc->withTypesCount();
-    const size_t adoptedWith =
-        withCount == 0 && expectedWith > 0 ? expectedWith : size_t{0};
+    const size_t adoptedWith  = withCount == 0 && expectedWith > 0 ? expectedWith : size_t{0};
     // A pack among the `with` parameters stands for the position's `with` list from its own index
     // on, one `with` parameter each, exactly as an ordinary rest parameter stands for the ordinary
     // ones: the arity it leaves open is the position's, so the count compared below is the
     // position's too. A pack is last in the list (the parser refuses one that is not), so the
     // parameters before it are the written ones.
     const size_t withPackAt    = withPack ? withCount - 1 : withCount;
-    const size_t effectiveWith =
-        withPack ? expectedWith : withCount + adoptedWith;
-    const size_t expectedTotal  = expectedWith + expectedFunc->normTypesCount();
+    const size_t effectiveWith = withPack ? expectedWith : withCount + adoptedWith;
+    const size_t expectedTotal = expectedWith + expectedFunc->normTypesCount();
     if (withPack && expectedWith < withPackAt) {
         report(
             holes[0],
@@ -1251,8 +1274,9 @@ FunctionType *Builder::completeLambdaSignature(
                     expectedTotal,
                     effectiveWith + funcType->normTypesCount()));
         }
-    } else if (restHole->index >= withCount &&
-               expectedFunc->normTypesCount() < restHole->index - withCount) {
+    } else if (
+        restHole->index >= withCount &&
+        expectedFunc->normTypesCount() < restHole->index - withCount) {
         // An ordinary rest parameter stands for the expected type's ordinary members from its own
         // position on, and for however many there are -- none included -- so the one thing the
         // position owes it is to reach it. The position is counted among the expected type's
@@ -1300,8 +1324,8 @@ FunctionType *Builder::completeLambdaSignature(
     }
     size_t hole = 0;
     for (size_t i = 0; i < total; ++i) {
-        Type *type   = typeAt(i);
-        bool isHole  = hole < holes.size() && holes[hole].index == i;
+        Type *type  = typeAt(i);
+        bool isHole = hole < holes.size() && holes[hole].index == i;
         if (isHole) {
             const GCT::Tree::UnwrittenParam &param = holes[hole++];
             if (param.rest && i < withCount) {
@@ -1314,7 +1338,9 @@ FunctionType *Builder::completeLambdaSignature(
                 for (size_t k = i; k < expectedWith; ++k) {
                     Type *const expanded = expectedFunc->withTypeAt(k);
                     if (expanded == nullptr) {
-                        report(param, "the expected function type does not say what this parameter is");
+                        report(
+                            param,
+                            "the expected function type does not say what this parameter is");
                     }
                     factory.addWithArg(
                         base + "_" + std::to_string(k - i),
@@ -1340,7 +1366,9 @@ FunctionType *Builder::completeLambdaSignature(
                     Type *const expanded = k < withCount ? expectedFunc->withTypeAt(k)
                                                          : expectedFunc->normTypeAt(k - withCount);
                     if (expanded == nullptr) {
-                        report(param, "the expected function type does not say what this parameter is");
+                        report(
+                            param,
+                            "the expected function type does not say what this parameter is");
                     }
                     factory.addNormArg(base + "_" + std::to_string(k - i), expanded, false);
                 }
@@ -1363,9 +1391,8 @@ FunctionType *Builder::completeLambdaSignature(
                         expectedFunc->toString(),
                         i + 1));
             }
-            Type *const wanted                     = i < withCount
-                                                         ? expectedFunc->withTypeAt(i)
-                                                         : expectedFunc->normTypeAt(i - withCount);
+            Type *const wanted = i < withCount ? expectedFunc->withTypeAt(i)
+                                               : expectedFunc->normTypeAt(i - withCount);
             if (wanted == nullptr) {
                 report(param, "the expected function type does not say what this parameter is");
             }
@@ -1383,7 +1410,11 @@ FunctionType *Builder::completeLambdaSignature(
             type = wanted;
         }
         if (i < withCount) {
-            factory.addWithArg(nameAt(i), type, funcType->withIsVarAt(i), funcType->withNeedsValueAt(i));
+            factory.addWithArg(
+                nameAt(i),
+                type,
+                funcType->withIsVarAt(i),
+                funcType->withNeedsValueAt(i));
         } else {
             factory.addNormArg(nameAt(i), type, funcType->normIsVarAt(i - withCount));
         }
@@ -1400,12 +1431,12 @@ void Builder::stampPermissions(node_handle_t operNode) const {
 
 namespace {
 
-/// Whether the GCT `node`, or something it contains, reads the value `name`. The body of a lambda is a
-/// GCT node by the time its graph is built, and a name the body does not declare stands in it as the
-/// reference it makes (NREF for a value, DREF for something reached as a declaration), so the question
-/// is asked of the graph the body already is rather than of the source it came from. GIR asks it
-/// before building the tuple a rest parameter stands for: a lambda that never reads its rest
-/// parameter gets no node, and its graph is what it was.
+/// Whether the GCT `node`, or something it contains, reads the value `name`. The body of a lambda
+/// is a GCT node by the time its graph is built, and a name the body does not declare stands in it
+/// as the reference it makes (NREF for a value, DREF for something reached as a declaration), so
+/// the question is asked of the graph the body already is rather than of the source it came from.
+/// GIR asks it before building the tuple a rest parameter stands for: a lambda that never reads its
+/// rest parameter gets no node, and its graph is what it was.
 bool graphNamesValue(const GCT::node_ptr_t &node, const std::string &name) {
     if (node == nullptr) {
         return false;
@@ -1450,14 +1481,15 @@ void Builder::buildFuncBody(
     AttrScope attrs(
         currentAttrs_,
         camel::core::attr::unite(
-            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first), bodyTags.nodes));
+            camel::core::attr::unite(currentAttrs_, staticGrantsOf(gct).first),
+            bodyTags.nodes));
     // A function (or a lambda) written inside a `match type` arm has returns of its own.
     StaticBodyScope *outerStaticBody = std::exchange(activeStaticBody_, nullptr);
     const size_t outerStaticDepth    = std::exchange(staticDepth_, 0);
     // A nested function is a boundary for rest parameters too: `..ts` of an enclosing
     // expansion cannot be spread inside another graph.
-    RestBody *outerRestBody         = std::exchange(activeRestBody_, nullptr);
-    const size_t outerRestBindings  = restBindings_.size();
+    RestBody *outerRestBody        = std::exchange(activeRestBody_, nullptr);
+    const size_t outerRestBindings = restBindings_.size();
     // The body EXEC is where the tags of the function are the body region's, not a block's.
     struct FunctionBodyScope {
         const GCT::Node *&slot;
@@ -1503,18 +1535,19 @@ void Builder::buildFuncBody(
         // because the completed `funcType` holds the expanded parameters and no longer the one name
         // the body writes.
         //
-        // The tuple is built only when the body names it (`graphNamesValue` above): a rest lambda that
-        // never reads `xs` gets no node, and its graph is what it was before rest parameters existed.
-        // The question is asked of the GCT the body already is, so what it looks for is the NREF or
-        // DREF the reference became -- not the source name, which is also in the parameter list -- and
-        // it does not enter a nested FUNC, whose names are not this body's.
+        // The tuple is built only when the body names it (`graphNamesValue` above): a rest lambda
+        // that never reads `xs` gets no node, and its graph is what it was before rest parameters
+        // existed. The question is asked of the GCT the body already is, so what it looks for is
+        // the NREF or DREF the reference became -- not the source name, which is also in the
+        // parameter list -- and it does not enter a nested FUNC, whose names are not this body's.
         //
         // The condition under which this is wrong, and the one that would go red: the guard answers
-        // "no" for every kind of node it does not look at, so a body that reaches `xs` through a new
-        // kind -- a name reference that is neither NREF nor DREF -- loses the tuple silently. What
-        // moves then is not the node count: the body's read of `xs` stops resolving, and the red is
-        // `UnresolvedReference` in `rest_params.lambda_rest_as_a_value` (and in every other case whose
-        // rest lambda reads its parameter), the same red the binding was added to remove.
+        // "no" for every kind of node it does not look at, so a body that reaches `xs` through a
+        // new kind -- a name reference that is neither NREF nor DREF -- loses the tuple silently.
+        // What moves then is not the node count: the body's read of `xs` stops resolving, and the
+        // red is `UnresolvedReference` in `rest_params.lambda_rest_as_a_value` (and in every other
+        // case whose rest lambda reads its parameter), the same red the binding was added to
+        // remove.
         if (written != nullptr) {
             if (const auto *unwritten = GCT::Tree::of(gct)->unwrittenParamsOf(gct)) {
                 for (const auto &param : *unwritten) {
@@ -1527,12 +1560,12 @@ void Builder::buildFuncBody(
                     }
                     // `param.index` numbers the parameters as the lambda *wrote* them, and the
                     // completed signature is what the ports are read from: a `with` list the lambda
-                    // took from the position (`completeLambdaSignature`) is in the second and not in
-                    // the first, so the two are subtracted in their own terms.
+                    // took from the position (`completeLambdaSignature`) is in the second and not
+                    // in the first, so the two are subtracted in their own terms.
                     const size_t writtenWith = written->withTypesCount();
                     const size_t firstNorm =
                         param.index >= writtenWith ? param.index - writtenWith : 0;
-                    const auto normPorts     = graph->view().normPorts();
+                    const auto normPorts = graph->view().normPorts();
                     std::vector<Type *> parts;
                     std::vector<node_handle_t> members;
                     for (size_t norm = firstNorm; norm < funcType->normTypesCount(); ++norm) {
@@ -1556,7 +1589,10 @@ void Builder::buildFuncBody(
                         // reached the scheduler, which is why the case written for spreading was
                         // green while reading the same pack was not.
                         node_handle_t tuple = fillStaticValues(
-                            TupleType::create(parts), members, gct, "gir.lambda.rest.tuple");
+                            TupleType::create(parts),
+                            members,
+                            gct,
+                            "gir.lambda.rest.tuple");
                         insertNode(restName, tuple);
                     }
                     break;
@@ -1584,8 +1620,11 @@ void Builder::buildFuncBody(
                 // The same construction as the rest parameter above, and for the same reason: a
                 // FILL reads the shape it fills through a `Norm` input, so a set of members linked
                 // as `With` inputs alone is a node the scheduler refuses.
-                node_handle_t tuple =
-                    fillStaticValues(TupleType::create(parts), members, gct, "gir.lambda.with.pack");
+                node_handle_t tuple = fillStaticValues(
+                    TupleType::create(parts),
+                    members,
+                    gct,
+                    "gir.lambda.with.pack");
                 insertNode(packName, tuple);
             }
         }
@@ -1601,10 +1640,9 @@ void Builder::buildFuncBody(
             for (const auto &tupleParam : *tuples) {
                 const std::string paramName(funcType->argNameAt(tupleParam.index));
                 const bool isWith = tupleParam.index < funcType->withTypesCount();
-                Type *paramType   = isWith
-                                        ? funcType->withTypeAt(tupleParam.index)
-                                        : funcType->normTypeAt(
-                                              tupleParam.index - funcType->withTypesCount());
+                Type *paramType =
+                    isWith ? funcType->withTypeAt(tupleParam.index)
+                           : funcType->normTypeAt(tupleParam.index - funcType->withTypesCount());
                 if (paramType->code() != TypeCode::Tuple ||
                     tt::as_ptr<TupleType>(paramType)->size() != tupleParam.names.size()) {
                     diags_->of(SemanticDiag::TupleUnpackingCountMismatch)
@@ -1676,7 +1714,8 @@ void Builder::buildFuncBody(
         // the clause has no name for, the conservative reading of a call through a value that
         // writes no clause) leaves the signature as it is rather than promising too little.
         if (graph->funcType() != nullptr &&
-            graph->funcType()->resources().mode == camel::core::sem::ResourceSignature::Mode::Generic) {
+            graph->funcType()->resources().mode ==
+                camel::core::sem::ResourceSignature::Mode::Generic) {
             // Its signature carries an inferred set from here on: this is what the settled
             // measurement is written onto once every body has been measured. A measurement that
             // cannot be written as a clause is not written now, and is not written then either.
@@ -1705,9 +1744,9 @@ void Builder::buildFuncBody(
         // The caller entered the scope of `graph`; an error leaves it on the way out.
         bodyStates_[graph.get()] = BodyState::Built;
         failedBodies_.insert(graph.get());
-        activeStaticBody_        = outerStaticBody;
-        staticDepth_             = outerStaticDepth;
-        activeRestBody_          = outerRestBody;
+        activeStaticBody_ = outerStaticBody;
+        staticDepth_      = outerStaticDepth;
+        activeRestBody_   = outerRestBody;
         restBindings_.resize(outerRestBindings);
         staticValueScopes_ = std::move(outerStaticValues);
         leaveScope();
@@ -1741,11 +1780,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // (`#[contract] { ... }`) reaches the nodes through this one column.
     NumericPermissionScope permissions(
         numericPermissions_,
-        static_cast<camel::core::sem::PermissionMask>(
-            numericPermissions_ | blockTags.permissions));
-    AttrScope attrs(
-        currentAttrs_,
-        camel::core::attr::unite(currentAttrs_, blockTags.nodes));
+        static_cast<camel::core::sem::PermissionMask>(numericPermissions_ | blockTags.permissions));
+    AttrScope attrs(currentAttrs_, camel::core::attr::unite(currentAttrs_, blockTags.nodes));
     // A tagged block is a Block region: the facts it carries are the region's, and the nodes
     // written in it are put in the region by the draft (addNode follows the insert region).
     // The region is an annotation only: it changes no order and reaches no scheduler.
@@ -1762,7 +1798,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     regionScope.outer       = regionScope.transaction->edit().insertRegion();
     if (blockTags.nodes != camel::core::attr::kNoAttrs && gct != functionBody_) {
         const uint32_t block = regionScope.transaction->edit().addRegion(
-            runtime::GCRegionKind::Block, regionScope.outer);
+            runtime::GCRegionKind::Block,
+            regionScope.outer);
         regionScope.transaction->edit().setRegionAttrs(block, blockTags.nodes);
         regionScope.transaction->edit().setInsertRegion(block);
     }
@@ -1774,8 +1811,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // declaration) is not a block: in a sync block it continues the chain, in written order,
     // like the arguments of a call statement. So does a sync block written inside a sync
     // block: its expressions are expressions of the enclosing block, in the same order.
-    const bool operands = gct->operands() || (synced_ && gct->synced()) ||
-                          (synced_ && gct == syncedBlockOverride_);
+    const bool operands =
+        gct->operands() || (synced_ && gct->synced()) || (synced_ && gct == syncedBlockOverride_);
     if (!operands) {
         synced_         = gct->synced();
         lastSyncedNode_ = {};
@@ -1785,7 +1822,9 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     struct BlockScope {
         const GCT::Node *&slot;
         const GCT::Node *outer;
-        BlockScope(const GCT::Node *&s, const GCT::Node *block) : slot(s), outer(s) { slot = block; }
+        BlockScope(const GCT::Node *&s, const GCT::Node *block) : slot(s), outer(s) {
+            slot = block;
+        }
         ~BlockScope() { slot = outer; }
     } blockScope(currentBlock_, gct);
     registerGenericTemplates(gct);
@@ -1810,8 +1849,8 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
         explicit StatementState(Builder &b)
             : self(b), graph(b.currGraph_), nodeScope(b.nodeScope_), graphScope(b.graphScope_),
               decoratedScope(b.decoratedScope_), templateScope(b.templateScope_),
-              bindings(b.typeBindings_), depth(b.instantiationDepth_),
-              synced(b.synced_), varied(b.varied_), declaresVariable(b.declaresVariable_),
+              bindings(b.typeBindings_), depth(b.instantiationDepth_), synced(b.synced_),
+              varied(b.varied_), declaresVariable(b.declaresVariable_),
               calleeAllowed(b.genericCalleeAllowed_), lastSynced(b.lastSyncedNode_) {}
         void restore() {
             self.currGraph_            = graph;
@@ -1868,10 +1907,9 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             // literal or empty array there (design principles 5.1).
             // A function declaration is a statement, not a value: it leaves the block's value
             // as it was (an empty-named FUNC is a lambda written in place, and is a value).
-            const bool declaration =
-                child->type() == GCT::NodeKind::FUNC && !child->name().empty();
-            const bool tailPosition = tailExpected != nullptr && !gct->operands() &&
-                                      i + 1 == gct->size() && !declaration;
+            const bool declaration = child->type() == GCT::NodeKind::FUNC && !child->name().empty();
+            const bool tailPosition =
+                tailExpected != nullptr && !gct->operands() && i + 1 == gct->size() && !declaration;
             if (tailPosition) {
                 result = visitInPosition(child, tailExpected);
             } else if (!gct->operands()) {
@@ -1938,9 +1976,9 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     if (failed) {
         throw BuildAbortException();
     }
-    const bool nameAtTail =
-        gct->size() > 0 && res != nullptr && nodeIsKind(res, runtime::GCNodeKind::Dref) &&
-        sameGraph(res, currGraph_);
+    const bool nameAtTail = gct->size() > 0 && res != nullptr &&
+                            nodeIsKind(res, runtime::GCNodeKind::Dref) &&
+                            sameGraph(res, currGraph_);
     // Whether the value this block ends with is one nothing takes: the tail of a body or an arm
     // declared `: void` (`acceptsAsResult`), a position that takes no value (the channel
     // visitInPosition hands the position down by, the one branchTakesNoValue asks a branch about),
@@ -1948,9 +1986,9 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // `sync` block, or of any block, and the body of a decorated block nothing takes). There is
     // one rule and it is about the position, not the shape: a position that drops a value does not
     // use a name, so every one of these is the same `dropped` here.
-    const bool dropped =
-        valueDropped || (tailExpected != nullptr && isVoidGraphExitType(tailExpected)) ||
-        (expectedValueType_ != nullptr && isVoidGraphExitType(expectedValueType_));
+    const bool dropped = valueDropped ||
+                         (tailExpected != nullptr && isVoidGraphExitType(tailExpected)) ||
+                         (expectedValueType_ != nullptr && isVoidGraphExitType(expectedValueType_));
     // The value of a block is that of its last statement, and a name standing there is a value
     // only where a value is wanted -- a DREF is a compile-time marker and no node of the graph
     // (graph_encode, prepareGraph).
@@ -1992,8 +2030,6 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
                 std::ranges::find(ctrlInputsOf(res), nodeIdOf(lastSyncedNode_)) !=
                     ctrlInputsOf(res).end();
             if (waitsOnTail) {
-                markSyncStatement(lastSyncedNode_);
-                markSyncStatement(res);
                 linkNodes(LinkType::Sync, lastSyncedNode_, res);
             } else {
                 node_handle_t gate = currGraph_->addGateNode(nodeTypeOf(res));
@@ -2016,5 +2052,3 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
 }
 
 } // namespace camel::compile::gir
-
-

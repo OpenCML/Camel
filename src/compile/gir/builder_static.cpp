@@ -340,28 +340,36 @@ void Builder::walkStaticBodyNames(
         return;
     }
     case GCT::NodeKind::SFOR: {
-        // `n` is bound in the body only. The type name `F` is not a value, so a use of it in
-        // a value position stays unresolved, as it should. `_` (the wildcard of `match`) binds
-        // nothing, so a use of it stays unresolved too.
+        // The field name and its tags are values bound in the body only. The type name `F` is not
+        // a value, so a use of it in a value position stays unresolved, as it should. `_` (the
+        // wildcard of `match`) binds nothing, so a use of it stays unresolved too.
         locals.emplace_back();
         const std::string &valueName = node->staticForValueName();
-        if (!valueName.empty() && valueName != "_") {
+        if (!valueName.empty() && valueName != GCT::kDiscardName) {
             locals.back().insert(valueName);
+        }
+        const std::string &tagsName = node->staticForTagsName();
+        if (!tagsName.empty() && tagsName != GCT::kDiscardName) {
+            locals.back().insert(tagsName);
         }
         walkStaticBodyNames(node->staticForBody(), locals, intoFunctions);
         locals.pop_back();
         return;
     }
     case GCT::NodeKind::SLOOP: {
-        // The first values are outside the names of the head; `n` and the state names are
-        // bound in the body only (as for a run-time loop).
+        // The first values are outside the names of the head; the field name, its tags and the
+        // state names are bound in the body only (as for a run-time loop).
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             walkStaticBodyNames(node->staticLoopInitial(j), locals, intoFunctions);
         }
         locals.emplace_back();
         const std::string &valueName = node->staticLoopValueName();
-        if (valueName != "_") {
+        if (valueName != GCT::kDiscardName) {
             locals.back().insert(valueName);
+        }
+        const std::string &tagsName = node->staticLoopTagsName();
+        if (!tagsName.empty() && tagsName != GCT::kDiscardName) {
+            locals.back().insert(tagsName);
         }
         for (size_t j = 0; j < node->staticLoopStateCount(); ++j) {
             locals.back().insert(node->staticLoopStateName(j));

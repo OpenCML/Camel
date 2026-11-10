@@ -30,6 +30,8 @@ digraph GraphIR {
         N03 -> N05 [label="0|0", type="NORM"];
         N04 -> N05 [label="0|1", type="NORM"];
         N05 -> N06 [label="0|0", type="NORM"];
+        N05 -> N06 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
+        N05 -> N06 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
         N07 -> N08 [label="0|0", type="NORM"];
         N06 -> N08 [label="0|0", type="CTRL", style=dashed, arrowhead=empty];
         N06 -> N08 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];

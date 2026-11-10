@@ -137,14 +137,35 @@ timeout_ms = 30000
 
 [[tests]]
 name = "saturate.default"
-desc = "The local algebra of std::opt::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::opt::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. `shared_product` is `sync`: the sum waits for the println, and the product that replaces it takes over that wait (waits=1), so it folds as in std::opt::algebra. The program prints what it printed on every back end."
+desc = "The local algebra of std::opt::algebra as rules (exact commutation, neutral elements of wrapping integers, x*c+x*c, x*c1+x*c2, (x*c1)*c2, the last two needing reassociate for floats), saturated under the default numeric policy and extracted by node count, leaves the same operators as std::opt::algebra on every function of the algebra corpus: the products and sums of `strict`, `underflow_sensitive`, the coefficient functions and the integer ones fold into one product, `mixed_permissions` (a product outside the block that grants reassociate) is left alone. `shared_product` is `sync`: its pure result is a block value whose completion GATE waits for the println, rather than a statement whose product needs a chain place (waits=0), so it folds as in std::opt::algebra. The program prints what it printed on every back end."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra.cml"
 args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "${backend}"]
 backends = ["nvm", "fvm"]
 
 expect_exit = 0
-expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=0", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "shared_product.completion_gate"
+desc = "The pure result of shared_product is a block value, not a statement in the middle of the chain. Its return GATE still waits for the preceding println after the product is rewritten."
+kind = "behavior"
+case = "../../../cases/opt/generic/algebra.cml"
+args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate", "std::jgir"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+ const doc = JSON.parse(input.normalized.stdout.slice(input.normalized.stdout.indexOf('{')))
+ const g = doc.graphs.find(g => g.name === 'shared_product')
+ const labels = new Map(g.nodes.map(n => [n.id, n.label]))
+ const gate = g.nodes.find(n => n.id === g.exit && n.kind === 'GATE')
+ assert(gate, 'the pure result must keep its completion GATE')
+ assert(g.edges.some(e => e.kind === 'sync' && e.target === gate.id && labels.get(e.source) === ':io/println'),
+   'the completion GATE no longer waits for the preceding println')
+}
+"""
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -157,7 +178,7 @@ args = ["${case}", "--arg", "x=2", "std::opt::fold", "test::saturate_safe", "${b
 backends = ["nvm", "fvm"]
 
 expect_exit = 0
-expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=1 mul=1", "SATURATE strict_coefficients add=1 mul=2", "SATURATE relaxed_coefficients add=1 mul=2", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+expect_stdout_contains = ["SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=1 mul=1", "SATURATE strict_coefficients add=1 mul=2", "SATURATE relaxed_coefficients add=1 mul=2", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=0", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
@@ -171,7 +192,7 @@ backends = ["nvm", "fvm"]
 backends_agree = ["exit_code", "stdout_normalized"]
 
 expect_exit = 0
-expect_stdout_contains = ["SATURATE-PROPS targets=10 saturated=10 fixpoint=10 stable=10", "SATURATE-AGAIN integer_chain writings=0 unions=0 saturated=1", "SATURATE-STABLE integer_chain same=1", "SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=1", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
+expect_stdout_contains = ["SATURATE-PROPS targets=10 saturated=10 fixpoint=10 stable=10", "SATURATE-AGAIN integer_chain writings=0 unions=0 saturated=1", "SATURATE-STABLE integer_chain same=1", "SATURATE strict add=0 mul=1", "SATURATE underflow_sensitive add=0 mul=1", "SATURATE strict_coefficients add=0 mul=1", "SATURATE relaxed_coefficients add=0 mul=1", "SATURATE mixed_permissions add=1 mul=2", "SATURATE integer_coefficients add=0 mul=1", "SATURATE integer_chain add=0 mul=1", "SATURATE shared_product add=0 mul=2 waits=0", "SATURATE strict32 add=0 mul=1", "SATURATE integer32 add=0 mul=1", "12.0 0.4 16.0\n16.0 16.0\n56 42 56\n12.0\n6.0\n12.0\n12.0 18.0"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 

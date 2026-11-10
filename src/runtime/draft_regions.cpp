@@ -5,7 +5,6 @@
 
 #include "camel/runtime/draft.h"
 
-
 #include <stdexcept>
 
 namespace camel::runtime {
@@ -34,8 +33,8 @@ void GraphDraft::setNodeRegion(gc_node_ref_t id, uint32_t region) {
     draftNode->header.region = region;
 }
 
-uint32_t GraphDraft::addRegion(
-    GCRegionKind kind, uint32_t parent, gc_node_ref_t owner, uint32_t index) {
+uint32_t
+GraphDraft::addRegion(GCRegionKind kind, uint32_t parent, gc_node_ref_t owner, uint32_t index) {
     ++mutations_;
     ASSERT(!regions_.empty(), "A draft is made with its body region, so the table is not empty.");
     ASSERT(parent < regions_.size(), "A region is made in a region that is not there.");
@@ -49,7 +48,7 @@ uint32_t GraphDraft::addRegion(
 }
 
 uint32_t GraphDraft::addInlineRegion(uint32_t parent, GraphId callee, gc_node_ref_t callSite) {
-    const uint32_t id = addRegion(GCRegionKind::Inline, parent);
+    const uint32_t id     = addRegion(GCRegionKind::Inline, parent);
     regions_[id].inlineOf = callee;
     regions_[id].callSite = callSite;
     return id;
@@ -96,19 +95,16 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
     if (regions_.size() <= 1 || !inheritsRegions_) {
         return;
     }
-    DraftNode *reader = node(user);
+    DraftNode *reader     = node(user);
     const DraftNode *read = node(input);
     // A JOIN reads the results of its arms, and a LOOP those of its parts.
     if (reader == nullptr || read == nullptr || reader->header.kind == GCNodeKind::Join ||
         reader->header.kind == GCNodeKind::Loop) {
         return;
     }
-    // Neither is a statement of a `sync` block moved: a statement is written where it is written,
-    // and the chain that joins it to the block never leaves the block's region (4.6). A value an
-    // inner region computes is read through that region's result -- the region is what carries it
-    // out (5.7) -- so moving the reader into the region is not how it is reached, and it would pull
-    // every chain edge of the reader across regions with it.
-    if ((reader->header.runtimeFlags & kGCNodeFlagSyncStatement) != 0) {
+    // A node already attached to a chain stays in that chain's region. An unattached node has no
+    // chain place to preserve; a value an inner region computes is reached through its result.
+    if (!syncInputsOf(user).empty() || !syncUsersOf(user).empty()) {
         return;
     }
     // Inline and Block regions only say where code came from: their values are read from outside.
@@ -123,7 +119,8 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
     };
     const uint32_t readControl   = controlOf(read->header.region);
     const uint32_t readerControl = controlOf(reader->header.region);
-    if (readControl == 0 || readControl == readerControl || regionWithin(readerControl, readControl)) {
+    if (readControl == 0 || readControl == readerControl ||
+        regionWithin(readerControl, readControl)) {
         return;
     }
     if (regionWithin(readControl, readerControl)) {
@@ -133,7 +130,7 @@ void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
 
 void GraphDraft::dissolveRegionsOf(gc_node_ref_t id) {
     for (uint32_t r = 1; r < regions_.size(); ++r) {
-        GCRegion &region = regions_[r];
+        GCRegion &region   = regions_[r];
         const bool control = region.kind == GCRegionKind::Arm ||
                              region.kind == GCRegionKind::LoopCond ||
                              region.kind == GCRegionKind::LoopBody;
@@ -288,7 +285,7 @@ bool GraphDraft::inlinedCopyOf(gc_node_ref_t id, const GCGraph *callee) const {
     // The region a call is in says what inlined body it belongs to; a region that is the body of
     // a function inlined at its call carries the same source (an Arm region that became one).
     for (uint32_t region = nodeRegion(id); region != 0 && region < regions_.size();
-         region = regions_[region].parent) {
+         region          = regions_[region].parent) {
         const GraphId inlineOf = regions_[region].inlineOf;
         if (inlineOf == callee->id()) {
             return true;

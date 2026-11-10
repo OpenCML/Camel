@@ -24,20 +24,20 @@
 #include "camel/core/tags.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
-#include "camel/runtime/operator_instance.h"
 #include "camel/execute/pass/base.h"
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
+#include "camel/runtime/operator_instance.h"
 
 #include <deque>
 #include <map>
 #include <optional>
-#include <unordered_set>
 #include <queue>
 #include <tuple>
+#include <unordered_set>
 #include <vector>
 
 using namespace camel::passes::generic;
@@ -105,7 +105,6 @@ bool holdsNoValue(slot_t value, type::Type *type) {
     return value == NullSlot && type != nullptr && type::isGCTraced(type->code()) &&
            type::asNullable(type) == nullptr;
 }
-
 
 /**
  * Whether a folded value may be put into the graph as a constant. A value above the pass's
@@ -191,16 +190,21 @@ staticValueOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t
 /// anchors follow it as well (`replaceFoldResult`). Leaving it pinned is what kept a conversion
 /// written in return position (the CAST a named result type adds) in the graph forever: every
 /// folding round skipped it, and every inlining of that function copied the unfolded conversion.
-/// A returned value that waits on something (`sync` bodies end in a gate that carries that
-/// ordering) is not folded: it is the tail of the graph's effect order, and a constant replacing
-/// it would carry none of it. The wait is read in both kinds the chain of a block is written as
-/// (docs/design/effects/edges.cn.md 1.5 and 5.3), the control input and the sync edge. A returned
-/// gate that waits carries the chain behind it: the statements of its block run because the graph's
-/// result is reached through them (edges.cn.md 2), so folding it to its own input detaches every
-/// one of them.
+bool isSyncWaitingGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
+    const auto *node  = draft.header(id);
+    return node != nullptr && node->kind == GCNodeKind::Gate && !draft.syncInputsOf(id).empty();
+}
+
+/// A GATE with a sync predecessor carries a chain place and cannot be folded into its input.
+/// A returned value that waits on anything else is not folded either: it is the tail of the graph's
+/// effect order (docs/design/effects/edges.cn.md 1.5 and 5.3).
 bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
-    const bool waits = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
+    if (isSyncWaitingGate(transaction, id)) {
+        return false;
+    }
+    const bool waits       = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
     const bool valueAnchor = isReplaceable(transaction, id) || (id == draft.returnNode() && !waits);
     return valueAnchor && !isWrittenInPlace(draft, id) && readsNoWrittenSlot(transaction, id);
 }
@@ -231,8 +235,8 @@ void replaceFoldResult(
     }
 }
 
-std::optional<StaticArgsView>
-staticArgs(const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs) {
+std::optional<StaticArgsView> staticArgs(
+    const camel::runtime::GraphTransaction &transaction, std::span<const gc_node_ref_t> inputs) {
     const auto &draft = transaction.graph();
     std::vector<slot_t> slots;
     std::vector<type::Type *> types;
@@ -250,9 +254,10 @@ staticArgs(const camel::runtime::GraphTransaction &transaction, std::span<const 
 // ---------------------------------------------------------------- branch pruning
 
 /// The arm a BRCH takes, when its condition (and, for a match, every case) is a static scalar.
-std::optional<size_t> staticArmOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch) {
+std::optional<size_t>
+staticArmOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch) {
     const auto &draft = transaction.graph();
-    const auto conds = draft.normInputsOf(brch);
+    const auto conds  = draft.normInputsOf(brch);
     if (conds.size() != 1) {
         return std::nullopt;
     }
@@ -281,8 +286,8 @@ std::optional<size_t> staticArmOf(const camel::runtime::GraphTransaction &transa
  * The nodes of each arm of `brch`: those in the region of the arm (the branches inside the arm
  * included), or nullopt when an arm has no region.
  */
-std::optional<std::vector<std::vector<gc_node_ref_t>>>
-branchArmNodes(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch, size_t armCount) {
+std::optional<std::vector<std::vector<gc_node_ref_t>>> branchArmNodes(
+    const camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch, size_t armCount) {
     const auto &draft = transaction.graph();
     std::vector<uint32_t> armRegion(armCount, 0);
     for (uint32_t r = 1; r < draft.regionCount(); ++r) {
@@ -312,24 +317,6 @@ branchArmNodes(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
     return arms;
 }
 
-/// Where the block's chain goes when the node in front of a statement is a branch. A `BRCH` is not a
-/// link of that chain: it jumps into the arm it selects, and the node that runs once the branch is
-/// over, whichever arm was taken, is the `JOIN`. A statement chained from the `BRCH` itself waits on
-/// a node it is not in an arm of, and no back end runs it -- the four schedulers lay a branch out as
-/// `BRCH`, one range per arm, `JOIN`, and nothing outside the arms is ever entered from the `BRCH`
-/// (`docs/technical/17_graph_rewrite_api_contracts.md`, 4.1 rule 2). The front end writes the same
-/// link: the statement after a branch waits on the `JOIN`. The `JOIN` is returned even when it is
-/// gone -- the caller decides whether the place is still in its block. It takes the transaction its
-/// callers already hold rather than a draft: the object is the caller's, not one this function made.
-gc_node_ref_t branchPlaceInChain(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t node) {
-    const auto &draft = transaction.graph();
-    const camel::runtime::DraftNodeHeader *header = draft.header(node);
-    if (header == nullptr || header->kind != GCNodeKind::Brch) {
-        return node;
-    }
-    return reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(node).data())->join;
-}
-
 /**
  * Replaces a branch whose arm is statically known by that arm's code: the other arms are removed,
  * the JOIN's users read the taken arm's result, and the taken arm runs after what the BRCH ran
@@ -338,11 +325,11 @@ gc_node_ref_t branchPlaceInChain(const camel::runtime::GraphTransaction &transac
 /// The statements of one block are one chain (docs/design/effects/edges.cn.md 5.3), but they do not
 /// always arrive as one: a splice lays the body it moved in inside the arm of a branch, and a prune
 /// moves that arm's code back out, so a block collects the code of several bodies with one head and
-/// one tail of its own each. The fragments are joined here, in the order they were laid out, skipping
-/// a join that would close the chain on itself: layout order is not dependency order, and a fragment
-/// that already waits on a later one is left where it is rather than made part of a cycle. Returns
-/// the head and the tail of the chain the block's statements make, or two invalid refs when they do
-/// not make one.
+/// one tail of its own each. The fragments are joined here, in the order they were laid out,
+/// skipping a join that would close the chain on itself: layout order is not dependency order, and
+/// a fragment that already waits on a later one is left where it is rather than made part of a
+/// cycle. Returns the head and the tail of the chain the block's statements make, or two invalid
+/// refs when they do not make one.
 std::pair<gc_node_ref_t, gc_node_ref_t>
 joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t anchor) {
     auto &draft = transaction.edit();
@@ -355,9 +342,7 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
     };
     std::vector<gc_node_ref_t> heads;
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
-        const camel::runtime::DraftNodeHeader *header = draft.header(n);
-        if (header == nullptr || !draft.alive(n) ||
-            (header->runtimeFlags & camel::runtime::kGCNodeFlagSyncStatement) == 0 ||
+        if (!camel::runtime::occupiesChainPlace(draft, n) ||
             !camel::runtime::sameSyncBlock(draft, n, anchor)) {
             continue;
         }
@@ -396,12 +381,8 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
                 if (!joinable) {
                     break;
                 }
-                // The fragment's last statement is a branch: what follows the branch in the chain is
-                // its JOIN, not the BRCH (branchPlaceInChain). Walking on from the JOIN keeps the
-                // fragment's tail a node of the block; ending it at the BRCH would chain the next
-                // fragment from the BRCH itself, and a statement that waits on a BRCH is a statement
-                // no back end runs unless it is in one of the branch's arms (17, 4.1 rule 2).
-                const gc_node_ref_t after = branchPlaceInChain(transaction, tail);
+                // A structural statement continues from its exit, not from its owning node.
+                const gc_node_ref_t after = camel::runtime::chainExitOf(draft, tail);
                 if (after == tail) {
                     break;
                 }
@@ -430,8 +411,8 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
         return none;
     }
     // Does `from` wait on `target`, directly or through any edge kind? A join is written only where
-    // the answer is no; an exhausted walk answers yes, because not proving it free does not make the
-    // join safe.
+    // the answer is no; an exhausted walk answers yes, because not proving it free does not make
+    // the join safe.
     const auto waitsOn = [&](gc_node_ref_t from, gc_node_ref_t target) {
         std::vector<gc_node_ref_t> work{from};
         std::unordered_set<gc_node_ref_t> seen;
@@ -461,26 +442,18 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
         }
         return false;
     };
-    const auto markStatement = [&](gc_node_ref_t n) {
-        const camel::runtime::DraftNodeHeader *header = draft.header(n);
-        if (header != nullptr) {
-            draft.setNodeRuntimeFlags(
-                n,
-                static_cast<uint8_t>(header->runtimeFlags |
-                                     camel::runtime::kGCNodeFlagSyncStatement));
-        }
-    };
     bool joined = true;
     for (size_t i = 1; i < heads.size(); ++i) {
         if (waitsOn(tails[i - 1], heads[i])) {
             joined = false;
             continue;
         }
-        markStatement(heads[i]);
-        markStatement(tails[i - 1]);
-        const gc_node_ref_t only[1] = {tails[i - 1]};
-        draft.setSyncInputs(heads[i], only);
-        camel::runtime::appendControlDependency(transaction, tails[i - 1], heads[i]);
+        const gc_node_ref_t exit = draft.appendChainStatement(heads[i], tails[i - 1]);
+        if (exit == kInvalidNodeRef) {
+            joined = false;
+            continue;
+        }
+        tails[i - 1] = exit;
     }
     if (!joined) {
         return none;
@@ -489,7 +462,7 @@ joinBlockFragments(camel::runtime::GraphTransaction &transaction, gc_node_ref_t 
 }
 
 bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t brch) {
-    auto &draft = transaction.edit();
+    auto &draft    = transaction.edit();
     const auto arm = staticArmOf(transaction, brch);
     if (!arm) {
         return false;
@@ -512,10 +485,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // The arms' code must stay inside the branch: nothing but the JOIN may read it.
     for (const auto &region : regions) {
         for (gc_node_ref_t n : region) {
-            for (auto users : {draft.normUsersOf(n),
-                               draft.withUsersOf(n),
-                               draft.ctrlUsersOf(n),
-                               draft.syncUsersOf(n)}) {
+            for (auto users :
+                 {draft.normUsersOf(n),
+                  draft.withUsersOf(n),
+                  draft.ctrlUsersOf(n),
+                  draft.syncUsersOf(n)}) {
                 for (gc_node_ref_t u : users) {
                     if (u != join && std::ranges::find(region, u) == region.end()) {
                         return false;
@@ -526,6 +500,14 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
 
     std::vector<gc_node_ref_t> brchPreds = draft.waitInputsOf(brch);
+    const std::vector<gc_node_ref_t> branchOrderPreds(
+        draft.orderInputsOf(brch).begin(),
+        draft.orderInputsOf(brch).end());
+    for (gc_node_ref_t pred : branchOrderPreds) {
+        if (std::ranges::find(brchPreds, pred) == brchPreds.end()) {
+            brchPreds.push_back(pred);
+        }
+    }
     // The branch also ran after what its condition was ordered after: a condition whose value
     // is known may still wait on an effect (the result of a call that prints, seen through a
     // GATE). With the BRCH gone nothing else may reach that effect, and it was silently dropped.
@@ -544,7 +526,9 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             dropped[n] = i != *arm;
         }
     }
-    const auto removed = [&](gc_node_ref_t n) { return static_cast<bool>(dropped[n]); };
+    const auto removed = [&](gc_node_ref_t n) {
+        return n < dropped.size() && static_cast<bool>(dropped[n]);
+    };
     // The taken arm's chain tail: the statement the arm's block value reads -- the sync predecessor
     // of the value the arm gives, when that value is the gate forwarding it -- or, when the block's
     // value carries no chain of its own (a void block, whose value is a constant), the last
@@ -567,9 +551,9 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // written in it that is still there -- runs when that region runs, not whenever the branch
     // runs: the loop's condition runs inside the loop, and an inner arm only when that inner branch
     // takes it. The place the branch stood in is taken by a node the whole block reaches, so only a
-    // node that runs with the arm may stand there; handing it to a node of a nested region makes the
-    // statements after the branch wait on a value that region computes, and the commit refuses that
-    // graph (17, 4.1: a node reads only nodes that run whenever it does).
+    // node that runs with the arm may stand there; handing it to a node of a nested region makes
+    // the statements after the branch wait on a value that region computes, and the commit refuses
+    // that graph (17, 4.1: a node reads only nodes that run whenever it does).
     //
     // `Inline`, `Block` and `Dead` are not control regions (control_regions.h): they only say where
     // code came from, and their nodes run with the region around them, which is why the test below
@@ -592,11 +576,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         return armControl != 0 && draft.alive(n) &&
                controlRegionOf(draft.nodeRegion(n)) == armControl;
     };
-    // The statements of the taken arm are the statements of this block once the branch is gone, and a
-    // block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
+    // The statements of the taken arm are the statements of this block once the branch is gone, and
+    // a block's statements are one chain (docs/design/effects/edges.cn.md 5.3). They do not always
     // arrive as one, so the fragments the arm brings are joined before the branch's place is handed
-    // over: only one of them would take the place, and the statements of the others would be reached
-    // by nothing and would stop running (2).
+    // over: only one of them would take the place, and the statements of the others would be
+    // reached by nothing and would stop running (2).
     gc_node_ref_t armBlockNode = kInvalidNodeRef;
     if (armRegion != 0) {
         for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
@@ -606,53 +590,34 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             }
         }
     }
-    const auto markStatement = [&](gc_node_ref_t n) {
-        const camel::runtime::DraftNodeHeader *header = draft.header(n);
-        if (header != nullptr) {
-            draft.setNodeRuntimeFlags(
-                n,
-                static_cast<uint8_t>(header->runtimeFlags |
-                                     camel::runtime::kGCNodeFlagSyncStatement));
-        }
-    };
     const auto chainTo = [&](gc_node_ref_t user, gc_node_ref_t pred) {
-        // A wait is never written from a BRCH: the node that follows a branch is its JOIN
-        // (branchPlaceInChain), and a node chained from the BRCH would wait on a node it is not in an
-        // arm of -- 17, 4.1 rule 2, the invariant no back end can run such a graph under.
-        pred = branchPlaceInChain(transaction, pred);
+        pred = camel::runtime::chainExitOf(draft, pred);
         if (pred == kInvalidNodeRef || !draft.alive(pred)) {
             return;
         }
-        markStatement(user);
-        markStatement(pred);
-        const gc_node_ref_t only[1] = {pred};
-        draft.setSyncInputs(user, only);
-        camel::runtime::appendControlDependency(transaction, pred, user);
+        draft.setSyncInputs(user, {});
+        (void)draft.appendChainStatement(user, pred);
     };
     gc_node_ref_t armChainHead = kInvalidNodeRef;
     gc_node_ref_t armChainTail = kInvalidNodeRef;
     if (armBlockNode != kInvalidNodeRef) {
-        const auto chain  = joinBlockFragments(transaction, armBlockNode);
-        armChainHead      = chain.first;
-        armChainTail      = chain.second;
+        const auto chain = joinBlockFragments(transaction, armBlockNode);
+        armChainHead     = chain.first;
+        armChainTail     = chain.second;
     }
     gc_node_ref_t armTail = kInvalidNodeRef;
-    for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
-        if (inArmRegion(pred)) {
-            armTail = pred;
+    if (inArmRegion(result)) {
+        armTail = result;
+    } else {
+        for (gc_node_ref_t pred : draft.syncInputsOf(result)) {
+            if (inArmRegion(pred)) {
+                armTail = pred;
+            }
         }
     }
-    if (armTail == kInvalidNodeRef && inArmRegion(result) && carriesOrdering(draft, result, true)) {
-        // An arm written as data flow only -- its statements never chained, because what the arm
-        // returns is what they compute -- has no tail of its own. What runs last in it is the value
-        // it returns, when that value is code that runs and not a constant: `if i % 100 == 0 then
-        // { ... ->println } else { '' }` returns the `println`'s value, and running the `println` is
-        // what the arm is written for. Handing the branch's place to another node of the arm would
-        // leave that effect ordered only by the wait the block writes around the branch, and the
-        // node carrying that wait can be folded away itself, which leaves the effect in no chain at
-        // all (`nn.mnist`): the effect's own value is where the branch stood.
-        armTail = result;
-    }
+    // A result inside the taken arm is the arm's own exit. `prepareChainPlace` decides whether
+    // that value can continue the chain directly or needs a GATE; its predecessor is not a
+    // shortcut.
     if (armTail == kInvalidNodeRef) {
         for (gc_node_ref_t n : armNodes) {
             if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
@@ -674,13 +639,52 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // The chain the arm's fragments were joined into is what the branch's place is handed to: its
     // tail is where the statements written after the branch follow, and its head is entered from
     // where the branch stood.
-    const std::vector<gc_node_ref_t> joinChainPreds(
-        draft.syncInputsOf(join).begin(),
-        draft.syncInputsOf(join).end());
+    const std::vector<gc_node_ref_t> branchChainPreds(
+        draft.syncInputsOf(brch).begin(),
+        draft.syncInputsOf(brch).end());
     if (armChainTail != kInvalidNodeRef) {
         armTail = armChainTail;
     }
-    const auto &preds = brchPreds;
+    std::vector<gc_node_ref_t> armRoots;
+    if (armChainHead != kInvalidNodeRef && carriesOrdering(draft, armChainHead, true)) {
+        armRoots.push_back(armChainHead);
+    } else {
+        for (gc_node_ref_t n : armNodes) {
+            if (!inArmRegion(n) || !carriesOrdering(draft, n, true)) {
+                continue;
+            }
+            bool hasArmPredecessor = false;
+            for (auto inputs :
+                 {draft.normInputsOf(n),
+                  draft.withInputsOf(n),
+                  draft.ctrlInputsOf(n),
+                  draft.orderInputsOf(n),
+                  draft.syncInputsOf(n)}) {
+                for (gc_node_ref_t input : inputs) {
+                    if (inArmRegion(input)) {
+                        hasArmPredecessor = true;
+                        break;
+                    }
+                }
+                if (hasArmPredecessor) {
+                    break;
+                }
+            }
+            if (!hasArmPredecessor) {
+                armRoots.push_back(n);
+            }
+        }
+    }
+    for (gc_node_ref_t root : armRoots) {
+        for (gc_node_ref_t pred : branchOrderPreds) {
+            if (draft.alive(root) && draft.alive(pred) &&
+                !isComputedAfter(transaction, root, pred) &&
+                !isComputedAfter(transaction, pred, root)) {
+                (void)draft.appendOrderDependency(root, pred);
+            }
+        }
+    }
+    const auto &preds                              = brchPreds;
     const std::vector<gc_node_ref_t> brchCtrlUsers = draft.waitUsersOf(brch);
     for (gc_node_ref_t user : brchCtrlUsers) {
         if (user == join || removed(user)) {
@@ -708,7 +712,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     std::vector<gc_node_ref_t> joinValueUsers;
     for (auto group : {draft.normUsersOf(join), draft.withUsersOf(join)}) {
         for (gc_node_ref_t u : group) {
-            if (!dropped[u] && std::ranges::find(joinValueUsers, u) == joinValueUsers.end()) {
+            if (!removed(u) && std::ranges::find(joinValueUsers, u) == joinValueUsers.end()) {
                 joinValueUsers.push_back(u);
             }
         }
@@ -732,7 +736,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     if (!resultInArm) {
         for (gc_node_ref_t user : joinValueUsers) {
             for (gc_node_ref_t pred : after) {
-                if (pred != result && pred != stood && !dropped[pred]) {
+                if (pred != result && pred != stood && !removed(pred)) {
                     camel::runtime::appendControlDependency(transaction, pred, user);
                 }
             }
@@ -741,7 +745,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     for (gc_node_ref_t user : joinCtrlUsers) {
         draft.unlinkInput(camel::runtime::DraftEdgeKind::Ctrl, user, join);
         for (gc_node_ref_t pred : after) {
-            if (!dropped[pred]) {
+            if (!removed(pred)) {
                 camel::runtime::appendControlDependency(transaction, pred, user);
             }
         }
@@ -758,30 +762,31 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
 
     // 5.7: the branch's place in the block's chain is handed to the taken arm's chain tail --
     // the arm's code is the block's code once the branch is dissolved (eraseNode re-parents its
-    // regions) -- and the arm's chain is entered from where the branch stood. Both ends are written:
-    // waiting on the arm's value alone steps over the arm's code whenever that value is not a
-    // statement of it, which is what the counterexample `opt_lambda_effect_lost` is (a `null` arm
-    // value with a lambda call in the arm, whose effect stopped running). The call runs before the
-    // erases so that eraseNode's own chain closing finds no successor left to close over.
+    // regions) -- and the arm's chain is entered from where the branch stood. Both ends are
+    // written: waiting on the arm's value alone steps over the arm's code whenever that value is
+    // not a statement of it, which is what the counterexample `opt_lambda_effect_lost` is (a `null`
+    // arm value with a lambda call in the arm, whose effect stopped running). The call runs before
+    // the erases so that eraseNode's own chain closing finds no successor left to close over.
     if (armTail != kInvalidNodeRef && draft.alive(armTail) && draft.alive(join)) {
-        draft.handChainPlaceTo(
-            join, armTail, camel::runtime::PlaceHandover::DissolvedIntoIdsBlock);
+        draft.handChainPlaceTo(join, armTail, camel::runtime::PlaceHandover::DissolvedIntoIdsBlock);
     }
-    // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to the
-    // chain's tail, which already waits on the fragment before it, so the entry is written here. The
-    // predecessor a head arrives with can be the branch itself -- the builder enters an arm's chain
-    // from its BRCH -- and the BRCH is one of the nodes erased below, so that place is not one the
-    // head keeps: the branch's own place, the one its tail was handed, takes that slot instead.
-    const auto erasedByBranch = [&](gc_node_ref_t n) { return n == brch || n == join || removed(n); };
+    // The joined chain's head stands where the branch stood: `handChainPlaceTo` gave the place to
+    // the chain's tail, which already waits on the fragment before it, so the entry is written
+    // here. The predecessor a head arrives with can be the branch itself -- the builder enters an
+    // arm's chain from its BRCH -- and the BRCH is one of the nodes erased below, so that place is
+    // not one the head keeps: the branch's own place, the one its tail was handed, takes that slot
+    // instead.
+    const auto erasedByBranch = [&](gc_node_ref_t n) {
+        return n == brch || n == join || removed(n);
+    };
     if (armChainHead != kInvalidNodeRef && draft.alive(armChainHead)) {
         bool entered = false;
         for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
             entered = entered || !erasedByBranch(pred);
         }
         if (!entered) {
-            for (gc_node_ref_t pred : joinChainPreds) {
-                if (pred != armChainHead && pred != join && draft.alive(pred) &&
-                    !removed(pred)) {
+            for (gc_node_ref_t pred : branchChainPreds) {
+                if (pred != armChainHead && pred != join && draft.alive(pred) && !removed(pred)) {
                     chainTo(armChainHead, pred);
                     break;
                 }
@@ -802,10 +807,11 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
                 continue;
             }
             for (gc_node_ref_t n : regions[i]) {
-                for (auto group : {draft.normInputsOf(n),
-                                   draft.withInputsOf(n),
-                                   draft.ctrlInputsOf(n),
-                                   draft.syncInputsOf(n)}) {
+                for (auto group :
+                     {draft.normInputsOf(n),
+                      draft.withInputsOf(n),
+                      draft.ctrlInputsOf(n),
+                      draft.syncInputsOf(n)}) {
                     work.insert(work.end(), group.begin(), group.end());
                 }
             }
@@ -823,18 +829,18 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         while (!work.empty()) {
             const gc_node_ref_t n = work.back();
             work.pop_back();
-            if (n >= queued.size() || n == brch || n == join || !draft.alive(n) ||
-                queued[n]) {
+            if (n >= queued.size() || n == brch || n == join || !draft.alive(n) || queued[n]) {
                 continue;
             }
             queued[n] = true;
             // What an arm reads is read through the arm's own code as well: the code goes away and
             // what it read from outside is what has to keep running.
             if (removed(n)) {
-                for (auto group : {draft.normInputsOf(n),
-                                   draft.withInputsOf(n),
-                                   draft.ctrlInputsOf(n),
-                                   draft.syncInputsOf(n)}) {
+                for (auto group :
+                     {draft.normInputsOf(n),
+                      draft.withInputsOf(n),
+                      draft.ctrlInputsOf(n),
+                      draft.syncInputsOf(n)}) {
                     work.insert(work.end(), group.begin(), group.end());
                 }
                 continue;
@@ -846,29 +852,19 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     draft.eraseNode(join);
     draft.eraseNode(brch);
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
-        if (dropped[n] && draft.header(n)) {
+        if (removed(n) && draft.header(n)) {
             draft.eraseNode(n);
         }
     }
-    // An effect among those reads that only the dropped arm used runs where the branch stood, before
-    // the code that took its place: the branch used it, so it happens whether or not that arm is
-    // taken, and it is the arm's code that runs when the arm is the taken one. The wait is written
-    // on the first thing the surviving code runs -- the taken arm's chain head, or the node that
-    // stands at the branch's place, or the effect the code after the branch reaches first.
+    // An effect among those reads that only the dropped arm used runs where the branch stood,
+    // before the code that took its place: the branch used it, so it happens whether or not that
+    // arm is taken, and it is the arm's code that runs when the arm is the taken one. The wait is
+    // written on the first thing the surviving code runs -- the taken arm's chain head, or the node
+    // that stands at the branch's place, or the effect the code after the branch reaches first.
     {
         std::vector<gc_node_ref_t> lost;
         for (gc_node_ref_t read : outsideReads) {
             if (!draft.alive(read)) {
-                continue;
-            }
-            bool stillRead = false;
-            for (auto group : {draft.normUsersOf(read),
-                               draft.withUsersOf(read),
-                               draft.ctrlUsersOf(read),
-                               draft.syncUsersOf(read)}) {
-                stillRead = stillRead || !group.empty();
-            }
-            if (stillRead) {
                 continue;
             }
             if (camel::runtime::carriesOrdering(draft, read, true)) {
@@ -916,8 +912,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
                     targets.push_back(user);
                 }
             }
-            const auto *resultHeader =
-                result == kInvalidNodeRef ? nullptr : draft.header(result);
+            const auto *resultHeader = result == kInvalidNodeRef ? nullptr : draft.header(result);
             if (targets.empty() && resultHeader != nullptr &&
                 resultHeader->kind != GCNodeKind::Data &&
                 std::ranges::find(lost, result) == lost.end()) {
@@ -940,19 +935,20 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     // Gates that waited only on the branch now wait on nothing; commit dissolves them.
     //
-    // What is not done here: joining the block's fragments a second time, now that the arm's code is
-    // code of this block. Reading the fragments of a block the arm was just merged into takes the
-    // statements of a `var` that was captured and written in the same block for fragments of one
-    // chain, and joining them reorders writes the capture rules keep apart (`var_capture`,
+    // What is not done here: joining the block's fragments a second time, now that the arm's code
+    // is code of this block. Reading the fragments of a block the arm was just merged into takes
+    // the statements of a `var` that was captured and written in the same block for fragments of
+    // one chain, and joining them reorders writes the capture rules keep apart (`var_capture`,
     // `captured_write_order`). The arm's fragments are joined above, where the block is still the
     // arm's own and the statements are the arm's.
+    (void)eraseOrphanedChainGates(transaction);
     return true;
 }
 
 /// Replaces an element access on a constant tuple or struct by the element's value.
 bool foldStaticAccess(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, size_t constantBudget) {
-    auto &draft       = transaction.edit();
+    auto &draft        = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     if (sources.size() != 1) {
         return false;
@@ -987,8 +983,7 @@ bool foldStaticAccess(
         return false; // the element is a value of its own, and one too large to hold
     }
     // The element is reachable from the constant it was read from, which the graph keeps.
-    replaceFoldResult(
-        transaction, id, draft.materializeStaticValue(value, result));
+    replaceFoldResult(transaction, id, draft.materializeStaticValue(value, result));
     return true;
 }
 
@@ -996,7 +991,7 @@ bool foldStaticAccess(
 bool foldStaticFill(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
-    auto &draft = transaction.edit();
+    auto &draft        = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     type::Type *result = draft.header(id)->dataType;
     if (sources.size() != 1 || !result || !type::isGCTraced(result->code())) {
@@ -1023,8 +1018,10 @@ bool foldStaticFill(
     // that describes that shape, so its size is the size the constant would have. One above the
     // budget is not made at all: folding buys run time with compile-time memory, which a value
     // this large does not repay.
-    if (!fitsConstantBudget(source->first, source->second ? source->second : result,
-                            constantBudget)) {
+    if (!fitsConstantBudget(
+            source->first,
+            source->second ? source->second : result,
+            constantBudget)) {
         return false;
     }
     auto *object = camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(source->first)
@@ -1033,7 +1030,8 @@ bool foldStaticFill(
     roots.emplace_back(camel::core::mm::autoSpace(), object, result, "std::opt::fold");
     camel::execute::writeRuntimeFillSlots(object, result, body, slots);
     replaceFoldResult(
-        transaction, id,
+        transaction,
+        id,
         draft.materializeStaticValue(camel::core::rtdata::toSlot(object), result));
     return true;
 }
@@ -1049,7 +1047,7 @@ bool foldStaticFill(
 bool foldStaticCast(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
-    auto &draft = transaction.edit();
+    auto &draft        = transaction.edit();
     const auto sources = draft.normInputsOf(id);
     type::Type *target = draft.header(id)->dataType;
     if (sources.size() != 1 || !target || !draft.withInputsOf(id).empty()) {
@@ -1107,15 +1105,14 @@ bool foldStaticCast(
             "std::opt::fold");
     }
     const gc_node_ref_t data = draft.materializeStaticValue(result, target);
-    replaceFoldResult(
-        transaction, id, data);
+    replaceFoldResult(transaction, id, data);
     return true;
 }
 
 size_t foldDraft(
     camel::runtime::GraphTransaction &transaction, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
-    auto &draft  = transaction.edit();
+    auto &draft   = transaction.edit();
     size_t folded = 0;
     for (bool changed = true; changed;) {
         changed = false;
@@ -1134,8 +1131,7 @@ size_t foldDraft(
                 h && h->kind == GCNodeKind::Accs && isFoldable(transaction, id)) {
                 const gc_node_ref_t value = camel::runtime::resolveTupleProjection(draft, id);
                 if (value != id) {
-                    replaceFoldResult(
-        transaction, id, value);
+                    replaceFoldResult(transaction, id, value);
                     ++folded;
                     changed = true;
                 } else if (foldStaticAccess(transaction, id, constantBudget)) {
@@ -1238,8 +1234,7 @@ size_t foldDraft(
                     "std::opt::fold");
             }
             const gc_node_ref_t value = draft.materializeStaticValue(result, resultType);
-            replaceFoldResult(
-        transaction, id, value);
+            replaceFoldResult(transaction, id, value);
             ++folded;
             changed = true;
         }
@@ -1249,13 +1244,15 @@ size_t foldDraft(
             (void)camel::runtime::reinferDraftTypes(draft);
         }
     }
-    return folded;
+    const size_t removed = eraseOrphanedChainGates(transaction);
+    camel::runtime::resolvePlaceForks(transaction.edit());
+    return folded + removed;
 }
 
 // ---------------------------------------------------------------- cse
 
 size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
-    auto &draft = transaction.edit();
+    auto &draft        = transaction.edit();
     const auto regions = armRegions(transaction);
     // The numeric permissions are part of the key: two otherwise identical operations granted
     // different permissions (design principles 7.5) may compute different bits, and merging
@@ -1280,9 +1277,10 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
     // constants that are written in place.
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        // A known JOIN value does not make the JOIN replaceable: it still closes its BRCH
-        // and carries the condition and selected arm's effects. Consumers may fold instead.
-        if (const auto *h = draft.header(id); h && h->kind == GCNodeKind::Join) {
+        // A JOIN still closes its BRCH and carries the condition and selected arm's effects.
+        // A GATE with a sync predecessor carries a chain place. Neither is replaced by its value.
+        if (const auto *h = draft.header(id);
+            h && (h->kind == GCNodeKind::Join || isSyncWaitingGate(transaction, id))) {
             continue;
         }
         const auto value = staticValueOf(transaction, id);
@@ -1382,19 +1380,21 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
  */
 bool gateInputsSurvive(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t gate) {
     const auto &draft = transaction.graph();
-    for (auto inputs : {draft.normInputsOf(gate),
-                        draft.withInputsOf(gate),
-                        draft.ctrlInputsOf(gate),
-                        draft.syncInputsOf(gate)}) {
+    for (auto inputs :
+         {draft.normInputsOf(gate),
+          draft.withInputsOf(gate),
+          draft.ctrlInputsOf(gate),
+          draft.syncInputsOf(gate)}) {
         for (gc_node_ref_t in : inputs) {
             if (isValueOnly(transaction, in)) {
                 continue;
             }
             size_t users = 0;
-            for (auto group : {draft.normUsersOf(in),
-                               draft.withUsersOf(in),
-                               draft.ctrlUsersOf(in),
-                               draft.syncUsersOf(in)}) {
+            for (auto group :
+                 {draft.normUsersOf(in),
+                  draft.withUsersOf(in),
+                  draft.ctrlUsersOf(in),
+                  draft.syncUsersOf(in)}) {
                 for (gc_node_ref_t user : group) {
                     users += user != gate ? 1 : 0;
                 }
@@ -1410,7 +1410,7 @@ bool gateInputsSurvive(const camel::runtime::GraphTransaction &transaction, gc_n
 /// With valuesOnly, only the nodes that are no more than their value: constants and pure
 /// operations (also casts, copies, accesses and fills) that no node reads; gates and syncs stay.
 size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly = false) {
-    auto &draft = transaction.edit();
+    auto &draft           = transaction.edit();
     size_t removed        = 0;
     size_t gateEdgeBudget = std::min<size_t>(8192, draft.nodeSlotCount() * 8);
     for (bool changed = true; changed;) {
@@ -1429,12 +1429,13 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
             // through a branch stayed read by the dead GATE, and the export could not split
             // that call across the branch. A GATE that nothing uses at all stays when it is the
             // only way something it waits on reaches the exit.
-            const auto *h          = draft.header(id);
+            const auto *h = draft.header(id);
             const bool isDeadGate =
                 !valuesOnly && h && h->kind == GCNodeKind::Gate &&
                 (!draft.waitUsersOf(id).empty() || gateInputsSurvive(transaction, id));
-            if ((isDeadWhenUnread(transaction, id) || isDeadGate) && draft.normUsersOf(id).empty() &&
-                draft.withUsersOf(id).empty() && isReplaceable(transaction, id)) {
+            if ((isDeadWhenUnread(transaction, id) || isDeadGate) &&
+                draft.normUsersOf(id).empty() && draft.withUsersOf(id).empty() &&
+                isReplaceable(transaction, id)) {
                 // The statement that goes away may be the last reader of an effect, or of a
                 // computation that may fault, written inside it (`println(5) - 1` read by nothing).
                 // Its value is unread -- that is why it goes -- so there is no reader to hand the
@@ -1444,10 +1445,14 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
                 // being reached only by the order of the chain that used to pass through the
                 // statement (design principles 3.3 as amended, 9.7).
                 if (!draft.syncUsersOf(id).empty()) {
-                    const gc_node_ref_t stood =
-                        keepThroughValue(transaction, id, kInvalidNodeRef);
-                    if (stood != kInvalidNodeRef) {
-                        draft.handChainPlaceTo(id, stood);
+                    if (h->kind == GCNodeKind::Gate && draft.syncInputsOf(id).size() == 1) {
+                        draft.handChainPlaceTo(id, draft.syncInputsOf(id).front());
+                    } else {
+                        const gc_node_ref_t stood =
+                            keepThroughValue(transaction, id, kInvalidNodeRef);
+                        if (stood != kInvalidNodeRef) {
+                            draft.handChainPlaceTo(id, stood);
+                        }
                     }
                 }
                 replaceNode(transaction, id, kInvalidNodeRef);
@@ -1470,8 +1475,9 @@ namespace camel::passes::generic {
 bool foldFromTypes(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
-    auto &draft            = transaction.edit();
-    const auto *folder     = camel::core::OperatorTable::instance().typeFolder(operIdOf(transaction, id));
+    auto &draft = transaction.edit();
+    const auto *folder =
+        camel::core::OperatorTable::instance().typeFolder(operIdOf(transaction, id));
     type::Type *resultType = draft.header(id)->dataType;
     // The arguments as the operator's kernel reads them (with-arguments after the ordinary ones
     // when it takes them so); an operator with other with-arguments is not folded.
@@ -1505,8 +1511,7 @@ bool foldFromTypes(
             resultType,
             "std::opt::fold");
     }
-    replaceFoldResult(
-        transaction, id, draft.materializeStaticValue(*result, resultType));
+    replaceFoldResult(transaction, id, draft.materializeStaticValue(*result, resultType));
     return true;
 }
 
@@ -1632,10 +1637,10 @@ const camel::runtime::Program *simplifyGraph(
             result,
             "std::opt::order",
             [](camel::runtime::GraphTransaction &transaction) {
-            auto &draft = transaction.edit();
-            return camel::runtime::reduceOrderDependencies(transaction) +
-                   camel::runtime::reduceControlDependencies(transaction);
-        },
+                auto &draft = transaction.edit();
+                return camel::runtime::reduceOrderDependencies(transaction) +
+                       camel::runtime::reduceControlDependencies(transaction);
+            },
             nullptr,
             &memo,
             mayReduceOrder,
@@ -1668,12 +1673,13 @@ const camel::runtime::Program *simplifyGraph(
             mayMerge,
             config.checkScreens);
         // The algebraic stage is the pass itself: std::opt::algebra is the rules library's
-        // `rules::simplify` (`rules::simplify strict=true` for safe_fp), so the laws are written once,
-        // in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
+        // `rules::simplify` (`rules::simplify strict=true` for safe_fp), so the laws are written
+        // once, in stdlib/rules.cml. std::opt orders it after fold, as the library's corpus
         // measurements assume.
         const std::string algebraPass =
             config.safeFloatingPoint ? "std::opt::algebra safe_fp=true" : "std::opt::algebra";
-        const PassRunResult algebra = applyRegisteredPass(program, algebraPass, context, os, caller);
+        const PassRunResult algebra =
+            applyRegisteredPass(program, algebraPass, context, os, caller);
         if (algebra.program == nullptr) {
             return nullptr;
         }

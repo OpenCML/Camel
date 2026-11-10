@@ -7815,7 +7815,19 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                         types.size()));
             throw BuildAbortException();
         }
-        Type *applied = typeFunc->apply(types);
+        Type *applied = nullptr;
+        if (std::any_of(types.begin(), types.end(), containsTypeOf)) {
+            // Applying the declaration now would put an unresolved `typeof` inside an ordinary
+            // value type (a named struct, an array, a tuple, ...). Consumers of such a type quite
+            // correctly use it before the graph builder's type-expression resolution: a struct
+            // literal would check its fields against the placeholder. Keep the declaration and
+            // its arguments as a type application instead; `resolveTypeNode` evaluates it after
+            // each `typeof` has become the expression's actual type.
+            applied =
+                TypeCallType::makeTypeFunctionCall(const_cast<TypeFunctionType *>(typeFunc), types);
+        } else {
+            applied = typeFunc->apply(types);
+        }
         // An argument that is still a `typeof` is not concrete yet: `typeof e` is a type
         // expression (ruling of 2026-10-31), and the graph builder resolves it where the type is
         // used, without evaluating `e`. Reporting "not applicable" here would refuse the

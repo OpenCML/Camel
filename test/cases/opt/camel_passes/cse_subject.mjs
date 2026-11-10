@@ -57,7 +57,7 @@ assert(
 const written = graph('written')
 const writtenProducts = written.nodes.filter((n) => n.label === ':op/mul_l')
 assert(writtenProducts.length === 2, `the graph 'written' has ${writtenProducts.length} products, not the two the source wrote`)
-const readOf = (product) => normal(written, product.id).find((n) => n.label === ':var/peek')
+const readOf = (product) => normal(written, product.id).find((n) => n.label === ':var/get')
 const reads = writtenProducts.map(readOf)
 assert(
     reads.every(Boolean) && reads[0].id !== reads[1].id,

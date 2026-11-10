@@ -6,16 +6,18 @@
  * written with `type` and called with `F<...>` in a type position, and its body is a type
  * expression, a `match type` among them.
  *
- *   - `TypeCallType` is a primitive type function applied to arguments: `ElementOf<T>`,
- *     `PayloadOf<T>`, `KeyOf<T>` and `ValueOf<T>` of the module `types`, which take a type apart
- *     where `match type` cannot (the library declares them without a body).
+ *   - `TypeCallType` is a type function application whose evaluation is deferred: a primitive
+ *     such as `PayloadOf<T>`, `KeyOf<T>` or `ValueOf<T>` (the library declares those without a
+ *     body), or a source type function with a `typeof` argument. The latter keeps its declaration
+ *     as the first, internal parameter until the argument's type is known.
  *   - `MatchTypeType` is a `match type` in a type position: the subject, and for each case the
  *     shapes and identities it selects and the type it gives.
  *
- * While an argument or the subject is still a type variable the application stays a type of its
- * own, and the type-variable algebra descends through it like any other type application. When
- * everything is concrete, which is when the variables of a generic instance are bound,
- * `substituteTypeVars` replaces it by the type it computes. One that stays unevaluated with
+ * While an argument or the subject is still a type variable or an unresolved `typeof`, the
+ * application stays a type of its own, and the type-variable algebra descends through it like any
+ * other type application. When everything is concrete, which is when the variables of a generic
+ * instance are bound and the graph builder has inferred each `typeof`, `substituteTypeVars` or the
+ * graph builder replaces it by the type it computes. One that stays unevaluated with
  * concrete arguments (`ElementOf<int>`, a `match type` no case selects) is reported where the
  * type is used.
  */
@@ -32,10 +34,15 @@
 
 namespace camel::core::type {
 
+class TypeFunctionType;
+
 class TypeCallType final : public OtherType {
   public:
     static TypeCode typeCode();
     static TypeCallType *create(std::string_view name, std::span<Type *const> arguments);
+    /// A source type function kept with its arguments until a `typeof` among them is resolved.
+    static TypeCallType *
+    makeTypeFunctionCall(TypeFunctionType *function, std::span<Type *const> arguments);
 
     /// Whether `name` is one of the primitive type functions.
     static bool isTypeFunction(std::string_view name);
