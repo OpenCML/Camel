@@ -3311,3 +3311,50 @@ S2 改用 `grad` 等这一步落地后再做。
 ## 更正（2026-11-07）：上一条"程序即图的边界"写过头了
 
 负责人指出我理解错了：他的意思只是"规则系统不能影响 Camel 程序即图的定位"。我上一条写进原则和设计稿的四个细则无法遵守，其中"遍只做保持语义的改写"还与设计原则第 14 节第 8 条相冲突（遍可以改变图并带有效应），"规则集只在显式交给遍时才起作用"也与默认流水线的做法不符。现已改为负责人的原意：规则、事实、作用在图上的函数，以及以后扩展的图改写能力，本身也是 Camel 程序、也是图；加入更强的图改写能力，不能让 Camel 偏离程序即图的定位。设计原则第 1 节和设计稿 5.5 节都已照此改写。
+
+## 返工（2026-11-12）：图接口能造出坏图的一处，以及一处编译期崩溃
+
+来源是论文侧在 `ae874ce04` 上用 `graph` 模块做的探针。那个构建之后 develop 又进了五百多笔提交，所以两条都先在当前 develop 上重跑：已经好了的，只把用例收进快层。
+
+**一、`replace` 换掉形参端口，提交接受，运行时中止。** 这违反原则第 1 节红线第 1 条（Camel 程序造不出结构上坏的图）。
+```
+func writeBoth(var c1: int, var c2: int): int {
+    c1 = 1
+    c2 = 2
+    let r1 = c1
+    let r2 = c2
+    return r1 + r2
+}
+func main(): int sync {
+    var a = 0
+    var b = 0
+    println(writeBoth(a, b))
+    return 0
+}
+```
+- 一个遍在 `writeBoth` 里执行 `replace(t, <端口 c2>, <端口 c1>)`，然后 `commit`。两步都被接受。
+- 结果 `writeBoth` 只剩一个端口，`main` 仍传两个实参。NodeVM 以 `argSlots.size() == layout->calleePortSlots.size()` 中止，退出码 134，没有 `GraphInvalid`。
+- **修法**：
+  - 遍的类型是 `(f: F) => F!`，形参是函数的接口，遍改不了。`replace` 的 `old` 和 `erase` 的对象是端口时，与锚点一样给 `InvalidArgument`。
+  - 提交检查第 7 条（实参个数等于被调图的端口数）补一道底：不只查本次提交改过的图，也查程序里调用这些图的未改动的图。
+- **验收**：
+  - 上面的遍在 `replace` 处得到 `InvalidArgument`；
+  - 用测试遍绕过 `replace` 造出同样的图，提交得到 `GraphInvalid`，消息指明调用与端口个数；
+  - 两例进快层。
+
+**二、`inc->cse->fold !! inc` 编译期段错误。**
+```
+import { fold, cse } from opt
+func inc(x: int): int {
+    return x + 1 + 1
+}
+func main(): int sync {
+    let a = inc->cse->fold !! inc
+    println(a(3))
+    return 0
+}
+```
+- 编译阶段退出码 139，没有任何输出；换成 `std::cml` 阶段也一样。
+- 以下写法都正常打印 5：`inc->cse !! inc`、`inc->fold !! inc`、`(inc->cse !! inc)->fold !! inc`、`inc->fold->cse !! inc`。
+- `inc->cse` 是 `F!`，再交给 `fold` 时应当按现有的可失败值规则处理：要么得到一条带位置的诊断，要么照常运行。不论哪种，编译器都不能崩。
+- **验收**：五种写法收成一个用例，各自的输出或诊断钉住，进快层。
