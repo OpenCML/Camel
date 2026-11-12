@@ -403,8 +403,8 @@ class FramePool {
             throw std::bad_alloc();
         end_ = base_ + totalSize;
         top_ = base_;
-        // Initialize the sentinel frame slot.
-        reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr;
+        // The sentinel at `top_` is a Frame, so it is constructed as one (see _placeSentinel).
+        _placeSentinel();
     }
 
     ~FramePool() {
@@ -433,7 +433,16 @@ class FramePool {
         gcTracerRegistered_ = false;
     }
 
-    inline void _resetTop() { reinterpret_cast<Frame *>(top_)->runtimeGraph_ = nullptr; }
+    /// The slot at `top_` is read as "the frame the next acquire may reuse" and written as the
+    /// sentinel that says there is nothing to reuse. Both need a Frame *object* there, not raw
+    /// bytes: the pool owns the storage, and the sentinel is the frame that owns it until the
+    /// next acquire constructs over it. Setting `runtimeGraph_` through a `reinterpret_cast` to a
+    /// Frame that was never constructed is what made UBSan read an invalid vptr at this line
+    /// (CI run 41428440898: `FramePool::_resetTop` <- `acquire(GCGraph*)` <-
+    /// `NodeVMSchedPass::apply`).
+    inline void _placeSentinel() { new (top_) Frame(nullptr, nullptr, nullptr); }
+
+    inline void _resetTop() { _placeSentinel(); }
 
     inline Frame *_acquire(camel::runtime::GCGraph *graph) {
         return acquireImpl<false>(graph, nullptr);

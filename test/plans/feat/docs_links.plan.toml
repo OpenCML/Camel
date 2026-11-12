@@ -180,7 +180,12 @@ args = ["${case}", "--default-roots", "--camel", "${camel}"]
 expect_exit = 0
 expect_stdout_contains = ["no stale snippet in"]
 normalizers = ["normalize_newlines"]
-timeout_ms = 120000
+# The bound moved with the reading, and the reading is why: on the release gate of 2026-11-05
+# (`42078846656`, linux-x64) the case used 34410 ms of CPU against 120000 ms, so the margin was
+# 30000 ms at the 4x rule -- the rule was the red, not the check, whose verdict passed
+# (`no stale snippet in`, exit 0). 180000 ms puts the margin at 45000 ms, a third above that
+# reading, and still catches a genuine hang inside three minutes.
+timeout_ms = 180000
 
 [[tests]]
 name = "docs.snippets_dump_is_compared"

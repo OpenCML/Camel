@@ -319,7 +319,12 @@ normalizers = ["normalize_newlines"]
 # So the count the work needs is 47 s of CPU -- the library's own arithmetic, 575 examples, each
 # its own process -- and a bound it cannot meet is a red about the bound. 240000 ms leaves 60 s of
 # margin, the case still asks for every slot, and the number is stated rather than waved at.
-timeout_ms = 240000
+# 360000, not 240000: on the develop gate of 2026-11-05 (`42077348260`, linux-x64) the case used
+# 61040 ms of CPU, and 240000/4 is 60000 -- the margin was the red, not the check, whose verdict
+# and both pinned lines passed (exit 0). At 360000 the margin is 90000 ms, half again that
+# reading. The two readings above (47750 ms at 180000, 47.02 s at 240000) are why the bound has
+# moved twice: the work grows as the reference does, and the rule reads the work.
+timeout_ms = 360000
 # This case compiles every `@example` of the library -- several hundred programs, each its own
 # process -- and reports how many of them compile. Under a full gate that number is a reading
 # about the machine as much as about the library: on 2026-11-02 the same tree passed alone and
