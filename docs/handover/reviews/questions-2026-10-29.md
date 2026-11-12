@@ -3358,3 +3358,29 @@ func main(): int sync {
 - 以下写法都正常打印 5：`inc->cse !! inc`、`inc->fold !! inc`、`(inc->cse !! inc)->fold !! inc`、`inc->fold->cse !! inc`。
 - `inc->cse` 是 `F!`，再交给 `fold` 时应当按现有的可失败值规则处理：要么得到一条带位置的诊断，要么照常运行。不论哪种，编译器都不能崩。
 - **验收**：五种写法收成一个用例，各自的输出或诊断钉住，进快层。
+
+## 返工（2026-11-12）：`std::taskflow` 对经函数值的调用不守顺序边
+
+违反原则第 1 节红线第 6 条（结果确定）。不经任何遍，源码就能触发。
+```
+func k2(x: int): int sync {
+    println('k2 called with', x)
+    return x
+}
+func two(): int {
+    let f1 = k2
+    let f2 = k2
+    let a = f1(1)
+    let b = f2(2)
+    return a + b
+}
+func main(): int sync {
+    println(two())
+    return 0
+}
+```
+- 编译器在两次调用之间加了顺序边（`std::jgir` 里有 `order`），这是对的。
+- `std::nvm` 跑 200 次，都先打印 1。`std::taskflow` 跑 200 次（不加参数和加 `-t 8` 都一样），约 120 次先打印 1、约 80 次先打印 2。
+- 直接调用具名函数（`k2(1)`、`k2(2)`）时，两个后端都稳定。所以问题出在 taskflow 给经函数值的调用建任务时漏了顺序边，或者只认直接调用的那一种。
+- 数据来自 `ae874ce04`。先在当前 develop 上重跑。
+- **验收**：上面的程序在 `std::taskflow`、`-t 8 std::taskflow` 上各跑 200 次，都先打印 1。把这条和 `with` 参数、闭包、高阶算子里经函数值的调用一起收成用例；重复运行比对进慢层，单次的输出钉进快层。
