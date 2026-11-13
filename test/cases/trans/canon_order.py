@@ -142,13 +142,20 @@ def jgir(camel, workdir, name, text):
 
 
 def without_positions(value):
-    """Every field the document spells a source position in, recursively removed."""
+    """Every field the document spells a source position in, recursively removed: a node's
+    `origin` (an opaque per-build id for a position) and its `source` (the file it is written in
+    and the span there). An *edge's* `source` is the node the edge comes from, which is structure
+    and is kept -- the two documents must agree on every edge, or the comparison would be a
+    comparison of node lists."""
     if isinstance(value, dict):
-        return {
-            key: without_positions(item)
-            for key, item in value.items()
-            if key not in ("origin", "source")
-        }
+        kept = {}
+        for key, item in value.items():
+            if key == "origin":
+                continue
+            if key == "source" and isinstance(item, dict):
+                continue
+            kept[key] = without_positions(item)
+        return kept
     if isinstance(value, list):
         return [without_positions(item) for item in value]
     return value
@@ -194,6 +201,23 @@ def subtree_text(nodes, inputs, root):
         )
 
     return json.dumps(describe(root), sort_keys=False)
+
+
+def subtree_labels(graph, root):
+    """The labels of the constant nodes inside a fragment: what value it builds."""
+    nodes, inputs = index_lines(graph)
+    labels = set()
+    stack = [root]
+    seen = set()
+    while stack:
+        node = stack.pop()
+        if node in seen:
+            continue
+        seen.add(node)
+        if nodes[node].get("kind") == "DATA":
+            labels.add(nodes[node].get("label"))
+        stack.extend(inputs.get(node, []))
+    return labels
 
 
 def fnv1a(text):
@@ -316,22 +340,33 @@ def choose_payloads(camel, workdir):
 def read_tie(camel, workdir):
     """Reading 2: a width-2 tie takes the smallest numbering table."""
     smaller, larger, smaller_hash, larger_hash = choose_payloads(camel, workdir)
-    # The larger payload is captured first: the capture table's order and the creation order both
-    # put it first, and the numbering table must not.
+    # The larger payload is captured first: the source names it first, the cell is created first,
+    # and a structural hash of the two fragments orders it first as well. The numbering table must
+    # not, and the document must therefore number the capture of the smaller payload first.
     program = CAPTURE_TWO.replace("@LARGER@", str(larger)).replace("@SMALLER@", str(smaller))
     document, proc = jgir(camel, workdir, "capture_tie.cml", program)
     if document is None:
         raise AssertionError(f"the tie program did not compile: {proc.stderr[:2000]}")
     graph, fragments = graph_with_captures(document)
-    if 0 not in fragments or 1 not in fragments:
+    if len(fragments) != 2:
         raise AssertionError(
             f"the closure did not capture two values (captured: {sorted(fragments)}):\n{program}"
         )
+    # Which captured value is which is read off the payloads inside them, not off a slot: the slots
+    # the document prints are the canonical order, which is the thing under test.
+    by_payload = {}
+    for slot in sorted(fragments):
+        labels = subtree_labels(graph, fragments[slot])
+        for payload in (smaller, larger):
+            if str(payload) in labels:
+                by_payload[payload] = fragments[slot]
+    if sorted(by_payload) != [smaller, larger]:
+        raise AssertionError(
+            f"the two captures do not hold the two payloads (payloads found: {sorted(by_payload)}):"
+            f"\n{program}\nfragments: {subtree_text(*index_lines(graph), fragments[0])[:200]}"
+        )
     order = {node["id"]: index for index, node in enumerate(graph["nodes"])}
-    first, second = fragments[0], fragments[1]
-    # Capture 0 is the larger payload: the source named it first and a structural hash orders it
-    # first. The numbering table puts the smaller one first, and that is the arrangement taken.
-    smaller_fragment, larger_fragment = second, first
+    smaller_fragment, larger_fragment = by_payload[smaller], by_payload[larger]
     smaller_text = fragment_text(graph, smaller_fragment)
     larger_text = fragment_text(graph, larger_fragment)
     if not smaller_text < larger_text:

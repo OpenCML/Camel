@@ -214,6 +214,27 @@ std::string dumpJsonRuntimeGraph(
             rank[captures[i]] = static_cast<uint32_t>(i);
         return rank;
     };
+    // A closure value's with inputs are the values it captured, in the order of the capture table
+    // -- the order the source captured them in, which is spelling. The slot the document prints
+    // for one of them is its rank in the canonical order, and its edges are written in that order;
+    // the input list's own indices are the capture table's.
+    const auto captureSlots = [&](GCGraph *g, gc_node_ref_t ref) {
+        std::unordered_map<gc_node_ref_t, size_t> slot;
+        const GCNode *node = g->node(ref);
+        if (node == nullptr || node->kind != GCNodeKind::Fill)
+            return slot;
+        const auto *body = g->nodeBodyAs<GCFillBody>(ref);
+        if (body == nullptr || body->fillKind != GCFillKind::FunctionClosure)
+            return slot;
+        const auto &place = numbers.at(g);
+        std::vector<gc_node_ref_t> withs(g->withInputsOf(ref).begin(), g->withInputsOf(ref).end());
+        std::sort(withs.begin(), withs.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+            return place[a] < place[b];
+        });
+        for (size_t i = 0; i < withs.size(); ++i)
+            slot[withs[i]] = i;
+        return slot;
+    };
     // A graph names the node its result comes from, and a document may name only nodes it holds:
     // `null` when the graph has none, the same answer `dumpCanonicalRuntimeGraph` gives
     // (src/passes/trans/json/gir_canonical.cpp#CanonicalDocument) and the one the dot dump cannot
@@ -402,10 +423,23 @@ std::string dumpJsonRuntimeGraph(
             for (const auto &role : NodeRoleRegistry::instance().classify(*g, ref))
                 value["roles"].push_back(role.spec.name);
             graph["nodes"].push_back(std::move(value));
-            // Explicit edge classes and indices preserve duplicate inputs and their order.
-            const auto edges = [&](const char *edgeKind, auto inputs, auto outputsOf) {
+            // Explicit edge classes and indices preserve duplicate inputs and their order. The
+            // slots and the edges are written in the canonical order, not in the input list's:
+            // `inputSlot` names the slot a source is read in when the list's own index is the
+            // capture table's order (see captureSlots above).
+            const auto edges = [&](const char *edgeKind,
+                                   auto inputs,
+                                   auto outputsOf,
+                                   const std::unordered_map<gc_node_ref_t, size_t> &inputSlot) {
+                std::vector<std::pair<size_t, gc_node_ref_t>> slots;
                 for (size_t i = 0; i < inputs.size(); ++i) {
-                    const auto source  = inputs[i];
+                    const auto at = inputSlot.find(inputs[i]);
+                    slots.emplace_back(at == inputSlot.end() ? i : at->second, inputs[i]);
+                }
+                std::stable_sort(slots.begin(), slots.end(), [](const auto &a, const auto &b) {
+                    return a.first < b.first;
+                });
+                for (const auto &[slot, source] : slots) {
                     const auto outputs = outputsOf(source);
                     // The runtime use index lists each consumer once per edge class,
                     // even when it reads this source in several ordered input slots.
@@ -428,40 +462,49 @@ std::string dumpJsonRuntimeGraph(
                          {"target", nodeId(g, ref)},
                          {"kind", edgeKind},
                          {"sourceIndex", static_cast<size_t>(rank)},
-                         {"targetIndex", i}});
+                         {"targetIndex", slot}});
                 }
             };
-            edges("normal", g->normInputsOf(ref), [&](auto source) {
-                return g->normOutputsOf(source);
-            });
-            edges("context", g->withInputsOf(ref), [&](auto source) {
-                return g->withOutputsOf(source);
-            });
-            edges("control", g->ctrlInputsOf(ref), [&](auto source) {
-                return g->ctrlOutputsOf(source);
-            });
+            const std::unordered_map<gc_node_ref_t, size_t> noSlots;
+            const std::unordered_map<gc_node_ref_t, size_t> capturedSlots = captureSlots(g, ref);
+            edges(
+                "normal",
+                g->normInputsOf(ref),
+                [&](auto source) { return g->normOutputsOf(source); },
+                noSlots);
+            edges(
+                "context",
+                g->withInputsOf(ref),
+                [&](auto source) { return g->withOutputsOf(source); },
+                capturedSlots);
+            edges(
+                "control",
+                g->ctrlInputsOf(ref),
+                [&](auto source) { return g->ctrlOutputsOf(source); },
+                noSlots);
             // An order edge and a sync edge are not ports: they live in the graph's own arrays,
             // which is what `std::gir` draws them from too, so neither has an input slot and
             // neither is addressed by one (docs/design/effects/edges.cn.md 1.5, 5). A dump that
             // left them out showed a `sync` block's statements joined by nothing.
-            for (const camel::runtime::GCGraphOrderEdge &edge : g->orderPredsOf(ref)) {
-                if (!g->containsNodeRef(edge.pred)) {
-                    continue;
+            const auto chainEdges = [&](const char *edgeKind, auto preds) {
+                std::vector<gc_node_ref_t> sources;
+                for (const auto &edge : preds) {
+                    if (g->containsNodeRef(edge.pred)) {
+                        sources.push_back(edge.pred);
+                    }
                 }
-                graph["edges"].push_back(
-                    {{"source", nodeId(g, edge.pred)},
-                     {"target", nodeId(g, ref)},
-                     {"kind", "order"}});
-            }
-            for (const camel::runtime::GCGraphSyncEdge &edge : g->syncPredsOf(ref)) {
-                if (!g->containsNodeRef(edge.pred)) {
-                    continue;
+                std::sort(sources.begin(), sources.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+                    return place[a] < place[b];
+                });
+                for (gc_node_ref_t source : sources) {
+                    graph["edges"].push_back(
+                        {{"source", nodeId(g, source)},
+                         {"target", nodeId(g, ref)},
+                         {"kind", edgeKind}});
                 }
-                graph["edges"].push_back(
-                    {{"source", nodeId(g, edge.pred)},
-                     {"target", nodeId(g, ref)},
-                     {"kind", "sync"}});
-            }
+            };
+            chainEdges("order", g->orderPredsOf(ref));
+            chainEdges("sync", g->syncPredsOf(ref));
         }
         document["graphs"].push_back(std::move(graph));
     }
