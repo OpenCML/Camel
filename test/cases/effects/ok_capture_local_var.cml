@@ -1,0 +1,26 @@
+/**
+ * A body that writes a variable of its own through a closure is not reaching a resource: the cell
+ * is made by this call and dies with it, the caller cannot see it, so its reads and writes are not
+ * this function's effects (design principles 3.3, effect masking). The closure `add` captures `acc`
+ * and writes it, and `total` still touches nothing: a caller may ask for it with `pure`.
+ *
+ * The call runs because it writes a cell of this body, so the answer is the sum of 0..x-1.
+ */
+
+func total(x: int): int {
+    var acc = 0
+    let add = (k: int): int => sync {
+        acc = acc + k
+        acc
+    }
+    let _ = loop i = 0 while i < x do sync {
+        add(i)
+        i + 1
+    }
+    acc
+}
+
+func main(): int sync {
+    println(total(3))
+    return 0
+}

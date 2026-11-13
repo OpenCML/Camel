@@ -2357,6 +2357,9 @@ class Builder {
     // The cell of `origin` in `graph`, when `graph` already captured it: the port a read of the
     // variable there takes. Null when the graph has not captured it yet.
     node_handle_t capturedCellIn(DraftGraphBuilder *graph, node_handle_t origin) const;
+    // The position in `graph`'s capture order of one of its capture ports: what a signature names
+    // a capture by (`ResourceSignature::captures`). Nothing when `port` is not one of its captures.
+    std::optional<uint8_t> capturePositionOf(DraftGraphBuilder *graph, node_handle_t port) const;
     // The calls of `graph` the conservative writer set counted as possible writers of a variable
     // the graph had not captured when they were built, by the variable's origin: a read of that
     // variable written after such a call takes `:var/after` of it (readVariableThrough), which is
@@ -2424,6 +2427,10 @@ class Builder {
         // Values the function captured from the one around it: a `with` port its type does not
         // count, and the closure nodes. Their resources are that function's, not a parameter's.
         std::unordered_set<draft_node_ref_t> captured;
+        // The position in the capture order of each of those ports: the way this body's own
+        // signature names a capture (`ResourceSignature::captures`), so that a caller can read it
+        // back through the value it holds.
+        std::unordered_map<draft_node_ref_t, uint8_t> capturePositions;
         bool unplaceable = false;
     };
     // The walk of one body, in the named steps it is made of: the body's ports, the uses one node
@@ -2431,17 +2438,34 @@ class Builder {
     // direct call and a call through a value. Each step says whether the node could be placed.
     // Every step reads the graph through the transaction that owns it, never the storage by name.
     void numberBodyPorts(
-        BodyReach &walk, const runtime::GraphTransaction &transaction,
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         const FunctionType &type) const;
     void addParamUse(
         BodyReach &walk, size_t index, camel::core::sem::ResourceClass cls, const std::string &name,
         camel::core::sem::AccessMode mode) const;
     void addAmbientUse(
         BodyReach &walk, const std::string &name, camel::core::sem::AccessMode mode) const;
+    // A use of a value this body captured, read onto the body itself (design principles 3.3,
+    // effect masking): the resource may be a variable of a module's top level, a capture of an
+    // enclosing function, or a cell this body made, which no caller can reach. False when the walk
+    // cannot place it at all -- the body is then measured as reaching anything, never as reaching
+    // nothing.
+    bool placeCapturedUse(
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+        draft_node_ref_t captured, camel::core::sem::AccessMode mode) const;
+    // Whether this body can hand a closure it made to its caller: its result is a function type or
+    // a composite that can hold one. A cell such a closure captured then outlives the call, so
+    // writing it is an effect after all (design principles 3.3).
+    bool bodyResultCanHoldAFunction(const camel::core::type::FunctionType &type) const;
+    // One capture of a callee, read onto the body being measured: the value the caller hands over
+    // for that capture, then the same question placeCapturedUse answers for a direct use.
+    bool placeCalleeCapture(
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+        const compile_graph_ptr_t &callee, size_t position, draft_node_ref_t value) const;
     bool readCalleeSignature(
-        BodyReach &walk, const runtime::GraphTransaction &transaction,
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
         const camel::core::sem::ResourceSignature &sig, size_t calleeWithCount, bool isCall,
-        draft_node_ref_t id) const;
+        draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const;
     void readUnknownValue(BodyReach &walk) const;
     bool reachOfOper(
         DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
@@ -2450,7 +2474,8 @@ class Builder {
         DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
         draft_node_ref_t id) const;
     bool reachOfCall(
-        const runtime::GraphTransaction &transaction, BodyReach &walk, draft_node_ref_t id) const;
+        DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
+        draft_node_ref_t id) const;
     void addVarParameters(BodyReach &walk, const FunctionType &type) const;
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty

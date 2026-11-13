@@ -14,6 +14,9 @@
 
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
+#include "camel/core/type/composite/array.h"
+#include "camel/core/type/composite/struct.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -108,9 +111,50 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
     return united;
 }
 
+/// Whether a value of this type can hold a function value: a function itself, or a composite that
+/// can carry one (a tuple or struct field, an array element). A body whose result is of such a type
+/// can hand a closure it made to its caller, which is what makes a cell the closure captured
+/// outlive the call (design principles 3.3, effect masking). A type this does not read is answered
+/// as able to hold one: refusing a `pure` promise costs a program, accepting one it broke costs
+/// correctness.
+bool typeCarriesFunction(const Type *type, int depth = 0) {
+    if (type == nullptr || depth > 8) {
+        return true;
+    }
+    switch (type->code()) {
+    case TypeCode::Function:
+        return true;
+    case TypeCode::Tuple: {
+        const auto *tuple = static_cast<const TupleType *>(type);
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            if (typeCarriesFunction(tuple->typeAt(i), depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Struct: {
+        const auto *record = static_cast<const StructType *>(type);
+        for (size_t i = 0; i < record->size(); ++i) {
+            if (typeCarriesFunction(record->typeAt(i), depth + 1)) {
+                return true;
+            }
+        }
+        return false;
+    }
+    case TypeCode::Array:
+        return typeCarriesFunction(static_cast<const ArrayType *>(type)->elemType(), depth + 1);
+    case TypeCode::Other:
+        return true; // an enum or a type a module names: its variants may hold one
+    default:
+        return false;
+    }
+}
+
 } // namespace
 
-void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphTransaction &transaction,
+void Builder::numberBodyPorts(BodyReach &walk, DraftGraphBuilder *graph,
+                              const runtime::GraphTransaction &transaction,
                               const FunctionType &type) const {
     const auto &draft = transaction.graph();
     // Which parameter a port is, in the numbering a call uses: `with` parameters first, then the
@@ -139,13 +183,22 @@ void Builder::numberBodyPorts(BodyReach &walk, const runtime::GraphTransaction &
         ++index;
     }
     // A `with` port the type does not count is a value the function captured from the one around
-    // it; so is a closure node. A use through one is not a use of a parameter of this function, and
-    // which resource of the enclosing function it is cannot be read from here.
+    // it; so is a closure node. A use through one is not a use of a parameter of this function: it
+    // is that function's resource, or a cell of this body's own frame (placeCapturedUse). The
+    // position is how this body's own signature names it, so that a caller holding its value can
+    // read the capture back.
     for (; withAt < withPorts.size(); ++withAt) {
         walk.captured.insert(withPorts[withAt]);
+        if (const auto position = capturePositionOf(graph, draft.ref(withPorts[withAt]));
+            position.has_value()) {
+            walk.capturePositions.emplace(withPorts[withAt], *position);
+        }
     }
     for (draft_node_ref_t node : draft.closureNodes()) {
         walk.captured.insert(node);
+        if (const auto position = capturePositionOf(graph, draft.ref(node)); position.has_value()) {
+            walk.capturePositions.emplace(node, *position);
+        }
     }
 }
 
@@ -210,9 +263,103 @@ void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::Acces
     found->mode = sem::uniteAccess(found->mode, mode);
 }
 
-bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphTransaction &transaction,
+bool Builder::placeCapturedUse(BodyReach &walk, DraftGraphBuilder *graph,
+                               const runtime::GraphTransaction &transaction,
+                               draft_node_ref_t captured, sem::AccessMode mode) const {
+    // Design principles 3.3, effect masking: a function promises none of its caller's resources,
+    // and a variable the function makes itself is not one of them -- the cell dies with the call
+    // and the caller cannot read it, so reading or writing it is no effect of this function, even
+    // when a closure that stays inside this call is what writes it. What the resource is, three
+    // answers in order:
+    //   * a variable of a module's top level: the caller reads the same cell, so it is ambient;
+    //   * a capture of this body: the value comes from the graph around it, and this body's own
+    //     signature names it by position, so the function holding this value can read it back;
+    //   * a cell of this body: nothing the caller can reach, so nothing to record -- unless this
+    //     body can hand the closure out, because then the cell outlives the call.
+    if (const auto variable = moduleVariableOf(transaction, captured); variable.has_value()) {
+        addAmbientUse(walk, *variable, mode);
+        return true;
+    }
+    if (const auto position = walk.capturePositions.find(captured);
+        position != walk.capturePositions.end()) {
+        walk.reach.captures.push_back(position->second);
+        return true;
+    }
+    const node_handle_t node = transaction.graph().ref(captured);
+    if (nodeGraphOf(node) != graph) {
+        return false; // not a node of this body: which resource it is cannot be read from here
+    }
+    if (!isVariable(node)) {
+        // A value this body computed that is not a cell cannot be written through: there is no
+        // resource here to record, and no cell that could outlive the call.
+        return true;
+    }
+    if (bodyResultCanHoldAFunction(*graph->funcType())) {
+        // The body can hand a closure it made to its caller, so the cell such a closure captured
+        // outlives the call and a write of it is an effect the caller can reach. A clause has no
+        // name for a cell of the function's own making, so the reach records its class.
+        walk.reach.anyOf.push_back(sem::ResourceClass::Variable);
+    }
+    return true;
+}
+
+bool Builder::bodyResultCanHoldAFunction(const camel::core::type::FunctionType &type) const {
+    return type.hasExitType() && typeCarriesFunction(type.exitType());
+}
+
+bool Builder::placeCalleeCapture(BodyReach &walk, DraftGraphBuilder *graph,
+                                 const runtime::GraphTransaction &transaction,
+                                 const compile_graph_ptr_t &callee, size_t position,
+                                 draft_node_ref_t value) const {
+    // One capture of a callee, as this body sees it. A direct call hands its callee's captures in
+    // after the declared `with` arguments (linkCaptureSites), so the caller's node is known; a call
+    // through a value does not list them among its inputs, and the value was made in the graph that
+    // captured them, so the origin is read from there. The origin then answers the same question a
+    // direct use of a capture answers (placeCapturedUse), except that a cell of an enclosing graph
+    // is this body's capture of it.
+    const auto classify = [&](node_handle_t at) -> bool {
+        if (at == nullptr) {
+            return false;
+        }
+        if (const auto cell = moduleVariableResources_.find(at);
+            cell != moduleVariableResources_.end()) {
+            addAmbientUse(walk, cell->second, sem::AccessMode::ReadModifyWrite);
+            return true;
+        }
+        if (const auto port = capturePositionOf(graph, at); port.has_value()) {
+            walk.reach.captures.push_back(*port);
+            return true;
+        }
+        if (nodeGraphOf(at) == graph) {
+            return placeCapturedUse(walk, graph, transaction, nodeIdOf(at),
+                                    sem::AccessMode::ReadModifyWrite);
+        }
+        // A value of a graph around this one: this body holds it in a capture port of its own.
+        const node_handle_t port = capturedCellIn(graph, at);
+        if (port == nullptr) {
+            return false;
+        }
+        const auto position = capturePositionOf(graph, port);
+        if (!position.has_value()) {
+            return false;
+        }
+        walk.reach.captures.push_back(*position);
+        return true;
+    };
+    if (value != 0 && transaction.graph().alive(value)) {
+        return classify(transaction.graph().ref(value));
+    }
+    const auto table = capturedValues_.find(callee.get());
+    if (table == capturedValues_.end() || position >= table->second.size()) {
+        return false;
+    }
+    return classify(table->second[position].origin);
+}
+
+bool Builder::readCalleeSignature(BodyReach &walk, DraftGraphBuilder *graph,
+                                  const runtime::GraphTransaction &transaction,
                                   const ResourceSignature &sig, size_t calleeWithCount, bool isCall,
-                                  draft_node_ref_t id) const {
+                                  draft_node_ref_t id, const compile_graph_ptr_t &calleeGraph) const {
     // What one node's signature amounts to for this body: its own parameters, in the numbering the
     // callee uses (with parameters first, then ordinary ones -- the same mapping as
     // runtime/resources.cpp fromSignature), read back onto the parameters of this body where the
@@ -220,11 +367,6 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphTransacti
     // this measurement cannot place: the body is then not measured at all, rather than measured as
     // pure because the walk gave up.
     if (sig.mode != ResourceSignature::Mode::Concrete) {
-        return false;
-    }
-    if (!sig.captures.empty()) {
-        // A capture is a resource of the closure this body belongs to, and which capture of the
-        // enclosing function it is cannot be read from here.
         return false;
     }
     const auto &draft = transaction.graph();
@@ -247,12 +389,10 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphTransacti
             operand = norm[at];
         }
         if (walk.captured.contains(operand)) {
-            if (const auto variable = moduleVariableOf(transaction, operand);
-                variable.has_value()) {
-                addAmbientUse(walk, *variable, use.mode); // a variable of a module's top level
-                continue;
+            if (!placeCapturedUse(walk, graph, transaction, operand, use.mode)) {
+                return false;
             }
-            return false; // a resource of the function around this one
+            continue;
         }
         const auto port = walk.ports.find(operand);
         if (port == walk.ports.end()) {
@@ -261,6 +401,24 @@ bool Builder::readCalleeSignature(BodyReach &walk, const runtime::GraphTransacti
             continue;
         }
         addParamUse(walk, port->second, use.cls, use.name, use.mode);
+    }
+    // What the callee captured. A closure that wrote no clause carries the captures its body was
+    // measured to reach, and a call of it through its value is a use of those (design principles
+    // 3.3): each is read onto this body, which may find it is a cell of its own -- in which case
+    // nothing is reached, and the callee's write stays inside this call.
+    for (uint8_t capture : sig.captures) {
+        draft_node_ref_t value = 0;
+        if (!isCall) {
+            // A direct call hands the captures in after the declared `with` arguments.
+            const size_t at = calleeWithCount + size_t(capture);
+            if (at >= with.size()) {
+                return false;
+            }
+            value = with[at];
+        }
+        if (!placeCalleeCapture(walk, graph, transaction, calleeGraph, size_t(capture), value)) {
+            return false;
+        }
     }
     for (const auto &use : sig.ambient) {
         addAmbientUse(walk, use.name, use.mode);
@@ -325,7 +483,10 @@ bool Builder::reachOfOper(
             continue;
         }
         if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
-            return false; // which capture of this closure it is, is not readable
+            // Which capture of this graph an operator's own footprint names is a position in that
+            // footprint, not the position of one of this graph's capture ports: the two do not
+            // correspond, so the use cannot be placed from here.
+            return false;
         }
         const bool isWith = access.binding.kind == sem::ResourceBinding::Kind::With;
         const auto inputs = isWith ? draft.withInputsOf(id) : draft.normInputsOf(id);
@@ -341,12 +502,10 @@ bool Builder::reachOfOper(
             return false;
         }
         if (walk.captured.contains(inputs[at])) {
-            if (const auto variable = moduleVariableOf(transaction, inputs[at]);
-                variable.has_value()) {
-                addAmbientUse(walk, *variable, access.mode); // a variable of a module's top level
-                continue;
+            if (!placeCapturedUse(walk, graph, transaction, inputs[at], access.mode)) {
+                return false;
             }
-            return false; // a resource of the function around this one
+            continue;
         }
         const auto port = walk.ports.find(inputs[at]);
         if (port == walk.ports.end()) {
@@ -381,19 +540,19 @@ bool Builder::reachOfFunc(
                               ? inferredResources_.find(callee.get())
                               : inferredResources_.end();
     if (inferred != inferredResources_.end()) {
-        return readCalleeSignature(walk, transaction, inferred->second,
-                                   calleeType->withTypesCount(), false, id);
+        return readCalleeSignature(walk, graph, transaction, inferred->second,
+                                   calleeType->withTypesCount(), false, id, callee);
     }
     if (calleeType->resources().mode != ResourceSignature::Mode::Concrete) {
         readUnknownValue(walk);
         return true;
     }
-    return readCalleeSignature(walk, transaction, calleeType->resources(),
-                               calleeType->withTypesCount(), false, id);
+    return readCalleeSignature(walk, graph, transaction, calleeType->resources(),
+                               calleeType->withTypesCount(), false, id, callee);
 }
 
-bool Builder::reachOfCall(
-    const runtime::GraphTransaction &transaction, BodyReach &walk, draft_node_ref_t id) const {
+bool Builder::reachOfCall(DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+                          BodyReach &walk, draft_node_ref_t id) const {
     // A call through a function value: what it runs is the value's signature, which is the first
     // `with` input of the call (isEffectNode reads it the same way). A value of a function that
     // wrote no clause carries the set its body was measured to reach; the only function type that
@@ -412,8 +571,9 @@ bool Builder::reachOfCall(
         readUnknownValue(walk);
         return true;
     }
-    return readCalleeSignature(walk, transaction, calleeFunc->resources(),
-                               calleeFunc->withTypesCount(), true, id);
+    return readCalleeSignature(walk, graph, transaction, calleeFunc->resources(),
+                               calleeFunc->withTypesCount(), true, id,
+                               functionValueGraphOf(transaction.graph().ref(callee[0])));
 }
 
 void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const {
@@ -450,7 +610,7 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     // runtime reads this on the type once the measurement is published there, and a body that
     // returns the caller's cell is not a body whose result nothing else refers to.
     walk.reach.result = sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
-    numberBodyPorts(walk, transaction, *type);
+    numberBodyPorts(walk, graph, transaction, *type);
     // One node's own reach, asked for by the report of a violation or by the ordering of the
     // effects on one resource, is one node's walk: nothing else of the body is looked at.
     const auto walkNode = [&](draft_node_ref_t id) {
@@ -460,7 +620,7 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
         case runtime::GCNodeKind::Func:
             return reachOfFunc(graph, transaction, walk, id);
         case runtime::GCNodeKind::Call:
-            return reachOfCall(transaction, walk, id);
+            return reachOfCall(graph, transaction, walk, id);
         default:
             return true;
         }
@@ -479,6 +639,24 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     if (walk.unplaceable) {
         return std::nullopt; // see addParamUse: nothing here is measured, rather than too little
     }
+    if (!only.has_value() && bodyResultCanHoldAFunction(*type)) {
+        // A closure made here that captures a cell of this body can leave through the result --
+        // the tuple or struct the body returns holds it -- and then the cell outlives the call, so
+        // writing it is an effect of this body after all (design principles 3.3, effect masking).
+        // Which closure the result actually holds is not traced: a body whose result can hold a
+        // function and that makes a closure over one of its cells is measured as reaching that
+        // cell. Refusing a `pure` promise costs a program; accepting one the body broke costs
+        // correctness. A cell of this body can only be captured by a closure written inside it,
+        // so the captures of every body are asked, without walking a single node.
+        for (const auto &[closure, summary] : captures_) {
+            (void)closure;
+            for (node_handle_t cell : summary.variables) {
+                if (nodeGraphOf(cell) == graph && isVariable(cell)) {
+                    walk.reach.anyOf.push_back(sem::ResourceClass::Variable);
+                }
+            }
+        }
+    }
     if (!only.has_value()) {
         addVarParameters(walk, *type);
     }
@@ -489,6 +667,9 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     std::sort(walk.reach.anyOf.begin(), walk.reach.anyOf.end());
     walk.reach.anyOf.erase(std::unique(walk.reach.anyOf.begin(), walk.reach.anyOf.end()),
                            walk.reach.anyOf.end());
+    std::sort(walk.reach.captures.begin(), walk.reach.captures.end());
+    walk.reach.captures.erase(std::unique(walk.reach.captures.begin(), walk.reach.captures.end()),
+                              walk.reach.captures.end());
     return walk.reach;
 }
 
