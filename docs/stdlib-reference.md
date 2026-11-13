@@ -6153,8 +6153,11 @@ rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, pro
 Applies `rules` until no rule changes the function, and gives the rewritten function.
 `ordered: true` preserves operand positions throughout the pattern, including after guard
 rejection. The default also searches declared commutative and exact associative alternatives.
-`protect_effects` and `protect_faults` select conservative local deletion guards. Disabling
-one permits its deletion; remaining users and synchronization can still demand the input.
+`protect_faults` selects the conservative local deletion guard for a computation that may
+fault. `protect_effects` does not decide whether an external access or a final write to a
+variable that outlives the call may be dropped: the graph that holds them keeps them
+(design principles 9.7), so no choice here removes one, while remaining users and
+synchronization can still demand the input.
 These choices do not disable structural validation or prove whole-program equivalence.
 
 - Failure: error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow.
@@ -6168,8 +6171,10 @@ saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
-every writing the saturation found; `extract` chooses among them. The deletion protections
-select candidate admission. Extraction cannot restore protection disabled during saturation.
+every writing the saturation found; `extract` chooses among them. `protect_faults` selects
+candidate admission, and a candidate that would drop an external access or a final write to a
+variable that outlives the call is never admitted, whatever `protect_effects` says (design
+principles 9.7). Extraction cannot restore protection disabled during saturation.
 The resulting alternatives are derivations under the rules, not full observational equalities.
 `ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
 remain searchable, and an explicit commutativity rule may still add exchanged writings.

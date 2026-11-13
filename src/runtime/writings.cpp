@@ -1046,8 +1046,10 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
     //
     // Structural anchors and values written in place remain roots. Operators and casts stay
     // when selected writings demand them, including through sync dependencies. Admission
-    // already applied the selected deletion guards: retaining every effect operator here would
-    // restore a disabled guard and leave orphan effects without an admission credential.
+    // already refused every candidate that would drop an external access or a write that
+    // outlives the call (9.7), and applied the selected fault guard besides: retaining every
+    // effect operator here would restore a fault guard the caller disabled and leave orphan
+    // effects without an admission credential.
     // Order edges alone do not demand execution (design principles 3.1).
     std::vector<uint8_t> selected(slots, 0);
     std::vector<gc_node_ref_t> work;
@@ -1939,10 +1941,15 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
 /// Whether deletion is admitted by the caller's selected local guards. Unknown calls and
 /// control-region summaries are conservative. This is not an exact execution-set analysis:
 /// outside users may keep a discarded binding running.
+///
+/// One question here is not the caller's to answer: whether the computation is an external access
+/// or a write of a variable that outlives the running function (design principles 9.7). Those are
+/// kept by the region or the exit that holds them, and only the graph interface's dedicated
+/// effect-deleting operation removes one, so this engine refuses the discard instead of letting a
+/// guard decide it: `protect_effects` does not reach them, and `protect_faults` is what the caller
+/// still chooses. A computation whose value nobody reads and which does neither is the one the
+/// guards are about.
 bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
-    if (!protection_.effects && !protection_.faults) {
-        return true;
-    }
     std::vector<gc_node_ref_t> work{node};
     std::vector<gc_node_ref_t> seen;
     while (!work.empty()) {
@@ -1965,22 +1972,26 @@ bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
         if (protection_.faults && nodeMayFault(draft_, at, true)) {
             return false;
         }
-        if (protection_.effects) {
-            bool effect = writtenInPlace(at);
-            if (h->kind == GCNodeKind::Oper) {
-                const auto bytes = draft_.payloadOf(at);
-                effect |= bytes.size() < sizeof(GCOperBody) ||
-                          !camel::core::OperatorTable::instance().mayBeRecomputed(
-                              reinterpret_cast<const GCOperBody *>(bytes.data())->oper);
-            } else if (
-                h->kind == GCNodeKind::Call || h->kind == GCNodeKind::Func ||
-                h->kind == GCNodeKind::Loop || h->kind == GCNodeKind::Brch ||
-                h->kind == GCNodeKind::Join) {
-                effect = true; // No local summary proves these computations effect-free.
-            }
-            if (effect) {
-                return false;
-            }
+        // The effect itself, which no selected guard may take away (9.7): an external access, a
+        // write of state the program owns, or a write of a value the program keeps in a variable.
+        // `writtenInPlace` is the tree's answer to "some user writes this value" -- the cell a
+        // variable lives in, or an argument an operator or a `var` parameter writes -- which is the
+        // write that outlives the call when the variable is not this function's own. A call, a
+        // loop and a control region carry no local summary, so they are kept as if they had one.
+        bool effect = writtenInPlace(at);
+        if (h->kind == GCNodeKind::Oper) {
+            const auto bytes = draft_.payloadOf(at);
+            effect |= bytes.size() < sizeof(GCOperBody) ||
+                      !camel::core::OperatorTable::instance().mayBeRecomputed(
+                          reinterpret_cast<const GCOperBody *>(bytes.data())->oper);
+        } else if (
+            h->kind == GCNodeKind::Call || h->kind == GCNodeKind::Func ||
+            h->kind == GCNodeKind::Loop || h->kind == GCNodeKind::Brch ||
+            h->kind == GCNodeKind::Join) {
+            effect = true; // No local summary proves these computations effect-free.
+        }
+        if (effect) {
+            return false;
         }
         for (auto part :
              {draft_.normInputsOf(at),
@@ -2110,7 +2121,9 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
                draft_.ctrlUsersOf(node).empty() && draft_.syncUsersOf(node).empty();
     };
     // Remove unread nodes admitted by the selected guards, then their unread inputs. Named
-    // anchors and remaining users independently keep a node. No keeper restores a disabled guard.
+    // anchors and remaining users independently keep a node. No keeper restores a guard the
+    // caller disabled; a node that takes no part in a rewrite is asked again whether it may go, so
+    // an external access or a write that outlives the call is not erased on this path either.
     // `step` records physical erasure, which is distinct from whether a retained node executes.
     const auto eraseUnused = [&](gc_node_ref_t first, RewriteStep *step) {
         std::vector<gc_node_ref_t> work{first};
@@ -2545,7 +2558,8 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
     miss.kind = RuleMiss::Kind::Blocked;
     if (dropsProtected(rule, binds.node, MatchRemainder{})) {
         miss.detail = std::format(
-            "selected deletion protection rejects the discarded computation "
+            "the discarded computation is an external access or a write that outlives the call, "
+            "which no selected guard deletes, or the selected guards reject it "
             "(protect_effects={}, protect_faults={})",
             protection_.effects,
             protection_.faults);
