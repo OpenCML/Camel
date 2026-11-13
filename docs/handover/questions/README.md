@@ -5,14 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：2 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type`](2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type.cn.md) | `match type` 的一条臂能不能带「这个叶子是不是数值」的守卫 |
-| [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ |
 
-## 生成器不会删的行：76 行（页已不在 `questions/` 里）
+## 生成器不会删的行：77 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -92,6 +91,7 @@
 | [`2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion`](../reviews/2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion.cn.md) | 第二条裁定给的那条读数，在删除前就是绿的 | 在 `reviews/` |
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](../reviews/2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 | 在 `reviews/` |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](../reviews/2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 | 在 `reviews/` |
+| [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](../reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ | 在 `reviews/` |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |

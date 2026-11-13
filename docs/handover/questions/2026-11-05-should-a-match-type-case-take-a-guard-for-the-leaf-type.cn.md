@@ -36,3 +36,6 @@
 - `ShapeOf<string>` 与 `ShapeOf<int>` 今天同答 `int[0]`（上面第一行）。
 - `test/cases/compile/match_type/array_dims.cml` 钉的是**标量那一条**（`ShapeOf<int>`），**没有钉 `string` 那一条**——守卫落地时，那条读数才会有一个可以被改红的用例；现在钉它只会把缺陷固定成期望。
 - `stdlib/types.cml#ShapeOf` 的注释已经写明第三臂是默认臂、以及它为什么不能问叶子类型，**这一页是那条注释的问句形态**。
+## 决策者（2026-11-13）
+
+这是新语法，已列给负责人裁。决策者推荐第 1 条（`case _ when <pred>`，与值层 `match` 的 `when` 同形），理由同本页。裁定前不动 `ShapeOf`。

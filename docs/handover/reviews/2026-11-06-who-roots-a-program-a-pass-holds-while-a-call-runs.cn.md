@@ -99,3 +99,14 @@ bytecode vector 140037 > 40000、JIT 表 4000 个版本），闸门耗时 2 倍�
 - `lane-gcfreed` 的 `2cc52a23c`（road A 的实现与代价）与 `180a56b30`（reserve 即 root 的第二半）；
 - `docs/technical/36_gc_handle_rules.md`：root 规则表，本条应在 `Program` 那一行补一句
   「持有者在 C++ 里时由持有者 `pin`」。
+## 决策者答复（2026-11-13）
+
+**走 B，但做成结构上的保证，不靠逐个认领。** 默认建议的 B 是"每个持有者自己 `pin/unpin`"，漏一个就还是一个窗口；这正是目标架构（`docs/design/architecture/README.cn.md`）要去掉的那种"各处自觉"。定为：
+
+1. **一个持有即 root 的句柄**：在 `graph` 层加一个 RAII 类型（名字如 `ProgramHold`），构造时 `pin`、析构时 `unpin`、可移动不可复制。C++ 里任何活得过一次安全点的 `Program` 持有者（`GraphDraftGroup`、提交的 `committed`、`makeProgram` 的调用点、会话的工作表……）都只能经它持有，不许存裸的 `Program *` 或 `shared_ptr<Program>`。`GraphDraftGroup` 现有的 `pin/unpin` 改成用它。
+2. **检查脚本**：除这个句柄与 `GCGraphManager` 自己以外，类成员里出现 `Program *`、`shared_ptr<Program>` 即报错。先以"只报告"列出现有持有者，作为改造清单；清单清空后转为硬门槛。这比地址采样更全：采样只能找到这两条用例碰到的那批。
+3. **尺子先立**：`--gc-stress safepoint=1,kind=minor`（不带 poison）的那条用例先进 fast 层，标 `known_fail` 并写明本页，改完转绿；两条 poison 用例同时转绿。
+4. **C 不做**，除非 1、2 做完仍有窗口；A 不重来（代价已量过）。
+5. `docs/technical/36_gc_handle_rules.md` 的 `Program` 一行补一句："C++ 持有者只经 `ProgramHold`"。
+
+归第十一节第 1 路（返工清扫）。
