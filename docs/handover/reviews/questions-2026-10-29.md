@@ -3384,3 +3384,58 @@ func main(): int sync {
 - 直接调用具名函数（`k2(1)`、`k2(2)`）时，两个后端都稳定。所以问题出在 taskflow 给经函数值的调用建任务时漏了顺序边，或者只认直接调用的那一种。
 - 数据来自 `ae874ce04`。先在当前 develop 上重跑。
 - **验收**：上面的程序在 `std::taskflow`、`-t 8 std::taskflow` 上各跑 200 次，都先打印 1。把这条和 `with` 参数、闭包、高阶算子里经函数值的调用一起收成用例；重复运行比对进慢层，单次的输出钉进快层。
+
+## 返工（2026-11-13）：三处缺陷，都在 develop `b72d59535` 上复现
+
+ECOOP 论文要求文中例子在 Camel 上照原样运行，这三处挡着。数据来自 develop `b72d59535`，与 `ae874ce04` 上一致。
+
+**一、分支臂里有效应时，前面同一资源上的效应与分支之间没有顺序边。** 违反原则 3.3（同一资源上的效应按书写顺序；进区域的顺序边挂在 `BRCH` 上）。
+```
+func f(c: bool, x: int): int {
+    let y = x * 2
+    let a = println(x)
+    let b = if c then { y } else sync { println(y); y + 1 }
+    return a + b
+}
+func main(): int sync { println(f(false, 1)); return 0 }
+```
+- 用 `graph::order_inputs` 逐个打印 `f` 的 12 个节点，全是空的，`println(x)` 到 `Brch` 没有边。直线代码里的两次打印之间有边。
+- 现在的输出是 `1 2 4`，只是碰巧对：把 `if` 那一行挪到 `let a = println(x)` 之前，按书写顺序应当打印 `2 1 4`，实际仍打印 `1 2 4`。
+- **验收**：
+  - `std::jgir` 里 `println(x)` 到 `Brch` 有顺序边；
+  - 挪行后的版本在 `std::nvm`、`std::macro std::opt std::nvm`、`std::taskflow` 上都打印 `2 1 4`；
+  - 两个版本收成用例，进快层。
+
+**二、未标类型的 lambda 交给 `reduce`、累加值的类型对不上时，编译器段错误。** 应当是类型错误。
+```
+export func strip::<F>(f: F): F! {
+    return commit(nodes(graph_of(f))->filter<is_print>
+        ->reduce<(d, n) => replace(d, n, inputs(n)[0]), open(f)>)
+}
+```
+- `replace` 返回 `void`，初值是 `Txn<F>`，累加值类型不一致。主程序 `let g = strip(f) !! f`，在 `std::nvm` 下打印完前面的输出后退出码 139。
+- lambda 写上类型、写成 `sync { replace(d, n, inputs(n)[0]); d }` 就能正常运行。
+- 完整复现在 `Camel-Archive/ECOOP2027/artifacts/graph-value-probes/strip_chain_crash*.cml`。可能与上一条返工里 `inc->cse->fold !! inc` 的段错误同源，两条一起查。
+- **验收**：报一条带位置的类型诊断，指出累加值的类型与初值不一致；收成用例，进快层。
+
+**三、库里用规则写的 `vjp`/`grad` 加上 `std::opt` 后报 `ExitTypeMismatch`。**
+```
+import { vjp } from vjp
+func loss(w: float, x: float, t: float): float {
+    let e = x * w - t
+    return 0.5 * e * e
+}
+func main(): int sync {
+    var w = 0.5
+    let (l, pullback) = vjp(loss)(w, 1.5, 2.0)
+    let (gw, gx, gt) = pullback(1.0)
+    w = w - 0.1 * gw
+    println(l)
+    println(w)
+    return 0
+}
+```
+- 默认流水线、`std::macro std::nvm`、`std::macro std::taskflow` 都打印 `0.78125`、`0.6875`。手算一致，引擎的 `with_grad` 也给同样的数。
+- 加上 `std::opt` 后报 `RuntimeDiag::ExitTypeMismatch`，位置在 `stdlib/rulesets/jvp.cml` 的 `jvp_pow_d` 右边，两个函数值的类型不一致。这个 `loss` 里根本没有 `pow`，所以是 `std::opt` 改了规则集模块里的图。
+- 库的 `grad(loss)(w, x, t)`（`with` 权重写法）也一样。
+- **验收**：上面的程序和 `grad` 写法在 `std::macro std::opt` 加 `nvm`、`fvm`、`jit` 上的输出与不加 `std::opt` 时相同；进快层。
