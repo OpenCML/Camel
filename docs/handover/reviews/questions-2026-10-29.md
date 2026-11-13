@@ -3384,6 +3384,7 @@ func main(): int sync {
 - 直接调用具名函数（`k2(1)`、`k2(2)`）时，两个后端都稳定。所以问题出在 taskflow 给经函数值的调用建任务时漏了顺序边，或者只认直接调用的那一种。
 - 数据来自 `ae874ce04`。先在当前 develop 上重跑。
 - **develop `b72d59535` 上仍在（2026-11-13 复核）**，并且会丢更新：`func twice(f: () => int): int { return f() * 10 + f() }`，传入写捕获变量的闭包 `() => sync { n = n + 1; n }`。`std::gir` 里两个 `CALL` 之间有 `ORDER` 边；`std::nvm`、`std::fvm`、加 `std::opt` 都打印 12；`std::taskflow` 跑 100 次，51 次 12、40 次 21、9 次 11。11 说明两次调用的读改写交错了。闭包从创建它的函数返回后再传进去，结果相同。这两个程序也收进用例。
+- **根因（2026-11-13 架构审计找到，决策者核实）**：taskflow 在用的结构化计划里，`buildStructuredPlan` 的 `collectWaits`（`src/passes/sched/taskflow/taskflow.cpp`）只收集控制、数据、`with` 和同步四种前驱，没有 `orderPredsOf`；只有旧的、注释说"留给转储"的任务图构建（`connectRuntimeDependencies`）读顺序边。所以凡是只靠顺序边排序的两项都可能并发，不限于经函数值的调用。修法分两步：先在 `collectWaits` 里加上顺序边；再把"一个节点执行前要等哪些前驱"做成 `src/execute` 里的一个共用函数，与 `computeExecutionOrder` 共用，线性后端和 taskflow 都从它取，以后加新的边种类不会漏掉某一个后端。
 - **验收**：上面的程序在 `std::taskflow`、`-t 8 std::taskflow` 上各跑 200 次，都先打印 1。把这条和 `with` 参数、闭包、高阶算子里经函数值的调用一起收成用例；重复运行比对进慢层，单次的输出钉进快层。
 
 ## 返工（2026-11-13）：三处缺陷，都在 develop `b72d59535` 上复现
