@@ -1,0 +1,44 @@
+/**
+ * A `typeof` used as a derived type's argument is resolved before the declaration is checked.
+ * The same declaration keeps the name of the derived type and gives its argument the value's
+ * actual type, in a generic instance and in an ordinary function alike. A type function nested in
+ * that argument is evaluated after the `typeof`, not at the placeholder's leaf shape.
+ */
+
+import { ElementOf, Tangent, is_same } from types
+
+type Derived<T> = { value: T }
+type Pair<A, B> = { first: A, second: B }
+
+func generic_value::<P>(p: P) {
+    let derived: Derived<typeof(p)> = { value: p }
+    return derived
+}
+
+func ordinary_value(p: int): int {
+    let derived: Derived<typeof(p)> = { value: p }
+    return derived.value
+}
+
+func element_value::<P>(p: P[]): P {
+    let derived: Derived<ElementOf<typeof(p)>> = { value: p[0] }
+    return derived.value
+}
+
+func tangent_pair::<P, Q>(p: P, q: Q): bool {
+    return is_same::<Tangent<Pair<P, typeof(q)>>, { first: Tangent<P>, second: float }>()
+}
+
+func tangent_signature::<P, Q>(p: P, q: Q): Tangent<Pair<P, typeof(q)>> {
+    return { first: (), second: q }
+}
+
+func main(): int sync {
+    println(generic_value(3).value)
+    println(ordinary_value(4))
+    println(element_value([6, 7]))
+    println(tangent_pair(9, 10.0))
+    println(tangent_pair(13.0, 14.0))
+    println(tangent_signature(11, 12.0).second)
+    return 0
+}

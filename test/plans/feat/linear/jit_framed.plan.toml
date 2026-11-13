@@ -217,7 +217,7 @@ skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 args = ["--gc-check", "poison", "--gc", "mark-sweep", "-vv", "${case}", "std::jit hot_threshold=0"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)\n", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces\n", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round contains OPER\n"]
+expect_output_contains = ["compiled & cached graph 'countdown' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_to' as framed code; loop rounds: native rounds\n", "compiled & cached graph 'sum_squares' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'until_above' as framed code; loop rounds: helper: the round takes the next element of a sequence\n", "compiled & cached graph 'nested' as framed code; loop rounds: helper: the round takes the next element of a sequence (2 loops)\n", "compiled & cached graph 'collects' as framed code; loop rounds: helper: the round collects the values it produces\n", "compiled & cached graph 'ticks' as framed code; loop rounds: helper: the round makes the state tuple anew every round\n"]
 expect_output_not_contains = ["'countdown' as framed code; loop rounds: helper", "'sum_to' as framed code; loop rounds: helper", "'sum_squares' as framed code; loop rounds: native", "'until_above' as framed code; loop rounds: native", "'nested' as framed code; loop rounds: native", "'collects' as framed code; loop rounds: native", "'ticks' as framed code; loop rounds: native", "compile skipped", "Segmentation fault", "dumped core"]
 
 [[tests]]
@@ -238,14 +238,22 @@ desc = "The same program after std::opt::inline: every function is inlined into 
 # above passed. The comma needle below stays for the message it gives: `native rounds` is the only
 # reason of main's that repeats, so a comma at the end is a fifth reason and not a count of a
 # fourth, and that needle names it as one.
+# A reason can also be exchanged for another one of the lowering's own without a graph gaining a
+# loop or a reason: `ticks` reports `helper: the round makes the state tuple anew every round`
+# where it reported `helper: the round contains OPER`, both true of that round (its body builds the
+# next state tuple and prints) and both the helper path -- the three `tick` lines still print. The
+# reason printed is the first the lowerer finds in the round, so the order the round's instructions
+# are laid out in decides which one it is, and a statement's place in its block's chain is what
+# that order comes from now (docs/design/effects/edges.cn.md 4.6). The needles below were recorded
+# from the run that changed it; nothing else on the line moved.
 case = "../../../cases/loops/compiled.cml"
 backends = false
 skip_unless = ["node", "test/tools/have-native-jit.mjs"]
 sweep = false
 args = ["-vv", "${case}", "std::opt::inline", "std::jit hot_threshold=0"]
 expect_exit = 0
-expect_output_contains = ["compiled & cached graph 'main' as framed code", "OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round contains OPER\n", "30", "21", "29"]
-expect_output_not_contains = ["OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round contains OPER,", "compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
+expect_output_contains = ["compiled & cached graph 'main' as framed code", "OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round makes the state tuple anew every round\n", "30", "21", "29"]
+expect_output_not_contains = ["OnDemand: compiled & cached graph 'main' as framed code; loop rounds: helper: the round takes the next element of a sequence (8 loops), native rounds (2 loops), helper: the round collects the values it produces, helper: the round makes the state tuple anew every round,", "compile skipped", "Segmentation fault", "dumped core", "GC invariant violated"]
 
 [[tests]]
 name = "framed.loops.moving"

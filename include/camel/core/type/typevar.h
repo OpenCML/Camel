@@ -92,11 +92,13 @@ bool containsTypeVar(Type *type);
 
 /**
  * `typeof e` (design principles 5.6): the type of the value `e` will have. It exists only while
- * a module is compiled and only as the whole type written after `typeof`: the graph builder
- * builds `e` where the type is used and replaces the placeholder by the expression's type.
+ * a module is compiled. It may be the whole type or an argument of a type function, including a
+ * parameterised named type; the graph builder infers `e` where the type is used and replaces the
+ * placeholder before the type of a value is checked.
  *
  * The expression is a pointer the compiler owns (a node of the graph construction tree). The
- * core type system never looks at it, so the type stays an opaque, uninterned object here.
+ * core type system never looks at it: the placeholder is opaque here and carries no value type
+ * of its own.
  */
 class TypeOfType : public Type {
   public:
@@ -150,8 +152,7 @@ Type *substituteExtentValues(Type *type, const ExtentValues &values, const Exten
  * still decide, so two graphs never share one.
  */
 OpenFunctionType *instantiateFunctionType(
-    FunctionType *type, const type_bindings_t &bindings,
-    const ExtentValues *extents = nullptr);
+    FunctionType *type, const type_bindings_t &bindings, const ExtentValues *extents = nullptr);
 
 /**
  * Binds the variables `pattern` binds (occurrences of its head-declared type parameters) from
@@ -194,4 +195,3 @@ TupleType *findRepeatedMark(Type *type);
 std::string typeBindingsToString(const type_bindings_t &bindings);
 
 } // namespace camel::core::type
-

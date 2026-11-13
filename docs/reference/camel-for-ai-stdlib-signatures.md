@@ -247,7 +247,7 @@ permute: (t: float[...], perm: int[]) => float[...]
 concat: (a: float[...] | number[], b: float[...] | number[], axis: int) => float[...]
 take: (t: float[...], indices: int64[...] | number[]) => float[...]
 one_hot: (labels: int64[...] | number[], classes: int) => f32[...]
-shape: (t: T[...]) => int[] when is_numeric::<T>()
+shape: (t: T) => ShapeOf<T>
 numel: (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: int> (t: T[...]) => int when is_numeric::<T>()
 dim: <axis: i32> (t: T[...]) => int when is_numeric::<T>()
@@ -623,7 +623,7 @@ arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_fun
 zen: () => string
 ```
 
-**`graph`** — import { ... } from graph — 46 name(s)
+**`graph`** — import { ... } from graph — 47 name(s)
 
 ```text
 graph_of: (f: F) => Graph when is_function::<F>()
@@ -674,15 +674,16 @@ eval: (t: Txn<F>, n: Node) => Node? uses t
 add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
 commit: (t: Txn<F>) => F! uses t
 abort: (t: Txn<F>) => void uses t
+check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```
 
 **`rewrite`** — import { ... } from rewrite — 15 name(s)
 
 ```text
-rewrite: <rules: Rule[], strict: bool = false> (f: F) => F! when is_function::<F>()
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
 check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 check_text: (r: CheckReport) => string

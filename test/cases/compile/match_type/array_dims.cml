@@ -1,0 +1,44 @@
+/// A `match type` case takes an array type apart (`case E[...Dims]`): `E` is the element type and
+/// `Dims` the dimensions after it, a dimension pack like the one a signature writes. Written where
+/// an extent stands, the pack is how many dimensions it has, so a type function can state a shape
+/// whose length is a rank -- `ShapeOf<T>` is the standard library's use of it.
+///
+/// Two answers that do not come from one reading: a stated rank (whatever its extents are), and an
+/// open rank. `ShapeOf<float[2, 3]>` answering `int[2]` would also come out of a special case that
+/// answers the first extent, so `float[3, 4]` and `float[2, 3, 4]` are asked beside it.
+import { is_same, ShapeOf } from types
+
+/// The dimensions put back: one dimension of unknown length in front, the dims the case reached
+/// after it.
+type RowsProbe<T> = match type T {
+    case E[...Dims] => E[?, ...Dims]
+    case E[...] => E[?, ...]
+    case _ => T[?]
+}
+
+/// The number the dimensions of the subject are, or `bool` when the case does not select it.
+type DimsProbe<T> = match type T {
+    case E[...Dims] => int[Dims]
+    case _ => bool
+}
+
+func main(): int sync {
+    // ① a stated rank: the number of dimensions, not the first extent and not a default.
+    println(is_same::<ShapeOf<float[2, 3]>, int[2]>(), is_same::<ShapeOf<float[3, 4]>, int[2]>())
+    println(is_same::<ShapeOf<float[3]>, int[1]>(), is_same::<ShapeOf<float[2, 3, 4]>, int[3]>())
+    println(is_same::<ShapeOf<float[]>, int[1]>())
+    // ② a scalar is a tensor of rank zero: the empty shape. This arm is a default -- `match type`
+    //    cases have no guard position, so the type layer cannot tell a number from another leaf
+    //    type, and `ShapeOf<string>` answers the same. See `stdlib/types.cml#ShapeOf`.
+    println(is_same::<ShapeOf<int>, int[0]>())
+    // ③ an open rank states the open list.
+    println(is_same::<ShapeOf<float[...]>, int[]>()
+    )
+    // ④ the dimensions are a pack that can be put back, and the case that binds them selects no
+    //    scalar and no open rank.
+    println(is_same::<RowsProbe<float[2, 3]>, float[?, 2, 3]>())
+    println(is_same::<RowsProbe<float[...]>, float[?, ...]>(), is_same::<RowsProbe<int>, int[]>())
+    println(is_same::<DimsProbe<float[2, 3]>, int[2]>(), is_same::<DimsProbe<int>, bool>())
+    println(is_same::<DimsProbe<float[...]>, bool>())
+    return 0
+}

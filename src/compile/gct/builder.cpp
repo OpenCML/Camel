@@ -13,9 +13,9 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/bytes.h"
 #include "camel/core/type/collection.h"
-#include "camel/core/type/native.h"
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/enum.h"
+#include "camel/core/type/native.h"
 #include "camel/core/type/other.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typecall.h"
@@ -288,9 +288,9 @@ pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &
             // A name: read where the literal is built, unless an element computed after it is
             // hoisted first.
             auto entry = std::find_if(
-                pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
-                    return candidate.first == execNode;
-                });
+                pendingNames_.begin(),
+                pendingNames_.end(),
+                [&](const auto &candidate) { return candidate.first == execNode; });
             if (entry == pendingNames_.end()) {
                 pendingNames_.emplace_back(execNode, std::vector<PendingName>{});
                 entry = std::prev(pendingNames_.end());
@@ -301,8 +301,8 @@ pair<data_ptr_t, bool> Builder::extractData(const node_ptr_t &node, node_ptr_t &
         return make_pair(data, false);
     } else {
         // The names written before this element are used before it: they are hoisted ahead of it.
-        const auto entry = std::find_if(
-            pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
+        const auto entry =
+            std::find_if(pendingNames_.begin(), pendingNames_.end(), [&](const auto &candidate) {
                 return candidate.first == execNode;
             });
         if (entry != pendingNames_.end()) {
@@ -1147,7 +1147,11 @@ node_ptr_t Builder::visitDataDecl(const AST::node_ptr_t &ast) {
                 // not at an element that happens to be past the end.
                 tree_->markUnpack(accsNode, refs.size());
                 setOriginFromAst(
-                    context_, accsNode, ast, camel::source::OriginKind::GctNode, "gct.accs");
+                    context_,
+                    accsNode,
+                    ast,
+                    camel::source::OriginKind::GctNode,
+                    "gct.accs");
                 *nRefNode << accsNode;
                 setOriginFromOrigin(
                     context_,
@@ -1762,8 +1766,10 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
     } fieldTagOwner(*this, declNode);
     if (!typeNode && !typeLoad->params().empty() && module_->name() == "types" &&
         TypeCallType::isTypeFunction(typeLoad->ref().toString())) {
-        // `export type ElementOf<T>`: a primitive type function (design principles 5.6), declared
-        // here without a body; the compiler takes the type apart where `match type` cannot.
+        // `export type PayloadOf<T>`: a primitive type function (design principles 5.6),
+        // declared here without a body; the compiler answers it, because what it answers is a field
+        // of the type that a `match type` case cannot name. A type function that only takes a type
+        // apart or puts one back together is written in the library as a `match type` instead.
         const string typeName = typeLoad->ref().toString();
         struct TypeScopeGuard {
             Builder &self;
@@ -1772,8 +1778,10 @@ node_ptr_t Builder::visitTypeDecl(const AST::node_ptr_t &ast) {
         } typeScopeGuard{*this, typeScope_};
         pushScope();
         const std::vector<Type *> parameters = bindTypeParameters(typeLoad.get(), ast, typeName);
-        type = TypeFunctionType::create(
-            typeName, typeLoad->params(), TypeCallType::create(typeName, parameters));
+        type                                 = TypeFunctionType::create(
+            typeName,
+            typeLoad->params(),
+            TypeCallType::create(typeName, parameters));
     } else if (!typeNode) {
         // `export type Graph`, `export type Txn<F>`: the type is provided by the C++ module of
         // the same name, under this name (design principles 10.4), like a function without a
@@ -2619,7 +2627,8 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 context_,
                 node,
                 findSemanticOrigin(
-                    astSemantic(context_, ast), camel::source::SemanticRole::Operator),
+                    astSemantic(context_, ast),
+                    camel::source::SemanticRole::Operator),
                 camel::source::OriginKind::GctNode,
                 "gct.binary.operator");
             return node;
@@ -2637,16 +2646,22 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
                 *node << intConstant(static_cast<int64_t>(dim.axis));
             }
             setOriginFromAst(
-                context_, node, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
+                context_,
+                node,
+                ast,
+                camel::source::OriginKind::GctNode,
+                "gct.binary.link");
             registerGctSemantic(
                 context_,
                 node,
                 ast,
                 {
                     semanticPart(
-                        camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
-                    semanticPart(
-                        camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
+                        camel::source::SemanticRole::Operator,
+                        nodeOrigin(opNode),
+                        -1,
+                        "operator"),
+                    semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
                     semanticPart(
                         camel::source::SemanticRole::IndexExpr,
                         nodeOrigin(indexNode),
@@ -2665,11 +2680,10 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         // end is read only when written.
         const auto buildSlice = [&](const SubscriptDimension &dim, const node_ptr_t &base) {
             const AST::node_ptr_t &boundsOf = dim.item;
-            node_ptr_t bound[3] = {nullptr, nullptr, nullptr};
-            bool written[3]     = {false, false, false};
+            node_ptr_t bound[3]             = {nullptr, nullptr, nullptr};
+            bool written[3]                 = {false, false, false};
             for (size_t i = 0; i < 3; ++i) {
-                written[i] =
-                    boundsOf != nullptr && boundsOf->at(i)->type() != AST::LoadType::Null;
+                written[i] = boundsOf != nullptr && boundsOf->at(i)->type() != AST::LoadType::Null;
                 if (written[i]) {
                     bound[i] = visitData(boundsOf->at(i));
                 }
@@ -2683,12 +2697,13 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             *node << opNode << base << intConstant(static_cast<int64_t>(dim.axis));
             std::vector<camel::source::SemanticPart> parts = {
                 semanticPart(
-                    camel::source::SemanticRole::Operator, nodeOrigin(opNode), -1, "operator"),
+                    camel::source::SemanticRole::Operator,
+                    nodeOrigin(opNode),
+                    -1,
+                    "operator"),
                 semanticPart(camel::source::SemanticRole::Argument, nodeOrigin(base), 0, "lhs"),
             };
-            std::vector<camel::source::origin_id_t> inputs = {
-                nodeOrigin(opNode),
-                nodeOrigin(base)};
+            std::vector<camel::source::origin_id_t> inputs = {nodeOrigin(opNode), nodeOrigin(base)};
             for (size_t i = 0; i < 3; ++i) {
                 *node << bound[i];
                 if (written[i]) {
@@ -2702,9 +2717,12 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
             }
             *node << endWrittenNode;
             setOriginFromAst(
-                context_, node, ast, camel::source::OriginKind::GctNode, "gct.binary.link");
-            registerGctSemantic(
-                context_, node, ast, std::move(parts), std::move(inputs));
+                context_,
+                node,
+                ast,
+                camel::source::OriginKind::GctNode,
+                "gct.binary.link");
+            registerGctSemantic(context_, node, ast, std::move(parts), std::move(inputs));
             return node;
         };
         if (writtenDimensions.empty()) {
@@ -2808,7 +2826,11 @@ node_ptr_t Builder::visitBinaryExpr(const AST::node_ptr_t &ast) {
         node_ptr_t negation = tree_->makeLink(1);
         *negation << notOperator << res;
         setOriginFromAst(
-            context_, negation, ast, camel::source::OriginKind::GctNode, "gct.binary.negation");
+            context_,
+            negation,
+            ast,
+            camel::source::OriginKind::GctNode,
+            "gct.binary.negation");
         res = negation;
     }
 
@@ -2858,7 +2880,7 @@ node_ptr_t Builder::visitLogicalExpr(const AST::node_ptr_t &ast) {
         *caseNode << execNode;
         return caseNode;
     };
-    *brchNode << lhsNode << armOf(CaseType::True, isAnd ? rhsNode: decidedNode)
+    *brchNode << lhsNode << armOf(CaseType::True, isAnd ? rhsNode : decidedNode)
               << armOf(CaseType::Else, isAnd ? decidedNode : rhsNode);
 
     node_ptr_t res = brchNode;
@@ -3181,7 +3203,7 @@ node_ptr_t Builder::visitReservedExpr(const AST::node_ptr_t &ast) {
         }
         if (dataNode->type() == NodeKind::DATA && !containsTypeVar(dstType) &&
             !containsTypeOf(dstType) && asTagged(dstType) == nullptr && !intoCollection) {
-            const auto &data = dataNode->data();
+            const auto &data        = dataNode->data();
             const CastSafety safety = dstType->castSafetyFrom(data->type());
             if (safety == CastSafety::Forbidden && data->type()->isPrimitive() &&
                 dstType->isPrimitive()) {
@@ -3697,14 +3719,13 @@ node_ptr_t Builder::visitStaticFor(const AST::node_ptr_t &ast) {
     ENTER("StaticFor");
     GUARD(ast->type() == AST::LoadType::Data, "Expected DataLoad type for StaticFor");
     const auto &load = ast->loadAs<AST::StaticForLoad>();
-    checkStaticHeadNames(
-        ast,
-        load->byIndices() ? "indices"
-                          : "fields",
-        load->nameCount());
+    checkStaticHeadNames(ast, load->byIndices() ? "indices" : "fields", load->nameCount());
 
     node_ptr_t forNode = tree_->makeStaticFor(
-        load->valueName(), load->typeName(), load->tagsName(), load->byIndices());
+        load->valueName(),
+        load->typeName(),
+        load->tagsName(),
+        load->byIndices());
     setOriginFromAst(context_, forNode, ast, camel::source::OriginKind::GctNode, "gct.static.for");
 
     if (load->byIndices()) {
@@ -3764,8 +3785,7 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
     const bool byFields = !load->byIndices() && !load->bySequence();
     checkStaticHeadNames(
         ast,
-        byFields ? "fields"
-                 : (load->byIndices() ? "indices" : "a written sequence"),
+        byFields ? "fields" : (load->byIndices() ? "indices" : "a written sequence"),
         load->nameCount());
 
     std::vector<std::string> state;
@@ -3774,7 +3794,11 @@ node_ptr_t Builder::visitStaticLoop(const AST::node_ptr_t &ast) {
         state.push_back(name.toString());
     }
     node_ptr_t loopNode = tree_->makeStaticLoop(
-        state, load->valueName(), load->typeName(), load->tagsName(), load->byIndices(),
+        state,
+        load->valueName(),
+        load->typeName(),
+        load->tagsName(),
+        load->byIndices(),
         load->bySequence());
     setOriginFromAst(
         context_,
@@ -3939,9 +3963,10 @@ node_ptr_t Builder::visitLiteral(const AST::node_ptr_t &ast) {
         // A raw string (`r"C:\dir"`) is not decoded at all: its text is the value, so a backslash
         // in it is a backslash -- there is no escape to be unknown, and the table is not run.
         std::vector<std::string> unknownEscapes;
-        std::string decoded = literal->fromRawString()
-                                ? str
-                                : decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
+        std::string decoded =
+            literal->fromRawString()
+                ? str
+                : decodeEscapes(str, literal->fromFormattedString(), &unknownEscapes);
         for (const std::string &escape : unknownEscapes) {
             diags_->of(LexicalDiag::InvalidEscapeSequence)
                 .at(ast->load()->tokenRange())
@@ -4400,8 +4425,7 @@ bool hasRankZeroPosition(Type *type) {
         if (arrayType == nullptr) {
             return false;
         }
-        return arrayType->rankZeroType() != nullptr ||
-               hasRankZeroPosition(arrayType->elemType());
+        return arrayType->rankZeroType() != nullptr || hasRankZeroPosition(arrayType->elemType());
     }
     if (type->code() == TypeCode::Struct) {
         const auto *structType = tt::as_ptr<StructType>(type);
@@ -4432,8 +4456,8 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
     // instantiated) are left to the CAST, and so is a function type, which a literal cannot
     // have. A type written as `typeof e` is left to the CAST too: it is inferred in the graph
     // builder, and until then it is not a type a literal could be converted to.
-    if (value->type() == NodeKind::DATA && asTagged(type) == nullptr &&
-        !containsTypeVar(type) && !containsTypeOf(type)) {
+    if (value->type() == NodeKind::DATA && asTagged(type) == nullptr && !containsTypeVar(type) &&
+        !containsTypeOf(type)) {
         // The value the literal was written as, exactly (design principles 5.1): `let x: f32 =
         // 0.1` is the f32 nearest to one tenth, not the same double rounded twice, and `let x:
         // float = 1` is 1.0 (an integer literal takes the float type its context asks for).
@@ -4505,7 +4529,8 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 }
             }
             // A text field of a composite literal is reported at the field itself, as a type
-            // mismatch; a lone text value keeps the declaration's position, as the same check reports it
+            // mismatch; a lone text value keeps the declaration's position, as the same check
+            // reports it
             // (`let x: int = '42'` is a mismatch at the declaration), and anything else the
             // conversion cannot take is reported for the literal as a whole below.
             if (isComposite(value->data()->type()->code()) &&
@@ -4525,7 +4550,10 @@ node_ptr_t Builder::declaredValue(const node_ptr_t &value, Type *type, const AST
                 // position's, not the data layer's.
             } else if (converted == nullptr) {
                 reportLiteralCastFailure(
-                    diags_, ast->load()->tokenRange(), value->data(), literalType);
+                    diags_,
+                    ast->load()->tokenRange(),
+                    value->data(),
+                    literalType);
                 throw BuildAbortException();
             }
             // A conversion that comes back as another type is not what the declaration says:
@@ -4579,8 +4607,8 @@ bool statesARank(const ArrayType *type) {
 /// array is a shape a program may declare, pass and compute with (an empty tensor's reduction is
 /// `InvalidArgument`, not a compile error).
 ///
-/// The same question is asked in three places and they answer alike: this literal-vs-position check,
-/// the ranked comparison of the literal's lengths to the stated extents
+/// The same question is asked in three places and they answer alike: this literal-vs-position
+/// check, the ranked comparison of the literal's lengths to the stated extents
 /// (`visitRankedArrayInto` below, where `[]` into `f32[0]` compares 0 to 0), and a `f32[0]`
 /// parameter taking a `[]` argument. A position that states *another* rank or another extent still
 /// does not take `[]`: `f32[2]` asks for two elements, `f32[0, 0]` for a second axis the literal
@@ -4589,7 +4617,6 @@ bool isADimensionOfNoElements(const ArrayType *type) {
     const std::span<const ExtentForm> extents = type->extents();
     return extents.size() == 1 && extents.front().isConstant() && extents.front().constant() == 0;
 }
-
 
 } // namespace
 
@@ -4619,12 +4646,14 @@ node_ptr_t Builder::visitDataInto(const AST::node_ptr_t &ast, Type *type, bool &
                         !isADimensionOfNoElements(emptyInto)) {
                         // `[]` writes one dimension of no elements: it is not the shape the
                         // position states, and it is not reshaped into it either. A position that
-                        // states that same dimension (`f32[0]`) is the one stated shape `[]` writes,
-                        // and it is taken below like any other empty array of the position's type.
+                        // states that same dimension (`f32[0]`) is the one stated shape `[]`
+                        // writes, and it is taken below like any other empty array of the
+                        // position's type.
                         diags_->of(SemanticDiag::DimensionMismatch)
                             .at(ast->load()->tokenRange())
                             .commit(
-                                "The array literal written here", "0",
+                                "The array literal written here",
+                                "0",
                                 "the position states the shape '" + type->toString() + "'");
                         throw BuildAbortException();
                     }
@@ -4805,13 +4834,13 @@ void literalShapeOf(
 
 } // namespace
 
-node_ptr_t Builder::visitRankedArrayInto(
-    const AST::node_ptr_t &ast, Type *arrayType, bool &entered) {
+node_ptr_t
+Builder::visitRankedArrayInto(const AST::node_ptr_t &ast, Type *arrayType, bool &entered) {
     ENTER("ArrayDataRanked");
-    entered = false;
-    const auto *aType   = tt::as_ptr<ArrayType>(arrayType);
-    const auto extents  = aType->extents();
-    Type *elemType      = aType->elemType();
+    entered            = false;
+    const auto *aType  = tt::as_ptr<ArrayType>(arrayType);
+    const auto extents = aType->extents();
+    Type *elemType     = aType->elemType();
 
     std::vector<int64_t> lengths;
     std::vector<AST::node_ptr_t> levelAt;
@@ -5290,12 +5319,12 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         std::unordered_set<std::string> outerWritten;
         bool outerSignatureVisit;
         ~TypeScopeGuard() {
-            self.typeScope_          = outer;
-            self.declaredTypeVars_   = std::move(outerVars);
-            self.declaredPackVars_   = std::move(outerPacks);
-            self.headTypeVarTypes_   = std::move(outerHead);
-            self.writtenHeadVars_    = std::move(outerWritten);
-            self.signatureVisit_     = outerSignatureVisit;
+            self.typeScope_        = outer;
+            self.declaredTypeVars_ = std::move(outerVars);
+            self.declaredPackVars_ = std::move(outerPacks);
+            self.headTypeVarTypes_ = std::move(outerHead);
+            self.writtenHeadVars_  = std::move(outerWritten);
+            self.signatureVisit_   = outerSignatureVisit;
         }
     } typeScopeGuard{
         *this,
@@ -5501,8 +5530,8 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
         std::exchange(dimPacks_, std::make_shared<std::set<std::string>>()),
         std::exchange(dimBindAllowed_, false)};
     for (const bool declared : {false, true}) {
-        const std::span<Type *const> params = declared ? funcType->withTypesSpan()
-                                                       : funcType->normTypesSpan();
+        const std::span<Type *const> params =
+            declared ? funcType->withTypesSpan() : funcType->normTypesSpan();
         for (Type *param : params) {
             if (param == nullptr) {
                 continue;
@@ -5529,10 +5558,10 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     // The body of a function or lambda is a body of its own: its value is the function's
     // result, and its exits are the function's, wherever the function is written.
     const ValueUseScope valueUseScope(*this);
-    valueUse_            = {};
+    valueUse_                      = {};
     const AST::node_ptr_t &bodyAst = ast->atAs<AST::StmtBlockLoad>(1);
-    node_ptr_t stmtsNode = writesOwnYield(bodyAst) ? visitGeneratorBody(ast, funcType)
-                                                   : visitStmtBlock(bodyAst);
+    node_ptr_t stmtsNode =
+        writesOwnYield(bodyAst) ? visitGeneratorBody(ast, funcType) : visitStmtBlock(bodyAst);
     reportUnusedHead(stmtsNode, whenNode);
     node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
     tree_->setHeadTypeParams(
@@ -5753,11 +5782,11 @@ state kept the way this language can keep it:
   - a cell is a node identity and not a type (a value taken out of a struct is not a variable),
     so the state is not one struct: it is the cells, and the closures hold the handles.
 */
-node_ptr_t Builder::visitGeneratorBody(
-    const AST::node_ptr_t &funcAst, const FunctionType *funcType) {
+node_ptr_t
+Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *funcType) {
     ENTER("GeneratorBody");
     const AST::node_ptr_t &bodyAst = funcAst->atAs<AST::StmtBlockLoad>(1);
-    const auto &bodyStmts         = bodyAst->atAs<AST::RepeatedLoad>(0);
+    const auto &bodyStmts          = bodyAst->atAs<AST::RepeatedLoad>(0);
 
     // The head writes the stream type, and it is what says what one `yield` hands out. A statement
     // shape this machine does not build is a broken invariant, guarded where the statement walk
@@ -5765,9 +5794,7 @@ node_ptr_t Builder::visitGeneratorBody(
     // The body of a generator `loop` is cut at its `yield`, and its last statement writes the next
     // state value. A body that does not is a rule the reader has to be told, not a defect.
     const auto reportLoopBodyShape = [&](const AST::node_ptr_t &atNode) -> void {
-        diags_->of(SemanticDiag::LoopBodyNeedsNextState)
-            .at(atNode->load()->tokenRange())
-            .commit();
+        diags_->of(SemanticDiag::LoopBodyNeedsNextState).at(atNode->load()->tokenRange()).commit();
         throw BuildAbortException();
     };
     // A local that lives across a `yield` is a cell of the body (see `addTypedCell`), so there is
@@ -5783,10 +5810,10 @@ node_ptr_t Builder::visitGeneratorBody(
             .commit();
         throw BuildAbortException();
     }
-    auto *stream           = static_cast<StreamType *>(exit);
-    Type *elemType         = stream->elemType();
-    FunctionType *stepType = stream->stepType();
-    Type *answerType       = TupleType::nullable(TupleType::create({elemType, exit}));
+    auto *stream             = static_cast<StreamType *>(exit);
+    Type *elemType           = stream->elemType();
+    FunctionType *stepType   = stream->stepType();
+    Type *answerType         = TupleType::nullable(TupleType::create({elemType, exit}));
     const AST::node_ptr_t at = bodyStmts->size() > 0 ? bodyStmts->at(0) : bodyAst;
     // The generator's head writes the `sync` of its body: the machine's own blocks take the same
     // one, so a write between two `yield`s is ordered by the same rule as any other (3.4).
@@ -5804,7 +5831,7 @@ node_ptr_t Builder::visitGeneratorBody(
         setOriginFromAst(context_, node, ast, camel::source::OriginKind::GctNode, what);
         return node;
     };
-    const auto readCell = [&](const std::string &name) { return tree_->makeDRef(name); };
+    const auto readCell  = [&](const std::string &name) { return tree_->makeDRef(name); };
     const auto writeCell = [&](const std::string &name, node_ptr_t value) {
         node_ptr_t link = tree_->makeLink(2);
         *link << tree_->makeDRef("__assn__") << readCell(name) << value;
@@ -5849,7 +5876,7 @@ node_ptr_t Builder::visitGeneratorBody(
     // The cells: `pc`, `halt`, then every local of the body in the order it is written. A
     // declaration is hoisted only where what it holds does not depend on the point it stands at
     // -- a constant or a lambda, which reads its cells when it is called and not now.
-    node_ptr_t outer     = makeExec(synced);
+    node_ptr_t outer   = makeExec(synced);
     const auto addCell = [&](const std::string &name, node_ptr_t init, const AST::node_ptr_t &ast) {
         node_ptr_t vari = tree_->makeVari();
         node_ptr_t ref  = tree_->makeNRef(name);
@@ -5862,22 +5889,20 @@ node_ptr_t Builder::visitGeneratorBody(
     // `typeof <that value's expression>`, so the cell has a type and no value yet, and the body
     // that creates the stream evaluates nothing (design principles 5.4). The value is written
     // where the statement is reached, in the arm that reaches it.
-    const auto addCellOfType = [&](const std::string &name,
-                                   Type *type,
-                                   const AST::node_ptr_t &ast) {
-        node_ptr_t ref = tree_->makeNRef(name);
-        *ref << tree_->makeType(type);
-        node_ptr_t vari = tree_->makeVari();
-        *vari << ref;
-        mark(vari, ast, "gct.generator.cell");
-        *outer << vari;
-    };
+    const auto addCellOfType =
+        [&](const std::string &name, Type *type, const AST::node_ptr_t &ast) {
+            node_ptr_t ref = tree_->makeNRef(name);
+            *ref << tree_->makeType(type);
+            node_ptr_t vari = tree_->makeVari();
+            *vari << ref;
+            mark(vari, ast, "gct.generator.cell");
+            *outer << vari;
+        };
     // The same cell, typed by the expression whose value it will hold.
-    const auto addTypedCell = [&](const std::string &name,
-                                  const node_ptr_t &expr,
-                                  const AST::node_ptr_t &ast) {
-        addCellOfType(name, TypeOfType::create(expr), ast);
-    };
+    const auto addTypedCell =
+        [&](const std::string &name, const node_ptr_t &expr, const AST::node_ptr_t &ast) {
+            addCellOfType(name, TypeOfType::create(expr), ast);
+        };
     // The body's declarations that became cells: the statement that writes each, where it stands
     // in `bodyStmts`, and the cell's name. A cell is written where its declaration stands, so an
     // arm that starts after that statement finds it written and a read that stands before it is
@@ -6033,21 +6058,19 @@ node_ptr_t Builder::visitGeneratorBody(
                         return;
                     }
                 }
-                const bool isStmt =
-                    stmt->type() == AST::LoadType::Stmt;
+                const bool isStmt = stmt->type() == AST::LoadType::Stmt;
                 const auto stmtType =
                     isStmt ? stmt->loadAs<AST::StmtLoad>()->stmtType() : AST::StmtType::Expr;
                 if (isStmt && stmtType == AST::StmtType::Exit &&
                     stmt->loadAs<AST::ExitStmtLoad>()->exitType() == AST::ExitType::Yield) {
                     // The answer: the element and the stream that continues after this point.
                     const auto &values = stmt->atAs<AST::RepeatedLoad>(0);
-                    // Not reachable from source today: the statement parser requires an expression after
-                    // `yield`, so a bare `yield` is a syntax error before this point. The refusal stays
-                    // because everything below reads `values`; it is a guard on the shape of the node,
-                    // not a gate this version chose to keep shut.
-                    // `yield a, b` hands out the tuple `(a, b)`, the same element `yield (a, b)`
-                    // writes. A `yield` with no value has no element to hand out and keeps the
-                    // named refusal.
+                    // Not reachable from source today: the statement parser requires an expression
+                    // after `yield`, so a bare `yield` is a syntax error before this point. The
+                    // refusal stays because everything below reads `values`; it is a guard on the
+                    // shape of the node, not a gate this version chose to keep shut. `yield a, b`
+                    // hands out the tuple `(a, b)`, the same element `yield (a, b)` writes. A
+                    // `yield` with no value has no element to hand out and keeps the named refusal.
                     if (values->size() == 0) {
                         GUARD(false, "a `yield` with no value reached the generator machine");
                     }
@@ -6108,10 +6131,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         }
                         continue;
                     }
-                    if (std::any_of(
-                            hoisted.begin(),
-                            hoisted.end(),
-                            [&](const HoistedCell &cell) { return cell.decl == stmt.get(); })) {
+                    if (std::any_of(hoisted.begin(), hoisted.end(), [&](const HoistedCell &cell) {
+                            return cell.decl == stmt.get();
+                        })) {
                         const auto &decl  = stmt->loadAs<AST::DataDeclLoad>();
                         const auto &inits = stmt->atAs<AST::RepeatedLoad>(1);
                         for (size_t k = 0; k < decl->refs().size(); ++k) {
@@ -6132,10 +6154,11 @@ node_ptr_t Builder::visitGeneratorBody(
                         isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
                         stmt->at(0)->type() == AST::LoadType::Data &&
                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::IfExpr;
-                    const bool isMatch =
-                        isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
-                        stmt->at(0)->type() == AST::LoadType::Data &&
-                        stmt->at(0)->loadAs<AST::DataLoad>()->dataType() == AST::DataType::MatchExpr;
+                    const bool isMatch = isStmt && stmtType == AST::StmtType::Expr &&
+                                         stmt->size() > 0 &&
+                                         stmt->at(0)->type() == AST::LoadType::Data &&
+                                         stmt->at(0)->loadAs<AST::DataLoad>()->dataType() ==
+                                             AST::DataType::MatchExpr;
                     const bool isLoop =
                         isStmt && stmtType == AST::StmtType::Expr && stmt->size() > 0 &&
                         stmt->at(0)->type() == AST::LoadType::Data &&
@@ -6153,7 +6176,9 @@ node_ptr_t Builder::visitGeneratorBody(
                             popScope();
                             return;
                         }
-                        GUARD(false, "a statement the generator body does not build reached the machine");
+                        GUARD(
+                            false,
+                            "a statement the generator body does not build reached the machine");
                     }
                     if (isLoop) {
                         // A `while` loop whose body writes a `yield`. The pull that hands an
@@ -6161,9 +6186,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         // be restarted from the top nor be left as one stretch: what the loop
                         // carries is one cell, its body is an arm of its own, and the arm after
                         // the body goes back to the condition.
-                        const auto &loopAst  = stmt->at(0);
-                        const auto &loopLoad = loopAst->loadAs<AST::LoopExprLoad>();
-                        const auto &inits    = loopAst->atAs<AST::RepeatedLoad>(0);
+                        const auto &loopAst        = stmt->at(0);
+                        const auto &loopLoad       = loopAst->loadAs<AST::LoopExprLoad>();
+                        const auto &inits          = loopAst->atAs<AST::RepeatedLoad>(0);
                         const AST::node_ptr_t init = inits->size() == 1 ? inits->at(0) : nullptr;
                         if (loopLoad->hasFor()) {
                             // `loop s = 0 for x in xs do ...`: the machine carries the sequence
@@ -6171,10 +6196,13 @@ node_ptr_t Builder::visitGeneratorBody(
                             // and the fold state the body hands on. Each round writes the element
                             // at that position into the binder's cell before the body runs.
                             const auto &seqAst = loopAst->optAtAs<AST::DataLoad>(1);
-                            if (seqAst == nullptr || loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
+                            if (seqAst == nullptr ||
+                                loopAst->optAtAs<AST::DataLoad>(2) != nullptr ||
                                 loopLoad->state().size() != 1 || init == nullptr ||
                                 !hoistable(init)) {
-                                GUARD(false, "a `loop ... for` clause reached the generator machine");
+                                GUARD(
+                                    false,
+                                    "a `loop ... for` clause reached the generator machine");
                             }
                             const std::string stateName = loopLoad->state()[0].toString();
                             if (std::find(cellNames.begin(), cellNames.end(), stateName) ==
@@ -6200,16 +6228,14 @@ node_ptr_t Builder::visitGeneratorBody(
                             const std::string binderName = loopLoad->binder().toString();
                             if (std::find(cellNames.begin(), cellNames.end(), binderName) ==
                                 cellNames.end()) {
-                                // The binder's type is the sequence's element type, written the
-                                // way the language writes it -- `ElementOf<typeof xs>`, a type
-                                // function applied to a `typeof`. `typeof` gives the type of the
-                                // value without evaluating it, so the position is static.
-                                std::vector<Type *> binderArguments = {
-                                    TypeOfType::create(sequence)};
-                                addCellOfType(
-                                    binderName,
-                                    TypeCallType::create("ElementOf", binderArguments),
-                                    stmt);
+                                // The binder's type is the type of the element the loop reads: the
+                                // same expression the loop writes into the cell, asked with
+                                // `typeof` (design principles 5.6: `typeof` gives the type a value
+                                // would have and evaluates nothing), so the position is static.
+                                // What an element of a container is, is what indexing it gives --
+                                // the same rule the library's `ElementOf` writes in Camel -- so the
+                                // comprehension needs no type function of its own.
+                                addTypedCell(binderName, elementAt(), stmt);
                                 cellNames.push_back(binderName);
                             }
                             const int afterPc = newArm();
@@ -6233,7 +6259,8 @@ node_ptr_t Builder::visitGeneratorBody(
                                 mark(brch, stmt, "gct.generator.branch");
                                 *arms[static_cast<size_t>(condPc)] << brch;
                             }
-                            *arms[static_cast<size_t>(bodyPc)] << writeCell(binderName, elementAt());
+                            *arms[static_cast<size_t>(bodyPc)]
+                                << writeCell(binderName, elementAt());
                             fill(
                                 bodyPc,
                                 loopAst->atAs<AST::StmtBlockLoad>(3)->atAs<AST::RepeatedLoad>(0),
@@ -6244,8 +6271,7 @@ node_ptr_t Builder::visitGeneratorBody(
                                 node_ptr_t nextIndex = tree_->makeLink(2);
                                 *nextIndex << tree_->makeDRef("__add__") << readCell(idxName)
                                            << intLiteral(1);
-                                *arms[static_cast<size_t>(stepPc)]
-                                    << writeCell(idxName, nextIndex);
+                                *arms[static_cast<size_t>(stepPc)] << writeCell(idxName, nextIndex);
                                 *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
                             }
                             *exec << writeCell(seqName, visitData(seqAst));
@@ -6264,7 +6290,10 @@ node_ptr_t Builder::visitGeneratorBody(
                         // the arm boundary is the next step).
                         if (inits->size() == 0 || loopLoad->state().empty() || loopLoad->hasFor() ||
                             inits->size() != loopLoad->state().size()) {
-                            GUARD(false, "a `loop` with no state, or a state with no first value, reached the machine");
+                            GUARD(
+                                false,
+                                "a `loop` with no state, or a state with no first value, reached "
+                                "the machine");
                         }
                         // One cell per carried name. The body already may have a cell of that name
                         // (a `var` of its own): the loop carries that one cell, and the value below
@@ -6273,11 +6302,11 @@ node_ptr_t Builder::visitGeneratorBody(
                         // type.
                         std::vector<std::string> stateNames;
                         for (size_t k = 0; k < loopLoad->state().size(); ++k) {
-                            const std::string name = loopLoad->state()[k].toString();
+                            const std::string name         = loopLoad->state()[k].toString();
                             const AST::node_ptr_t eachInit = inits->at(k);
-                            // The initial value is evaluated where the loop stands (see the write below),
-                            // once, before the first condition: a value computed there, or read from a
-                            // local, is the first round's state like a constant is.
+                            // The initial value is evaluated where the loop stands (see the write
+                            // below), once, before the first condition: a value computed there, or
+                            // read from a local, is the first round's state like a constant is.
                             if (std::find(cellNames.begin(), cellNames.end(), name) ==
                                 cellNames.end()) {
                                 addTypedCell(name, visitData(eachInit), stmt);
@@ -6298,9 +6327,9 @@ node_ptr_t Builder::visitGeneratorBody(
                         // and the step back to the condition.
                         const int afterPc = newArm();
                         fill(afterPc, stmts, i + 1, next, nextState);
-                        const int condPc = newArm();
-                        const int bodyPc = newArm();
-                        const int stepPc = newArm();
+                        const int condPc    = newArm();
+                        const int bodyPc    = newArm();
+                        const int stepPc    = newArm();
                         const auto &condAst = loopAst->optAtAs<AST::DataLoad>(2);
                         if (condAst) {
                             node_ptr_t brch = tree_->makeBrch();
@@ -6326,8 +6355,9 @@ node_ptr_t Builder::visitGeneratorBody(
                             stepPc,
                             stateName);
                         *arms[static_cast<size_t>(stepPc)] << jumpTo(condPc);
-                        // The pull that reaches the loop enters it after writing the state the first round starts
-                        // from: the initial value is evaluated here, where the loop stands.
+                        // The pull that reaches the loop enters it after writing the state the
+                        // first round starts from: the initial value is evaluated here, where the
+                        // loop stands.
                         for (size_t k = 0; k < stateNames.size(); ++k) {
                             *exec << writeCell(stateNames[k], visitData(inits->at(k)));
                         }
@@ -6341,11 +6371,11 @@ node_ptr_t Builder::visitGeneratorBody(
                         const auto &matchAst = stmt->at(0);
                         const int afterMatch = newArm();
                         fill(afterMatch, stmts, i + 1, next, nextState);
-                        // The matched value outlives the `yield`s the arms are cut at, so it is put in
-                        // a cell where the `match` stands and the branch reads the cell. A cell declared
-                        // in the walk is captured with the others (the capture loop reads every name in
-                        // `cellNames`, which the walk filled), so an arm that starts after a `yield`
-                        // still finds it written.
+                        // The matched value outlives the `yield`s the arms are cut at, so it is put
+                        // in a cell where the `match` stands and the branch reads the cell. A cell
+                        // declared in the walk is captured with the others (the capture loop reads
+                        // every name in `cellNames`, which the walk filled), so an arm that starts
+                        // after a `yield` still finds it written.
                         node_ptr_t subject = visitData(matchAst->atAs<AST::DataLoad>(0));
                         const std::string subjectCell =
                             "__gen_match_subject_" + std::to_string(cellNames.size());
@@ -6355,12 +6385,11 @@ node_ptr_t Builder::visitGeneratorBody(
                         node_ptr_t brch = tree_->makeBrch();
                         *brch << readCell(subjectCell);
                         for (const auto &caseNode : *matchAst->atAs<AST::RepeatedLoad>(1)) {
-                            const auto &pattern = caseNode->at(0);
+                            const auto &pattern       = caseNode->at(0);
                             const bool writtenPattern = pattern->type() == AST::LoadType::Data;
                             const auto patternKind =
-                                writtenPattern
-                                    ? pattern->loadAs<AST::DataLoad>()->dataType()
-                                    : AST::DataType::Literal;
+                                writtenPattern ? pattern->loadAs<AST::DataLoad>()->dataType()
+                                               : AST::DataType::Literal;
                             const bool isEnumPattern =
                                 writtenPattern && patternKind == AST::DataType::EnumPattern;
                             const bool isRefPattern =
@@ -6392,15 +6421,13 @@ node_ptr_t Builder::visitGeneratorBody(
                                             const auto tag = enumType->decl()->findVariant(
                                                 enumPattern->ref().ident());
                                             if (tag.has_value()) {
-                                                variant =
-                                                    &enumType->decl()->variants()[*tag];
+                                                variant = &enumType->decl()->variants()[*tag];
                                             }
                                         }
                                     }
                                 }
                                 for (size_t k = 0; k < enumPattern->fields().size(); ++k) {
-                                    const AST::EnumPatternField &field =
-                                        enumPattern->fields()[k];
+                                    const AST::EnumPatternField &field = enumPattern->fields()[k];
                                     patternFields.push_back(field.name);
                                     if (field.binding.empty()) {
                                         patternBindings.push_back(std::string());
@@ -6411,12 +6438,10 @@ node_ptr_t Builder::visitGeneratorBody(
                                     patternBindings.push_back(holder);
                                     Type *fieldType = nullptr;
                                     if (variant != nullptr) {
-                                        const auto at =
-                                            enumPattern->structShape()
-                                                ? variant->findField(field.name)
-                                                : std::optional<size_t>(k);
-                                        if (at.has_value() &&
-                                            *at < variant->fieldCount()) {
+                                        const auto at = enumPattern->structShape()
+                                                            ? variant->findField(field.name)
+                                                            : std::optional<size_t>(k);
+                                        if (at.has_value() && *at < variant->fieldCount()) {
                                             fieldType = variant->fieldTypes[*at];
                                         }
                                     }
@@ -6435,10 +6460,10 @@ node_ptr_t Builder::visitGeneratorBody(
                                 // `case v` binds the payload of a `T?` / `T!`; `case error e` binds
                                 // the error of a `T!`, and that one is not the payload. Every
                                 // fallible value carries the one `Error` structure (design
-                                // principles 3.9), and the prelude declares that type under the name
-                                // `Error`, so the cell a `case error e` binds is typed by reading the
-                                // declaration, the way a written annotation would.
-                                const bool isError = pattern->size() > 0;
+                                // principles 3.9), and the prelude declares that type under the
+                                // name `Error`, so the cell a `case error e` binds is typed by
+                                // reading the declaration, the way a written annotation would.
+                                const bool isError     = pattern->size() > 0;
                                 const std::string name = (isError ? pattern->front() : pattern)
                                                              ->loadAs<AST::RefDataLoad>()
                                                              ->ref()
@@ -6494,7 +6519,7 @@ node_ptr_t Builder::visitGeneratorBody(
                             }
                             if (isEnumPattern) {
                                 const auto enumPattern = pattern->loadAs<AST::EnumPatternLoad>();
-                                node_ptr_t gCase = tree_->makeEnumCase(
+                                node_ptr_t gCase       = tree_->makeEnumCase(
                                     enumPattern->ref().toString(),
                                     patternFields,
                                     patternBindings,
@@ -6532,7 +6557,7 @@ node_ptr_t Builder::visitGeneratorBody(
                         0,
                         after,
                         nextState);
-                    const int elsePc = newArm();
+                    const int elsePc      = newArm();
                     const auto &elseBlock = ifAst->optAtAs<AST::StmtBlockLoad>(2);
                     if (elseBlock) {
                         fill(elsePc, elseBlock->atAs<AST::RepeatedLoad>(0), 0, after, nextState);
@@ -6557,7 +6582,7 @@ node_ptr_t Builder::visitGeneratorBody(
                 // stands, and the write is the arm's last step.
                 node_ptr_t value = visitStmt(stmt);
                 if (!nextState.empty() && i + 1 == stmts->size()) {
-                    last = value;
+                    last     = value;
                     lastStmt = stmt;
                 } else {
                     *exec << value;
@@ -6571,15 +6596,15 @@ node_ptr_t Builder::visitGeneratorBody(
                 if (last == nullptr) {
                     reportLoopBodyShape(from < stmts->size() ? stmts->at(from) : stmts);
                 }
-                // One name takes the value itself; a list of names takes the tuple the body built, one
-                // element per name -- the shape a loop that carries several values hands on:
+                // One name takes the value itself; a list of names takes the tuple the body built,
+                // one element per name -- the shape a loop that carries several values hands on:
                 // `(i + 1, s + i)` for `loop i = 0, s = 0 ...`. The elements are built where the
                 // writes stand, one visit each.
                 if (nextState.find(',') == std::string::npos) {
                     *exec << writeCell(nextState, last);
                 } else {
                     std::vector<std::string> names;
-                    size_t at = 0;
+                    size_t at  = 0;
                     size_t end = 0;
                     while (at <= nextState.size()) {
                         end = nextState.find(',', at);
@@ -6612,8 +6637,7 @@ node_ptr_t Builder::visitGeneratorBody(
                     // write already put there.
                     std::vector<std::string> nextCells;
                     for (size_t k = 0; k < names.size(); ++k) {
-                        const std::string nextName =
-                            "__gen_next_" + std::to_string(idIndex_++);
+                        const std::string nextName = "__gen_next_" + std::to_string(idIndex_++);
                         addTypedCell(nextName, readCell(names[k]), lastStmt);
                         cellNames.push_back(nextName);
                         nextCells.push_back(nextName);
@@ -6646,8 +6670,7 @@ node_ptr_t Builder::visitGeneratorBody(
         *touch << readCell(cellNames[i]);
         *stepBody << touch;
     }
-    node_ptr_t loopNode =
-        tree_->makeLoop(camel::core::LoopKind::While, {outName}, std::string());
+    node_ptr_t loopNode = tree_->makeLoop(camel::core::LoopKind::While, {outName}, std::string());
     mark(loopNode, at, "gct.generator.loop");
     *loopNode << declaredValue(tree_->makeData(Data::null()), answerType, at);
     node_ptr_t condition = makeExec();
@@ -7110,7 +7133,6 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
 
     FunctionTypeFactory factory;
 
-
     std::unordered_set<string> paramNames;
 
     // The parameters of a lambda that leave their type out (design principles 5.9). The
@@ -7154,7 +7176,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         }
         if (const auto bound = typeScope_->get(Reference(name)); bound.has_value()) {
             return (*bound)->code() == TypeCode::TypeVar ? TypeCallType::makeExpand(*bound)
-                                                        : nullptr;
+                                                         : nullptr;
         }
         if (signatureVisit_ && !typeScope_->has(Reference(name), false)) {
             // A name the declaration's head does not declare, written after `..` in a parameter
@@ -7181,9 +7203,9 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
     std::string lastDefaultName;
     const auto &withParams = *ast->atAs<AST::RepeatedLoad>(0);
     for (size_t wi = 0; wi < withParams.size(); ++wi) {
-        const auto &paramPair = withParams[wi];
-        const auto &paramLoad = paramPair->loadAs<AST::NamedPairLoad>();
-        const bool isVar     = paramLoad->isVar();
+        const auto &paramPair     = withParams[wi];
+        const auto &paramLoad     = paramPair->loadAs<AST::NamedPairLoad>();
+        const bool isVar          = paramLoad->isVar();
         const Reference &paramRef = paramLoad->getRef();
         const string &name        = paramRef.ident();
         if (paramLoad->isRest()) {
@@ -7192,11 +7214,11 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
                 factory.addWithArg(name + "_" + std::to_string(wi), pack, false);
                 continue;
             }
-            // A pack among the `with` parameters (`with <..args>`): last, like the rest parameter of
-            // the ordinary ones, and typed or not. A pack that writes a type (`with <..args: T>`)
-            // takes `with` arguments of that type, on the rule an ordinary parameter follows one
-            // type further out (design principles 4.4, 5.6); `with <..args>` takes any type. What
-            // the body may do with the pack is built where the body is.
+            // A pack among the `with` parameters (`with <..args>`): last, like the rest parameter
+            // of the ordinary ones, and typed or not. A pack that writes a type (`with <..args:
+            // T>`) takes `with` arguments of that type, on the rule an ordinary parameter follows
+            // one type further out (design principles 4.4, 5.6); `with <..args>` takes any type.
+            // What the body may do with the pack is built where the body is.
             if (wi + 1 != withParams.size()) {
                 diags_->of(SemanticDiag::RestParameterNotLast)
                     .at(paramLoad->tokenRange())
@@ -7211,7 +7233,8 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             }
             defaults.with.push_back({nullptr, camel::source::kInvalidOriginId});
             factory.addWithRest(
-                name, paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
+                name,
+                paramPair->size() > 0 ? visitType(paramPair->at(0)) : nullptr);
             // The pack takes one slot in the numbering of the parameters the function wrote, which
             // is the numbering the unwritten parameters of a lambda are recorded against (`with`
             // parameters first): a parameter written after it (an ordinary rest parameter, say) is
@@ -7219,7 +7242,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             ++paramIndex;
             continue;
         }
-        Type *type                = nullptr;
+        Type *type = nullptr;
         if (paramLoad->isConstas()) {
             // A `constas` parameter of the `with` list is a value a call gives in angle brackets
             // (design principles 5.4); it writes its type and may default.
@@ -7365,7 +7388,7 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
             continue;
         }
         const bool isVar = paramLoad->isVar();
-        Type *type = nullptr;
+        Type *type       = nullptr;
         {
             dimBindAllowed_ = signature;
             type            = paramTypeOf(paramPair, name);
@@ -7426,13 +7449,13 @@ Type *Builder::visitFuncType(const AST::node_ptr_t &ast, Tree::ParameterDefaults
         // author's line and cannot be written any other way. What the rule writes is carried here
         // from the rule's own text (`src/parse/ast/builder.cpp`, `visitRuleDecl`), so the check
         // reads the whole declaration and not the one side it happens to be building.
-        const auto &acrossTheRule =
-            ast->loadAs<AST::FuncTypeLoad>()->typeParamsWrittenElsewhere();
+        const auto &acrossTheRule = ast->loadAs<AST::FuncTypeLoad>()->typeParamsWrittenElsewhere();
         pendingUnusedHeadVars_.clear();
         for (const std::string &name : declaredTypeVars_) {
             if (std::find(used.begin(), used.end(), name) == used.end() &&
                 !writtenHeadVars_.contains(name) &&
-                std::find(acrossTheRule.begin(), acrossTheRule.end(), name) == acrossTheRule.end()) {
+                std::find(acrossTheRule.begin(), acrossTheRule.end(), name) ==
+                    acrossTheRule.end()) {
                 pendingUnusedHeadVars_.push_back(name);
             }
         }
@@ -7560,27 +7583,48 @@ void Builder::packPatternNamesOf(const AST::node_ptr_t &typeAst, std::vector<std
     // The names the case has written so far, and the types the scopes and the imports answer,
     // decide which of the pattern's names are new (design principles 5.4 binds a dimension name the
     // same way: a name a type here already answers is a reference).
-    const auto binds = [&](const std::string &name) {
-        if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
-            return false;
-        }
-        if (typeScope_->get(Reference(name)).has_value()) {
-            return false;
-        }
-        return module_ == nullptr || !module_->getImportedType(Reference(name)).has_value();
-    };
     const auto &members = *typeAst->atAs<AST::RepeatedLoad>(0);
     // The members the pattern writes out bind first, then the rest binds what is left of the pack.
     for (size_t i = 0; i + 1 < members.size(); ++i) {
         const std::string member = writtenNameOf(members.at(i));
-        if (!member.empty() && binds(member)) {
+        if (!member.empty() && patternNameIsNew(member, bound)) {
             bound.push_back(member);
         }
     }
     const std::string rest = packRestNameOf(members.at(members.size() - 1));
-    if (!rest.empty() && binds(rest)) {
+    if (!rest.empty() && patternNameIsNew(rest, bound)) {
         bound.push_back(rest);
     }
+}
+
+const AST::DimGroup *Builder::arrayPatternDimsOf(const AST::node_ptr_t &typeAst) {
+    if (typeAst == nullptr || typeAst->type() != AST::LoadType::Type ||
+        typeAst->loadAs<AST::TypeLoad>()->typeType() != AST::TypeType::Array) {
+        return nullptr;
+    }
+    const auto &groups = typeAst->loadAs<AST::ArrayTypeLoad>()->dims();
+    if (groups.size() != 1) {
+        return nullptr;
+    }
+    const AST::DimGroup &group = groups.front();
+    // A pack is the trailing dimensions; a case pattern that states extents before it states a
+    // shape, which is what an identity case selects.
+    if (group.pack == AST::DimPack::None || !group.extents.empty() || group.packRepeated ||
+        group.packItem + 1 != group.itemCount) {
+        return nullptr;
+    }
+    return &group;
+}
+
+bool Builder::patternNameIsNew(
+    const std::string &name, const std::vector<std::string> &bound) const {
+    if (std::find(bound.begin(), bound.end(), name) != bound.end()) {
+        return false;
+    }
+    if (typeScope_->get(Reference(name)).has_value()) {
+        return false;
+    }
+    return module_ == nullptr || !module_->getImportedType(Reference(name)).has_value();
 }
 
 /*
@@ -7602,16 +7646,45 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
             throw BuildAbortException();
         }
         MatchTypeArm arm;
-        const auto caseLoad         = armAst->loadAs<AST::TypeCaseLoad>();
+        const auto caseLoad = armAst->loadAs<AST::TypeCaseLoad>();
         // A case that writes the rest of a pack (`case (W, ...Rest)`) takes the subject pack apart,
         // and the names it writes stand for the members it reached (design principles 5.6: a type
-        // pack takes apart the way a value pack does). They are bound in this case alone -- in the
-        // patterns and in the type the case gives -- and a name a type here already answers is that
-        // type, as a dimension name written once too often is a reference and not a new name (5.4).
+        // pack takes apart the way a value pack does). A case that writes an array whose dims pack
+        // it names (`case E[...Dims]`) or leaves anonymous (`case E[...]`) takes an array type
+        // apart the same way: `E` is the element type and `Dims` the dimensions after it. They are
+        // bound in this case alone -- in the patterns and in the type the case gives -- and a name
+        // a type here already answers is that type, as a dimension name written once too often is a
+        // reference and not a new name (5.4).
+        const auto &patterns = caseLoad->patterns();
         std::vector<std::string> written;
-        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
-            packPatternNamesOf(pattern.type, written);
+        std::vector<bool> takesArrayApart(patterns.size(), false);
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            packPatternNamesOf(patterns[i].type, written);
+            // The element name is decided here, before the scope holds it: a name that is already
+            // a type here would make the case an identity pattern, which selects one type.
+            const AST::DimGroup *dims = arrayPatternDimsOf(patterns[i].type);
+            const std::string element =
+                dims != nullptr ? writtenNameOf(patterns[i].type->at(0)) : std::string();
+            if (dims != nullptr && !element.empty() && patternNameIsNew(element, written)) {
+                written.push_back(element);
+                takesArrayApart[i] = true;
+            }
         }
+        // The dimensions a case binds are the case's own: the pattern binds the pack and the type
+        // the case gives may put it back (`E[?, ...Dims]`) or ask how many there are (`int[Dims]`),
+        // and nothing outside the case sees either.
+        struct CaseDimsScope {
+            Builder &self;
+            std::shared_ptr<std::set<std::string>> packs;
+            bool bind;
+            bool entered = false;
+            ~CaseDimsScope() {
+                if (entered) {
+                    self.dimPacks_       = std::move(packs);
+                    self.dimBindAllowed_ = bind;
+                }
+            }
+        } caseDimsScope{*this, dimPacks_, dimBindAllowed_};
         struct PatternScope {
             Builder &self;
             scope_ptr_t<Reference, Type *> outer;
@@ -7629,11 +7702,22 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
                 typeScope_->insert(Reference(name), TypeVarType::create(name, false));
             }
         }
-        for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
-            const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
+        for (size_t i = 0; i < patterns.size(); ++i) {
+            const AST::TypeCasePattern &pattern = patterns[i];
+            const GCT::TypeCaseKind kind        = static_cast<GCT::TypeCaseKind>(pattern.kind);
             if (kind == GCT::TypeCaseKind::Identity) {
                 if (isPackPattern(pattern.type)) {
                     arm.packPatterns.push_back(visitType(pattern.type));
+                } else if (takesArrayApart[i]) {
+                    // The pack name is this case's to bind; the dims it stands for are read from
+                    // the subject when the case selects it (`takeArrayApart`).
+                    caseDimsScope.entered = true;
+                    dimPacks_          = dimPacks_ != nullptr
+                                             ? std::make_shared<std::set<std::string>>(*dimPacks_)
+                                             : std::make_shared<std::set<std::string>>();
+                    const bool binding = std::exchange(dimBindAllowed_, true);
+                    arm.arrayPatterns.push_back(visitType(pattern.type));
+                    dimBindAllowed_ = binding;
                 } else if (Type *identity = visitType(pattern.type)) {
                     arm.identities.push_back(identity);
                 }
@@ -7731,7 +7815,19 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
                         types.size()));
             throw BuildAbortException();
         }
-        Type *applied = typeFunc->apply(types);
+        Type *applied = nullptr;
+        if (std::any_of(types.begin(), types.end(), containsTypeOf)) {
+            // Applying the declaration now would put an unresolved `typeof` inside an ordinary
+            // value type (a named struct, an array, a tuple, ...). Consumers of such a type quite
+            // correctly use it before the graph builder's type-expression resolution: a struct
+            // literal would check its fields against the placeholder. Keep the declaration and
+            // its arguments as a type application instead; `resolveTypeNode` evaluates it after
+            // each `typeof` has become the expression's actual type.
+            applied =
+                TypeCallType::makeTypeFunctionCall(const_cast<TypeFunctionType *>(typeFunc), types);
+        } else {
+            applied = typeFunc->apply(types);
+        }
         // An argument that is still a `typeof` is not concrete yet: `typeof e` is a type
         // expression (ruling of 2026-10-31), and the graph builder resolves it where the type is
         // used, without evaluating `e`. Reporting "not applicable" here would refuse the
@@ -7802,7 +7898,8 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
     // key of a map are refused by the key rules already ('values of this type have no order');
     // this is the value of a map, which no key rule looks at.
     if (const CollectionType *coll = asCollectionTypeOrPrototype(res); coll != nullptr) {
-        if (Type *value = coll->valueType(); value != nullptr && value->code() == TypeCode::Stream) {
+        if (Type *value = coll->valueType();
+            value != nullptr && value->code() == TypeCode::Stream) {
             diags_->of(SemanticDiag::StreamInContainer)
                 .at(ast->load()->tokenRange())
                 .commit(value->toString(), "a map");
@@ -7852,7 +7949,9 @@ std::shared_ptr<const camel::core::type::ExtentExpr> exprOfExtent(const ExtentFo
         std::shared_ptr<const ExtentExpr> term = ExtentExpr::makeName(name);
         if (coefficient != 1) {
             term = ExtentExpr::make(
-                ExtentExpr::Op::Mul, ExtentExpr::makeConstant(coefficient), std::move(term));
+                ExtentExpr::Op::Mul,
+                ExtentExpr::makeConstant(coefficient),
+                std::move(term));
         }
         sum = sum ? ExtentExpr::make(ExtentExpr::Op::Add, std::move(sum), std::move(term))
                   : std::move(term);
@@ -7862,15 +7961,17 @@ std::shared_ptr<const camel::core::type::ExtentExpr> exprOfExtent(const ExtentFo
     }
     if (form.constant() != 0) {
         sum = ExtentExpr::make(
-            ExtentExpr::Op::Add, std::move(sum), ExtentExpr::makeConstant(form.constant()));
+            ExtentExpr::Op::Add,
+            std::move(sum),
+            ExtentExpr::makeConstant(form.constant()));
     }
     return sum;
 }
 
 /// `lhs op rhs` where the result is no linear form: an expression, folded when both sides are
 /// constants.
-ExtentForm computedExtent(
-    camel::core::type::ExtentExpr::Op op, const ExtentForm &lhs, const ExtentForm &rhs) {
+ExtentForm
+computedExtent(camel::core::type::ExtentExpr::Op op, const ExtentForm &lhs, const ExtentForm &rhs) {
     using camel::core::type::ExtentExpr;
     if (lhs.isUnknown() || rhs.isUnknown()) {
         return ExtentForm::unknown();
@@ -7969,6 +8070,13 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
             }
             return ExtentForm::linear({{name, 1}});
         }
+        if (dimPacks_ != nullptr && dimPacks_->contains(name)) {
+            // A dimension pack written where an extent stands is how many dimensions it stands for
+            // -- the count `indices` walks in the value layer, spelled with the name the type
+            // already gave the pack: `int[rest]` is the array of the rank `rest` reaches, and a
+            // `match type` case that binds `Dims` writes `int[Dims]` (design principles 5.4).
+            return ExtentForm::linear({{name, 1}});
+        }
         if (dimBindAllowed_ && dimNames_ != nullptr) {
             // The first plain name in a parameter type binds the dimension; the ones after it
             // in the same signature write the same extent (design principles 5.4).
@@ -8006,9 +8114,11 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
             }
         }
         node_ptr_t call = visitData(ast);
-        return ExtentForm::computed(camel::core::type::ExtentExpr::makeCall(
-            std::shared_ptr<const void>(call, [](const void *) {}), std::move(names),
-            ast->load()->geneCode()));
+        return ExtentForm::computed(
+            camel::core::type::ExtentExpr::makeCall(
+                std::shared_ptr<const void>(call, [](const void *) {}),
+                std::move(names),
+                ast->load()->geneCode()));
     }
     case AST::DataType::UnaryExpr: {
         const auto &unary = ast->loadAs<AST::UnaryExprLoad>();
@@ -8017,8 +8127,10 @@ camel::core::type::ExtentForm Builder::visitExtent(const AST::node_ptr_t &ast) {
         }
         const ExtentForm inner = visitExtent(ast->at(0));
         if (inner.isComputed()) {
-            return ExtentForm::computed(camel::core::type::ExtentExpr::make(
-                camel::core::type::ExtentExpr::Op::Neg, inner.expression()));
+            return ExtentForm::computed(
+                camel::core::type::ExtentExpr::make(
+                    camel::core::type::ExtentExpr::Op::Neg,
+                    inner.expression()));
         }
         return scaleExtent(inner, -1);
     }

@@ -406,3 +406,16 @@ These forms are all ruled ([rules language v2](../../design/rewrite/v2.cn.md), s
 - [46 Rules](../../technical/46_rules.md): what rules and facts look like in the implementation (a technical record)
 - [Standard library reference](../../stdlib-reference.md): every function of the `rewrite` module (`rewrite`, `saturate`, `extract`, `check`, `run`, `explain`, `why_not`, the four readers)
 - [Chapter 17 · Teaching the compiler a law](../../tutorial/17_teaching_a_law.en.md): writing a rule from scratch and checking it with `check`
+## Choosing operand matching
+
+The invocation can require the operand positions written in its pattern:
+`f->rewrite<rules, ordered: true>`. The same `ordered: bool = false` option is
+available on `run` and `saturate`. It preserves positions at every nested pattern
+node; a failed guard does not enable operand exchange. Repeated parameters retain
+the engine's existing equality contract. Omission preserves the default search
+using declared commutativity and exact associativity.
+
+Ordered saturation still searches existing writings and permits explicit
+commutativity rules to add alternatives. Extraction, round budgets, fact domains,
+numeric permissions and deletion guards remain separate choices. The option does
+not prove fault or effect preservation.

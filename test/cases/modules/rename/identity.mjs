@@ -14,6 +14,12 @@
 // rename itself still changes only the module name; the digests are a snapshot of the whole graph,
 // which is what this check is.
 //
+// Recorded once more when a statement's chain place began to be derived from the graph's shape
+// (`docs/design/effects/edges.cn.md` 4.6): a direct `FUNC` call is a statement of its block, so
+// the statements after the `get_env` and `get_cwd` calls in these samples now follow them by a
+// sync edge, with the legacy control edge written beside it. The samples gained that pair and
+// nothing else; their data edges are the ones the previous digests hashed.
+//
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
 //
@@ -40,13 +46,13 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'd4785cc572cb48997b83e6362e7fd4a76fce01ce2d54ff05d298b021442ecc27',
+        expected: 'd6a236f3a28fc6ba368920822b9eda0fd6a4e831adba53fa74afbee3c698578a',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: 'a1f13890de58a4a185feaef24a0cec38558f32832dcb50c5d70b4723377ddb15',
+        expected: '0c5f457573b1a368d19561c712ed37cb43d3598ba1cf7f2307c895b61ec8ae87',
     },
 }
 

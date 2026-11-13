@@ -1,7 +1,6 @@
-// A `var` parameter read by a statement of the same `sync` block: the read is the place the block's
-// chain has for that statement, so the statement follows it, and the write the block makes next
-// follows the statements written before it (docs/design/effects/edges.cn.md 5.3, 5.5). The caller
-// sees the write the block made.
+// A `var` parameter read by a statement of the same `sync` block: the statement occupies the block's
+// chain place and takes the read as a value input. The write the block makes next follows the
+// statements written before it (docs/design/effects/edges.cn.md 4.6, 5.6). The caller sees the write.
 
 func tally(var x: int): int sync {
     println("tally", x)

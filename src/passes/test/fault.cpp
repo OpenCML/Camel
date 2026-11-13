@@ -3,8 +3,8 @@
 
 #include "fault.h"
 
-#include "camel/passes/test/anchor.h"
 #include "../opt/generic/rewrite.h"
+#include "camel/passes/test/anchor.h"
 #include "camel/runtime/draft_session.h"
 
 using camel::passes::test::anchorNode;
@@ -104,21 +104,6 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
     using camel::runtime::DraftEdgeKind;
     using camel::runtime::GCNodeKind;
     camel::runtime::RuntimeGraphDraftSession session(context_, program);
-    // One-off reading: the flags every node of the input graph carries. The `kGCNodeFlagSyncStatement`
-    // mark lives on the committed node, not on the draft, so this is where it can be seen.
-    for (const camel::runtime::GCGraph *graph : program->graphs()) {
-        if (graph == nullptr) {
-            continue;
-        }
-        for (uint32_t node = 0; node < graph->nodeCount(); ++node) {
-            const camel::runtime::GCNode *committed =
-                graph->node(static_cast<camel::runtime::gc_node_ref_t>(node));
-            if (committed != nullptr &&
-                committed->hasFlag(camel::runtime::kGCNodeFlagSyncStatement)) {
-                out << "order_only_effect: marked node=" << node << " graph=" << node << "\n";
-            }
-        }
-    }
     for (camel::runtime::GCGraph *owner : session.collectReachableRuntimeGraphs()) {
         auto &transaction = session.edit(owner);
         auto &draft       = transaction.edit();
@@ -133,9 +118,7 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             if (!uri.starts_with(":io/")) {
                 continue;
             }
-            // The mark the effect carries, before any edge goes: a test reading of this pass has to
-            // show that the node under test is marked, not assume it because the program wrote it in
-            // a `sync` block (a reading that assumes its own instrument works is no reading).
+            // Identify the effect before stripping its credentials.
             out << "order_only_effect: node=" << id << " uri=" << uri
                 << " runtimeFlags=" << static_cast<int>(header->runtimeFlags) << "\n";
             // A node to hang the order edge on: the effect's own chain predecessor when it has one,
@@ -186,9 +169,8 @@ OrderOnlyEffectTestPass::apply(const camel::runtime::Program *program, std::ostr
             // The effect keeps one edge and only one: an order edge out of it, to a node of its own
             // region (an order edge that enters a region breaks edges.cn.md 4.6 first, and that
             // refusal is not the one this instrument is for). Order is not a credential (3.1,
-            // edges.cn.md 1.5; the author struck it on 2026-11-01), so what is left of the effect is
-            // the mark alone, and the order edge is what keeps the node from being dropped as dead
-            // before the credential check sees it.
+            // edges.cn.md 1.5); it only keeps the node from being dropped as dead before the
+            // credential check sees it.
             camel::runtime::gc_node_ref_t other = camel::runtime::kInvalidNodeRef;
             for (camel::runtime::gc_node_ref_t candidate = 0; candidate < draft.nodeSlotCount();
                  ++candidate) {

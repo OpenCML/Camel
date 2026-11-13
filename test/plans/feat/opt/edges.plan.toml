@@ -101,6 +101,14 @@ args = ["${case}", "test::edges_sync_gate"]
 expect_stdout_contains = ["SYNCGATE wrote=1 ctrl=0", "EDGES accepted", "SYNCGATE frozen_sync_edges=1 gates=1 gates_waiting_on_the_chain=1 gates_with_ctrl=0"]
 
 [[tests]]
+name = "sync_chain_place_is_handed_to_a_gate"
+desc = "A three-statement chain A -> B -> C replaces B by a shared pure value. The replacement has real sync and order edges to inherit, so the draft must produce A -> GATE(value) -> C and put the order edge on that GATE, never on the pure value. Exactly one GATE is added; the value's ordinary COPY reader stays direct. A second replacement with no old sync edges must not invent a chain place or another GATE, which separates a legal handover from manufacturing a position."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_sync_gate"]
+expect_stdout_contains = ["EDGES accepted", "SYNCPLACE middle_gate=1 predecessor=1 successor=1 gate_delta=1 shared_value_direct=1 order_on_gate=1 order_on_value=0"]
+expect_output_not_contains = ["refused"]
+
+[[tests]]
 name = "sync_chain_fork_is_refused"
 desc = "The other half of the same rule: one statement follows one other at most *and* one statement follows it. A statement two statements of its block follow is a chain that forks, which is no chain, so a rewrite that leaves the graph in that state -- an inline splice that cannot put a statement in its place without making the graph wait on itself -- is refused by the seal, which names the statement the two follow, rather than freezing a chain the layout may walk one way and silently drop the other."
 case = "../../../cases/opt/generic/generic_passes.cml"

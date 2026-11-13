@@ -77,11 +77,11 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'data-covered GATE retained or return anchor erased');
+ assert(gates.filter(n=>n.id===g.exit).length===1&&gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.kind==='sync'&&e.source===n.id)),'a chain GATE has no successor, or the block-value return anchor is missing');
  const node=id=>g.nodes.find(n=>n.id===id);
  const ctrl=g.edges.filter(e=>e.kind==='control');
- assert(ctrl.length===2,'unexpected control dependencies');
- assert(ctrl.some(e=>node(e.source).label==='rand:seed'&&node(e.target).label==='rand:next_key'),'RNG ordering lost');
+ assert(ctrl.every(e=>node(e.target)?.kind==='GATE' || g.edges.some(x => x.kind === 'sync' && x.source === e.source && x.target === e.target)),'a control dependency bypasses the gates');
+ assert(g.edges.some(e=>e.kind==='order'&&node(e.source).label==='rand:seed'&&node(e.target).label==='rand:next_key'),'RNG ordering lost');
  assert(ctrl.some(e=>node(e.source).label===':io/println'&&e.target===g.exit),'return completion lost');
 }
 '''
@@ -94,11 +94,11 @@ verify_script = '''
 ({input,assert})=>{
  const g=JSON.parse(input.normalized.stdout).graphs.find(g=>g.name==='main');
  const gates=g.nodes.filter(n=>n.kind==='GATE');
- assert(gates.length===1&&gates[0].id===g.exit,'data-covered GATE retained or return anchor erased');
+ assert(gates.filter(n=>n.id===g.exit).length===1&&gates.filter(n=>n.id!==g.exit).every(n=>g.edges.some(e=>e.kind==='sync'&&e.source===n.id)),'a chain GATE has no successor, or the block-value return anchor is missing');
  const node=id=>g.nodes.find(n=>n.id===id);
  const ctrl=g.edges.filter(e=>e.kind==='control');
- assert(ctrl.length===2,'unexpected control dependencies');
- assert(ctrl.some(e=>node(e.source).label==='rand:seed'&&node(e.target).label==='rand:next_key'),'RNG ordering lost');
+ assert(ctrl.every(e=>node(e.target)?.kind==='GATE' || g.edges.some(x => x.kind === 'sync' && x.source === e.source && x.target === e.target)),'a control dependency bypasses the gates');
+ assert(g.edges.some(e=>e.kind==='order'&&node(e.source).label==='rand:seed'&&node(e.target).label==='rand:next_key'),'RNG ordering lost');
  assert(ctrl.some(e=>node(e.source).label===':io/println'&&e.target===g.exit),'return completion lost');
 }
 '''

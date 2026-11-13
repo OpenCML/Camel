@@ -2,7 +2,7 @@ id = "opt.inline_use"
 order = 355
 tier = "fast"
 tags = ["feat", "opt", "effects", "inline", "resources"]
-desc = "Inlining a function that writes `stdout` keeps the write: the use is counted before and after the copy, and erasing it is refused by the pass boundary"
+desc = "Inlining retains stdout uses; a generic pass can intentionally erase them without selecting a preserving check."
 
 # Design principles 3.3: what a program does to state it does not own is its effects, and a pass may
 # move code, copy it or inline a body without changing them. Inlining moves a print from the callee
@@ -13,7 +13,7 @@ desc = "Inlining a function that writes `stdout` keeps the write: the use is cou
 #   inline_keeps_stdout.inline   `std::opt::inline` folds `noisy` into `main`: still two writes,
 #                                and the program prints what it printed
 #   inline_keeps_stdout.drop     `test::inline_use_drop` erases both prints after the inline: the
-#                                boundary refuses the pass (`before stdout (write), after nothing`)
+#                                generic boundary admits this intentional deletion without a selected check
 #   ....twice_write / .twice_inline
 #                                the same function called twice: the copies replace the nodes they
 #                                came from (`48:0`, `48:3` -> `48:11`, `48:15`) and the count stays
@@ -54,12 +54,11 @@ expect_output_not_contains = ["PassBoundaryResources", "changed the ambient reso
 
 [[tests]]
 name = "inline_keeps_stdout.drop"
-desc = "The other direction: `test::inline_use_drop` erases the prints after the inline, and the pass boundary refuses it -- a use that goes away is not an optimisation."
+desc = "The generic route permits an intentional deletion without an explicit support-preserving check."
 case = "../../../cases/opt/effects/inline_keeps_stdout.cml"
 args = ["${case}", "std::opt::inline", "test::inline_use_drop", "${backend}"]
-expect_exit = 1
+expect_exit = 0
 expect_stdout_contains = ["INLINE_USE_DROP erased=3"]
-expect_stderr_contains = ["PassBoundaryResources", "before stdout (write), after nothing"]
 expect_output_not_contains = ["PassBoundaryNodes", "PassBoundaryPorts"]
 
 [[tests]]

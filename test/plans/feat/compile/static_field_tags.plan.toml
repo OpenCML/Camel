@@ -49,3 +49,14 @@ expect_diagnostic_name = "SemanticDiag::TagFieldNameAmbiguous"
 expect_stdout_contains = ["Two tags on this field are written 'width': 'tags_field_name_conflict::width' and 'tags_second_width::width'.", "Rename one of them, or write only one of the two."]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
+
+[[tests]]
+name = "static_field_tags_generic_fields"
+desc = "The third binding of `fields P` is visible during the generic declaration's name resolution as well as during each instantiated round. Both `static for` and `static loop` read the field through `n`, declare a value with `F`, and add the tagged width while walking a named `Box`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/generic_field_tags.cml"
+args = ["${case}", "std::fvm"]
+expect_exit = 0
+expect_stdout_exact = "11\n11\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000

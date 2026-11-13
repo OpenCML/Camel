@@ -51,7 +51,7 @@ void printChain(
     os << indent << chain.from << "\n";
     for (const ProofObject::Link &link : path) {
         const camel::runtime::RewriteStep &step = log[link.step];
-        os << indent << "  = " << linkAfter(step, link.reverse) << "  by " << step.rule;
+        os << indent << "  ~> " << linkAfter(step, link.reverse) << "  by " << step.rule;
         if (link.reverse) {
             os << "  (backwards)";
         }
@@ -83,6 +83,10 @@ rtdata::Object *ProofObject::cloneImpl(mm::IAllocator &allocator, const Type *, 
 }
 
 void ProofObject::printImpl(std::ostream &os, const Type *) const {
+    os << "derivation under supplied rules; protect_effects="
+       << (record_->protection.effects ? "true" : "false")
+       << ", protect_faults=" << (record_->protection.faults ? "true" : "false")
+       << "; not a proof of full observational equality\n";
     if (chain_) {
         const Chain &chain = *chain_;
         if (chain.same) {
@@ -96,7 +100,7 @@ void ProofObject::printImpl(std::ostream &os, const Type *) const {
         }
         const size_t count = chain.paths.size();
         if (count == 1) {
-            os << "chain " << chain.from << " = " << chain.to << ": "
+            os << "chain " << chain.from << " ~> " << chain.to << ": "
                << countedText(chain.paths.front().size(), "rewrite", "rewrites") << "\n";
             printChain(os, record_->steps, chain, chain.paths.front(), "  ");
             return;
@@ -122,7 +126,7 @@ void ProofObject::printImpl(std::ostream &os, const Type *) const {
         const std::string before =
             step.matchedText.empty() ? std::string("%?") : step.matchedText.front();
         os << "  " << step.graph << " round " << step.round << ": " << before << "\n";
-        os << "  = " << step.producedText << "  by " << step.rule << "\n";
+        os << "  ~> " << step.producedText << "  by " << step.rule << "\n";
         os << "    matched";
         for (const std::string &text : step.matchedText) {
             os << " " << text << ";";
@@ -153,7 +157,8 @@ void ProofObject::updateRefsImpl(const rtdata::Object::RefRelocator &relocate, c
         return;
     }
     input_ = static_cast<const camel::runtime::Program *>(relocate(
-        const_cast<camel::runtime::Program *>(input_), nullptr,
+        const_cast<camel::runtime::Program *>(input_),
+        nullptr,
         rtdata::RefTraceInfo{
             .owner     = this,
             .ownerType = type,

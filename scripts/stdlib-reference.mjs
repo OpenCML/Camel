@@ -2257,16 +2257,37 @@ function compareMatchPieces(declared, operator, what) {
     return { same: true }
 }
 
+// A type function expanded into a pack, with the container around it kept for comparison. For
+// example, `(...ElementOf<A>)[]` has body `ElementOf<A>` and suffix `[]`; the registered form may
+// write the body out as a `match type` and keep a trailing comma inside the pack.
+function matchTypeExpansion(text) {
+    const source = (text || '').trim()
+    if (!source.startsWith('(...')) return null
+    const close = partnerBracket(source, 0)
+    if (close < 0) return null
+    return {
+        body: source.slice(4, close).trim().replace(/,$/, '').trim(),
+        suffix: source.slice(close + 1).trim(),
+    }
+}
+
 // The `match type` form a text stands for: the text itself, or the definition of the name it
 // applies when the library defines that name as a type function. null when the text is a name this
 // reader has no definition for, or a type function applied to a subject the type layer would have
 // evaluated: neither is a form this comparison reads, and both stay with the exception classes.
 function matchTypeForm(text) {
     const source = withoutConditions(text)
+    const expansion = matchTypeExpansion(source)
+    if (expansion !== null) {
+        const inner = matchTypeForm(expansion.body)
+        return inner === null ? null : { ...inner, suffix: expansion.suffix }
+    }
     const direct = parseMatchType(source)
-    if (direct !== null) return direct
+    if (direct !== null) return { ...direct, suffix: '' }
     const applied = applyTypeFunction(source)
-    return applied === null ? null : parseMatchType(applied)
+    if (applied === null) return null
+    const evaluated = parseMatchType(applied)
+    return evaluated === null ? null : { ...evaluated, suffix: '' }
 }
 
 // `Name<arguments>` with `Name` a type function, instantiated as the definition writes it. The
@@ -2302,6 +2323,12 @@ function matchTypeVerdict(declaredText, operatorText) {
     const mine = matchTypeForm(declaredText)
     const theirs = matchTypeForm(operatorText)
     if (mine === null || theirs === null) return null
+    if (mine.suffix !== theirs.suffix) {
+        return {
+            same: false,
+            why: `the declaration's container \`${mine.suffix}\` and the operator's \`${theirs.suffix}\` differ`,
+        }
+    }
     const subject = compareMatchPieces(mine.subject, theirs.subject, 'subject')
     if (subject.same !== true) {
         return {

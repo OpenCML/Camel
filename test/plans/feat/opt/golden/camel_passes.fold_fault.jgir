@@ -85,6 +85,11 @@
           "targetIndex": 0
         },
         {
+          "kind": "sync",
+          "source": "g1n2",
+          "target": "g1n6"
+        },
+        {
           "kind": "normal",
           "source": "g1n2",
           "sourceIndex": 0,

@@ -26,9 +26,11 @@ struct DraftInlineResult {
     explicit operator bool() const { return valueExit != kInvalidNodeRef; }
 };
 
+void resolvePlaceForks(GraphDraft &draft);
+
 /// With `asArm`, `funcNodeId` is the call of a branch arm the front end built as a graph: its body
-/// becomes the Arm region of that arm (an arm index of the BRCH that orders the call), not an Inline
-/// region.
+/// becomes the Arm region of that arm (an arm index of the BRCH that orders the call), not an
+/// Inline region.
 DraftInlineResult inlineCallableInDraft(
     RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
     bool asArm = false);
@@ -54,7 +56,8 @@ inline constexpr size_t kTypeSpecializationFixedPointGuard = 4096;
 /// identity is observable); a function value has no identity (design principles 5.2), so binding
 /// it changes nothing but which calls are known.
 bool specializeDirectFuncInDraft(
-    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId, bool functionValuesOnly = false);
+    RuntimeGraphDraftSession &session, GraphTransaction &transaction, gc_node_ref_t funcNodeId,
+    bool functionValuesOnly = false);
 /// Rewrites a CALL into a direct FUNC when its callee is known: a static Function (its static
 /// captures bound into a specialization), or a closure built in this graph by FILL, whose graph
 /// is lifted so that the captures become trailing norm arguments. With `unwrapGatedCallee` a

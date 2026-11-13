@@ -57,8 +57,10 @@ verify_script = """
     // Beside the order edges the body keeps the chain it brought: its own statements are joined to
     // each other in their written order, and the first of them to what the call was written after.
     // The kind of those edges is not named: 5.7 asks for the order, not for ctrl or sync.
+    // The incoming constraint uses an order edge; the body's own chain may use either companion.
     const joins = (source, target) => graph.edges.some(
-        e => e.source === source && e.target === target && (e.kind === 'control' || e.kind === 'sync'))
+        e => e.source === source && e.target === target &&
+            (e.kind === 'control' || e.kind === 'sync' || e.kind === 'order'))
     assert(joins(before.id, body[0].id), 'the body is not joined to the statement before the call')
     assert(joins(body[0].id, body[1].id), 'the body statements are not joined in their written order')
     // The spliced body keeps its source: its statements lie in a region of its own that records the

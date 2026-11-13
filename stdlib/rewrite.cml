@@ -28,7 +28,7 @@ import { is_function } from types
 /// A rewrite rule, a value the engine applies to a function.
 export type Rule
 
-/// What an engine run proved about a rule it applied.
+/// A derivation record under supplied rules and selected guards, not a semantic equality proof.
 export type Proof
 
 // ---- the results ----
@@ -46,7 +46,7 @@ export type Run<F> = {
     erased: int,
     fixpoint: bool,
     seconds: float,
-    proof: Proof?,
+    proof: Proof?
 }
 
 /// How a check came out: `Proved` when a solver established the rule's proposition, `Refuted`
@@ -82,7 +82,7 @@ export type CheckRow = {
     evidence: string,
     reason: string,
     coverage: string,
-    detail: string,
+    detail: string
 }
 
 /// The verdict table of a check, one row per rule or per instance of a generic law, in the order
@@ -92,20 +92,29 @@ export type CheckReport = { rows: CheckRow[] }
 // ---- the passes ----
 
 /// Applies `rules` until no rule changes the function, and gives the rewritten function.
+/// `ordered: true` preserves operand positions throughout the pattern, including after guard
+/// rejection. The default also searches declared commutative and exact associative alternatives.
+/// `protect_effects` and `protect_faults` select conservative local deletion guards. Disabling
+/// one permits its deletion; remaining users and synchronization can still demand the input.
+/// These choices do not disable structural validation or prove whole-program equivalence.
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment a rule set comes from the caller
 /// @example f->rewrite<rules>
 #op('rewrite:rewrite')
-with <rules: Rule[], strict: bool = false>
+with <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false>
 export func rewrite::<F>(f: F): F! when is_function::<F>()
 
 /// Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
-/// every writing the saturation found; `extract` chooses among them.
+/// every writing the saturation found; `extract` chooses among them. The deletion protections
+/// select candidate admission. Extraction cannot restore protection disabled during saturation.
+/// The resulting alternatives are derivations under the rules, not full observational equalities.
+/// `ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
+/// remain searchable, and an explicit commutativity rule may still add exchanged writings.
 /// @fails error value `RuleInvalid` when a rule does not compile
 /// @example-fragment a rule set comes from the caller
 /// @example f->saturate<rules, rounds: 20>
 #op('rewrite:saturate')
-with <rules: Rule[], rounds: int = 6, strict: bool = false>
+with <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false>
 export func saturate::<F>(f: F): F! when is_function::<F>()
 
 /// Chooses one writing of every value that has several, the one of least total cost. The cost of
@@ -121,11 +130,12 @@ export func extract::<F>(f: F): F! when is_function::<F>()
 /// `explain: true` opens the attribution record (rewrite design 8.7): `explain` then reads back
 /// the shortest chain between two values, and `explain_all` every rewrite that was made.
 /// Recording is off unless it is asked for, so a plain application pays nothing for it.
+/// `ordered` selects positional pattern binding as in `rewrite` and is retained by the proof.
 /// @fails error value `RuleInvalid` when a rule does not compile; error value `RuleTwoWay` when a rule is applied in a direction it does not allow
 /// @example-fragment a rule set comes from the caller
 /// @example f->run<rules, rounds: 8, explain: true>
 #op('rewrite:run')
-with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false>
+with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false>
 export func run::<F>(f: F): Run<F>! when is_function::<F>()
 
 // ---- checking rules ----
@@ -173,7 +183,7 @@ export let coverage_table: string
 // ---- reading a run ----
 
 /// The shortest chain of rewrites of the run `r` that connects the values `a` and `b`, as the
-/// derivation `a = ... = b`: only that chain, not every step the run made. Each line names the
+/// derivation `a ~> ... ~> b`: only that chain, not every step the run made. Each line names the
 /// rule and whether the step is read backwards; a chain through a value that was later rewritten
 /// away names it too. When two chains are equally short both are printed, in the order the
 /// rewrites were made.

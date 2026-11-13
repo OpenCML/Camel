@@ -31,11 +31,10 @@ gc_node_ref_t bridgeMacroRewriteControl(
         draft.ctrlInputsOf(replacedNodeId).end());
     // The node a macro rewrote may be a statement of a `sync` block: the gate then takes its place
     // in the chain (takeStatementPlace, called by the caller), so a gate is needed even when
-    // nothing ordered the node (docs/design/effects/edges.cn.md 1.5). A statement is read from the
-    // chain itself -- a node the chain names as a predecessor or a user -- and not from the
-    // `kGCNodeFlagSyncStatement` mark, which said the same thing in a second place.
-    const bool wasStatement =
-        !draft.syncInputsOf(replacedNodeId).empty() || !draft.syncUsersOf(replacedNodeId).empty();
+    // nothing ordered the node (docs/design/effects/edges.cn.md 1.5). The chain itself answers
+    // whether the node has a place to hand over.
+    const bool wasStatement = !draft.syncUsersOf(replacedNodeId).empty() ||
+                              camel::runtime::isBlockValue(draft, replacedNodeId);
     // Something may also have ordered the replaced node: an effect written between two others on
     // one resource carries an order edge, and the edges move with the node (takeStatementPlace ->
     // replaceOrderEdgesAt). A materialized value is the work's result and not the work, so it is a
@@ -43,7 +42,8 @@ gc_node_ref_t bridgeMacroRewriteControl(
     // keeps the place the value may not take.
     const bool wasOrdered =
         !draft.orderInputsOf(replacedNodeId).empty() || !draft.orderUsersOf(replacedNodeId).empty();
-    if (ctrlPreds.empty() && !wasStatement && !wasOrdered) {
+    if (!wasStatement && !wasOrdered && draft.normUsersOf(replacedNodeId).empty() &&
+        draft.withUsersOf(replacedNodeId).empty()) {
         return valueNodeId;
     }
 
@@ -75,9 +75,9 @@ bool applyMacroRewrite(
         return false;
     }
 
-    auto &transaction = session.edit(candidate.runtimeGraph);
-    auto &draft       = transaction.edit();
-    const gc_node_ref_t draftNodeId   = draft.draftIdOfSourceRef(candidate.nodeRef);
+    auto &transaction               = session.edit(candidate.runtimeGraph);
+    auto &draft                     = transaction.edit();
+    const gc_node_ref_t draftNodeId = draft.draftIdOfSourceRef(candidate.nodeRef);
     if (draftNodeId == camel::runtime::kInvalidNodeRef || !draft.alive(draftNodeId)) {
         return false;
     }
@@ -90,6 +90,18 @@ bool applyMacroRewrite(
     draft.takeStatementPlace(draftNodeId, replacementNodeId);
     draft.replaceAllValueUses(draftNodeId, replacementNodeId);
     draft.replaceAllCtrlUses(draftNodeId, replacementNodeId);
+    if (replacementNodeId != valueNodeId && draft.syncUsersOf(replacementNodeId).empty()) {
+        const std::vector<gc_node_ref_t> users(
+            draft.ctrlUsersOf(replacementNodeId).begin(),
+            draft.ctrlUsersOf(replacementNodeId).end());
+        for (gc_node_ref_t user : users) {
+            if (camel::runtime::isChainStatement(draft, user) &&
+                camel::runtime::sameSyncBlock(draft, user, replacementNodeId)) {
+                (void)draft.appendChainStatement(user, replacementNodeId);
+                break;
+            }
+        }
+    }
     if (draft.outputNode() == draftNodeId) {
         draft.setOutputNode(replacementNodeId);
     }

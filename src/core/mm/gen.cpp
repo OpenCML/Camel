@@ -15,10 +15,10 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/profile/allocation.h"
 
-#include <cstdio>
 #include "camel/utils/assert.h"
 #include "camel/utils/brpred.h"
 #include "camel/utils/log.h"
+#include <cstdio>
 
 #include <algorithm>
 #include <chrono>
@@ -47,6 +47,13 @@ constexpr const char *kHeapLimitSetting           = "--gc-heap-limit-mb";
 
 double megabytes(uint64_t bytes) { return static_cast<double>(bytes) / (1024.0 * 1024.0); }
 
+bool isLiveGraphCarrierReference(rtdata::Object *ref, const rtdata::RefTraceInfo &info) {
+    return ref != nullptr &&
+           (info.slotName == "graph" || info.slotName == "graph-edge" ||
+            info.slotName == "program") &&
+           graphSpace().isAllocated(ref);
+}
+
 } // namespace
 
 GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
@@ -69,8 +76,7 @@ GenerationalAllocatorWithGC::GenerationalAllocatorWithGC(const Config &config)
       largeObjMinBudget_(config.largeObjCollectionBudget),
       largeObjGrowthPercent_(config.largeObjGrowthPercent),
       largeObjBudget_(config.largeObjCollectionBudget), elderMinBudget_(config.elderGenSize),
-      elderBudget_(config.elderGenSize),
-      elderBlockBudget_(config.largeObjCollectionBudget),
+      elderBudget_(config.elderGenSize), elderBlockBudget_(config.largeObjCollectionBudget),
       minorTriggerBytes_(
           static_cast<size_t>(
               static_cast<double>(config.birthSize) *
@@ -161,10 +167,10 @@ void GenerationalAllocatorWithGC::registerObjectRootSet(
     std::lock_guard<std::mutex> lock(mutex_);
     ASSERT(owner != nullptr, "An object root set must name its owner.");
     ASSERT(!name.empty(), "An object root set must have a name.");
-    auto it = std::find_if(
-        objectRootSets_.begin(),
-        objectRootSets_.end(),
-        [owner](const auto &entry) { return entry.owner == owner; });
+    auto it =
+        std::find_if(objectRootSets_.begin(), objectRootSets_.end(), [owner](const auto &entry) {
+            return entry.owner == owner;
+        });
     if (it != objectRootSets_.end()) {
         // The same owner re-registering: its entry is updated, nobody else's is touched.
         it->name = std::move(name);
@@ -176,8 +182,7 @@ void GenerationalAllocatorWithGC::registerObjectRootSet(
 
 void GenerationalAllocatorWithGC::unregisterObjectRootSet(const void *owner) {
     std::lock_guard<std::mutex> lock(mutex_);
-    std::erase_if(
-        objectRootSets_, [owner](const auto &entry) { return entry.owner == owner; });
+    std::erase_if(objectRootSets_, [owner](const auto &entry) { return entry.owner == owner; });
 }
 
 void GenerationalAllocatorWithGC::registerGraphSweeper(
@@ -186,10 +191,10 @@ void GenerationalAllocatorWithGC::registerGraphSweeper(
     ASSERT(owner != nullptr, "A graph sweeper must name its owner.");
     ASSERT(!name.empty(), "A graph sweeper must have a name.");
     ASSERT(static_cast<bool>(sweeper), "A graph sweeper cannot be empty.");
-    auto it = std::find_if(
-        graphSweepers_.begin(),
-        graphSweepers_.end(),
-        [owner](const auto &entry) { return entry.owner == owner; });
+    auto it =
+        std::find_if(graphSweepers_.begin(), graphSweepers_.end(), [owner](const auto &entry) {
+            return entry.owner == owner;
+        });
     if (it != graphSweepers_.end()) {
         it->name    = std::move(name);
         it->sweeper = std::move(sweeper);
@@ -209,6 +214,7 @@ void GenerationalAllocatorWithGC::collectGraphSpace() {
     for (const auto &entry : graphSweepers_) {
         entry.sweeper();
     }
+    pruneRememberedSetUnlocked();
 }
 
 void GenerationalAllocatorWithGC::requestMajorCollection(std::string_view reason) {
@@ -413,7 +419,7 @@ void GenerationalAllocatorWithGC::safepoint(std::string_view reason) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Minor, "safepoint poisoning");
         }
 
-        requested                      = pendingSafepointCollection_;
+        requested                       = pendingSafepointCollection_;
         pendingSafepointCollection_     = CollectionKind::None;
         const std::string_view gcReason = reason.empty() ? std::string_view{"safepoint"} : reason;
         collectAtSafepointUnlocked(requested, gcReason);
@@ -760,8 +766,7 @@ void *GenerationalAllocatorWithGC::allocElderUnlocked(size_t payloadSize, size_t
         freshOld_.insert(header);
         anyFreshOld_.store(true, std::memory_order_release);
     }
-    if (UNLIKELY(
-            elderBytesSinceSweep_ + blockBytesGrowthUnlocked() >= elderBudget_) &&
+    if (UNLIKELY(elderBytesSinceSweep_ + blockBytesGrowthUnlocked() >= elderBudget_) &&
         pendingSafepointCollection_ != CollectionKind::Major &&
         pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
         requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
@@ -1003,9 +1008,9 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
             handle->trace(relocateYoung);
         }
 
-        // 3. Process old-to-young references. Entries are retained after relocation while the
-        // old object still points into the young generation; clearing them blindly would lose the
-        // edge on the next minor collection.
+        // 3. Process old-to-young references and old references to graph carriers. Entries stay
+        // while either kind of reference still needs a minor scan; clearing them blindly would
+        // lose the edge on the next collection.
         std::unordered_map<ObjectHeader *, RememberedSetEntry> retainedRememberedSet;
         for (const auto &[oldHeader, entry] : rememberedSet_) {
             if (!oldHeader || !oldHeader->isValid())
@@ -1031,16 +1036,16 @@ void GenerationalAllocatorWithGC::minorGCUnlocked() {
         // From here on "young" means young only: nothing is fresh any more.
         freshOld_.clear();
         anyFreshOld_.store(false, std::memory_order_release);
-        // Keep the remembered owners that still point at a young object (the scan above may
-        // have promoted their targets), and remember the promoted and born-old objects that do.
+        // Keep owners of young references and of graph carriers whose static areas need another
+        // minor scan, then remember promoted and born-old objects with either kind of reference.
         rememberedSet_.clear();
         for (const auto &[oldHeader, entry] : retainedRememberedSet) {
-            if (hasYoungRefsUnlocked(entry.object, entry.type)) {
+            if (rememberedEntryNeedsMinorScanUnlocked(oldHeader, entry)) {
                 rememberedSet_[oldHeader] = entry;
             }
         }
         for (const TraceEntry &entry : relocationScan_) {
-            rememberOldObjectIfYoungRefsUnlocked(entry.object, entry.type);
+            rememberOldObjectForMinorScanUnlocked(entry.object, entry.type);
         }
         minorTracedGraphs_.clear();
         minorGraphScan_.clear();
@@ -1092,6 +1097,7 @@ void GenerationalAllocatorWithGC::majorGCUnlocked() {
     for (const GraphSweeperEntry &entry : graphSweepers_) {
         entry.sweeper();
     }
+    pruneRememberedSetUnlocked();
 
     // Sweep old generation (mark-sweep; no compaction here).
     sweepOldGen();
@@ -1205,9 +1211,24 @@ bool GenerationalAllocatorWithGC::hasYoungRefsUnlocked(
     return found;
 }
 
-void GenerationalAllocatorWithGC::rememberOldObjectIfYoungRefsUnlocked(
+bool GenerationalAllocatorWithGC::hasGraphCarrierRefsUnlocked(
+    rtdata::Object *object, const type::Type *objectType) const {
+    bool found = false;
+    object->updateRefs(
+        [&](rtdata::Object *ref,
+            const type::Type *,
+            const rtdata::RefTraceInfo &info) -> rtdata::Object * {
+            if (!found && isLiveGraphCarrierReference(ref, info)) {
+                found = true;
+            }
+            return ref;
+        },
+        objectType);
+    return found;
+}
+
+void GenerationalAllocatorWithGC::rememberOldObjectForMinorScanUnlocked(
     rtdata::Object *object, const type::Type *objectType) {
-    // Most of what a minor collection copies stays young: decided by three range checks.
     if (!object || birthSpace_.contains(object) || havenSpace_.contains(object) ||
         cacheSpace_.contains(object)) {
         return;
@@ -1217,12 +1238,32 @@ void GenerationalAllocatorWithGC::rememberOldObjectIfYoungRefsUnlocked(
         return;
     }
     recordObjectTypeUnlocked(object, objectType);
-    if (hasYoungRefsUnlocked(object, objectType)) {
+    if (hasYoungRefsUnlocked(object, objectType) ||
+        hasGraphCarrierRefsUnlocked(object, objectType)) {
         rememberedSet_[header] = RememberedSetEntry{
             .object = object,
             .type   = objectType,
         };
     }
+}
+
+bool GenerationalAllocatorWithGC::rememberedEntryNeedsMinorScanUnlocked(
+    ObjectHeader *header, const RememberedSetEntry &entry) const {
+    rtdata::Object *object       = entry.object ? entry.object : payloadOf<rtdata::Object>(header);
+    const type::Type *objectType = entry.type ? entry.type : knownObjectTypeUnlocked(header);
+    return hasYoungRefsUnlocked(object, objectType) ||
+           hasGraphCarrierRefsUnlocked(object, objectType);
+}
+
+void GenerationalAllocatorWithGC::pruneRememberedSetUnlocked() {
+    std::erase_if(rememberedSet_, [this](const auto &item) {
+        ObjectHeader *header = item.first;
+        if (!header || !header->isValid() ||
+            (!inElderGenSpace(header) && !inLargeObjSpace(header))) {
+            return false;
+        }
+        return !rememberedEntryNeedsMinorScanUnlocked(header, item.second);
+    });
 }
 
 void GenerationalAllocatorWithGC::finalizeDeadYoungUnlocked() {
@@ -1280,8 +1321,7 @@ GenerationalAllocatorWithGC::forward(rtdata::Object *obj, const type::Type *objT
     const auto promote = [&]() {
         newObj = elderGenSpace_.alloc(objSize, alignof(slot_t));
         elderBytesSinceSweep_ += objSize;
-        if (UNLIKELY(
-                elderBytesSinceSweep_ + blockBytesGrowthUnlocked() >= elderBudget_) &&
+        if (UNLIKELY(elderBytesSinceSweep_ + blockBytesGrowthUnlocked() >= elderBudget_) &&
             pendingSafepointCollection_ != CollectionKind::Major &&
             pendingSafepointCollection_ != CollectionKind::MinorAndMajor) {
             requestCollectionAtSafepointUnlocked(CollectionKind::Major, kCauseElderExhausted);
@@ -1353,8 +1393,7 @@ rtdata::Object *GenerationalAllocatorWithGC::relocateForMinor(
     if (!ref) {
         return nullptr;
     }
-    if (refType == nullptr &&
-        (info.slotName == "graph" || info.slotName == "graph-edge" || info.slotName == "program")) {
+    if (refType == nullptr && isLiveGraphCarrierReference(ref, info)) {
         // A graph carrier (graph space, never moved). Program graphs are roots and were
         // traced at the start; a graph created while the program runs (an autodiff gradient
         // graph, an attached rule) is reached only here, through the Function that owns it or
@@ -1366,7 +1405,7 @@ rtdata::Object *GenerationalAllocatorWithGC::relocateForMinor(
         // (GCGraphManager frees the graphs a rewrite replaced), so the carrier is traced only
         // if the graph space still holds it. A new graph at the same address is a live graph,
         // and tracing a live graph once more is harmless.
-        if (graphSpace().isAllocated(ref) && minorTracedGraphs_.insert(ref).second) {
+        if (minorTracedGraphs_.insert(ref).second) {
             minorGraphScan_.push_back(ref);
         }
         return ref;
@@ -1582,7 +1621,7 @@ void GenerationalAllocatorWithGC::markObject(rtdata::Object *obj, const type::Ty
 
 void GenerationalAllocatorWithGC::sweepOldGen() {
     std::vector<ObjectHeader *> unreachable;
-    size_t liveBlockBytes = 0;
+    size_t liveBlockBytes          = 0;
     const uint64_t sweepGeneration = blockSweepGeneration_++;
 
     elderGenSpace_.iterateAllocated(
@@ -1619,9 +1658,9 @@ void GenerationalAllocatorWithGC::sweepOldGen() {
     // since the sweep are what can have turned into garbage that only the next major can free.
     elderBlockBytesSinceSweep_ = 0;
     elderBlockLiveBytes_       = liveBlockBytes;
-    const size_t blockGrowth = liveBlockBytes / 100 * largeObjGrowthPercent_ +
-                               liveBlockBytes % 100 * largeObjGrowthPercent_ / 100;
-    elderBlockBudget_ = std::max(largeObjMinBudget_, blockGrowth);
+    const size_t blockGrowth   = liveBlockBytes / 100 * largeObjGrowthPercent_ +
+                                 liveBlockBytes % 100 * largeObjGrowthPercent_ / 100;
+    elderBlockBudget_          = std::max(largeObjMinBudget_, blockGrowth);
 }
 
 void GenerationalAllocatorWithGC::sweepLargeObjects() {

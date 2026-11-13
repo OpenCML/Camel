@@ -81,8 +81,9 @@ using type::TupleType;
 using type::Type;
 using type::TypeCode;
 
-/// Which of the two answers of the core's tangent query a node's tangent is built for. `Machinery` is the tangent of a value the
-/// transform carries itself -- a loop's state, a captured tuple, an aggregate on the reverse tape
+/// Which of the two answers of the core's tangent query a node's tangent is built for. `Machinery`
+/// is the tangent of a value the transform carries itself -- a loop's state, a captured tuple, an
+/// aggregate on the reverse tape
 /// -- and `User` is the gradient `grad`/`with_grad` hands back, which is the parameter's own
 /// gradient type. The same program value is asked about for either audience; what differs is who
 /// reads the answer, never the value's shape.
@@ -191,9 +192,7 @@ Type *tangentElementType(Type *type) {
 /// The place a refusal is about is carried by the diagnostic's own position and by its related
 /// locations, never by the message: a reader's tool reads the fields, and the same place written
 /// twice in one line is what this helper used to add.
-std::string whereIs(uint64_t) {
-    return {};
-}
+std::string whereIs(uint64_t) { return {}; }
 
 /// A variable (`var`) is a cell; the graph passes the cell, not its content.
 bool isCellType(Type *type) {
@@ -204,7 +203,7 @@ bool isCellType(Type *type) {
 // ---------------------------------------------------------------- draft helpers
 
 Type *typeOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
-    const auto &draft = transaction.graph();
+    const auto &draft  = transaction.graph();
     const auto *header = draft.header(node);
     if (header == nullptr) {
         fail(
@@ -217,7 +216,7 @@ Type *typeOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
 }
 
 GCNodeKind kindOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
-    const auto &draft = transaction.graph();
+    const auto &draft  = transaction.graph();
     const auto *header = draft.header(node);
     if (header == nullptr) {
         fail(
@@ -283,20 +282,21 @@ bool holdsFunction(Type *type) {
 /// answer a comparison of two computations in the optimizer asks for.
 using camel::runtime::ungated;
 
-
 GCGraph *calleeOf(const rt::GraphTransaction &transaction, gc_node_ref_t node) {
     return transaction.graph().calleeGraphOf(node);
 }
 
-gc_node_ref_t addAccs(rt::GraphTransaction &transaction, Type *type, gc_node_ref_t source, size_t index) {
-    auto &draft = transaction.edit();
+gc_node_ref_t
+addAccs(rt::GraphTransaction &transaction, Type *type, gc_node_ref_t source, size_t index) {
+    auto &draft              = transaction.edit();
     const gc_node_ref_t node = draft.addAccsNode(type, static_cast<uint32_t>(index));
     draft.setNormInputs(node, std::span<const gc_node_ref_t>(&source, 1));
     return node;
 }
 
-gc_node_ref_t addField(rt::GraphTransaction &transaction, Type *aggregate, gc_node_ref_t source, size_t index) {
-    auto &draft = transaction.edit();
+gc_node_ref_t
+addField(rt::GraphTransaction &transaction, Type *aggregate, gc_node_ref_t source, size_t index) {
+    auto &draft    = transaction.edit();
     Type *elemType = aggregateElement(aggregate, index);
     if (aggregate->code() == TypeCode::Struct) {
         const auto name          = tt::as_ptr<StructType>(aggregate)->fieldName(index);
@@ -307,16 +307,16 @@ gc_node_ref_t addField(rt::GraphTransaction &transaction, Type *aggregate, gc_no
     return addAccs(transaction, elemType, source, index);
 }
 
-gc_node_ref_t
-addOper(rt::GraphTransaction &transaction, Type *type, std::string_view uri, std::span<const gc_node_ref_t> in) {
-    auto &draft = transaction.edit();
+gc_node_ref_t addOper(
+    rt::GraphTransaction &transaction, Type *type, std::string_view uri,
+    std::span<const gc_node_ref_t> in) {
+    auto &draft              = transaction.edit();
     const gc_node_ref_t node = draft.addOperNode(type, nullptr, uri);
     draft.setNormInputs(node, in);
     return node;
 }
 
-gc_node_ref_t
-addCall(
+gc_node_ref_t addCall(
     rt::GraphTransaction &transaction, Type *type, gc_node_ref_t callee,
     std::span<const gc_node_ref_t> args) {
     auto &draft              = transaction.edit();
@@ -342,8 +342,9 @@ gc_node_ref_t addFill(
 }
 
 /// A tuple or struct built from `values`, one per element in order.
-gc_node_ref_t addAggregate(rt::GraphTransaction &transaction, Type *type, std::span<const gc_node_ref_t> values) {
-    auto &draft = transaction.edit();
+gc_node_ref_t
+addAggregate(rt::GraphTransaction &transaction, Type *type, std::span<const gc_node_ref_t> values) {
+    auto &draft       = transaction.edit();
     const size_t size = aggregateSize(type);
     ASSERT(values.size() == size, "autodiff: aggregate element count mismatch.");
     camel::core::rtdata::Object *empty = nullptr;
@@ -362,9 +363,9 @@ gc_node_ref_t addAggregate(rt::GraphTransaction &transaction, Type *type, std::s
 
 /// A closure of `graph` (a graph of the current group) capturing `captures`.
 gc_node_ref_t addClosure(
-    rt::GraphDraftGroup &group, rt::GraphTransaction &transaction, rt::GraphId graph, FunctionType *type,
-    TupleType *closureType, std::span<const gc_node_ref_t> captures) {
-    auto &draft = transaction.edit();
+    rt::GraphDraftGroup &group, rt::GraphTransaction &transaction, rt::GraphId graph,
+    FunctionType *type, TupleType *closureType, std::span<const gc_node_ref_t> captures) {
+    auto &draft    = transaction.edit();
     auto *function = ::Function::create(group.program(), graph, closureType, mm::autoSpace());
     const gc_node_ref_t source = draft.materializeStaticValue(toSlot<::Function *>(function), type);
     return addFill(transaction, type, rt::GCFillKind::FunctionClosure, source, captures);
@@ -377,7 +378,7 @@ gc_node_ref_t addPort(rt::GraphTransaction &transaction, Type *type) {
 
 /// Makes `result` what the graph returns, keeping the effects the old exit waited for.
 void setResult(rt::GraphTransaction &transaction, gc_node_ref_t result) {
-    auto &draft = transaction.edit();
+    auto &draft                   = transaction.edit();
     const gc_node_ref_t oldExit   = draft.exitNode();
     const gc_node_ref_t oldOutput = draft.outputNode();
     gc_node_ref_t exit            = result;
@@ -392,7 +393,7 @@ void setResult(rt::GraphTransaction &transaction, gc_node_ref_t result) {
 }
 
 gc_node_ref_t valueNode(const rt::GraphTransaction &transaction) {
-    const auto &draft = transaction.graph();
+    const auto &draft    = transaction.graph();
     gc_node_ref_t output = draft.outputNode();
     if (output == kInvalidNodeRef) {
         output = draft.returnNode();
@@ -456,7 +457,8 @@ std::vector<gc_node_ref_t> valueOrder(
         if (kindOf(transaction, node) == GCNodeKind::Loop) {
             for (gc_node_ref_t read :
                  rt::LoopDraftView(*draft.program(), draft, node).externalInputs(false)) {
-                if (!seen.contains(read) && regionMember(transaction, draft.nodeRegion(read), region)) {
+                if (!seen.contains(read) &&
+                    regionMember(transaction, draft.nodeRegion(read), region)) {
                     stack.emplace_back(read, false);
                 }
             }
@@ -472,12 +474,14 @@ std::vector<gc_node_ref_t> valueOrder(
             }
         }
         for (gc_node_ref_t input : draft.withInputsOf(node)) {
-            if (!seen.contains(input) && regionMember(transaction, draft.nodeRegion(input), region)) {
+            if (!seen.contains(input) &&
+                regionMember(transaction, draft.nodeRegion(input), region)) {
                 stack.emplace_back(input, false);
             }
         }
         for (gc_node_ref_t input : draft.normInputsOf(node)) {
-            if (!seen.contains(input) && regionMember(transaction, draft.nodeRegion(input), region)) {
+            if (!seen.contains(input) &&
+                regionMember(transaction, draft.nodeRegion(input), region)) {
                 stack.emplace_back(input, false);
             }
         }
@@ -487,7 +491,8 @@ std::vector<gc_node_ref_t> valueOrder(
 
 /// The nodes outside `region` that its nodes read, in the order they are first read. The
 /// constants are left out: a rule copies them, it does not capture them.
-std::vector<gc_node_ref_t> externalInputsOf(const rt::GraphTransaction &transaction, uint32_t region) {
+std::vector<gc_node_ref_t>
+externalInputsOf(const rt::GraphTransaction &transaction, uint32_t region) {
     const auto &draft = transaction.graph();
     std::vector<gc_node_ref_t> nodes;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
@@ -565,10 +570,11 @@ void pruneUnreachable(rt::GraphTransaction &transaction) {
         // statement carries is written in the control kind or, where the chain of its block has
         // moved onto the sync kind, as its sync predecessor; reading only the control kind would
         // prune the statements a chain holds up.
-        for (auto inputs : {draft.normInputsOf(node),
-                            draft.withInputsOf(node),
-                            draft.ctrlInputsOf(node),
-                            draft.syncInputsOf(node)}) {
+        for (auto inputs :
+             {draft.normInputsOf(node),
+              draft.withInputsOf(node),
+              draft.ctrlInputsOf(node),
+              draft.syncInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 if (!live[input]) {
                     stack.push_back(input);
@@ -620,7 +626,7 @@ std::vector<Type *> portTypesOf(const GCGraph *graph) {
 }
 
 std::vector<gc_node_ref_t> portsOf(const rt::GraphTransaction &transaction) {
-    const auto &draft = transaction.graph();
+    const auto &draft                = transaction.graph();
     std::vector<gc_node_ref_t> ports = copyOf(draft.withPorts());
     for (gc_node_ref_t port : draft.normPorts()) {
         ports.push_back(port);
@@ -666,7 +672,8 @@ bool carriesGradient(Type *type) {
     }
     if (isAggregate(type)) {
         for (size_t i = 0; i < aggregateSize(type); ++i) {
-            if (machineryTangentElementIndex(type, i) && carriesGradient(aggregateElement(type, i))) {
+            if (machineryTangentElementIndex(type, i) &&
+                carriesGradient(aggregateElement(type, i))) {
                 return true;
             }
         }
@@ -898,7 +905,8 @@ class ForwardRewrite {
                     }
                 }
             }
-            if (kindOf(transaction_, node) != GCNodeKind::Gate || draft().normInputsOf(node).empty()) {
+            if (kindOf(transaction_, node) != GCNodeKind::Gate ||
+                draft().normInputsOf(node).empty()) {
                 return ctrl;
             }
             node = draft().normInputsOf(node).back();
@@ -911,20 +919,7 @@ class ForwardRewrite {
     /// block's chain broken (docs/design/effects/edges.cn.md 1, 4.6; docs/handover/README.cn.md
     /// 5.21 item 4).
     void takeSyncPlace(gc_node_ref_t from, gc_node_ref_t to) const {
-        const auto inputs = copyOf(draft().syncInputsOf(from));
-        if (inputs.empty() || from == to) {
-            return;
-        }
-        if (const auto *header = draft().header(to); header != nullptr) {
-            draft().setNodeRuntimeFlags(
-                to,
-                static_cast<uint8_t>(
-                    header->runtimeFlags | camel::runtime::kGCNodeFlagSyncStatement));
-        }
-        draft().setSyncInputs(to, inputs);
-        for (gc_node_ref_t user : copyOf(draft().syncUsersOf(from))) {
-            draft().replaceInput(rt::DraftEdgeKind::Sync, user, from, to);
-        }
+        draft().takeStatementPlace(from, to);
     }
 
     /// The function a function value is, where the graph itself says so: a constant function, or a
@@ -1133,9 +1128,7 @@ class Backward final : public VjpBuilder {
         return autodiff::addOper(targetTransaction_, type, uri, normInputs);
     }
     vjp_node_t addOper(
-        Type *type,
-        std::string_view uri,
-        std::span<const vjp_node_t> normInputs,
+        Type *type, std::string_view uri, std::span<const vjp_node_t> normInputs,
         camel::core::attr::AttrSetId attrs) override {
         const vjp_node_t node = autodiff::addOper(targetTransaction_, type, uri, normInputs);
         if (attrs != camel::core::attr::kNoAttrs) {
@@ -1144,21 +1137,23 @@ class Backward final : public VjpBuilder {
         return node;
     }
     void markFusionGroup(
-        camel::core::attr::AttrKey key,
-        std::string_view name,
+        camel::core::attr::AttrKey key, std::string_view name,
         std::span<const vjp_node_t> members) override {
         if (key == camel::core::attr::kNoKey || members.empty()) {
             return;
         }
         const camel::core::attr::AttrValueId value = camel::core::attr::symbol(name);
-        const camel::core::attr::AttrSetId attrs = camel::core::attr::single(key, value);
+        const camel::core::attr::AttrSetId attrs   = camel::core::attr::single(key, value);
         for (vjp_node_t node : members) {
-            target().setNodeAttrs(
-                node, camel::core::attr::unite(target().nodeAttrs(node), attrs));
+            target().setNodeAttrs(node, camel::core::attr::unite(target().nodeAttrs(node), attrs));
         }
     }
     vjp_node_t addAccess(vjp_node_t aggregate, size_t index) override {
-        return autodiff::addField(targetTransaction_, typeOf(targetTransaction_, aggregate), aggregate, index);
+        return autodiff::addField(
+            targetTransaction_,
+            typeOf(targetTransaction_, aggregate),
+            aggregate,
+            index);
     }
     std::optional<vjp_node_t> gradientOf(vjp_node_t node) const override;
     void accumulateGradient(vjp_node_t node, vjp_node_t gradient) override;
@@ -1171,8 +1166,7 @@ class Backward final : public VjpBuilder {
         Tangent &tangent, Type *primalType, gc_node_ref_t gradient,
         gc_node_ref_t at = kInvalidNodeRef);
     void mergeInto(
-        Tangent &tangent, Type *primalType, Tangent &&other,
-        gc_node_ref_t at = kInvalidNodeRef);
+        Tangent &tangent, Type *primalType, Tangent &&other, gc_node_ref_t at = kInvalidNodeRef);
     /// Refuses a gradient whose element type is not the differentiated value's (design principles
     /// 9.9). `at` is the forward node whose gradient it is, for a location when no rule is running.
     void checkGradientType(Type *primalType, gc_node_ref_t gradient, gc_node_ref_t at);
@@ -1182,8 +1176,8 @@ class Backward final : public VjpBuilder {
     /// Builds the gradient of `primal` out of the parts that reached it, for one of the two
     /// audiences `computeGradientType` answers for: the machinery's own tangent, or the gradient
     /// `grad`/`with_grad` hands back (see `gradient` and `userGradient`).
-    gc_node_ref_t materialize(
-        Tangent &tangent, Type *primalType, gc_node_ref_t primal, TangentAudience audience);
+    gc_node_ref_t
+    materialize(Tangent &tangent, Type *primalType, gc_node_ref_t primal, TangentAudience audience);
     gc_node_ref_t zero(Type *primalType, gc_node_ref_t primal, TangentAudience audience);
     gc_node_ref_t add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t rhs);
 
@@ -1215,7 +1209,6 @@ class Backward final : public VjpBuilder {
     /// call names it: the same choice refusalReason's words describe, as a place.
     gc_node_ref_t chosenFunction(gc_node_ref_t call) const;
     void reportRefusals(const std::vector<gc_node_ref_t> &order);
-
 
     Engine &engine_; // the `#impl` bodies this pass must not confuse with their kernels
     rt::GraphTransaction &forwardTransaction_;
@@ -1377,7 +1370,8 @@ class Engine {
     rt::RuntimeGraphDraftSession inlining_;
     size_t followed_ = 0;
     std::unordered_map<GCGraph *, std::unordered_set<GCGraph *>> armOwners_;
-    std::map<std::pair<const rt::GraphTransaction *, uint32_t>, std::unordered_set<GCGraph *>> regionOwners_;
+    std::map<std::pair<const rt::GraphTransaction *, uint32_t>, std::unordered_set<GCGraph *>>
+        regionOwners_;
     std::unordered_set<GCGraph *> recursions_;
     std::vector<Refusal> refusals_;
     // The semantic bodies of the program's `#impl` functions (see implBodiesByKernel), read
@@ -1385,7 +1379,7 @@ class Engine {
     // the body and the reverse pass to refuse a kernel OPER that reached it unexpanded.
     std::unordered_map<std::string, std::vector<GCGraph *>> implBodies_;
     std::unordered_set<std::string> implKernelUris_;
-    bool implBodiesBuilt_    = false;
+    bool implBodiesBuilt_     = false;
     bool implKernelUrisBuilt_ = false;
     camel::source::source_context_ptr_t outerSource_;
 };
@@ -1423,7 +1417,8 @@ void ForwardRewrite::followFunctionValues() {
                 continue;
             }
             const GCNodeKind kind = kindOf(transaction_, id);
-            if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) || !carriesFunctionValue(id)) {
+            if ((kind != GCNodeKind::Func && kind != GCNodeKind::Call) ||
+                !carriesFunctionValue(id)) {
                 continue;
             }
             // The function whose body would come in (for a closure, the function it closes).
@@ -1494,9 +1489,7 @@ void ForwardRewrite::followFunctionValues() {
 /// Whether a call (FUNC, or CALL of an evident function) passes an evident function value to
 /// its callee, as an argument or a captured value, or gets a function value back from it.
 bool ForwardRewrite::carriesFunctionValue(gc_node_ref_t call) const {
-    const auto evident = [&](gc_node_ref_t node) {
-        return evidentFunction(node) != nullptr;
-    };
+    const auto evident = [&](gc_node_ref_t node) { return evidentFunction(node) != nullptr; };
     // A macro, and a function with a derivative rule of its own, are not differentiated
     // through their bodies.
     const auto opaque = [](const GCGraph *graph) {
@@ -1548,7 +1541,7 @@ const std::unordered_map<std::string, std::vector<GCGraph *>> &Engine::implBodie
     if (implBodiesBuilt_) {
         return implBodies_;
     }
-    implBodiesBuilt_ = true;
+    implBodiesBuilt_           = true;
     const rt::Program *program = &inlining_.work();
     // A body that is built on its own kernel (the scalar `exp` at `float` is `T(exp_kernel(x))`,
     // and the kernel of that instance is the very `math:exp_d` the body calls) has no meaning
@@ -1890,7 +1883,7 @@ struct ReverseLoop {
     TupleType *tangentsType = nullptr;   // the tangents of the site's ports, in port order
     rt::GraphId bodyPullback =
         rt::kInvalidGraphId; // the forward body's pullback, run once per round
-    uint64_t origin         = 0;
+    uint64_t origin = 0;
     /// The position of a state's / a capture's gradient in the body pullback's result, if it
     /// has one.
     std::vector<std::optional<size_t>> stateTangent;
@@ -1904,8 +1897,8 @@ struct ReverseLoop {
     /// tangent of the array can be taken from it), the component of the reverse state the array's
     /// gradient travels in, its position in the site's tangents, and the position of one round's
     /// element gradient in the body pullback's result.
-    Type *iterableType       = nullptr;
-    size_t arraySlot         = kNoSlot;
+    Type *iterableType = nullptr;
+    size_t arraySlot   = kNoSlot;
     std::optional<size_t> arrayTangent;
     std::optional<size_t> elementTangent;
     TupleType *bodyTangentsType = nullptr; // the result type of body.pb
@@ -1954,7 +1947,8 @@ std::vector<Type *> reverseStateTypes(const ReverseLoop &loop) {
 /// A tuple of `values`, or the value itself when there is only one (the loop's value is not
 /// wrapped when neither the state nor the collection count wraps it).
 gc_node_ref_t packState(
-    rt::GraphTransaction &transaction, const std::vector<Type *> &types, std::span<const gc_node_ref_t> values) {
+    rt::GraphTransaction &transaction, const std::vector<Type *> &types,
+    std::span<const gc_node_ref_t> values) {
     auto &draft = transaction.edit();
     ASSERT(types.size() == values.size(), "autodiff: state component count mismatch.");
     if (types.size() == 1) {
@@ -1992,7 +1986,8 @@ std::optional<slot_t> discreteZeroSlot(Type *type) {
 
 /// The zero of `primal`'s tangent; `primalValue` is the primal value (a tensor's zero is taken
 /// from it).
-gc_node_ref_t addZeroTangent(rt::GraphTransaction &transaction, Type *primal, gc_node_ref_t primalValue) {
+gc_node_ref_t
+addZeroTangent(rt::GraphTransaction &transaction, Type *primal, gc_node_ref_t primalValue) {
     auto &draft = transaction.edit();
     if (isAggregate(primal)) {
         std::vector<gc_node_ref_t> zeros;
@@ -2001,7 +1996,10 @@ gc_node_ref_t addZeroTangent(rt::GraphTransaction &transaction, Type *primal, gc
                 continue;
             }
             Type *element = aggregateElement(primal, i);
-            zeros.push_back(addZeroTangent(transaction, element, addField(transaction, primal, primalValue, i)));
+            zeros.push_back(addZeroTangent(
+                transaction,
+                element,
+                addField(transaction, primal, primalValue, i)));
         }
         return addAggregate(transaction, machineryTangentTypeOf(primal), zeros);
     }
@@ -2024,7 +2022,8 @@ gc_node_ref_t addZeroTangent(rt::GraphTransaction &transaction, Type *primal, gc
 
 /// `lhs + rhs` of the tangents of `primal`, element-wise for an aggregate (a state or a captured
 /// value may be a tuple, a struct or a model).
-gc_node_ref_t addTangentSum(rt::GraphTransaction &transaction, Type *primal, gc_node_ref_t lhs, gc_node_ref_t rhs) {
+gc_node_ref_t addTangentSum(
+    rt::GraphTransaction &transaction, Type *primal, gc_node_ref_t lhs, gc_node_ref_t rhs) {
     auto &draft = transaction.edit();
     if (isAggregate(primal)) {
         Type *tangent = machineryTangentTypeOf(primal);
@@ -2078,7 +2077,7 @@ void buildReverseCond(const ReverseLoop &loop, rt::GraphTransaction &transaction
 void buildReverseBody(
     const ReverseLoop &loop, rt::GraphTransaction &transaction, uint32_t region,
     std::span<const gc_node_ref_t> tapePorts) {
-    auto &draft = transaction.edit();
+    auto &draft                          = transaction.edit();
     const std::vector<Type *> stateTypes = reverseStateTypes(loop);
     draft.setInsertRegion(region);
     std::vector<gc_node_ref_t> ports;
@@ -2104,8 +2103,7 @@ void buildReverseBody(
         const std::array<gc_node_ref_t, 2> at{tapePorts[c], ports.front()};
         args.push_back(addOper(transaction, loop.residualTypes[c], ":op/idx_arr", at));
     }
-    const gc_node_ref_t pullback =
-        draft.addFuncNode(loop.bodyPullback, loop.bodyTangentsType);
+    const gc_node_ref_t pullback = draft.addFuncNode(loop.bodyPullback, loop.bodyTangentsType);
     draft.setNormInputs(pullback, args);
     const std::array<gc_node_ref_t, 2> step{ports.front(), addLoopInt(transaction, 1)};
     std::vector<gc_node_ref_t> next{addOper(transaction, Type::Int64(), ":op/sub_l", step)};
@@ -2142,8 +2140,7 @@ void buildReverseBody(
             loop.bodyTangentsType->typeAt(*loop.elementTangent),
             pullback,
             *loop.elementTangent);
-        const std::array<gc_node_ref_t, 3> scatter{
-            ports[loop.arraySlot], ports.front(), element};
+        const std::array<gc_node_ref_t, 3> scatter{ports[loop.arraySlot], ports.front(), element};
         // Which scatter takes that element's gradient back is the iterated value's own kind's
         // answer, not one hard-wired operator: the registry states it beside the kind's add and
         // zero (`TangentSpace::scatterUri`). An array whose elements the core holds one slot each
@@ -2156,12 +2153,11 @@ void buildReverseBody(
         // here, where the iterated value's own type is in hand.
         const TangentSpace *const space =
             DerivativeRegistry::instance().findTangentSpace(loop.iterableType);
-        const std::string_view scatterUri =
-            (isNumericArrayType(loop.iterableType) &&
-             machineryTangentTypeOf(loop.iterableType) != nullptr && space != nullptr &&
-             !space->scatterUri.empty())
-                ? std::string_view(space->scatterUri)
-                : std::string_view(":tangent/scatter_add_arr");
+        const std::string_view scatterUri = (isNumericArrayType(loop.iterableType) &&
+                                             machineryTangentTypeOf(loop.iterableType) != nullptr &&
+                                             space != nullptr && !space->scatterUri.empty())
+                                                ? std::string_view(space->scatterUri)
+                                                : std::string_view(":tangent/scatter_add_arr");
         next.push_back(addOper(
             transaction,
             loop.tangentsType->typeAt(*loop.arrayTangent),
@@ -2229,9 +2225,12 @@ void buildReverseClosure(
             continue;
         }
         initial.push_back(
-            loop.stateTypes.size() == 1
-                ? dy
-                : addAccs(transaction, loop.tangentsType->typeAt(*loop.stateTangent[j]), dy, loop.statePart[j]));
+            loop.stateTypes.size() == 1 ? dy
+                                        : addAccs(
+                                              transaction,
+                                              loop.tangentsType->typeAt(*loop.stateTangent[j]),
+                                              dy,
+                                              loop.statePart[j]));
     }
     for (size_t c = 0; c < loop.captureTypes.size(); ++c) {
         if (loop.captureSlot[c] == kNoSlot) {
@@ -2244,14 +2243,14 @@ void buildReverseClosure(
     }
     const Type *valueType =
         stateTypes.size() == 1 ? stateTypes.front() : TupleType::create(stateTypes);
-    const rt::GCLoopBody payload{
-        .kind            = camel::core::LoopKind::While,
-        .collectionCount = 0};
+    const rt::GCLoopBody payload{.kind = camel::core::LoopKind::While, .collectionCount = 0};
     const gc_node_ref_t round    = addPort(transaction, Type::Int64());
     const gc_node_ref_t loopNode = draft.addLoopNode(payload, const_cast<Type *>(valueType));
     draft.setNormInputs(loopNode, initial);
     const std::array<gc_node_ref_t, 3> parts{
-        draft.region(bodyRegion).result, draft.region(condRegion).result, round};
+        draft.region(bodyRegion).result,
+        draft.region(condRegion).result,
+        round};
     draft.setWithInputs(loopNode, parts);
     draft.setRegionOwner(condRegion, loopNode, 0);
     draft.setRegionOwner(bodyRegion, loopNode, 1);
@@ -2297,8 +2296,10 @@ bool ForwardRewrite::dependsOnTangentPort(gc_node_ref_t node) {
             const gc_node_ref_t value = work.back();
             work.pop_back();
             for (const std::span<const gc_node_ref_t> users :
-                 {draft().normUsersOf(value), draft().withUsersOf(value),
-                  draft().ctrlUsersOf(value), draft().syncUsersOf(value)}) {
+                 {draft().normUsersOf(value),
+                  draft().withUsersOf(value),
+                  draft().ctrlUsersOf(value),
+                  draft().syncUsersOf(value)}) {
                 for (gc_node_ref_t user : users) {
                     if (reach_.insert(user).second) {
                         work.push_back(user);
@@ -2325,17 +2326,20 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // axis is a slice, and iterating any other value goes through that kind's own operator. Such a
     // value reaches the loop as the array that operator produced, or is refused where the operator
     // has no derivative rule.
-    const bool carryArray =
-        iterableType != nullptr && iterableType->code() == TypeCode::Array &&
-        carriesGradient(iterableType) && dependsOnTangentPort(*iterable);
+    const bool carryArray = iterableType != nullptr && iterableType->code() == TypeCode::Array &&
+                            carriesGradient(iterableType) && dependsOnTangentPort(*iterable);
     // The builder may already have given the loop collection slots (an empty-array state whose
     // only use is `append`, Builder::collectLoopAppends). They are part of the loop's value,
     // before the tape, and are preserved here.
     const size_t existingCollections = view.collectionCount();
-    const LoopBodyPlan &bodyPlan = engine_.loopBodyPlanFor(
-        transaction_, loop, view.stateCount(), view.iterable().has_value(), carryArray);
-    const size_t k               = bodyPlan.stateTypes.size();
-    const size_t m               = bodyPlan.captureTypes.size();
+    const LoopBodyPlan &bodyPlan     = engine_.loopBodyPlanFor(
+        transaction_,
+        loop,
+        view.stateCount(),
+        view.iterable().has_value(),
+        carryArray);
+    const size_t k = bodyPlan.stateTypes.size();
+    const size_t m = bodyPlan.captureTypes.size();
     // A state with no tangent whose next value depends on an active value loses that value's
     // gradient at the round boundary. The body knows which states those are; refuse the loop
     // here, where the source loop is, rather than let the tape skip it (9.9).
@@ -2400,7 +2404,10 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // The loop's value becomes (the states…, one array per collection slot): the tape is part of
     // it, collected in place by the executor.
     std::vector<Type *> valueTypes = bodyPlan.stateTypes;
-    valueTypes.insert(valueTypes.end(), bodyPlan.collectionTypes.begin(), bodyPlan.collectionTypes.end());
+    valueTypes.insert(
+        valueTypes.end(),
+        bodyPlan.collectionTypes.begin(),
+        bodyPlan.collectionTypes.end());
     Type *const valueType = TupleType::create(valueTypes);
     draft().setLoopCollectionCount(loop, static_cast<uint32_t>(bodyPlan.collectionTypes.size()));
     draft().setNodeDataType(loop, valueType);
@@ -2434,7 +2441,8 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
                 slots[j] = j;
             }
             state = draft().addFillNode(
-                bodyPlan.stateValueType, rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
+                bodyPlan.stateValueType,
+                rt::makeFillPayload(rt::GCFillKind::Tuple, slots));
         }
         draft().setNodeOrigin(state, origin);
         redirectValue(loop, state);
@@ -2443,13 +2451,15 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         } else {
             std::vector<gc_node_ref_t> components;
             for (size_t j = 0; j < k; ++j) {
-                const gc_node_ref_t component = addAccs(transaction_, bodyPlan.stateTypes[j], loop, j);
+                const gc_node_ref_t component =
+                    addAccs(transaction_, bodyPlan.stateTypes[j], loop, j);
                 draft().setNodeOrigin(component, origin);
                 components.push_back(component);
             }
-            auto *const empty = ::Tuple::create(k, mm::autoSpace());
+            auto *const empty          = ::Tuple::create(k, mm::autoSpace());
             const gc_node_ref_t source = draft().materializeStaticValue(
-                toSlot<camel::core::rtdata::Object *>(empty), bodyPlan.stateValueType);
+                toSlot<camel::core::rtdata::Object *>(empty),
+                bodyPlan.stateValueType);
             draft().setNormInputs(state, std::span<const gc_node_ref_t>(&source, 1));
             draft().setWithInputs(state, components);
         }
@@ -2459,7 +2469,9 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     std::vector<gc_node_ref_t> tapes;
     for (size_t c = 0; c < bodyPlan.tapeCollectionTypes.size(); ++c) {
         const gc_node_ref_t tape = addAccs(
-            transaction_, bodyPlan.tapeCollectionTypes[c], loop,
+            transaction_,
+            bodyPlan.tapeCollectionTypes[c],
+            loop,
             static_cast<uint32_t>(k + existingCollections + c));
         draft().setNodeOrigin(tape, origin);
         tapes.push_back(tape);
@@ -2483,8 +2495,8 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     reverse.statePart.resize(k, 0);
     reverse.bodyTangentsType = bodyPlan.graphs.tangentsType;
     if (carryArray) {
-        reverse.iterableType  = iterableType;
-        reverse.arrayTangent  = site.tangentIndex(m + k);
+        reverse.iterableType   = iterableType;
+        reverse.arrayTangent   = site.tangentIndex(m + k);
         reverse.elementTangent = bodyPlan.graphs.tangentIndex(m + k);
         ASSERT(
             reverse.arrayTangent && reverse.elementTangent,
@@ -2511,7 +2523,7 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
     // The reverse pass's graph: its condition and body are regions of it, as a program's loops are.
     // It is reserved (not encoded) now; the group re-points the graph references its payload holds
     // when it encodes it, as it does for every member the transformation adds.
-    const std::string key = bodyPlan.name + ".reverse";
+    const std::string key        = bodyPlan.name + ".reverse";
     const rt::GraphId closureKey = engine_.group().reserve("autodiff.loop/" + key, key);
     // What the reverse pass captures, in order: the tape, then the captures whose gradient it
     // starts from zero.
@@ -2533,11 +2545,16 @@ void ForwardRewrite::rewriteLoop(gc_node_ref_t loop) {
         closureTypes.push_back(iterableType);
     }
     TupleType *const closureType = TupleType::create(closureTypes);
-    auto closure = rt::GraphTransaction::open(closureKey);
+    auto closure                 = rt::GraphTransaction::open(closureKey);
     buildReverseClosure(*closure, reverse, closureType, captures);
     engine_.group().define(closureKey, std::move(closure));
-    const gc_node_ref_t pullback =
-        addClosure(engine_.group(), transaction_, closureKey, site.pullbackType, closureType, captures);
+    const gc_node_ref_t pullback = addClosure(
+        engine_.group(),
+        transaction_,
+        closureKey,
+        site.pullbackType,
+        closureType,
+        captures);
     // The site: the loop's value is `state`; its gradient is the gradient of the loop's value.
     CallSite recorded;
     recorded.pullback = pullback;
@@ -2689,7 +2706,8 @@ void ForwardRewrite::rewriteClosureCall(
     for (gc_node_ref_t capture : graph->closureNodes()) {
         portTypes.push_back(graph->node(capture)->dataType());
     }
-    const bool carriesFlow = machineryTangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
+    const bool carriesFlow =
+        machineryTangentTypeOf(type->exitType()) != nullptr && anyTangent(portTypes);
     if (!carriesFlow || graph->isMacro()) {
         return; // nothing to differentiate: the call stays, a constant to the reverse pass
     }
@@ -2762,10 +2780,10 @@ void ForwardRewrite::rewriteClosureCall(
         auto *function   = value ? fromSlot<::Function *>(*value) : nullptr;
         return function && function->graph() ? function : nullptr;
     };
-    const auto norm    = draft().normInputsOf(callee);
-    ::Function *result = nullptr;
-    const bool withValue = oper == kValueAndGrad || oper == kValueAndGradAux;
-    const bool hasAux    = oper == kGradAux || oper == kValueAndGradAux;
+    const auto norm          = draft().normInputsOf(callee);
+    ::Function *result       = nullptr;
+    const bool withValue     = oper == kValueAndGrad || oper == kValueAndGradAux;
+    const bool hasAux        = oper == kGradAux || oper == kValueAndGradAux;
     const bool takesFunction = oper == kGrad || oper == kValueAndGrad || hasAux;
     if (takesFunction && norm.size() == (hasAux ? 2u : 1u)) {
         ::Function *function = staticFunction(norm.front());
@@ -2856,7 +2874,7 @@ void ForwardRewrite::rewriteCall(gc_node_ref_t call) {
                 portTypes.size()));
     }
     const PullbackPlan &plan = engine_.planFor(callee);
-    const size_t versions      = retarget(call, plan);
+    const size_t versions    = retarget(call, plan);
     split(call, plan, std::move(inputs), versions);
 }
 
@@ -2904,9 +2922,9 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         const uint32_t region = regions[i];
         ArmRewrite &arm       = rewritten[i];
         arm.scope             = GraphScope{
-                        .role      = GraphRole::BranchArm,
-                        .enclosing = engine_.ownersOf(&transaction_, region),
-                        .recursive = scope_.recursive,
+            .role      = GraphRole::BranchArm,
+            .enclosing = engine_.ownersOf(&transaction_, region),
+            .recursive = scope_.recursive,
         };
         // The function whose graph holds the arm: a call of it from the arm is its recursion.
         arm.scope.enclosing.insert(scope_.enclosing.begin(), scope_.enclosing.end());
@@ -2974,8 +2992,8 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
     std::vector<gc_node_ref_t> armResults;
 
     for (size_t i = 0; i < regions.size(); ++i) {
-        const uint32_t region = regions[i];
-        ArmRewrite &arm       = rewritten[i];
+        const uint32_t region     = regions[i];
+        ArmRewrite &arm           = rewritten[i];
         const gc_node_ref_t value = arm.value;
         // The identity is the one the arm's plan reserves below; define() stamps it.
         auto pullbackOwner = rt::GraphTransaction::open(rt::kInvalidGraphId);
@@ -2988,10 +3006,16 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
             differentiated.push_back(input);
         }
         Backward backward(
-            engine_, transaction_, *pullbackOwner, arm.rewrite->sites(), arm.scope,
+            engine_,
+            transaction_,
+            *pullbackOwner,
+            arm.rewrite->sites(),
+            arm.scope,
             engine_.refusals(),
             std::move(differentiated),
-            /*residualPorts=*/false, boundary, arm.rewrite->untapedLoops());
+            /*residualPorts=*/false,
+            boundary,
+            arm.rewrite->untapedLoops());
         backward.seed(value, dy);
         std::vector<gc_node_ref_t> order = valueOrder(transaction_, value, region);
         order.insert(order.begin(), shared.begin(), shared.end());
@@ -3011,16 +3035,22 @@ void ForwardRewrite::rewriteBranch(gc_node_ref_t join) {
         }
         TupleType *const closureType = TupleType::create(captureTypes);
         pullback.setClosureType(closureType);
-        const PullbackPlan armPlan =
-            engine_.reserveRegionPullback(std::format("arm{}.{}", static_cast<size_t>(region), i), types);
+        const PullbackPlan armPlan = engine_.reserveRegionPullback(
+            std::format("arm{}.{}", static_cast<size_t>(region), i),
+            types);
         const uint32_t savedRegion = draft().insertRegion();
         draft().setInsertRegion(region);
-        const gc_node_ref_t closure =
-            addClosure(engine_.group(), transaction_, armPlan.pullback, types.pullbackType, closureType, captured);
+        const gc_node_ref_t closure = addClosure(
+            engine_.group(),
+            transaction_,
+            armPlan.pullback,
+            types.pullbackType,
+            closureType,
+            captured);
         const std::array<gc_node_ref_t, 2> pair{value, closure};
-        const gc_node_ref_t result = addAggregate(transaction_, types.forwardValueType, pair);
+        const gc_node_ref_t result    = addAggregate(transaction_, types.forwardValueType, pair);
         const gc_node_ref_t oldResult = draft().region(region).result;
-        gc_node_ref_t armResult      = result;
+        gc_node_ref_t armResult       = result;
         if (oldResult != kInvalidNodeRef && oldResult != result) {
             armResult = draft().addGateNode(typeOf(transaction_, result));
             draft().setNormInputs(armResult, std::span<const gc_node_ref_t>(&result, 1));
@@ -3118,7 +3148,8 @@ void Backward::accumulateInto(
             if (!position) {
                 continue;
             }
-            const gc_node_ref_t element = addField(targetTransaction_, tangentType, gradient, *position);
+            const gc_node_ref_t element =
+                addField(targetTransaction_, tangentType, gradient, *position);
             accumulateInto(tangent.elements[i], aggregateElement(primalType, i), element, at);
         }
         return;
@@ -3176,8 +3207,7 @@ std::string Backward::producerOf(gc_node_ref_t gradient) const {
     }
 }
 
-void Backward::mergeInto(
-    Tangent &tangent, Type *primalType, Tangent &&other, gc_node_ref_t at) {
+void Backward::mergeInto(Tangent &tangent, Type *primalType, Tangent &&other, gc_node_ref_t at) {
     if (other.value != kInvalidNodeRef) {
         accumulateInto(tangent, primalType, other.value, at);
     }
@@ -3202,7 +3232,11 @@ gc_node_ref_t Backward::add(Type *primalType, gc_node_ref_t lhs, gc_node_ref_t r
         fail(std::format("cannot add gradients of type '{}'", primalType->toString()));
     }
     const std::array<gc_node_ref_t, 2> inputs{lhs, rhs};
-    return autodiff::addOper(targetTransaction_, tangentNodeType(primalType), space->addUri, inputs);
+    return autodiff::addOper(
+        targetTransaction_,
+        tangentNodeType(primalType),
+        space->addUri,
+        inputs);
 }
 
 gc_node_ref_t Backward::zero(Type *primalType, gc_node_ref_t primal, TangentAudience audience) {
@@ -3262,7 +3296,8 @@ gc_node_ref_t Backward::materialize(
             values.push_back(materialize(it->second, elementType, element, audience));
         }
     }
-    tangent.materialized = addAggregate(targetTransaction_, tangentTypeFor(primalType, audience), values);
+    tangent.materialized =
+        addAggregate(targetTransaction_, tangentTypeFor(primalType, audience), values);
     return tangent.materialized;
 }
 
@@ -3275,7 +3310,10 @@ gc_node_ref_t Backward::gradient(gc_node_ref_t primal) {
     // The primal value is only read for zeros; avoid capturing it otherwise.
     const bool needsPrimal = tangent.empty() || isAggregate(type);
     return materialize(
-        tangent, type, needsPrimal ? ref(primal) : kInvalidNodeRef, TangentAudience::Machinery);
+        tangent,
+        type,
+        needsPrimal ? ref(primal) : kInvalidNodeRef,
+        TangentAudience::Machinery);
 }
 
 gc_node_ref_t Backward::userGradient(gc_node_ref_t primal) {
@@ -3388,7 +3426,8 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if (kind == GCNodeKind::Oper) {
             const auto payload = forward.payloadOf(node);
             if (payload.size() >= sizeof(rt::GCOperBody)) {
-                const std::string uri(reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri());
+                const std::string uri(
+                    reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri());
                 if (uri == "tensor:where" || uri == ":op/where") {
                     const auto norm = forward.normInputsOf(node);
                     return !norm.empty() && input == norm.front();
@@ -3411,7 +3450,8 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if (payload.size() < sizeof(rt::GCOperBody)) {
             return false;
         }
-        const std::string_view uri = reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
+        const std::string_view uri =
+            reinterpret_cast<const rt::GCOperBody *>(payload.data())->uri();
         return uri == "tensor:shape" || uri == ":op/len_arr" || uri == ":op/len_str" ||
                uri == "tensor:rank" || uri == "tensor:numel";
     };
@@ -3470,8 +3510,7 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         // iteration operator of its kind (`tensor:iter` and the like), which is refused by the
         // rule lookup when the value takes part in the gradient.
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop) {
-            const auto iterable =
-                rt::LoopDraftView(*forward.program(), forward, node).iterable();
+            const auto iterable = rt::LoopDraftView(*forward.program(), forward, node).iterable();
             if (iterable.has_value() &&
                 (active_.contains(*iterable) || tainted_.contains(*iterable))) {
                 Type *const iterableType = typeOf(forwardTransaction_, *iterable);
@@ -3494,13 +3533,13 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                 // A round of a loop over an array whose elements are themselves arrays (a rank-2
                 // or higher numeric array, whose rounds are its slices) cannot be reversed yet:
                 // such an array's tangent is the array of its *elements'* tangents, one rank short
-                // of the value (src/core/derivative.cpp, the Array case of `computeTangent`), so both
-                // the zero tangent the reverse loop starts from and its per-round scatter-add are
-                // typed one rank short of the array they accumulate into. `std::macro std::jgir`
-                // prints them, `tensor:zeros_like` and `:tangent/scatter_add_arr` both of type
-                // `f32[]`, while the array is `f32[2, 3]`; the rounds' slices then landed in a
-                // container nothing filled, and the gradient came back as uninitialized memory --
-                // two garbage floats where the hand adjoint has six ones
+                // of the value (src/core/derivative.cpp, the Array case of `computeTangent`), so
+                // both the zero tangent the reverse loop starts from and its per-round scatter-add
+                // are typed one rank short of the array they accumulate into. `std::macro
+                // std::jgir` prints them, `tensor:zeros_like` and `:tangent/scatter_add_arr` both
+                // of type `f32[]`, while the array is `f32[2, 3]`; the rounds' slices then landed
+                // in a container nothing filled, and the gradient came back as uninitialized memory
+                // -- two garbage floats where the hand adjoint has six ones
                 // (test/cases/modules/autodiff/loop_grad_tensor_iterable.cml, `shape(d) = [2]`).
                 // Refuse the loop by name until an array's tangent is the array itself.
                 else if (iterableType->code() == TypeCode::Array) {
@@ -3535,8 +3574,8 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         }
         Type *const type   = typeOf(forwardTransaction_, node);
         const bool carrier = holdsFunction(type);
-        bool inputActive    = false;
-        bool inputTainted   = false;
+        bool inputActive   = false;
+        bool inputTainted  = false;
         for (auto inputs : {forward.normInputsOf(node), forward.withInputsOf(node)}) {
             for (gc_node_ref_t input : inputs) {
                 inputActive |= active_.contains(input);
@@ -3585,10 +3624,13 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
         if (kindOf(forwardTransaction_, node) == GCNodeKind::Loop && untapedLoops_.contains(node)) {
             // The condition and the body are regions: what the loop depends on is what they read
             // from around them, not only what the node itself is passed.
-            std::vector<gc_node_ref_t> reads{forward.normInputsOf(node).begin(),
-                                             forward.normInputsOf(node).end()};
+            std::vector<gc_node_ref_t> reads{
+                forward.normInputsOf(node).begin(),
+                forward.normInputsOf(node).end()};
             reads.insert(
-                reads.end(), forward.withInputsOf(node).begin(), forward.withInputsOf(node).end());
+                reads.end(),
+                forward.withInputsOf(node).begin(),
+                forward.withInputsOf(node).end());
             for (gc_node_ref_t read :
                  rt::LoopDraftView(*forward.program(), forward, node).externalInputs(false)) {
                 reads.push_back(read);
@@ -3657,11 +3699,10 @@ void Backward::run(const std::vector<gc_node_ref_t> &order) {
                     "carry a gradient (a float, or an aggregate of floats){}",
                     typeOf(forwardTransaction_, source)->toString(),
                     whereIs(forward.nodeOrigin(node)),
-                    source == kInvalidNodeRef
-                        ? std::string()
-                        : std::format(
-                              "; the value with no channel comes from {}",
-                              whereIs(forward.nodeOrigin(source)))));
+                    source == kInvalidNodeRef ? std::string()
+                                              : std::format(
+                                                    "; the value with no channel comes from {}",
+                                                    whereIs(forward.nodeOrigin(source)))));
         }
         active_.insert(node);
     }
@@ -3705,10 +3746,11 @@ void Backward::reportRefusals(const std::vector<gc_node_ref_t> &order) {
                                machineryTangentTypeOf(typeOf(forwardTransaction_, node)) != nullptr;
         if (met.contains(node) || unreached) {
             const gc_node_ref_t chosen = chosenFunction(node);
-            refusals_.push_back(Refusal{
-                .origin = forward().nodeOrigin(node),
-                .chosen = chosen == kInvalidNodeRef ? 0 : forward().nodeOrigin(chosen),
-                .reason = refusalReason(node)});
+            refusals_.push_back(
+                Refusal{
+                    .origin = forward().nodeOrigin(node),
+                    .chosen = chosen == kInvalidNodeRef ? 0 : forward().nodeOrigin(chosen),
+                    .reason = refusalReason(node)});
         }
     }
 }
@@ -3822,19 +3864,19 @@ std::string Backward::whyNotEvident(gc_node_ref_t function) const {
         if (camel::core::oper::isVariableRead(operId(function))) {
             return "the function is read from a variable";
         }
-        // Nothing here names the operator. Which operator computed a function value is *provenance*,
-        // and a verdict read off provenance is a verdict about where the value came from rather than
-        // about what it is: the sentence used to read "the function is the result of
-        // 'transforms:split'", which named a transform this engine knows nothing else about and told
-        // a reader to go and look at it (author, 2026-11-04 04:20: the engine's "this is the result
-        // of `transforms:split`" refusal judges by provenance, so the engine deletes it and does not
-        // learn to read provenance -- the library's `grad` covers those shapes). What this engine can
-        // say about such a value by its content is the sentence below the switch: it is computed at
-        // run time, so which function it calls is not evident where it is called.
-        // A transform's own answer to "what is this function's derivative" is the library's rule --
-        // `stdlib/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine neither
-        // repeats that rule nor guesses at it. `break`, not a fallthrough: the cases below read the
-        // node as the kind they name, and an operator node is not one of them.
+        // Nothing here names the operator. Which operator computed a function value is
+        // *provenance*, and a verdict read off provenance is a verdict about where the value came
+        // from rather than about what it is: the sentence used to read "the function is the result
+        // of 'transforms:split'", which named a transform this engine knows nothing else about and
+        // told a reader to go and look at it (author, 2026-11-04 04:20: the engine's "this is the
+        // result of `transforms:split`" refusal judges by provenance, so the engine deletes it and
+        // does not learn to read provenance -- the library's `grad` covers those shapes). What this
+        // engine can say about such a value by its content is the sentence below the switch: it is
+        // computed at run time, so which function it calls is not evident where it is called. A
+        // transform's own answer to "what is this function's derivative" is the library's rule --
+        // `stdlib/vjp.cml#grad` composes `vjp` from `split` and `transpose` -- and the engine
+        // neither repeats that rule nor guesses at it. `break`, not a fallthrough: the cases below
+        // read the node as the kind they name, and an operator node is not one of them.
         break;
     case GCNodeKind::Func:
         // A call that returns a function value is never retargeted: its callee is a graph.
@@ -4043,13 +4085,20 @@ void Backward::visitCallSite(gc_node_ref_t node, const CallSite &site) {
     }
     const gc_node_ref_t dy       = gradient(node);
     const gc_node_ref_t pullback = ref(site.pullback);
-    const gc_node_ref_t tangents =
-        addCall(targetTransaction_, site.plan.tangentsType, pullback, std::span<const gc_node_ref_t>(&dy, 1));
+    const gc_node_ref_t tangents = addCall(
+        targetTransaction_,
+        site.plan.tangentsType,
+        pullback,
+        std::span<const gc_node_ref_t>(&dy, 1));
     for (size_t i = 0; i < site.inputs.size(); ++i) {
         if (const auto position = site.plan.tangentIndex(i)) {
             accumulate(
                 site.inputs[i],
-                addAccs(targetTransaction_, machineryTangentTypeOf(site.plan.portTypes[i]), tangents, *position));
+                addAccs(
+                    targetTransaction_,
+                    machineryTangentTypeOf(site.plan.portTypes[i]),
+                    tangents,
+                    *position));
         }
     }
 }
@@ -4074,9 +4123,12 @@ void Backward::visitRuleSite(gc_node_ref_t node, const CallSite &site) {
         if (const auto position = site.plan.tangentIndex(i)) {
             accumulate(
                 site.inputs[i],
-                count == 1
-                    ? result
-                    : addAccs(targetTransaction_, machineryTangentTypeOf(site.plan.portTypes[i]), result, *position));
+                count == 1 ? result
+                           : addAccs(
+                                 targetTransaction_,
+                                 machineryTangentTypeOf(site.plan.portTypes[i]),
+                                 result,
+                                 *position));
         }
     }
     producing_ = kInvalidNodeRef;
@@ -4104,7 +4156,8 @@ void Backward::visitOper(gc_node_ref_t node) {
     std::vector<ValueWith> valueWith;
     size_t withIndex = 0;
     for (gc_node_ref_t input : forward().withInputsOf(node)) {
-        if (active_.contains(input) && machineryTangentTypeOf(typeOf(forwardTransaction_, input)) != nullptr) {
+        if (active_.contains(input) &&
+            machineryTangentTypeOf(typeOf(forwardTransaction_, input)) != nullptr) {
             valueWith.push_back(ValueWith{.input = input, .index = withIndex});
             active = true;
         }
@@ -4181,7 +4234,7 @@ void Backward::visitOper(gc_node_ref_t node) {
             .attrs      = forward().nodeAttrs(node)});
     producing_ = kInvalidNodeRef;
     for (size_t i = 0; i < valueWith.size(); ++i) {
-        const auto found = contributions_.find(valueWith[i].input);
+        const auto found   = contributions_.find(valueWith[i].input);
         const uint64_t now = found == contributions_.end() ? 0 : found->second;
         if (now == before[i]) {
             failValueWith(
@@ -4242,10 +4295,12 @@ void Backward::visitFill(gc_node_ref_t node) {
                 continue;
             }
             const gc_node_ref_t index = target().materializeStaticValue(
-                toSlot<int64_t>(static_cast<int64_t>(slots[i])), Type::Int64());
+                toSlot<int64_t>(static_cast<int64_t>(slots[i])),
+                Type::Int64());
             const std::array<gc_node_ref_t, 2> at{moved.value, index};
             accumulate(
-                values[i], autodiff::addOper(targetTransaction_, elementTangent, ":op/idx_arr", at));
+                values[i],
+                autodiff::addOper(targetTransaction_, elementTangent, ":op/idx_arr", at));
         }
         return;
     }
@@ -4281,7 +4336,8 @@ void Backward::visitForward(gc_node_ref_t node, bool convert) {
         return;
     }
     gc_node_ref_t g = gradient(node);
-    if (convert && !sourceTangent->equals(machineryTangentTypeOf(typeOf(forwardTransaction_, node)))) {
+    if (convert &&
+        !sourceTangent->equals(machineryTangentTypeOf(typeOf(forwardTransaction_, node)))) {
         const gc_node_ref_t cast = target().addCastNode(sourceTangent);
         target().setNormInputs(cast, std::span<const gc_node_ref_t>(&g, 1));
         g = cast;
@@ -4328,12 +4384,13 @@ const PullbackPlan &Engine::planFor(GCGraph *callee) {
     }
     PullbackPlan plan =
         reserve(callee->name(), makePlanTypes(portTypesOf(callee), callee->funcType()->exitType()));
-    pending_.push_back(Pending{
-        .plan   = plan,
-        .source = rt::GraphTransaction::decode(inlining_.work(), callee),
-        .scope  = GraphScope{.role = GraphRole::Callee},
-        .graph  = callee,
-    });
+    pending_.push_back(
+        Pending{
+            .plan   = plan,
+            .source = rt::GraphTransaction::decode(inlining_.work(), callee),
+            .scope  = GraphScope{.role = GraphRole::Callee},
+            .graph  = callee,
+        });
     return plans_.emplace(callee, plan).first->second;
 }
 
@@ -4361,8 +4418,7 @@ const PullbackPlan &Engine::planForClosure(GCGraph *graph) {
         normParams.emplace_back(captured, false);
         portTypes.push_back(captured);
     }
-    liftedDraft.setFuncType(
-        FunctionType::create(withParams, normParams, type->exitType()));
+    liftedDraft.setFuncType(FunctionType::create(withParams, normParams, type->exitType()));
     liftedDraft.setClosureType(nullptr);
     PullbackPlan plan =
         reserve(graph->name(), makePlanTypes(std::move(portTypes), type->exitType()));
@@ -4389,8 +4445,8 @@ PullbackPlan Engine::planForDraft(
 // a report of its own: the one at the
 // first call in source order is the fault's own and the rest are carried beside it, and each
 // names where the function value was chosen as related information. Which of them a reader sees
-// is the reader's business: a run-time fault stops at the first, and the macro evaluator reports every one of them, because
-// a compile-time expansion collects all the mistakes in one round.
+// is the reader's business: a run-time fault stops at the first, and the macro evaluator reports
+// every one of them, because a compile-time expansion collects all the mistakes in one round.
 void Engine::refuse() {
     struct Place {
         std::string path;
@@ -4436,10 +4492,11 @@ void Engine::refuse() {
         report.formatArgs = {"autodiff: " + refusal.reason + exhausted + remedy};
         if (refusal.chosen != 0 && currentSource) {
             if (const auto *file = currentSource->fileForOrigin(refusal.chosen)) {
-                report.related.push_back(camel::core::error::DiagLabel{
-                    static_cast<camel::source::origin_id_t>(refusal.chosen),
-                    "the function value is chosen here",
-                    file->path});
+                report.related.push_back(
+                    camel::core::error::DiagLabel{
+                        static_cast<camel::source::origin_id_t>(refusal.chosen),
+                        "the function value is chosen here",
+                        file->path});
             }
         }
         return report;
@@ -4458,7 +4515,7 @@ void Engine::refuse() {
 
 void Engine::build(Pending &pending) {
     const PullbackPlan &plan = pending.plan;
-    auto &forward = pending.source->edit();
+    auto &forward            = pending.source->edit();
 
     if (pending.graph != nullptr && recursions_.contains(pending.graph)) {
         pending.scope.recursive = pending.graph->name();
@@ -4491,8 +4548,16 @@ void Engine::build(Pending &pending) {
         }
     }
     Backward backward(
-        *this, *pending.source, *pullbackOwner, rewrite.sites(), pending.scope, refusals(),
-        std::move(differentiated), /*residualPorts=*/false, {}, rewrite.untapedLoops());
+        *this,
+        *pending.source,
+        *pullbackOwner,
+        rewrite.sites(),
+        pending.scope,
+        refusals(),
+        std::move(differentiated),
+        /*residualPorts=*/false,
+        {},
+        rewrite.untapedLoops());
     backward.seed(value, dy);
     const auto edges = siteEdges(rewrite.sites());
     backward.run(valueOrder(*pending.source, value, 0, &edges));
@@ -4514,8 +4579,13 @@ void Engine::build(Pending &pending) {
     TupleType *closureType = TupleType::create(std::move(captureTypes));
     pullback.setClosureType(closureType);
 
-    const gc_node_ref_t closure =
-        addClosure(group_, *pending.source, plan.pullback, plan.pullbackType, closureType, captures);
+    const gc_node_ref_t closure = addClosure(
+        group_,
+        *pending.source,
+        plan.pullback,
+        plan.pullbackType,
+        closureType,
+        captures);
     const std::array<gc_node_ref_t, 2> pair{value, closure};
     setResult(*pending.source, addAggregate(*pending.source, plan.forwardValueType, pair));
     pruneUnreachable(*pending.source);
@@ -4528,11 +4598,7 @@ void Engine::build(Pending &pending) {
     for (size_t i = 0; i < sourceType->normTypesCount(); ++i) {
         normParams.emplace_back(sourceType->normTypeAt(i), sourceType->normIsVarAt(i));
     }
-    forward.setFuncType(
-        FunctionType::create(
-            withParams,
-            normParams,
-            plan.forwardValueType));
+    forward.setFuncType(FunctionType::create(withParams, normParams, plan.forwardValueType));
 
     group_.define(plan.forward, std::move(pending.source));
     group_.define(plan.pullback, std::move(pullbackOwner));
@@ -4570,7 +4636,7 @@ LoopBodyPlan Engine::buildLoopBody(
     rt::GraphTransaction &transaction, gc_node_ref_t loop, size_t stateCount, bool iterates,
     bool arrayGradient) {
     LoopBodyPlan plan;
-    auto &draft                        = transaction.edit();
+    auto &draft = transaction.edit();
     const LoopDraftView view(*draft.program(), draft, loop);
     const uint32_t bodyRegion = view.bodyRegion();
     ASSERT(
@@ -4585,8 +4651,10 @@ LoopBodyPlan Engine::buildLoopBody(
     for (size_t j = 0; j < stateCount; ++j) {
         plan.stateTypes.push_back(view.stateType(j));
     }
-    plan.stateValueType = stateCount == 1 ? plan.stateTypes.front() : TupleType::create(plan.stateTypes);
-    plan.dyType = carriesGradient(plan.stateValueType) ? machineryTangentTypeOf(plan.stateValueType) : nullptr;
+    plan.stateValueType =
+        stateCount == 1 ? plan.stateTypes.front() : TupleType::create(plan.stateTypes);
+    plan.dyType = carriesGradient(plan.stateValueType) ? machineryTangentTypeOf(plan.stateValueType)
+                                                       : nullptr;
     if (plan.dyType == nullptr) {
         return plan; // nothing can flow through the loop: the caller leaves it alone
     }
@@ -4610,7 +4678,8 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     plan.name   = std::format("loop{}.tape", static_cast<size_t>(loop));
     plan.graphs = reservePullback(
-        plan.name, makePlanTypes(pullbackPorts, plan.stateValueType, carriesGradient));
+        plan.name,
+        makePlanTypes(pullbackPorts, plan.stateValueType, carriesGradient));
 
     // A loop that appends to its array state in place (Builder::markLoopStateInPlace) has one
     // array that every round writes into, so the tape this body is about to collect would hold
@@ -4628,15 +4697,15 @@ LoopBodyPlan Engine::buildLoopBody(
     // the loop (Builder::collectLoopAppends). They come first, before the tape; the gradient
     // still flows through the states alone, so the backward pass below is seeded with the state
     // value, not with the whole tuple.
-    const gc_node_ref_t value = view.nextState();
+    const gc_node_ref_t value  = view.nextState();
     size_t existingCollections = 0;
     if (kindOf(transaction, value) == GCNodeKind::Fill) {
         const auto withIns = draft.withInputsOf(value);
         const auto payload = draft.payloadOf(value);
         if (payload.size() >= sizeof(rt::GCFillBody)) {
             const auto *fill = reinterpret_cast<const rt::GCFillBody *>(payload.data());
-            if (fill->fillKind == rt::GCFillKind::Tuple &&
-                fill->slots().size() == withIns.size() && withIns.size() > stateCount) {
+            if (fill->fillKind == rt::GCFillKind::Tuple && fill->slots().size() == withIns.size() &&
+                withIns.size() > stateCount) {
                 existingCollections = withIns.size() - stateCount;
             }
         }
@@ -4689,9 +4758,16 @@ LoopBodyPlan Engine::buildLoopBody(
     }
     const std::unordered_set<gc_node_ref_t> boundarySet(boundary.begin(), boundary.end());
     Backward backward(
-        *this, transaction, *pullbackOwner, rewrite.sites(), scope, refusals(),
+        *this,
+        transaction,
+        *pullbackOwner,
+        rewrite.sites(),
+        scope,
+        refusals(),
         std::move(differentiated),
-        /*residualPorts=*/true, boundarySet, rewrite.untapedLoops());
+        /*residualPorts=*/true,
+        boundarySet,
+        rewrite.untapedLoops());
     backward.seed(stateValue, dy);
     std::vector<gc_node_ref_t> order = valueOrder(transaction, stateValue, bodyRegion);
     order.insert(order.begin(), boundary.begin(), boundary.end());
@@ -4702,7 +4778,8 @@ LoopBodyPlan Engine::buildLoopBody(
     // and can refuse it with the loop's location.
     plan.stateNextTainted.assign(stateCount, false);
     for (size_t j = 0; j < stateCount; ++j) {
-        plan.stateNextTainted[j] = stateNext[j] != kInvalidNodeRef && backward.tainted(stateNext[j]);
+        plan.stateNextTainted[j] =
+            stateNext[j] != kInvalidNodeRef && backward.tainted(stateNext[j]);
     }
 
     // The tangents of the body's ports, in the order the site's pullback returns them. Asking for
@@ -4745,7 +4822,8 @@ LoopBodyPlan Engine::buildLoopBody(
         components.push_back(addLoopInt(transaction, 1));
     }
     plan.tapeCollectionTypes.clear();
-    for (size_t c = plan.existingCollectionElemTypes.size(); c < plan.collectionElemTypes.size(); ++c) {
+    for (size_t c = plan.existingCollectionElemTypes.size(); c < plan.collectionElemTypes.size();
+         ++c) {
         if (plan.collectionElemTypes[c] == nullptr) {
             fail("autodiff: internal error: a loop tape slot has no element type.");
         }
@@ -4758,8 +4836,12 @@ LoopBodyPlan Engine::buildLoopBody(
         plan.collectionTypes.push_back(ArrayType::create(element));
     }
     std::vector<Type *> resultTypes = plan.stateTypes;
-    resultTypes.insert(resultTypes.end(), plan.collectionElemTypes.begin(), plan.collectionElemTypes.end());
-    const gc_node_ref_t fill = addAggregate(transaction, TupleType::create(resultTypes), components);
+    resultTypes.insert(
+        resultTypes.end(),
+        plan.collectionElemTypes.begin(),
+        plan.collectionElemTypes.end());
+    const gc_node_ref_t fill =
+        addAggregate(transaction, TupleType::create(resultTypes), components);
     // Keep the order the body's own result had: the tape is written after the statements.
     const gc_node_ref_t oldResult = draft.region(bodyRegion).result;
     gc_node_ref_t bodyResult      = fill;
@@ -4799,9 +4881,9 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
     // is taken of the first, and the second is handed back as it is. Reading the pair's element
     // node is how the auxiliary value stays part of the transform's result while the backward pass
     // is seeded at the value alone (the pair itself, being a tuple, has no gradient of its own).
-    const gc_node_ref_t pair  = valueNode(*transaction);
-    gc_node_ref_t value       = pair;
-    gc_node_ref_t aux         = kInvalidNodeRef;
+    const gc_node_ref_t pair = valueNode(*transaction);
+    gc_node_ref_t value      = pair;
+    gc_node_ref_t aux        = kInvalidNodeRef;
     if (hasAux) {
         Type *pairType = typeOf(*transaction, pair);
         value          = addAccs(*transaction, aggregateElement(pairType, 0), pair, 0);
@@ -4814,10 +4896,17 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
     // `grad` and `with_grad` differentiate the first `with` parameter only. The other `with`
     // parameters and every ordinary parameter are data, even when their type has a tangent.
     Backward backward(
-        *this, *transaction, *transaction, rewrite.sites(), scope, refusals(),
+        *this,
+        *transaction,
+        *transaction,
+        rewrite.sites(),
+        scope,
+        refusals(),
         withPorts.empty() ? std::vector<gc_node_ref_t>{}
                           : std::vector<gc_node_ref_t>{withPorts.front()},
-        /*residualPorts=*/false, {}, rewrite.untapedLoops());
+        /*residualPorts=*/false,
+        {},
+        rewrite.untapedLoops());
     Type *valueType  = typeOf(*transaction, value);
     const slot_t one = valueType->code() == TypeCode::Float32
                            ? toSlot<camel::core::rtdata::Float32>(1.0f)
@@ -4893,13 +4982,13 @@ GCGraph *Engine::gradient(GCGraph *function, bool withValue, bool hasAux) {
 namespace {
 
 /// The member of `type` that has no gradient, by the path to it inside the value and its type. A
-/// struct or a tuple has a gradient exactly when every member has one, so the reason a whole value is refused
-/// is always one member: the refusal names that member -- "field `s` has type string", "element 1
-/// has type string" -- and not only the value's own type. The path is the member's field name, or
-/// its position where the member is a tuple's element: it is the refusal that says "field" or
-/// "element" in front of it.
-std::optional<std::pair<std::string, Type *>> memberWithoutTangent(
-    Type *type, const std::string &path) {
+/// struct or a tuple has a gradient exactly when every member has one, so the reason a whole value
+/// is refused is always one member: the refusal names that member -- "field `s` has type string",
+/// "element 1 has type string" -- and not only the value's own type. The path is the member's field
+/// name, or its position where the member is a tuple's element: it is the refusal that says "field"
+/// or "element" in front of it.
+std::optional<std::pair<std::string, Type *>>
+memberWithoutTangent(Type *type, const std::string &path) {
     if (type == nullptr) {
         return std::nullopt;
     }
@@ -4973,7 +5062,8 @@ std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     if (valueType == nullptr ||
         (valueType->code() != TypeCode::Float64 && valueType->code() != TypeCode::Float32)) {
         return std::format(
-            "it returns {}, not a float", valueType ? valueType->toString() : "nothing");
+            "it returns {}, not a float",
+            valueType ? valueType->toString() : "nothing");
     }
     // grad differentiates f's first `with` parameter (9.9); the ordinary parameters are data.
     if (function->withTypesCount() == 0) {
@@ -5009,8 +5099,8 @@ std::string differentiationRefusal(FunctionType *function, bool hasAux) {
     return {};
 }
 
-std::optional<GradientSignature> gradientSignature(
-    FunctionType *function, bool withValue, bool hasAux) {
+std::optional<GradientSignature>
+gradientSignature(FunctionType *function, bool withValue, bool hasAux) {
     if (!differentiationRefusal(function, hasAux).empty()) {
         return std::nullopt;
     }
@@ -5033,7 +5123,7 @@ std::optional<GradientSignature> gradientSignature(
     Type *result = nullptr;
     if (hasAux && withValue) {
         Type *valueAndAux = TupleType::create(std::vector<Type *>{valueType, auxType});
-        result            = TupleType::create(std::vector<Type *>{valueAndAux, signature.gradientType});
+        result = TupleType::create(std::vector<Type *>{valueAndAux, signature.gradientType});
     } else if (hasAux) {
         result = TupleType::create(std::vector<Type *>{signature.gradientType, auxType});
     } else {

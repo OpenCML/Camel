@@ -68,11 +68,15 @@ namespace {
 /// returns is computed in another graph (a function's), whose state
 /// this is not — a loop state is only written in place when the graph that returns it also
 /// builds it.
-node_handle_t loopStateValueOf(node_handle_t node) {
-    // A gate chain is at most the number of blocks the value passed through; a bound keeps a
-    // malformed cycle from looping forever.
+node_handle_t loopStateValueOf(node_handle_t node, bool preserveWaits = true) {
+    // A gate that carries a wait is the block's execution anchor, not only a value forwarder:
+    // keep it so the effects behind the state remain reachable. Only a forwarder with no wait is
+    // looked through. A gate chain is at most the number of blocks the value passed through.
     for (size_t depth = 0; node != nullptr && depth < 16; ++depth) {
         if (!nodeIsKind(node, runtime::GCNodeKind::Gate)) {
+            return node;
+        }
+        if (preserveWaits && (!syncInputsOf(node).empty() || !ctrlInputsOf(node).empty())) {
             return node;
         }
         const auto inputs = normInputsOf(node);
@@ -87,7 +91,7 @@ node_handle_t loopStateValueOf(node_handle_t node) {
 /// The results of the arms a loop body ends in: the value itself, or, behind a JOIN (an `if` or a
 /// `match`), the result of each arm, looking through the JOINs of an `else if` chain.
 std::vector<node_handle_t> loopArmResultsOf(node_handle_t node) {
-    node = loopStateValueOf(node);
+    node = loopStateValueOf(node, false);
     if (node == nullptr || !nodeIsKind(node, runtime::GCNodeKind::Join)) {
         return {node};
     }
@@ -105,8 +109,8 @@ void retypeValueNode(DraftGraphBuilder *graph, node_handle_t node, Type *type) {
     if (graph == nullptr || node == nullptr || type == nullptr) {
         return;
     }
-    auto &draft    = graph->transaction().edit();
-    const auto id  = nodeIdOf(node);
+    auto &draft   = graph->transaction().edit();
+    const auto id = nodeIdOf(node);
     draft.setNodeDataType(id, type);
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
         return; // a static slot, not a frame slot
@@ -130,8 +134,8 @@ bool isEmptyArrayLiteral(node_handle_t node) {
     }
     if (nodeIsKind(node, runtime::GCNodeKind::Data)) {
         // A typed `[]` is a static array: its length says whether the literal was empty.
-        const auto &draft = *nodeDraftOf(node);
-        const int32_t dataIndex          = draft.node(nodeIdOf(node))->header.dataIndex;
+        const auto &draft       = *nodeDraftOf(node);
+        const int32_t dataIndex = draft.node(nodeIdOf(node))->header.dataIndex;
         if (dataIndex < 0 && static_cast<size_t>(-dataIndex) < draft.staticSlots().size()) {
             const auto *array = camel::core::rtdata::fromSlot<::Array *>(
                 draft.staticSlots()[static_cast<size_t>(-dataIndex)]);
@@ -579,8 +583,7 @@ node_handle_t Builder::convertStructValue(
     auto *source = tt::as_ptr<StructType>(sourceType);
     // The fields must be the same ones, by name, before anything is copied: the relation of the
     // type layer (relateStructs) says so, as it does for every other conversion of a struct.
-    if (source == nullptr ||
-        relateStructs(target, source) == StructRelation::None) {
+    if (source == nullptr || relateStructs(target, source) == StructRelation::None) {
         return nullptr;
     }
     // A struct of `target`'s shape, its slots filled from the source's fields in the target's
@@ -618,8 +621,9 @@ node_handle_t Builder::convertStructValue(
                 } else if (!targetFieldType->assignableFrom(sourceFieldType)) {
                     return nullptr;
                 }
-            } else if (isEmptyArrayLiteralType(sourceFieldType) &&
-                       targetFieldType->code() == TypeCode::Array) {
+            } else if (
+                isEmptyArrayLiteralType(sourceFieldType) &&
+                targetFieldType->code() == TypeCode::Array) {
                 // The field is a position with an expected type like any other, and the empty
                 // array literal takes the element type of the type it stands in (design
                 // principles 5.1, 5.2) — the same rule, and the same call, that types `[]` when
@@ -722,10 +726,8 @@ node_handle_t Builder::coerceTo(node_handle_t node, Type *target, const GCT::nod
     if (TupleType *fallible = asFallible(target);
         fallible != nullptr && source->equals(errorType())) {
         const std::string name = bindTemporary(valueOf(node));
-        node_handle_t failed =
-            applyTagOperator(camel::core::oper::TagThrow, name, origin);
-        return nodeTypeOf(failed)->equals(fallible) ? failed
-                                                    : castNodeTo(failed, fallible, origin);
+        node_handle_t failed   = applyTagOperator(camel::core::oper::TagThrow, name, origin);
+        return nodeTypeOf(failed)->equals(fallible) ? failed : castNodeTo(failed, fallible, origin);
     }
     if (!entersImplicitly(target, source)) {
         // The other direction of the same edge: a value of `T[..]` read as `T` is the element it
@@ -863,9 +865,8 @@ Builder::compositeDataInType(const data_ptr_t &data, Type *type, const GCT::node
     // extent, or a target that states none, is still taken as it was).
     const bool positionStatesWhatTheValueLeavesOpen = [&] {
         const auto *target = tt::as_ptr<ArrayType>(type);
-        const auto *source = data->type()->code() == TypeCode::Array
-                                 ? tt::as_ptr<ArrayType>(data->type())
-                                 : nullptr;
+        const auto *source =
+            data->type()->code() == TypeCode::Array ? tt::as_ptr<ArrayType>(data->type()) : nullptr;
         if (target == nullptr || source == nullptr ||
             target->extents().size() != source->extents().size()) {
             return false;
@@ -1099,7 +1100,9 @@ data_ptr_t Builder::compositeWithHolesInType(
         Type *elemType        = arrayType != nullptr ? arrayType->elemType() : nullptr;
         if (array == nullptr || elemType == nullptr || elemType->code() == TypeCode::Void ||
             !arrayLiteralFitsShape(
-                origin != nullptr ? GCT::Tree::of(origin) : nullptr, arrayType, data)) {
+                origin != nullptr ? GCT::Tree::of(origin) : nullptr,
+                arrayType,
+                data)) {
             return nullptr;
         }
         const std::vector<Type *> holeTypes = holeTypesByIndex();
@@ -1124,7 +1127,10 @@ data_ptr_t Builder::compositeWithHolesInType(
                 continue;
             }
             data_ptr_t converted = literalElementInType(
-                array->raw()[i], elemType, origin, literalElementAt(written, i));
+                array->raw()[i],
+                elemType,
+                origin,
+                literalElementAt(written, i));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -1139,9 +1145,9 @@ data_ptr_t Builder::compositeWithHolesInType(
         return factory.build();
     }
     if (position->code() == TypeCode::Struct) {
-        auto *structType       = tt::as_ptr<StructType>(position);
-        const auto *ownType    = tt::as_ptr<StructType>(data->type());
-        const auto object      = std::dynamic_pointer_cast<StructData>(data);
+        auto *structType    = tt::as_ptr<StructType>(position);
+        const auto *ownType = tt::as_ptr<StructType>(data->type());
+        const auto object   = std::dynamic_pointer_cast<StructData>(data);
         if (structType == nullptr || ownType == nullptr || object == nullptr ||
             object->raw().size() != structType->size() || refHoles.size() != refNames.size()) {
             return nullptr;
@@ -1180,13 +1186,18 @@ data_ptr_t Builder::compositeWithHolesInType(
                     // it is about named in the message. A literal whose fields are all computed
                     // is judged the same way.
                     rejectHole(
-                        "field '" + name + "' of '" + structType->toString() + "'", index, hole,
+                        "field '" + name + "' of '" + structType->toString() + "'",
+                        index,
+                        hole,
                         fieldType);
                 }
                 factory.add(name, value);
             } else {
                 data_ptr_t converted = literalElementInType(
-                    value, fieldType, origin, literalElementAt(written, index));
+                    value,
+                    fieldType,
+                    origin,
+                    literalElementAt(written, index));
                 if (converted == nullptr) {
                     return nullptr;
                 }
@@ -1234,7 +1245,10 @@ data_ptr_t Builder::compositeWithHolesInType(
                 continue;
             }
             data_ptr_t converted = literalElementInType(
-                object->raw()[i], elemType, origin, literalElementAt(written, i));
+                object->raw()[i],
+                elemType,
+                origin,
+                literalElementAt(written, i));
             if (converted == nullptr) {
                 return nullptr;
             }
@@ -1257,8 +1271,7 @@ data_ptr_t Builder::literalElementInType(
     // the compiler converts at a computed value (`Builder::coerceTo`): one rule, two entrances -- a
     // value the program computes keeps its computation and is converted as it enters, a literal
     // becomes the value at this level, because there is nothing to compute.
-    if (Type *rankZeroElement = rankZeroElementOf(type);
-        rankZeroElement != nullptr) {
+    if (Type *rankZeroElement = rankZeroElementOf(type); rankZeroElement != nullptr) {
         auto *rankZeroValueType = tt::as_ptr<ArrayType>(type);
         if (rankZeroElement->assignableFrom(data->type())) {
             return ArrayData::rankZero(rankZeroValueType, data);
@@ -1271,8 +1284,8 @@ data_ptr_t Builder::literalElementInType(
         const std::optional<literal::Value> fallback =
             exact == nullptr ? exactValueOfData(data) : std::nullopt;
         const literal::Value *value = exact != nullptr ? exact : fallback ? &*fallback : nullptr;
-        if (value != nullptr && isNumericType(rankZeroElement) &&
-            isNumericType(data->type()) && literal::kindEnters(*value, rankZeroElement)) {
+        if (value != nullptr && isNumericType(rankZeroElement) && isNumericType(data->type()) &&
+            literal::kindEnters(*value, rankZeroElement)) {
             if (const auto element = value->toData(rankZeroElement); element.has_value()) {
                 return ArrayData::rankZero(rankZeroValueType, *element);
             }
@@ -1339,7 +1352,8 @@ void Builder::coerceArmExit(const arm_ptr_t &arm, Type *target, const GCT::node_
             .commit(
                 "the value of a branch arm is not joined: the arm gives '" +
                 (exitType != nullptr ? exitType->toString() : std::string("?")) +
-                "' and the join takes '" + (target != nullptr ? target->toString() : std::string("?")) +
+                "' and the join takes '" +
+                (target != nullptr ? target->toString() : std::string("?")) +
                 "', which the value does not enter");
         throw BuildAbortException();
     }
@@ -1390,8 +1404,8 @@ void Builder::readArmCellValue(const arm_ptr_t &arm) {
     auto &draft                = arm->graph->transaction().edit();
     const uint32_t outerRegion = draft.insertRegion();
     draft.setInsertRegion(arm->region);
-    node_handle_t read = variableOperator(
-        camel::core::oper::VarGet, version != nullptr ? version : cell);
+    node_handle_t read =
+        variableOperator(camel::core::oper::VarGet, version != nullptr ? version : cell);
     if (version == nullptr) {
         // The write gave no version of the cell, so the cell is the read's data port and the
         // write that must execute first is what a control input stands for (readVariableThrough,
@@ -1444,8 +1458,7 @@ Type *Builder::tailPositionType() const {
 }
 
 Type *Builder::expectedExitTypeHere() const {
-    if (activeArm() != nullptr || activeStaticBody_ != nullptr ||
-        currentBlock_ != functionBody_) {
+    if (activeArm() != nullptr || activeStaticBody_ != nullptr || currentBlock_ != functionBody_) {
         // Inside a branch arm, the selected body of a `match type`, or a block written inside a
         // body, the value of a `return` is that construct's value, so its position is the one the
         // construct stands at; the function's declared return type has nothing to do with it
@@ -1689,10 +1702,9 @@ node_handle_t Builder::visitTaggedBrchNode(const GCT::node_ptr_t &gct) {
     // `a`, then `b`, then gives the default. Arm 1 then hands on `a` as it is instead of
     // taking the value out. Either way it is one branch.
     Type *fallback   = arms[0]->exitType();
-    const bool plain = fallback != nullptr && (payload->unify(fallback) != nullptr ||
-                                               entersImplicitly(payload, fallback));
-    const bool chained =
-        !plain && fallback != nullptr && entersImplicitly(subjectType, fallback);
+    const bool plain = fallback != nullptr &&
+                       (payload->unify(fallback) != nullptr || entersImplicitly(payload, fallback));
+    const bool chained = !plain && fallback != nullptr && entersImplicitly(subjectType, fallback);
     if (plain) {
         if (payload->unify(fallback) == nullptr) {
             coerceArmExit(arms[0], payload, gct);
@@ -1809,8 +1821,9 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         // Without a guard the cases of a side are one and the same case: what the old form
         // says, and what its reports name.
         if (taggedSide.size() > 1) {
-            malformed(std::string("it has more than one '") +
-                      (type->isNullable() ? "case null" : "case error") + "'");
+            malformed(
+                std::string("it has more than one '") +
+                (type->isNullable() ? "case null" : "case error") + "'");
         }
         if (restSide.size() > 1) {
             malformed("it has more than one case for the value");
@@ -1855,9 +1868,9 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         for (size_t i = 1; i < gct->size(); ++i) {
             const GCT::node_ptr_t &caseNode = gct->at(i);
             const auto caseType             = caseNode->caseType();
-            const bool isNull               = caseType == CaseType::Value &&
-                               caseNode->at(0)->type() == GCT::NodeKind::DATA &&
-                               caseNode->at(0)->data()->type()->code() == TypeCode::Void;
+            const bool isNull   = caseType == CaseType::Value &&
+                                  caseNode->at(0)->type() == GCT::NodeKind::DATA &&
+                                  caseNode->at(0)->data()->type()->code() == TypeCode::Void;
             const bool onTagged = isNull || caseType == CaseType::Error;
             CaseStep caseStep;
             caseStep.guard = tree_->caseGuardOf(caseNode);
@@ -1866,18 +1879,15 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
                 // The last case is the one the list ends at, and it needs no test: nothing
                 // written after it can meet the value. Every other case says which side it
                 // takes, so that the value a guard of a case before it refused reaches it.
-                node_handle_t tag   = tagOf(caseNode);
-                caseStep.condition = onTagged
-                                          ? tag
-                                          : negateCondition(tag, caseNode);
+                node_handle_t tag  = tagOf(caseNode);
+                caseStep.condition = onTagged ? tag : negateCondition(tag, caseNode);
             }
             caseStep.bind = [&, caseNode, onTagged, isNull, caseType] {
                 if (onTagged) {
                     if (type->isFallible()) {
                         insertNode(
                             caseNode->binding(),
-                            applyTagOperator(
-                                camel::core::oper::TagErrorInfo, name, caseNode));
+                            applyTagOperator(camel::core::oper::TagErrorInfo, name, caseNode));
                     }
                 } else if (caseType == CaseType::Bind) {
                     insertNode(
@@ -1894,7 +1904,7 @@ Builder::visitTaggedMatch(const GCT::node_ptr_t &gct, node_handle_t scrutinee, T
         return buildCaseChain(steps, gct);
     }
 
-    node_handle_t tagNode = tagOf(gct);
+    node_handle_t tagNode            = tagOf(gct);
     const GCT::node_ptr_t taggedExec = taggedCase->at(taggedCase->size() - 1);
     const GCT::node_ptr_t restExec   = restCase->at(0);
     std::vector<arm_ptr_t> arms(2);
@@ -2349,7 +2359,7 @@ node_handle_t Builder::visitBrchNode(const GCT::node_ptr_t &gct) {
 }
 
 void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scrutinee) {
-    using CaseType    = GCT::CaseType;
+    using CaseType = GCT::CaseType;
     bool hasTrue = false, hasFalse = false, anyCase = false;
     for (size_t i = 1; i < gct->size(); ++i) {
         const auto &caseNode = gct->at(i);
@@ -2368,8 +2378,9 @@ void Builder::requireMatchDefault(const GCT::node_ptr_t &gct, node_handle_t scru
         }
         anyCase = true;
         if (caseNode->guardedCase()) {
-            // A guarded case covers nothing on its own (and Rust the same): the value a false guard refuses is matched by the
-            // cases written after it, so it counts for neither `case _` nor a bool's values.
+            // A guarded case covers nothing on its own (and Rust the same): the value a false guard
+            // refuses is matched by the cases written after it, so it counts for neither `case _`
+            // nor a bool's values.
             continue;
         }
         if (caseNode->at(0)->type() == GCT::NodeKind::DATA) {
@@ -2416,8 +2427,7 @@ node_handle_t Builder::negateCondition(node_handle_t value, const GCT::node_ptr_
     return buildBranch(origin, value, &two);
 }
 
-node_handle_t
-Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin) {
+node_handle_t Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &origin) {
     node_handle_t always = currGraph_->addStaticDataNode(
         tt::as_shared<Data>(std::make_shared<PrimaryData<bool>>(true)));
     registerNodeOrigin(context_, always, origin, "gir.data");
@@ -2447,11 +2457,17 @@ Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &ori
             // `case _ when c`: the case tests nothing itself, so the guard is its whole
             // condition. The names the pattern binds are taken out all the same.
             std::vector<arm_ptr_t> one(1);
-            one[0] = buildArm(step.exec, [&] { step.bind(); return guardValue(); });
+            one[0] = buildArm(step.exec, [&] {
+                step.bind();
+                return guardValue();
+            });
             return buildBranch(origin, always, &one);
         }
         std::vector<arm_ptr_t> held(2);
-        held[0] = buildArm(step.exec, [&] { step.bind(); return guardValue(); });
+        held[0] = buildArm(step.exec, [&] {
+            step.bind();
+            return guardValue();
+        });
         held[1] = buildArm(step.exec, [&] { return boolConstant(false); });
         return buildBranch(origin, step.condition, &held);
     };
@@ -2460,8 +2476,8 @@ Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &ori
     // of its own step, and are built there: a guard that does not hold hands the value to them,
     // and they are reached no other way.
     std::function<node_handle_t(size_t)> step = [&](size_t i) -> node_handle_t {
-        CaseStep &caseStep        = steps[i];
-        node_handle_t condition   = caseStep.condition;
+        CaseStep &caseStep      = steps[i];
+        node_handle_t condition = caseStep.condition;
         if (caseStep.guard != nullptr) {
             condition = conditionOf(caseStep);
         }
@@ -2470,8 +2486,10 @@ Builder::buildCaseChain(std::vector<CaseStep> &steps, const GCT::node_ptr_t &ori
             // refused a `match` that can reach a value none of its cases takes). Its arm is the
             // only one, and the runtime takes it: the branch has no case value.
             std::vector<arm_ptr_t> one(1);
-            one[0] =
-                buildArm(caseStep.exec, [&] { caseStep.bind(); return visitBodyNode(caseStep.exec); });
+            one[0] = buildArm(caseStep.exec, [&] {
+                caseStep.bind();
+                return visitBodyNode(caseStep.exec);
+            });
             return buildBranch(origin, always, &one);
         }
         std::vector<arm_ptr_t> two(2);
@@ -2502,7 +2520,7 @@ node_handle_t Builder::buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle
     // `f32` compares it with 3.0 (design principles 5.1) exactly as the branch that dispatches
     // by case value does, and a case value of another type is the same report that branch gives.
     const std::string name = bindTemporary(condNode);
-    Type *subjectType = valueTypeOf(nodeTypeOf(condNode));
+    Type *subjectType      = valueTypeOf(nodeTypeOf(condNode));
     std::vector<CaseStep> steps;
     for (size_t i = 1; i < gct->size(); ++i) {
         const GCT::node_ptr_t &caseNode = gct->at(i);
@@ -2515,28 +2533,32 @@ node_handle_t Builder::buildGuardedMatch(const GCT::node_ptr_t &gct, node_handle
             // and a node of this tree has one parent. The case value is a pattern constant -- a
             // literal, or a name that folds to one -- so the copy is the same value, and nothing
             // is evaluated twice by taking it.
-            node_handle_t valueNode  = valueNodeOf(visit(caseNode->at(0)));
-            Type *caseType           = valueTypeOf(nodeTypeOf(valueNode));
-            GCT::node_ptr_t operand  = tree_->clone(caseNode->at(0));
-            bool converted           = false;
+            node_handle_t valueNode = valueNodeOf(visit(caseNode->at(0)));
+            Type *caseType          = valueTypeOf(nodeTypeOf(valueNode));
+            GCT::node_ptr_t operand = tree_->clone(caseNode->at(0));
+            bool converted          = false;
             if (const std::optional<literal::Value> pattern = literalValueOfExpr(caseNode->at(0));
                 pattern.has_value() && subjectType != nullptr && subjectType->isPrimitive() &&
-                !subjectType->assignableFrom(caseType) && literal::kindEnters(*pattern, subjectType)) {
+                !subjectType->assignableFrom(caseType) &&
+                literal::kindEnters(*pattern, subjectType)) {
                 if (const auto data = pattern->toData(subjectType); data.has_value()) {
                     operand   = tree_->makeData(*data);
                     converted = true;
                 }
             }
-            if (!converted &&
-                (subjectType == nullptr || !subjectType->assignableFrom(caseType))) {
+            if (!converted && (subjectType == nullptr || !subjectType->assignableFrom(caseType))) {
                 diags_->of(SemanticDiag::MatchCaseTypeMismatch)
                     .atOrigin(caseNode->at(0)->origin())
-                    .commit(subjectType == nullptr ? std::string("?") : subjectType->toString(),
-                            caseType->toString());
+                    .commit(
+                        subjectType == nullptr ? std::string("?") : subjectType->toString(),
+                        caseType->toString());
                 throw BuildAbortException();
             }
-            caseStep.condition =
-                applyInternalOperator("__eq__", nullptr, {tree_->makeDRef(name), operand}, caseNode);
+            caseStep.condition = applyInternalOperator(
+                "__eq__",
+                nullptr,
+                {tree_->makeDRef(name), operand},
+                caseNode);
             caseStep.exec = caseNode->at(1);
             break;
         }
@@ -2843,26 +2865,8 @@ node_handle_t Builder::buildBranch(
     }
 
     if (synced_) {
-        if (lastSyncedNode_ != nullptr && shouldAddSyncCtrlLink(lastSyncedNode_, brchNode)) {
-            writeControlLink(lastSyncedNode_, brchNode);
-        }
-        // A branch is one statement of the block and the join is where that statement's chain goes
-        // on: the statements written after the branch are written directly after it, and the arm
-        // regions hang on the branch itself (docs/design/effects/edges.cn.md 1.5, 5.3, 5.7). The
-        // statement written directly before the branch is the chain's tail there, so the join follows
-        // it -- the shape a loop has, where the node that stands for the statement follows the
-        // statement written before it. Without the link nothing orders the statements after a branch
-        // after the ones before it once the control edges go, and the layout reads it this way
-        // already: it lays the statement written before a branch out before the arms
-        // (src/execute/graph_runtime_support.cpp). A sync edge from the branch to its join instead is
-        // not this link: the layout reads the join's sync predecessor as the statement written
-        // before the branch, and every `??` of test/cases/consistency/entering/fallback_chain.cml
-        // then takes the arm that branch did not.
-        if (lastSyncedNode_ != nullptr && linkCheek(lastSyncedNode_, joinNode)) {
-            markSyncStatement(lastSyncedNode_);
-            markSyncStatement(joinNode);
-            linkNodes(LinkType::Sync, lastSyncedNode_, joinNode);
-        }
+        // A branch is one statement: the chain enters its owning BRCH and continues from its JOIN.
+        linkSyncStatement(lastSyncedNode_, brchNode);
         lastSyncedNode_ = joinNode;
         chainedNodes_.insert(brchNode);
         chainedNodes_.insert(joinNode);
@@ -2872,15 +2876,14 @@ node_handle_t Builder::buildBranch(
 }
 
 void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t brchNode) {
-    // The nodes of an arm that read nothing the arm computes wait for the BRCH: the arm runs
-    // only when it is entered.
+    // Arm entry is conditional control, not a sync edge of the enclosing block: an outer sync block
+    // does not turn the arm into a sync block.
     auto &draft                = currGraph_->transaction().edit();
     const draft_node_ref_t end = static_cast<draft_node_ref_t>(draft.nodeSlotCount());
     for (const arm_ptr_t &arm : arms) {
         const auto inArm = [&](draft_node_ref_t id) {
             return draft.alive(id) && draft.regionWithin(draft.nodeRegion(id), arm->region);
         };
-        node_handle_t entry{};
         for (draft_node_ref_t id = arm->firstNode; id < end; ++id) {
             if (!draft.alive(id) || draft.nodeRegion(id) != arm->region) {
                 continue;
@@ -2904,34 +2907,7 @@ void Builder::linkArmEntries(const std::vector<arm_ptr_t> &arms, node_handle_t b
             if (!computed && linkCheek(brchNode, node)) {
                 writeControlLink(brchNode, node);
             }
-            // The entry of the arm's chain: the first statement of the arm's own region -- the
-            // draft numbers its nodes in the order they are written -- that follows nothing and
-            // that the arm's own code follows. A node that already follows something is a later
-            // link of that chain, and a node the arm does not follow is no statement of it.
-            if (entry != nullptr || !draft.syncInputsOf(id).empty()) {
-                continue;
-            }
-            for (draft_node_ref_t user : draft.syncUsersOf(id)) {
-                if (draft.alive(user) && draft.regionWithin(draft.nodeRegion(user), arm->region)) {
-                    entry = node;
-                    break;
-                }
-            }
         }
-        // The arm is a `sync` chain of its own, and the branch is the statement written before it:
-        // the arm runs only when it is entered, so the BRCH is the chain predecessor of the arm's
-        // first statement and not only the node its entries wait for (docs/design/effects/
-        // edges.cn.md 1.5, 5.7). The chain link is the sync edge below; the control edge that used
-        // to stand beside it said nothing this edge does not -- a sync edge orders like an order
-        // edge and carries "used" like a data port -- so it is not written any more. A chain never
-        // forks, so an arm that already enters its chain from something keeps that place and no
-        // second predecessor is written.
-        if (entry == nullptr || !syncInputsOf(entry).empty() || !linkCheek(brchNode, entry)) {
-            continue;
-        }
-        markSyncStatement(brchNode);
-        markSyncStatement(entry);
-        linkNodes(LinkType::Sync, brchNode, entry);
     }
 }
 
@@ -2966,19 +2942,20 @@ void Builder::mergeArmVariables(
     }
 }
 
-node_handle_t Builder::intervalSequenceValue(
-    node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
+node_handle_t
+Builder::intervalSequenceValue(node_handle_t from, node_handle_t to, const GCT::node_ptr_t &expr) {
     // The interval in the sequence position of a loop is the pair of its two bounds, not the
-    // array of its elements (design principles 4.2): the pair stands where any other sequence stands — Norm
-    // input 0 of the LOOP node, one value — and a back end takes the element of the round from
-    // the bounds and the round number, so nothing of the interval's size is ever made. The
-    // interval is the `int[]` of `intervalValue` in every other position.
+    // array of its elements (design principles 4.2): the pair stands where any other sequence
+    // stands — Norm input 0 of the LOOP node, one value — and a back end takes the element of the
+    // round from the bounds and the round number, so nothing of the interval's size is ever made.
+    // The interval is the `int[]` of `intervalValue` in every other position.
     std::vector<Type *> bounds{Type::Int64(), Type::Int64()};
-    TupleType *boundsType       = TupleType::create(bounds);
+    TupleType *boundsType = TupleType::create(bounds);
     const std::vector<size_t> slots{0, 1};
-    auto &draft                 = currGraph_->transaction().edit();
-    node_handle_t result        = currGraph_->addFillNode(
-        boundsType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+    auto &draft          = currGraph_->transaction().edit();
+    node_handle_t result = currGraph_->addFillNode(
+        boundsType,
+        runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
     const slot_t empty =
         camel::core::rtdata::toSlot(::Tuple::create(2, camel::core::mm::autoSpace()));
     node_handle_t source = draft.ref(draft.materializeStaticValue(empty, boundsType));
@@ -3059,7 +3036,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 continue;
             }
             if (literalEnters(gct->loopInitial(j), state)) {
-                stateExpected[j] = state;
+                stateExpected[j]     = state;
                 literalAtPosition[j] = true;
             }
         }
@@ -3069,8 +3046,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     std::vector<bool> emptyInitial(k, false);
     bool deferredEmpty = false;
     for (size_t j = 0; j < k; ++j) {
-        const auto &expr      = gct->loopInitial(j);
-        Type *loopExpected    = stateExpected[j];
+        const auto &expr   = gct->loopInitial(j);
+        Type *loopExpected = stateExpected[j];
         node_handle_t node;
         {
             ExpectedValueScope stateScope(expectedValueType_, loopExpected);
@@ -3091,9 +3068,9 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 node = typed;
             }
         }
-        Type *type         = valueTypeOf(nodeTypeOf(node));
-        const bool untyped = type == nullptr || type->code() == TypeCode::Void ||
-                             isUntypedArrayType(type);
+        Type *type = valueTypeOf(nodeTypeOf(node));
+        const bool untyped =
+            type == nullptr || type->code() == TypeCode::Void || isUntypedArrayType(type);
         if (untyped) {
             // `loop losses = [] for ... do losses->append<l>`: the element type is the value
             // the body appends, and it is known once the body is built (design principles 5.1,
@@ -3135,8 +3112,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     //
     // `__iter__` reaches a compilation unit only if it imports the module that declares it, and
     // the standard library's own array code compiles without it.
-    const auto iterableElementType =
-        [&](node_handle_t &iterable, const GCT::node_ptr_t &expr) -> Type * {
+    const auto iterableElementType = [&](node_handle_t &iterable,
+                                         const GCT::node_ptr_t &expr) -> Type * {
         Type *type = valueTypeOf(nodeTypeOf(iterable));
         if (type == nullptr) {
             diags_->of(SemanticDiag::LoopSequenceNotIterable)
@@ -3215,7 +3192,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             LEAVE("LOOP");
             return buildStreamLoop(gct, sequence, initial, stateTypes);
         }
-        elementType      = iterableElementType(sequence, expr);
+        elementType = iterableElementType(sequence, expr);
     }
     Type *stateType =
         k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
@@ -3264,8 +3241,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         for (size_t j = 0; j < k; ++j) {
             node_handle_t port = add(stateNames[j], stateTypes[j]);
             // The value a state's port stands for: what the round starts from, which is the state's
-            // initial value. A loop that carries a stream is the loop that reads it, so the port and
-            // the value handed to the loop are one value (noteMachinePortOrigin).
+            // initial value. A loop that carries a stream is the loop that reads it, so the port
+            // and the value handed to the loop are one value (noteMachinePortOrigin).
             if (j < initial.size()) {
                 noteMachinePortOrigin(port, initial[j]);
             }
@@ -3373,8 +3350,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             bodyPart->output == nullptr || !isSplittableAggregate(stateType)) {
             return false;
         }
-        auto &draft                = currGraph_->transaction().edit();
-        const size_t statePortAt   = camel::core::loopHasIterable(kind) ? 1 : 0;
+        auto &draft              = currGraph_->transaction().edit();
+        const size_t statePortAt = camel::core::loopHasIterable(kind) ? 1 : 0;
         if (bodyPart->ports.size() != statePortAt + 1) {
             return false;
         }
@@ -3749,8 +3726,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
             const slot_t empty = camel::core::rtdata::toSlot(
                 ::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->view().ref(
-                currGraph_->edit().materializeStaticValue(empty, stateType));
+            node_handle_t source =
+                currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, stateType));
             linkNodes(LinkType::Norm, source, loopValue);
             for (size_t j = 0; j < stateTypes.size(); ++j) {
                 node_handle_t component =
@@ -3795,13 +3772,13 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
                 runtime::makeFillPayload(
                     isStruct ? runtime::GCFillKind::Struct : runtime::GCFillKind::Tuple,
                     slots));
-            const slot_t empty   = isStruct
-                                       ? camel::core::rtdata::toSlot(
-                                             ::Struct::create(count, camel::core::mm::autoSpace()))
-                                       : camel::core::rtdata::toSlot(
-                                             ::Tuple::create(count, camel::core::mm::autoSpace()));
-            node_handle_t source = currGraph_->view().ref(
-                currGraph_->edit().materializeStaticValue(empty, part.type));
+            const slot_t empty = isStruct
+                                     ? camel::core::rtdata::toSlot(
+                                           ::Struct::create(count, camel::core::mm::autoSpace()))
+                                     : camel::core::rtdata::toSlot(
+                                           ::Tuple::create(count, camel::core::mm::autoSpace()));
+            node_handle_t source =
+                currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, part.type));
             linkNodes(LinkType::Norm, source, fill);
             for (node_handle_t value : values) {
                 linkNodes(LinkType::With, value, fill);
@@ -3834,8 +3811,8 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
 // is something to iterate. Nothing here is a new node kind, a new region kind or a new loop
 // form: a back end sees the LOOP node it always did, and the driver the same.
 node_handle_t Builder::buildStreamLoop(
-    const GCT::node_ptr_t &gct, node_handle_t sequence,
-    const std::vector<node_handle_t> &initial, const std::vector<Type *> &stateTypes) {
+    const GCT::node_ptr_t &gct, node_handle_t sequence, const std::vector<node_handle_t> &initial,
+    const std::vector<Type *> &stateTypes) {
     using camel::core::LoopKind;
     using camel::core::oper::TagIsNull;
     using camel::core::oper::TagNullValue;
@@ -3903,11 +3880,12 @@ node_handle_t Builder::buildStreamLoop(
         std::vector<size_t> slots(components.size());
         std::iota(slots.begin(), slots.end(), size_t{0});
         node_handle_t fill = currGraph_->addFillNode(
-            machineType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            machineType,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
         const slot_t empty = camel::core::rtdata::toSlot(
             ::Tuple::create(components.size(), camel::core::mm::autoSpace()));
-        node_handle_t source = currGraph_->view().ref(
-            currGraph_->edit().materializeStaticValue(empty, machineType));
+        node_handle_t source =
+            currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, machineType));
         linkNodes(LinkType::Norm, source, fill);
         for (node_handle_t component : components) {
             linkNodes(LinkType::With, component, fill);
@@ -3933,8 +3911,7 @@ node_handle_t Builder::buildStreamLoop(
         FunctionTypeFactory params;
         std::vector<runtime::gc_node_ref_t> ids;
         for (size_t i = 0; i < part.ports.size(); ++i) {
-            const std::string &name =
-                i == 0 ? streamName : (i == 1 ? doneName : stateNames[i - 2]);
+            const std::string &name = i == 0 ? streamName : (i == 1 ? doneName : stateNames[i - 2]);
             params.addNormArg(name, nodeTypeOf(part.ports[i]), false);
             ids.push_back(nodeIdOf(part.ports[i]));
         }
@@ -3946,9 +3923,9 @@ node_handle_t Builder::buildStreamLoop(
         // The value each port stands for: the machine is handed the sequence, the flag that says it
         // is over and the states, in that order (`machineInitial`), and inside a round those values
         // are the round's ports. The port is recorded against what it stands for, so the value the
-        // program wrote outside and the slot that carries it inside are one value (design principles
-        // 3.7 C1, `noteMachinePortOrigin`).
-        size_t handed = 0;
+        // program wrote outside and the slot that carries it inside are one value (design
+        // principles 3.7 C1, `noteMachinePortOrigin`).
+        size_t handed  = 0;
         const auto add = [&](const std::string &name, Type *type) {
             node_handle_t port = currGraph_->addRegionPortNode(type, name);
             part.graph->edit().setNodeRegion(nodeIdOf(port), part.region);
@@ -3995,11 +3972,10 @@ node_handle_t Builder::buildStreamLoop(
             });
             return buildBranch(condExec, over, &arms);
         };
-        condPart = buildArm(
-            condExec,
-            conditionArms,
-            runtime::GCRegionKind::LoopCond,
-            [&](ArmBuild &part) { declarePorts(part, condExec); });
+        condPart =
+            buildArm(condExec, conditionArms, runtime::GCRegionKind::LoopCond, [&](ArmBuild &part) {
+                declarePorts(part, condExec);
+            });
         Type *condType = condPart->exitType();
         if (condType == nullptr || condType->code() != TypeCode::Bool) {
             diags_->of(SemanticDiag::LoopConditionNotBool)
@@ -4013,9 +3989,9 @@ node_handle_t Builder::buildStreamLoop(
         bodyPart = buildArm(
             gct->loopBody(),
             [&]() -> node_handle_t {
-                node_handle_t pull = pullOf(*nodeAt(streamName), gct->loopBody());
+                node_handle_t pull         = pullOf(*nodeAt(streamName), gct->loopBody());
                 const std::string pullTemp = bindTemporary(pull);
-                node_handle_t isNull = applyTagOperator(TagIsNull, pullTemp, gct->loopBody());
+                node_handle_t isNull       = applyTagOperator(TagIsNull, pullTemp, gct->loopBody());
                 std::vector<arm_ptr_t> arms(2);
                 // The pull answered `null`: the stream is over. The program's body does not run,
                 // the stream and the state stay as they are, and the round that begins after it
@@ -4043,8 +4019,8 @@ node_handle_t Builder::buildStreamLoop(
                     registerNodeOrigin(context_, rest, gct->loopBody(), "gir.loop.rest");
 
                     // What the program's body gives is the state of the next round.
-                    node_handle_t state = intoState(
-                        loopStateValueOf(visitBodyNode(gct->loopBody())), stateType);
+                    node_handle_t state =
+                        intoState(loopStateValueOf(visitBodyNode(gct->loopBody())), stateType);
                     if (state == nullptr) {
                         diags_->of(SemanticDiag::LoopBodyTypeMismatch)
                             .atOrigin(gct->loopBody()->origin())
@@ -4058,11 +4034,14 @@ node_handle_t Builder::buildStreamLoop(
                         next.push_back(state);
                     } else {
                         for (size_t j = 0; j < k; ++j) {
-                            node_handle_t component = currGraph_->addAccsNode(
-                                stateTypes[j], static_cast<uint32_t>(j));
+                            node_handle_t component =
+                                currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
                             linkNodes(LinkType::Norm, state, component);
                             registerNodeOrigin(
-                                context_, component, gct->loopBody(), "gir.loop.state");
+                                context_,
+                                component,
+                                gct->loopBody(),
+                                "gir.loop.state");
                             next.push_back(component);
                         }
                     }
@@ -4147,9 +4126,10 @@ node_handle_t Builder::buildStreamLoop(
         std::vector<size_t> slots(k);
         std::iota(slots.begin(), slots.end(), size_t{0});
         loopValue = currGraph_->addFillNode(
-            stateType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
-        const slot_t empty = camel::core::rtdata::toSlot(
-            ::Tuple::create(k, camel::core::mm::autoSpace()));
+            stateType,
+            runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+        const slot_t empty =
+            camel::core::rtdata::toSlot(::Tuple::create(k, camel::core::mm::autoSpace()));
         // Two steps, because the two halves are not the same side: writing the static value is an
         // edit, and reading the node it produced is a view.
         const auto emptyNode = currGraph_->edit().materializeStaticValue(empty, stateType);
@@ -4190,16 +4170,16 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     if (const data_ptr_t written = constantOfNode(resNode); written != nullptr) {
         Type *declaredExit = expectedExitTypeHere();
         if (declaredExit != nullptr && declaredExit->code() == TypeCode::Array &&
-            written->type()->code() == TypeCode::Array &&
-            !declaredExit->equals(written->type())) {
+            written->type()->code() == TypeCode::Array && !declaredExit->equals(written->type())) {
             if (const data_ptr_t built = compositeDataInType(written, declaredExit, gct->at(0));
                 built != nullptr && declaredExit->equals(built->type())) {
                 resNode = currGraph_->addStaticDataNode(built);
                 rememberConstant(resNode, built);
                 registerNodeOrigin(context_, resNode, gct, "gir.data");
-            } else if (const auto *stated = tt::as_ptr<ArrayType>(declaredExit);
-                       stated != nullptr && stated->extents().size() == 1 &&
-                       stated->extents().front().isConstant()) {
+            } else if (
+                const auto *stated = tt::as_ptr<ArrayType>(declaredExit);
+                stated != nullptr && stated->extents().size() == 1 &&
+                stated->extents().front().isConstant()) {
                 // A literal of another length is a length, reported with the extent it wrote and
                 // the one the position states, rather than as a value that is merely less exact
                 // than the return type.
@@ -4259,11 +4239,10 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
         outputAnchor = gatedValue;
     }
     for (node_handle_t ctrlInput : syncInputs) {
-        if (linkCheek(ctrlInput, outputAnchor) &&
-            !runtime::hasControlDependency(
-                *nodeTransactionOf(outputAnchor),
-                nodeIdOf(ctrlInput),
-                nodeIdOf(outputAnchor))) {
+        if (linkCheek(ctrlInput, outputAnchor) && !runtime::hasControlDependency(
+                                                      *nodeTransactionOf(outputAnchor),
+                                                      nodeIdOf(ctrlInput),
+                                                      nodeIdOf(outputAnchor))) {
             if (ctrlInput == lastSyncedNode_) {
                 // The chain's tail: the statement the chain ends with reaches the value the graph
                 // hands on by a sync edge (docs/design/effects/edges.cn.md 5.3).
@@ -4401,8 +4380,8 @@ std::vector<Type *> Builder::collectLoopAppends(
     if (stateCount == 0 || emptyInitial.size() != stateCount || body->returned) {
         return {};
     }
-    auto &draft                = currGraph_->transaction().edit();
-    node_handle_t returned     = loopStateValueOf(body->value);
+    auto &draft            = currGraph_->transaction().edit();
+    node_handle_t returned = loopStateValueOf(body->value);
     if (returned == nullptr) {
         return {};
     }
@@ -4685,8 +4664,7 @@ void Builder::markLoopStateInPlaceOne(
     if (copyGroup == nullptr) {
         return;
     }
-    const auto copyOp =
-        copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics);
+    const auto copyOp = copyGroup->resolve({}, {nodeTypeOf(initial[index])}, statics);
     if (!copyOp.has_value()) {
         return;
     }

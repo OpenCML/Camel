@@ -20,16 +20,16 @@ await runTest(async (t) => {
 
     // Running the program prints the library's proof and its why_not answer before it stops.
     const runOut = await repl.command('run std::nvm')
-    const libChain = (runOut || '').match(/^chain (%\d+).*?= (%\d+).*?: 1 rewrite$/m)
+    const libChain = (runOut || '').match(/^chain (%\d+).*?~> (%\d+).*?: 1 rewrite$/m)
     check(libChain, 'the library printed the chain of the record', runOut)
-    check(/^\s+= .*  by zero_to_one  \(round 1, graph f\)$/m.test(runOut || ''), 'the library named the rule that fired', runOut)
+    check(/^\s+~> .*  by zero_to_one  \(round 1, graph f\)$/m.test(runOut || ''), 'the library named the rule that fired', runOut)
     const libReason = (runOut || '').match(/^`mul_zero` did not fire at (.*)$/m)
     check(libReason, 'the library answered why_not with the rule and the reason', runOut)
     check(new RegExp(`^Stopped \\(breakpoint\\) in show.*explain\\.cml:${stop}:`, 'm').test(runOut || ''), 'the program stopped where the run can be read', runOut)
 
     // explain: the same rule and the same two positions as the library's own print.
     const chain = await repl.command('explain r before after')
-    const gotChain = (chain || '').match(/chain (%\d+).*?= (%\d+).*?: 1 rewrite/)
+    const gotChain = (chain || '').match(/chain (%\d+).*?~> (%\d+).*?: 1 rewrite/)
     check(gotChain, 'explain printed a chain', chain)
     checkEq(gotChain?.slice(1, 3), libChain?.slice(1, 3), 'explain names the same two values the library named')
     check(/by zero_to_one/.test(chain || ''), 'explain names the rule that fired', chain)
