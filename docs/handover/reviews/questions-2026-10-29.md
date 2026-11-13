@@ -3439,3 +3439,33 @@ func main(): int sync {
 - 加上 `std::opt` 后报 `RuntimeDiag::ExitTypeMismatch`，位置在 `stdlib/rulesets/jvp.cml` 的 `jvp_pow_d` 右边，两个函数值的类型不一致。这个 `loss` 里根本没有 `pow`，所以是 `std::opt` 改了规则集模块里的图。
 - 库的 `grad(loss)(w, x, t)`（`with` 权重写法）也一样。
 - **验收**：上面的程序和 `grad` 写法在 `std::macro std::opt` 加 `nvm`、`fvm`、`jit` 上的输出与不加 `std::opt` 时相同；进快层。
+
+## 返工（2026-11-13）：改类型的规则造出坏图；循环体里右边是已有节点的规则不触发
+
+ECOOP 论文会话读规则系统时发现，报告在 `Camel-Archive/ECOOP2027/research/rule-system-survey.md`。以下两条我在 develop `b72d59535` 上复核过。
+
+**一、规则改了类型，落在算子操作数上时，造出的坏图被提交接受。** 违反原则第 1 节红线第 1 条。
+```
+import { rewrite } from rewrite
+rule ty(x: int) { x + 0 => 1.5 }
+export func simplify::<F>(p: F): F! { return p->rewrite<[ty]> }
+func f(a: int): int { return (a + 0) * 2 + a }
+func main(): int sync { println(f(5)); return 0 }
+```
+- 用法：`camel b5b.cml b5b::simplify std::nvm`。
+- 不加遍时打印 15。加遍后没有任何诊断，`std::nvm` 打印 8，`std::fvm` 打印 9218868437227405317：`:op/mul_l` 的一个操作数成了 `float` 常量。
+- 同一条规则落在返回值上会报 `ExitTypeMismatch`，落在调用实参上会报边不变量，只有算子操作数这一处漏了。
+- 修两处：
+  - 提交时的边类型检查要覆盖算子操作数，与调用实参同一条规则。
+  - 规则声明时比较左右两边的类型，不一致就报带位置的诊断。泛型规则按声明的类型参数比较。
+- **验收**：
+  - 上面的规则在声明处就报错；
+  - 绕过声明检查造出同样的图（用事务 `replace`），提交时拒绝；
+  - 两条都进快层。
+
+**二、右边是已有节点的规则（如 `x + 0 => x`）在循环体里不触发。**
+- 在 `ae874ce04` 上，同步块里和循环体里都不触发。develop 上同步块里的已经能触发：`f` 里两处 `+ 0` 都消掉了。
+- 循环体里的仍不触发：`loop acc = 0 for x in xs do acc + (x * 2) + 0` 用 `[add_zero, dbl]` 跑，只改了 `dbl` 一处，`+ 0` 留在体里。结果仍然正确（12），只是该做的改写没做。
+- 按"同一类事各处同一条规则"，纯且不会出故障的节点在哪个区域都应同样可改写。
+- 程序：`Camel-Archive` 那份报告的 e4，也就是上面那个循环加两条规则。
+- **验收**：循环体里的 `+ 0` 消掉，`run` 报 `rewrites 2`；同步块、臂、循环体三处各钉一个用例。
