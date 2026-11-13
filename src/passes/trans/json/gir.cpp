@@ -5,11 +5,12 @@
 
 #include "camel/passes/trans/json/gir.h"
 #include "camel/core/node_attrs.h"
-#include "camel/core/tags.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/source/manager.h"
+#include "camel/core/tags.h"
 #include "camel/passes/trans/gir_metadata.h"
+#include "camel/runtime/canonical.h"
 #include "camel/runtime/node_roles.h"
 #include "camel/runtime/reachable.h"
 #include "camel/runtime/writings.h"
@@ -88,16 +89,15 @@ std::string egraphClassId(const std::string &graphId, gc_node_ref_t root) {
 /// rather than being a value (design principles 3.3), so it is not a child.
 std::string dumpEgraphRuntimeGraph(
     const Program &program, GCGraph *root, const camel::core::context::context_ptr_t &ctx) {
-    const auto graphs = collectReachableGraphs(program, root);
+    const auto graphs                      = collectReachableGraphs(program, root);
     std::shared_ptr<const CostModel> model = findCostModel(kWritingsCostModel);
     if (!model) {
-        throw std::runtime_error(
-            std::format("There is no cost model '{}'.", kWritingsCostModel));
+        throw std::runtime_error(std::format("There is no cost model '{}'.", kWritingsCostModel));
     }
     std::unordered_map<const GCGraph *, std::string> ids;
     std::unordered_map<const GCGraph *, GraphWritings> classes;
     for (size_t i = 0; i < graphs.size(); ++i) {
-        ids[graphs[i]]       = std::format("g{}", i);
+        ids[graphs[i]]     = std::format("g{}", i);
         classes[graphs[i]] = graphWritings(program, graphs[i], *model, ctx.get());
     }
     // The class of the value a node is a writing of: the node itself when its value has one
@@ -128,7 +128,7 @@ std::string dumpEgraphRuntimeGraph(
                 {"children", std::move(children)},
                 {"eclass", classId(g, ref)}};
             if (const auto at = classes.at(g).nodes.find(ref); at != classes.at(g).nodes.end()) {
-                entry["cost"]           = at->second.own;
+                entry["cost"]              = at->second.own;
                 classData[classId(g, ref)] = json{{"cost", at->second.value}};
             }
             nodes[std::format("{}n{}", ids.at(g), ref)] = std::move(entry);
@@ -170,12 +170,49 @@ std::string dumpJsonRuntimeGraph(
     std::unordered_map<const GCGraph *, std::string> ids;
     for (size_t i = 0; i < graphs.size(); ++i)
         ids[graphs[i]] = std::format("g{}", i);
+    // The numbering is the graph's, not the creation order's: `canonicalNodeOrder` walks the
+    // graph by its own structure and arranges what the ports leave open (camel/runtime/canonical.h,
+    // design principles 9). A node's id is its number in that order, and the document prints the
+    // nodes in it, so two programs whose graphs differ only in what the source spelled -- the order
+    // two values were captured in, say -- write one document.
+    std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> orders;
+    std::unordered_map<const GCGraph *, std::vector<uint32_t>> numbers;
+    for (auto *g : graphs) {
+        orders[g]                    = canonicalNodeOrder(program, *g);
+        std::vector<uint32_t> &place = numbers[g];
+        place.assign(g->nodeCount(), kNoCanonicalNumber);
+        for (size_t i = 0; i < orders[g].size(); ++i)
+            place[orders[g][i]] = static_cast<uint32_t>(i);
+    }
     const auto graphId = [&](const GCGraph *g) -> json {
         auto at = ids.find(g);
         return at == ids.end() ? json(nullptr) : json(at->second);
     };
     const auto nodeId = [&](GCGraph *g, gc_node_ref_t n) {
-        return std::format("{}n{}", ids.at(g), n);
+        const auto &place     = numbers.at(g);
+        const uint32_t number = n < place.size() ? place[n] : kNoCanonicalNumber;
+        return std::format("{}n{}", ids.at(g), number);
+    };
+    // The position of a capture port among the graph's capture ports, in the canonical order: the
+    // capture table's own index is the order the source captured the values in, which is spelling
+    // and not a thing the document may show.
+    const auto captureRanks = [&](GCGraph *g) {
+        std::unordered_map<gc_node_ref_t, uint32_t> rank;
+        std::vector<gc_node_ref_t> captures;
+        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
+            const gc_node_ref_t ref = it.ref();
+            if (g->node(ref)->kind != GCNodeKind::Port)
+                continue;
+            if (portInfo(g, ref).kind == "capture")
+                captures.push_back(ref);
+        }
+        const auto &place = numbers.at(g);
+        std::sort(captures.begin(), captures.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+            return place[a] < place[b];
+        });
+        for (size_t i = 0; i < captures.size(); ++i)
+            rank[captures[i]] = static_cast<uint32_t>(i);
+        return rank;
     };
     // A graph names the node its result comes from, and a document may name only nodes it holds:
     // `null` when the graph has none, the same answer `dumpCanonicalRuntimeGraph` gives
@@ -211,8 +248,17 @@ std::string dumpJsonRuntimeGraph(
             graph["normalPorts"].push_back(nodeId(g, n));
         for (auto n : g->withPorts())
             graph["contextPorts"].push_back(nodeId(g, n));
-        for (auto n : g->closureNodes())
-            graph["capturePorts"].push_back(nodeId(g, n));
+        {
+            // The capture table's order is the order the source captured the values in, which is
+            // spelling: the ports are written in the canonical order instead.
+            std::vector<gc_node_ref_t> captures(g->closureNodes().begin(), g->closureNodes().end());
+            const auto &place = numbers.at(g);
+            std::sort(captures.begin(), captures.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+                return place[a] < place[b];
+            });
+            for (auto n : captures)
+                graph["capturePorts"].push_back(nodeId(g, n));
+        }
         // The regions, when the graph has any besides the body (an inlined function is one), and
         // the body itself when it carries a fact (the tags written on the function). A body
         // region with no attributes is left out, so a graph without tags keeps its form.
@@ -223,10 +269,11 @@ std::string dumpJsonRuntimeGraph(
                 {"body", "arm", "loop_cond", "loop_body", "inline", "block"};
             json regions = json::array();
             if (bodyAttrs != camel::core::attr::kNoAttrs) {
-                regions.push_back(json{
-                    {"id", std::format("{}r0", ids.at(g))},
-                    {"kind", "body"},
-                    {"attrs", attrSetJson(bodyAttrs)}});
+                regions.push_back(
+                    json{
+                        {"id", std::format("{}r0", ids.at(g))},
+                        {"kind", "body"},
+                        {"attrs", attrSetJson(bodyAttrs)}});
             }
             for (uint32_t r = 1; r < g->regionCount(); ++r) {
                 const GCRegion &region = *g->region(r);
@@ -265,19 +312,21 @@ std::string dumpJsonRuntimeGraph(
                         json writings = json::array();
                         for (gc_node_ref_t member : value.writings)
                             writings.push_back(nodeId(g, member));
-                        list.push_back(json{
-                            {"id", std::format("{}c{}", ids.at(g), value.root)},
-                            {"writings", std::move(writings)},
-                            {"chosen", nodeId(g, value.chosen)},
-                            {"cost", value.cost}});
+                        list.push_back(
+                            json{
+                                {"id", std::format("{}c{}", ids.at(g), value.root)},
+                                {"writings", std::move(writings)},
+                                {"chosen", nodeId(g, value.chosen)},
+                                {"cost", value.cost}});
                     }
                     graph["classes"] = std::move(list);
                 }
             }
         }
-        for (auto it = g->nodes().begin(); it != g->nodes().end(); ++it) {
-            const auto ref   = it.ref();
-            const auto *node = *it;
+        const auto captureRank = captureRanks(g);
+        const auto &place      = numbers.at(g);
+        for (gc_node_ref_t ref : orders.at(g)) {
+            const auto *node = g->node(ref);
             if (!node)
                 continue;
             const auto kind = recordType(*node);
@@ -293,11 +342,16 @@ std::string dumpJsonRuntimeGraph(
             if (const auto *type = nodeStaticSlotType(g, *node))
                 value["outputType"] = camel::core::type::sourceTypeSpelling(type->toString());
             if (node->kind == GCNodeKind::Port) {
-                const auto port    = portInfo(g, ref);
+                const auto port = portInfo(g, ref);
+                // A capture port's own index is where it sits in the capture table, which is the
+                // order the source captured the values in: the canonical position among the
+                // captures is the one the document may show.
+                const auto at      = captureRank.find(ref);
                 value["parameter"] = {
                     {"name", port.name},
                     {"kind", port.kind},
-                    {"index", port.index}};
+                    {"index",
+                     at == captureRank.end() ? port.index : static_cast<uint32_t>(at->second)}};
             }
             if (node->kind == GCNodeKind::Func)
                 value["callee"] = graphId(program.calleeOf(*g, ref));
@@ -315,7 +369,8 @@ std::string dumpJsonRuntimeGraph(
             if (node->kind == GCNodeKind::Loop) {
                 value["loop"] = {
                     {"kind", camel::core::loopKindName(g->loopKindOf(ref))},
-                    {"conditionRegion", g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopCond)},
+                    {"conditionRegion",
+                     g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopCond)},
                     {"bodyRegion", g->loopRegionOf(ref, camel::runtime::GCRegionKind::LoopBody)}};
             }
             const auto origin = g->nodeOrigin(ref);
@@ -359,11 +414,20 @@ std::string dumpJsonRuntimeGraph(
                     ASSERT(
                         at != outputs.end(),
                         "GIR JSON edge is missing its outgoing connection.");
+                    static_cast<void>(at);
+                    // The source-side index is the edge's rank among the source's edges of this
+                    // class, in the canonical order: the use list's own order is the order the
+                    // users were made, which is spelling.
+                    std::vector<gc_node_ref_t> users(outputs.begin(), outputs.end());
+                    std::sort(users.begin(), users.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+                        return place[a] < place[b];
+                    });
+                    const auto rank = std::find(users.begin(), users.end(), ref) - users.begin();
                     graph["edges"].push_back(
                         {{"source", nodeId(g, source)},
                          {"target", nodeId(g, ref)},
                          {"kind", edgeKind},
-                         {"sourceIndex", static_cast<size_t>(at - outputs.begin())},
+                         {"sourceIndex", static_cast<size_t>(rank)},
                          {"targetIndex", i}});
                 }
             };
@@ -415,6 +479,7 @@ PassMaker jgirPass() {
         return std::make_unique<JsonGirDumpPass>(
             ctx,
             JsonGirOptions{
-                .canonical = args.getBool("canonical"), .egraph = args.getBool("egraph")});
+                .canonical = args.getBool("canonical"),
+                .egraph    = args.getBool("egraph")});
     };
 }

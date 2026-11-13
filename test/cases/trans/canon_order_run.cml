@@ -1,0 +1,10 @@
+// Two writes to two `var`s in one `sync` block, printed: the canonical numbering is a query, so
+// what this program prints is what it printed before the rule changed (design principles 9).
+func main(): int sync {
+    var a = 0
+    var b = 0
+    a = 1
+    b = 2
+    println(a, b)
+    return 0
+}

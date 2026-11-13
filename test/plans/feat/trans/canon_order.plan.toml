@@ -1,0 +1,26 @@
+id = "trans.canon_order"
+order = 970
+tier = "fast"
+tags = ["feat", "trans", "dump", "json", "canonical"]
+
+[[tests]]
+name = "numbering_is_the_graphs"
+desc = "The default numbering is the canonical order (design principles 9, 'the graph interface does not see the spelling'): two programs that differ only in the order two values were captured in write one std::jgir document with source positions compared out; a tie of width 2 -- two final writes of captured variables that no edge orders -- is arranged by the smallest numbering table, with the source and a structural hash of the two fragments both ordering it the other way; and std::nvm runs a program to the same output it printed before the rule changed, because the numbering is a query and not a scheduler."
+kind = "behavior"
+tool = "python"
+case = "../../../cases/trans/canon_order.py"
+# `${camel}` is the compiler of the build under test, named as an argument.
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["canonical order: PASS"]
+timeout_ms = 180000
+
+[[tests]]
+name = "execution_is_unchanged"
+desc = "Two writes into one sync block print what they printed before the rule changed: the canonical numbering is a query over the graph, and a tie may change what a document says and never what the program does."
+kind = "behavior"
+case = "../../../cases/trans/canon_order_run.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["1 2"]
+timeout_ms = 60000
