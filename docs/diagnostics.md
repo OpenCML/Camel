@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-312 diagnostics: 291 errors, 21 warnings. 16 carry a machine-applicable edit, 296 say why they carry none.
+313 diagnostics: 292 errors, 21 warnings. 16 carry a machine-applicable edit, 297 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -271,6 +271,7 @@ prints one entry.
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x0300020C` | [SemanticDiag::ExternalResourceNeedsVar](#externalresourceneedsvar) | Error | yes |
+| `0x0300020D` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8950,6 +8951,44 @@ func tick(): int uses stdout sync {
 
 func main(): int sync {
     return tick()
+}
+```
+
+### ClosureCaptureEscapes
+
+`0x0300020D` · Error · `SemanticDiag::ClosureCaptureEscapes`
+
+**Fix**
+
+None: choice: capture the value the cell holds, or pass the state as a value, and which of the two is the writer's
+
+**Message**
+
+```text
+'{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out.
+```
+
+**Help**
+
+```text
+A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
+```
+
+**Example** (`test/cases/compile/state_escape/err_escape_return.cml`, run as `camel test/cases/compile/state_escape/err_escape_return.cml`)
+
+```camel
+func make(): (x: int) => int {
+    var acc = 0
+    return (x: int): int => sync {
+        acc = acc + x
+        acc
+    }
+}
+
+func main(): int sync {
+    let g = make()
+    println(g(1))
+    return 0
 }
 ```
 

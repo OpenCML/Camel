@@ -1821,6 +1821,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ClosureCaptureEscapes,
+            {
+                "ClosureCaptureEscapes",
+                "'{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out.",
+                "A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

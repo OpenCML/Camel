@@ -60,6 +60,7 @@ SemanticDiag::BranchReturnTypeMismatch	test/cases/compile/semantic/branch_return
 SemanticDiag::CalledFallibleValue	test/cases/compile/unused_values/called_fallible.cml
 SemanticDiag::CallingIncompleteFunction	test/cases/compile/module_load/order_values.cml
 SemanticDiag::CaptureAfterRecursiveCall	test/cases/compile/module_load/recursive_late_var.cml
+SemanticDiag::ClosureCaptureEscapes	test/cases/compile/state_escape/err_escape_return.cml
 SemanticDiag::CollectionKeyNotAllowed	test/cases/compile/collections/err_key_float.cml
 SemanticDiag::CompOperandGenericWithoutType	test/cases/compile/stream/comp_operand_generic.cml
 SemanticDiag::CompOperandMismatch	test/cases/compile/stream/comp_operand_mismatch.cml

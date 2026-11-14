@@ -1,0 +1,171 @@
+# The state rule: a closure may not carry a `var` capture out of the evaluation that declared it
+# (design principles 3.5, rule two; the author's ruling of 2026-11-14, origin/fsh-dev c8af40747). The rule is the author's, the wording of the reports is
+# this lane's, and nothing new is written in the language: what a closure may do with a cell is the
+# effect analysis the builder already has (src/compile/gir/builder_state.cpp).
+#
+# A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent
+# to the call that received it. A closure may capture one by reference exactly while it stays inside
+# that evaluation. The rule names the three ways a closure leaves, and this plan has a case for each:
+#
+#   as a result              `make` returns the closure that reads its own `acc`
+#   into a place it does not own
+#                            `fill` stores it into a field, and into an element, of the caller's cell
+#   handed to a call that keeps it
+#                            `keep` returns it in a pair, and `make` hands `keep` what it was given
+#   one level down           `outer` captures `inner`, which holds the cell
+#
+# A call that merely takes a function is not a way out: `map` and `foreach` take a closure and drop it
+# when they return, and a callee whose signature says nothing promises nothing, so neither is refused.
+# What is refused is a cell that outlives the call that declared it, which is what these cases share.
+#
+# Each is a compile error whose text says what the rule is and gives the two rewrites the author
+# named -- capture the value the cell holds (`let x = acc; (k) => x + k`), or pass the state as a
+# value, in as a parameter and back as the result. The capture is never quietly made by value, so
+# neither is that offered: it would answer a different question than the one the program asks.
+#
+# The bytes of what is refused are pinned too: the diagnostic is ClosureCaptureEscapes, and the
+# program is refused before it runs, so the cases print nothing.
+#
+# The module top level is a scope under the same rule, and that half is NOT in this lane: the top
+# level is evaluated once, before any function runs, and every function it declares is handed out, so
+# a top-level `var` is captured by a function that always carries the cell out -- it has no other use
+# -- and a top-level binding may not write an external resource either (importing a module runs no
+# code). Both were written and measured, and both are refused on the whole tree today for a reason
+# that is not this rule: 246 plan entries go red, and the documentation itself stops compiling
+# (docs/language/05_modules.md:234, docs/language/07_statements.md:38). The refusal is a five-line hunk at two known
+# sites and two ready diagnostics; it needs the 35 test cases and the two doc examples migrated with
+# it, which is a lane of its own. It is filed as a question page,
+# docs/handover/questions/2026-11-14-who-migrates-the-module-level-var.cn.md, and until then a module
+# `var` works as it did -- the one way out this plan does not refuse.
+#
+# What is NOT covered here either, by design: `Ref<T>` (the sanctioned way to hand long-lived shared
+# state out) and the hint that tells a writer an in-place update turned into a copy. Both belong to
+# other lanes of the same ruling; this plan pins this rule only.
+
+id = "compile.state_escape"
+order = 1010
+tier = "fast"
+tags = ["feat", "compile", "effects", "state"]
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "compile.state_escape.capture_within"
+desc = "The positive side: a closure captures `acc`, a `var` of `total`'s call, and `total` calls it in its own body -- the write is real and the caller sees it (0 + 1 + 2 + 3 = 6). Nothing is reported."
+kind = "behavior"
+case = "../../../cases/compile/state_escape/ok_capture_within.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.trim() === '6', 'the closure reads and writes the cell inside the call: ' + JSON.stringify(out))
+}
+"""
+
+[[tests]]
+name = "compile.state_escape.escape_return"
+desc = "Route one, as a result: `make` returns the closure that reads `acc`, a `var` of its own call, so the caller reads a cell whose owner has returned. Compile error, with the rule's words and the two rewrites."
+kind = "negative"
+case = "../../../cases/compile/state_escape/err_escape_return.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x0300020D"
+verify_script = """
+({ input, assert }) => {
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
+assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
+assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+}
+"""
+
+[[tests]]
+name = "compile.state_escape.escape_field"
+desc = "Route two, a field: `fill` stores the closure that reads its own `acc` into `b.f`, a field of the caller's variable, which outlives the call. Compile error."
+kind = "negative"
+case = "../../../cases/compile/state_escape/err_escape_field.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x0300020D"
+verify_script = """
+({ input, assert }) => {
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
+assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
+assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+}
+"""
+
+[[tests]]
+name = "compile.state_escape.escape_array"
+desc = "Route two, an element: `fill` stores the closure into `out[0]`, an element of the caller's array, which outlives the call. Compile error."
+kind = "negative"
+case = "../../../cases/compile/state_escape/err_escape_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x0300020D"
+verify_script = """
+({ input, assert }) => {
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
+assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
+assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+}
+"""
+
+[[tests]]
+name = "compile.state_escape.escape_stored_by_callee"
+desc = "Route three, a call that keeps it: `keep` returns the function it is given in a pair, so `make` handing it a closure over its own `acc` puts the cell past the call. Compile error."
+kind = "negative"
+case = "../../../cases/compile/state_escape/err_escape_stored_by_callee.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x0300020D"
+verify_script = """
+({ input, assert }) => {
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
+assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
+assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+}
+"""
+
+[[tests]]
+name = "compile.state_escape.escape_into_closure"
+desc = "One level down: `outer` captures `inner`, which holds a cell of `make`'s call, and `make` returns `outer` -- the value's type cannot show the capture, and the rule follows the value into the closure it is. Compile error."
+kind = "negative"
+case = "../../../cases/compile/state_escape/err_escape_into_closure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x0300020D"
+verify_script = """
+({ input, assert }) => {
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
+assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
+assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+}
+"""
+
+[[tests]]
+name = "compile.state_escape.top_level_value"
+desc = "The top level is untouched by this lane, and this is its legal half: a `let` constant and a function value are read by the functions that name them (10 + 1 = 11, doubled 22), and nothing is reported -- what a module declares is a value, and no evaluation of it is over."
+kind = "behavior"
+case = "../../../cases/compile/state_escape/ok_top_level_value.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+assert(out.includes('11'), 'the top-level constant is read: ' + JSON.stringify(out))
+assert(out.includes('22'), 'the top-level function value is handed to `double`: ' + JSON.stringify(out))
+}
+"""

@@ -47,12 +47,6 @@ args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}"]
 golden = "golden/content_equality_trees.txt"
 
 [[tests]]
-name = "value.counter_closure"
-desc = "Closures returned by a function share the var of their own call."
-case = "../../../cases/consistency/values/counter_closure.cml"
-golden = "golden/counter_closure.txt"
-
-[[tests]]
 name = "value.effect_not_used"
 desc = "An effect whose result nothing uses, outside a sync block, does not run (design principles 3.1, 3.2)."
 case = "../../../cases/consistency/values/effect_not_used.cml"

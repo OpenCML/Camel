@@ -959,6 +959,9 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportEffectfulConditions();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
+                // The state rule (design principles 3.5, rule two): a closure may not carry a `var`
+                // capture out of the evaluation that declared it. Also before the bodies are let go.
+                checkCellEscapes();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`

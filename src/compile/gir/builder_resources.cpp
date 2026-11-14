@@ -112,45 +112,10 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
     return united;
 }
 
-/// Whether a value of this type can hold a function value: a function itself, or a composite that
-/// can carry one (a tuple or struct field, an array element). A body whose result is of such a type
-/// can hand a closure it made to its caller, which is what makes a cell the closure captured
-/// outlive the call (design principles 3.3, effect masking). A type this does not read is answered
-/// as able to hold one: refusing a `pure` promise costs a program, accepting one it broke costs
-/// correctness.
-bool typeCarriesFunction(const Type *type, int depth = 0) {
-    if (type == nullptr || depth > 8) {
-        return true;
-    }
-    switch (type->code()) {
-    case TypeCode::Function:
-        return true;
-    case TypeCode::Tuple: {
-        const auto *tuple = static_cast<const TupleType *>(type);
-        for (size_t i = 0; i < tuple->size(); ++i) {
-            if (typeCarriesFunction(tuple->typeAt(i), depth + 1)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    case TypeCode::Struct: {
-        const auto *record = static_cast<const StructType *>(type);
-        for (size_t i = 0; i < record->size(); ++i) {
-            if (typeCarriesFunction(record->typeAt(i), depth + 1)) {
-                return true;
-            }
-        }
-        return false;
-    }
-    case TypeCode::Array:
-        return typeCarriesFunction(static_cast<const ArrayType *>(type)->elemType(), depth + 1);
-    case TypeCode::Other:
-        return true; // an enum or a type a module names: its variants may hold one
-    default:
-        return false;
-    }
-}
+/// Whether a value of this type can hold a function value: `typeCarriesFunction` in builder_helpers.h,
+/// which the state rule (`Builder::reportCellEscapes`) reads the same way -- a body whose result can
+/// hold a function can hand a closure it made to its caller, and that is what makes the cell the
+/// closure captured outlive the call.
 
 } // namespace
 

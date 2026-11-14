@@ -120,6 +120,14 @@ inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
     return node.draft;
 }
 
+/// Whether a handle still names the draft it was made in. `nodeDraftOf` guards this question and
+/// answers it by aborting; a caller that walks a table of handles the builder keeps across bodies
+/// (`variables_`, the stores a body made, the captures it took) has to ask it first, because a body a
+/// pass has measured is let go and the allocator hands its memory to the next draft.
+inline bool nodeIsCurrent(node_handle_t node) {
+    return node != nullptr && node.draft != nullptr && node.epoch == node.draft->epoch();
+}
+
 inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
     return nodeDraftOf(node)->header(node.id)->kind;
