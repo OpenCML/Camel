@@ -1528,7 +1528,7 @@ node test/tools/check-plan-fields.mjs --update-baseline  # accept the count it j
 
 It runs report-only on the gate (`-Check all` in `internal/tools/camel-remote.ps1`), and
 **report-only is not un-ratcheted**: the last accepted count lives in
-`test/plan-fields-baseline.json`, findings that grow past it exit non-zero by name and by category,
+`test/tools/plan-fields-baseline.json`, findings that grow past it exit non-zero by name and by category,
 and findings that come down exit zero with the line that says to accept the new number. A report
 that can only ever print is a number nobody has to answer for; the ratchet is what makes "may not
 grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count

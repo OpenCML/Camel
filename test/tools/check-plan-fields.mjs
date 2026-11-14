@@ -96,9 +96,11 @@ import { execFileSync } from 'node:child_process'
 import { parseTomlFile } from './toml-lite.mjs'
 
 const HERE = path.dirname(url.fileURLToPath(import.meta.url))
-// What the last accepted reading was: `test/<subject>-baseline.json`, the shape `test/perf-baseline.json`
-// already has. Read by the ratchet below, written only by `--update-baseline`.
-const BASELINE_PATH = path.resolve(HERE, '..', '..', 'test', 'plan-fields-baseline.json')
+// What the last accepted reading was, beside the only script that reads it -- and under `test/tools/`
+// rather than beside `test/perf-baseline.json`, because a tracked file the selection rules name
+// nothing for is a hole in `--changed` (test/tools/selftest/run.mjs). Read by the ratchet below,
+// written only by `--update-baseline`.
+const BASELINE_PATH = path.join(HERE, 'plan-fields-baseline.json')
 
 // Every field `validateTest` evaluates whatever the kind is. `expect_stdout` is the legacy name of
 // `expect_stdout_exact` and the two are read in one loop; `verify_js` is the legacy name of
