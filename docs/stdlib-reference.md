@@ -5450,6 +5450,9 @@ rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
 Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
 passed, and gives how many calls met (after a timeout, how many were waiting). A tool for
 showing that calls really run at the same time.
+Nondeterministic: the result depends on whether another call is waiting at the same moment,
+which is the schedule's business and not the program's. Written for a property of the
+scheduler, never for a program's result.
 
 - Failure: fault `InvalidArgument` when parties is below 1 or timeout is negative.
 - Example: `rendezvous(2, 1.0)` gives `2 when another call arrived in time`

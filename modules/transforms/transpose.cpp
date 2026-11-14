@@ -4,6 +4,7 @@
 #include "transpose.h"
 
 #include "jvp.h"
+#include "node_order.h"
 #include "rule_expand.h"
 #include "split.h"
 
@@ -1130,60 +1131,16 @@ struct PairCall {
 /// `transpose` of it answer 0.0 where the unoptimized program answers 20.0
 /// (`test/cases/compile/transforms/transpose_after_algebra.cml`).
 ///
-/// The order here is the graph's own: a node is ready once every node that consumes its value has
-/// been visited -- Kahn's algorithm over the two lists a value is carried by (`normInputsOf`,
-/// `withInputsOf`), which is where every cotangent this file delivers travels. Ties go to the higher
-/// id, so a graph the front end built (where every consumer has the higher id) is visited in exactly
-/// the order the id sweep visited it in.
+/// The order itself is `node_order.h#reverseDependencyOrderOf` -- the one answer in the tree to
+/// "what order does this graph's own edges impose", shared with the copy walks that read a body
+/// forwards (`vmap.cpp`, `modules/transforms/node_order.h`). Keeping a second Kahn walk here, with a
+/// tie rule of its own, was a way for the two readings to drift apart for no reason; a walk that
+/// needs a node before its readers needs the forward order reversed, and that is what it asks for.
+/// On a graph the front end built the two agree id for id (the forward order is the id order, so
+/// reversing it is the descending sweep this walk used to do), which is why nothing a plan pins
+/// moved when it was written this way.
 std::vector<gc_node_ref_t> cotangentWalkOrder(const camel::runtime::GCGraph *function) {
-    const size_t nodeCount = function->nodeCount();
-    std::vector<gc_node_ref_t> order;
-    order.reserve(nodeCount);
-    // How many nodes still have to hand this one a cotangent: one per place its value is read.
-    std::vector<size_t> waiting(nodeCount, 0);
-    const auto readInputs = [&](gc_node_ref_t ref, const auto &visit) {
-        for (const std::span<const gc_node_ref_t> inputs :
-             {function->normInputsOf(ref), function->withInputsOf(ref)}) {
-            for (const gc_node_ref_t input : inputs) {
-                if (input < nodeCount) {
-                    visit(input);
-                }
-            }
-        }
-    };
-    for (gc_node_ref_t ref = 0; ref < nodeCount; ++ref) {
-        readInputs(ref, [&](gc_node_ref_t input) { ++waiting[input]; });
-    }
-    std::priority_queue<gc_node_ref_t> ready;
-    for (gc_node_ref_t ref = 0; ref < nodeCount; ++ref) {
-        if (waiting[ref] == 0) {
-            ready.push(ref);
-        }
-    }
-    std::vector<bool> visited(nodeCount, false);
-    while (!ready.empty()) {
-        const gc_node_ref_t ref = ready.top();
-        ready.pop();
-        if (visited[ref]) {
-            continue;
-        }
-        visited[ref] = true;
-        order.push_back(ref);
-        readInputs(ref, [&](gc_node_ref_t input) {
-            if (--waiting[input] == 0) {
-                ready.push(input);
-            }
-        });
-    }
-    // Along the value edges a graph is a DAG (`docs/technical/17_graph_rewrite_api_contracts.md`
-    // 4.2), so nothing is left over. If a graph this walk is handed one day is not, the nodes it
-    // could not order are visited in the order the sweep used, rather than dropped.
-    for (gc_node_ref_t ref = static_cast<gc_node_ref_t>(nodeCount); ref-- > 0;) {
-        if (!visited[ref]) {
-            order.push_back(ref);
-        }
-    }
-    return order;
+    return camel::transforms::reverseDependencyOrderOf(*function);
 }
 
 /// Transposes a call of a callee that answers the pair (value, tangent) **by the content of that

@@ -1,0 +1,12 @@
+func r6(a7: int, a8: int): int {
+    return if a7 <= 0 then 1 else r6(0, (match a8 {
+        case 5 => int(0.25)
+        case _ => -a8
+    }) % 97);
+}
+
+func main(): int sync {
+    var v65 = (0, 0).0;
+    var v67 = r6(8, v65);
+    return 0;
+}

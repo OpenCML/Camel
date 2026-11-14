@@ -1,0 +1,25 @@
+/**
+ * Two effectful statements and nothing between them but an order edge: `mark` writes the console,
+ * so the builder orders the call written first before the call written second, and no `sync` block,
+ * data edge or control edge joins the two (design principles 3.3, "同一资源自动有序"; the pair is
+ * the `order:` of `std::tfdump`). That edge orders them although they could otherwise run at the
+ * same time, which is what this case adds to the differential test `para.exec_pred`: the plan used
+ * to ignore the order edge and the two lines could come out in either order, and every back end now
+ * prints them as they are written.
+ */
+func mark(tag: string, n: int): int sync {
+    println(tag)
+    return n
+}
+
+// Not a sync block: nothing but the console orders the two calls.
+func two(): int {
+    let a = mark("order 1", 10)
+    let b = mark("order 2", 20)
+    return a + b
+}
+
+func main(): int sync {
+    println("order", two())
+    return 0
+}

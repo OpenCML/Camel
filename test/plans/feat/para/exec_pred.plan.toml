@@ -2,7 +2,7 @@ id = "para.exec_pred"
 order = 352
 tier = "fast"
 tags = ["feat", "para", "consistency"]
-desc = "The nodes one node waits for have one implementation, and the differential test that pins it: the same six programs on std::nvm (the reference) and on the parallel scheduler, whose task graph is cut by that implementation, print the same lines in the same order"
+desc = "The nodes one node waits for have one implementation, and the differential test that pins it: the same seven programs on std::nvm (the reference) and on the parallel scheduler, whose task graph is cut by that implementation, print the same lines in the same order"
 
 # What this plan is for
 # ---------------------
@@ -13,9 +13,8 @@ desc = "The nodes one node waits for have one implementation, and the differenti
 # (the same file, the `collectWaits` of buildStructuredPlan) and the storage-reuse proof of the
 # plan (src/execute/exec_plan.cpp, planStorageReuse). They are now one function,
 # `camel::execute::executionPredecessorsOf` (include/camel/execute/graph_runtime_support.h), and
-# the four read it. The differences the four had are named one by one in the commit that made the
-# change; the one difference that is still there -- the structured plan obeys the data, control and
-# sync edges and not the order edge -- is written where the plan decides it, once (see below).
+# the four read it, every kind of edge included: the plan waits for the order edge as it waits for
+# the data, control and sync edges, so what is left is one answer and no exception.
 #
 # This entry is the differential test: the same programs, run by std::nvm -- the linear reference,
 # which walks the order the plan computes -- and by the parallel scheduler, whose scopes are cut
@@ -33,32 +32,23 @@ desc = "The nodes one node waits for have one implementation, and the differenti
 #                         (`fanout_all=true`), so the edges are what cuts it. Measured on these
 #                         six programs with `segments=true`: the arm of `sumTo` in branch.cml,
 #                         the body of `inner` in sync_block.cml and `main` in fault.cml are cut
-#                         into chains of tasks. The other three are totally ordered (a linear
-#                         chain, a loop, and an io body whose statements are all on the chain),
-#                         which is what those three are here to keep true;
+#                         into chains of tasks. The others are totally ordered (a linear chain, a
+#                         loop, and an io body whose statements are all on the chain), which is
+#                         what those three are here to keep true. By that same rule the program
+#                         this entry adds is cut too: `two` of order_edge.cml has two constant
+#                         pairs with no path between them, so it is not totally ordered either;
 #   run_prl_no_bytecode   the scheduler evaluates every graph itself instead of handing a serial
 #                         one to the interpreter.
 #
-# The six programs cover the shapes the predecessor function has to answer for: a linear chain,
+# The seven programs cover the shapes the predecessor function has to answer for: a linear chain,
 # a branch (both arms, and the arm's own pure computation, which is where a task graph appears),
 # a loop (evaluated node by node, so this case is the path where no task graph is cut at all), a
 # sync block (GATEs forwarding a value along the chain, a block body in a function and in a
 # lambda), a computation that may fault and is caught (`GATE`, the fault becoming an error
-# value) and external access (`println`, a module operator, a comprehension and a higher-order
-# call).
-#
-# What these six deliberately do not contain: two effectful nodes that an *order* edge orders and
-# that a plan may otherwise run at once. The scheduler's plan obeys the data, control and sync
-# edges and not the order edge (one `constexpr` says so, in
-# src/passes/sched/taskflow/taskflow.cpp#planObeysPredecessor), while `std::nvm` obeys all three
-# because it walks one order. Two existing programs measure that disagreement and both are
-# asserted on the scheduler's side, so a case of this kind here would be red from the start:
-# `test/cases/para/core/concurrent_calls.cml` prints `0` on `std::nvm` and `2` on `run_prl`, and
-# `concurrent_recursion.cml` prints `0 of 8` against `8 of 8`. Whichever side is right is the
-# language author's decision; until it is taken, this entry pins the edges the two back ends do
-# agree on, which is the whole of what the shared function decides for a graph that has no such
-# pair. When the plan does start obeying order edges, adding one of those two programs here is
-# what turns the new answer into a number instead of a claim.
+# value), external access (`println`, a module operator, a comprehension and a higher-order
+# call) and two effectful calls that only an order edge orders (`order_edge.cml`: the two calls
+# of `mark` both write the console, the builder orders them in the order they are written, and
+# that edge is the one thing that says which line comes first).
 #
 # The six differential entries compare what two back ends print, which catches an answer that makes
 # a program print the wrong thing and cannot catch an answer that is merely larger than it should
@@ -166,8 +156,20 @@ io 5 [2, 4, 6] [2, 5, 10]
 """
 
 [[tests]]
+name = "order_edge"
+desc = "Two effectful calls with nothing between them but an order edge: both write the console, so the builder orders the call written first before the call written second, and the plan must wait for that edge like for any other (it used to run them at once, and the two lines could come out in either order). The first two lines are the edge's answer; the third is the sum the two calls returned."
+case = "../../../cases/para/exec_pred/order_edge.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """order 1
+order 2
+order 30
+"""
+
+[[tests]]
 name = "linear.predecessors"
-desc = "The linear chain's predecessor set, line by line: what every node that runs waits for, and the kind of edge that says so. The two calls the last line adds are the case's only unordered pair (`# 11 <- [data:9, data:10]`), and the order edges the builder writes before the printing statements are in it too, which is why the plan filters them and NodeVM does not."
+desc = "The linear chain's predecessor set, line by line: what every node that runs waits for, and the kind of edge that says so. The two calls the last line adds are the case's only unordered pair (`# 11 <- [data:9, data:10]`), and the order edges the builder writes before the printing statements are in it too, which the plan now waits for like NodeVM does."
 case = "../../../cases/para/exec_pred/linear.cml"
 args = ["${case}", "std::tfdump"]
 verify_script = """({ input, assert }) => {

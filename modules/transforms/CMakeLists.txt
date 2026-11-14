@@ -8,6 +8,7 @@ add_camel_module(
     first_with_as_param_operator.cpp
     jvp.cpp
     jvp_operator.cpp
+    node_order.cpp
     remat_operator.cpp
     rule_expand.cpp
     split.cpp

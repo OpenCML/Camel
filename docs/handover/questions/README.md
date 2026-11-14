@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：88 行（页已不在 `questions/` 里）
+## 生成器不会删的行：89 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -93,6 +93,7 @@
 | [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](../reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ | 在 `reviews/` |
 | [`2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge`](../reviews/2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge.cn.md) | 一个既没有值读者、也没有同步后继的 `GATE`，怎么结束一条同步边？ | 在 `reviews/` |
 | [`2026-11-14-a-type-layer-that-names-four-objects-and-one-of-them-is-a-node-its-build-owns`](../reviews/2026-11-14-a-type-layer-that-names-four-objects-and-one-of-them-is-a-node-its-build-owns.cn.md) | 类型层还按「对象地址」认四样东西：三样该留，一样是 `typeof` 的表达式节点 | 在 `reviews/` |
+| [`2026-11-14-a-vmap-of-a-constant-body-answers-one-line`](../reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md) | 体的整体答案是一个常量时，`vmap` 该答几行？ | 在 `reviews/` |
 | [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](../reviews/2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，这条入口现在读的是「有没有这条遍都一样」 | 在 `reviews/` |
 | [`2026-11-14-delete-neutral-only`](../reviews/2026-11-14-delete-neutral-only.cn.md) | 作者要删 `algebra.cpp` 的 `neutral_only`，可它是活代码：删还是留？ | 在 `reviews/` |
 | [`2026-11-14-how-does-a-plan-say-no-diagnostic-at-all`](../reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md) | 一个计划怎么表达「这次运行一个诊断都不产生」？ | 在 `reviews/` |
