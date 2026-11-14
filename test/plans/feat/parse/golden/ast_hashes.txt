@@ -3792,6 +3792,8 @@ e5f1dda926825893 ok test/cases/opt/defun/family_shape.cml
 94ae362b8abacc94 ok test/cases/opt/defun/nested_signature.cml
 81f3343c0f081204 ok test/cases/opt/defun/value_tag.cml
 bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
+a697e5029bcc5876 ok test/cases/opt/devirtualize/recallee_arity.cml
+3ccda385a066a3b9 ok test/cases/opt/devirtualize/recallee_type.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
 1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
@@ -3851,6 +3853,7 @@ ca3d97c1b4140eb5 ok test/cases/opt/generic/interval_bounds_computed.cml
 ea9584bfca450b56 ok test/cases/opt/generic/interval_bounds_constant.cml
 3678fd4f027f82e2 ok test/cases/opt/generic/pruned_branch_keeps_condition_effect.cml
 18c652adaa7204b1 ok test/cases/opt/generic/recursion_unroll.cml
+a02921616f780e7d ok test/cases/opt/generic/rounds_exhausted.cml
 f0b01c65986bb7e0 ok test/cases/opt/generic/shape_unroll.cml
 de3e406180e622d0 ok test/cases/opt/generic/simplify_growth_budget.cml
 6e049f32641aa4d2 ok test/cases/opt/generic/specialization_survives_the_round.cml

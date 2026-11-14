@@ -1027,6 +1027,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOrderOnlyEffectPass, OrderOnlyEffectTestPass),
+        TEST_PASS(kRecalleeArityPass, RecalleeArityTestPass),
+        TEST_PASS(kRecalleeTypePass, RecalleeTypeTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
         TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
         TEST_PASS(kBreakJoinTestPass, BreakJoinTestPass),

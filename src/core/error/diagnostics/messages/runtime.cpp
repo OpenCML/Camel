@@ -372,6 +372,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
                 "The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.",
             },
         },
+        {
+            RuntimeDiag::OptimizationStoppedShort,
+            {
+                "OptimizationStoppedShort",
+                "`std::opt` stopped short of a fixed point: {0}.",
+                "Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The round count is the pass's own bound, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.",
+            },
+        },
     };
     return infoMap;
 }
