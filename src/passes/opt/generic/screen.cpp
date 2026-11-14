@@ -13,6 +13,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
 #include "camel/core/type/intern.h"
+#include "camel/runtime/graph.h"
 
 #include <algorithm>
 #include <map>
@@ -250,6 +251,13 @@ bool mayRemoveDead(const GCGraph &graph) {
             break;
         case GCNodeKind::Oper:
             if (isPureOperNode(graph, ref)) {
+                return true;
+            }
+            break;
+        case GCNodeKind::Func:
+            // A closure definition nothing can call: the sweep takes it too, so a graph whose only
+            // dead thing is one must not be screened out (a screen says "there is something here").
+            if (camel::runtime::isUnreadClosure(graph, ref)) {
                 return true;
             }
             break;

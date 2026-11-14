@@ -1628,6 +1628,7 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
                 }
                 replaceNode(transaction, id, kInvalidNodeRef);
                 ++removed;
+                noteSweepRemoval(h ? h->kind : camel::runtime::GCNodeKind::Dead);
                 changed = true;
             }
         }

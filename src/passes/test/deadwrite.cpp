@@ -15,6 +15,7 @@
 
 #include "camel/core/operator_table.h"
 #include "camel/runtime/effect_liveness.h"
+#include "passes/opt/generic/rewrite.h"
 
 const camel::runtime::Program *
 DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
@@ -50,5 +51,12 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                << " dead=" << (deadWrite(*graph, ref) ? 1 : 0) << "\n";
         }
     }
+    // What the sweep took, by kind: the count that says extending the kinds it takes is doing work
+    // rather than leaving every graph it was written for alone (an assertion about one case can say
+    // "the closure is gone", never how many nodes in all went).
+    os << "SWEEP func=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Func)
+       << " call=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Call)
+       << " gate=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Gate)
+       << " oper=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Oper) << "\n";
     return program;
 }

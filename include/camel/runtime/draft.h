@@ -1156,6 +1156,13 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape =
 /// statement and stays.
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
 
+/// Whether the node is a closure definition nothing can call: a FUNC node the graph does not export
+/// (`closureNodes`), with no control, order or sync edge on either side. A FUNC node is a value, not
+/// a statement (design principles 3.1): what runs is the CALL of it, so an unread definition runs
+/// nothing, drops no effect and faults nothing. What it captured is read only by its body, which is
+/// why letting it go is what leaves a write nothing else reads a dead write (9.7).
+bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
+
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
 /// inlined call gates its arguments after what the call waited for -- and changes nothing else
 /// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
