@@ -26,6 +26,7 @@
 #include <optional>
 #include <string>
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 using namespace std;
@@ -377,6 +378,16 @@ bool Builder::readCalleeSignature(
             }
             operand = norm[at];
         }
+        if (use.cls == sem::ResourceClass::Handle) {
+            // A handle access names a value, not a parameter of this body (design effects plan
+            // 3.2): its key is read before the port test below, because a handle this body made
+            // itself is no port of the caller and still has to meet the other operations on the
+            // one box it names.
+            std::string key;
+            walk.valueKeys.push_back(
+                handleKeyOf(walk, graph, transaction, operand, key) ? std::move(key)
+                                                                    : std::string());
+        }
         if (walk.captured.contains(operand)) {
             if (!placeCapturedUse(walk, graph, transaction, operand, use.mode)) {
                 return false;
@@ -441,6 +452,132 @@ void Builder::readUnknownValue(BodyReach &walk) const {
     walk.reach.external = true;
 }
 
+std::optional<sem::ResultAlias> Builder::resultAliasOf(
+    DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+    draft_node_ref_t id) const {
+    // How a node's result relates to its operands, read from what the node names: an operator's
+    // declaration, a callee's signature (the clause it wrote, or what its body was measured to
+    // reach), or the signature of the function value a call goes through. `nullopt` for a node
+    // that runs nothing -- a port, a gate, a constant -- whose value is simply its own.
+    const auto &draft = transaction.graph();
+    const auto kind   = nodeKindOf(draft.ref(id));
+    if (kind == runtime::GCNodeKind::Oper) {
+        const auto &op = graph->operTarget(draft.ref(id));
+        if (op == nullptr) {
+            return std::nullopt;
+        }
+        const auto &table = camel::core::OperatorTable::instance();
+        if (const auto found = table.lookup(std::string(op->uri())); found.has_value()) {
+            if (const auto *facts = table.semantics(*found); facts != nullptr && facts->resources) {
+                return facts->resources->result;
+            }
+        }
+        // An operator that declares nothing may answer anything one of its operands holds.
+        return sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
+    }
+    if (kind == runtime::GCNodeKind::Func) {
+        const compile_graph_ptr_t callee = graph->funcTarget(draft.ref(id));
+        if (callee == nullptr || callee->funcType() == nullptr) {
+            return std::nullopt;
+        }
+        if (inferredSignatures_.contains(callee.get())) {
+            const auto inferred = inferredResources_.find(callee.get());
+            if (inferred != inferredResources_.end()) {
+                return inferred->second.result;
+            }
+        }
+        const ResourceSignature &sig = callee->funcType()->resources();
+        if (sig.mode != ResourceSignature::Mode::Concrete) {
+            return sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
+        }
+        return sig.result;
+    }
+    if (kind == runtime::GCNodeKind::Call) {
+        const auto callee = draft.withInputsOf(id);
+        if (callee.empty()) {
+            return std::nullopt;
+        }
+        Type *calleeType = nodeTypeOf(draft.ref(callee[0]));
+        if (calleeType == nullptr || calleeType->code() != TypeCode::Function) {
+            return std::nullopt;
+        }
+        const auto *fnType = tt::as_ptr<FunctionType>(calleeType);
+        if (fnType->resources().mode != ResourceSignature::Mode::Concrete) {
+            return sem::ResultAlias{.kind = sem::ResultAlias::Kind::Unknown};
+        }
+        return fnType->resources().result;
+    }
+    return std::nullopt;
+}
+
+bool Builder::handleKeyOf(
+    BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+    draft_node_ref_t value, std::string &key) const {
+    // The resource a handle value names (design effects plan 3.2: the key is the handle's value).
+    // The value is followed through the nodes that only name the same handle again -- a gate, a
+    // copy, and a result the operator says is the operand it was handed -- until it lands on a
+    // parameter of this body, on one of its captures, or on a node that made the handle itself.
+    // Two uses with one key reach one box; two uses with two keys are two references, whose
+    // operations keep no order between them.
+    const auto &draft = transaction.graph();
+    std::unordered_set<draft_node_ref_t> seen;
+    while (draft.alive(value) && seen.insert(value).second) {
+        if (const auto port = walk.ports.find(value); port != walk.ports.end()) {
+            key = std::format("p{}", port->second);
+            return true;
+        }
+        if (walk.captured.contains(value)) {
+            const auto at = walk.capturePositions.find(value);
+            if (at == walk.capturePositions.end()) {
+                return false;
+            }
+            key = std::format("c{}", static_cast<unsigned>(at->second));
+            return true;
+        }
+        const node_handle_t node = draft.ref(value);
+        if (nodeGraphOf(node) != graph) {
+            // A value of a graph around this one: this body holds it in a capture port of its own.
+            const node_handle_t port = capturedCellIn(graph, node);
+            const auto at =
+                port == nullptr ? std::optional<uint8_t>() : capturePositionOf(graph, port);
+            if (!at.has_value()) {
+                return false;
+            }
+            key = std::format("c{}", static_cast<unsigned>(*at));
+            return true;
+        }
+        const auto kind = nodeKindOf(node);
+        if (kind == runtime::GCNodeKind::Gate || kind == runtime::GCNodeKind::Copy) {
+            const auto in = draft.normInputsOf(value);
+            if (in.empty()) {
+                return false;
+            }
+            value = in[0];
+            continue;
+        }
+        const auto alias = resultAliasOf(graph, transaction, value);
+        if (alias.has_value()) {
+            if (alias->kind == sem::ResultAlias::Kind::Same ||
+                alias->kind == sem::ResultAlias::Kind::View) {
+                const auto in = draft.normInputsOf(value);
+                if (alias->operand >= in.size()) {
+                    return false;
+                }
+                value = in[alias->operand];
+                continue;
+            }
+            if (alias->kind != sem::ResultAlias::Kind::Fresh) {
+                // The result may be a value one of its operands holds, so this cannot say which
+                // one handle it names.
+                return false;
+            }
+        }
+        key = std::format("h{}", static_cast<unsigned>(value));
+        return true;
+    }
+    return false;
+}
+
 bool Builder::reachOfOper(
     DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
     draft_node_ref_t id) const {
@@ -493,6 +630,13 @@ bool Builder::reachOfOper(
         const size_t at   = size_t(access.binding.index) + (isWith && isCall ? 1 : 0);
         if (at >= inputs.size()) {
             return false;
+        }
+        if (access.resource.cls == sem::ResourceClass::Handle) {
+            // The same reading as in readCalleeSignature, for an operator's own declaration.
+            std::string key;
+            walk.valueKeys.push_back(
+                handleKeyOf(walk, graph, transaction, inputs[at], key) ? std::move(key)
+                                                                       : std::string());
         }
         if (walk.captured.contains(inputs[at])) {
             if (!placeCapturedUse(walk, graph, transaction, inputs[at], access.mode)) {
@@ -615,7 +759,9 @@ void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const 
 }
 
 std::optional<camel::core::sem::ResourceSignature>
-Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only) const {
+Builder::footprintOf(
+    DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only,
+    std::vector<std::string> *valueKeys) const {
     FunctionType *type = graph->funcType();
     if (type == nullptr) {
         return std::nullopt; // the body did not build (an error was reported)
@@ -656,6 +802,12 @@ Builder::footprintOf(DraftGraphBuilder *graph, std::optional<draft_node_ref_t> o
     }
     if (walk.unplaceable) {
         return std::nullopt; // see addParamUse: nothing here is measured, rather than too little
+    }
+    if (valueKeys != nullptr) {
+        // The resources this walk named by value (design effects plan 3.2). They are not part of
+        // the signature -- a signature names its resources by parameter -- and only the ordering of
+        // the effects on one resource reads them.
+        *valueKeys = std::move(walk.valueKeys);
     }
     if (!only.has_value() && bodyResultCanHoldAFunction(*type)) {
         // A closure made here that captures a cell of this body can leave through the result --
@@ -857,10 +1009,23 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
         if (!isEffectNode(graph, node) || !nodeTakesAnOrder(node)) {
             continue;
         }
-        const auto reach = footprintOf(graph, id);
+        std::vector<std::string> valueKeys;
+        const auto reach = footprintOf(graph, id, &valueKeys);
         ResourceKeys named;
         if (reach.has_value()) {
             named = resourceKeysOf(*reach);
+            for (std::string &key : valueKeys) {
+                if (key.empty()) {
+                    // A handle access the walk cannot pin to one box reaches any resource of its
+                    // class, the way an undeclared operator does (design principles 3.3).
+                    named.unnamed = true;
+                    continue;
+                }
+                named.keys.push_back(std::move(key));
+            }
+            // One key per resource, however many of a node's accesses name it.
+            std::sort(named.keys.begin(), named.keys.end());
+            named.keys.erase(std::unique(named.keys.begin(), named.keys.end()), named.keys.end());
         } else {
             named.unnamed = true;
         }

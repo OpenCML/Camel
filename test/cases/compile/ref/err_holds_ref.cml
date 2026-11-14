@@ -1,0 +1,15 @@
+/**
+ * A reference's content may not hold a reference: `Ref<Ref<int>>` would let two handles name each
+ * other's box and never reach a count of zero, so the type is refused where the outer one is made.
+ * The value is a `Ref<int>` itself, which is the one shape the rule names.
+ */
+
+import state
+
+func main(): int sync {
+    let inner = state::ref(1)
+    let outer = state::ref(inner)
+    let back = state::get(outer)
+    println(state::get(back))
+    return 0
+}

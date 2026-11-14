@@ -1,0 +1,18 @@
+/**
+ * The same place makes a box again and again: one body, run once per element of a small range.
+ *
+ * Each element's box is dead when the element is done, so a mechanism that frees a box when its
+ * last handle goes answers as many liveness readings as the element count -- not as many as the
+ * range's length. `--gc-check foreign` reads it at exit, and `ref_boxes_loop_thousand.cml` is the
+ * same program over a range a hundred times longer: `live` beside that one's is what says whether
+ * anything was reclaimed while the program ran.
+ */
+
+import state
+
+func main(): int sync {
+    let kept = state::ref(41)
+    let total = [state::get(state::ref(i)) for i in 0..10]
+    println(len(total), state::get(kept))
+    return 0
+}

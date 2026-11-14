@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-314 diagnostics: 292 errors, 22 warnings. 15 carry a machine-applicable edit, 299 say why they carry none.
+315 diagnostics: 293 errors, 22 warnings. 15 carry a machine-applicable edit, 300 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -272,6 +272,7 @@ prints one entry.
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
 | `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
+| `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8986,6 +8987,40 @@ func make(): (x: int) => int {
 func main(): int sync {
     let g = make()
     println(g(1))
+    return 0
+}
+```
+
+### RefContentHoldsRef
+
+`0x03000211` · Error · `SemanticDiag::RefContentHoldsRef`
+
+**Fix**
+
+None: choice: the content holds a reference; either store the value the reference holds, or use one reference where two boxes would be needed, and which of the two is the writer's
+
+**Message**
+
+```text
+'{0}' cannot be the content of a reference: {1}.
+```
+
+**Help**
+
+```text
+A reference is a box reclaimed by counting the handles that point at it: the last handle to go frees it (design principles 3.3). A box that holds a reference -- directly, or through a field, an element, a variant's payload, what a function takes or returns, or a value a closure captures -- keeps that other box's count above zero for ever, so neither is freed and the program holds values it can no longer reach. The content is any other type. When the value to store already holds a reference, read what it holds out first and make the box of that value, or keep the one reference instead of making a second box.
+```
+
+**Example** (`test/cases/compile/ref/err_holds_ref.cml`, run as `camel test/cases/compile/ref/err_holds_ref.cml`)
+
+```camel
+import state
+
+func main(): int sync {
+    let inner = state::ref(1)
+    let outer = state::ref(inner)
+    let back = state::get(outer)
+    println(state::get(back))
     return 0
 }
 ```

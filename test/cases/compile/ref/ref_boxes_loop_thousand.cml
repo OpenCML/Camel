@@ -1,0 +1,16 @@
+/**
+ * The same program as `ref_boxes_loop_ten.cml` over a range a hundred times longer: one body, run
+ * once per element, one box per element, dead when the element is done.
+ *
+ * Read with `--gc-check foreign`, the counters of the two runs are the judgement: `live` here must
+ * be the same size as `live` there, or the boxes of the elements that are over are still counted.
+ */
+
+import state
+
+func main(): int sync {
+    let kept = state::ref(41)
+    let total = [state::get(state::ref(i)) for i in 0..1000]
+    println(len(total), state::get(kept))
+    return 0
+}

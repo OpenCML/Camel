@@ -1829,6 +1829,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::RefContentHoldsRef,
+            {
+                "RefContentHoldsRef",
+                "'{0}' cannot be the content of a reference: {1}.",
+                "A reference is a box reclaimed by counting the handles that point at it: the last handle to go frees it (design principles 3.3). A box that holds a reference -- directly, or through a field, an element, a variant's payload, what a function takes or returns, or a value a closure captures -- keeps that other box's count above zero for ever, so neither is freed and the program holds values it can no longer reach. The content is any other type. When the value to store already holds a reference, read what it holds out first and make the box of that value, or keep the one reference instead of making a second box.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

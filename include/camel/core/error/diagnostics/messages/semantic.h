@@ -487,6 +487,7 @@ enum class SemanticDiag : uint32_t {
     /// the author named and no third one, because capturing by value would change what the program means
     /// without saying so. 0x20D and up, after the extent-of codes.
     ClosureCaptureEscapes = 0x000210,
+    RefContentHoldsRef    = 0x000211,
 
     // Warnings
     IgnoredSideEffect = 0x100002,
