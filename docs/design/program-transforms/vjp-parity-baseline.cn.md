@@ -2,7 +2,9 @@
 
 - 状态：**基线**。第六节第 6 路（求导对齐）的第一次读数：库的 `vjp` 推到与引擎对齐，每次合并报台账读数，**引擎冻结**。
 - 树：`D:\Projects\Camel-wt\ledger`，分支 `lane-ledger`，基线 `146bb01ba`（= 实时 `origin/develop`）。
-- 本轮改动面：**只有本页**。`src/runtime/retype*`、`src/passes/opt/defun/**` 一行未动；这一轮只测量、只立基线。
+- 本轮改动面：**本页 + 台账本身**——`scripts/vjp-parity.mjs` 加了 `stale=<n>` 与 `--strict`，清单里 24 行陈旧豁免
+  逐条核过删掉，`test/tools/check-vjp-parity.mjs` 的第一条读数改成断言 `stale=0`。`src/**`、`modules/**`、
+  `stdlib/**` 一行未动；`src/runtime/retype*`、`src/passes/opt/defun/**` 仍是冻结区。
 - 判据：**读数先于动作**——先有一个能重复跑、能对着看的数，再谈"先动哪一类"；否则"对齐了"只是印象。
 
 ## 1. 口径
@@ -11,12 +13,13 @@
 
 | 东西 | 位置 | 干什么 |
 |---|---|---|
-| 判定 | `scripts/vjp-parity.mjs` | 两份求导表各压成同一个键 `head@arity`，求差，逐条对清单 |
+| 判定 | `scripts/vjp-parity.mjs` | 两份求导表各压成同一个键 `head@arity`，求差，逐条对清单；顺手数出"清单有、树没有"的行数 `stale` |
 | 清单 | `scripts/vjp-parity-exemptions.tsv` | 每个差一行：标记（算子的名字或 `+ - * / ^` 这类记号）、主人、理由；通配符被拒 |
-| 自检 | `test/tools/check-vjp-parity.mjs` | 三道读数：真树 `0 new`；加一条没人答的律必须 exit 1 并点名；把那行登记进清单后必须 exit 0 |
+| 自检 | `test/tools/check-vjp-parity.mjs` | 三道读数：真树在 `--strict` 下 `0 new` 且 `stale=0`；加一条没人答的律必须 exit 1 并点名；把那行登记进清单后必须 exit 0 |
 | 闸门 | `test/plans/feat/compile/transforms.plan.toml` 的 `vjp_api.the_two_tables_are_compared` | CI 里跑的是自检，不是判定本身 |
 
 **一句话的口径**：一个键两边都答，或者这个键的差在清单里有一行写着主人和理由——两者都没有的那条差就是欠账（exit 1）。
+反过来也成立：一行清单失去了它写的差，这笔账就不成立（`stale`，`--strict` 下同样是 exit 1）。
 "一致"是计数，不列举；"不一致"逐行列出，因为那是人要去动的东西。
 
 **两侧怎么读**（`--tables` 的原样排法）：
@@ -29,10 +32,11 @@
 （[2026-11-04 的 11 项逐条重算](../../handover/reports/2026-11-04-where-the-library-and-the-engine-still-differ.cn.md)），
 本页不与它混用：那张表回答"两条腿跑同一个程序各答什么数"，这张回答"两份表差哪些键"，混在一起会让"读数变了"分不清是数变了还是键变了。
 
-四条命令，全在树根跑，不建树、不跑计划，只读源码：
+五条命令，全在树根跑，不建树、不跑计划，只读源码：
 
 ```powershell
-node scripts/vjp-parity.mjs            # 判定：0 new 即绿；有未登记的差 exit 1；树读不了 exit 2
+node scripts/vjp-parity.mjs            # 判定：0 new 且 stale 只报数；有未登记的差 exit 1；树读不了 exit 2
+node scripts/vjp-parity.mjs --strict   # 闸门档：stale>0 也 exit 1（见第 5 节）
 node scripts/vjp-parity.mjs --tables   # 三张表：both / library-only / engine-only，每条差一行
 node scripts/vjp-parity.mjs --json     # 同样的三张表，机器可读（本页的数字就是从这里数的）
 node test/tools/check-vjp-parity.mjs   # 三道自检，本轮实跑：3/3 PASS
@@ -45,7 +49,7 @@ node test/tools/check-vjp-parity.mjs   # 三道自检，本轮实跑：3/3 PASS
 ```text
 PASS the two derivative tables differ only where the list says so: 103 law(s) filed under 54 key(s),
 116 engine registration(s) under 100 key(s), 48 key(s) both answer, 6 library-only and 52 engine-only
-exempt, 0 new
+exempt, 0 new, stale=0
 ```
 
 | 数 | 值 | 意思 |
@@ -57,10 +61,11 @@ exempt, 0 new
 | **一致** | **48 键** | 两边都答，同一件事两条腿都能走 |
 | **不一致** | **58 行** | 6 行库有引擎无 + 52 行引擎有库无 |
 | 其中未登记（欠账） | **0 行** | 这就是这张表绿的唯一意思 |
-| 清单行数 / 陈旧 | 80 行 / **24 行** | 清单比树多 24 行：这些差已经不存在了，行可以删 |
+| 清单行数 / 陈旧 | 56 行 / **0 行** | 本轮清掉 24 行，清单现在正好等于树的差 |
 
 58 行按"键"算是 **56 个差**（`argmax`、`argmin` 各两行：整张量的和带轴的两种拼法共用一个标记）。
-80 − 56 = 24，就是那 24 行陈旧项的来源。
+本轮开工时清单是 **80 行**，比树多 24 行；那 24 行逐条核过（19 行的键已经变成"两边都答"，5 行的键按新
+的键规则落到另一个标记下、由那一行接住），已全部删掉，所以现在 56 行 = 56 个差。
 
 ## 3. 不一致的分组
 
@@ -163,19 +168,27 @@ F 的 16 个核心键：`argmax` `argmax@1` `argmin` `argmin@1` `concat` `idx_ta
    今天一条规则也没写过的命名空间，先要有"规则集能不能给一个模块的拼法写律"的决定。
 4. **7 个 `modules/nn` 键放最后**：规则集不 `import` 任何 `nn`，对齐它们要先定"规则集看不看得见 `nn`"。这与第 3 条最后那 5 个
    是同一个问题的两个面，先答一次，两处一起动。
-5. **24 行陈旧项随手删，但不单独成一笔**：它们描述的差已经不存在（`abs` `log` `sqrt` `maximum` `minimum` `max` `min`
-   `where` `neg` `divide` `sum_axis` `max_axis` `min_axis` `mean` `argmax_axis` `argmin_axis` `transpose` `gelu` `linear`
-   `erf` `erfc` `rsqrt` `stop_gradient` `pick_at`——正好 24 行），删掉让清单等于树；单独删的合并只是把账本变短，不会让任何一行从差变成 both。
+5. **24 行陈旧项本轮已清完**（`abs` `log` `sqrt` `maximum` `minimum` `max` `min` `where` `neg` `divide` `sum_axis`
+   `max_axis` `min_axis` `mean` `argmax_axis` `argmin_axis` `transpose` `gelu` `linear` `erf` `erfc` `rsqrt`
+   `stop_gradient` `pick_at`——正好 24 行，逐条核过才删）。以后不必再排：`stale>0` 现在是**硬判据**（见第 5 节），
+   一行失去它的差就会让 `--strict` 变红，所以清单只会等于树，不会再悄悄变肥。
 
 ## 5. 复现
 
 ```powershell
 cd D:\Projects\Camel-wt\ledger
-node scripts/vjp-parity.mjs --json > vjp.json     # 本页所有数字都从这一份数出来
-node scripts/vjp-parity.mjs | Select-Object -Last 1   # 第 2 节那一行
-node scripts/vjp-parity.mjs --tables                  # 第 3 节每一块的原样行
-node test/tools/check-vjp-parity.mjs                  # 3/3 PASS
+node scripts/vjp-parity.mjs --json > vjp.json     # 本页所有数字都从这一份数出来（含 staleCount）
+node scripts/vjp-parity.mjs | Select-Object -Last 1   # 第 2 节那一行，末尾带 stale=0
+node scripts/vjp-parity.mjs --strict              # 闸门档：stale>0 即 exit 1
+node scripts/vjp-parity.mjs --tables              # 第 3 节每一块的原样行
+node test/tools/check-vjp-parity.mjs              # 3/3 PASS（第一条读数就跑 --strict 并断言 stale=0）
 ```
+
+**`stale` 从此是硬判据**：`stale` 是"清单里有、树里已经没有"的行数——一个失效的豁免和有效的豁免在三个字段上
+长得一模一样，所以它必须被数出来而不是被相信。默认档只报 `stale=<n>` 并 exit 0（中途合并的树还要能读），
+`--strict` 档 `stale>0` 即 exit 1；`test/tools/check-vjp-parity.mjs` 的第一条读数用的是 `--strict` 并断言
+`stale=0`，所以这一条以后咬得住。反证读数：临时加回一行 `sum`（两边都答的键），默认档 `stale=1` exit 0，
+`--strict` 档 exit 1 并报 `1 exemption row(s) hold no difference`；撤回后两档都是 `stale=0` exit 0。
 
 **没有随机性**：脚本只读 `src/`、`modules/`、`stdlib/rulesets/` 与清单，输出顺序是排序后的键，同一个树跑两次逐字相同
 （本轮连跑两次，两行都逐字一致）。唯一会动数字的是树的源码，不是运行环境——这也是它可以每次合并都报的原因。
