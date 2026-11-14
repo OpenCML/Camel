@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：91 行（页已不在 `questions/` 里）
+## 生成器不会删的行：93 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -104,6 +104,8 @@
 | [`2026-11-14-where-do-the-engines-still-keep-a-dead-write`](../reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md) | 死写「可以删」之后，两个引擎分别卡在哪一处？ | 在 `reviews/` |
 | [`2026-11-14-where-the-uses-boundary-sits`](../reviews/2026-11-14-where-the-uses-boundary-sits.cn.md) | `uses` 的边界落在哪一格：变量、句柄、还是不透明的值 | 在 `reviews/` |
 | [`2026-11-14-who-migrates-the-module-level-var`](../reviews/2026-11-14-who-migrates-the-module-level-var.cn.md) | 模块顶层的 `var` 与顶层外部写：谁来做那 35 个用例的迁移？ | 在 `reviews/` |
+| [`2026-11-15-live-node-count-is-not-the-live-set`](../reviews/2026-11-15-live-node-count-is-not-the-live-set.cn.md) | `liveNodeCount()` 不是活集合 | 在 `reviews/` |
+| [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |

@@ -34,8 +34,18 @@
  *
  * `files` is a list and not a count even though a machine can write the type into a comment and move
  * it: the ruling keeps this list, and the report below prints the line a new member stands on, so a
- * reader sees whether a file entered because of code or because of prose. That reading is the point
- * of naming the member; a total could not show it at all.
+ * reader sees whether a file entered because of code or because of prose.
+ *
+ * **Membership is decided on code, not on text.** A match inside a comment, a character literal or a
+ * string literal is not a connection to the type and does not put a file on a list: a sentence saying
+ * "a draft that is numbered anew (`GraphDraft::keepsNodeIds`)" is documentation, and a checker a
+ * sentence can turn red is a checker the next sentence turns red again. So every candidate is re-read
+ * from the file with comments and string literals blanked out (same length, newlines kept, so a line
+ * number never moves) and only a match that survives that reading counts. What the check no longer
+ * trusts `git grep` for is content -- only for which files are tracked; a match it found is re-checked
+ * against the blanked text, and a line whose only occurrence was prose is simply not a member.
+ * Measured both ways on 2026-11-15: a comment naming the type in a header that does not otherwise
+ * connect to it leaves the check green, and a real declaration in the same header turns it red again.
  *
  * ## What the gate says
  *
@@ -163,6 +173,85 @@ function parseLocation(line) {
 
 const sourceCache = new Map()
 
+// Comments and string/character literals, blanked out with spaces so that every remaining offset and
+// every newline is where it was: a member is found in the blanked text and printed against the
+// original line, and a red that pointed at a shifted line would be worse than no red at all. Raw
+// strings (`R"tag(...)tag"`) are handled because this tree uses them; a `//` inside a string is not a
+// comment, and a quote inside a comment does not open a string.
+function blankCommentsAndStrings(text) {
+    const out = text.split("")
+    const blank = (from, to) => {
+        for (let index = from; index < to && index < out.length; index++) {
+            if (out[index] !== "\n") out[index] = " "
+        }
+    }
+    let index = 0
+    const length = text.length
+    while (index < length) {
+        const two = text.slice(index, index + 2)
+        if (two === "//") {
+            const end = text.indexOf("\n", index)
+            blank(index, end === -1 ? length : end)
+            index = end === -1 ? length : end
+            continue
+        }
+        if (two === "/*") {
+            const end = text.indexOf("*/", index + 2)
+            blank(index, end === -1 ? length : end + 2)
+            index = end === -1 ? length : end + 2
+            continue
+        }
+        const char = text[index]
+        if (char === '"' || char === "'") {
+            const before = index > 0 ? text[index - 1] : ""
+            let end = index + 1
+            if (before === "R" && char === '"') {
+                const open = text.indexOf("(", index)
+                const tag = open === -1 ? "" : text.slice(index + 1, open)
+                const close = open === -1 ? -1 : text.indexOf(")" + tag + '"', open)
+                end = close === -1 ? length : close + tag.length + 2
+            } else {
+                while (end < length && text[end] !== char) {
+                    if (text[end] === "\\") end++
+                    end++
+                }
+                end = Math.min(end + 1, length)
+            }
+            blank(index, end)
+            index = end
+            continue
+        }
+        index++
+    }
+    return out.join("")
+}
+
+/**
+ * The lines of a file that still match with its comments and literals blanked. Reading the file beats
+ * re-reading the grep output: a match that spans a line break (a signature wrapped after the type)
+ * shows up here, and the blanking is per file, so a block comment opened on one line closes on the
+ * right one.
+ */
+function codeLines(relative) {
+    if (!sourceCache.has(relative)) {
+        let text = null
+        try {
+            text = fs.readFileSync(path.join(REPO_ROOT, ...relative.split("/")), "utf8")
+        } catch {
+            text = null
+        }
+        sourceCache.set(relative, text === null ? null : blankCommentsAndStrings(text).split("\n"))
+    }
+    return sourceCache.get(relative)
+}
+
+/** Word-boundary test for the whole-word ledger, plain substring for the two symbol ones. */
+function lineMatchesCode(ledger, codeText) {
+    if (ledger.key === "files") return /(?:^|[^\w])GraphDraft(?!\w)/.test(codeText)
+    if (ledger.key === "constructions") return /make_unique<[^>]*GraphDraft>/.test(codeText)
+    return /GraphDraft::decode/.test(codeText)
+}
+
 function sourceLines(relative) {
     if (!sourceCache.has(relative)) {
         let lines = null
@@ -212,9 +301,25 @@ function measure() {
     const lists = {}
     const where = {}
     for (const ledger of LEDGERS) {
-        const entries = gitGrep(ledger.flags, ledger.pattern)
-            .map(parseLocation)
-            .filter((entry) => !isTransactionFile(entry.path))
+        // `git grep` still decides WHICH FILES are read -- it says what the commit would ship -- but
+        // the entries come from the blanked text, so a match that only ever existed in prose is not a
+        // member. `-n` stays in the flags because the paths come out of its output.
+        const paths = [...new Set(gitGrep(ledger.flags, ledger.pattern).map((line) => parseLocation(line).path))]
+        const entries = []
+        for (const relative of paths.sort()) {
+            if (isTransactionFile(relative)) continue
+            const lines = codeLines(relative)
+            if (!lines) continue
+            for (let index = 0; index < lines.length; index++) {
+                if (!lineMatchesCode(ledger, lines[index])) continue
+                const original = sourceLines(relative)
+                entries.push({
+                    path: relative,
+                    line: index + 1,
+                    text: original && original[index] !== undefined ? original[index] : "",
+                })
+            }
+        }
         const first = new Map()
         for (const entry of entries) {
             const member = ledger.bySymbol
@@ -284,8 +389,11 @@ function difference(measured, baseline) {
 function zeroFilesLine() {
     const dirty = []
     for (const file of ZERO_FILES) {
-        const lines = gitGrep(['-n', '-w'], 'GraphDraft', [file]).filter((entry) => entry !== '')
-        if (lines.length > 0) dirty.push(`${file}: ${lines.length}`)
+        // The endpoint is a fact about these files’ CODE; a comment explaining why the type is gone
+        // must not read like the type coming back.
+        const lines = codeLines(file) || []
+        const naming = lines.filter((line) => /(?:^|[^\w])GraphDraft(?!\w)/.test(line))
+        if (naming.length > 0) dirty.push(`${file}: ${naming.length}`)
     }
     if (dirty.length === 0) {
         return `[LEDGER] zero files ok: ${ZERO_FILES.join(', ')} name the type nowhere`
