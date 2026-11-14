@@ -11,8 +11,10 @@
 
 #include "camel/passes/trans/cml/cml.h"
 
+#include "camel/core/context/context.h"
 #include "camel/core/error/diagnostics/messages/semantic.h"
 #include "camel/core/loop_kind.h"
+#include "camel/core/module/module.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/array.h"
@@ -333,9 +335,9 @@ namespace {
 class CmlPrinter {
   public:
     CmlPrinter(
-        const Program &program, std::ostream &out, size_t maxLiteralBytes,
-        std::vector<BigConstant> &bigConstants)
-        : program_(program), out_(out), maxLiteralBytes_(maxLiteralBytes),
+        const Program &program, const camel::core::context::Context *context, std::ostream &out,
+        size_t maxLiteralBytes, std::vector<BigConstant> &bigConstants)
+        : program_(program), context_(context), out_(out), maxLiteralBytes_(maxLiteralBytes),
           bigConstants_(bigConstants) {}
 
     void run() {
@@ -345,8 +347,11 @@ class CmlPrinter {
         }
         graphs_ = camel::runtime::collectReachableGraphs(program_, root);
         classifyLambdas();
+        assignFunctionNames();
         collectTopLevelNames(root);
         findEntry(root);
+        collectOperatorModules();
+        collectConstructionTemplates();
         collectImports();
         // The named struct types have to be known before a signature is validated: a signature
         // that names `V` is printable only because the printed program will declare `V`.
@@ -422,6 +427,10 @@ class CmlPrinter {
 
   private:
     const Program &program_;
+    /// The context the program was compiled on, for the one fact the printer cannot read off a
+    /// graph: which module a name belongs to (see `collectOperatorModules`). Null when a caller
+    /// builds a printer without one, and then a URI's own prefix is all there is.
+    const camel::core::context::Context *context_ = nullptr;
     std::ostream &out_;
     size_t maxLiteralBytes_;
     std::vector<BigConstant> &bigConstants_;
@@ -460,6 +469,20 @@ class CmlPrinter {
     /// -- as a sign or as `module::name` -- is bound by a declaration of its module, and a module
     /// imported whole brings the declaration in.
     std::set<std::string> moduleImports_;
+    /// The module each operator the text names belongs to, by the URI it was declared under (see
+    /// `collectOperatorModules`), and the module a URI's prefix answers on. Both hold the name a
+    /// program *imports*, which is not always the spelling the operator's URI uses.
+    std::unordered_map<std::string, std::string> operatorModule_;
+    std::unordered_map<std::string, std::string> protocolModule_;
+    /// The template constants of constructions whose every slot is written by the construction
+    /// (see `collectConstructionTemplates`): shapes, not values the program writes. The graph is
+    /// part of the key: a node reference is only an index inside one graph, and a reference held
+    /// for one graph named a node of another (a lambda body's template made the enclosing
+    /// function's `let count` disappear, `trans/port_fill_metadata.cml`).
+    std::unordered_map<const GCGraph *, std::unordered_set<gc_node_ref_t>> constructionTemplates_;
+    /// The name each function graph is printed under, when it is not the graph's own name (see
+    /// `assignFunctionNames`).
+    std::unordered_map<const GCGraph *, std::string> functionNames_;
     /// The named struct types the printed program mentions, in discovery order, and the ones for
     /// which no `type` statement can be written, with the reason (see `collectNamedTypes`).
     std::vector<const StructType *> namedTypeRecords_;
@@ -529,13 +552,63 @@ class CmlPrinter {
         // The names the file will declare: `func <name>`, in the spelling `printFunction` writes
         // (the part after the last `::`).
         for (const GCGraph *graph : graphs_) {
-            const std::string name = graph->name();
+            const std::string name = printedNameOf(graph);
             if (name.empty()) {
                 continue;
             }
             const size_t at = name.rfind("::");
             writtenFunctionNames_.insert(at == std::string::npos ? name : name.substr(at + 2));
         }
+    }
+
+    /// The name a function graph is printed under: its source name, unless another graph already
+    /// carries that name. Two graphs can: a program with two `when`-overloaded declarations
+    /// (`when fast` / `when wide`) compiles to two graphs of one source name, and the condition
+    /// text that tells them apart is on the declaration and not on the graph
+    /// (`compile/when_overloads/values.cml` printed `func pick` twice, which is `Redeclaration`).
+    /// A name is for a reader -- the canonical document compares the graphs, and its graph label
+    /// carries `flags`, `root` and `entry`, not the name -- so a second name the printer makes up
+    /// is invisible to the checker, while every call still calls the graph it called (the calls
+    /// are printed from the callee's graph, see `expression` of a function constant).
+    void assignFunctionNames() {
+        std::unordered_set<std::string> taken;
+        for (GCGraph *graph : graphs_) {
+            if (lambdaGraphs_.contains(graph) || graph == program_.root()) {
+                continue;
+            }
+            // The graph's own name is what the declaration writes, namespaced functions included
+            // (`Tools::inc` is printed inside a `namespace Tools` block, see `printFunction`).
+            const std::string name = graph->name();
+            if (name.empty()) {
+                continue;
+            }
+            if (taken.insert(name).second) {
+                continue;
+            }
+            // Keep the namespace the source wrote and make the local part new.
+            const size_t at          = name.rfind("::");
+            const std::string prefix = at == std::string::npos ? std::string{} : name.substr(0, at + 2);
+            std::string candidate;
+            do {
+                candidate = prefix + freshName();
+            } while (!taken.insert(candidate).second);
+            functionNames_[graph] = candidate;
+        }
+    }
+
+    /// The name a printed declaration of this graph writes (see `assignFunctionNames`): the graph's
+    /// own name, or the one made up for it because another graph carries that name too.
+    std::string printedNameOf(const GCGraph *graph) const {
+        const auto found = functionNames_.find(graph);
+        return found != functionNames_.end() ? found->second
+                                             : (graph != nullptr ? graph->name() : std::string{});
+    }
+
+    /// The name a printed *call* of this graph writes: the same, but a graph with no source name
+    /// (a lambda) is refused by the caller rather than named after its internal label.
+    std::string callNameOf(const GCGraph *graph) const {
+        const auto found = functionNames_.find(graph);
+        return found != functionNames_.end() ? found->second : functionNameOf(graph);
     }
 
     std::string sourceNameIt(const GCGraph *graph, gc_node_ref_t ref) const {
@@ -897,6 +970,15 @@ class CmlPrinter {
 
     std::string annotationOf(const Type *type) {
         if (hasFunction(type)) {
+            return {};
+        }
+        // An array literal written with no element type at all is a value of the array whose
+        // element type nobody wrote, and `[]` is that type's shape and not a type: the annotation
+        // position reads a type, so `let cml1: [] = []` is `Unexpected '['; expected a type`
+        // (`trans/cpp/empty_literal_takes_the_position.cml`). The unannotated `let` states the
+        // same type by saying nothing -- it starts from the same literal, whose type is the one
+        // the node has.
+        if (camel::core::type::isUntypedArrayType(type)) {
             return {};
         }
         return ": " + writtenTypeText(type);
@@ -1355,6 +1437,15 @@ class CmlPrinter {
             return false;
         }
         if (type->code() == TypeCode::Array && isConstant(ref)) {
+            // An empty literal whose element type nobody wrote has no `let` of its own: the
+            // annotation position reads a type and `[]` is a shape, while an unannotated `let` of
+            // it is `EmptyArrayWithoutType` ("write the type: `let cml1: int[] = []`"). The type
+            // such a value has is the one the *position* gives it, so the literal is written where
+            // it stands and the position types it again -- which is what the source wrote
+            // (`[]->append<1>`, `trans/cpp/empty_literal_takes_the_position.cml`).
+            if (camel::core::type::isUntypedArrayType(type)) {
+                return false;
+            }
             const auto *array = static_cast<const ArrayType *>(type);
             const size_t index = static_cast<size_t>(-node->dataIndex);
             const auto *value   = fromSlot<Array *>(graph_->staticArea()->get<slot_t>(index));
@@ -1446,6 +1537,197 @@ class CmlPrinter {
     }
 
     // ---- scopes --------------------------------------------------------------------------
+    //
+    // Which module a printed name belongs to. An operator is printed as a call of the declaration
+    // that made it an operator, and that call has to resolve in the printed file: a module
+    // operator is written `module::name`, and the module is imported whole. That module is *not*
+    // the operator URI's prefix, and two measurements say so:
+    //
+    //   * a module may answer on another prefix than its own name -- `random` registers its
+    //     operators as `rand:...` (`modules/random/module.h`) -- so the printed `import rand` was
+    //     `ModuleNotFound` (`resources/conflict_per_resource.cml`);
+    //   * the core's namespace is where an *implementation* lives, not where the name does: a
+    //     module's declaration tags its body `#op(':mark/unordered_reduce_arr')`
+    //     (`stdlib/para.cml`), and the name a program writes is that module's. Printed bare, with
+    //     no import, `unordered_reduce` was `UnresolvedReference`
+    //     (`compile/native/para_declaration_import.cml`).
+    //
+    // So the module is asked for instead of being spelled out of the URI: the run's modules are
+    // asked which of them exports the operator. The prelude and the entry module are not
+    // candidates: their names are in scope without an import, so qualifying a call with one would
+    // write a name the printed file does not have.
+    void collectOperatorModules() {
+        if (context_ == nullptr) {
+            return;
+        }
+        const auto entry   = context_->mainModule();
+        const auto prelude = context_->preludeModule();
+        for (const auto &module : context_->allUserModules()) {
+            if (module == nullptr || module == entry || module == prelude || module->name().empty()) {
+                continue;
+            }
+            for (const std::string &protocol : module->operatorProtocols()) {
+                if (!protocol.empty()) {
+                    protocolModule_.try_emplace(protocol, module->name());
+                }
+            }
+        }
+    }
+
+    /// The module a printed call of `uri` is qualified with and imported from, or empty when the
+    /// name is in scope by itself (`println`, `+`, `map`) and no import is needed. A prefix no
+    /// module claims is the answer, which keeps the reading a URI's own spelling gives wherever
+    /// the two agree.
+    std::string moduleNameOf(std::string_view uri) {
+        const size_t colon = uri.find(':');
+        if (colon == std::string_view::npos) {
+            return {};
+        }
+        if (colon != 0) {
+            const std::string prefix(uri.substr(0, colon));
+            const auto known = protocolModule_.find(prefix);
+            return known != protocolModule_.end() ? known->second : prefix;
+        }
+        const std::string key(uri);
+        const auto cached = operatorModule_.find(key);
+        if (cached != operatorModule_.end()) {
+            return cached->second;
+        }
+        std::string owner;
+        // A sign is the language's own spelling wherever the operator was declared: `:op/idx_arr`
+        // is `[]` by the group's symbol, and the printed `[7, 8, 9][2]` needs no module at all --
+        // qualifying it, or importing the module that declared the same URI, only adds a name the
+        // program did not write (`compile/native/generic_qualified.cml`, whose `at` is a
+        // declaration of `generic_module` over this URI and whose printed form is the subscript).
+        const bool languageSymbol =
+            camel::core::operatorSymbolOf(camel::core::OperatorTable::instance().groupOf(key)) !=
+            nullptr;
+        const auto oper = languageSymbol
+                              ? std::optional<camel::core::OperId>{}
+                              : camel::core::OperatorTable::instance().lookup(key);
+        if (context_ != nullptr && oper.has_value()) {
+            const auto entry   = context_->mainModule();
+            const auto prelude = context_->preludeModule();
+            for (const auto &module : context_->allUserModules()) {
+                if (module == nullptr || module == entry || module == prelude ||
+                    module->name().empty()) {
+                    continue;
+                }
+                if (module->nativeOperatorGroup(*oper) != nullptr) {
+                    owner = module->name();
+                    break;
+                }
+            }
+        }
+        operatorModule_.emplace(key, owner);
+        return owner;
+    }
+
+    /// A construction's template constant is not always a value the program writes: an array literal
+    /// whose every slot is filled by the construction is written as that literal again, and the
+    /// compiler builds the same template. Such a constant is skipped when all of this holds, and
+    /// each part is a fact measured against a case that broke when it was left out:
+    ///
+    ///   * it is an `Array` construction (`append` grows its template rather than filling it, and
+    ///     the loop that builds an array through `append` is refused by `loopExpression` for a
+    ///     reason of its own -- `loops/edges.cml`);
+    ///   * the constant is an array whose slots are all empty: the values of the slots a
+    ///     construction does not fill come from the constant, so a constant that holds one is the
+    ///     program's value;
+    ///   * the constant has no source name (`let make = ...` binds a value the source named, and
+    ///     the closure construction around it is not a literal, `trans/port_fill_metadata.cml`);
+    ///   * nothing else reads it, and every slot is covered by a `with` input.
+    ///
+    /// What it fixes: `compile/array_shape/rank_zero_slot_array_element.cml` printed
+    /// `let cml1: f32[...][2] = [[], []]` for the skeleton of `[one, two]`, and no spelling of an
+    /// open-rank element is `[]` (`DimensionMismatch` at that position).
+    void collectConstructionTemplates() {
+        for (GCGraph *graph : graphs_) {
+            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
+                const camel::runtime::GCNode *node = *it;
+                if (node->kind != camel::runtime::GCNodeKind::Fill) {
+                    continue;
+                }
+                const auto *body = graph->nodeBodyAs<camel::runtime::GCFillBody>(it.ref());
+                if (body == nullptr || body->fillKind != camel::runtime::GCFillKind::Array) {
+                    continue;
+                }
+                const auto inputs = graph->normInputsOf(it.ref());
+                if (inputs.empty()) {
+                    continue;
+                }
+                const gc_node_ref_t templ             = inputs.front();
+                const camel::runtime::GCNode *constant = graph->node(templ);
+                if (constant == nullptr || constant->kind != camel::runtime::GCNodeKind::Data ||
+                    constant->dataIndex >= 0 || !sourceNameIt(graph, templ).empty()) {
+                    continue;
+                }
+                if (constant->dataType() == nullptr ||
+                    constant->dataType()->code() != TypeCode::Array) {
+                    continue;
+                }
+                const auto *value =
+                    fromSlot<Array *>(graph->staticArea()->get<slot_t>(-constant->dataIndex));
+                if (value == nullptr || value->size() == 0 ||
+                    body->slots().size() < value->size()) {
+                    continue;
+                }
+                bool emptyShape = true;
+                for (size_t i = 0; i < value->size(); ++i) {
+                    if (value->get<slot_t>(i) != 0) {
+                        emptyShape = false;
+                        break;
+                    }
+                }
+                if (!emptyShape) {
+                    continue;
+                }
+                // A construction that is itself an input of another construction is part of that
+                // one's shape, not a literal the program wrote: the array a closure captures is
+                // the `with` input of the closure's own construction, and skipping its template
+                // orphaned the values the closure body still names (`trans/port_fill_metadata.cml`
+                // lost `let make` and left `count` unresolved).
+                bool partOfAnotherConstruction = false;
+                for (const gc_node_ref_t user : graph->normOutputsOf(it.ref())) {
+                    const camel::runtime::GCNode *userNode = graph->node(user);
+                    if (userNode != nullptr &&
+                        userNode->kind == camel::runtime::GCNodeKind::Fill) {
+                        partOfAnotherConstruction = true;
+                        break;
+                    }
+                }
+                if (!partOfAnotherConstruction) {
+                    for (const gc_node_ref_t user : graph->normOutputsOf(it.ref())) {
+                        for (const gc_node_ref_t with : graph->withInputsOf(user)) {
+                            if (with == it.ref()) {
+                                partOfAnotherConstruction = true;
+                            }
+                        }
+                    }
+                }
+                if (partOfAnotherConstruction) {
+                    continue;
+                }
+                // A template anything else reads is a value of the program, not only a shape.
+                bool onlyTheConstruction = true;
+                for (const gc_node_ref_t user : graph->normOutputsOf(templ)) {
+                    if (user != it.ref()) {
+                        onlyTheConstruction = false;
+                        break;
+                    }
+                }
+                for (const gc_node_ref_t user : graph->withOutputsOf(templ)) {
+                    if (user != it.ref()) {
+                        onlyTheConstruction = false;
+                        break;
+                    }
+                }
+                if (onlyTheConstruction) {
+                    constructionTemplates_[graph].insert(templ);
+                }
+            }
+        }
+    }
 
     /// The names the printed program calls, by the module that declares them: a call by name needs
     /// the name in scope, and `sum` is a name of the module `tensor` (`import { sum } from
@@ -1466,11 +1748,10 @@ class CmlPrinter {
                     continue;
                 }
                 const std::string_view uri = body->uri();
-                const size_t colon         = uri.find(':');
-                if (colon == std::string_view::npos || colon == 0) {
+                const std::string module   = moduleNameOf(uri);
+                if (module.empty()) {
                     continue;
                 }
-                const std::string module(uri.substr(0, colon));
                 // What the printed file writes for a module operator is `module::name`, the
                 // qualified call (`tensor::sum([1.0])` compiles to `tensor:sum`, measured), and the
                 // module is imported whole -- the one import that makes a qualified call resolve and
@@ -2001,7 +2282,8 @@ class CmlPrinter {
         if (valueWrite != camel::runtime::kInvalidNodeRef) {
             tailPrintedAsStatement = true;
         }
-        if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement) {
+        if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement &&
+            !ifWithoutElse(tail)) {
             // A region whose value is a gate with ordering in front of it was written as an
             // explicit `return`; a bare last expression yields the value without that gate.
             Expr value;
@@ -2046,6 +2328,45 @@ class CmlPrinter {
         }
         text += body.closeIndent + "}";
         return text;
+    }
+
+    /// Whether the value this JOIN yields is an `if` with no `else`: an arm written and an empty
+    /// second arm, over a `void` join. Such an `if` has no value (design principles 3.7) and can
+    /// only stand as a statement, so a region that ends in one says `if ... then ...` and never
+    /// `return if ... then ...`: the front end answers that with `IfWithoutElseAsValue`
+    /// (`consistency/if_without_else/statement.cml`, whose lambda body is exactly this statement,
+    /// printed as `return if x > 2 then { ... }`).
+    bool ifWithoutElse(gc_node_ref_t joinRef) const {
+        if (joinRef == camel::runtime::kInvalidNodeRef) {
+            return false;
+        }
+        const camel::runtime::GCNode *node = graph_->node(joinRef);
+        if (node == nullptr || node->kind != camel::runtime::GCNodeKind::Join) {
+            return false;
+        }
+        const Type *joinType = node->dataType();
+        if (joinType == nullptr || joinType->code() != TypeCode::Void) {
+            return false;
+        }
+        const auto *body = graph_->nodeBodyAs<camel::runtime::GCJoinBody>(joinRef);
+        if (body == nullptr || body->brch == camel::runtime::kInvalidNodeRef) {
+            return false;
+        }
+        // A `match` writes patterns on its branch; an `if` has none.
+        if (!graph_->withInputsOf(body->brch).empty()) {
+            return false;
+        }
+        const auto arms = control_->armsOf(body->brch);
+        if (arms.size() != 2) {
+            return false;
+        }
+        const camel::runtime::GCRegion *second = graph_->region(arms[1]);
+        return second != nullptr &&
+               (second->result == camel::runtime::kInvalidNodeRef ||
+                (graph_->node(second->result) != nullptr &&
+                 graph_->node(second->result)->kind == camel::runtime::GCNodeKind::Data &&
+                 graph_->node(second->result)->dataType() != nullptr &&
+                 graph_->node(second->result)->dataType()->code() == TypeCode::Void));
     }
 
     /// Whether the source ended this region with an explicit `return`: the region yields a gate
@@ -2258,6 +2579,12 @@ class CmlPrinter {
         if (node == nullptr) {
             return;
         }
+        if (graph_ != nullptr && constructionTemplates_.contains(graph_) &&
+            constructionTemplates_.at(graph_).contains(ref)) {
+            // A construction's template is a shape, not a value the program writes: the literal
+            // written back builds its own (see `collectConstructionTemplates`).
+            return;
+        }
         switch (node->kind) {
         case camel::runtime::GCNodeKind::Port:
         case camel::runtime::GCNodeKind::Gate:
@@ -2378,6 +2705,17 @@ class CmlPrinter {
             }
         } else if ((users > 1 || needsAnnotation(ref)) && !typeWrittenByUse(ref) &&
                    !(patternRefs_.contains(ref) && users <= 1)) {
+            // An empty literal whose element type nobody wrote cannot be bound: `let x = []` is
+            // `EmptyArrayWithoutType` and `let x: [] = []` is not a type. One use keeps the literal
+            // in the position that types it; two uses have no spelling at all.
+            if (node->kind == camel::runtime::GCNodeKind::Data && node->dataType() != nullptr &&
+                camel::core::type::isUntypedArrayType(node->dataType())) {
+                fail(
+                    ref,
+                    "an empty array literal whose element type nobody wrote, read in more than "
+                    "one place: the position types one use, and the language has no spelling of "
+                    "that type for a `let`");
+            }
             const Expr value       = expression(ref);
             const std::string name = freshName();
             declared_[ref]         = name;
@@ -2672,6 +3010,18 @@ class CmlPrinter {
             // a conversion between two named types (which the language only writes) stays.
             const camel::runtime::GCNode *source = graph_->node(inputs.front());
             const Type *from = source != nullptr ? source->dataType() : nullptr;
+            // A `T` and a `T[..]` are the same value (design principles 5.4): the run keeps the
+            // rank-zero array in the slot and the element in the type, and the conversion between
+            // them is the compiler's, supplied by whatever position the value stands in. It is
+            // not a program's `as` -- `as` between the two is `DynamicCastForbidden` -- so writing
+            // one is not a stronger statement, it is a program that does not compile:
+            // `compile/array_shape/rank_zero_parameter_slot` printed `(v as f32)` in the body and
+            // `elem((cml1 as f32[...]))` at the call, and neither cast is in the source.
+            if (from != nullptr &&
+                camel::core::type::isRankZeroEdge(
+                    const_cast<Type *>(node->dataType()), const_cast<Type *>(from))) {
+                return inner;
+            }
             if (from != nullptr && from->code() == TypeCode::Struct &&
                 static_cast<const StructType *>(node->dataType())->named() &&
                 camel::core::type::relateStructs(
@@ -2777,14 +3127,7 @@ class CmlPrinter {
             if (arms.size() != 2) {
                 fail(joinRef, "an `if` that does not have two arms");
             }
-            const camel::runtime::GCRegion *second = graph_->region(arms[1]);
-            const bool emptyElse =
-                joinType != nullptr && joinType->code() == TypeCode::Void && second != nullptr &&
-                (second->result == camel::runtime::kInvalidNodeRef ||
-                 (graph_->node(second->result) != nullptr &&
-                  graph_->node(second->result)->kind == camel::runtime::GCNodeKind::Data &&
-                  graph_->node(second->result)->dataType() != nullptr &&
-                  graph_->node(second->result)->dataType()->code() == TypeCode::Void));
+            const bool emptyElse = ifWithoutElse(joinRef);
             const Expr condition = expression(selector.front());
             std::string text = std::format("if {} then {}", parenthesize(condition, 30), armText(0));
             if (!emptyElse) {
@@ -3041,7 +3384,7 @@ class CmlPrinter {
             if (function->graph() != nullptr && lambdaGraphs_.contains(function->graph())) {
                 return lambdaExpression(function->graph(), {}, indent_);
             }
-            const std::string name = functionNameOf(function->graph());
+            const std::string name = callNameOf(function->graph());
             if (name.empty()) {
                 fail(ref, "a function value whose graph has no source name (a lambda)");
             }
@@ -3101,7 +3444,7 @@ class CmlPrinter {
                 return lambdaExpression(function->graph(), captureTexts, indent_);
             }
             const std::string name =
-                function != nullptr ? functionNameOf(function->graph()) : std::string{};
+                function != nullptr ? callNameOf(function->graph()) : std::string{};
             if (name.empty()) {
                 fail(ref, "a closure of an anonymous function (a lambda)");
             }
@@ -3408,12 +3751,13 @@ class CmlPrinter {
         if (writable) {
             // A module operator is written qualified (`tensor::sum`), which is the only spelling that
             // names one operator without depending on what else the printed file imports: a bare
-            // `sum` is the language's own function as well, and a bare `tanh` is `math`'s. A core
-            // operator (`:op/print`) has no module to qualify with and keeps its plain name.
-            const size_t colonAt = uri.find(':');
-            name                 = colonAt == std::string::npos || colonAt == 0
-                                       ? callForm->name
-                                       : std::string(uri.substr(0, colonAt)) + "::" + callForm->name;
+            // `sum` is the language's own function as well, and a bare `tanh` is `math`'s. Which
+            // module that is comes from `moduleNameOf`, not from the URI's prefix: `:mark/...` is
+            // where `unordered_reduce` is implemented and `para` is where it is declared. An
+            // operator of the core (`:io/println`, `:op/add_l`) has no module to qualify with and
+            // keeps its plain name.
+            const std::string owner = moduleNameOf(uri);
+            name = owner.empty() ? callForm->name : owner + "::" + callForm->name;
         } else if (callForm.has_value() && callForm->kernelDeclaration && !languageOwned &&
                    !callForm->exported) {
             // There is a declaration and it has a name, but the module did not export it: a
@@ -3611,7 +3955,7 @@ class CmlPrinter {
         // A direct call of a function that reads module values passes those values as `with`
         // inputs. The source omits them: the callee names the top-level values itself. The
         // function's own `with` parameters come first, and a call spells them inside `<...>`.
-        const std::string name = functionNameOf(callee);
+        const std::string name = callNameOf(callee);
         if (name.empty()) {
             fail(ref, "a call of a function whose graph has no source name (a lambda)");
         }
@@ -3885,7 +4229,7 @@ class CmlPrinter {
         prepareGraph(graph);
 
         const FunctionType *type = graph->funcType();
-        const std::string name   = graph->name();
+        const std::string name   = printedNameOf(graph);
         // A function a program declared inside a namespace is printed inside that `namespace` block,
         // under its own name: the graph name is the qualified one (`Tools::inc`), and the source
         // wrote the block, not the qualified name (`compile/namespace_rules/lib2.cml`).
@@ -3991,7 +4335,8 @@ const camel::runtime::Program *CmlDumpPass::apply(
     std::vector<BigConstant> bigConstants;
     std::ostringstream rendered;
     try {
-        CmlPrinter printer(*program, rendered, options_.maxLiteralBytes, bigConstants);
+        CmlPrinter printer(
+            *program, context_.get(), rendered, options_.maxLiteralBytes, bigConstants);
         printer.run();
     } catch (const Refusal &refusal) {
         auto diagnostic = context_->rtmDiags()->of(
