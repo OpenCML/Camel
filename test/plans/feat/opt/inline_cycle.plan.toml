@@ -80,6 +80,28 @@ verify_script = """
 }
 """
 
+# What the three entries above measure today, and what they cannot (measured 2026-11-15 on
+# 6c64f2042, the tree of this lane):
+#
+#   1. `seed23_fold_inline` is refused by the state rule before any pass runs -- the call is
+#      `checkCellEscapes();` in src/compile/gir/program.cpp, and `camel <case> std::gir` exits 1
+#      and prints no graph at all. None of the three entries above exercises the optimizer; their
+#      green is the front end's refusal, not the reading they were written for.
+#   2. With that one call taken out, the program and its legal same shape
+#      `seed23_fold_inline_within_call.cml` (the `var` captured by a closure that is called inside
+#      the call that declares it, so nothing is carried out) print the same sixteen lines at exit
+#      0: the state rule is the only thing standing in this program's way.
+#   3. The ring `a1723fbb9` fixed is unobservable in this shape today, not gone. With the place
+#      decision that commit added switched off (`if (false && placePreds.empty())` on the
+#      argument-place block of src/runtime/draft_inline.cpp#inlineCallableInDraft), this program's
+#      inlined drawing is byte-for-byte identical -- 2246 lines, the 194 `ORDER` edges included --
+#      exit 0 and no `PassInternalError`; three hand-written argument shapes (`k(len([1,2]))`,
+#      `k(1+2)`, `k(foo())`) ring nowhere either. Making the ring observable again is work on a
+#      branch that reverts `a1723fbb9`, not a new seed: a seed that only runs would be green for
+#      a reason unrelated to what this plan was written to guard.
+#
+# What is still guardable is the half that is live: the pair inlines at all. The two entries below
+# read that number -- `direct_calls` 24 with no pass and 3 under the pair.
 [[tests]]
 name = "inline_cycle.within_call_no_pass"
 desc = "The legal half of seed 23 with no pass: the program runs, prints its sixteen lines, and `std::stats` reads 24 direct calls -- the number the entry below must move. This is the reading that is still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above)."
