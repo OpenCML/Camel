@@ -3381,6 +3381,7 @@ dfde453c4be9360a ok test/cases/modules/std/json/err_encode_no_form.cml
 210ad97acdee85c3 ok test/cases/modules/std/json/json_gc.cml
 b237b3050c1f4b18 ok test/cases/modules/std/json/json_gc_macro.cml
 e8405f93b22c8c9c ok test/cases/modules/std/json/json_kind_failed.cml
+7c266a3d8130b172 ok test/cases/modules/std/json/json_kind_no_document.cml
 6d9d3f1346670deb ok test/cases/modules/std/json/json_value.cml
 ab51cfe0da9c7065 ok test/cases/modules/std/math/basic.cml
 beb22e0cb6009e01 ok test/cases/modules/std/process/basic.cml
