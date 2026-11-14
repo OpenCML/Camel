@@ -5,12 +5,15 @@
 /**
  * A plan field the runner never reads is not a test.
  *
- * `test/plans/gpu/tiles.plan.toml` carried the shape this guard exists for: an entry with
- * `kind = "negative"` and, beside it, a `compare_to` and a `compare_fields` naming a twin entry
- * that had to print the same thing. The text said "this run must equal that one"; the runner
- * compares on `compare_to` only under `kind = "differential"` (run-tests.mjs, the
- * `if (test.kind === 'differential')` block), so the entry checked its exit code and *never*
- * compared a byte -- for seven months, green, with a report that said so.
+ * The shape it exists for: an entry with `kind = "negative"` and, beside it, a `compare_to` and a
+ * `compare_fields` naming a twin entry that had to print the same thing. That text says "this run
+ * must equal that one"; the runner compares on `compare_to` only under `kind = "differential"`
+ * (run-tests.mjs, the `if (test.kind === 'differential')` block), so the entry checks its exit code
+ * and never compares a byte. The instance reported against `test/plans/gpu/tiles.plan.toml` on
+ * 2026-11-14 was already `differential` in that baseline, and no entry in the tree writes
+ * `compare_to` outside one -- so this guard proves itself on a probe plan (the readings are in the
+ * commit that added it) rather than on a live entry, and it stays because the class is one field
+ * away from coming back.
  *
  * The plan schema is closed (`TEST_FIELDS` in run-tests.mjs): a key that is not a field is an
  * error. That stops a misspelled assertion. It cannot stop a correctly spelled field under a kind
@@ -75,20 +78,32 @@
  *   label-without-check  `kind = "negative"` with neither `expect_exit` nor `expect_signal`
  *   kind-unread          `kind` is missing, or is a value no block in the runner reads
  *
- * It is **report only** by default: it prints its findings and the line
- * `plan-fields fields=<n> findings=<n> mode=report`, and exits zero, because the finding list is
- * a work item and not yet empty. `--enforce` is the mode it becomes when the list is empty; that
- * is the switch a gate turns on, and it is deliberately absent from every invocation until then.
+ * It is **ratcheted**: it prints its findings and the line
+ * `plan-fields fields=<n> findings=<n> mode=report`, then compares the count with
+ * `test/tools/plan-fields-baseline.json`. Findings that grow past that file exit non-zero -- by name
+ * and by category -- and findings that come down exit zero with the line that says to accept the
+ * new number (`--update-baseline` is the only writer). A missing baseline is a red too, never a pass
+ * over nothing. This is what makes the check a wall rather than a reading: the gate runs it on every
+ * run and its exit code decides, so "may not grow" holds and "came down" is the reward.
+ *
+ * `--enforce` is the stricter mode: *any* finding fails, baseline or not. It is what the entry
+ * becomes once the list reaches zero, and the two are one edit apart.
+ *
+ * `--report-only` is the old posture kept for a reader who wants the numbers and not the exit code:
+ * it prints the findings and exits zero, ratchet included.
  *
  * `--verify-runner` is the other half, and the reason this table can be trusted: it reads
- * `test/tools/run-tests.mjs` itself and refuses a table that no longer matches the runner's three
- * kind-gated blocks. A hard-coded table that outlives the code it describes is the same defect one
- * level up -- a guard that asserts nothing -- so the table is checked against the source it came
- * from, and adding a fourth gated kind or moving a field out of a block fails here by name.
+ * `test/tools/run-tests.mjs` itself and refuses a table that no longer matches the runner -- the
+ * three kind-gated blocks by name, and every field listed as evaluated for every kind must be read
+ * somewhere in the source. A hard-coded table that outlives the code it describes is the same
+ * defect one level up -- a guard that asserts nothing -- so the table is checked against the source
+ * it came from, and adding a fourth gated kind or moving a field out of a block fails here by name.
  *
- *   node test/tools/check-plan-fields.mjs                 # the tree, report only
+ *   node test/tools/check-plan-fields.mjs                 # the tree, ratcheted against the baseline
  *   node test/tools/check-plan-fields.mjs --enforce       # the tree, findings are a failure
+ *   node test/tools/check-plan-fields.mjs --report-only   # the tree, findings and exit zero
  *   node test/tools/check-plan-fields.mjs --verify-runner # the table against run-tests.mjs
+ *   node test/tools/check-plan-fields.mjs --update-baseline
  *   node test/tools/check-plan-fields.mjs --root <checkout>
  */
 import fs from 'node:fs'
@@ -361,6 +376,11 @@ function report(result) {
     )
     if (ENFORCE) {
         return result.findings.length > 0 ? 1 : 0
+    }
+    if (REPORT_ONLY) {
+        // The posture this check had before it became a wall: the same lines, no exit code.
+        console.log('plan-fields report only: the count is not compared with the baseline')
+        return 0
     }
     return ratchet(result, BASELINE_PATH)
 }
@@ -641,6 +661,7 @@ function verifyRunner(runnerPath) {
 
 let root = path.resolve(HERE, '..', '..')
 let ENFORCE = false
+let REPORT_ONLY = false
 let mode = 'tree'
 let UPDATE_BASELINE = false
 for (let index = 2; index < process.argv.length; index++) {
@@ -651,6 +672,7 @@ for (let index = 2; index < process.argv.length; index++) {
         ENFORCE = true
     } else if (argument === '--report-only') {
         ENFORCE = false
+        REPORT_ONLY = true
     } else if (argument === '--verify-runner') {
         mode = 'runner'
     } else if (argument === '--update-baseline') {

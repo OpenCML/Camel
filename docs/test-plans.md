@@ -1533,15 +1533,18 @@ node test/tools/check-plan-fields.mjs --verify-runner    # the table against run
 node test/tools/check-plan-fields.mjs --update-baseline  # accept the count it just measured
 ```
 
-It runs report-only on the gate (`-Check all` in `internal/tools/camel-remote.ps1`), and
-**report-only is not un-ratcheted**: the last accepted count lives in
-`test/tools/plan-fields-baseline.json`, findings that grow past it exit non-zero by name and by category,
-and findings that come down exit zero with the line that says to accept the new number. A report
-that can only ever print is a number nobody has to answer for; the ratchet is what makes "may not
-grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count
-reaches zero, and both the baseline and the wall are one edit apart. The table above is copied into
-that script, so `--verify-runner` fails by name when `validateTest`'s gated blocks change: a guard
-whose table outlives the code it describes is the defect it exists to catch, one level up.
+It is a **wall** on the gate (`-Check all` in `internal/tools/camel-remote.ps1`): the check is pure
+static analysis over `test/plans/**`, deterministic and a few seconds, so its exit code decides the
+run. What makes that fair on the day it was turned on is the ratchet: the last accepted count lives in
+`test/tools/plan-fields-baseline.json`, findings that grow past it exit non-zero by name and by
+category, and findings that come down exit zero with the line that says to accept the new number
+(`--update-baseline` is the only writer; a missing baseline is a red, never a pass over nothing). A
+check that can only ever print is a number nobody has to answer for; the ratchet is what makes "may
+not grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count
+reaches zero, `--report-only` is the numbers without the exit code, and all three are one edit apart.
+The table above is copied into that script, so `--verify-runner` fails by name when `validateTest`'s
+gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
+catch, one level up.
 
 ## Performance Measurement
 
