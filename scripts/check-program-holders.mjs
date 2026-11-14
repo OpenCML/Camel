@@ -19,32 +19,44 @@
  * that lives across a safepoint therefore holds the program through that handle and nothing else --
  * no bare `Program *`, no `shared_ptr<Program>`.
  *
- *   node scripts/check-program-holders.mjs              the reform list, in report-only mode
- *   node scripts/check-program-holders.mjs --enforce     the hard gate: exit 1 when a holder exists
+ * A holder that must not or cannot pin -- a Program the object itself traces through its own
+ * `updateRefs`, a Program another root already keeps, a Program a cache must not keep alive, a
+ * borrowed view -- says so where it is declared, in the comment directly above the member:
+ *
+ *   // program-holder-exempt: kept-by-another-root -- rootForRun pins it for the whole run
+ *   Program *program_;
+ *
+ * The label is one of four, and it also says why the holder does not pin:
+ *
+ *   heap-self-tracking      the holding object lives in the Camel heap and relocates the slot in
+ *                           its own updateRefs; the collector already sees it
+ *   kept-by-another-root    another root owns the program for the holder's whole life
+ *   long-lived-cache        pinning would keep every program the cache ever saw alive; the cache
+ *                           names programs that a root (or the heap) already keeps
+ *   borrow-or-foreign-type  a view or a reference used only while the caller's program is
+ *                           alive, or a `Program` of `camel::tiles` and not the runtime's
+ *
+ * `docs/technical/36_gc_handle_rules.md` states the four as the exceptions of rule 7. A holder
+ * with no such comment, a label outside the four, or a comment with no reason after `--` is
+ * *unexplained*, and that is the only thing the hard gate reports.
+ *
+ *   node scripts/check-program-holders.mjs              holders=<N> exempt=<M> unexplained=<K>
+ *   node scripts/check-program-holders.mjs --enforce     exit 1 only when unexplained > 0
  *   node scripts/check-program-holders.mjs --path <p>    scan another file or directory (a sample)
  *
- * The ruling asked for the report first: this file lists the holders that still exist, so the list
- * is a work item rather than a wall, and `--enforce` is the mode the gate will run once the list is
- * empty. Only two names are exempt, both named by the ruling: `ProgramHold` (the handle) and
- * `GCGraphManager` (the owner of the Programs and the thing that pins them).
- *
  * What is a holder here: a *member* declaration at class scope whose type is a pointer or reference
- * to `Program`, or a `shared_ptr`/`unique_ptr`/`weak_ptr` of one. A local variable, a parameter
- * and a return type are not holders -- they do not outlive the call -- so the scan works on class
- * bodies only, and skips any declaration with a parameter list. A smart pointer to a program the
- * object *owns* is reported too: owning one is not rooting it, and what the collector traces is
- * the slot, not the owner.
+ * to the runtime `Program`, or a `shared_ptr`/`unique_ptr`/`weak_ptr` of one. A local variable, a
+ * parameter and a return type are not holders -- they do not outlive the call -- so the scan works
+ * on class bodies only, and skips any declaration with a parameter list. A smart pointer to a
+ * program the object *owns* is reported too: owning one is not rooting it, and what the collector
+ * traces is the slot, not the owner.
  *
- * Two things the type alone cannot say, and what this file does about them:
- *
- *  - `camel::tiles` has a `Program` of its own (modules/tiles/include/tiles/internal/kernel_ir.h),
- *    and a bare `Program` inside `camel::tiles` is that one. It is skipped, and only there: a
- *    `rt::Program` or `camel::runtime::Program` in the same file is the runtime's and is reported.
- *  - a Program field of an object that lives *in the Camel heap* is a holder the collector does
- *    see (its `updateRefs` relocates the slot), which is why a function value may name its program.
- *    That is a property of the object's own trace, not of its type; the field is reported anyway,
- *    because the exemption is the object's trace and this check cannot read it. Whoever takes one
- *    of those off the list names the trace that covers it.
+ * The type is decided by identity, not by the name: the runtime's Program is `camel::Program` /
+ * `camel::runtime::Program` (and the file-local `rt` alias), while `camel::tiles` has a Program of
+ * its own (modules/tiles/include/tiles/program.h) that is not the runtime's and that this check
+ * does not report. An unqualified `Program` takes the identity of the namespace it is declared in,
+ * so a bare `Program *` inside `camel::tiles` is the tiles one. A qualifier this file does not know
+ * is reported, not skipped: a holder the check cannot place is a holder to look at.
  */
 
 import fs from 'node:fs'
@@ -58,22 +70,27 @@ const SCANNED = ['include', 'src', 'modules', 'tools']
 
 const SOURCE = /\.(?:h|hpp|hh|hxx|cpp|cc|cxx)$/
 
-/** The two names the ruling exempts. */
+/** The two names the ruling exempts outright: the handle, and the owner that pins. */
 const EXEMPT_CLASSES = new Set(['ProgramHold', 'GCGraphManager'])
 
-/** A pointer or reference to the runtime Program, or a smart pointer to one. */
-const PROGRAM_POINTER =
-    /(?:\bProgram\s*(?:\*+|&)|\b(?:shared|unique|weak)_ptr\s*<\s*(?:const\s+)?(?:(?:camel::runtime|rt)::)?Program\b)/
+/** The four reasons a holder may give for not pinning. See docs/technical/36_gc_handle_rules.md. */
+const EXEMPT_LABELS = new Set([
+    'heap-self-tracking',
+    'kept-by-another-root',
+    'long-lived-cache',
+    'borrow-or-foreign-type',
+])
 
-/**
- * The type of the Program in a declaration, as written: qualified (`camel::runtime::Program`,
- * `rt::Program`) or bare. Only the tiles namespace has a Program of its own, so a bare one there
- * is not the runtime's.
- */
-function programTypeIsRuntime(text, namespacePath) {
-    if (/(?:camel::runtime|rt)::Program\b/.test(text)) return true
-    return !namespacePath.includes('tiles')
-}
+/** `program-holder-exempt: <label> -- <reason>`; the reason is what makes the label a decision. */
+const EXEMPTION = /program-holder-exempt:\s*([A-Za-z][A-Za-z-]*)\s*(?:--\s*(.*))?/
+
+/** A pointer or reference to a `Program`, with the qualifier it was written with. */
+const PROGRAM_POINTER =
+    /((?:[A-Za-z_]\w*\s*::\s*)*)Program\s*(?:\*+|&)/
+
+/** A smart pointer to a `Program`, with the qualifier it was written with. */
+const PROGRAM_SMART_POINTER =
+    /\b(?:shared|unique|weak)_ptr\s*<\s*(?:const\s+)?((?:[A-Za-z_]\w*\s*::\s*)*)Program\b/
 
 const KEYWORDS = new Set([
     'alignas', 'auto', 'const', 'constexpr', 'explicit', 'extern', 'inline', 'mutable', 'static',
@@ -134,14 +151,17 @@ function headerOf(tail) {
         .replace(/\s+/g, ' ')
         .trim()
     let match = /^(?:template\s*<[^{]*>\s*)?(?:class|struct|union)\s+(?:alignas\s*\([^)]*\)\s*)?([A-Za-z_]\w*)/.exec(text)
-    if (match) return { kind: 'class', name: match[1] }
-    match = /^(?:inline\s+)?namespace\s+(?:[A-Za-z_]\w*\s*(?:::|$))+/.exec(text)
+    if (match) return { kind: 'class', name: match[1], path: null }
+    // `namespace a`, `namespace a::b`, `namespace a::b::c`: every segment is a scope, and the
+    // last one is not enough -- `namespace camel::tiles` inside `camel` is `camel::tiles`, and a
+    // bare `Program` there is the tiles one. An anonymous `namespace {` has no name, so it keeps
+    // the enclosing path.
+    match = /^(?:inline\s+)?namespace\s+([A-Za-z_]\w*(?:\s*::\s*[A-Za-z_]\w*)*)\s*$/.exec(text)
     if (match) {
-        const name = /namespace\s+((?:[A-Za-z_]\w*\s*::?\s*)+)/.exec(text)
-        const parts = name ? name[1].split('::').map((part) => part.trim()).filter(Boolean) : []
-        return { kind: 'namespace', name: parts[parts.length - 1] ?? '' }
+        const parts = match[1].split('::').map((part) => part.trim()).filter(Boolean)
+        return { kind: 'namespace', name: parts[parts.length - 1] ?? '', path: parts }
     }
-    if (/^enum\s/.test(text)) return { kind: 'other', name: '' }
+    if (/^enum\s/.test(text)) return { kind: 'other', name: '', path: null }
     return null
 }
 
@@ -155,9 +175,115 @@ function declaredName(text) {
     return '<unnamed>'
 }
 
+/**
+ * Which Program a mention names: `runtime` (the one ProgramHold pins), or `foreign` (a Program of
+ * another namespace). An unqualified mention takes the identity of the namespace it sits in; a
+ * qualifier this file does not know is `runtime`, because a holder it cannot place is one to look
+ * at rather than one to skip.
+ */
+function programIdentity(qualifier, namespacePath) {
+    const parts = qualifier
+        .split('::')
+        .map((part) => part.trim())
+        .filter(Boolean)
+    if (parts.length > 0) {
+        const head = parts[0]
+        if (head === 'rt' || head === 'runtime') return 'runtime'
+        // `camel::tiles::...` and a `tiles::...` written from inside `camel`.
+        if (head === 'tiles') return 'foreign'
+        if (head === 'camel' && parts[1] === 'tiles') return 'foreign'
+        return 'runtime'
+    }
+    return namespacePath.includes('tiles') ? 'foreign' : 'runtime'
+}
+
+/** Whether the declaration holds the runtime Program, by the identity of every Program it names. */
+function holdsRuntimeProgram(statement, namespacePath) {
+    const identities = []
+    for (const pattern of [PROGRAM_POINTER, PROGRAM_SMART_POINTER]) {
+        for (const match of statement.matchAll(new RegExp(pattern.source, 'g'))) {
+            identities.push(programIdentity(match[1] ?? '', namespacePath))
+        }
+    }
+    return identities.includes('runtime')
+}
+
+/** The comment text on `line` (1-based) that trails the code, or null. */
+function trailingComment(line) {
+    const at = line.indexOf('//')
+    if (at < 0) return null
+    return line.slice(at)
+}
+
+/** Whether a raw line is comment text alone, for the block above a declaration. */
+function isCommentOnly(line) {
+    const text = line.trim()
+    if (text === '') return false
+    return (
+        text.startsWith('//') ||
+        text.startsWith('/*') ||
+        text.startsWith('*') ||
+        text === '*/' ||
+        text.endsWith('*/')
+    )
+}
+
+/**
+ * The exemption a holder declares, read from the comment on its own line or the comment block
+ * directly above it. The block is joined before it is read, so a reason the tree wrapped at the
+ * column limit still counts. A label outside the four, or no reason after `--`, is not an
+ * exemption.
+ */
+function exemptionOf(rawLines, line) {
+    const above = []
+    let index = line - 2
+    while (index >= 0 && isCommentOnly(rawLines[index])) {
+        above.unshift(rawLines[index])
+        index -= 1
+    }
+    const own = trailingComment(rawLines[line - 1] ?? '')
+    if (own !== null) above.push(own)
+    const text = above.join(' ').replace(/\s+/g, ' ')
+    const at = text.indexOf('program-holder-exempt:')
+    if (at < 0) return { stated: false, exempt: false, why: 'no program-holder-exempt comment' }
+    const match = EXEMPTION.exec(text.slice(at))
+    const label = match[1]
+    const reason = (match[2] ?? '').replace(/^\/\/\s*/, '').trim()
+    if (!EXEMPT_LABELS.has(label)) {
+        return {
+            stated: true,
+            exempt: false,
+            why: `'${label}' is not one of ${[...EXEMPT_LABELS].join(', ')}`,
+        }
+    }
+    if (reason === '') {
+        return { stated: true, exempt: false, why: `'${label}' gives no reason after '--'` }
+    }
+    return { stated: true, exempt: true, label, reason }
+}
+
+/**
+ * The line a member declaration starts on. A statement may open with an access specifier
+ * (`private:`) that shares no line with the member; the comment above a member belongs above the
+ * member, so the label is skipped before the line is taken.
+ */
+function declarationLine(statement, frameStart, lineAt) {
+    let offset = 0
+    let rest = statement
+    for (;;) {
+        const access = /^\s*(?:private|public|protected)\s*:\s*/.exec(rest)
+        if (!access) break
+        offset += access[0].length
+        rest = rest.slice(access[0].length)
+    }
+    return lineAt(frameStart + offset + (rest.length - rest.trimStart().length))
+}
+
 /** Every class member of `file` whose type holds a Program, with the class that declares it. */
 function holdersIn(file) {
-    const text = stripCommentsAndStrings(fs.readFileSync(file, 'utf8'))
+    const raw = fs.readFileSync(file, 'utf8')
+    const text = stripCommentsAndStrings(raw)
+    const rawLines = raw.split('\n')
     const lineAt = (offset) => text.slice(0, offset).split('\n').length
     // Brace frames: a class body is the only scope a member lives in. Every other `{` (a function
     // body, a lambda, an initializer) is `other`, and a declaration inside one is not a member.
@@ -171,7 +297,7 @@ function holdersIn(file) {
             const header = headerOf(text.slice(frame.start, index))
             const namespacePath =
                 header && header.kind === 'namespace'
-                    ? [...frame.namespacePath, header.name]
+                    ? [...frame.namespacePath, ...header.path]
                     : frame.namespacePath
             frames.push({
                 kind: header ? header.kind : 'other',
@@ -193,14 +319,23 @@ function holdersIn(file) {
             const frame = frames[frames.length - 1]
             if (frame.kind === 'class') {
                 const statement = text.slice(frame.start, index)
-                const holdsProgram = PROGRAM_POINTER.test(statement) && !/\b(?:operator|function)\b\s*\(/.test(statement) && !statement.includes('(')
-                if (holdsProgram && programTypeIsRuntime(statement, frame.namespacePath)) {
+                const holdsProgram =
+                    PROGRAM_POINTER.test(statement) || PROGRAM_SMART_POINTER.test(statement)
+                const declaresFunction =
+                    /\b(?:operator|function)\b\s*\(/.test(statement) || statement.includes('(')
+                if (
+                    holdsProgram &&
+                    !declaresFunction &&
+                    holdsRuntimeProgram(statement, frame.namespacePath)
+                ) {
+                    const line = declarationLine(statement, frame.start, lineAt)
                     found.push({
                         file,
-                        line: lineAt(frame.start + (statement.length - statement.trimStart().length)),
+                        line,
                         className: frame.name,
                         member: declaredName(statement),
                         type: statement.replace(/\s+/g, ' ').trim(),
+                        exemption: exemptionOf(rawLines, line),
                     })
                 }
             }
@@ -266,25 +401,26 @@ const holders = scanned
     .sort((left, right) => left.file.localeCompare(right.file) || left.line - right.line)
 
 const shown = (file) => path.relative(ROOT, file).split(path.sep).join('/')
-for (const holder of holders) {
-    console.log(`${shown(holder.file)}:${holder.line}: ${holder.className}::${holder.member} -- ${holder.type}`)
-}
+const exempt = holders.filter((holder) => holder.exemption.exempt)
+const unexplained = holders.filter((holder) => !holder.exemption.exempt)
 
-const classes = new Set(holders.map((holder) => `${shown(holder.file)}#${holder.className}`))
-const files = new Set(holders.map((holder) => shown(holder.file)))
-console.log(
-    `check-program-holders: ${holders.length} C++ Program holder(s) in ${classes.size} class(es) ` +
-        `across ${files.size} file(s), of ${scanned.length} source file(s) scanned`,
-)
-if (holders.length === 0) {
-    console.log('check-program-holders: every Program a C++ holder keeps is held through ProgramHold')
+for (const holder of unexplained) {
+    console.log(
+        `${shown(holder.file)}:${holder.line}: ${holder.className}::${holder.member} -- ` +
+            `${holder.exemption.why} (${holder.type})`,
+    )
 }
-if (enforce && holders.length > 0) {
+console.log(
+    `holders=${holders.length} exempt=${exempt.length} unexplained=${unexplained.length}`,
+)
+
+// The report is the default: the numbers are a work item, not a wall. The gate is the unexplained
+// count alone -- a holder that stated a reason is a decision, and a decision is not a failure.
+if (enforce && unexplained.length > 0) {
     console.error(
-        'check-program-holders: a class member names a Program without ProgramHold: the program it ' +
-            'keeps is one the collector does not trace, and a safepoint that falls while the holder ' +
-            'keeps it leaves the old addresses of its static values in the slots ' +
-            '(docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md)',
+        'check-program-holders: a class member names a Program it does not root and does not ' +
+            'explain: hold it through ProgramHold, or say at the declaration which of the four ' +
+            'reasons lets it stay (docs/technical/36_gc_handle_rules.md, rule 7)',
     )
     process.exit(1)
 }

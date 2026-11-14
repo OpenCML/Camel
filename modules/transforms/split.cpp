@@ -418,6 +418,8 @@ struct Half {
     const rt::GCGraph *source;
     /// The program the graphs belong to, so a call node's callee can be read: a lifted graph's
     /// record of the graph it was lifted from is the only way to reach the primal from the call.
+    // program-holder-exempt: borrow-or-foreign-type -- the half reads the program its pass was
+    // given; the pass keeps it for the build.
     const rt::Program *program;
     std::vector<gc_node_ref_t> portOf;
     std::unordered_map<gc_node_ref_t, size_t> portIndex;

@@ -1063,6 +1063,8 @@ zeroOfSpaceOf(camel::runtime::GraphDraft &draft, Type *space, gc_node_ref_t shap
 /// two calls of one function call one graph.
 struct TransposeState {
     camel::runtime::GraphDraftGroup &group;
+    // program-holder-exempt: borrow-or-foreign-type -- the state borrows the program its pass
+    // was given; the pass keeps it for the build.
     const camel::runtime::Program *program;
     std::unordered_map<uint32_t, GraphId> callees;
     /// The context whose rule table the transpose reads. `TransposeState` is where it belongs: it

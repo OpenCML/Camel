@@ -238,6 +238,8 @@ struct WhenCall {
     std::shared_ptr<mm::RootHandle> rule;
     std::shared_ptr<NodeVMSchedPass> vm;
     /// The instance, when the condition belongs to one: its program and its condition graph.
+    // program-holder-exempt: kept-by-another-root -- an instance's program belongs to the
+    // context, which pins it for its own lifetime (rule_templates.cpp).
     const camel::runtime::Program *program = nullptr;
     const camel::runtime::GCGraph *graph   = nullptr;
     /// The rule's own parameters, the condition's, and which of the rule's are `const`.
@@ -867,6 +869,8 @@ uint64_t sampleStreamOf(uint64_t seed, std::string_view identity) {
 /// them (the rewrites and the nodes are summed over the graphs; the rounds are the rounds the
 /// whole application made, each graph advancing in the same round).
 struct Application {
+    // program-holder-exempt: kept-by-another-root -- the detached commit is tracked by the
+    // context, and the function value handed back reaches it through the heap.
     const camel::runtime::Program *program = nullptr;
     camel::runtime::RewriteStats stats;
 };

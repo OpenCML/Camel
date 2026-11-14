@@ -57,6 +57,8 @@ struct Refusal {
 /// What every function of a program shares while it is written.
 struct ProgramParts {
     /// The program the graphs are of: it names the graphs a graph calls.
+    // program-holder-exempt: borrow-or-foreign-type -- the parts are built per function of the
+    // program the pass holds for the translation.
     const camel::runtime::Program *program = nullptr;
     ProgramValues values;
     SiteTable sites;

@@ -79,7 +79,11 @@ class RunPrograms {
   private:
     camel::core::context::Context *context_ = nullptr;
     bool active_                            = false;
+    // program-holder-exempt: kept-by-another-root -- rootForRun pins it from begin() to end(),
+    // which is exactly the life of this holder.
     const camel::runtime::Program *main_    = nullptr;
+    // program-holder-exempt: kept-by-another-root -- the frames' function values hold these,
+    // and a pin would keep every gradient a long loop builds (graph_space).
     mutable std::vector<const camel::runtime::Program *> others_;
     mutable std::mutex mutex_;
 };

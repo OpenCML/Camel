@@ -332,6 +332,8 @@ FunctionType *jvpOperatorType(FunctionType *function) {
 /// id).
 struct LiftState {
     const camel::core::context::context_ptr_t &context;
+    // program-holder-exempt: borrow-or-foreign-type -- the lift borrows the program its pass
+    // was given and outlives no call.
     const camel::runtime::Program *program;
     camel::runtime::GraphDraftGroup &group;
     std::unordered_map<uint32_t, camel::runtime::GraphId> callees;

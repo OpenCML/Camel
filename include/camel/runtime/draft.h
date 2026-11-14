@@ -1020,6 +1020,8 @@ class GraphDraft {
 
     GraphId id_                     = kInvalidGraphId;
     GraphId outerGraphId_           = kInvalidGraphId;
+    // program-holder-exempt: kept-by-another-root -- the group's program is the session's
+    // (ProgramHold work_) or the pass's own; the draft is a view inside it.
     const Program *program_         = nullptr;
     GraphId typeSpecializationRoot_ = kInvalidGraphId;
     uint8_t flags_                  = 0;
