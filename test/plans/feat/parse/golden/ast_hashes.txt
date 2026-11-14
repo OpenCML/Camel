@@ -3807,6 +3807,7 @@ fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
 fc5dd9b72523c060 ok test/cases/opt/e9/rc03_seed30.cml
 2b621abdfd198a5b ok test/cases/opt/e9/rc04_seed72.cml
 4354ebdbd45852fb ok test/cases/opt/e9/rc08_seed324.cml
+2b68e1c7da848a36 ok test/cases/opt/e9/rc11_seed352.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
