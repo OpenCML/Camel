@@ -532,7 +532,7 @@ bb4f371c5fc7c439 ok stdlib/random.cml
 42b7b2c5046240f8 ok stdlib/rewrite.cml
 6f2d557f8d7349a5 ok stdlib/rules.cml
 e5785f40146107c0 ok stdlib/sim.cml
-76e021d10f7cb912 ok stdlib/state.cml
+74c1eac0be8e617a ok stdlib/state.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
 9f90e55ee60e5feb ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
@@ -1484,6 +1484,17 @@ dc61b52dc735d4cd ok test/cases/compile/prelude_signatures/function_type_pack.cml
 df2285a6921cfa9b ok test/cases/compile/prelude_signatures/imported_name.cml
 710d3126cf2be18d ok test/cases/compile/prelude_signatures/untyped_lambdas.cml
 61a3771632cfbbfe ok test/cases/compile/prelude_signatures/with_pack_with_body.cml
+d5bfbf7a13058125 ok test/cases/compile/ref/err_holds_ref.cml
+c7bf8d2161fb4912 ok test/cases/compile/ref/err_holds_ref_closure.cml
+a603f90011a7fd12 ok test/cases/compile/ref/ref_boxes_are_counted.cml
+c87e262c61f310e1 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
+d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
+6e031bde2d13dbbf ok test/cases/compile/ref/ref_closure.cml
+9c5ed6009d7896e0 ok test/cases/compile/ref/ref_closure_capture.cml
+2dc36a2971e3b790 ok test/cases/compile/ref/ref_content_survives.cml
+6ee7d8cfa508dc5c ok test/cases/compile/ref/ref_float.cml
+d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
+7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
 a1b48d4570f25659 ok test/cases/compile/rest_params/lambda_rest_annotated.cml
 3c94df4143955ed7 ok test/cases/compile/rest_params/lambda_rest_forward.cml
 ee92593628a15501 ok test/cases/compile/rest_params/lambda_rest_read_as_a_value.cml
