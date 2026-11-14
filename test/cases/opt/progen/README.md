@@ -354,7 +354,7 @@ Notes on single findings:
 - **F27, F28, F29 (fixed).** `src/builtin/executors/builtin.cpp` mapped `op/lt_s`, `op/le_s`, `op/gt_s`,
   `op/ge_s`, `op/assn_add_s` (and the untyped `op/lt`, `op/le`, `op/gt`, `op/ge`, `op/assn_add`,
   `op/assn_sub`, `op/assn_mul`, `op/assn_div`, `struct/contains_str`) to `__not_implemented__`
-  (`src/builtin/operators/other.h`), whose body is an `ASSERT(false)` followed by returning the
+  (the `other.h` that was under `src/builtin/operators/`, since deleted), whose body is an `ASSERT(false)` followed by returning the
   null slot. In a release build the assertion is compiled out, so the operator silently yields
   null: a comparison is false, an assignment does nothing. The type checker accepts all of them.
 - **F25.** The ingredients are a nested function that captures a local, a second nested

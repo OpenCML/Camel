@@ -18,7 +18,7 @@
 // that recomputes nothing, and both stop with the identical sentence.
 //
 // The question this measures is
-// `docs/handover/questions/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`,
+// `docs/handover/reviews/2026-11-04-when-a-recomputed-call-carries-an-unreachable-context-argument-should-the-cut-inline-it.cn.md`,
 // whose default is "inline the constant argument in the backward half" -- the measurement there says the
 // axis is a `context` edge onto a `DATA` node, so the argument is a node the cut can copy.
 //

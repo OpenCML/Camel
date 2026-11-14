@@ -14,7 +14,7 @@
 // run with `a direct call names a function whose graph is not in the program's graph table`, because
 // a cut adopts its callee's program and not the cuts *that* program adopted
 // (`include/camel/runtime/program.h#Program::adoptMissing` carried only the graphs a program added
-// itself; the page `docs/handover/questions/2026-11-04-does-a-program-own-what-it-adopted.cn.md` is
+// itself; the page `docs/handover/reviews/2026-11-04-does-a-program-own-what-it-adopted.cn.md` is
 // that defect's record and the ruling that closed it).
 import rulesets.jvp
 import rulesets.transpose

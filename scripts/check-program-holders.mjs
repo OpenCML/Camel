@@ -12,7 +12,7 @@
  * the old addresses in the slots. Measured on the two `modules.nn` large-bytecode cases under
  * `--gc-check poison` (rc=134) and without poison under `--gc-stress safepoint=1,kind=minor`
  * (rc=139); the page is
- * `docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
+ * `docs/handover/questions/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
  *
  * The answer the author ruled (2026-11-13) is one handle: `camel::runtime::ProgramHold` pins the
  * program in its constructor and unpins it in its destructor (camel/runtime/graph.h). A holder

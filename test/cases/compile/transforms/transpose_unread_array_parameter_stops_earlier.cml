@@ -18,7 +18,7 @@
 // So the answer is `[]` for an unread `float[]` and `(2.0, 0.0)` for an unread `float` (the neighbour
 // `transpose_unread_parameter_answers_zero`), and the difference between the two is the type, not the
 // reading. Whether an empty array is the right zero for a length nobody stated is item 2 of
-// `docs/handover/questions/2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`;
+// `docs/handover/reviews/2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`;
 // this case pins what the tree does, which is what a case is for, and the page says what is undecided.
 import { transpose } from transforms
 import rulesets.transpose

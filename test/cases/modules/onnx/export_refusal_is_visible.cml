@@ -16,7 +16,7 @@
  * What this pins is the pair a printed word and a disk must be compared on: no `exported`, the
  * refusal named, and no file. What it cannot pin is the discarding form itself -- `let _ =` on a
  * `T!` is a language question, and it is recorded in
- * `docs/handover/questions/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md`
+ * `docs/handover/reviews/2026-11-05-does-a-shape-declaration-need-a-length-in-its-return-type.cn.md`
  * (section 5).
  */
 

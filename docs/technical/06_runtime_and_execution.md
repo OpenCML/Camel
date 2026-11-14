@@ -6,7 +6,7 @@ Camel 的运行时围绕 **Frame**（栈帧）、**Context**（全局/模块上�
 
 ## 2. Frame（栈帧）
 
-- **定义**：`src/core/context/frame.h`，继承自 `Object`。
+- **定义**：`include/camel/core/context/frame.h`，继承自 `Object`。
 - **职责**：为一次「图执行」保存运行时状态：当前图、静态区、动态区、类型信息等。
 
 ### 2.1 与图的绑定

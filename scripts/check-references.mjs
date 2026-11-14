@@ -37,12 +37,28 @@
  *    design, and the sweep that untracked those files left such references behind on purpose
  *    (`examples/models/naive-in-expert-out/results/`); each one is counted and printed as local;
  *  - a path with a placeholder (`<module>.cml`, `*.json`, `{a,b}.cml`) is a pattern, not a claim;
+ *  - `./name.ext`, a `./`-prefixed path with no directory in it, is that same bare name's spelling
+ *    on a command line (`./counts.cml` takes the pass-name prefix `counts.cml` would): there is no
+ *    place in it to be wrong about, so it is the shorthand and not a claim;
  *  - a URL is not a path of this tree.
+ *
+ * Every leading `./` and `../` is taken off before the suffix rule is asked (`../../a/<file>.c` is
+ * asked as `a/<file>.c`): a comment quotes a path from the directory its sentence is about -- a
+ * test file's import example is written from where that test will sit, a transcript quotes what the
+ * tool printed -- so those segments are not evidence either way, and the suffix rule still demands
+ * exactly one file of the tree as the answer.
  *
  * The record directories are not read by default (`RECORD_DIRS`, the same rule the citation check
  * keeps): `docs/handover` and `docs/reviews` are the history of decisions, a page there quotes a
  * path as it stood when the decision was taken, and rewriting it would be rewriting the record.
- * `--path docs/handover` reads them anyway, which is how a sweep checks its own deletions.
+ * `--path docs/handover` reads them anyway, which is how a sweep checks its own deletions. A plan's
+ * `fixture/` trees are not read at all (`isFixtureTree`): they are a synthetic checkout another
+ * check builds and runs against, and one of their pages cites the file that must not be there.
+ *
+ * Premise of that last rule, and the reason it cannot quietly widen: the fixture page's intent is
+ * locked by `test/plans/feat/docs_links.plan.toml`, which asserts the exact "no such file" reading
+ * of the path it names. Skip and assertion are one decision -- if that assertion is ever removed,
+ * the skip stops being a rule and starts being a cover-up, and the two come out together.
  *
  * A `.md` fence is an example, not a claim: the path inside it is a path a command will write. So
  * are a plan's strings (`expect_output_contains`); only a comment line in code is read, and in a
@@ -73,6 +89,18 @@ const SKIP_DIRS = new Set([
 
 /** The records: history, not the tree as it stands. Read only when named by `--path`. */
 const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
+
+/**
+ * A synthetic checkout another check builds and runs against: the `fixture/` trees of the plans.
+ * A path in one of their pages is relative to *that* tree -- a `src/<name>.c` there is the
+ * fixture's own file beside the page that cites it, and a fixture whose whole point is a file that
+ * is not there would be reported forever. The same reason the record directories are not read, one
+ * step further out.
+ */
+function isFixtureTree(full) {
+    const rel = path.relative(ROOT, full).split(path.sep).join('/')
+    return rel.startsWith('test/plans/') && path.basename(full) === 'fixture'
+}
 
 /** A runner writes these at run time; a page that names one names an output. */
 const RUN_OUTPUTS = new Set([
@@ -108,6 +136,7 @@ function walk(directory, skipRecordDirs) {
     const entered = (full) => {
         const rel = path.relative(ROOT, full).split(path.sep).join('/')
         if (skipRecordDirs && RECORD_DIRS.has(rel)) return false
+        if (isFixtureTree(full)) return false
         return true
     }
     const visit = (dir) => {
@@ -240,8 +269,14 @@ function resolve(file, cited) {
             // not there; the suffix rule below may still answer
         }
     }
-    const suffix = `/${cited.replace(/^\.{1,2}\//, '')}`
-    const matches = treePaths().filter((entry) => entry.endsWith(suffix) || entry === cited)
+    // Every leading `./` and `../` goes, not just one: a comment quotes a path from the directory
+    // the sentence is about, not from the file that holds it -- a test file's import example is
+    // written from where that test file will sit, and a transcript quotes the path the tool
+    // printed. Those segments are not evidence either way; the rule below still demands that
+    // exactly one file of the tree answer the rest.
+    const trimmed = cited.replace(/^(?:\.{1,2}\/)+/, '')
+    const suffix = `/${trimmed}`
+    const matches = treePaths().filter((entry) => entry.endsWith(suffix) || entry === cited || entry === trimmed)
     if (matches.length === 1) return { resolved: true }
     if (matches.length > 1) return { resolved: false, ambiguous: matches.length }
     return { resolved: false }
@@ -297,6 +332,11 @@ for (const file of files) {
         if (!markdown && !isComment(file, text, match.index)) continue
         const first = cited.split('/')[0]
         const fromHere = first === '.' || first === '..'
+        // `./name.ext` names no directory: it is the spelling a command line gives a bare name
+        // (`./counts.cml` and `counts.cml` take the same pass-name prefix), and a bare name is a
+        // sentence's shorthand which this check does not read. There is no place in it to be wrong
+        // about; two files that bear the name are not a question the sentence asked.
+        if (/^\.\/[^/]+$/.test(cited)) continue
         if (!fromHere && !rootTop.has(first)) {
             // Not a path this tree could hold from its root: a sentence's shorthand. The suffix
             // rule is the only thing that can still answer it, and only when it answers once.
