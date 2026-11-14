@@ -1,0 +1,12 @@
+# lane-canonorder -> develop (b70c33308, 9620d0122)
+
+判据读数:
+- 拼写无关: 两份只差捕获顺序的程序, jgir 逐字节相同 (剥节点 origin 与 source 跨度; 边的 source 端点保留)
+- 最小编号表: "payloads 1<2: hash 与源序都把 2 排在前, 文档把 1 的捕获编在 4、2 的编在 7"
+- 可达性: std::nvm 打印 "1 2", exit 0
+- lane 内 feat: 8925 / 8882 / 4 / 7, 红集 = 基线四条
+
+合并闸门: total 8935 / pass 8891 / fail 4 / skip 8 / known 32; killed 0; 静态 14 段 0 fail.
+生成物: stdlib-reference 543 条、export_matrix 133 行重录后无差异.
+作者复审 9307dc243 的两处返工由 lane-tieswhole 承接: 并列要对整个程序取; 宽并列不许落回写法序.
+未做: DOT 族 (gir/rgir/agir/argir) 与 modules/graph 的 nodes 查询仍按存储序.
