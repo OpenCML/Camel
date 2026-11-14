@@ -1,10 +1,10 @@
 /**
- * The report points at the first use the clause does not name: a use the clause does name is not
- * where the body stopped matching it, so the note skips past it and lands on the use that is
- * outside the promise (design principles 3.3).
+ * The report points at the first use the clause does not name: the write of `c` is covered by the
+ * parameter list, which declares the cell, so the note skips past it and lands on the print -- the
+ * first use the promise does not name (design principles 3.3).
  */
 
-func bump(var c: int): int uses var c sync {
+func bump(var c: int): int uses var fs sync {
     c += 1
     println(c)
     return c

@@ -106,8 +106,6 @@ string typeCodeToString(TypeCode code) {
         return "typefunc";
     case TypeCode::EnumHole:
         return "_";
-    case TypeCode::TypeOf:
-        return "typeof";
     default:
         return isOtherType(code) ? OtherTypeRegistry::getTypeName(code) : "unknown";
     }

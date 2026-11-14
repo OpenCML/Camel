@@ -314,7 +314,7 @@ void ParserImpl::parsePrimaryType() {
         } else {
             parseLogicalOr();
         }
-        return close(m, NK::TypeOfType);
+        return close(m, NK::TypeOfExpr);
     }
     case TK::LParen: {
         const TK t1 = peek(1);

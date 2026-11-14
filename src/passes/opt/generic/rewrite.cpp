@@ -18,8 +18,8 @@
 #include "camel/core/type/intern.h"
 
 #include <algorithm>
-#include <cstddef>
 #include <array>
+#include <cstddef>
 #include <cstring>
 #include <format>
 #include <span>
@@ -289,6 +289,10 @@ std::vector<gc_node_ref_t> lastReadsGoingOut(
 
 } // namespace
 
+bool holdsChainPlace(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
+    return !draft.syncInputsOf(id).empty() || !draft.syncUsersOf(id).empty();
+}
 gc_node_ref_t keepThroughValue(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,
     const std::function<bool(gc_node_ref_t)> &alsoGoing) {
@@ -679,6 +683,8 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
         contentsByPass_[std::string(passName)].insert(hash);
     }
 }
+
+uint64_t graphContentHash(const GCGraph &graph) { return contentHash(graph); }
 
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,

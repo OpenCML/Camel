@@ -109,8 +109,7 @@ EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph) {
     return EffectWalk{program}.of(graph);
 }
 
-EffectSummary
-effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region) {
+EffectSummary effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region) {
     if (graph == nullptr || region == 0) {
         return {};
     }

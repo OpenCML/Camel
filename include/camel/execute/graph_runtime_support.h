@@ -35,8 +35,12 @@ namespace camel::execute {
 /**
  * The programs a back end runs graphs of: the one it was given and those of the function
  * values it meets (a function made in another program, such as a gradient the program built
- * while it ran). A frozen graph names the graphs it calls by id; the back end resolves them in
- * the program that holds the graph version, found here.
+ * while it ran). A frozen graph names the graphs it calls by id, and those ids mean the table
+ * of one program: the one that carries the graph. A caller that has the function value passes
+ * `function->program()` to call() and that is the answer (the value names its program, and
+ * `graphOf` returns the version that program holds); `of` is what is left for a graph no value
+ * names -- a root the run was handed -- and it answers with the program the run was given when
+ * that program holds the version.
  */
 class RunPrograms {
   public:
@@ -58,7 +62,12 @@ class RunPrograms {
         return function->graph();
     }
     void note(const camel::runtime::Program *program);
-    /// The program that holds this version of `graph`.
+    /// The program that holds this version of `graph`. A pass that has the function value in
+    /// hand must hand `function->program()` to call() instead: the value names the program it
+    /// was made in, while this can only look for a program that holds the version -- and a
+    /// version reached from a run-time table (the lambda a closure makes, a gradient) is held by
+    /// more than one program, so "who holds it" is not the same question as "whose table are
+    /// these ids read in". See the file comment.
     const camel::runtime::Program &of(const camel::runtime::GCGraph *graph) const {
         if (main_ != nullptr && main_->contains(graph)) {
             return *main_;
@@ -110,6 +119,38 @@ struct RuntimeBranchArmRegion {
     camel::runtime::gc_node_ref_t joinIndex = camel::runtime::kInvalidNodeRef;
     std::vector<camel::runtime::gc_node_ref_t> topoIndices;
 };
+
+/// One node another must run after, with the edge kind that says so (docs/design/effects/
+/// edges.cn.md 1: a data edge, a sync edge, an order edge; a control input is the chain wait a
+/// GATE carries).
+struct ExecutionPredecessor {
+    camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
+    enum class Kind : uint8_t {
+        Control, // a control input (the chain wait a GATE carries)
+        Data,    // a value port: one normal-role port, or a context (`with`) one
+        Sync,    // the statement written before this one in the same block
+        Order,   // an edge that only orders: both nodes run, the predecessor runs first
+    } kind = Kind::Data;
+    bool operator==(const ExecutionPredecessor &) const = default;
+};
+
+/// The nodes `ref` must run after, and nothing else: the one answer to "what does this node wait
+/// for" (docs/design/effects/edges.cn.md 2: the order obeys all three edge kinds). In this order --
+/// control inputs, normal-role data ports, context (`with`) ports, sync predecessors, order
+/// predecessors -- which is the order `computeExecutionOrder` walks them in, so a back end that
+/// reads this list lays a graph out exactly as that walk does.
+///
+/// A node is named once for every edge that reaches `ref` (a value read by two ports is named
+/// twice); nothing is filtered. The refs are the stored ones, so a caller laying out only the
+/// nodes that run skips the ones its own liveness does not hold -- an order edge orders two nodes
+/// that both run and never makes either of them run.
+///
+/// This is the single implementation. The execution order below, the parallel scheduler's task
+/// graph (`src/passes/sched/taskflow`), and the storage-reuse proof of the plan
+/// (`src/execute/exec_plan.cpp`) all read it, so no pass keeps a list of its own. It reads the
+/// graph and runs nothing, so a test may call it on its own.
+std::vector<ExecutionPredecessor> executionPredecessorsOf(
+    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref);
 
 /// Computes the order the live nodes of `graph` run in. Back ends do not call it: they read the
 /// execution plan (camel/runtime/exec_plan.h), which calls it once per graph version.

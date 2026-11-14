@@ -113,6 +113,14 @@ enum class RuntimeDiag : uint32_t {
     // and the program runs on the bytecode interpreter with the same result, which is why this is a
     // warning and not an error: what it reports is that the pass named does less here than its name says.
     JitWithoutCodeGenerator = 0x100018,
+    // `std::opt` runs a bounded number of rounds, because a recursion whose depth is not static would
+    // otherwise unroll about one level per round for ever. Every round keeps the program's meaning, so
+    // reaching the bound is no fault and does not stop the run; what it leaves behind is a program that
+    // still holds the calls and the computations the next round would have rewritten. That is worth
+    // telling the user -- and at the default log level a line on the log channel is never seen, which is
+    // why it is a warning on the diagnostics channel, naming the graph (one function) the last round was
+    // still changing.
+    OptimizationStoppedShort = 0x100019,
 };
 
 constexpr DiagType diagTypeOf(RuntimeDiag) { return DiagType::RuntimeDiag; }

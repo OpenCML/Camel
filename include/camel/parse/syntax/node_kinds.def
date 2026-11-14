@@ -134,7 +134,7 @@ CAMEL_NODE(PackType, Type)             // '..' typeExpr, once for each member of
 CAMEL_NODE(ParenType, Type)            // '(' typeExpr ')'
 CAMEL_NODE(TupleType, Type)            // '(' typeList? ','? ')'
 CAMEL_NODE(FuncType, Type)             // modifiers? angledParams? parentParams '=>' typeExpr resourceClause?
-CAMEL_NODE(TypeOfType, Type)           // 'typeof' dataExpr
+CAMEL_NODE(TypeOfExpr, Type)           // 'typeof' dataExpr
 CAMEL_NODE(MatchTypeType, Type)        // 'match' 'type' typeExpr '{' typeArm* '}'
 CAMEL_NODE(EnumType, Type)             // 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 CAMEL_NODE(EnumVariant, Other)         // identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?

@@ -2,8 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * In-place writes on a graph draft (see draft_writes.h), and the dead-write judgement asked of either
- * side of a commit (see effect_liveness.h).
+ * In-place writes on a graph draft (see draft_writes.h), and the dead-write judgement asked of
+ * either side of a commit (see effect_liveness.h).
  */
 
 #include "camel/runtime/draft_writes.h"
@@ -222,10 +222,11 @@ WrittenSlots::WrittenSlots(const GraphTransaction &transaction)
 
 // ---- The dead-write judgement, both sides of a commit ---------------------------------------
 //
-// One reading of one rule (design principles 9.7): "written in place" above says where a write goes;
-// these say whether the write itself is still anybody's. It lives in this file because the question
-// is asked twice about the same graph -- once on the draft a rule is admitted on, once on the frozen
-// graph the pass boundary checks -- and the two must not be two readings. The operator-level half
+// One reading of one rule (design principles 9.7): "written in place" above says where a write
+// goes; these say whether the write itself is still anybody's. It lives in this file because the
+// question is asked twice about the same graph -- once on the draft a rule is admitted on, once on
+// the frozen graph the pass boundary checks -- and the two must not be two readings. The
+// operator-level half
 // (`isWriteOfProgramState`, `writesProgramState`: what counts as a write) stays in effects.cpp.
 
 namespace {
@@ -236,15 +237,25 @@ bool writesOperandAt(const GCOperBody &body, size_t index) {
 }
 
 /// The names a graph keeps: its entry, its exit, the node whose value it returns, its ports (a
-/// `var` parameter or a capture), its closure nodes, and the result of each region. One spelling of
-/// them for both representations of a graph; the region results are the one part the two answer
-/// differently, so `regionIsResult` is what they pass in.
-template <typename RegionIsResult>
+/// `var` parameter or a capture), its closure nodes, the result of each region, and the ports a
+/// control region is entered with. One spelling of them for both representations of a graph; the
+/// regions are the one part the two read differently, so `regionIsResult` and `regionNamesPort` are
+/// what they pass in.
+///
+/// A control region's ports belong to this list because the table is positional and the table is
+/// how the region is entered: `LoopDraftView::bodyStateParam(j)` and `condStateParam(j)` are the
+/// j-th entry, and the j-th state is that value. A port node an erasure took leaves the entry
+/// pointing at nothing, and a table that dropped the entry instead renames every state after it --
+/// two wrong answers to one question. `validateRuntimeRegions` refuses the first (a control region
+/// needs every port it lists), so an unread port of a control region is a name and not dead code.
+/// An annotation region is not in this: a rewrite may remove one of its ports, and the published
+/// graph then holds the entry as "none".
+template <typename RegionIsResult, typename RegionNamesPort>
 bool namesOf(
     gc_node_ref_t ref, std::span<const gc_node_ref_t> normPorts,
     std::span<const gc_node_ref_t> withPorts, std::span<const gc_node_ref_t> closureNodes,
     gc_node_ref_t entry, gc_node_ref_t exit, gc_node_ref_t output, gc_node_ref_t result,
-    RegionIsResult regionIsResult) {
+    RegionIsResult regionIsResult, RegionNamesPort regionNamesPort) {
     if (ref == kInvalidNodeRef) {
         return false;
     }
@@ -257,7 +268,14 @@ bool namesOf(
     if (names(normPorts) || names(withPorts) || names(closureNodes)) {
         return true;
     }
-    return regionIsResult(ref);
+    return regionIsResult(ref) || regionNamesPort(ref);
+}
+
+/// Whether a region of `kind` is one the graph enters with a port list: the condition and the body
+/// of a LOOP, and the arm of a BRCH (see `namesOf`).
+bool kindsRegionEntersWithPorts(GCRegionKind kind) {
+    return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+           kind == GCRegionKind::LoopBody;
 }
 
 /// A frozen graph, read the way the graph space lays it out.
@@ -275,8 +293,14 @@ struct FrozenGraphView {
             return false;
         }
         return namesOf(
-            ref, graph.normPorts(), graph.withPorts(), graph.closureNodes(), graph.entryNodeRef(),
-            graph.exitNodeRef(), graph.outputNodeRef(), graph.returnNodeRef(),
+            ref,
+            graph.normPorts(),
+            graph.withPorts(),
+            graph.closureNodes(),
+            graph.entryNodeRef(),
+            graph.exitNodeRef(),
+            graph.outputNodeRef(),
+            graph.returnNodeRef(),
             [this](gc_node_ref_t candidate) {
                 for (uint32_t index = 0; index < graph.regionCount(); ++index) {
                     const GCRegion *region = graph.region(index);
@@ -285,11 +309,22 @@ struct FrozenGraphView {
                     }
                 }
                 return false;
+            },
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < graph.regionCount(); ++index) {
+                    const GCRegion *region = graph.region(index);
+                    if (region == nullptr || !kindsRegionEntersWithPorts(region->kind)) {
+                        continue;
+                    }
+                    const auto ports = graph.regionPorts(index);
+                    if (std::find(ports.begin(), ports.end(), candidate) != ports.end()) {
+                        return true;
+                    }
+                }
+                return false;
             });
     }
-    const GCOperBody *bodyOf(gc_node_ref_t ref) const {
-        return graph.nodeBodyAs<GCOperBody>(ref);
-    }
+    const GCOperBody *bodyOf(gc_node_ref_t ref) const { return graph.nodeBodyAs<GCOperBody>(ref); }
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         return graph.normInputsOf(ref);
     }
@@ -352,11 +387,29 @@ struct DraftGraphView {
             return false;
         }
         return namesOf(
-            ref, draft.normPorts(), draft.withPorts(), draft.closureNodes(), draft.entryNode(),
-            draft.exitNode(), draft.outputNode(), draft.returnNode(),
+            ref,
+            draft.normPorts(),
+            draft.withPorts(),
+            draft.closureNodes(),
+            draft.entryNode(),
+            draft.exitNode(),
+            draft.outputNode(),
+            draft.returnNode(),
             [this](gc_node_ref_t candidate) {
                 for (uint32_t index = 0; index < draft.regionCount(); ++index) {
                     if (draft.region(index).result == candidate) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < draft.regionCount(); ++index) {
+                    if (!kindsRegionEntersWithPorts(draft.region(index).kind)) {
+                        continue;
+                    }
+                    const auto ports = draft.regionPortsOf(index);
+                    if (std::find(ports.begin(), ports.end(), candidate) != ports.end()) {
                         return true;
                     }
                 }
@@ -376,8 +429,8 @@ struct DraftGraphView {
     /// Whether a value the write leaves is read by a reader the program can still see. A reader
     /// inside a node the live set does not reach -- a closure definition nothing calls -- reads a
     /// value nobody will ever look at, and counting it keeps a dead write alive (design principles
-    /// 9.7: the check is that the write is no root and its value unread). The set is asked here, not
-    /// handed in: one draft, one set, cached on the view.
+    /// 9.7: the check is that the write is no root and its value unread). The set is asked here,
+    /// not handed in: one draft, one set, cached on the view.
     bool isRead(gc_node_ref_t ref) const {
         const auto normUsers = draft.normUsersOf(ref);
         const auto withUsers = draft.withUsersOf(ref);
@@ -414,12 +467,12 @@ struct DraftGraphView {
 };
 
 /// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
-/// its value input, read here exactly as `isWrittenInPlace` reads a slot (`normInputsOf(id).back()`).
-/// So the cell a `var` parameter writes is the caller's cell, not the gate that carries it across the
-/// call: asking the gate alone answers "no root holds it" for every write made through a parameter,
-/// which is a write the caller can still read (design principles 3.5, 9.7).
-template <typename View>
-bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
+/// its value input, read here exactly as `isWrittenInPlace` reads a slot
+/// (`normInputsOf(id).back()`). So the cell a `var` parameter writes is the caller's cell, not the
+/// gate that carries it across the call: asking the gate alone answers "no root holds it" for every
+/// write made through a parameter, which is a write the caller can still read (design
+/// principles 3.5, 9.7).
+template <typename View> bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
     std::unordered_set<gc_node_ref_t> seen;
     gc_node_ref_t place = ref;
     while (seen.insert(place).second) {
@@ -440,8 +493,7 @@ bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
 }
 
 /// A root holds the value the write leaves, or the place it writes into.
-template <typename View>
-bool writeIsRootedWith(const View &view, gc_node_ref_t ref) {
+template <typename View> bool writeIsRootedWith(const View &view, gc_node_ref_t ref) {
     if (view.isNamed(ref)) {
         return true;
     }
@@ -458,8 +510,7 @@ bool writeIsRootedWith(const View &view, gc_node_ref_t ref) {
     return false;
 }
 
-template <typename View>
-bool deadWriteWith(const View &view, gc_node_ref_t ref) {
+template <typename View> bool deadWriteWith(const View &view, gc_node_ref_t ref) {
     const GCOperBody *body = view.bodyOf(ref);
     if (body == nullptr) {
         return false;
@@ -505,5 +556,7 @@ bool deadWriteOnceUnread(const GraphDraft &draft, gc_node_ref_t ref) {
 bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref) {
     return deadWriteWith(DraftGraphView{draft}, ref);
 }
+
+bool GraphDraft::namesNode(gc_node_ref_t ref) const { return DraftGraphView{*this}.isNamed(ref); }
 
 } // namespace camel::runtime

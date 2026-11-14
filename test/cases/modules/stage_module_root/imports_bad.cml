@@ -1,0 +1,7 @@
+/// The same module that does not parse, imported by a program instead of named as a pass: the
+/// import is a dependency of the program, so the failure is the imported module's.
+import bad
+
+func main(): int sync {
+    return 0
+}

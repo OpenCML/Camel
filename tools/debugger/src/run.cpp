@@ -163,7 +163,10 @@ bool compileInto(const std::string &targetFile) {
     bool ok = false;
     try {
         st.parser->parse(*file);
-        st.mainModule->compile(CompileStage::Done);
+        // A module that does not parse is a diagnostic against the module: compileForLoad records
+        // it there (camel/core/module/userdef.h) and the answer is `loaded()`, as after any other
+        // failed compile. The catches below stay for the failures that are not a module's own.
+        camel::core::module::compileForLoad(st.mainModule, CompileStage::Done);
         ok = st.mainModule->loaded();
         if (!ok) {
             st.ctx->dumpAllModuleDiagnostics(std::cout, false);

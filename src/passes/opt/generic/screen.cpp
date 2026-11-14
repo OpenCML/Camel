@@ -36,9 +36,9 @@ namespace type = camel::core::type;
 /// the bits and type of a static DATA seen through GATEs (as the passes' staticValueOf does), or
 /// `maybe` for what they read through a JOIN, which is not worked out here.
 struct ConstantValue {
-    bool known = false;
-    bool maybe = false;
-    slot_t slot = 0;
+    bool known             = false;
+    bool maybe             = false;
+    slot_t slot            = 0;
     const type::Type *type = nullptr;
 };
 
@@ -101,8 +101,8 @@ bool mayFold(const GCGraph &graph) {
             }
             break;
         case GCNodeKind::Accs:
-            if (norm.size() == 1 && (graph.node(norm[0])->kind == GCNodeKind::Fill ||
-                                     isConstantLike(graph, norm[0]))) {
+            if (norm.size() == 1 &&
+                (graph.node(norm[0])->kind == GCNodeKind::Fill || isConstantLike(graph, norm[0]))) {
                 return true; // a projection of a tuple built here, or of a constant
             }
             break;
@@ -206,7 +206,7 @@ bool mayRemoveDead(const GCGraph &graph) {
     std::vector<bool> joinOrBrchUser(count, false), anchor(count, false);
     for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
         const gc_node_ref_t ref = it.ref();
-        const bool joinOrBrch   = (*it)->kind == GCNodeKind::Join || (*it)->kind == GCNodeKind::Brch;
+        const bool joinOrBrch = (*it)->kind == GCNodeKind::Join || (*it)->kind == GCNodeKind::Brch;
         for (auto inputs : {graph.normInputsOf(ref), graph.withInputsOf(ref)}) {
             for (gc_node_ref_t in : inputs) {
                 ++valueUsers[in];

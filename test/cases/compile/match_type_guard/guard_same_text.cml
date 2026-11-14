@@ -1,0 +1,36 @@
+/// A guard's identity is what it says, not where it is written down: the same predicate written in
+/// three type functions is one question, and each case still gets the answer of its own case.
+import { is_numeric, is_same } from types
+
+/// ① the first copy: a number takes `int[1]`, anything else `int[2]`.
+type FirstCopy<T> = match type T {
+    case _ when is_numeric::<T>() => int[1]
+    case _ => int[2]
+}
+
+/// ② the same guard text, other results: a number takes `int[3]`, anything else `int[4]`.
+type SecondCopy<T> = match type T {
+    case _ when is_numeric::<T>() => int[3]
+    case _ => int[4]
+}
+
+/// ③ the same guard text once more, after a shape word has already decided the arrays.
+type ArrayFirst<T> = match type T {
+    case array => int[5]
+    case _ when is_numeric::<T>() => int[6]
+    case _ => int[7]
+}
+
+func main(): int sync {
+    // ① and ②: one question asked by two type functions, each case answered for itself.
+    println(is_same::<FirstCopy<int>, int[1]>(), is_same::<SecondCopy<int>, int[3]>())
+    // ③ the same two questions with a subject the guard refuses: each falls through to its own
+    //    default and neither takes the other's.
+    println(is_same::<FirstCopy<string>, int[2]>(), is_same::<SecondCopy<string>, int[4]>())
+    // ④ the answers do not depend on the order the questions are asked in.
+    println(is_same::<SecondCopy<string>, int[4]>(), is_same::<FirstCopy<int>, int[1]>())
+    // ⑤ a shape word decides before any guard is read.
+    println(is_same::<ArrayFirst<float[2]>, int[5]>(), is_same::<ArrayFirst<int>, int[6]>())
+    println(is_same::<ArrayFirst<string>, int[7]>())
+    return 0
+}

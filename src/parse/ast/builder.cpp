@@ -5349,7 +5349,7 @@ Value Builder::visitPackType(cst::PackType context) {
     return res;
 }
 
-Value Builder::visitTypeOfType(cst::TypeOfType context) {
+Value Builder::visitTypeOfExpr(cst::TypeOfExpr context) {
     node_ptr_t res = createNodeAs<TypeExprLoad>(TypeOp::TypeOf);
     setNodeTokenRangeByContext(res, context);
     *res << any2node(visitExpr(context->expr()));
@@ -5616,8 +5616,8 @@ Value Builder::visitType(syn::Node context) {
         return visitTupleType(cst::TupleType(context));
     case NK::FuncType:
         return visitFuncType(cst::FuncType(context));
-    case NK::TypeOfType:
-        return visitTypeOfType(cst::TypeOfType(context));
+    case NK::TypeOfExpr:
+        return visitTypeOfExpr(cst::TypeOfExpr(context));
     case NK::MatchTypeType:
         return visitMatchTypeType(cst::MatchTypeType(context));
     case NK::EnumType:

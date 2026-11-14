@@ -3,9 +3,9 @@
 
 // The deletion permission: whether a rule may drop a computation (design principles 9.7).
 
-#include "camel/runtime/writings.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/reachable.h"
+#include "camel/runtime/writings.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
@@ -76,10 +76,10 @@ bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
         // loop and a control region carry no local summary, so they are kept as if they had one.
         //
         // A write of the program's own state is its own case, and its judgement is
-        // `camel::runtime::deadWriteOnceUnread` -- `deadWrite` with the reads set aside, because the
-        // reads this deletion takes away are what the rule is doing. It is asked on the draft, from
-        // the same implementation the pass boundary's check and the generic rewrite's keeper answer
-        // from, so the three cannot disagree (design principles 9.7).
+        // `camel::runtime::deadWriteOnceUnread` -- `deadWrite` with the reads set aside, because
+        // the reads this deletion takes away are what the rule is doing. It is asked on the draft,
+        // from the same implementation the pass boundary's check and the generic rewrite's keeper
+        // answer from, so the three cannot disagree (design principles 9.7).
         bool effect = writtenInPlace(at);
         if (h->kind == GCNodeKind::Oper) {
             const auto bytes = draft_.payloadOf(at);

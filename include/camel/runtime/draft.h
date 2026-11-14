@@ -680,6 +680,20 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// Whether the graph names `id` by something other than a read, so that a policy which erases a
+    /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
+    /// the entry, the exit, the node whose value it returns, its ports, its captures, the result of
+    /// each region, and the ports of a control region (an arm of a branch, the condition and the
+    /// body of a loop).
+    ///
+    /// The last of those is not bookkeeping: a control region is entered with its port list, and
+    /// the list is positional -- `LoopDraftView::bodyStateParam(j)` is entry `j`, which is the j-th
+    /// state -- so a port node an erasure took leaves the entry naming nothing, which the commit
+    /// refuses (`validateRuntimeRegions`), and a table that dropped the entry instead renames every
+    /// state after it. An unread port of such a region is therefore a name and not dead code. The
+    /// ports of an annotation region are not in this list: a rewrite may remove one, and the
+    /// published graph then holds that entry as "none" (src/runtime/graph.cpp, the encoder).
+    bool namesNode(gc_node_ref_t id) const;
     /// The statements written directly after `id` follow what `id` followed: the block's chain
     /// closes over a node the graph loses (docs/design/effects/edges.cn.md 4, removing a node
     /// splices the orderings that pass through it). The control edge names the same pair beside the
@@ -1018,8 +1032,8 @@ class GraphDraft {
     /// Records node `id` in the list of its kind when that kind has one (see gateIds_).
     void noteNodeKind(gc_node_ref_t id, GCNodeKind kind);
 
-    GraphId id_                     = kInvalidGraphId;
-    GraphId outerGraphId_           = kInvalidGraphId;
+    GraphId id_           = kInvalidGraphId;
+    GraphId outerGraphId_ = kInvalidGraphId;
     // program-holder-exempt: kept-by-another-root -- the group's program is the session's
     // (ProgramHold work_) or the pass's own; the draft is a view inside it.
     const Program *program_         = nullptr;
@@ -1157,18 +1171,18 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape =
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
 
 /// Whether the node is a closure definition nothing can call: a FUNC node the graph does not export
-/// (`closureNodes`), with no control, order or sync edge on either side. A FUNC node is a value, not
-/// a statement (design principles 3.1): what runs is the CALL of it, so an unread definition runs
-/// nothing, drops no effect and faults nothing. What it captured is read only by its body, which is
-/// why letting it go is what leaves a write nothing else reads a dead write (9.7).
+/// (`closureNodes`), with no control, order or sync edge on either side. A FUNC node is a value,
+/// not a statement (design principles 3.1): what runs is the CALL of it, so an unread definition
+/// runs nothing, drops no effect and faults nothing. What it captured is read only by its body,
+/// which is why letting it go is what leaves a write nothing else reads a dead write (9.7).
 bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
 
 /// The live set of a graph: the nodes backward reachable from its roots -- entry, exit, output,
 /// return, the norm and `with` ports, the closure nodes it exports -- over the norm, `with`,
 /// control and sync inputs, with a loop's region ports and a branch's join. A node outside it can
 /// never be run or read by the program, so a value it reads is read by nobody. Sorted by ref.
-/// One implementation: `camel::compile::gir::liveDraftNodes` is this function, and every caller that
-/// needs the set asks it here rather than walking the graph again.
+/// One implementation: `camel::compile::gir::liveDraftNodes` is this function, and every caller
+/// that needs the set asks it here rather than walking the graph again.
 std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 
 /// How many members an aggregate has, when its members are its own ordinary inputs one for one, in

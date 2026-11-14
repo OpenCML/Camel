@@ -246,6 +246,9 @@ class Builder {
     struct AmbientEntry {
         std::string key;
         bool external = false;
+        /// The resource is declared `unordered` (design principles 3.3): effects on it keep no
+        /// written order.
+        bool unordered = false;
     };
     /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
     /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a
@@ -404,6 +407,9 @@ class Builder {
     Type *visitStreamType(const AST::node_ptr_t &ast);
     Type *visitNullableType(const AST::node_ptr_t &ast);
     Type *visitTypeExpr(const AST::node_ptr_t &ast);
+    /// `typeof e` as the type layer holds it: a type variable named for the expression, which the
+    /// tree keeps (`Tree::makeTypeOfPlaceholder`). Nothing of the expression reaches the type.
+    Type *typeOfPlaceholder(const node_ptr_t &expression);
     Type *visitArrayType(const AST::node_ptr_t &ast);
     Type *visitStructType(const AST::node_ptr_t &ast);
     Type *visitTupleType(const AST::node_ptr_t &ast);

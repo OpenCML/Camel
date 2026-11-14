@@ -27,6 +27,8 @@ inline constexpr const char *kDropCallArgumentPass = "test::drop_call_argument";
 inline constexpr const char *kLeakBranchArmPass    = "test::leak_branch_arm";
 inline constexpr const char *kShareBranchArmPass   = "test::share_branch_arm";
 inline constexpr const char *kOrderOnlyEffectPass  = "test::order_only_effect";
+inline constexpr const char *kRecalleeArityPass    = "test::recallee_arity";
+inline constexpr const char *kRecalleeTypePass     = "test::recallee_type";
 
 /// TEST-ONLY: strips every edge an effect stands on except its order edges, so the effect is kept
 /// in the graph by an order edge alone. An order edge orders two nodes that both run; it does not
@@ -55,6 +57,34 @@ class LeakBranchArmTestPass : public RuntimeGraphRewritePass {
 };
 
 class ShareBranchArmTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+/// TEST-ONLY: points a call at a function of another signature, which no source can express (the
+/// front end type-checks a call against the value it names, and a transaction that retargets one
+/// afterwards is the only way to build such a CALL: it is a call through a value, and the value is
+/// a constant the graph holds in its static area). What it builds is a call site that no longer
+/// says what the callee's type says, and the two halves of that are separate cases:
+///
+///  - `test::recallee_arity` points the first call whose callee is a static function at another
+///    static function of the same graph that takes a different number of ordinary arguments;
+///  - `test::recallee_type` points it at one that takes the same number of arguments of a
+///    different type (no argument of the call is compatible with the port it lands in).
+///
+/// The cases use them to ask two questions at once: does the commit refuse such a CALL, and does a
+/// pass that knows the callee (std::opt::devirtualize) write a direct call it cannot justify. The
+/// pass writes the retarget and nothing else; whether the program is accepted is the answer.
+class RecalleeArityTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+class RecalleeTypeTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

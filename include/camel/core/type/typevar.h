@@ -118,37 +118,6 @@ class TypeFunctionType : public Type {
 bool containsTypeVar(Type *type);
 
 /**
- * `typeof e` (design principles 5.6): the type of the value `e` will have. It exists only while
- * a module is compiled. It may be the whole type or an argument of a type function, including a
- * parameterised named type; the graph builder infers `e` where the type is used and replaces the
- * placeholder before the type of a value is checked.
- *
- * The expression is a pointer the compiler owns (a node of the graph construction tree). The
- * core type system never looks at it: the placeholder is opaque here and carries no value type
- * of its own.
- */
-class TypeOfType : public Type {
-  public:
-    static TypeOfType *create(const void *expression);
-
-    const void *expression() const { return expression_; }
-
-    std::string toString() const override;
-    std::string mangle() const override;
-    Type *clone(bool deep = false) const override;
-    bool equals(Type *type) const override;
-    CastSafety castSafetyFrom(Type *sourceType) const override;
-
-  private:
-    explicit TypeOfType(const void *expression);
-
-    const void *expression_;
-};
-
-/// Whether a `typeof` placeholder occurs anywhere in `type`.
-bool containsTypeOf(Type *type);
-
-/**
  * `type` with every variable that `bindings` binds replaced by its binding; a variable they do
  * not bind stays. Returns `type` itself (the same object) when nothing in it was replaced, so
  * code that holds no bindings is not affected.

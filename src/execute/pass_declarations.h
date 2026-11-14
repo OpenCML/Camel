@@ -13,8 +13,10 @@
 #pragma once
 
 #include "camel/core/context/context.h"
+#include "camel/core/error/diagnostics.h"
 #include "camel/execute/pass/params.h"
 
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -31,9 +33,32 @@ struct PassDeclaration {
     std::string when;
 };
 
+/// Why the declarations of a module could not be read: its declaration file is a module of this
+/// program like any other, and a file that does not parse is a diagnostic against it.
+///
+/// The reader is a second reader of the same file (the module loader is the first), and it used
+/// to throw a `std::runtime_error` carrying the parser's first error. That throw left the
+/// pipeline: a `.cml` named as a pass module and found through `-I` made the compiler terminate
+/// before any command could report it, while the very same file parsed as a program gave a
+/// diagnostic. The failure is a value here, and pass resolution reports it through the exit it
+/// already has for a pass library that does not compile (`InvalidPassParameter`, with this
+/// location as its secondary one).
+struct DeclarationProblem {
+    /// The sentence for the report: which module, which file, and why.
+    std::string text;
+    /// The parser's first error, with its position, when it has one.
+    std::optional<camel::core::error::DiagLabel> location;
+};
+
 /// The pass declarations of `module` (`std` for the core), read from `<module>.cml` under the
-/// context's module search paths. Empty when the module has no declaration file.
+/// context's module search paths. Empty when the module has no declaration file, and empty when
+/// the file could not be read: `declarationProblem` is what says which of the two it was.
 const std::vector<PassDeclaration> &passDeclarations(
+    const std::string &module, const camel::core::context::context_ptr_t &ctx);
+
+/// Why the declarations of `module` could not be read, or nothing when they were read (or when
+/// the module has no declaration file at all).
+std::optional<DeclarationProblem> declarationProblem(
     const std::string &module, const camel::core::context::context_ptr_t &ctx);
 
 /// The declaration of `name` in `module`, or null.

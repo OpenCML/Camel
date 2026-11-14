@@ -4,7 +4,6 @@
     "files": [
       "include/camel/compile/gir/draft_graph_builder.h",
       "include/camel/core/tags.h",
-      "include/camel/core/type/composite/func.h",
       "include/camel/runtime/draft.h",
       "include/camel/runtime/draft_inline.h",
       "include/camel/runtime/draft_session.h",
@@ -15,7 +14,6 @@
       "include/camel/runtime/node_ref.h",
       "include/camel/runtime/operator_instance.h",
       "include/camel/runtime/writings.h",
-      "modules/rewrite/proof.h",
       "modules/tiles/include/tiles/internal/graph_values.h",
       "modules/tiles/src/graph_values.cpp",
       "modules/tiles/src/region_extract.cpp",
@@ -49,7 +47,6 @@
       "src/runtime/draft.cpp#decode"
     ],
     "decode": [
-      "modules/rewrite/proof.h#-",
       "src/runtime/draft.cpp#decode",
       "src/runtime/draft_inline.cpp#liftClosureGraph",
       "src/runtime/draft_inline.cpp#specializeGraphWithBindings"

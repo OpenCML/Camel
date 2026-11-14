@@ -29,22 +29,38 @@ bool draftBodyOf(const Graph &draft, gc_node_ref_t ref, Body &out) {
 /// without a table of words.
 char kindLetter(GCNodeKind kind) {
     switch (kind) {
-    case GCNodeKind::Data: return 'D';
-    case GCNodeKind::Port: return 'P';
-    case GCNodeKind::Cast: return 'C';
-    case GCNodeKind::Copy: return 'Y';
-    case GCNodeKind::Fill: return 'F';
-    case GCNodeKind::Accs: return 'A';
-    case GCNodeKind::Brch: return 'B';
-    case GCNodeKind::Join: return 'J';
-    case GCNodeKind::Call: return 'L';
-    case GCNodeKind::Bind: return 'N';
-    case GCNodeKind::Func: return 'U';
-    case GCNodeKind::Oper: return 'O';
-    case GCNodeKind::Gate: return 'G';
-    case GCNodeKind::Dref: return 'E';
-    case GCNodeKind::Loop: return 'W';
-    case GCNodeKind::Dead: return '_';
+    case GCNodeKind::Data:
+        return 'D';
+    case GCNodeKind::Port:
+        return 'P';
+    case GCNodeKind::Cast:
+        return 'C';
+    case GCNodeKind::Copy:
+        return 'Y';
+    case GCNodeKind::Fill:
+        return 'F';
+    case GCNodeKind::Accs:
+        return 'A';
+    case GCNodeKind::Brch:
+        return 'B';
+    case GCNodeKind::Join:
+        return 'J';
+    case GCNodeKind::Call:
+        return 'L';
+    case GCNodeKind::Bind:
+        return 'N';
+    case GCNodeKind::Func:
+        return 'U';
+    case GCNodeKind::Oper:
+        return 'O';
+    case GCNodeKind::Gate:
+        return 'G';
+    case GCNodeKind::Dref:
+        return 'E';
+    case GCNodeKind::Loop:
+        return 'W';
+    case GCNodeKind::Dead:
+        return '_';
     }
     return '?';
 }
@@ -326,19 +342,18 @@ bool FrozenGraphRead::hasPayload(gc_node_ref_t ref) const {
     return node != nullptr && node->hasPayload();
 }
 
-
-
 std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
     // The graph's own facts, before its nodes: the regions it has, the static area it was given
     // and the value it answers. A draft carries a compile-time identity where the encoding carries
     // a runtime one, so the identity is not a fact the two sides share and is not compared here.
     if (draft.regionCountOf() != frozen.regionCountOf()) {
         return std::format(
-            "regions: draft has {}, frozen has {}", draft.regionCountOf(), frozen.regionCountOf());
+            "regions: draft has {}, frozen has {}",
+            draft.regionCountOf(),
+            frozen.regionCountOf());
     }
     if (draft.exitRefOf() != frozen.exitRefOf()) {
-        return std::format(
-            "exit: draft {} frozen {}", draft.exitRefOf(), frozen.exitRefOf());
+        return std::format("exit: draft {} frozen {}", draft.exitRefOf(), frozen.exitRefOf());
     }
     // The values in a draft's static area are not compared, only how many there are: the same
     // place holds a pointer on one side of some constants and the interned id of what it points at
@@ -366,7 +381,10 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
     for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
         if (draft.alive(ref) != frozen.alive(ref)) {
             return std::format(
-                "node {}: alive draft={} frozen={}", ref, draft.alive(ref), frozen.alive(ref));
+                "node {}: alive draft={} frozen={}",
+                ref,
+                draft.alive(ref),
+                frozen.alive(ref));
         }
         if (!draft.alive(ref)) {
             continue;
@@ -405,14 +423,13 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
         }
         // A type is compared by identity first and by spelling second. The spelling is the second
         // half because a graph's own function type is an object of that graph (each lambda and each
-        // instance has one) while a frozen graph keeps an interned id, and the encoder writes the id
-        // of the type with the same shape: two objects that print the same are the same type here,
-        // and a type that prints differently is a difference whatever its pointer.
+        // instance has one) while a frozen graph keeps an interned id, and the encoder writes the
+        // id of the type with the same shape: two objects that print the same are the same type
+        // here, and a type that prints differently is a difference whatever its pointer.
         const camel::core::type::Type *draftType  = draftFace.type;
         const camel::core::type::Type *frozenType = frozenFace.type;
-        if (draftType != frozenType &&
-            (draftType == nullptr || frozenType == nullptr ||
-             draftType->toString() != frozenType->toString())) {
+        if (draftType != frozenType && (draftType == nullptr || frozenType == nullptr ||
+                                        draftType->toString() != frozenType->toString())) {
             return std::format(
                 "node {}: type draft={} frozen={}",
                 ref,
@@ -438,20 +455,17 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
                 frozenFace.payload);
         }
         if (std::string role;
-            !(role = listDifference(
-                  ref, "norm", draft.normInputsOf(ref), frozen.normInputsOf(ref)))
+            !(role = listDifference(ref, "norm", draft.normInputsOf(ref), frozen.normInputsOf(ref)))
                  .empty()) {
             return role;
         }
         if (std::string role;
-            !(role = listDifference(
-                  ref, "with", draft.withInputsOf(ref), frozen.withInputsOf(ref)))
+            !(role = listDifference(ref, "with", draft.withInputsOf(ref), frozen.withInputsOf(ref)))
                  .empty()) {
             return role;
         }
         if (std::string role;
-            !(role = listDifference(
-                  ref, "ctrl", draft.ctrlInputsOf(ref), frozen.ctrlInputsOf(ref)))
+            !(role = listDifference(ref, "ctrl", draft.ctrlInputsOf(ref), frozen.ctrlInputsOf(ref)))
                  .empty()) {
             return role;
         }
@@ -483,7 +497,6 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
     }
     return {};
 }
-
 
 void DraftGraphs::add(const camel::runtime::GraphTransaction &txn) {
     byId_.try_emplace(txn.id(), std::make_unique<DraftGraphRead>(txn));

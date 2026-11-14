@@ -1,0 +1,18 @@
+/**
+ * A `Json` the program does not hold: the binding of the value case of a `Json!` that failed, in
+ * the arm the tag does not select (design principles 11.2). A pass may evaluate that arm where it
+ * is written, and asking such a binding for its kind is a fault of the call -- the report says
+ * what it was given and what it takes, at the call -- not a read through the empty slot.
+ */
+
+import { Json, decode, kind } from json
+
+func report(): int sync {
+    let bad = decode('{"a": ')
+    println(match bad { case error e => 'error' case v => kind(v) })
+    return 0
+}
+
+func main(): int sync {
+    return report()
+}

@@ -370,7 +370,7 @@ void Builder::registerGenericTemplates(const GCT::node_ptr_t &exec) {
 std::vector<std::string> Builder::typeParameterNames(const generic_template_ptr_t &tmpl) const {
     std::vector<std::string> names = tmpl->headParams;
     std::vector<std::string> fromSignature;
-    collectTypeVars(tmpl->funcType, fromSignature);
+    GCT::collectTypeVarsWithoutPlaceholders(tmpl->funcType, fromSignature);
     for (const std::string &name : fromSignature) {
         if (std::find(names.begin(), names.end(), name) == names.end()) {
             names.push_back(name);
@@ -483,7 +483,7 @@ compile_graph_ptr_t Builder::instantiateGenericAs(
         unifyTypeVars(signature->exitType(), expected->exitType(), bindings);
     }
     std::vector<std::string> names, open;
-    collectTypeVars(signature, names);
+    GCT::collectTypeVarsWithoutPlaceholders(signature, names);
     for (const std::string &name : names) {
         if (findTypeBinding(bindings, name) == nullptr) {
             open.push_back(name);
@@ -1714,7 +1714,7 @@ compile_graph_ptr_t Builder::instantiateForCall(
         attempts.close();
     }
     std::vector<std::string> names, open;
-    collectTypeVars(signature, names);
+    GCT::collectTypeVarsWithoutPlaceholders(signature, names);
     for (const std::string &name : names) {
         Type *bound = findTypeBinding(bindings, name);
         if (bound == nullptr) {
@@ -2015,7 +2015,7 @@ void Builder::settleGenericOperatorArguments(
         FunctionType *signature           = tmpl->funcType;
         const size_t params               = signature->normTypesCount();
         std::vector<std::string> names;
-        collectTypeVars(signature, names);
+        GCT::collectTypeVarsWithoutPlaceholders(signature, names);
         std::string tried;
         // The instances the types of the other arguments suggest are candidates, not the answer:
         // one whose body does not compile for the types it was tried with is simply not one this
@@ -2513,7 +2513,7 @@ compile_graph_ptr_t Builder::instantiateGeneric(
             graph,
             sharedName ? std::format("{}@{:p}", instanceName, static_cast<void *>(tmpl.get()))
                        : instanceName);
-        if (funcType->hasExitType() && containsTypeOf(funcType->exitType())) {
+        if (funcType->hasExitType() && GCT::hasTypeOfPlaceholder(funcType->exitType())) {
             // A result type may be computed from the parameters (`AdamState<typeof(params)>`).
             // Their ports exist now, so `typeof` inference reads their instance types and the
             // open signature receives the resolved result before the body checks against it.
@@ -2725,14 +2725,25 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     if (type == nullptr) {
         return nullptr;
     }
-    if (type->code() == TypeCode::TypeOf) {
-        // `typeof e`: the type of the value `e` would have, inferred without evaluating it. A
-        // build-time tuple is taken without a FILL, as `indices` and `...` take one.
-        const auto *placeholder = tt::as_ptr<TypeOfType>(type);
-        const auto *held        = static_cast<const GCT::Node *>(placeholder->expression());
-        GUARD(held != nullptr, "typeof holds the expression it was made with.");
-        GCT::Node *expression = const_cast<GCT::Node *>(held);
-        Type *valueType       = inferTypeOf(expression);
+    // `typeof e` is a placeholder the front end made: the type layer holds a type variable named
+    // `typeof#<n>`, and the expression the type layer knows nothing about is the tree's, under
+    // that number (GCT::Tree::makeTypeOfPlaceholder). The tree asked is the one the type was
+    // written in -- `at`'s -- because an instance of a generic function is built by the module that
+    // calls it while the type was written in the module that declared it.
+    const auto operandOf = [&](Type *held) -> GCT::node_ptr_t {
+        if (!GCT::isTypeOfPlaceholder(held)) {
+            return nullptr;
+        }
+        const auto *variable     = tt::as_ptr<TypeVarType>(held);
+        const GCT::Tree *written = at != nullptr ? GCT::Tree::of(at) : tree_;
+        return written != nullptr ? written->typeOfOperandOf(variable->name()) : nullptr;
+    };
+    // `typeof e`: the type of the value `e` would have, inferred without evaluating it. A
+    // build-time tuple is taken without a FILL, as `indices` and `...` take one.
+    const auto resolvePlaceholder = [&](Type *held) -> Type * {
+        GCT::node_ptr_t expression = operandOf(held);
+        GUARD(expression != nullptr, "typeof holds the expression it was made with.");
+        Type *valueType = inferTypeOf(expression);
         if (valueType == nullptr || valueType->code() == TypeCode::Void) {
             diags_->of(SemanticDiag::TypeOfNotAValue)
                 .atOrigin(expression->origin())
@@ -2740,16 +2751,19 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             throw BuildAbortException();
         }
         return boundType(valueType);
+    };
+    if (GCT::isTypeOfPlaceholder(type)) {
+        return resolvePlaceholder(type);
     }
-    if (containsTypeOf(type)) {
+    if (GCT::hasTypeOfPlaceholder(type)) {
         // `typeof e` gives the type `e` would have and evaluates nothing, so it is a type
         // expression, not only a whole type (ruling of 2026-10-31): it may stand as the argument
         // of a type function, and `ElementOf<typeof xs>` is the element type of what `xs` holds.
         // Each `typeof` met on the way down is resolved to the type it stands for; the type
         // function is then applied to a concrete argument like any other.
         std::function<Type *(Type *)> resolveTypeOfs = [&](Type *held) -> Type * {
-            if (held->code() == TypeCode::TypeOf) {
-                return resolveTypeNode(held, at);
+            if (GCT::isTypeOfPlaceholder(held)) {
+                return resolvePlaceholder(held);
             }
             if (held->code() == MatchTypeType::typeCode()) {
                 // A `match type` finds its subject where a type stands, so a `typeof` written
@@ -2775,8 +2789,9 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
                 // `typeof` stood for makes possible. A selected result is itself a type
                 // expression, so resolving the subject does not stop at the match's boundary.
                 Type *expanded = expandTypePacks(match->cloneWithParams(params));
-                return expanded == held || !containsTypeOf(expanded) ? expanded
-                                                                     : resolveTypeOfs(expanded);
+                return expanded == held || !GCT::hasTypeOfPlaceholder(expanded)
+                           ? expanded
+                           : resolveTypeOfs(expanded);
             }
             if (held->code() == TypeCode::Struct) {
                 auto *record = tt::as_ptr<StructType>(held);
@@ -2816,7 +2831,7 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
             }
             if (held->code() == TypeCallType::typeCode() &&
                 std::all_of(arguments.begin(), arguments.end(), [](Type *argument) {
-                    return !containsTypeVar(argument) && !containsTypeOf(argument);
+                    return !containsTypeVar(argument);
                 })) {
                 // The arguments are concrete now, so the function is one the type it computes
                 // stands for; one it does not accept stays a call and is reported where it is
@@ -2826,15 +2841,16 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
                 const auto *call = tt::as_ptr<TypeCallType>(held);
                 std::string error;
                 if (Type *computed = TypeCallType::evaluate(call->name(), arguments, error)) {
-                    return computed == held || !containsTypeOf(computed) ? computed
-                                                                         : resolveTypeOfs(computed);
+                    return computed == held || !GCT::hasTypeOfPlaceholder(computed)
+                               ? computed
+                               : resolveTypeOfs(computed);
                 }
             }
             return applied->cloneWithParams(arguments);
         };
         type = resolveTypeOfs(type);
     }
-    if (containsTypeOf(type)) {
+    if (GCT::hasTypeOfPlaceholder(type)) {
         diags_->of(SemanticDiag::TypeOfNotWholeType)
             .atOrigin(at != nullptr ? at->origin() : 0)
             .commit(type->toString());

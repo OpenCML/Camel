@@ -654,6 +654,10 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
     }
     setModifier(variable, exit);
     if (!throughCallee) {
+        // The store itself, for the state rule (builder_state.cpp): where a value goes, and whether
+        // that place is one this call owns. A write through a callee is the call's own use, and is
+        // read there from the callee's signature.
+        storeSites_[currGraph_.get()].emplace_back(variable, exit);
         if (ArmBuild *arm = activeArm()) {
             arm->directWrites.insert(variable);
         }
@@ -1362,7 +1366,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     // before anything is built with it, so that the expected type a literal takes is the inferred
     // one, and so that `e` is not evaluated by being written there (design principles 5.4).
     Type *written       = gct->targetType();
-    const bool inferred = written != nullptr && written->code() == TypeCode::TypeOf;
+    const bool inferred = GCT::isTypeOfPlaceholder(written);
     if (inferred) {
         written = resolveTypeNode(written, gct);
     }

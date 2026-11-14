@@ -76,6 +76,18 @@ expect_stdout_exact = "one: 0 5\ntwo: 0 5\ngiven: 1 6\n"
 timeout_ms = 20000
 
 [[tests]]
+name = "rewritten_callee_reads_the_same_on_every_back_end"
+desc = "The author's `p10c4`: a rewritten function's callee is the one its program holds, so the graph query and the run agree -- 0 `+ 1` nodes in the `target` reachable from `q` beside `q(5)` computing 5, and 1 beside 6 for the program the rewrite was taken from. The four back ends read the same line; a call site left on the old graph reads `val 6 6`."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/p10c4_rule_callee_value_vs_graph.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "gr 1 0\nval 6 5\n"
+timeout_ms = 20000
+
+[[tests]]
 name = "grad_leaves_loss_and_its_callers"
 desc = "grad(loss) and with_grad(loss) built at run time: loss and user, which calls it, compute the same before and after, and user's graph keeps its size."
 kind = "behavior"
@@ -127,6 +139,30 @@ backends = ["nvm", "inline_nvm", "inline_fvm", "inline_jit"]
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = "20 21 60 19\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "cloned_graph_is_read_in_its_own_program"
+desc = "remat(q) copies q's `user` graph into a graph of the transform's own program and hands back a value that names it: the copy reaches the `target` the rewrite left without a `+ 1` and computes 15, beside `user(5)` computing 18, and the graph query says the same thing. A copy whose calls were read in the program the run was handed reads 18 beside ones=0."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/clone_program.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "clone: 15 ones=0\ngiven: 18 ones=1\ncopy: user__remat\n"
+timeout_ms = 20000
+
+[[tests]]
+name = "reinterpretation_copies_the_body_into_its_own_program"
+desc = "first_with_as_param(q) copies q's `weighted` body into a graph of the transform's own program and hands back a value that names it: the copy reaches the `scaled` the rewrite left without a `+ 1` and computes 5 * 2 = 10, beside the same body in the program the rewrite was taken from computing 6 * 2 = 12, and the graph query says the same thing. A copy whose calls were read where its source graph came from reads 12 beside ones=0."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/reinterpret_copies_its_body.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "copy 10 0\ngiven 12 1\nform weighted__first_with_as_param\n"
 timeout_ms = 20000
 
 [[tests]]

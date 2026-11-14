@@ -10,10 +10,14 @@
  *   [11, 12, 13]  a lambda passed to map reads the variable as it is at the call. (It does not
  *                 write it: `map` may run its elements in parallel, and writes to one variable
  *                 from several of them are not ordered.)
- *   1 2 3    a lambda that outlives the function declaring the variable keeps it
- *   1 1      ... and each call of that function declares a new variable
  *   8        a nested function writes a variable of the enclosing function
  *   21       a captured var parameter: the write reaches the caller's variable
+ *
+ * What used to be here too -- a factory function that returns a lambda over its own `var`, and two
+ * calls of it keeping one cell each -- is refused now (design principles 3.5, rule two): that lambda
+ * carries the cell out of the call that declared it. The compile error is pinned by
+ * test/cases/compile/state_escape/err_escape_return.cml, and the two rewrites it names are to
+ * capture the value the cell holds, or to pass the state in as a value and back as the result.
  */
 
 func pick(k: int): int sync {
@@ -24,14 +28,6 @@ func pick(k: int): int sync {
     } else 0
     println('{} {}'->format<c, r>)
     return r
-}
-
-func counter(): () => int sync {
-    var n = 0
-    return (): int => sync {
-        n += 1
-        return n
-    }
 }
 
 func nested(): int sync {
@@ -79,17 +75,6 @@ func main(): int sync {
     base += 10
     let shifted = [1, 2, 3]->map<(x: int): int => x + base>
     println(shifted)
-
-    let next = counter()
-    let n1 = next()
-    let n2 = next()
-    let n3 = next()
-    println('{} {} {}'->format<n1, n2, n3>)
-    let other = counter()
-    let m1 = other()
-    let fresh = counter()
-    let m2 = fresh()
-    println('{} {}'->format<m1, m2>)
 
     println(nested())
 

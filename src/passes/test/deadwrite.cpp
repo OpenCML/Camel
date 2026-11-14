@@ -37,7 +37,7 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             }
             // A node that writes nothing is not what this pass reports: the judgement is about a
             // write, and printing every operation would bury the ones it is about.
-            bool writes = table.hasExternalEffect(body->oper);
+            bool writes       = table.hasExternalEffect(body->oper);
             const auto inputs = graph->normInputsOf(ref);
             for (size_t port = 0; port < inputs.size() && !writes; ++port) {
                 writes = table.writesOperand(body->oper, false, port);
@@ -45,8 +45,8 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             if (!writes) {
                 continue;
             }
-            os << "DEADWRITE graph=" << graph->name() << " node=" << ref
-               << " oper=" << body->uri() << " rooted=" << (writeIsRooted(*graph, ref) ? 1 : 0)
+            os << "DEADWRITE graph=" << graph->name() << " node=" << ref << " oper=" << body->uri()
+               << " rooted=" << (writeIsRooted(*graph, ref) ? 1 : 0)
                << " read=" << (valueIsRead(*graph, ref) ? 1 : 0)
                << " dead=" << (deadWrite(*graph, ref) ? 1 : 0) << "\n";
         }
@@ -101,6 +101,7 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     os << "SWEEP func=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Func)
        << " call=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Call)
        << " gate=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Gate)
-       << " oper=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Oper) << "\n";
+       << " oper=" << camel::passes::generic::sweepRemovalsOf(camel::runtime::GCNodeKind::Oper)
+       << "\n";
     return program;
 }

@@ -261,7 +261,8 @@ inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
 /// reads its operands and types.
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 
-/// `isUnreadClosure` of a draft, read the way the other graph questions are asked of a frozen graph.
+/// `isUnreadClosure` of a draft, read the way the other graph questions are asked of a frozen
+/// graph.
 bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
 
 /// The live set of a frozen graph, the same walk `liveNodesOf(const GraphDraft &)` runs (one kernel,
@@ -1311,6 +1312,18 @@ uint32_t funcWriteMaskOf(const GCGraph &graph, gc_node_ref_t ref);
 /// decides the same thing where the node is made; this is the same rule read back from a
 /// frozen graph, which is what the box check and the backends have.
 camel::core::type::Type *callValueTypeOf(const GCGraph &callee, uint32_t writtenCaptures);
+
+/// The relation a value and the place it goes into have to hold: equal, or one refines the other
+/// (a tensor of a known shape and the tensor of the same element type whose shape is not known),
+/// or either may be assigned to the other. Parameter and field names do not count, and `void` is
+/// compatible with everything, because it is a value nobody reads.
+///
+/// This is the one spelling of "the types agree" on a frozen graph. It is the judgement the seal
+/// makes along an edge (docs/technical/17_graph_rewrite_api_contracts.md, 4.2: a call's arguments
+/// and result are compatible with the callee's parameters and result), and it is the judgement a
+/// pass asks when it judges a call before writing it -- the same question, asked once, so the
+/// answer a pass works from and the answer the commit gives cannot drift apart.
+bool typesCompatible(camel::core::type::Type *a, camel::core::type::Type *b);
 
 /// The payload of the LOOP node `ref` of a frozen graph, as values.
 inline GCLoopBody loopBodyOf(const GCGraph &graph, gc_node_ref_t ref) {

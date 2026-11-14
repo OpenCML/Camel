@@ -22,12 +22,12 @@
  * composite that holds it (see typeKeyWord for the component the table does not hold).
  *
  * What is interned:
- *  - a bare type of one code (Type::create: the primitive singletons, the `typeof` hole);
+ *  - a bare type of one code (Type::create: the primitive singletons);
  *  - tuple types (TupleType::create), frame and static-area layouts among them, and the cell
  *    and the tagged forms (`var T`, `T?`, `T!`);
  *  - array types (ArrayType::make) and stream types (`T..`);
  *  - struct types (StructType): an anonymous struct by its field names and field types, a
- *    named one by its declaration and the canonical ids of its type arguments;
+ *    named one by its declaration's ordinal and the canonical ids of its type arguments;
  *  - function types (FunctionType::intern, FunctionTypeFactory::build), parameter names
  *    included: the type an operator's type rule gives a call, a function type a program
  *    writes, the signature of a branch arm, and every signature a rewrite re-infers. Each of
@@ -35,7 +35,7 @@
  *    signature never names its result or a parameter by the 0 that stands for a type the table
  *    does not hold -- the word every `TypeId` key would read as one and the same type;
  *  - the compile-time types: a type variable (by its name and its binding mark, see below), a
- *    type function, a `typeof` placeholder, an enum instance, a `Map`/`Set` instance.
+ *    type function, an enum instance, a `Map`/`Set` instance.
  *
  * What is not:
  *  - The open signature of a function the front end is building (OpenFunctionType, see
@@ -43,6 +43,16 @@
  *    of the function exist, and it is mutable until then, so the table never holds one. A
  *    frozen graph names the closed signature the builder reaches (FunctionType::intern), and
  *    the assertion in `typeIdOf` is what says so.
+ *  - A component type the table does not hold: a key names it by its address
+ *    (`typeKeyWord`), because there is nothing else to name it by -- were it in the table,
+ *    the key would carry its id. This is incompleteness, not a wrong answer, and it can only
+ *    ever **split**: the objects it names live in the permanent space and are never freed,
+ *    so an address is one object and one object is one type. Two spellings of one type get
+ *    two words (one table entry more than they need) instead of two types getting one word
+ *    (a type that is two things). `equals` reads no key (text.cpp, sameType), so an
+ *    over-split key costs an entry and never an equality. The repair, where it is worth
+ *    making, is on the caller's side: intern the component first
+ *    (`TypeTable::canonical`), which the key builders that can do so already do.
  *
  * Names and the canonical id. A key may hold names: a dimension name and a pack name in an
  * array's extents, a parameter name in a function type (plan 3.2 keeps them in the key because
@@ -120,7 +130,6 @@ class TypeTable {
         Function,       // FunctionType::intern
         TypeVar,        // TypeVarType::create
         TypeFunc,       // TypeFunctionType::create
-        TypeOf,         // TypeOfType::create
         Enum,           // EnumType::get
         Collection,     // MapType::get, SetType::get and their prototypes
         Other,          // another module type, one object per kind
@@ -241,7 +250,8 @@ class TypeTable {
     /// id starts as the type's own; interning a name-erased twin replaces it.
     void assignId(Type *type);
     /// The entry under this key, building it with `make` when the table does not hold one.
-    Type *findOrInsert(Shape shape, std::span<const uintptr_t> words, const std::function<Type *()> &make);
+    Type *findOrInsert(
+        Shape shape, std::span<const uintptr_t> words, const std::function<Type *()> &make);
 
     mutable std::recursive_mutex mutex_;
     std::unordered_map<Key, Type *, KeyHash, KeyEqual> byKey_;

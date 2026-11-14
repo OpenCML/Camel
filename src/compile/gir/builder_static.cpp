@@ -164,7 +164,7 @@ void Builder::resolveGenericTemplateNames(const generic_template_ptr_t &tmpl) {
         locals.back().insert(param);
     }
     std::vector<std::string> variables;
-    camel::core::type::collectTypeVars(tmpl->funcType, variables);
+    GCT::collectTypeVarsWithoutPlaceholders(tmpl->funcType, variables);
     for (const std::string &variable : variables) {
         locals.back().insert(variable);
     }

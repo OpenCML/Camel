@@ -5,6 +5,8 @@
 
 #include <format>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
@@ -579,8 +581,31 @@ slot_t payloadIf(ArgsView &norm, JsonValue::Kind kind, Type *payloadType) {
 
 } // namespace
 
+// The name of the document's own kind. Every other accessor answers a part of the document and
+// gives the null when there is none (`payloadIf`); `kind` answers the document's shape, so a Json
+// that holds no document has no answer to give: the zero slot a binding of a `match` arm has when
+// the tag selects another case is a `Json` the program does not hold, and reading it through the
+// empty slot is a null read rather than a kind. It is a fault of the call, the way an operand the
+// operator cannot take is (design principles 3.9), and it names what it was given and what it
+// takes -- the fold evaluates a constant expression where it is written, so the fault reaches the
+// user as the warning of a constant expression that can only fault, at the call, instead of
+// taking the process down.
 slot_t __json_kind__(ArgsView &, ArgsView &norm, Context &) {
     const JsonValue *value = fromSlot<JsonValue *>(norm.slot(0));
+    if (value == nullptr) {
+        // The sentence goes in the detail as well as in the format arguments: a run-time report
+        // renders the arguments itself, while a fold that evaluates this call reads `what()` into
+        // the warning of a constant expression that can only fault, and the reader there has only
+        // that text to learn what the call was given and what it takes.
+        const std::vector<std::string> args{
+            "json::kind",
+            "Json holding no document (the slot of a `Json!` that failed)",
+            "a Json that holds a document"};
+        throw RuntimeFault(
+            RuntimeDiag::OperandTypeUnsupported,
+            args,
+            runtimeDiagMessage(RuntimeDiag::OperandTypeUnsupported, args));
+    }
     return toSlot(String::from(JsonValue::kindName(value->kind()), mm::autoSpace()));
 }
 

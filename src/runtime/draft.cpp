@@ -2223,6 +2223,18 @@ void GraphDraft::replaceValueStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t n
 
     replaceOne(output_);
     replaceOne(returnNode_);
+    // A region's `result` names a value as well, and it is read as one by everything that keeps a
+    // node alive (`draft_writes`, `isNamed`): the region ends in whatever ends there now. Left
+    // naming the node it replaced, the record says the region ends where it no longer does, and that
+    // is not bookkeeping: the node that owns the region may read the region's exit and no other port
+    // of it (`graph.h`, `regionIsVisibleFrom`). `pruneBranch` is where this was met -- folding a
+    // loop body written `do if true then s else 0` to `do s` hands the body's place to the state
+    // port, the LOOP still reads its body's exit, and the exit the record named was the JOIN that
+    // went: commit refused the loop's one legitimate read as a read of a port of another region
+    // (17_graph_rewrite_api_contracts 4.1, docs/design/effects/edges.cn.md 5.7).
+    for (uint32_t id = 1; id < regions_.size(); ++id) {
+        replaceOne(regions_[id].result);
+    }
 }
 
 void GraphDraft::replaceCtrlStructuralRefs(gc_node_ref_t oldId, gc_node_ref_t newId) {

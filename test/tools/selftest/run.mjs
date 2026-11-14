@@ -26,6 +26,8 @@
 //     collections, one for the rest, every copy under `--tier all`;
 //   * the identity of a sweep copy: two source plans that both have a test named `shapes` keep
 //      four distinct names, and one source test reused under two sweeps keeps two;
+//   * the entries a sweep does not cover, counted: how many `negative` entries its source plans
+//      declare, how many it copies, and how many it leaves out (the line below `[calibration]`);
 //   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
 //      mean, and the runner reports that failure instead of throwing on the missing metric;
 //   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
@@ -46,6 +48,7 @@ import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
+import { negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
 import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
@@ -159,9 +162,9 @@ const backends = ['nvm', 'fvm', 'jit', 'prl']
 const expected = {
     plain: 'PASS',
     starts_with: 'PASS',
-    starts_with_fails: 'FAIL',
+    starts_with_fails: 'XFAIL',
     exact: 'PASS',
-    exact_fails: 'FAIL',
+    exact_fails: 'XFAIL',
     exact_legacy: 'PASS',
 }
 const expectAll = (name, status, exceptions = {}) => {
@@ -170,14 +173,20 @@ const expectAll = (name, status, exceptions = {}) => {
     }
 }
 expectAll('agree', 'PASS')
-expectAll('stdout_differs', 'PASS', { jit: 'FAIL' })
+// The six entries whose failure is the point are marked `known_fail` in the plan, so they report
+// `[XFAIL]` and are counted as known failures. One entry is red on purpose and stays red:
+// `known_but_passes` is the fixture for a mark that has healed, and marking it would be the same
+// mistake the other way round. If one of the marked ones ever passes, the runner reports
+// "marked known_fail on '<backend>' but passes: remove the mark" and this fixture turns red --
+// which is what keeps "expected to fail" from becoming "never fails".
+expectAll('stdout_differs', 'PASS', { jit: 'XFAIL' })
 expectAll('stdout_differs_known', 'PASS', { jit: 'XFAIL' })
 expectAll('known_but_passes', 'PASS', { prl: 'FAIL' })
-expectAll('column_differs', 'PASS', { fvm: 'FAIL' })
-expectAll('exit_differs', 'PASS', { prl: 'FAIL' })
+expectAll('column_differs', 'PASS', { fvm: 'XFAIL' })
+expectAll('exit_differs', 'PASS', { prl: 'XFAIL' })
 expectAll('fields_not_listed', 'PASS')
 expected['not_contains'] = 'PASS'
-expected['not_contains_fails'] = 'FAIL'
+expected['not_contains_fails'] = 'XFAIL'
 
 const actual = {}
 for (const [, status, name] of output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)) {
@@ -198,7 +207,7 @@ const mustContain = [
     'stdout does not start with "2\\n"',
     "stdout contains '42'",
     'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
-    '[SUMMARY] total: 36, pass: 28, fail: 7, known failures: 1',
+    '[SUMMARY] total: 36, pass: 28, fail: 1, known failures: 7',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)
@@ -711,8 +720,10 @@ if (!hasTarget(ownPlan, planFile)) {
 if (plansForChanges(['no/such/directory/file.txt']) !== null) {
     problems.push('--changed: an unmatched path selected plans instead of falling back')
 }
-// The forbidden layers stay unselectable: perf, the GC-stress plans and progen. A change there
-// falls back to the fast layer rather than running a plan the project keeps for a quiet machine.
+// The forbidden layers stay unselectable: perf and the GC-stress plans. A change there falls back
+// to the fast layer rather than running a plan the project keeps for a quiet machine. The progen
+// plan is here for a different reason: editing the plan file itself must fall back too, and only
+// the rule for its own harness may name it (checked below).
 for (const file of [
     'benchmarks/train.py',
     'test/cases/perf/fib_recursive.cml',
@@ -722,10 +733,37 @@ for (const file of [
     'test/plans/feat/opt/progen.plan.toml',
 ]) {
     if (plansForChanges([file]) !== null) {
-        problems.push(`--changed: ${file} selected a plan; perf/GC-stress/progen must be unselectable`)
+        problems.push(
+            `--changed: ${file} selected a plan; perf/GC-stress must be unselectable and a progen plan edit must fall back`
+        )
     }
 }
-// Every plan the selection file names must exist, and no rule may wire in a forbidden plan.
+// The one door into the random-program plan, and the reason it is a door and not a hole: the
+// harness that writes the programs is the one change that has to run them. It is selected by name,
+// so the whole plan runs -- the batch and the seed the batch leaves out -- because a plan that is
+// selected and then filtered down to one entry is the same "nobody runs it" in a new place.
+const progenHarness = plansForChanges(['test/tools/progen/generate.py'])
+const PROGEN_PLAN = 'feat/opt/progen.plan.toml'
+if (!hasPlan(progenHarness, PROGEN_PLAN)) {
+    problems.push(
+        `--changed: test/tools/progen/ selected ${progenHarness ? progenHarness.names.join(', ') : 'nothing'}, not the progen plan`
+    )
+} else if (hasLayered(progenHarness, PROGEN_PLAN)) {
+    problems.push(
+        '--changed: the progen plan is layered, so the tier filter would drop its batch; a harness change must run the plan in full'
+    )
+}
+// The lock: a progen case and the plan file itself still select nothing of the kind, so the door
+// above is the harness and not the corpus.
+const progenCase = plansForChanges(['test/cases/opt/progen/findings/inline_fvm_arm_effect_lost.cml'])
+if (hasPlan(progenCase, PROGEN_PLAN)) {
+    problems.push('--changed: a progen case selected the progen plan; only test/tools/progen/ may')
+}
+const HARNESS_DOOR = 'test/tools/progen/'
+const namesOnlyTheHarnessDoor = (rule) =>
+    Array.isArray(rule.paths) &&
+    rule.paths.length > 0 &&
+    rule.paths.every((p) => typeof p === 'string' && (p === HARNESS_DOOR || p.startsWith(HARNESS_DOOR)))
 const selectionDoc = JSON.parse(fs.readFileSync(path.join(repoRoot, 'test', 'plan-selection.json'), 'utf8'))
 const forbiddenPlan = (name) =>
     name === 'perf' ||
@@ -743,7 +781,7 @@ for (const rule of selectionDoc.rules || []) {
         if (!fs.existsSync(base) && !fs.existsSync(`${base}.plan.toml`)) {
             problems.push(`plan-selection.json: '${name}' is not a plan in test/plans`)
         }
-        if (forbiddenPlan(name)) {
+        if (forbiddenPlan(name) && !(name.startsWith('feat/opt/progen') && namesOnlyTheHarnessDoor(rule))) {
             problems.push(`plan-selection.json: '${name}' is a plan an ordinary change must not run`)
         }
     }
@@ -754,8 +792,9 @@ for (const rule of selectionDoc.rules || []) {
 // runs nothing. That is how stdlib/signatures, the doc guards, the golden files and the debugger
 // harness were being missed. This check walks every tracked file and fails on one that neither a
 // directory rule nor a file rule selects, unless it names a class the project deliberately does
-// not select. The allowlist is only for the forbidden layers (perf, GC stress, progen, PyTorch)
-// and for files no plan can read (vendored code, packaging, CI configuration).
+// not select. The allowlist is for the forbidden layers (perf, GC stress, PyTorch) and for the
+// progen plan file, which is reachable only from its own harness, plus files no plan can read.
+// (Vendored code, packaging, CI configuration.)
 const RULELESS_ALLOWED = [
     {
         match: /^hello\.cml$/,
@@ -819,7 +858,7 @@ const RULELESS_ALLOWED = [
     },
     {
         match: /^test\/plans\/feat\/opt\/progen\.plan\.toml$/,
-        why: 'progen is deliberately not selectable',
+        why: 'a progen plan edit falls back to the fast layer: the plan is named only by the rule for test/tools/progen/, not by its own file or by a case',
     },
     {
         match: /^test\/plans\/gpu\/tiles_(regions|decorator)\.plan\.toml$/,
@@ -1111,8 +1150,32 @@ if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(emptyRun.output)) {
 const matchedChangedList = path.join(changedScratch, 'matched.txt')
 fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
 const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
-if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
-    problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+// Two plans, and one of them follows `--tier`. The quantity is not incidental: a rule-matching
+// file selects the plan that mirrors its directory AND the plans the rule adds beside it, and since
+// 2026-11-14 the `test/cases/` rule carries `{ "plan": "feat/parse/frontend.plan.toml", "layer":
+// true }` (test/plan-selection.json; the reason is in that rule's own comment: the frontend plan
+// hashes every `.cml` of the repository, so a case that lands without its record is a file that
+// changed with nothing reading it). `select 1 plan(s)` was written on 2026-11-05, when the rule had
+// one plan; it was the count of that day, and it is now the count of a tree without `also`. A count
+// alone is a thin reading, so both plan files are asserted by name beside it and so is the layer
+// mark: a rule that dropped `also` reads 1 and goes red here, and an `also` written without
+// `layer` reads `select 2 plan(s)` with no tier note and goes red as well -- which is the case
+// worth pinning, because an unlayered frontend plan would run its slow fuzz test on every case
+// edit. The paths are compared after `\` is read as `/`: the runner prints the resolved targets as
+// `path.resolve` writes them, so on Windows they arrive with backslashes.
+const matchedText = matchedSelection.output.replace(/\\/g, '/')
+if (!/select 2 plan\(s\), 1 follow --tier/.test(matchedText)) {
+    problems.push(
+        `--changed on a rule-matching file did not select the plan it mirrors and the plan the rule `
+        + `adds beside it: ${matchedSelection.output.trim()}`
+    )
+}
+for (const plan of ['test/plans/feat/compile/enum.plan.toml', 'test/plans/feat/parse/frontend.plan.toml']) {
+    if (!matchedText.includes(plan)) {
+        problems.push(
+            `--changed on a rule-matching file did not name ${plan}: ${matchedSelection.output.trim()}`
+        )
+    }
 }
 if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
     problems.push(
@@ -1312,6 +1375,23 @@ console.log(
         + `fixed=${widthTally.fixed}, own=${widthTally.named}, inherited=${widthTally.inherited}, `
         + `cli=${widthTally.cli}; wall=${spentWall.toFixed(1)} s`
 )
+// The entries a sweep does not cover, counted rather than described: what the source plans of every
+// `[[sweeps]]` entry declare as `negative`, how many of those a sweep copies, how many it leaves out
+// and which ruling the code implements (`a`: a `negative` entry is copied; `b`: its kind is left
+// out). It reads the plan tree through the expansion itself, so it cannot disagree with the run.
+//
+// It is here because the count and the comment disagreed once and nothing said so: from the
+// sweep's first commit the kind filter left `negative` out while the docstring above `expandSweeps`
+// named only benchmarks and differential tests as left out, and 1258 entries -- 73% of the tree's
+// `negative` ones -- were never copied. A line that prints the three numbers on every gate run is
+// the difference between a coverage gap somebody has to remember and one that is in front of the
+// reader; the counts are a reading, so they are printed and not asserted.
+//
+// The walk is the runner's own loader over the plan tree, a couple of hundred milliseconds for the
+// whole tree (0.197 s over 372 plan files, measured on this machine), which is why it can sit in
+// this file instead of needing a check of its own.
+const sweepAccounting = negativeSweepAccounting(allPlanFiles)
+console.log(negativeSweepLine(sweepAccounting))
 if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')
