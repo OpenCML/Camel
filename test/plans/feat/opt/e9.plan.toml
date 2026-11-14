@@ -1,0 +1,92 @@
+id = "opt.e9"
+order = 336
+tier = "fast"
+tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce"]
+desc = "The optimizer answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass"
+
+# Four programs of the E9 differential campaign (`defects.md` A4b-A4e, pin adb67e081), reduced to
+# between 240 and 679 bytes. Each one made the optimizer end the process instead of the program:
+#
+#   rc01_seed47  `std::opt::inline` up to `std::opt::fold` aborted with "Region 2 yields node
+#                       8 and its owner 5 is in the execution, but that node is not"
+#   rc02_seed6          `std::opt` aborted in the fast VM's compile: a BRCH left with an unmatched
+#                       control output and no JOIN
+#   rc03_seed30         `std::opt` raised a `PassInternalError`: a DATA ran between a BRCH and its
+#                       JOIN and belonged to no arm
+#   rc04_seed72         `std::opt::inline` raised a `PassInternalError`: a node lay on a cycle of
+#                       inputs
+#
+# None of them prints anything, so what the entries hold is that the program still runs and still
+# says nothing -- the same as with no pass at all -- on every back end. That is the whole claim a
+# reduced program of this campaign makes, and a pass that aborts or crashes on one of them fails it.
+# The fifth program of the set (`rc00_seed27`) is not here: `std::opt` still takes a SIGSEGV on it,
+# inside `DefunctionalizeRewritePass::apply` -> `staticFunctionOf` -> `Function::graph()`, and a
+# case that is red on the day it lands is not a case (see the defect page for the trace).
+
+[defaults]
+kind = "behavior"
+backends = ["nvm", "fvm", "jit", "prl"]
+
+[[tests]]
+name = "rc01_seed47.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc01_seed47.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc01_seed47.opt"
+desc = "The whole optimizer, on the program whose inline-plus-fold used to abort."
+case = "../../../cases/opt/e9/rc01_seed47.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc02_seed6.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc02_seed6.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc02_seed6.opt"
+desc = "The whole optimizer, on the program whose fast-VM compile used to abort on an unmatched BRCH."
+case = "../../../cases/opt/e9/rc02_seed6.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc03_seed30.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc03_seed30.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc03_seed30.opt"
+desc = "The whole optimizer, on the program whose branch-arm invariant used to be broken by a DATA between BRCH and JOIN."
+case = "../../../cases/opt/e9/rc03_seed30.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc04_seed72.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc04_seed72.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc04_seed72.opt"
+desc = "The whole optimizer, on the program whose inline used to put a node on a cycle of inputs."
+case = "../../../cases/opt/e9/rc04_seed72.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
