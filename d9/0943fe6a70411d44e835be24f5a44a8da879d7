@@ -1,0 +1,11 @@
+# lane-asthash -> develop (d90943fe6)
+
+判据读数:
+- AST 金标 312 行 -> 4187 行 (补后 4192, 含合并树重录 6 行); 原 312 行一行未动 (numstat 3875/0)
+- 全仓可解析 .cml: HASHED=3960 OK=3843 REJECTED=117 UNREADABLE=0; 与旧 312 行不一致 = 0
+- 117 条被拒: 114 条是 plans 自己的 syntax-negative 用例, 3 条是 stdlib/signatures/{nn,tensor,transforms}.cml (文件头自称 "For reference only: these declarations are not compiled"); 全部照录 no 行 (码+位置), 未改文件、未删条目
+- 排除规则: 只排 docs/handover/** (65 个); 4025 - 65 = 3960 即全集. git ls-files '*.cml' = 4025
+- parse 层: total 115 / pass 115 / fail 0
+
+顺手修掉一个假绿: check.py 以前只比较 parse_cases(), 非 corpus 的已录行"保留但从不比较", 只补行等于假绿; 现在 corpus = parse 用例 + 探针 + 全仓并逐行比较, 已录而文件不在也算差异.
+合并树重录: 差异 6 行 = stdlib/rewrite.cml 1 行 (源变了) + 5 行新增 (protect/effmask 加的 .cml), 无文件越界.
