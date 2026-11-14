@@ -3643,3 +3643,27 @@ ECOOP 在证"五项提交检查足够"时查出两处：它们在演算里会让
 2. **错在 `rendezvous` 的声明。** 这两个用例里两次调用之间有顺序边，是因为 `test_support` 的 `rendezvous` 没有声明访问，按原则 3.3 被当作"写全局资源"，建图器就按书写顺序排了它们。这个保守是对的；要让两次调用能同时跑，应当让 `rendezvous` 如实声明：它访问一个 `unordered` 资源（原则 3.3"无序资源"，这种资源上的效应之间不保持书写顺序），于是建图器不排序，taskflow 守着所有边照样能并行。
 3. **这类用例在确定性保证之外，要写明。** `rendezvous` 的结果取决于有没有并发，和 `first_of` 一样，在声明里写 `nondeterministic`；用例头注释写明它观察的是调度器的并发能力，各后端的期望分别写，不进差分测试。
 4. 改完后，差分测试 `exec_pred.plan.toml` 里"选了不在两个可能并行的节点间放顺序边的程序"那句限制删掉，加一例两次打印之间有顺序边的程序，`std::prl` 三种配置都与 `std::nvm` 逐行相同。11-12 那条 taskflow 返工（`k2` 经函数值调用两次）、闭包探测的 `cb2`/`ca2`（曾出现 `11`、`21` 的乱序与丢更新）随之验收：各跑 200 次只有一种输出。
+
+## 返工（2026-11-14）：CC 评测在 `29ea0a011` 上查出的优化遍缺陷（优先级一）
+
+CC 论文 E9（随机程序加差分）在 develop `29ea0a011` 上查出一批与效应有关的错值、提交时被拒与崩溃。详情在 `Camel-Archive/CC2027/eval/defects.md` A16、A17；约简后的最小程序在 `Camel-Archive/CC2027/eval/results/29ea0a011/e9_reduced/`（容器内 `/work/cc2027-eval/results/29ea0a011/`），每个 5 次全复现。**全部是优先级一**：错值违反红线第 6 条与原则 9.5 第 3 条"标准库里的优化遍不应把程序改错"；崩溃违反"任何输入都只给诊断"。
+
+**错值（第 2 路，`src/passes/opt/**` 是它的；A16f 归第 4 路）**
+| 编号 | 遍 | 现象 | 最小程序 |
+|---|---|---|---|
+| A16a | `std::opt::fold` | 两次打印调用对调（9 个程序；第二次调用的实参是 `if false then n83 else false`） | `rc02_seed9.cml` |
+| A16b | `std::opt::inline` | 多打印一行 | `rc04_seed251.cml` |
+| A16c | `std::opt` | 少打印一行 | `rc05_seed256.cml` |
+| A16d | `std::opt::dce` | 删掉了一个会打印的语句调用 | `rc07_seed140.cml` |
+| A16e | `std::opt::order` | 两次输出对调 | `rc09_seed15.cml` |
+| A16f | 内联之后的 `std::prl` | 打印调用乱序（未约简，种子 377） | — |
+
+A16f 先在 taskflow 守所有顺序边（本日另一条返工）之后重跑；仍乱序再查内联。
+
+**提交时被拒（第 2 路）**：`fold` 14 个（`rc00_seed74.cml`）、`std::opt` 4 个（`rc03_seed56.cml`）、`dce` 2 个（`rc08_seed324.cml`）、`algebra` 1 个（`rc11_seed352.cml`），大多是跨区域的读。遍不得交出提交通不过的图：找出是哪一步造出了跨区域的读，从那里修。
+
+**崩溃（第 2 路；A17 归第 1 路）**：`std::opt` 11 个（10 个 SIGSEGV、1 个 `index < fieldCount_` 断言，`rc01_seed46.cml`，含旧的 A4a）；`fold` 1 个 SIGSEGV（`rc10_seed186.cml`）；A17：Camel 写的 `opt::fold` 作为一站时在 `test/cases/modules/std/json/json_kind_failed.cml` 上 SIGSEGV。
+
+**验收**：每个最小程序收进 `test/cases/opt/e9/`，在 `std::nvm` 上与不加遍的输出逐字相同，或者给出一条具名诊断；崩溃一律变成诊断。CC 的 E9 生成器（种子、条数）请协调者问 CC 会话要来，作为慢层的随机差分，每次合并报"错值 / 拒绝 / 崩溃"三个数，只降不升。
+
+**另**：`std::cpp` 在 `std::opt` 之后生成的 C++ 编译不过（2 个程序），归第 1 路，排在上面各条之后。
