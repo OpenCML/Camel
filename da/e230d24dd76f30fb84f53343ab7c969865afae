@@ -1,0 +1,13 @@
+Read the two side edge arrays when a commit asks whether the graph changed
+
+Readings: `src/runtime/draft_session.cpp` +8, `src/passes/test/edges.cpp` +151 (the case), `src/execute/pass.cpp` +1, one plan entry (+23). Gate `-Changed -ChangedBase edeaa9c41`: **`total: 8612, pass: 8581, fail: 0, skip: 7, known failures: 24`, `killed` none**.
+
+`RuntimeGraphDraftSession::commit` keeps the old graph when the re-encoded graph equals it, and it decided "equals" with `sameContent` — which **did not compare the `orderEdges` and `syncEdges` arrays**. So a transaction whose only edit was an edge was judged unchanged, its encoding was discarded, and `commit` reported success. The fix adds the two counts and the two arrays to the comparison; the optimisation survives, and that is a reading and not a hope: a transaction that touched nothing still reads `reused=1` and still releases the copy.
+
+**The before/after readings are the part to keep, because a fix that reports success is indistinguishable from one that works**:
+- before: `sameContent=1 syncOld=8 syncCopy=9 discard=1` -> `after=8 mine=0 reused=1` — the edge never arrived;
+- after: `after=9 sync_in=1 mine=1 reused=0`, and `untouched reused=1`.
+
+**Why the case could only go red now**: the old `edges_edit_only` wrote nodes that **had no place in the chain**, so the encoder and the comparison skipped that path *together* — it was green in both builds. Pointing the same edit at a node the graph already holds made it red on the unfixed build the first time it ran.
+
+The lane also measured the two onnx reds against its own base `8b856d837` on a throwaway branch and got the same two sentences, which is why they are attributed to the base and not to this change.
