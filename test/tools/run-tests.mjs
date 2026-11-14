@@ -552,6 +552,11 @@ export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
 // How many tests this run left unjudged that way, for the line it prints at the end.
 let marginSkippedTests = 0
 
+// How many `cpu_budget_ms` bounds this run never judged, for the same reason and by the same rule:
+// a host that reports no CPU figure is not a test that crossed its budget. Counted and printed
+// apart from `pass`, so "not read" is never read as "held".
+let budgetSkippedTests = 0
+
 /**
  * The timeout-margin rule's verdict for one test that passed everything else. `canReadCpu` is
  * whether this host reports a process tree's CPU time at all (CAN_READ_CHILD_CPU).
@@ -2389,7 +2394,17 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
                 `that stopped working, and the CPU budget is what catches one that works harder`
         )
     } else if (!logContext.options.compileOnly && cpuBudgetMs !== null) {
-        if (result.cpuMs === null) {
+        if (result.cpuMs === null && !CAN_READ_CHILD_CPU) {
+            // The host reports no CPU figure at all, so this is a fact about the host and not a
+            // reading of the test: the same split `timeoutMarginVerdict` makes a few lines below,
+            // for the same reason. Before this, a `cpu_budget_ms` entry on such a host was `fail`
+            // with no way to become green -- "the runner cannot read a bound" printed as "the test
+            // crossed one", which is the two readings a gate must not merge. The test keeps its
+            // other verdicts (what it printed, its exit code, its diagnostics); what it loses is
+            // the cost judgement, and the run says at the end how many it never judged.
+            result.budgetSkipped = NO_CPU_TIME_SKIP
+            budgetSkippedTests++
+        } else if (result.cpuMs === null) {
             failures.push(
                 `cpu_budget_ms ${cpuBudgetMs.toFixed(0)} ms has no CPU reading: ${result.cpuReason} ` +
                     `(a budget the runner cannot read is not a bound; test/tools/child-cpu.mjs reads ` +
@@ -4064,6 +4079,15 @@ async function main() {
         console.log(
             `${COLORS.cyan}[INFO]${COLORS.reset} timeout margin ${NO_CPU_TIME_SKIP} on ` +
                 `${marginSkippedTests} test(s): this host's wall clock is not a reading of a test's work`
+        )
+    }
+    if (budgetSkippedTests > 0) {
+        // The other half of the same reading: a `cpu_budget_ms` entry whose budget this host cannot
+        // read at all. Printed apart from the pass count, because a bound nobody read is not a bound
+        // that held.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} cpu_budget_ms ${NO_CPU_TIME_SKIP} on ` +
+                `${budgetSkippedTests} test(s): a cost bound this host cannot read is not a bound it crossed`
         )
     }
     // One line for the flow, with the whole accounting behind it in summary.json: the ratio the
