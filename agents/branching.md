@@ -26,9 +26,18 @@ A lane with more than ten unique commits is taken as a whole with `--no-ff`, not
 - Merge sequentially, checking branch and worktree state after every operation. If a command fails, inspect the graph, status and recent commits before proceeding; do not repeat it blindly.
 - Resolve conflicts by meaning. Documentation retains both applicable current statements; code retains every valid case without reviving an outdated implementation.
 - Run conflict-marker, diagnostics and documentation checks, relevant plans, and the fast layer. Name the tested commit in the report.
+- **Push each merge in the same step that makes it.** The shape to avoid is not "pushing late", it is merging faster than pushing: a local run's readings carry no `ls-remote` backing, and a gate result on an unpushed commit cannot be quoted. A merge is finished when it is pushed -- `git rev-list --count origin/develop..HEAD` above 2 means an earlier merge was not.
 - Verify ancestry with `git merge-base --is-ancestor <integrated-tip> develop`. Check `origin/develop` separately when reporting what has or has not been pushed.
 - Synchronize a feature branch by merging the current `origin/develop` into it, not by rebasing a pushed lane.
 - Do not push `main`, `develop`, a release branch or a tag without the user's authorization. Local integration and remote publication are different actions.
+
+## Plans no change selects
+
+Some plans are deliberately unreachable from `--changed` (`test/plans/perf/**`, the GC-stress plans; see `test/plan-selection.json` and `docs/test-plans.md`, "Selecting Plans From A Change"). That is allowed, and it has one condition: **something must name them on a schedule, or the ledger cannot tell "deliberate" from "forgotten".** A plan no change selects is a plan whose red is invisible until someone goes looking, and `perf/showcase_c2` sat red that way.
+
+- Run the unselectable plans **once each time the merge queue empties**, and report the reading with the commit it was taken against. It does not need to be every night, and it does not gate a merge; it needs to happen often enough that a change in its message is noticed within a day or two.
+- Read them on the build host, not on a workstation: the same case measured 300 s and 600 s (both timeouts) locally and 1.87 s / 2.07 s on the build host. **A difference of two orders of magnitude means "hangs on that platform", not "slower"**, and a timeout there is a platform finding rather than a defect until proved otherwise.
+- Report `killed by a signal` and `timed out` beside `fail` whenever they are non-zero; both are absent from `[SUMMARY]` when zero, so "the suffix did not appear" is the reading.
 
 ## Closing and preserving branches
 
