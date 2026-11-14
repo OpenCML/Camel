@@ -127,7 +127,7 @@
   └─ 发射       类型声明（元组、结构体、闭包）→ site 表 → 函数的前向声明 → 函数体 → 入口
 ```
 
-源文件（`src/passes/trans/cpp/`）按这几步分开：`program_emitter`（程序分析与整体布局）、`function_emitter`（一张图的块、分支、语句）、`cpp_types`（类型到 C++ 的映射与聚合类型的声明、常量的字面量）、`operator_rules`（算子译法表）、`fault_sites`（故障位置与报告文字）、`bridge`（运行时模块的边界）。今天的 `runtime_emitter.cpp`、`lower.cpp`（那张没有调用点的表）与 `include/camel/passes/trans/cpp/cpp_bridge.h` 的大部分随之删除。
+源文件（`src/passes/trans/cpp/`）按这几步分开：`program_emitter`（程序分析与整体布局）、`function_emitter`（一张图的块、分支、语句）、`cpp_types`（类型到 C++ 的映射与聚合类型的声明、常量的字面量）、`operator_rules`（算子译法表）、`fault_sites`（故障位置与报告文字）、`bridge`（运行时模块的边界）。今天的 `runtime_emitter.cpp`、`lower.cpp`（那张没有调用点的表）与 `include/camel/passes/trans/cpp/` 下的 `cpp_bridge.h` 的大部分随之删除。
 
 转译器只经过一处取算子的 URI（`operatorUri(graph, node)`）：图存储线合入后 `OPER` 节点带的是 `OperId`，那时只改这一处，并且改为从算子表项读纯度、`mayFault` 与 `callsGraphs`（图数据模型 3.5 的 `OPER` 卡片），转译器自己的表只剩“怎么写成 C++”。
 

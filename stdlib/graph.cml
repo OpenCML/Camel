@@ -21,7 +21,7 @@
 
 // The declarations of the operators of the C++ module `modules/graph` (design principles 6.4):
 // the C++ side keeps the kernels, the executor and the handles. Every signature is stated, so the
-// module has no computed signatures and no `stdlib/signatures/graph.cml`: a function-valued
+// module has no computed signatures and no `graph.cml` under `stdlib/signatures/`: a function-valued
 // argument is `F` with `when is_function::<F>()`.
 //
 // `operator ==` is declared as the reserved group `__eq__`. `operator !=` cannot be declared

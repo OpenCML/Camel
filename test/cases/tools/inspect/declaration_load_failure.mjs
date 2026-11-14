@@ -105,7 +105,7 @@ check(
 )
 check('no failure is reported for a healthy module', !healthy.stderr.includes('failed to load'), healthy.stderr)
 
-// 4. A C++ module whose signatures are computed (`stdlib/signatures/env.cml`, no `.cml` beside
+// 4. A C++ module whose signatures are computed (`env`'s computed signatures were recorded under `stdlib/signatures/`, since deleted; no `.cml` beside
 //    its `.cmo`): no declaration file exists, so there is nothing that could fail to load.
 const computedPath = path.join(SCRATCH, 'computed.cml')
 fs.writeFileSync(computedPath, 'import env\n\nfunc main(): int {\n    return 0\n}\n')

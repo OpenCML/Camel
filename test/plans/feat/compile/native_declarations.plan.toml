@@ -1293,7 +1293,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 #
 # `constant` and `add_constant` take the type of their sample, which a declaration cannot compute
 # from an argument; they are written out per sample type instead (six each). The four operators of
-# a function value stay computed in C++ (`stdlib/signatures/graph.cml`).
+# a function value stay computed in C++ (the `stdlib/signatures/` file for them, `graph.cml`, has been deleted).
 
 [[tests]]
 name = "native.graph_constant_import"
