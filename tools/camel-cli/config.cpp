@@ -414,6 +414,7 @@ bool dumpInstances = false; // Whether to dump the index semantics of every oper
 bool dumpFacts     = false; // Whether to compute and dump the graph facts of the program
 bool dumpTags      = false; // Whether to dump the tags the program declares
 bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
+bool dumpTies      = false; // Whether to dump the canonical numbering's tie groups
 bool geneCode      = false; // Whether to generate code from GIR
 int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -627,6 +628,7 @@ void _printInspectArgs() {
     cout << "\tdump-ast:" << dumpAST << endl;
     cout << "\tdump-gct:" << dumpGCT << endl;
     cout << "\tdump-gir:" << dumpGIR << endl;
+    cout << "\tdump-ties:" << dumpTies << endl;
     cout << "\tpass-until:" << passUntil << endl;
     cout << "\ttarget-file:";
     for (auto &file : targetFiles) {
@@ -850,6 +852,10 @@ bool parseArgs(int argc, char *argv[]) {
              "print every node attribute the tree can write with its fate in the interpreter, "
              "the dumps, the ONNX export and Tiles, then fail if a loaded module interned an "
              "attribute key the table does not classify",
+         option("--ties").set(dumpTies) %
+             "print the tie groups the canonical numbering met -- how wide each is, how much of "
+             "it the node key left equal, and which parts were too wide to enumerate -- so that a "
+             "known limitation is reported and not silently arranged in the creation order",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",

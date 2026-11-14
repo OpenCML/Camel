@@ -170,19 +170,26 @@ std::string dumpJsonRuntimeGraph(
     std::unordered_map<const GCGraph *, std::string> ids;
     for (size_t i = 0; i < graphs.size(); ++i)
         ids[graphs[i]] = std::format("g{}", i);
-    // The numbering is the graph's, not the creation order's: `canonicalNodeOrder` walks the
-    // graph by its own structure and arranges what the ports leave open (camel/runtime/canonical.h,
-    // design principles 9). A node's id is its number in that order, and the document prints the
-    // nodes in it, so two programs whose graphs differ only in what the source spelled -- the order
-    // two values were captured in, say -- write one document.
+    // The numbering is the graph's and the program's, not the creation order's:
+    // `canonicalNodeOrder` walks the graph by its own structure and arranges what the ports leave
+    // open (camel/runtime/canonical.h, design principles 9). A tie is arranged for the smallest
+    // numbering table over the whole program -- a bound graph's ports are numbered together with
+    // the binders that read them by those numbers -- so one solve numbers every graph here. A
+    // node's id is its number in that order, and the document prints the nodes in it, so two
+    // programs whose graphs differ only in what the source spelled -- the order two values were
+    // captured in, say -- write one document.
+    const CanonicalProgram canonical(program, *root);
     std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> orders;
     std::unordered_map<const GCGraph *, std::vector<uint32_t>> numbers;
     for (auto *g : graphs) {
-        orders[g]                    = canonicalNodeOrder(program, *g);
-        std::vector<uint32_t> &place = numbers[g];
-        place.assign(g->nodeCount(), kNoCanonicalNumber);
-        for (size_t i = 0; i < orders[g].size(); ++i)
-            place[orders[g][i]] = static_cast<uint32_t>(i);
+        orders[g]  = canonical.order(*g);
+        numbers[g] = canonical.numbers(*g);
+        // A graph the solve did not reach (it is not of the root's closure) is numbered on its own,
+        // so that no document is left without numbers.
+        if (orders[g].empty() && g->nodeCount() != 0) {
+            orders[g]  = canonicalNodeOrder(program, *g);
+            numbers[g] = canonicalNodeNumbers(program, *g);
+        }
     }
     const auto graphId = [&](const GCGraph *g) -> json {
         auto at = ids.find(g);
