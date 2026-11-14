@@ -2,17 +2,16 @@
  * A box is counted, and the count is read: `--gc-check foreign` prints one line when the program
  * stops, with the blocks that were made, released and still live.
  *
- * This program makes a thousand boxes and keeps one, then allocates so that collections follow the
- * call that made them. What the line says, and what this case holds the runtime to:
+ * This program makes a thousand boxes through nested calls and keeps one, then allocates so that
+ * the calls that made them are over before the program stops. What the line says, and what this
+ * case holds every back end to:
  *
- *   created >= 1001       every box the program made, and the one it kept, was counted;
- *   created = released + live   each block is one or the other, counted once;
- *   disposed = live       the process releases exactly what was still live when it stopped.
+ *   created >= 1001   every box the program made, and the one it kept, was counted;
+ *   released == created, live == 0   none of them outlived the run.
  *
- * `released` is the number the collection freed while the program ran, and it is read rather than
- * assumed: the four backends do not agree on it (an interpreter may still reach a box through the
- * frame that made it when the program stops), so the case compares the counters with each other and
- * not with a number. A mechanism whose whole lifetime is a count has to have this line.
+ * The moment a counted resource is reclaimed does not depend on which back end ran the program
+ * (design principles 10.5): a box whose last handle died while the program ran is freed by the
+ * collection that closes the run, and every back end runs it.
  */
 
 import state
@@ -26,9 +25,10 @@ func drop_many(i: int, n: int): int {
 func main(): int sync {
     let kept = state::ref(41)
     println(drop_many(0, 1000))
-    // A tail that allocates: a box is freed when the collector finds its last handle gone, so the
-    // collections the allocations below cause are the ones that would notice a dead one.
-    let tail = 0..20000
+    // A tail that allocates real objects: a box is freed when the collector finds its last handle
+    // gone, so the collections the allocations below cause are the ones that would notice a dead
+    // one. (Probe: a range object is cheap, an array is not.)
+    let tail = [i for i in 0..20000]
     println(len(tail))
     println(state::get(kept))
     return 0

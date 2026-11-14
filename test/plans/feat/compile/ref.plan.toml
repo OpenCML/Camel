@@ -166,7 +166,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_are_counted"
-desc = "A box's whole lifetime is a count, so the count is read: `--gc-check foreign` prints the blocks made, released and still live when the program stops. A thousand boxes are made and one is kept. The case holds the runtime to the arithmetic -- every box counted (`created` >= 1001), each block released or live and counted once (`created` = `released` + `live`), and the exit releasing exactly what was live (`disposed` = `live`) -- and not to one number: `released` is what a running collection freed, and the backends do not agree on it (an interpreter may still reach a box through the frame that made it)."
+desc = "A box's whole lifetime is a count, so the count is read: `--gc-check foreign` prints the blocks made, released and still live when the program stops. A thousand boxes are made through nested calls and one is kept, and the case holds every back end to the same number: `released` = `created` and `live` = 0. The moment a counted resource is reclaimed does not depend on which back end ran the program (design principles 10.5), so nothing of the thousand outlives the run on one back end while another still holds it."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_are_counted.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -183,18 +183,17 @@ verify_script = '''
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
-  assert(counts.created >= 1001,
-    'every box the program made, and the one it kept, was counted: ' + line)
-  assert(counts.released + counts.live === counts.created,
-    'each block is released or live, and counted once: ' + line)
-  assert(counts.disposed === counts.live,
-    'the process releases exactly the blocks still live when it stopped: ' + line)
+  assert(counts.created >= 1001, 'every box the program made was counted: ' + line)
+  assert(counts.live === 0,
+    'no box outlived the run on this back end: ' + line)
+  assert(counts.released === counts.created,
+    'every box was released, so the release does not depend on the back end: ' + line)
 }
 '''
 
 [[tests]]
 name = "ref.boxes_loop_ten"
-desc = "The same place makes ten boxes, one per element of a range, and each is dead when its element is done. `--gc-check foreign` reads the counters at exit: the boxes went (`released` >= 1) and the ones still counted are not the range's (`live` <= 10). `ref.boxes_loop_thousand` is the same program over a range a hundred times longer, and its `live` is read beside this one's: a mechanism that never freed anything while the program ran would answer the longer range with a hundred times more live blocks."
+desc = "The same place makes ten boxes, one per element of a range, and each is dead when its element is done. `--gc-check foreign` reads the counters at exit: every box released (`released` = `created`) and none still live (`live` = 0), on every back end -- the moment a counted resource is reclaimed does not depend on which one ran the program. `ref.boxes_loop_thousand` is the same program over a range a hundred times longer and must read the same; a mechanism that never freed anything while the program ran would answer the thousand with a thousand live blocks."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -212,16 +211,15 @@ verify_script = '''
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
   assert(counts.created >= 11, 'every box was counted: ' + line)
-  assert(counts.released >= 1, 'the boxes of the elements that are done went: ' + line)
-  assert(counts.live <= 10, 'the ones still counted are not the whole range: ' + line)
-  assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
-  assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+  assert(counts.live === 0, 'no box outlived the run: ' + line)
+  assert(counts.released === counts.created,
+    'every box was released, so the release does not depend on the back end: ' + line)
 }
 '''
 
 [[tests]]
 name = "ref.boxes_loop_thousand"
-desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times longer: a thousand boxes made in one place, one per element, dead when the element is done. The judgement is the pair of readings: `live` here must be the size of `live` there (not a hundred times it) while the thousand are released (`released` >= 900), because a box is freed when its last handle goes and the element's handle goes with the element."
+desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times longer: a thousand boxes made in one place, one per element, dead when the element is done. The reading must be the same one -- `released` = `created`, `live` = 0 -- because a box is freed when the last handle goes and the element's handle goes with the element; that moment does not depend on the back end (design principles 10.5)."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_thousand.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -239,12 +237,9 @@ verify_script = '''
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
   assert(counts.created >= 1001, 'every box was counted: ' + line)
-  assert(counts.released >= 900,
-    'the boxes of the elements that are done went while the program ran: ' + line)
-  assert(counts.live <= 10,
-    'the ones still counted are as many as the ten-element run made, not a hundred times more: ' + line)
-  assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
-  assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+  assert(counts.live === 0, 'no box outlived the run, over a range a hundred times longer: ' + line)
+  assert(counts.released === counts.created,
+    'every box was released, so the release does not depend on the back end: ' + line)
 }
 '''
 

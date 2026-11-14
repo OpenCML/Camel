@@ -274,6 +274,16 @@ int runCommand(int argc, char *argv[]) {
     // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
         ~ReleaseExternalResources() {
+            // The run is over and every frame it ran in has returned, so one collection here is
+            // what frees the resources whose last handle died while the program ran: a box whose
+            // count reached zero, and the wrapper the collector has to find dead before it gives
+            // that count back. It runs on every back end, so the moment a counted resource is
+            // reclaimed does not depend on which one ran the program (design principles 10.5).
+            {
+                auto &space = camel::core::mm::autoSpace();
+                space.requestMajorCollection("the end of the run");
+                space.safepoint("the end of the run");
+            }
             // `--gc-check foreign`: what the program had not released when it stopped, read before
             // anything is disposed, and the counters of a lifetime that is a count (design
             // principles 3.3: a `Ref<T>` box is freed by the last handle to go).
