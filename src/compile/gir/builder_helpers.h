@@ -1064,7 +1064,7 @@ collectConditionTypeVars(const GCT::node_ptr_t &condition, std::vector<std::stri
     }
     if (condition->type() == GCT::NodeKind::TYPE) {
         std::vector<std::string> written;
-        camel::core::type::collectTypeVars(condition->dataType(), written);
+        GCT::collectTypeVarsWithoutPlaceholders(condition->dataType(), written);
         for (const std::string &name : written) {
             if (std::find(names.begin(), names.end(), name) == names.end()) {
                 names.push_back(name);

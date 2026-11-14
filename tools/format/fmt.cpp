@@ -2257,7 +2257,7 @@ any Formatter::dispatch(syn::Node context) {
         // `..E`, one type expression written once for each member of a pack (design principles
         // 5.6).
         return "..." + any_cast<string>(visit(context.type()));
-    case NK::TypeOfType:
+    case NK::TypeOfExpr:
         return "typeof " + any_cast<string>(visit(context.expr()));
     case NK::ShapeComp: {
         // `T { static for n, F in fields U => e }`: the shape is written as a type, and the

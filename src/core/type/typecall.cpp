@@ -90,8 +90,8 @@ bool TypeCallType::isTypeFunction(std::string_view name) {
 Type *TypeCallType::evaluate(
     std::string_view name, std::span<Type *const> arguments, std::string &error) {
     if (name == kTypeApplyName) {
-        // A source type function whose arguments included `typeof` was kept as an application
-        // instead of being applied before the expression's type was known. Its declaration is the
+        // A source type function whose arguments were not concrete was kept as an application
+        // instead of being applied before the argument's type was known. Its declaration is the
         // first, internal parameter; the written arguments follow it.
         if (arguments.empty() || arguments.front() == nullptr ||
             arguments.front()->code() != TypeCode::TypeFunc) {
@@ -637,7 +637,7 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
     if (type == nullptr) {
         return false;
     }
-    const auto concrete = [](Type *t) { return !containsTypeVar(t) && !containsTypeOf(t); };
+    const auto concrete = [](Type *t) { return !containsTypeVar(t); };
     if (type->code() == TypeCallType::typeCode()) {
         const auto *call = static_cast<TypeCallType *>(type);
         if (call->name().starts_with(kLengthsTag)) {

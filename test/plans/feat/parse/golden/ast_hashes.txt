@@ -1641,6 +1641,9 @@ ebf5e9593ac84931 ok test/cases/compile/static_expansion/typeof_declaration_type.
 e58f7bc57f3b0c60 ok test/cases/compile/static_expansion/typeof_inferred_not_evaluated.cml
 7eacc37d2e7ed2a2 ok test/cases/compile/static_expansion/typeof_inside_type.cml
 f9e2a0efbf7de4ac ok test/cases/compile/static_expansion/typeof_only_here.cml
+08a0d221862995c2 ok test/cases/compile/static_expansion/typeof_same_number.cml
+1e09239215cfa1f6 ok test/cases/compile/static_expansion/typeof_same_number_first.cml
+e87522f2fe298d5a ok test/cases/compile/static_expansion/typeof_same_number_second.cml
 ef27fffe285b81cb ok test/cases/compile/static_expansion/typeof_type.cml
 0e1ff92d1689587d ok test/cases/compile/static_expansion/typeof_void.cml
 5e65864d14e1054c ok test/cases/compile/stream/arm_error_keeps_its_diagnosis.cml
