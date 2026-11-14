@@ -2016,6 +2016,7 @@ bf326af8aa04f422 ok test/cases/compile/transforms/vmap_capture_is_a_constant.cml
 c976ca79d603a706 ok test/cases/compile/transforms/vmap_layout_ops.cml
 9d04b3e37adf3e40 ok test/cases/compile/transforms/vmap_matmul.cml
 9fd724c477d6ab30 ok test/cases/compile/transforms/vmap_reductions.cml
+5c1e845f4d82ca1d ok test/cases/compile/transforms/vmap_rewritten_order.cml
 d53745599fb2eacc ok test/cases/compile/transforms/vmap_row_reductions.cml
 b7a72683990c0197 ok test/cases/compile/transforms/vmap_rule_outer_variable.cml
 ed807e2cc0dccee3 ok test/cases/compile/transforms/vmap_where_condition.cml

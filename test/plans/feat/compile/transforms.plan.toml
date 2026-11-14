@@ -160,6 +160,24 @@ expect_output_contains = ["value= 3.0", "grad= [1.0, 1.0]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# Why the same door is *not* closed for the split cut, measured and not reasoned (2026-11-14): the
+# program above never reaches `split` after `std::opt`. The pass's `std::defunctionalize` step
+# rewrites the rule graph's signature result through a type substitution that names a type the table
+# does not hold by `kNoTypeId` -- the sentinel *every* such type answers -- so the closure graph is
+# re-encoded with an unrelated family's enum and the run stops at `RuntimeDiag::ExitTypeMismatch` on
+# `rulesets.jvp::jvp_pow_d__rhs` (its `FnValue___g_286___0` against the declared `FnValue___g_350___6`)
+# before any transform runs. That is a defect of the substitution, not of an order, and `lane-vjpopt`
+# fixes it (`02b686266`, an entry matched by object rather than by the sentinel).
+#
+# Behind it the refusal this pair was written for is real and is a *second* door, not this one:
+# `REINTERP split function=jvp_of_g skip=forward construct=a node whose input was not copied
+# why=an operand of the node is not reachable from the half's exit`. The cut's own walk
+# (`split.cpp#copyHalf`) is a post-order DFS and does not read places in id order, so that refusal is
+# about the graph `jvp` hands it -- 39 nodes and two regions built by copying a body the pass had
+# rewritten -- and not about the order the cut reads them in. Left where it is, with the reading
+# above: the pair can only be green once both are closed, and it would be red at a commit about
+# orders for a reason that is not one.
+#
 # A loop whose body never reads the state's tangent -- `s + 1.0`, where the derivative does not
 # flow through the state at all -- is still lifted: the tangent is carried as zero, and the value is
 # what the loop computes. The pair is the loop's value whether or not anything differentiates it.
