@@ -1,0 +1,20 @@
+/**
+ * A loop: the rounds run in order and each round prints once, from the state it was given and the
+ * element it was handed. A graph with a loop is evaluated node by node by the parallel scheduler
+ * (docs/technical/06_runtime_and_execution.md), so this case is the path where the shared
+ * predecessor function cuts no task graph at all; the lines must still be the same as NodeVM's.
+ */
+func main(): int sync {
+    println("loop before")
+    let last = loop i = 0 for x in [3, 1, 4] do sync {
+        println("round", i, x)
+        i + x
+    }
+    println("loop after", last)
+    let down = loop k = 2 while k > 0 do sync {
+        println("while", k)
+        k - 1
+    }
+    println("loop done", down)
+    return 0
+}

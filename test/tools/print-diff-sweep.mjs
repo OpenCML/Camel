@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 /**
  * Prints are effects. `std::opt` may make a program faster and smaller, but it may not make it
  * print fewer lines: design principles 9.7 (a pass never changes which effects run), 3.1 and 3.4.

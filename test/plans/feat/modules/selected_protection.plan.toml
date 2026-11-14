@@ -386,3 +386,56 @@ case = "../../../cases/modules/selected_protection/capture.cml"
 args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir"]
 expect_exit = 0
 expect_output_contains = [":op/assn_l"]
+
+# The ruling's other half: a rewrite may not only hand back a graph that leaves a dead write, it may
+# drop one. `DraftWritings::deletionAllowed` (src/runtime/writings_deletion.cpp) asks
+# `camel::runtime::writeIsRooted` -- the half of the same judgement the pass boundary's check answers
+# from, asked on the draft -- so admission and the check cannot disagree (design principles 9.7).
+#
+#   dead_write       the cell is a local `var` that no root names, and the fold took the write's only
+#                    reader: the node is not in the graph the rewrite returns, and the program still
+#                    prints 1
+#   dead_write_held  the cell belongs to the module, so a root holds it: the write stays and the
+#                    program still prints the 41 it wrote -- the wall against relaxing this too far
+
+# The ruling's other half: a rewrite may not only hand back a graph that leaves a dead write, it may
+# drop one. `DraftWritings::deletionAllowed` (src/runtime/writings_deletion.cpp) now asks
+# `camel::runtime::writeIsRooted` -- the rooted half of the same judgement the pass boundary's check
+# answers from, asked on the draft instead of on the committed graph -- so admission and the check
+# cannot disagree (design principles 9.7).
+#
+#   dead_write       the cell is a local `var` that no root names, and the fold took the write's only
+#                    reader: no write is left in `probe`, and the program still prints 1
+#   dead_write_held  the cell belongs to the module, so a root holds it: `bump` keeps its write and
+#                    the program still prints the 41 it wrote -- the wall against relaxing too far
+[[tests]]
+name = "dead_write.direct.answer"
+desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see docs/handover/questions/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md."
+case = "../../../cases/modules/selected_protection/dead_write.cml"
+args = ["${case}", "policy::direct", "order=false", "faults=false", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["DEADWRITE graph=probe", "oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+
+[[tests]]
+name = "dead_write.direct.same_output"
+desc = "Dropping the dead write leaves the program's output unchanged."
+case = "../../../cases/modules/selected_protection/dead_write.cml"
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "dead_write_held.direct.kept"
+desc = "A write into a place the graph names is kept, and the answer says which half holds it."
+case = "../../../cases/modules/selected_protection/dead_write_held.cml"
+args = ["${case}", "policy::direct", "order=false", "faults=false", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["DEADWRITE graph=bump", "rooted=1 read=0 dead=0"]
+
+[[tests]]
+name = "dead_write_held.direct.same_output"
+desc = "And the program still prints the 41 it wrote."
+case = "../../../cases/modules/selected_protection/dead_write_held.cml"
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n41\n"

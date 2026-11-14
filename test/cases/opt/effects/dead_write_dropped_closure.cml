@@ -1,0 +1,23 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A probe: `h` is the only closure that captured `c`, and it reaches nothing the program keeps --
+// `p.0` reads the tuple's first member alone. `w * 0` is the only reader of the write `c = 41`, so
+// the rewrite that folds it leaves a write that is no root of the graph and that no port reads: a
+// dead write, which may go (design principles 9.7).
+
+func probe(): int {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    let p = (1, h)
+    return w + p.0
+}
+
+func main(): int sync {
+    println(probe())
+    return 0
+}

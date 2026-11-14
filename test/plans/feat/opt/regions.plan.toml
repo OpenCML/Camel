@@ -118,3 +118,47 @@ expect_exit = 0
 expect_output_contains = ["REGIONS sibling_refused=1 port=1 reader=6 arm=1 sibling=3 rule=1 named_port=1 named_reader=1", "REGIONS owner_refused=1 port=9 owner=10 region=2 rule=1 named_port=1 named_reader=1 violations=1", "REGIONS count=7 in_inner=2 in_outer=1 result=ok ports=1 within=1"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "regions.orphan_owner_refused"
+desc = "A control region may not outlive the node it belongs to. `test::regions` asks that of the commit by giving a region an owner the draft then erases, which is the state a pruning pass leaves when it takes the loop or the branch away and forgets the region; the region's kind and members stay as they were, its owner is not there, and the commit refuses it, naming the region (`validateRuntimeRegions`, src/runtime/graph.cpp). No program in the tree builds that draft, so with no case this check would look the same whether it read the owner or not. The two readings are `gone=1` (the draft really erased the owner) and `rule=1 named_region=1` (the refusal is the owner's own wording and names the region, not a neighbouring rule about a port or a member)."
+kind = "behavior"
+case = "../../../cases/compile/expected_type_loop/loop_parts.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS orphan_owner_refused=1 region=1 gone=1 rule=1 named_region=1", "REGIONS orphan_member_refused=1 region=2 rule=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.orphan_member_refused"
+desc = "The other direction of the same rule: a node whose region is not there. `test::regions` retires a region and leaves a node of the draft in it; the commit refuses the graph and names the node and the region (`validateRuntimeRegions`), because a region has no member table a check could find short -- the membership is the column on the node, so that is the side that has to be read. `rule=1` says the refusal is that wording and not another one about the same draft."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS orphan_member_refused=1 region=3 rule=1"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "regions.branch_pruned"
+desc = "A branch whose condition is statically known is replaced by the arm it takes, and the graph that is published holds no control region of that branch: the arm regions went with it (the draft dissolves them and hands what they held to the region around, GraphDraft::dissolveRegionsOf), so nothing is left pointing at a branch that is not there. Read through `test::exec_plan`, whose REGION lines are the control regions of each graph: none is left, while the program still prints what it printed before the branch was folded."
+kind = "behavior"
+case = "../../../cases/opt/generic/pruned_branch_keeps_condition_effect.cml"
+args = ["${case}", "std::opt", "test::exec_plan"]
+
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split(String.fromCharCode(10))
+const left = lines.filter((line) => line.startsWith('REGION '))
+assert(left.length === 0, `the dissolved branch left ${left.length} control region(s): ${left.join(' | ')}`)
+const printed = lines.filter((line) => line.trim() !== '').slice(-3).join(' | ')
+assert(printed === 'side 2 | side 2 | bd 1 1', `unexpected output: ${printed}`)
+}
+"""
+timeout_ms = 20000

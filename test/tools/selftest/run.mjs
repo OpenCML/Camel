@@ -26,6 +26,8 @@
 //     collections, one for the rest, every copy under `--tier all`;
 //   * the identity of a sweep copy: two source plans that both have a test named `shapes` keep
 //      four distinct names, and one source test reused under two sweeps keeps two;
+//   * the entries a sweep does not cover, counted: how many `negative` entries its source plans
+//      declare, how many it copies, and how many it leaves out (the line below `[calibration]`);
 //   * a benchmark whose timed pass fails: `--timeit` then reports the failed iteration with no
 //      mean, and the runner reports that failure instead of throwing on the missing metric;
 //   * the `--changed` mapping: the directory rule and the file rules together (the mirrored
@@ -46,6 +48,7 @@ import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
+import { negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
 import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
@@ -1312,6 +1315,23 @@ console.log(
         + `fixed=${widthTally.fixed}, own=${widthTally.named}, inherited=${widthTally.inherited}, `
         + `cli=${widthTally.cli}; wall=${spentWall.toFixed(1)} s`
 )
+// The entries a sweep does not cover, counted rather than described: what the source plans of every
+// `[[sweeps]]` entry declare as `negative`, how many of those a sweep copies, how many it leaves out
+// and which ruling the code implements (`a`: a `negative` entry is copied; `b`: its kind is left
+// out). It reads the plan tree through the expansion itself, so it cannot disagree with the run.
+//
+// It is here because the count and the comment disagreed once and nothing said so: from the
+// sweep's first commit the kind filter left `negative` out while the docstring above `expandSweeps`
+// named only benchmarks and differential tests as left out, and 1258 entries -- 73% of the tree's
+// `negative` ones -- were never copied. A line that prints the three numbers on every gate run is
+// the difference between a coverage gap somebody has to remember and one that is in front of the
+// reader; the counts are a reading, so they are printed and not asserted.
+//
+// The walk is the runner's own loader over the plan tree, a couple of hundred milliseconds for the
+// whole tree (0.197 s over 372 plan files, measured on this machine), which is why it can sit in
+// this file instead of needing a check of its own.
+const sweepAccounting = negativeSweepAccounting(allPlanFiles)
+console.log(negativeSweepLine(sweepAccounting))
 if (problems.length > 0) {
     console.error(problems.join('\n'))
     console.error('--- runner output ---')

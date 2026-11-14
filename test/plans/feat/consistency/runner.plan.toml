@@ -12,7 +12,7 @@ tool = "node"
 case = "../../../tools/selftest/run.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["runner self-test ok"]
+expect_stdout_contains = ["runner self-test ok", "negative-sweeps declared="]
 # The reading that decides is this self-test's own CPU time, not the wall clock: the runner's
 # timeout rule reads the CPU of every test's process tree. Six runs of this case inside the fast
 # layer at -Jobs 8 on 2026-10-24 read 12.41-12.69 s of CPU -- a 0.28 s spread, 2.3% -- against

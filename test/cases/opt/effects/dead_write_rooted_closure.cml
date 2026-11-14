@@ -1,0 +1,19 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A probe: the same program, with `h` called, so the write `c = 41` is still rooted.
+
+func probe(): int sync {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    return w + h()
+}
+
+func main(): int sync {
+    println(probe())
+    return 0
+}

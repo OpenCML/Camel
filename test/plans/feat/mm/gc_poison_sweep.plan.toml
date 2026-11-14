@@ -11,7 +11,11 @@ going unnoticed. The assertions of each test are kept: the program must print wh
 without the mode.
 
 The plans are named by directory, so an operator or a module added later is covered as soon as
-it has a test there. Left out: the slow model tests of autodiff and onnx (run them with
+it has a test there. Every test of those plans is copied, whatever it expects: the ones that run
+a program to completion, the ones that compare a stored picture, and the ones that say
+`kind = "negative"` -- a diagnostic, a refusal or a fault they expect to see -- because a run that
+ends the way the test says it does is still a run the mode can break, and its assertions are kept
+as they are. Left out: the slow model tests of autodiff and onnx (run them with
 `node scripts/test.js feat/modules/autodiff.plan.toml` after adding `--gc-check poison` when touching those
 modules), tests that choose their own collector settings, benchmarks and differential tests.
 A test that cannot run in the mode says `sweep = false` and why.

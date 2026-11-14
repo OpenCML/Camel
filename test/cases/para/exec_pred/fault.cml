@@ -1,0 +1,22 @@
+/**
+ * A computation that may fault: `divide` can raise, so it stays on the sync chain (design
+ * principles 3.4) and its value reaches the statement after it through a GATE. The fault itself is
+ * caught by `attempt` and becomes an error value, so the statements after it run, in the order they
+ * are written.
+ */
+func divide(a: int, b: int): int {
+    return a / b
+}
+
+func main(): int sync {
+    println("fault 1")
+    let ok = divide(12, 3)
+    println("fault 2", ok)
+    let bad = attempt(divide)(1, 0)
+    println("fault 3", match bad {
+        case error e => e.kind
+        case v => "no fault"
+    })
+    println("fault 4", divide(9, 3))
+    return 0
+}

@@ -55,12 +55,27 @@ export func update::<T>(r: Ref<T>, f: (x: T) => T): T sync
   4. **泛型只在签名上**。`Ref<T>` 的 `T` 是一个不进入存储的类型参数，所以 `Ref<int>` 与 `Ref<float>` 是
      两个类型、却只有前者能造出来。
 
-**本树的边界。** 这条裁定和它依赖的规则都还没进本基线：`git merge-base --is-ancestor c8c110de2 HEAD`
-与 `… 4fae172f2 HEAD` 都为假，`docs/design-principles.cn.md` 里 `Cell`/`Ref` 零命中，
-`src/compile/gir/builder_state.cpp` 也不在本树，原文与替换证据要用 `git show` 到 `origin/fsh-dev` 那一支
-去读。所以「拿 `Ref<T>` 把 `var` 格子带出声明求值会被拒绝」这一条**在本树测不出来**。本树测到的是另一面，
-也就是这条通道本来的性质：`ref(n)` 取的是值，`ref_takes_the_value.cml` 输出 `1 42`——`var` 后来的写看不见、
-句柄后来的写也改不了 `var`，所以格子根本没被带走。规则落地后要用同一条用例复测。
+**规则落地之后（`origin/develop` 已合进本树，`c8af40747`/`4fae172f2`/`c8c110de2` 都在其中）。** 三条读数：
+
+- **删掉的那条能力仍被拒绝**：一个闭包在声明它的那次求值里捕获 `var`、又被返回出去，诊断是
+  `SemanticDiag::ClosureCaptureEscapes`（`0x03000210`），exit 1，并给出「捕获值」与「把状态当值传」两条
+  改法——与本页第 1 节裁定的两条出路同一条。
+- **以 `Ref` 重写后合法，读数不变**：`counter_closure` 仍是 `1 2 101 3 102`（四个后端各一遍），
+  `ref_one_cell_two_holders` 仍是 `1 2 2 11`，`ref_takes_the_value` 仍是 `1 42`；`var` 当源也一样——
+  `var n = 0; let r = state::ref(n); n = 41;` 之后返回的闭包写句柄，读数是 `1 2`（不是 `42`）。
+- **闭包塞不进 `Ref`**：`state::ref(f)` 在 `stdlib/state.cml:28` 的 `match type T { case int => ... }` 处被
+  `SemanticDiag::StaticMatchNotExhaustive`（`0x03000170`）拒绝，类型写作 `() => int uses capture 0`——它根本
+  走不到携出判定，因为库的 `Ref` 只装 `int`。所以「把 `var` 格子塞进 `Ref`」在本库里是**类型先拦**，
+  不是 `ClosureCaptureEscapes`。
+
+**模块级 `var` 不在规则里，这是本页交给作者的第二件事。** 规则只拦闭包携出，不拦模块顶层，所以
+`state.cml` 的 `var cells` 现在合法——它是全树唯一一个用模块级 `var` 的 stdlib 模块。若那半落地
+（`SemanticDiag::TopLevelVariableUnusable`，`0x00020E`；本树只有问题页提到它，没有实现），拒绝会落在
+`state.cml` 里引用 `cells` 的两处（`push` 与 `write`），而它**没有改写方案**：规则给的两条出路（用 `let`、
+把写搬进 `main` 或它调用的函数）与「一个跨调用存活的格子」这个用途正好相反。引用面也小：
+`git grep "state::"` 全树 9 处、3 个文件，全部是本车道自己的用例，stdlib 内部与基准零引用。所以按条数
+它不是 246 条迁移里最大的受害者（那批多数能改成 `let` 或传参），按「无路可退」它是唯一一个——这就是
+「过渡形态」那句的依据：它是这条规则的过渡写法，正身是第 4 节 B 的内建 `Ref<T>`。
 
 ## 3. 缺的那一项能力，以及「库里写不出来」的证据
 
@@ -118,3 +133,6 @@ value nobody owns and nothing in the graph says so」）。不推荐，且与 `c
 
 **不要**在库里再往前一步（用 `json`/`bytes` 序列化当存储、或用 `PyObject` 当格子）：那会让 `get` 变成
 可能失败的转换，并把「一个格子」偷换成「一份编码」，而这两件事都不该由一个还没裁定的替代品决定。
+
+**一条时限**：若「模块顶层 `var`」那半规则先落地（第 2 节末），A 会当场被拒绝，那时 B 不再是一个待裁的
+选项，而是这个模块能不能存在的前置——A 的三条边界里，「全程序一个资源」这条正是先被规则撞上的那条。

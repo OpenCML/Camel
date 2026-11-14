@@ -7,18 +7,10 @@
  * reverse never enters: see `err_assignment_reverse` and `err_assignment_other_payload`.
  */
 
-// A `var` captured by a closure and written inside a `sync` body (section 7 of the primer).
-func make_best(): (x: float) => float {
-    var best: float? = null
-    return (x: float): float => sync {
-        let m = best ?? x
-        let hi = if x > m then x else m
-        best = hi
-        hi
-    }
-}
-
-// The null slot: `null` enters a `T?` place as it enters an annotated `let`.
+// A `var` captured by a closure and written inside a `sync` body (section 7 of the primer). The
+// closure stays inside the call that declares the cell -- it is made and called in `main` -- so the
+// state rule has nothing against it; a closure that was returned with the cell inside is refused
+// (design principles 3.5, rule two).
 func clear(): int? sync {
     var gone: int? = 7
     gone = null
@@ -47,8 +39,14 @@ func show(r: int!): string {
 }
 
 func main(): int sync {
-    let f = make_best()
-    println(f(2.0), f(-1.0), f(1.5), f(3.0))
+    var best: float? = null
+    let improve = (x: float): float => sync {
+        let m = best ?? x
+        let hi = if x > m then x else m
+        best = hi
+        hi
+    }
+    println(improve(2.0), improve(-1.0), improve(1.5), improve(3.0))
     println(clear() ?? -1)
     println(five() ?? -1)
     println(show(lifted(7)))

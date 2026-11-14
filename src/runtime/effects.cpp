@@ -10,7 +10,10 @@
 #include "camel/runtime/effect_liveness.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/runtime/draft.h"
 
+#include <algorithm>
+#include <span>
 #include <unordered_map>
 #include <unordered_set>
 
@@ -106,8 +109,7 @@ EffectSummary effectSummaryOf(const Program &program, const GCGraph *graph) {
     return EffectWalk{program}.of(graph);
 }
 
-EffectSummary
-effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region) {
+EffectSummary effectSummaryOfRegion(const Program &program, const GCGraph *graph, uint32_t region) {
     if (graph == nullptr || region == 0) {
         return {};
     }
@@ -132,6 +134,37 @@ EffectStanding effectStandingOf(const EffectLivenessFacts &facts) {
 
 bool keepsEffectAlive(EffectStanding standing) {
     return standing != EffectStanding::HasNoCredential;
+}
+
+namespace {
+
+/// Whether the declaration says the operator writes the operand at `index`.
+bool writesOperandAt(const GCOperBody &body, size_t index) {
+    return camel::core::OperatorTable::instance().writesOperand(body.oper, false, index);
+}
+
+} // namespace
+
+bool isWriteOfProgramState(const GCOperBody &body, size_t operandCount) {
+    const auto &table = camel::core::OperatorTable::instance();
+    // An ambient write is state outside the program whatever else the operator does; it is not a
+    // write this judgement is about.
+    if (table.touchesClass(body.oper, camel::core::sem::ResourceClass::Ambient, true)) {
+        return false;
+    }
+    // A store into a cell or into an object the program owns. An assignment says so as a family
+    // (`OperatorTable::isAssignment`) rather than through a resource declaration, which is why the
+    // two are asked together; the operand clause below catches a store the declaration names on the
+    // operand itself (a `var` parameter's cell).
+    if (table.isAssignment(body.oper) || table.writesProgramState(body.oper)) {
+        return true;
+    }
+    for (size_t index = 0; index < operandCount; ++index) {
+        if (writesOperandAt(body, index)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 } // namespace camel::runtime

@@ -1760,8 +1760,8 @@ function topLevelIndex(text, word) {
 }
 
 // The access list a declaration writes in its `uses` clause (design principles 3.3;
-// docs/design/effects/plan.cn.md 2.1, 4.3): one item per resource it touches, `uses fs` for an
-// access that reads and writes `fs` and `uses var n` for one that only writes the cell `n`. Null
+// docs/design/effects/plan.cn.md 2.1, 4.3): one item per resource it touches, `uses var fs` for an
+// access that writes `fs` and `uses fs` for one that only reads it. Null
 // when the declaration writes no clause at all, which states nothing about what the operator
 // touches -- an operator nobody itemized is read as writing the global resource, and a reading
 // cannot contradict a declaration that says nothing.
@@ -1851,14 +1851,13 @@ function compareAccesses(entry, op, declared, declaredPure) {
             continue
         }
         covered.add(access)
-        // An external resource is state the program does not own, so a call that names one reads and
-        // writes it, and the clause says so with `var` -- the rule the compiler enforces as
-        // `SemanticDiag::ExternalResourceNeedsVar` (design principles 3.3). The write flag of an
-        // ambient entry is therefore not compared with the operator's own mode: a read of an external
-        // resource is still written `uses var fs`, and requiring the operator's read to agree would
-        // make that declaration unspellable. The comparison stays for a parameter, whose effect the
-        // operator owns.
-        if (item.write && access.mode === 'read' && access.binding !== 'ambient') {
+        // An entry that carries `var` says the call writes its resource, so the operator it declares
+        // has to write it too -- an ambient resource included: what the program does not own is read
+        // or written as the operator that touches it says, and an entry that always had to say `var`
+        // said nothing about which (design principles 3.3). The other direction is left alone: a read
+        // entry on a resource the operator writes is an upper bound, and a body that reaches past it
+        // is what the promise check refuses.
+        if (item.write && access.mode === 'read') {
             problems.push(`${where} declares a write of \`${item.name}\` and the operator only reads it`)
         }
     }

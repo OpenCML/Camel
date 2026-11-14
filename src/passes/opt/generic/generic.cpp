@@ -9,6 +9,8 @@
 
 #include "rewrite.h"
 
+#include <atomic>
+
 #include "../inline/engine.h"
 
 #include "camel/passes/opt/constant_bytes.h"
@@ -51,17 +53,22 @@ namespace type = camel::core::type;
 
 namespace {
 
-/// How many constant branches this run left standing because dissolving one would have stranded
-/// an effect. Counted, not silent: what keeping the effects costs is read off the log.
-size_t g_foldsKeptForEffects = 0;
+/// How many constant branches were left standing because dissolving one would have stranded an
+/// effect. Counted, not silent: what keeping the effects costs is read off the log.
+///
+/// The count belongs to the process, not to a run: `std::opt` is a pass like any other and the same
+/// process may run it again (a second program, a second pipeline), and the pass layer has no place
+/// to reset a counter at. The log line says so; it used to say "in this run", which was a claim
+/// nothing kept. Atomic because the pass may be run by more than one thread at a time.
+std::atomic<size_t> g_foldsKeptForEffects{0};
 
 /// Records a fold the optimizer refused to keep the effects around it running, and says why.
 void keepBranchForEffects(camel::runtime::gc_node_ref_t brch, const char *why) {
-    const size_t kept = ++g_foldsKeptForEffects;
+    const size_t kept = g_foldsKeptForEffects.fetch_add(1, std::memory_order_relaxed) + 1;
     CAMEL_LOG_INFO_S(
         "Opt",
         "std::opt: kept the constant branch at node {} ({}) -- {} fold(s) kept for effects in this "
-        "run",
+        "process so far",
         (unsigned)brch,
         why,
         kept);
@@ -206,31 +213,23 @@ staticValueOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t
 /// anchors follow it as well (`replaceFoldResult`). Leaving it pinned is what kept a conversion
 /// written in return position (the CAST a named result type adds) in the graph forever: every
 /// folding round skipped it, and every inlining of that function copied the unfolded conversion.
-bool holdsChainPlaceGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
-    const auto &draft = transaction.graph();
-    const auto *node  = draft.header(id);
-    if (node == nullptr || node->kind != GCNodeKind::Gate) {
-        return false;
-    }
-    // A statement of a block's chain holds its place from both sides: it is written after the one
-    // before it (`syncInputsOf`) and it is what the one after it is written after
-    // (`syncUsersOf`). Reading only the first leaves the statement that stands at the head of a
-    // chain -- or the one whose wait came to it as a control edge rather than a sync one -- looking
-    // like a plain value, and a rewrite that replaces it by the value it forwards takes the
-    // statement out of the chain: the successor keeps no predecessor, and everything written before
-    // stands in no chain at all (docs/design/effects/edges.cn.md 1.5, 4.6, 5.7; design principles
-    // 3.3, 5.7). `test/cases/compile/surface/dropped_value_statement.cml` draws exactly this
-    // shape -- a block-boundary gate with a control wait and a sync successor -- and `std::opt`
-    // used to drop two prints of it while `std::opt::inline`/`::fold` alone kept them.
-    return !draft.syncInputsOf(id).empty() || !draft.syncUsersOf(id).empty();
+
+/// A GATE that stands in a chain is a statement of it, and a statement is not the value it passes
+/// on: folding it into that value would put the value where the statement was, and the statement
+/// after it would be left with a control wait only (`holdsChainPlace`, src/passes/opt/generic/
+/// rewrite.h -- the judgement the constant merge below reads as well). A returned value that waits
+/// on anything else is not folded either: it is the tail of the graph's effect order
+/// (docs/design/effects/edges.cn.md 1.5 and 5.3).
+bool isSyncWaitingGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto *node = transaction.graph().header(id);
+    return node != nullptr && node->kind == GCNodeKind::Gate && holdsChainPlace(transaction, id);
 }
 
-/// A GATE that holds a place in a chain carries it and cannot be folded into its input.
-/// A returned value that waits on anything else is not folded either: it is the tail of the graph's
-/// effect order (docs/design/effects/edges.cn.md 1.5 and 5.3).
+/// A node that stands in a chain cannot be folded into its value, and a returned value that waits
+/// on anything is not folded either: it is the tail of the graph's effect order.
 bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
-    if (holdsChainPlaceGate(transaction, id)) {
+    if (isSyncWaitingGate(transaction, id)) {
         return false;
     }
     const bool waits       = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
@@ -1451,7 +1450,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
         // A JOIN still closes its BRCH and carries the condition and selected arm's effects.
         // A GATE that holds a place in a chain carries it. Neither is replaced by its value.
         if (const auto *h = draft.header(id);
-            h && (h->kind == GCNodeKind::Join || holdsChainPlaceGate(transaction, id))) {
+            h && (h->kind == GCNodeKind::Join || isSyncWaitingGate(transaction, id))) {
             continue;
         }
         const auto value = staticValueOf(transaction, id);
