@@ -204,6 +204,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 [[tests]]
+name = "vmap_rewritten_body_without_the_optimizer"
+desc = "The second cell for the order a body is read in, and the one that shows the *order* and not the removed places: `h(x) = (x * 2.0 + x * 3.0) * 2.0` batched with no pass, `[10.0, 20.0, 30.0, 5.0]`, beside the same function row by row. The case is the base of `vmap_rewritten_body_after_std_opt`, which compares to it."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vmap_rewritten_order.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_output_contains = ["[10.0, 20.0, 30.0, 5.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# Why this pair exists as well as the elementwise one: the two halves of the reading are separate,
+# and measured separate (2026-11-14). `vmap_elementwise_after_std_opt` is held by skipping the
+# `Dead` places of the rewrite -- with the `Dead` places skipped and the places still read in id
+# order it is green, because the folds there leave no reader whose operand has a larger id. This
+# body does: the pass writes `5.0` and the two products *after* the place the outer product holds,
+# so a walk in id order meets `(x * 5.0) * 2.0` before the `5.0` inside it and refuses with the
+# reading `REINTERP vmap function=h skip=body construct=- uri=:op/mul_d asked=1 found=1` --
+# `transforms: vmap has no rule for ':op/mul_d' (an operand was not lifted)`, which is the red this
+# entry goes to when the order half is taken away again (measured 2026-11-14 on this branch with
+# `dependencyOrderOf` swapped back for `0 .. nodeCount()` in `vmap.cpp#buildVmapGraph`).
+[[tests]]
+name = "vmap_rewritten_body_after_std_opt"
+desc = "The same program after `std::opt`, compared to `vmap_rewritten_body_without_the_optimizer` on `exit_code` and `stdout_normalized`. The pass rewrites `x * 2.0 + x * 3.0` into `x * 5.0` and leaves the nodes it wrote past the reader they feed, so this is the cell where the *order* a body is read in is what is being held: the transform has to read the folded constant and the product before the outer product, which is not the order of the places. The batched answer has to be `[10.0, 20.0, 30.0, 5.0]`, the same bytes as the run with no pass."
+kind = "differential"
+case = "../../../cases/compile/transforms/vmap_rewritten_order.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+compare_to = "vmap_rewritten_body_without_the_optimizer"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
 name = "vmap_batches_the_product_of_two_arrays"
 desc = "`r * r` on a row, batched: `tensor:multiply` is not `:op/mul_d` and it has no token a rule's left side could be written with, so its rule is filed under a call -- `mul_tensor` at two operands -- and the operator is bound to that key where it is declared. The reading says the rule was reached (`asked=1 found=1 missing=0 rules=vmap_rule_mul_tensor`), and the values say the two writings are one computation: `[[1, 2, 3], [4, 5, 6]]` squared is `[[1.0, 4.0, 9.0], [16.0, 25.0, 36.0]]` row by row and by the transform, and a batch of one row is still one row (`[[4.0, 9.0, 16.0]]`). The batch is `Lift<f32[3]>` = `f32[?, 3]`, one dimension in front of the row, and the transform multiplies the whole batch at once -- the same operator, so the same bits."
 kind = "behavior"
