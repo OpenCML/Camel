@@ -17,6 +17,9 @@
 #include "camel/runtime/effect_liveness.h"
 #include "passes/opt/generic/rewrite.h"
 
+#include <algorithm>
+#include <span>
+
 const camel::runtime::Program *
 DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
@@ -53,22 +56,39 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
     }
     // Every aggregate, and what the judgement says about its last member: a refusal that cannot say
     // which guard refused cannot be told from a guard written wrong.
+    //
+    // `members=` is the aggregate's slot table against the `with` inputs that fill it, position by
+    // position -- `<component>:<kind of the node that fills it>`. It is *not* a list of the node's
+    // normal inputs: an aggregate of two members has one normal input (its template) and two `with`
+    // inputs, so a reading that counted the normal inputs printed `inputs=1` for `arity=2` and said
+    // the members were something they were not. `components=` is the tuple type's size, which is the
+    // number that says which component is the last one; a component the table does not name keeps the
+    // value the template carries.
     for (const GCGraph *graph : program->graphs()) {
         for (uint32_t index = 0; index < graph->nodeCount(); ++index) {
             const gc_node_ref_t ref = static_cast<gc_node_ref_t>(index);
             if (camel::runtime::aggregateArity(*graph, ref) == 0) {
                 continue;
             }
+            const auto *body = graph->nodeBodyAs<camel::runtime::GCFillBody>(ref);
+            const auto slots = body != nullptr ? body->slots() : std::span<const gc_slot_idx_t>{};
+            const auto values = graph->withInputsOf(ref);
+            const size_t paired = std::min(slots.size(), values.size());
             os << "AGGREGATE graph=" << graph->name() << " node=" << ref
-               << " arity=" << camel::runtime::aggregateArity(*graph, ref)
-               << " inputs=" << graph->normInputsOf(ref).size()
-               << " members=";
-            for (gc_node_ref_t member : graph->normInputsOf(ref)) {
-                const GCNode *memberNode = graph->node(member);
-                os << member << ":"
-                   << (memberNode == nullptr ? -1 : static_cast<int>(memberNode->kind)) << ",";
+               << " components=" << camel::runtime::aggregateComponentCount(*graph, ref)
+               << " slots=" << slots.size() << " norm=" << graph->normInputsOf(ref).size()
+               << " with=" << values.size() << " members=";
+            for (size_t position = 0; position < paired; ++position) {
+                const GCNode *producer = graph->node(values[position]);
+                os << slots[position] << ":"
+                   << (producer == nullptr ? -1 : static_cast<int>(producer->kind)) << ",";
             }
-            os << " verdict="
+            const uint32_t tail = camel::runtime::aggregateTailInputIndex(*graph, ref);
+            os << " tail="
+               << (tail == camel::runtime::kInvalidNodeRef
+                       ? -1
+                       : static_cast<int>(values[tail]))
+               << " verdict="
                << camel::runtime::aggregateTailVerdictName(
                       camel::runtime::aggregateTailVerdict(*graph, ref))
                << "\n";
