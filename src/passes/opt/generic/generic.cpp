@@ -51,6 +51,22 @@ namespace type = camel::core::type;
 
 namespace {
 
+/// How many constant branches this run left standing because dissolving one would have stranded
+/// an effect. Counted, not silent: what keeping the effects costs is read off the log.
+size_t g_foldsKeptForEffects = 0;
+
+/// Records a fold the optimizer refused to keep the effects around it running, and says why.
+void keepBranchForEffects(camel::runtime::gc_node_ref_t brch, const char *why) {
+    const size_t kept = ++g_foldsKeptForEffects;
+    CAMEL_LOG_INFO_S(
+        "Opt",
+        "std::opt: kept the constant branch at node {} ({}) -- {} fold(s) kept for effects in this "
+        "run",
+        (unsigned)brch,
+        why,
+        kept);
+}
+
 // ---------------------------------------------------------------- branch regions
 
 /**
@@ -724,6 +740,27 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
             }
         }
         if (armCarriesOrder && !armPlaceable()) {
+            keepBranchForEffects(brch, "its arm's chain has no place to be entered from");
+            return false;
+        }
+    }
+    // An arm that brings no chain of its own -- a constant value, or code its region does not hold
+    // -- leaves nothing for the branch's place to be handed to. `eraseNode` closes the chain over
+    // the branch and gives its predecessor the branch's successors, so a branch with no sync
+    // successor at all leaves that predecessor's chain ending with nothing: the statement written
+    // after the branch is only ordered after it, by a control edge, and the effects written before
+    // the branch stop running with it (a recursion that prints in its own body drops the prints
+    // under `std::opt`). The branch is left standing, and the fold it costs is counted.
+    if (armChainHead == kInvalidNodeRef && !branchChainPreds.empty()) {
+        bool continues = false;
+        for (gc_node_ref_t user : draft.syncUsersOf(join)) {
+            if (user != brch && draft.alive(user) && !removed(user)) {
+                continues = true;
+                break;
+            }
+        }
+        if (!continues) {
+            keepBranchForEffects(brch, "its arm brings no chain and nothing waits on its place");
             return false;
         }
     }
