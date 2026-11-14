@@ -52,10 +52,15 @@ bool TestSupportModule::load() {
     {
         using camel::core::sem::AccessMode;
         using camel::core::sem::externalAmbient;
+        using camel::core::sem::externalUnorderedAmbient;
         camel::core::OperatorTable::instance().declareResources(
             "test_support",
             {
-                {"rendezvous", externalAmbient("rendezvous_point", AccessMode::ReadModifyWrite)},
+                // The meeting point keeps no order between the calls that wait at it: what one of
+                // them returns depends on which other call got there at the same time, not on
+                // where it is written (design principles 3.3, "unordered resources").
+                {"rendezvous",
+                 externalUnorderedAmbient("rendezvous_point", AccessMode::ReadModifyWrite)},
                 {"thread_count", externalAmbient("process:process", AccessMode::Read)},
             });
     }
