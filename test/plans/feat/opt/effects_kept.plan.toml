@@ -533,7 +533,6 @@ case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
 expect_stdout_contains = ["AGGREGATE graph=probe"]
-
 [[tests]]
 name = "dead_write.aggregate_escapes_kept"
 desc = "Guard: the aggregate is handed to a call, which may read any member, so nothing is dropped."
