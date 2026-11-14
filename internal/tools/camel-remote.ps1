@@ -332,6 +332,14 @@ param(
     # gate's own readings without that extra sweep -- and it names what it left out, because an
     # absent line and a green one read the same from the outside.
     [switch]$NoGpuWatch,
+    # Which dirty tracked files a run may carry from the MAIN checkout. The patch this script sends
+    # is `git diff HEAD`, i.e. the working tree, not the commit: a file somebody edited and did not
+    # commit is built and measured as part of the change. In a lane's own worktree that is the point
+    # -- the author is measuring the edit. In the main checkout it is never the point, because the
+    # main checkout is where a commit is made, so a dirty file there belongs to somebody else's
+    # unfinished work and a green gate would be reporting "measured" about a mixture of two changes.
+    # A machine-local value (the gate settings file is git-ignored) usually belongs here.
+    [string[]]$AllowDirty = @('internal/tools/camel-remote.ps1'),
     # The toolchain's libstdc++ directory, put first on the single LD_LIBRARY_PATH this run exports
     # (see the header). A current build carries its own copy in `libs/` with a `$ORIGIN` rpath, so
     # the export only serves the older installs still sitting in host checkouts. Empty means the
@@ -971,6 +979,59 @@ try {
     }
     $stagingPushed = $true
 
+    # --- what this run would measure, said before it travels --------------------
+    # The patch below carries the WORKING TREE (`git diff HEAD`), not the commit, so every reading a
+    # gate prints is about "the commit plus whatever else is uncommitted in this checkout". In a lane
+    # worktree that is exactly what the author wants. In the main checkout it is an accident waiting
+    # to happen: two of them in one night (a half-finished rename, and a probe dropped into
+    # src/runtime/draft.cpp) turned a build into somebody else's compile error, and a green run would
+    # have been just as wrong in the other direction. So the main checkout -- the checkout whose
+    # --git-dir is the common directory, i.e. not a linked worktree -- refuses a dirty tree outside
+    # $AllowDirty, and every run prints which files it is about to carry, so that "measured" can be
+    # read off the output instead of assumed.
+    $dirtyTracked = @()
+    try {
+        $dirtyTracked = @(git -C $Path status --porcelain --untracked-files=no 2>$null |
+            ForEach-Object { $_.Substring(3).Trim() } |
+            Where-Object { $_ -ne '' })
+    } catch {
+        $dirtyTracked = @()
+    }
+    $gitDir = ''
+    $commonDir = ''
+    try {
+        $gitDir = (git -C $Path rev-parse --absolute-git-dir 2>$null).Trim()
+        $commonDir = (git -C $Path rev-parse --path-format=absolute --git-common-dir 2>$null).Trim()
+    } catch {
+        $gitDir = ''
+        $commonDir = ''
+    }
+    $isMainCheckout = ($gitDir -ne '' -and $gitDir -eq $commonDir)
+    if ($dirtyTracked.Count -gt 0) {
+        $allowed = @($AllowDirty | Where-Object { $_ -ne '' })
+        $foreign = @($dirtyTracked | Where-Object {
+            $rel = $_
+            -not ($allowed | Where-Object { $rel -eq $_ -or $rel -like $_ })
+        })
+        $carried = @($dirtyTracked | Where-Object { $foreign -notcontains $_ })
+        if ($carried.Count -gt 0) {
+            Write-Host ("[camel-remote] carrying {0} allowed dirty file(s): {1}" -f $carried.Count, ($carried -join ', '))
+        }
+        if ($foreign.Count -gt 0) {
+            Write-Host ("[camel-remote] {0} dirty file(s) that -AllowDirty does not name:" -f $foreign.Count)
+            foreach ($rel in $foreign) { Write-Host ("[camel-remote]   {0}" -f $rel) }
+            if ($isMainCheckout) {
+                Set-BuildPhase 'starting' ("[camel-remote] refusing: {0} dirty file(s) in the main checkout" -f $foreign.Count)
+                Write-Host '[camel-remote] refusing to send: the main checkout is dirty outside -AllowDirty, so a'
+                Write-Host '[camel-remote] reading taken now would be about this commit plus somebody else''s unfinished'
+                Write-Host '[camel-remote] work, and "this commit was measured" would not be true. Commit it, revert it,'
+                Write-Host '[camel-remote] or name it in -AllowDirty if it really is part of this change.'
+                exit 5
+            }
+            Write-Host '[camel-remote] continuing: this is a linked worktree, where a dirty tree is the point.'
+        }
+    }
+
     # `git diff --output=` writes the patch as raw bytes; `>` in PowerShell would write UTF-16.
     git -C $Path diff HEAD --binary --output=$patchFile 2>&1 | Out-Null
 
@@ -991,6 +1052,14 @@ try {
     $changedCount = ([regex]::Matches($patchText, '(?m)^diff --git ')).Count
     Write-Host ("[camel-remote] {0}: pushed {1}, {2} changed file(s), {3} untracked ({4:N1} s)" -f `
         $name, $branch, $changedCount, $untracked.Count, $sw.Elapsed.TotalSeconds)
+    if ($changedCount -gt 0) {
+        # The names, not just the count: a count cannot tell "my one file" from "mine and a probe".
+        $changedNames = @([regex]::Matches($patchText, '(?m)^diff --git a/(\S+) ') |
+            ForEach-Object { $_.Groups[1].Value })
+        Write-Host ("[camel-remote] measuring: {0}" -f ($changedNames -join ', '))
+    } else {
+        Write-Host '[camel-remote] measuring: the commit alone (no tracked change)'
+    }
     Set-BuildPhase 'starting' ("[camel-remote] {0}: {1} changed file(s), {2} untracked; sending to {3}" -f `
         $name, $changedCount, $untracked.Count, $sshHost)
 
