@@ -696,13 +696,13 @@ timeout_ms = 30000
 # `src/` and `modules/`, so the engine side of the comparison is the tree's own.
 [[tests]]
 name = "vjp_api.the_two_tables_are_compared"
-desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new`; a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
+desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new` and `stale=0` under `--strict` (a row that has outlived its difference is a failure there, so the list cannot grow longer than the tree); a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-vjp-parity.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["the real tree has no difference the list does not hold", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
+expect_stdout_contains = ["the real tree has no difference the list does not hold, and no row without a difference", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
