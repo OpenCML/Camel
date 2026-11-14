@@ -3788,6 +3788,8 @@ e5f1dda926825893 ok test/cases/opt/defun/family_shape.cml
 94ae362b8abacc94 ok test/cases/opt/defun/nested_signature.cml
 81f3343c0f081204 ok test/cases/opt/defun/value_tag.cml
 bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
+bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
+4354ebdbd45852fb ok test/cases/opt/e9/rc08_seed324.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
 1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
