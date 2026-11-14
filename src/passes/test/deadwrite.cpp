@@ -51,6 +51,50 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                << " dead=" << (deadWrite(*graph, ref) ? 1 : 0) << "\n";
         }
     }
+    // Every aggregate, and what the judgement says about its last member: a refusal that cannot say
+    // which guard refused cannot be told from a guard written wrong.
+    for (const GCGraph *graph : program->graphs()) {
+        for (uint32_t index = 0; index < graph->nodeCount(); ++index) {
+            const gc_node_ref_t ref = static_cast<gc_node_ref_t>(index);
+            if (camel::runtime::aggregateArity(*graph, ref) == 0) {
+                continue;
+            }
+            os << "AGGREGATE graph=" << graph->name() << " node=" << ref
+               << " arity=" << camel::runtime::aggregateArity(*graph, ref)
+               << " inputs=" << graph->normInputsOf(ref).size()
+               << " members=";
+            for (gc_node_ref_t member : graph->normInputsOf(ref)) {
+                const GCNode *memberNode = graph->node(member);
+                os << member << ":"
+                   << (memberNode == nullptr ? -1 : static_cast<int>(memberNode->kind)) << ",";
+            }
+            os << " verdict="
+               << camel::runtime::aggregateTailVerdictName(
+                      camel::runtime::aggregateTailVerdict(*graph, ref))
+               << "\n";
+        }
+        // A closure, and every kind of user it still has: whether the sweep may take it is a
+        // question about these counts, so the count that blocked it has to be readable.
+        for (uint32_t index = 0; index < graph->nodeCount(); ++index) {
+            const gc_node_ref_t ref = static_cast<gc_node_ref_t>(index);
+            if (graph->node(ref) == nullptr || graph->node(ref)->kind != GCNodeKind::Func) {
+                continue;
+            }
+            bool named = false;
+            for (gc_node_ref_t closure : graph->closureNodes()) {
+                named = named || closure == ref;
+            }
+            os << "FUNC graph=" << graph->name() << " node=" << ref
+               << " normUsers=" << graph->normUsersOf(ref).size()
+               << " withUsers=" << graph->withUsersOf(ref).size()
+               << " ctrl=" << (graph->ctrlInputsOf(ref).size() + graph->ctrlUsersOf(ref).size())
+               << " order=" << (graph->orderPredsOf(ref).size() + graph->orderUsersOf(ref).size())
+               << " sync=" << (graph->syncPredsOf(ref).size() + graph->syncUsersOf(ref).size())
+               << " closureNode=" << (named ? 1 : 0)
+               << " unreadClosure=" << (camel::runtime::isUnreadClosure(*graph, ref) ? 1 : 0)
+               << "\n";
+        }
+    }
     // What the sweep took, by kind: the count that says extending the kinds it takes is doing work
     // rather than leaving every graph it was written for alone (an assertion about one case can say
     // "the closure is gone", never how many nodes in all went).

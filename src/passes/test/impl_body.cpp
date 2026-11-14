@@ -49,7 +49,7 @@ ImplBodyTestPass::apply(const camel::runtime::Program *program, std::ostream &os
             "IMPL graph {} body={} nodes={} edges={}\n",
             graph->name(),
             graph->isImplBody() ? "yes" : "no",
-            graph->liveNodeCount(),
+            graph->storedNodeCount(),
             graph->edgeCount());
         if (graph->regionCount() > 0 &&
             graph->region(0)->attrs != camel::core::attr::kNoAttrs) {

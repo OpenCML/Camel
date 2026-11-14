@@ -233,6 +233,7 @@ bool mayRemoveDead(const GCGraph &graph) {
             valueUsers[ref] > 0 && !joinOrBrchUser[ref]) {
             return true;
         }
+
         // What nothing reads: a GATE or a value computed for nothing.
         if (valueUsers[ref] != 0) {
             continue;

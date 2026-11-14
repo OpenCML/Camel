@@ -100,3 +100,62 @@ assert(text.includes('0x03000210'), 'and it names the code the rule landed with:
 }
 """
 timeout_ms = 20000
+# The same measurement for the pair above, on the same tree (2026-11-15, 6c64f2042):
+#
+#   1. `rc04_seed72` is refused by the state rule before any pass runs -- `camel <case> std::gir`
+#      exits 1 and prints no graph at all -- so neither of the two entries above exercises the
+#      optimizer. Their green is the front end's refusal, not the reading they were written for.
+#   2. With that one call taken out (`checkCellEscapes();` in src/compile/gir/program.cpp), the
+#      program runs at exit 0 with no output, exactly as its legal same shape
+#      `rc04_seed72_within_call.cml` does: the state rule is the only thing in its way.
+#   3. The ring `a1723fbb9` fixed is unobservable in this shape today, not gone. With the place
+#      decision that commit added switched off (`if (false && placePreds.empty())` on the
+#      argument-place block of src/runtime/draft_inline.cpp#inlineCallableInDraft), the program
+#      still exits 0 with no cycle and no `PassInternalError`. The byte-for-byte comparison of the
+#      inlined drawing (2246 lines, the 194 `ORDER` edges included) is on the sibling shape and
+#      written in feat/opt/inline_cycle. Making the ring observable again is work on a branch that
+#      reverts `a1723fbb9`, not a new seed.
+#
+# The live half is the inlining the two entries below read: `direct_calls` 2 with no pass and 0
+# under the pass.
+[[tests]]
+name = "adb67e081.rc04_seed72_within_call_no_pass"
+desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above)."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
+args = ["${case}", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 2, 'no pass: 2 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 0, 'the program says nothing, read ' + JSON.stringify(lines))
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc04_seed72_within_call_inline"
+desc = "The same program under `std::opt::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
+args = ["${case}", "std::opt::inline", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 0, 'inline: 0 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 0, 'the program says nothing after the pass too, read ' + JSON.stringify(lines))
+}
+"""
+timeout_ms = 20000

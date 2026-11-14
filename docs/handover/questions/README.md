@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：95 行（页已不在 `questions/` 里）
+## 生成器不会删的行：102 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -103,10 +103,17 @@
 | [`2026-11-14-what-makes-a-reader-alive`](../reviews/2026-11-14-what-makes-a-reader-alive.cn.md) | 一个格子「有活着的读者」是怎么算出来的？ | 在 `reviews/` |
 | [`2026-11-14-where-do-the-engines-still-keep-a-dead-write`](../reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md) | 死写「可以删」之后，两个引擎分别卡在哪一处？ | 在 `reviews/` |
 | [`2026-11-14-where-the-uses-boundary-sits`](../reviews/2026-11-14-where-the-uses-boundary-sits.cn.md) | `uses` 的边界落在哪一格：变量、句柄、还是不透明的值 | 在 `reviews/` |
+| [`2026-11-14-who-holds-the-place-when-a-holding-node-is-folded`](../reviews/2026-11-14-who-holds-the-place-when-a-holding-node-is-folded.cn.md) | 折掉一个持位节点之后，它的位置归谁？ | 在 `reviews/` |
 | [`2026-11-14-who-migrates-the-module-level-var`](../reviews/2026-11-14-who-migrates-the-module-level-var.cn.md) | 模块顶层的 `var` 与顶层外部写：谁来做那 35 个用例的迁移？ | 在 `reviews/` |
+| [`2026-11-15-can-a-commit-depend-on-unrelated-writes`](../reviews/2026-11-15-can-a-commit-depend-on-unrelated-writes.cn.md) | 同一个图的提交结果，能不能取决于同一事务里有没有别的写入？ | 在 `reviews/` |
 | [`2026-11-15-does-a-returned-calls-slot-keep-a-box-alive`](../reviews/2026-11-15-does-a-returned-calls-slot-keep-a-box-alive.cn.md) | 调用返回之后，它留下的句柄槽还让盒子活着吗？ | 在 `reviews/` |
+| [`2026-11-15-how-does-a-camel-pass-warn`](../reviews/2026-11-15-how-does-a-camel-pass-warn.cn.md) | 一个用 Camel 写的 pass，怎么报告一条不致命的诊断？ | 在 `reviews/` |
 | [`2026-11-15-is-the-inline-splices-program-observable`](../reviews/2026-11-15-is-the-inline-splices-program-observable.cn.md) | 拼接进来的那段体，归属可观测吗 | 在 `reviews/` |
 | [`2026-11-15-live-node-count-is-not-the-live-set`](../reviews/2026-11-15-live-node-count-is-not-the-live-set.cn.md) | `liveNodeCount()` 不是活集合 | 在 `reviews/` |
+| [`2026-11-15-member-liveness-needs-slot-producers`](../reviews/2026-11-15-member-liveness-needs-slot-producers.cn.md) | 成员级活性需要的是「槽位 → 生产者」，不是「成员 = 输入」 | 在 `reviews/` |
+| [`2026-11-15-the-acceptance-assumes-the-chain-starts-at-the-sweep`](../reviews/2026-11-15-the-acceptance-assumes-the-chain-starts-at-the-sweep.cn.md) | 验收的前提不成立：这条链不是从清扫开始的 | 在 `reviews/` |
+| [`2026-11-15-what-does-an-edit-promise`](../reviews/2026-11-15-what-does-an-edit-promise.cn.md) | 一个编辑算子，该保证「落地」，还是只保证「写进草稿」？ | 在 `reviews/` |
+| [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](../reviews/2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ | 在 `reviews/` |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |

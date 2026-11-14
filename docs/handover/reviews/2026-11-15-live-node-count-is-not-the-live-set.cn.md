@@ -53,3 +53,10 @@ gc_cnt_t GCGraph::liveNodeCount() const {
 ## 决策者答复（2026-11-15）
 
 你对，我上一页把它点错了：`liveNodeCount()` 回答的是要装几个节点，不是程序能看到哪些节点，不能改成调 `liveNodesOf`。保持它，但**改名**为 `storedNodeCount()`（或同义的名字），免得下一个人再把它当活集合用。冻结图侧的活集合按默认建议写在 `liveNodesOf` 旁边，并且**只写一份算法**：从根沿输入向后走的那段代码，对草稿与冻结图各有一个只读视图（`draft_writes.cpp` 已有 `FrozenGraphView` 这种视图），走法本身不复制。
+
+## 后续（已落地）
+
+作者裁定「保持它、但改名」：`GCGraph::liveNodeCount()` 现在叫 **`storedNodeCount()`**
+（`include/camel/runtime/graph.h:895`），`GraphRead` 接口上的同名方法一并改名（`graph_read.h:88`），
+注释里写明「它回答要装几个节点，不是程序能看到哪些节点」。活集合只由 `camel::runtime::liveNodesOf` 回答，
+冻结图侧的那份与本页建议一致，已经补上（`2e5504b8e`，与草稿同一份走法、两个视图）。
