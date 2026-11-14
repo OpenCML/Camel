@@ -5,9 +5,11 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：0 页
+## 现在在等作者：1 页
 
-（目录为空：没有页在等回答。）
+| 页 | 问什么 |
+| --- | --- |
+| [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，这条入口现在读的是「有没有这条遍都一样」 |
 
 ## 生成器不会删的行：80 行（页已不在 `questions/` 里）
 
