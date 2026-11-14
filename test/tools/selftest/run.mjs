@@ -714,8 +714,10 @@ if (!hasTarget(ownPlan, planFile)) {
 if (plansForChanges(['no/such/directory/file.txt']) !== null) {
     problems.push('--changed: an unmatched path selected plans instead of falling back')
 }
-// The forbidden layers stay unselectable: perf, the GC-stress plans and progen. A change there
-// falls back to the fast layer rather than running a plan the project keeps for a quiet machine.
+// The forbidden layers stay unselectable: perf and the GC-stress plans. A change there falls back
+// to the fast layer rather than running a plan the project keeps for a quiet machine. The progen
+// plan is here for a different reason: editing the plan file itself must fall back too, and only
+// the rule for its own harness may name it (checked below).
 for (const file of [
     'benchmarks/train.py',
     'test/cases/perf/fib_recursive.cml',
@@ -725,10 +727,37 @@ for (const file of [
     'test/plans/feat/opt/progen.plan.toml',
 ]) {
     if (plansForChanges([file]) !== null) {
-        problems.push(`--changed: ${file} selected a plan; perf/GC-stress/progen must be unselectable`)
+        problems.push(
+            `--changed: ${file} selected a plan; perf/GC-stress must be unselectable and a progen plan edit must fall back`
+        )
     }
 }
-// Every plan the selection file names must exist, and no rule may wire in a forbidden plan.
+// The one door into the random-program plan, and the reason it is a door and not a hole: the
+// harness that writes the programs is the one change that has to run them. It is selected by name,
+// so the whole plan runs -- the batch and the seed the batch leaves out -- because a plan that is
+// selected and then filtered down to one entry is the same "nobody runs it" in a new place.
+const progenHarness = plansForChanges(['test/tools/progen/generate.py'])
+const PROGEN_PLAN = 'feat/opt/progen.plan.toml'
+if (!hasPlan(progenHarness, PROGEN_PLAN)) {
+    problems.push(
+        `--changed: test/tools/progen/ selected ${progenHarness ? progenHarness.names.join(', ') : 'nothing'}, not the progen plan`
+    )
+} else if (hasLayered(progenHarness, PROGEN_PLAN)) {
+    problems.push(
+        '--changed: the progen plan is layered, so the tier filter would drop its batch; a harness change must run the plan in full'
+    )
+}
+// The lock: a progen case and the plan file itself still select nothing of the kind, so the door
+// above is the harness and not the corpus.
+const progenCase = plansForChanges(['test/cases/opt/progen/findings/inline_fvm_arm_effect_lost.cml'])
+if (hasPlan(progenCase, PROGEN_PLAN)) {
+    problems.push('--changed: a progen case selected the progen plan; only test/tools/progen/ may')
+}
+const HARNESS_DOOR = 'test/tools/progen/'
+const namesOnlyTheHarnessDoor = (rule) =>
+    Array.isArray(rule.paths) &&
+    rule.paths.length > 0 &&
+    rule.paths.every((p) => typeof p === 'string' && (p === HARNESS_DOOR || p.startsWith(HARNESS_DOOR)))
 const selectionDoc = JSON.parse(fs.readFileSync(path.join(repoRoot, 'test', 'plan-selection.json'), 'utf8'))
 const forbiddenPlan = (name) =>
     name === 'perf' ||
@@ -746,7 +775,7 @@ for (const rule of selectionDoc.rules || []) {
         if (!fs.existsSync(base) && !fs.existsSync(`${base}.plan.toml`)) {
             problems.push(`plan-selection.json: '${name}' is not a plan in test/plans`)
         }
-        if (forbiddenPlan(name)) {
+        if (forbiddenPlan(name) && !(name.startsWith('feat/opt/progen') && namesOnlyTheHarnessDoor(rule))) {
             problems.push(`plan-selection.json: '${name}' is a plan an ordinary change must not run`)
         }
     }
@@ -757,8 +786,9 @@ for (const rule of selectionDoc.rules || []) {
 // runs nothing. That is how stdlib/signatures, the doc guards, the golden files and the debugger
 // harness were being missed. This check walks every tracked file and fails on one that neither a
 // directory rule nor a file rule selects, unless it names a class the project deliberately does
-// not select. The allowlist is only for the forbidden layers (perf, GC stress, progen, PyTorch)
-// and for files no plan can read (vendored code, packaging, CI configuration).
+// not select. The allowlist is for the forbidden layers (perf, GC stress, PyTorch) and for the
+// progen plan file, which is reachable only from its own harness, plus files no plan can read.
+// (Vendored code, packaging, CI configuration.)
 const RULELESS_ALLOWED = [
     {
         match: /^hello\.cml$/,
@@ -822,7 +852,7 @@ const RULELESS_ALLOWED = [
     },
     {
         match: /^test\/plans\/feat\/opt\/progen\.plan\.toml$/,
-        why: 'progen is deliberately not selectable',
+        why: 'a progen plan edit falls back to the fast layer: the plan is named only by the rule for test/tools/progen/, not by its own file or by a case',
     },
     {
         match: /^test\/plans\/gpu\/tiles_(regions|decorator)\.plan\.toml$/,
