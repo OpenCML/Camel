@@ -1480,6 +1480,258 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
     return planDraftPayload(draft).runtimeRefsByDraftId;
 }
 
+namespace {
+
+/// A short spelling of a list of node references, for the sentences of the delivery check.
+std::string spelledRefs(std::span<const gc_node_ref_t> refs) {
+    if (refs.empty()) {
+        return "none";
+    }
+    std::string text;
+    for (size_t i = 0; i < refs.size(); ++i) {
+        text += i == 0 ? "" : ",";
+        text += std::to_string(refs[i]);
+    }
+    return text;
+}
+
+/// Whether the encoder writes no order input on `id`: the edge says nothing on a node that
+/// arranges itself freely, so the payload plan drops them (this file, `planDraftPayload`, and
+/// `carriesOrdering`, which is the same rule read by the rewrite side). The delivery check has to
+/// read that rule the same way or it would report every order edge of such a node as lost.
+bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+        !nodeIsFreelySchedulable(draft, id)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            if (draft.region(region).owner == id) {
+                return false; // it stands for its region and carries its order
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+void verifyDraftDelivery(
+    const GraphTransaction &transaction, const GCGraph &graph, std::string_view name) {
+    const GraphDraft &draft                       = transaction.graph();
+    const std::vector<gc_node_ref_t> draftToGraph = draftRuntimeNodeRefs(transaction);
+
+    // The sentence every refusal carries: which graph, and which edge. A graph that does not hold
+    // an edge its draft holds is an edit the caller wrote and will never see, so the commit is the
+    // last place that can say so -- and the one place that knows both sides.
+    const auto refuse = [&](const std::string &sentence) -> void {
+        throw std::runtime_error(
+            std::format(
+                "the graph '{}' this commit made is not the draft it encoded: {}",
+                name,
+                sentence));
+    };
+    // The node the graph holds for a draft node. A live draft node the graph has no node for is
+    // already a disagreement: the commit encoded this draft itself, so every one of them is there.
+    const auto graphNodeOf = [&](gc_node_ref_t id) {
+        const gc_node_ref_t ref = id < draftToGraph.size() ? draftToGraph[id] : kInvalidNodeRef;
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref) || graph.node(ref) == nullptr ||
+            graph.node(ref)->kind == GCNodeKind::Dead) {
+            refuse(
+                std::format(
+                    "draft node {} is live and the graph has no node for it (the draft's numbering "
+                    "gives "
+                    "it {}, and the graph holds {} node place(s) that are not dead).",
+                    id,
+                    ref == kInvalidNodeRef ? std::string("nothing") : std::to_string(ref),
+                    static_cast<uint64_t>(graph.storedNodeCount())));
+        }
+        return ref;
+    };
+    // The draft's inputs of one kind, in the graph's numbering, in the order the draft holds them.
+    const auto mappedInputs =
+        [&](gc_node_ref_t id, std::span<const gc_node_ref_t> inputs, const char *kind) {
+            std::vector<gc_node_ref_t> refs;
+            refs.reserve(inputs.size());
+            for (gc_node_ref_t input : inputs) {
+                const gc_node_ref_t pred =
+                    input < draftToGraph.size() ? draftToGraph[input] : kInvalidNodeRef;
+                if (pred == kInvalidNodeRef) {
+                    refuse(
+                        std::format(
+                            "the draft's {} input of node {} names draft node {}, which the graph "
+                            "has no node "
+                            "for; a committed graph cannot hold an edge to nothing.",
+                            kind,
+                            id,
+                            input));
+                }
+                refs.push_back(pred);
+            }
+            return refs;
+        };
+    // A run of inputs the graph must hold exactly as the draft does, in the same order (the ports
+    // and the control inputs are runs of one list and their order is the port order).
+    const auto sameRun = [&](gc_node_ref_t id,
+                             gc_node_ref_t ref,
+                             const char *kind,
+                             std::vector<gc_node_ref_t>
+                                 expected,
+                             std::span<const gc_node_ref_t>
+                                 actual) {
+        if (expected.size() == actual.size() &&
+            std::equal(expected.begin(), expected.end(), actual.begin())) {
+            return;
+        }
+        refuse(
+            std::format(
+                "node {} (graph node {}) has its {} inputs as [{}] in the draft and as [{}] in the "
+                "graph.",
+                id,
+                ref,
+                kind,
+                spelledRefs(expected),
+                spelledRefs(actual)));
+    };
+    // A set of side edges (order, sync): the graph holds one array per kind, sorted by (user,
+    // pred), so the order the draft wrote them in says nothing.
+    const auto sameSideEdges = [&](gc_node_ref_t id,
+                                   gc_node_ref_t ref,
+                                   const char *kind,
+                                   std::vector<gc_node_ref_t>
+                                       expected,
+                                   std::vector<gc_node_ref_t>
+                                       actual) {
+        std::sort(expected.begin(), expected.end());
+        std::sort(actual.begin(), actual.end());
+        for (gc_node_ref_t pred : expected) {
+            if (!std::binary_search(actual.begin(), actual.end(), pred)) {
+                refuse(
+                    std::format(
+                        "the {} edge from node {} to node {} (graph nodes {} -> {}) is in the "
+                        "draft and "
+                        "not in the graph: the graph's {} inputs of that node are [{}].",
+                        kind,
+                        pred,
+                        id,
+                        pred,
+                        ref,
+                        kind,
+                        spelledRefs(actual)));
+            }
+        }
+        for (gc_node_ref_t pred : actual) {
+            if (!std::binary_search(expected.begin(), expected.end(), pred)) {
+                refuse(
+                    std::format(
+                        "the graph holds a {} edge from node {} to node {} (graph nodes {} -> {}) "
+                        "that the "
+                        "draft does not: the draft's {} inputs of that node are [{}].",
+                        kind,
+                        pred,
+                        id,
+                        pred,
+                        ref,
+                        kind,
+                        spelledRefs(expected)));
+            }
+        }
+    };
+    const auto sidePreds = [&](gc_node_ref_t ref, bool order) {
+        std::vector<gc_node_ref_t> preds;
+        if (order) {
+            for (const GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+                preds.push_back(edge.pred);
+            }
+        } else {
+            for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+                preds.push_back(edge.pred);
+            }
+        }
+        std::sort(preds.begin(), preds.end());
+        return preds;
+    };
+
+    // Every edge the draft holds, in the numbering the graph gives its nodes: the four kinds of
+    // the design (a data port -- the normal run and the context one -- a control input, an order
+    // edge and a sync edge), so a graph that lost or gained one anywhere is caught.
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (draft.header(id) == nullptr || !draft.alive(id)) {
+            continue;
+        }
+        const gc_node_ref_t ref = graphNodeOf(id);
+        sameRun(
+            id,
+            ref,
+            "normal",
+            mappedInputs(id, draft.normInputsOf(id), "normal"),
+            graph.normInputsOf(ref));
+        sameRun(
+            id,
+            ref,
+            "context",
+            mappedInputs(id, draft.withInputsOf(id), "context"),
+            graph.withInputsOf(ref));
+        sameRun(
+            id,
+            ref,
+            "control",
+            mappedInputs(id, draft.ctrlInputsOf(id), "control"),
+            graph.ctrlInputsOf(ref));
+        const std::vector<gc_node_ref_t> order = sidePreds(ref, true);
+        if (takesNoOrder(draft, id)) {
+            if (!order.empty()) {
+                refuse(
+                    std::format(
+                        "the graph orders node {} (graph node {}) after [{}], and a node that "
+                        "arranges "
+                        "itself freely carries no order edge.",
+                        id,
+                        ref,
+                        spelledRefs(order)));
+            }
+        } else {
+            sameSideEdges(
+                id,
+                ref,
+                "order",
+                mappedInputs(id, draft.orderInputsOf(id), "order"),
+                order);
+        }
+        sameSideEdges(
+            id,
+            ref,
+            "sync",
+            mappedInputs(id, draft.syncInputsOf(id), "sync"),
+            sidePreds(ref, false));
+    }
+
+    // And the graph's side: a node or an edge nobody wrote is as wrong as one the draft lost. The
+    // runs and the side arrays were compared as sets above, so what is left is a node the draft has
+    // no place for.
+    std::vector<gc_node_ref_t> graphToDraft(graph.nodeCount(), kInvalidNodeRef);
+    for (gc_node_ref_t id = 0; id < draftToGraph.size(); ++id) {
+        const gc_node_ref_t ref = draftToGraph[id];
+        if (ref != kInvalidNodeRef && ref < graphToDraft.size()) {
+            graphToDraft[ref] = id;
+        }
+    }
+    for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        const GCNode *node = graph.node(ref);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            continue;
+        }
+        if (graphToDraft[ref] == kInvalidNodeRef) {
+            refuse(
+                std::format(
+                    "the graph holds node {} (kind {}) that the draft has no node for.",
+                    ref,
+                    static_cast<int>(node->kind)));
+        }
+    }
+}
+
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || !draft.alive(id)) {
@@ -1694,9 +1946,7 @@ namespace {
 struct DraftLiveFace {
     const GraphDraft &draft;
 
-    bool alive(gc_node_ref_t ref) const {
-        return draft.header(ref) != nullptr && draft.alive(ref);
-    }
+    bool alive(gc_node_ref_t ref) const { return draft.header(ref) != nullptr && draft.alive(ref); }
     GCNodeKind kindOf(gc_node_ref_t ref) const {
         const DraftNodeHeader *header = draft.header(ref);
         return header != nullptr ? header->kind : GCNodeKind::Dead;
@@ -1760,8 +2010,11 @@ struct FrozenLiveFace {
         return node != nullptr ? node->kind : GCNodeKind::Dead;
     }
     void roots(std::vector<gc_node_ref_t> &into) const {
-        for (gc_node_ref_t ref : {graph.entryNodeRef(), graph.exitNodeRef(),
-                                  graph.outputNodeRef(), graph.returnNodeRef()}) {
+        for (gc_node_ref_t ref :
+             {graph.entryNodeRef(),
+              graph.exitNodeRef(),
+              graph.outputNodeRef(),
+              graph.returnNodeRef()}) {
             into.push_back(ref);
         }
         for (gc_node_ref_t ref : graph.normPorts()) {
@@ -1808,8 +2061,7 @@ struct FrozenLiveFace {
     }
 };
 
-template <typename Face>
-std::vector<gc_node_ref_t> liveNodesWith(const Face &face) {
+template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &face) {
     std::unordered_set<gc_node_ref_t> visited;
     std::vector<gc_node_ref_t> worklist;
     auto pushRoot = [&](gc_node_ref_t ref) {

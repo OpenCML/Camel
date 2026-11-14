@@ -717,10 +717,9 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
         // encoded and handed back the graph the edit never reached.
         a->orderEdgeCount != b->orderEdgeCount || a->syncEdgeCount != b->syncEdgeCount ||
         !sameArray(a->orderEdges, b->orderEdges, a->orderEdgeCount) ||
-        !sameArray(a->syncEdges, b->syncEdges, a->syncEdgeCount) ||
-        a->entryNode != b->entryNode || a->exitNode != b->exitNode ||
-        a->outputNode != b->outputNode || a->returnNode != b->returnNode ||
-        a->returnKind != b->returnKind ||
+        !sameArray(a->syncEdges, b->syncEdges, a->syncEdgeCount) || a->entryNode != b->entryNode ||
+        a->exitNode != b->exitNode || a->outputNode != b->outputNode ||
+        a->returnNode != b->returnNode || a->returnKind != b->returnKind ||
         table.canonicalId(before.funcType()) != table.canonicalId(after.funcType()) ||
         table.canonicalId(before.closureType()) != table.canonicalId(after.closureType()) ||
         table.canonicalId(before.staticDataType()) != table.canonicalId(after.staticDataType()) ||
@@ -1493,6 +1492,28 @@ std::vector<gc_node_ref_t> RuntimeGraphDraftSession::committedNodeRefs(GCGraph *
     return draftRuntimeNodeRefs(*found->second->transaction);
 }
 
+namespace {
+
+/// Whether a commit reads back what it delivered against the draft it encoded
+/// (`verifyDraftDelivery`, graph_build.h). On in a Debug build, off in a Release one until a test
+/// asks for it: the check walks every edge of every graph a commit encodes, and a Release build is
+/// measured. It is never an `ASSERT` -- what it reports is a value the caller can see, and a claim
+/// that a graph holds what its draft holds has to hold in the build that ships too.
+std::atomic<bool> draftDeliveryCheck =
+#ifndef NDEBUG
+    true;
+#else
+    false;
+#endif
+
+} // namespace
+
+bool draftDeliveryCheckEnabled() { return draftDeliveryCheck.load(std::memory_order_relaxed); }
+
+void setDraftDeliveryCheckEnabled(bool enabled) {
+    draftDeliveryCheck.store(enabled, std::memory_order_relaxed);
+}
+
 void RuntimeGraphDraftSession::validateDraftPorts() const {
     for (const auto &[graph, entry] : drafts_) {
         if (entry == nullptr || entry->transaction == nullptr) {
@@ -1629,28 +1650,47 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (!drafted && (graph->flags() & kGraphFlagGatesDissolved)) {
             continue;
         }
-        auto &draft = ensureDraft(graph).edit();
-        if (draft.writings().empty() && draft.normalizeChainPlaces() > 0) {
-            edited_.insert(graph);
-        }
-        const bool dissolved = draft.dissolveUnorderedGates() > 0;
+        (void)ensureDraft(graph);
+        DraftEntry &entry = *drafts_.at(graph);
+        auto &draft       = entry.transaction->edit();
+        // What the session left in this draft, read before the commit closes it: `mutations` counts
+        // the calls that may have changed a draft since it was decoded, and everything below is one
+        // of them whatever it finds. This is the draft's own answer to "is the graph this draft was
+        // decoded from still this draft", and it is the answer the commit acts on. The encoder's
+        // answer is not asked: an encoding that dropped an edge made an edit look like no edit, and
+        // a write somewhere else in the same transaction could flip that reading back (the graph
+        // this commit made, then read against the draft, is what `verifyDraftDelivery` checks).
+        // Measured against the count the last commit left, so a second commit over the same draft
+        // is not read as a write of its own closing.
+        const bool written    = draft.mutations() > entry.deliveredMutations;
+        const bool normalized = draft.writings().empty() && draft.normalizeChainPlaces() > 0;
+        const bool dissolved  = draft.dissolveUnorderedGates() > 0;
         // An order edge whose two ends a rewrite left in different control regions is written on
         // the node that owns the region the deeper end runs in (docs/design/effects/edges.cn.md
         // 4.6). It is the last thing a commit does to the edges: dissolving gates above splices
         // order edges over the nodes it removes.
         const bool rehomed = draft.rehomeOrderEdges() > 0;
-        if (dissolved || rehomed) {
+        if (written || normalized || dissolved || rehomed) {
             edited_.insert(graph);
-        } else if (!drafted) {
-            GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
+        } else {
+            // The draft wrote nothing and the commit found nothing to close in it: it is the graph
+            // it was decoded from, so the graph keeps its version.
+            edited_.erase(graph);
+            if (!drafted) {
+                GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
 #ifndef NDEBUG
-            // Before the draft is destroyed: the Debug record must never name a freed draft.
-            noteDraftClosed(*debugRoots_, *drafts_.at(graph)->transaction);
+                // Before the draft is destroyed: the Debug record must never name a freed draft.
+                noteDraftClosed(*debugRoots_, *drafts_.at(graph)->transaction);
 #endif
-            drafts_.erase(graph);
-            draftedIds_[toValue(graph->id())] = 0;
-            draftRefs_.erase(graph);
+                drafts_.erase(graph);
+                draftedIds_[toValue(graph->id())] = 0;
+                draftRefs_.erase(graph);
+                continue;
+            }
         }
+        // The draft keeps the count this commit read, whatever it did to the draft: what comes next
+        // is the session's writing, not this commit's closing.
+        entry.deliveredMutations = draft.mutations();
     }
 
     // The program after the commit holds every graph of the closure: the version it has now, or
@@ -1701,13 +1741,9 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
 
     std::vector<GCGraph *> first;
     for (GCGraph *graph : closure) {
-        // A graph that was asked for editing and not changed is the graph it was.
-        if (heldBefore(graph) && edited_.contains(graph)) {
-            const auto draft = drafts_.find(graph);
-            if (draft != drafts_.end() && draft->second->transaction->graph().mutations() == 0) {
-                edited_.erase(graph);
-            }
-        }
+        // `edited_` is what the draft said: a rewrite wrote into it, or the commit's own closing of
+        // it did (the loop above). A graph the draft holds as the graph it was decoded from is not
+        // one of them, and keeps the version it has.
         if (!heldBefore(graph) || edited_.contains(graph)) {
             first.push_back(graph);
             allocate(graph);
@@ -1717,19 +1753,18 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         encode(*it);
     }
 
-    // The graphs that have a new version where the program had one. An edited graph encoded
-    // back to its own content is left as it is, unless it holds function values.
+    // The graphs that have a new version where the program had one. What is delivered is not a
+    // question a comparison of encodings may answer: a graph that got here has a draft whose
+    // content is not the graph the program holds, and that draft's encoding is the version. The
+    // comparison this replaces (`sameContent(old, encoded)`) did answer it, and an encoding that
+    // carried less than the draft made an edit look like no edit: the commit released the copy it
+    // had just encoded and handed back the graph the edit never reached. Whether a write somewhere
+    // else in the transaction happened to change the encoding decided whether the edge lived.
+    // `sameContent` still answers the other question -- whether the version needs a new revision
+    // (`changed`, below) -- and `verifyDraftDelivery` checks the encoding against the draft itself.
     std::vector<GCGraph *> replaced;
     for (GCGraph *graph : first) {
         if (!heldBefore(graph)) {
-            continue;
-        }
-        GCGraph *copy = fresh.at(graph);
-        if (graph->staticGraphRefs().empty() && sameContent(*graph, *copy)) {
-            committed->bind(graph->id(), graph);
-            fresh.erase(graph);
-            context_->releaseRuntimeGraph(copy);
-            edited_.erase(graph);
             continue;
         }
         replaced.push_back(graph);
@@ -1825,12 +1860,45 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     }
     // The copy is the same graph to the fact store; a new revision only for a graph that was
     // edited and not encoded back to the same content (what a graph refers to is the fact
-    // engine's business: closureRevision).
+    // engine's business: closureRevision). This is all `sameContent` decides now: a revision is a
+    // number about the content that was delivered, and the content is the copy.
     for (const auto &[graph, copy] : fresh) {
         const bool changed = edited_.contains(graph) && !sameContent(*graph, *copy);
         GCGraphBuildAccess::inheritRevision(copy, graph, changed);
     }
     committed->setRoot(committed->graph(oldRuntimeRoot->id()));
+
+    // What the commit delivered, read back against the draft it encoded (`verifyDraftDelivery`,
+    // src/runtime/graph_build.h): the graph the program is about to hold, edge by edge, both ways.
+    // A commit is the last place that knows both sides, and a graph that does not hold an edge its
+    // draft holds is an edit the caller wrote and will never see -- the shape this replaces, where
+    // a comparison of encodings decided what was delivered and answered "the same graph" for an
+    // edit whose only trace was an edge the comparison did not read. On in a Debug build, and in a
+    // test that asks for it (`setDraftDeliveryCheckEnabled`), because it walks every edge of every
+    // graph the commit encoded; a graph that is not one of those is not one this commit changed.
+    if (draftDeliveryCheckEnabled()) {
+        std::vector<GCGraph *> delivered(first);
+        std::unordered_set<GCGraph *> seen(first.begin(), first.end());
+        for (GCGraph *graph : order) {
+            if (seen.insert(graph).second) {
+                delivered.push_back(graph);
+            }
+        }
+        for (GCGraph *graph : delivered) {
+            const auto draft = drafts_.find(graph);
+            if (draft == drafts_.end() || draft->second->transaction == nullptr) {
+                continue;
+            }
+            const GCGraph *installed = committed->graph(graph->id());
+            if (installed == nullptr) {
+                continue;
+            }
+            verifyDraftDelivery(
+                *draft->second->transaction,
+                *installed,
+                draft->second->identity.name);
+        }
+    }
 
     // The table is a cache, not an owner (specializations.h): an entry whose specialization the
     // program does not hold names a graph the snapshot collected, and an entry whose callee got a

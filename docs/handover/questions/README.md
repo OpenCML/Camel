@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：49 页
+## 现在在等作者：50 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -54,6 +54,7 @@
 | [`2026-11-15-live-node-count-is-not-the-live-set`](2026-11-15-live-node-count-is-not-the-live-set.cn.md) | `liveNodeCount()` 不是活集合 |
 | [`2026-11-15-member-liveness-needs-slot-producers`](2026-11-15-member-liveness-needs-slot-producers.cn.md) | 成员级活性需要的是「槽位 → 生产者」，不是「成员 = 输入」 |
 | [`2026-11-15-the-acceptance-assumes-the-chain-starts-at-the-sweep`](2026-11-15-the-acceptance-assumes-the-chain-starts-at-the-sweep.cn.md) | 验收的前提不成立：这条链不是从清扫开始的 |
+| [`2026-11-15-the-premise-that-the-encoder-dropped-the-edge`](2026-11-15-the-premise-that-the-encoder-dropped-the-edge.cn.md) | 裁定的前提被读数推翻：编码没有丢那条边 |
 | [`2026-11-15-what-does-an-edit-promise`](2026-11-15-what-does-an-edit-promise.cn.md) | 一个编辑算子，该保证「落地」，还是只保证「写进草稿」？ |
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 |

@@ -121,3 +121,85 @@ is」）。**A 里提交结果没有变化，B 里有变化**——如果 A 的�
 
 今天没有能从源码写边的算子（`set_sync_predecessor` 已随 `0e860af5c` 的 Revert 消失），
 所以证据是 `test::` pass 的两次读数，不是一条 `.cml` 用例。
+
+## 8. 落地：交付看草稿，编码被读回来核对
+
+作者的裁决是三件事，这一节按顺序记读数。
+
+### 8.1 第 1 步的推断被推翻：编码没有丢那条边
+
+探针挂在 `RuntimeGraphDraftSession::commit` 里（`CAMEL_COMMIT_PROBE=1`，不入提交），在 `encode`
+之后同时打印草稿侧与编码侧的 sync/order 边（这条路径上草稿的 id 与图的 ref 同号）：
+
+    [probe encoded] graph=main draftSync=9 copySync=9 draftOrder=2 copyOrder=2
+      draft0->2(k11/pk0) draft2->3(k11/pk11) ... draft33->35(k13/pk11)
+      copy0->2         copy2->3         ... copy33->35
+    EDITONLY sync wrote=1 before=8 after=9 sync_in=1 mine=1 reused=0
+
+`draft0->2` 就是这次写的边（用户的 kind 11 是 `Oper`，`:op/assn_l` 的形状），`copy0->2` 说明
+**编码一侧有它**：`emitSideEdges` 对计划里每个活着的节点都写 `draft.syncInputsOf(user)`，丢边的
+不是它。丢边的是那个比较——`e4fe5f860` 之前 `sameContent` 不读两条旁挂数组，于是「编码结果等于
+旧图」成立，「内容没变」成立，副本被释放，旧图交回去。**所以「编码会丢边」这个前提在本树不成立**；
+它是同一个 bug 的另一种说法，判错的是比较，不是编码。
+
+### 8.2 修法：交付不比较编码，只看草稿自己记的账
+
+`commit` 不再用 `sameContent(旧图, 编码后的副本)` 决定「这张图沿用旧版本吗」，它问草稿：
+`draft.mutations()`——「自解码以来可能改动过这份草稿的调用次数」，取值在提交自己动手（归一化链位、
+解散无序 gate、重整 order 边）**之前**。写了东西（或被提交补完）的图进入 `first`；`first` 里程序
+本来就持有的图一律进 `replaced`，编码出来的副本就是新版本；什么都没写、提交也没补完的图，草稿自己
+说「我还是解码时那张图」，旧版本原样留着。
+
+`sameContent` 还在，只回答另一个问题：这张图的版本号要不要变（`changed`）。它的输入一直是「交付的
+副本 vs 旧图」，对这个问题是正确的输入。
+
+判据换掉之后有个洞：判据会把自己触发。`mutations()` 把提交自己的收尾也计进去，所以同一个草稿第二次
+提交会把上一次的收尾读成一次写入——「编辑被当成没编辑」的修法就会变成「每次提交都产生新版本」。
+`DraftEntry::deliveredMutations` 因此记下上一次交付时的计数，判定写成
+`draft.mutations() > entry.deliveredMutations`；`EDITONLY untouched reused=1` 是 plan 里的一条断言，
+钉住的就是这一条，不靠肉眼。
+
+读数（同一份用例，三次构建）：
+
+| 构建 | `EDITONLY` | 差分用例 |
+| --- | --- | --- |
+| `be5cb26da`（基线） | `after=9 sync_in=1 mine=1 reused=0` | `same=1`（绿） |
+| 交付退回比较 + 比较退回 `e4fe5f860` 之前 | `after=8 sync_in=0 mine=0 reused=1` | `same=0`（**红**） |
+| 本笔（交付不看比较） | `after=9 sync_in=1 mine=1 reused=0` | `same=1`（绿） |
+
+中间那一行是本页的 bug；基线上差分用例**是绿的**，因为 `e4fe5f860` 已经补上了比较的盲区——
+所以「修复前红」只能在退回那次比较之后读出来，不能拿基线冒充红。
+
+### 8.3 差分用例：同一条编辑，加不加无关写入，提交后的图逐边相同
+
+`test::edges_commit_differential`（`test/plans/feat/opt/edges.plan.toml`，
+`the_same_edit_commits_the_same_with_and_without_an_unrelated_write`）从同一个程序提交两次：一次只
+写那条边，一次在旁边再写一个「没人读、没人跑」的节点（`blankNode`，纯节点、零条边）。两次都打印
+提交后那张图的四类边（normal/with/ctrl 三条 run，order 与 sync 两条旁挂数组，逐边 `kind:user>pred;`），
+断言两行完全相同。
+
+- 基线：`DIFF same=1`（见上表）；
+- 交付退回比较 + 比较退回 `e4fe5f860` 之前：`DIFF a` 里**没有** `sync:2>0`，`DIFF b` 里有，
+  `DIFF same=0`——同一条编辑因为「别处还写了个节点」落到不同的图上，正是本页 §4 说的那个依赖；
+- 本笔：`DIFF same=1`，两次的 `sync:2>0` 都在。
+
+无关写入让节点数从 36 变成 37，边一分不差。
+
+### 8.4 往返检查：提交把图读回来核对
+
+`verifyDraftDelivery`（`src/runtime/graph_build.h`，实现在 `src/runtime/graph.cpp`）拿**草稿**与
+**装上去的图**逐边比：节点一一对应（草稿的活节点 ↔ 图的活节点），normal/with/ctrl 三条 run 按序
+比，order 与 sync 按集合比，并且两边都不许有对方没有的边。不一致就抛 `std::runtime_error`，句子里
+点名图、边、两个节点——不是 `ASSERT`（`NDEBUG` 会把它抹掉，而出问题的构建恰恰可能是发布构建）。
+
+它在 `commit` 末尾、版本号与根节点定下之后跑；Debug 构建常开，Release 构建要测试显式打开
+（`setDraftDeliveryCheckEnabled(true)`，`include/camel/runtime/draft_session.h`）。只核对**这次提交
+真的编码过**的图（`first` 与 `order`），别的图这次没有新版本，草稿里有而图上没有的差别不归它管。
+
+人为制造不一致的读数（`test::edges_delivery_check`：把「草稿写了边、图还是旧的」这一对直接交给
+检查）：
+
+    DELIVERY commit checked=1 accepted=1
+    DELIVERY refused: the graph 'main' this commit made is not the draft it encoded: the sync edge
+    from node 0 to node 2 (graph nodes 0 -> 2) is in the draft and not in the graph: the graph's
+    sync inputs of that node are [none].
