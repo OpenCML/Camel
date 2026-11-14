@@ -2994,6 +2994,7 @@ e6704f3f915eaf57 no test/cases/modules/graph_pass/unparsable_pass_lib.cml
 4b0af59f4afb72e6 ok test/cases/modules/graph_pass/valuereader.cml
 6c573532502ad360 ok test/cases/modules/graph_pass/values.cml
 d3cab3999bf66cb2 ok test/cases/modules/graph_values/attempt_holders.cml
+7fa0be0978b55b3c ok test/cases/modules/graph_values/clone_program.cml
 f0a02d775249a045 ok test/cases/modules/graph_values/discard_pass.cml
 72c62c56fb1915b6 ok test/cases/modules/graph_values/discard_target.cml
 7fab9dbd99156f9e ok test/cases/modules/graph_values/function_txn.cml
