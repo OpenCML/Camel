@@ -188,3 +188,28 @@ screen 认为没有可删节点 → 清扫一次都不跑。**摘元组成员要
 
 这条能拿到**第一份真读数**（摘完 `h` 变成没人读 ⇒ `isUnreadClosure` 收走 ⇒ 格子没有活读者 ⇒ `dead=1`
 的写成真死写 ⇒ 才轮到边界检查那次「拒不拒」的实测）。**重编号留给作者裁**，不在这一步里混。
+
+### 这一笔为什么停在「设计」而没有落地（本轮预算的真实边界）
+
+摘最后一个成员**不是**一次简单的「删一条输入」，它是**换一个节点**：`GCFillBody::slotCount` 必须跟着减一，
+而草稿的载荷是**只读**的——`payloadOf` 只有 const 重载（`include/camel/runtime/draft.h:493`），没有写回载荷的接口。
+所以正确的做法是：
+
+1. 用 `addFillNode(缩短后的元组类型, 新 GCFillBody, dataIndex)` 造一个新 `Fill`
+   （`include/camel/runtime/draft.h:628`，实现在 `src/runtime/draft_construct.cpp:161`）；
+2. 把**留下来的**成员按原顺序接到它上面（新槽位表 = 原槽位表去掉最后一项）；
+3. `replaceAllValueUses(旧, 新)` 把读者接过去（`draft.h:795` 一带），再擦掉旧的；
+4. 缩短后的元组类型由 `TupleTypeFactory(std::vector<Type*>)` + `TupleType::fromFactory`
+   （`include/camel/core/type/composite/tuple.h:42/86`）interning 得到，成员类型取留下来的输入各自的 `dataType`；
+5. 之后 `h` 失去用户 ⇒ 清扫的 `isUnreadClosure` 收走它。
+
+四条守卫**不需要活集合**，用更强的形式就够（保守是正确的方向）：最后输入的 `normUsersOf` **只有这个 `Fill`**、
+`withUsersOf` 为空、不被任何根点名；`Fill` 的其它用户全是 `TupleIndex < slotCount-1` 的 `Accs`；`Fill` 自己不是根。
+判不了「逃没逃逸」的形状（例如 `Fill` 被 `Call` 当参数、进 `Brch` 的一条臂、进 `Loop` 的端口）一律**不摘**。
+
+还有一处必须同时改：`screen.cpp#mayRemoveDead` 现在先看 `valueUsers`，元组还读着闭包 ⇒ 图被判「无可删」⇒
+**清扫一次都不跑**（读数 `SWEEP func=0 call=0 gate=0 oper=0`）。所以要让它也认「某个 `Fill` 的最后一个成员
+没人读」这一种可删的理由，否则换节点的代码永远跑不到。
+
+**结论**：这一步要一次完整的实现 + 一次构建 + 四种拒绝用例的读数，是单独一轮的活。半做会让「摘了但没接对」
+和「没摘」混在一起，读数就读不出是谁的问题——所以本轮停在这里，把上面五步和两条改点交出去。
