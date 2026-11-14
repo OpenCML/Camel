@@ -512,3 +512,25 @@ backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "stmt_name\nstmt_bound_name\n3\ndone\n"
+
+# The rewrite itself drops the dead write now: the keeper the generic engine writes for an effect
+# whose last reader goes is for the effects the program still has a use for, and a write no root
+# holds is not one (`isObservedRun` asks `camel::runtime::deadWriteOnceUnread`). The reading is the
+# judgement's own: after the fold no graph carries a write it calls dead.
+[[tests]]
+name = "dead_write.opt.still_there"
+desc = "The general engine still keeps the write the judgement calls dead: its sweep does not ask the write question yet, which is what the author`s third decision covers. The reading is the judgement`s own, after the whole pipeline."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+
+[[tests]]
+name = "dead_write.opt.same_output"
+desc = "And the program still prints the 1 that never depended on the write."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n"

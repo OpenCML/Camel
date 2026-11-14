@@ -299,6 +299,13 @@ struct FrozenGraphView {
     bool isRead(gc_node_ref_t ref) const {
         return !graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty();
     }
+    bool isGate(gc_node_ref_t ref) const {
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        return node != nullptr && node->kind == GCNodeKind::Gate;
+    }
 };
 
 /// A draft under rewrite, read the way the transaction holds it: the same questions, spelled the
@@ -342,7 +349,37 @@ struct DraftGraphView {
     bool isRead(gc_node_ref_t ref) const {
         return !draft.normUsersOf(ref).empty() || !draft.withUsersOf(ref).empty();
     }
+    bool isGate(gc_node_ref_t ref) const {
+        const DraftNodeHeader *header = draft.header(ref);
+        return header != nullptr && header->kind == GCNodeKind::Gate;
+    }
 };
+
+/// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
+/// its value input, read here exactly as `isWrittenInPlace` reads a slot
+/// (`normInputsOf(id).back()`). So the cell a `var` parameter writes is the caller's cell, not the
+/// gate that carries it across the call: asking the gate alone answers "no root holds it" for every
+/// write made through a parameter, which is a write the caller can still read (design
+/// principles 3.5, 9.7).
+template <typename View> bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
+    std::unordered_set<gc_node_ref_t> seen;
+    gc_node_ref_t place = ref;
+    while (seen.insert(place).second) {
+        if (view.isNamed(place)) {
+            return true;
+        }
+        if (!view.isGate(place)) {
+            return false;
+        }
+        const auto inputs = view.normInputsOf(place);
+        if (inputs.empty()) {
+            return false;
+        }
+        place = inputs.back();
+    }
+    // A cycle of GATEs: nothing behind it, so no root holds it.
+    return false;
+}
 
 /// A root holds the value the write leaves, or the place it writes into.
 template <typename View> bool writeIsRootedWith(const View &view, gc_node_ref_t ref) {
@@ -355,7 +392,7 @@ template <typename View> bool writeIsRootedWith(const View &view, gc_node_ref_t 
     }
     const auto inputs = view.normInputsOf(ref);
     for (size_t index = 0; index < inputs.size(); ++index) {
-        if (writesOperandAt(*body, index) && view.isNamed(inputs[index])) {
+        if (writesOperandAt(*body, index) && placeIsRootedWith(view, inputs[index])) {
             return true;
         }
     }
@@ -389,6 +426,20 @@ bool deadWrite(const GCGraph &graph, gc_node_ref_t ref) {
 
 bool writeIsRooted(const GraphDraft &draft, gc_node_ref_t ref) {
     return writeIsRootedWith(DraftGraphView{draft}, ref);
+}
+
+bool deadWriteOnceUnread(const GCGraph &graph, gc_node_ref_t ref) {
+    const FrozenGraphView view{graph};
+    const GCOperBody *body = view.bodyOf(ref);
+    return body != nullptr && isWriteOfProgramState(*body, view.normInputsOf(ref).size()) &&
+           !writeIsRootedWith(view, ref);
+}
+
+bool deadWriteOnceUnread(const GraphDraft &draft, gc_node_ref_t ref) {
+    const DraftGraphView view{draft};
+    const GCOperBody *body = view.bodyOf(ref);
+    return body != nullptr && isWriteOfProgramState(*body, view.normInputsOf(ref).size()) &&
+           !writeIsRootedWith(view, ref);
 }
 
 bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref) {
