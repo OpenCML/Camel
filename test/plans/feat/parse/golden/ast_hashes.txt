@@ -3779,6 +3779,8 @@ e5f1dda926825893 ok test/cases/opt/defun/family_shape.cml
 94ae362b8abacc94 ok test/cases/opt/defun/nested_signature.cml
 81f3343c0f081204 ok test/cases/opt/defun/value_tag.cml
 bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
+a697e5029bcc5876 ok test/cases/opt/devirtualize/recallee_arity.cml
+3ccda385a066a3b9 ok test/cases/opt/devirtualize/recallee_type.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
 a4d7f13da29104db ok test/cases/opt/effects/fold_keeps_arm_effect.cml
