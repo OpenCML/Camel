@@ -1,0 +1,142 @@
+id = "para.exec_pred"
+order = 352
+tier = "fast"
+tags = ["feat", "para", "consistency"]
+desc = "The nodes one node waits for have one implementation, and the differential test that pins it: the same six programs on std::nvm (the reference) and on the parallel scheduler, whose task graph is cut by that implementation, print the same lines in the same order"
+
+# What this plan is for
+# ---------------------
+# "Which nodes must run before this one" used to be worked out in four places that each read the
+# graph's edges themselves: the execution order (src/execute/graph_runtime_support.cpp,
+# computeExecutionOrder), the parallel scheduler's node-by-node task graph
+# (src/passes/sched/taskflow/taskflow.cpp, connectRuntimeDependencies), its structured plan
+# (the same file, the `collectWaits` of buildStructuredPlan) and the storage-reuse proof of the
+# plan (src/execute/exec_plan.cpp, planStorageReuse). They are now one function,
+# `camel::execute::executionPredecessorsOf` (include/camel/execute/graph_runtime_support.h), and
+# the four read it. The differences the four had are named one by one in the commit that made the
+# change; the one difference that is still there -- the structured plan obeys the data, control and
+# sync edges and not the order edge -- is written where the plan decides it, once (see below).
+#
+# This entry is the differential test: the same programs, run by std::nvm -- the linear reference,
+# which walks the order the plan computes -- and by the parallel scheduler, whose scopes are cut
+# into tasks exactly along the predecessor edges. Both must print the same lines in the same
+# order, and `expect_stdout_exact` freezes that text here so that a divergence is reported as the
+# first differing line (`describeTextDifference` in test/tools/run-tests.mjs) rather than as a
+# bare "differs".
+#
+# Four configurations of the scheduler are run, because they reach the predecessor edges by
+# different paths, and a change that breaks one need not break the others:
+#
+#   run_prl               the default: a serial graph goes to the bytecode interpreter, and the
+#                         rest is laid out from the plan;
+#   run_prl_fanout_all    every scope whose items are not totally ordered becomes a task graph
+#                         (`fanout_all=true`), so the edges are what cuts it. Measured on these
+#                         six programs with `segments=true`: the arm of `sumTo` in branch.cml,
+#                         the body of `inner` in sync_block.cml and `main` in fault.cml are cut
+#                         into chains of tasks. The other three are totally ordered (a linear
+#                         chain, a loop, and an io body whose statements are all on the chain),
+#                         which is what those three are here to keep true;
+#   run_prl_no_bytecode   the scheduler evaluates every graph itself instead of handing a serial
+#                         one to the interpreter.
+#
+# The six programs cover the shapes the predecessor function has to answer for: a linear chain,
+# a branch (both arms, and the arm's own pure computation, which is where a task graph appears),
+# a loop (evaluated node by node, so this case is the path where no task graph is cut at all), a
+# sync block (GATEs forwarding a value along the chain, a block body in a function and in a
+# lambda), a computation that may fault and is caught (`GATE`, the fault becoming an error
+# value) and external access (`println`, a module operator, a comprehension and a higher-order
+# call).
+#
+# What these six deliberately do not contain: two effectful nodes that an *order* edge orders and
+# that a plan may otherwise run at once. The scheduler's plan obeys the data, control and sync
+# edges and not the order edge (one `constexpr` says so, in
+# src/passes/sched/taskflow/taskflow.cpp#planObeysPredecessor), while `std::nvm` obeys all three
+# because it walks one order. Two existing programs measure that disagreement and both are
+# asserted on the scheduler's side, so a case of this kind here would be red from the start:
+# `test/cases/para/core/concurrent_calls.cml` prints `0` on `std::nvm` and `2` on `run_prl`, and
+# `concurrent_recursion.cml` prints `0 of 8` against `8 of 8`. Whichever side is right is the
+# language author's decision; until it is taken, this entry pins the edges the two back ends do
+# agree on, which is the whole of what the shared function decides for a graph that has no such
+# pair. When the plan does start obeying order edges, adding one of those two programs here is
+# what turns the new answer into a number instead of a claim.
+
+[defaults]
+kind = "behavior"
+args = ["${case}", "${backend}"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+timeout_ms = 60000
+
+[[tests]]
+name = "linear"
+desc = "A linear chain: every statement of the body prints, so the order the lines come out in is the order the nodes ran in. The last line prints a value two unordered calls made, which only a back end that ran both before it can print."
+case = "../../../cases/para/exec_pred/linear.cml"
+expect_stdout_exact = """linear 0
+linear 1 3
+linear 2 7
+linear 3 22
+linear 4 164
+"""
+
+[[tests]]
+name = "branch"
+desc = "A branch: one arm runs and the other does not, what an arm reads from outside the branch is computed before it is taken, and the arm's own arithmetic is a scope the parallel scheduler cuts into tasks."
+case = "../../../cases/para/exec_pred/branch.cml"
+expect_stdout_exact = """pick enter 3
+arm odd 3
+pick leave 60
+branch 1 60
+pick enter 4
+arm even 4
+pick leave 10
+branch 2 10
+"""
+
+[[tests]]
+name = "loop"
+desc = "A loop: the rounds run in order and each round prints once. The scheduler evaluates a graph with a loop node by node, so this case is the path where the shared function cuts no task graph and the lines must still be the reference's."
+case = "../../../cases/para/exec_pred/loop.cml"
+expect_stdout_exact = """loop before
+round 0 3
+round 3 1
+round 4 4
+loop after 8
+while 2
+while 1
+loop done 0
+"""
+
+[[tests]]
+name = "sync_block"
+desc = "A sync block: its statements run in the order they are written, and a value it hands on that is not its own is forwarded through a GATE -- the node whose sync predecessor the shared function has to keep. A block body in a function and in a lambda."
+case = "../../../cases/para/exec_pred/sync_block.cml"
+expect_stdout_exact = """main 1
+block 1 5
+inner 1 5
+inner 2 10
+block 2 10
+main 2 11
+"""
+
+[[tests]]
+name = "fault"
+desc = "A computation that may fault: `divide` stays on the sync chain and its value reaches the next statement through a GATE; the fault itself is caught by `attempt` and becomes an error value, and the statements after it still run in order."
+case = "../../../cases/para/exec_pred/fault.cml"
+expect_stdout_exact = """fault 1
+fault 2 4
+fault 3 DivisionByZero
+fault 4 3
+"""
+
+[[tests]]
+name = "io"
+desc = "External access: println, a module operator, a value built by a comprehension and a reduction over an array, then two higher-order calls neither of which waits for the other."
+case = "../../../cases/para/exec_pred/io.cml"
+expect_stdout_exact = """io 1 3.1622776601683795
+io 2 [1, 2, 3]
+io 3 [1, 4, 9]
+io 4 14.035668847618199
+io 5 [2, 4, 6] [2, 5, 10]
+"""

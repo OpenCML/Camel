@@ -134,6 +134,36 @@ std::string describeNode(const camel::runtime::GCGraph *graph, gc_node_ref_t ref
 
 } // namespace
 
+std::vector<ExecutionPredecessor>
+executionPredecessorsOf(const camel::runtime::GCGraph &graph, gc_node_ref_t ref) {
+    std::vector<ExecutionPredecessor> predecessors;
+    const auto append = [&predecessors](gc_node_ref_t node, ExecutionPredecessor::Kind kind) {
+        predecessors.push_back(ExecutionPredecessor{node, kind});
+    };
+    // The order the walk of computeExecutionOrder takes them in, which is also the order the plan
+    // is laid out in: control inputs, then the data ports (normal role before context role,
+    // edges.cn.md 1.5), then the statements of a sync chain, then what only orders.
+    for (gc_node_ref_t input : graph.ctrlInputsOf(ref)) {
+        append(input, ExecutionPredecessor::Kind::Control);
+    }
+    for (gc_node_ref_t input : graph.normInputsOf(ref)) {
+        append(input, ExecutionPredecessor::Kind::Data);
+    }
+    for (gc_node_ref_t input : graph.withInputsOf(ref)) {
+        append(input, ExecutionPredecessor::Kind::Data);
+    }
+    // A sync edge carries "used" and an order at once (edges.cn.md 1.5): the statement written
+    // before this one runs before it, exactly as a control input does.
+    for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+        append(edge.pred, ExecutionPredecessor::Kind::Sync);
+    }
+    // An order edge only orders: neither end is made to run by it (edges.cn.md 2).
+    for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+        append(edge.pred, ExecutionPredecessor::Kind::Order);
+    }
+    return predecessors;
+}
+
 std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *graph) {
     GUARD(graph != nullptr, "Runtime graph is null in execution topo construction.");
     GUARD(
@@ -512,32 +542,24 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
             }
         }
 
-        for (gc_node_ref_t input : graph->ctrlInputsOf(index)) {
-            visit(input);
-        }
-        for (gc_node_ref_t input : graph->normInputsOf(index)) {
-            visit(input);
-        }
-        for (gc_node_ref_t input : graph->withInputsOf(index)) {
-            visit(input);
-        }
-        // A sync edge is a use and an order at once (docs/design/effects/edges.cn.md 1.5): the
-        // statement written before this one runs before it. It is live whenever the node is --
-        // the liveness walk above follows it -- so it is visited whether or not the layout holds
-        // it for another reason.
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(index)) {
-            visit(edge.pred);
-        }
+        // Everything that orders another node after this one, read from the one function that
+        // says what it is (executionPredecessorsOf): the control inputs, the data ports, the
+        // statement a sync edge writes before this one -- which is live whenever the node is, the
+        // liveness walk above following it -- and the order edges.
+        //
         // An order edge orders two nodes that both run; it does not make either of them run
         // (docs/design/effects/edges.cn.md 1.5 and 2; design principles 3.1: a node runs iff a node
         // of its region that runs uses it). A predecessor that the layout does not hold anyway is a
         // node nothing reaches, so its order says nothing and is not visited: no other edge is
         // followed from it. Region membership decides *when* a node runs, never *whether* -- it is
-        // read below, to lay the plan out arm by arm, and it does not seed this walk.
-        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
-            if (live[edge.pred]) {
-                visit(edge.pred);
+        // read above, to lay the plan out arm by arm, and it does not seed this walk.
+        for (const ExecutionPredecessor &predecessor : executionPredecessorsOf(*graph, index)) {
+            const bool onlyOrders = predecessor.kind == ExecutionPredecessor::Kind::Order;
+            if (onlyOrders &&
+                (predecessor.node >= live.size() || live[predecessor.node] == 0)) {
+                continue;
             }
+            visit(predecessor.node);
         }
 
         state[index] = 2;

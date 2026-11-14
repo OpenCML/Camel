@@ -107,6 +107,38 @@ struct RuntimeBranchArmRegion {
     std::vector<camel::runtime::gc_node_ref_t> topoIndices;
 };
 
+/// One node another must run after, with the edge kind that says so (docs/design/effects/
+/// edges.cn.md 1: a data edge, a sync edge, an order edge; a control input is the chain wait a
+/// GATE carries).
+struct ExecutionPredecessor {
+    camel::runtime::gc_node_ref_t node = camel::runtime::kInvalidNodeRef;
+    enum class Kind : uint8_t {
+        Control, // a control input (the chain wait a GATE carries)
+        Data,    // a value port: one normal-role port, or a context (`with`) one
+        Sync,    // the statement written before this one in the same block
+        Order,   // an edge that only orders: both nodes run, the predecessor runs first
+    } kind = Kind::Data;
+    bool operator==(const ExecutionPredecessor &) const = default;
+};
+
+/// The nodes `ref` must run after, and nothing else: the one answer to "what does this node wait
+/// for" (docs/design/effects/edges.cn.md 2: the order obeys all three edge kinds). In this order --
+/// control inputs, normal-role data ports, context (`with`) ports, sync predecessors, order
+/// predecessors -- which is the order `computeExecutionOrder` walks them in, so a back end that
+/// reads this list lays a graph out exactly as that walk does.
+///
+/// A node is named once for every edge that reaches `ref` (a value read by two ports is named
+/// twice); nothing is filtered. The refs are the stored ones, so a caller laying out only the
+/// nodes that run skips the ones its own liveness does not hold -- an order edge orders two nodes
+/// that both run and never makes either of them run.
+///
+/// This is the single implementation. The execution order below, the parallel scheduler's task
+/// graph (`src/passes/sched/taskflow`), and the storage-reuse proof of the plan
+/// (`src/execute/exec_plan.cpp`) all read it, so no pass keeps a list of its own. It reads the
+/// graph and runs nothing, so a test may call it on its own.
+std::vector<ExecutionPredecessor> executionPredecessorsOf(
+    const camel::runtime::GCGraph &graph, camel::runtime::gc_node_ref_t ref);
+
 /// Computes the order the live nodes of `graph` run in. Back ends do not call it: they read the
 /// execution plan (camel/runtime/exec_plan.h), which calls it once per graph version.
 std::vector<camel::runtime::gc_node_ref_t>
