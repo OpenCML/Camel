@@ -1,0 +1,17 @@
+Round-bound hypothesis (coordinator): refuted by reading.
+
+I proposed that rc03_seed56's only-integrated-std::opt red might be the fixed point
+stopping at its round bound, so that pruneBranch:817 was running on a graph that
+needed one more fold round. The merge lane measured it on this tree's binary:
+no pass -> exit 0, no output; std::opt::fold alone -> exit 0, no output;
+std::opt -> RuntimeDiag::PassInternalError with three order edges entering
+region 5 (28 -> 10, 31 -> 10, 32 -> 10), and no OptimizationStoppedShort.
+
+So the round bound never stopped this program: the optimizer was not short of a
+round, it wrote an order edge into a nested region. The original judgement on
+pruneBranch:817 stands; "needs a second round of fold" is retired. rounds_warning
+(05e331ca3) is unrelated to this red.
+
+Recorded here because the commit was already pushed and rewriting it would cost
+everyone else their baseline. The hypothesis was the coordinator's; the reading
+refuted it.
