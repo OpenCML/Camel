@@ -16,19 +16,6 @@ slot_t __builtin__assn__(ArgsView &with, ArgsView &norm, camel::core::context::C
 slot_t __builtin__var_take__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_owned__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 
-/// `:op/keep(x, v)`: the value `v`, with `x` as an input whose value no result takes, so that the
-/// node `x` names stays in the data-use set the liveness function computes (design principles
-/// 3.3). A pass that removes the last use of a node that must still run -- an effect, or a
-/// computation that may fault -- routes that node here instead of dropping it, and `v` stands
-/// where the node's value did. The body is a pass-through and stands beside its declaration; the
-/// table declares the operator conservatively (an effect, may fault; operator_table.h), so no
-/// pass drops it, merges it, moves it or computes it early.
-inline slot_t __keep__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx) {
-    (void)with;
-    (void)ctx;
-    return norm.slot(1);
-}
-
 slot_t __builtin__assn_add_i__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_add_l__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);
 slot_t __builtin__assn_add_f__(ArgsView &with, ArgsView &norm, camel::core::context::Context &ctx);

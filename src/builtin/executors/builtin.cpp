@@ -177,11 +177,6 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         {"struct/append_arr_in_place", __append_in_place_arr__},
         // The private copy of an array a rewritten loop starts from; likewise internal.
         {"struct/copy_arr", __copy_arr__},
-        // `:op/keep(x, v)`: `v`, with `x` kept as an input of an operator that must run, so that
-        // the node `x` names stays in the data-use set (operators/ops.h). Inserted by a pass that
-        // removes the last use of an effect or of a computation that may fault; not a group a
-        // program can name.
-        {"op/keep", __keep__},
 
         // variables
         {"var/new", __builtin__var_new__},
@@ -519,7 +514,7 @@ void registerBuiltinOperatorTraits() {
     // reads `mayFault` beside `elementwise` to answer design principles 3.4's predicate, and
     // `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or recompute a node
     // -- an operator left out of this list is a running the program observes, so `std::opt`
-    // keeps it alive with `:op/keep` when a removal takes its last read
+    // keeps it alive with a `GATE` when a removal takes its last read
     // (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Each entry here is one operator of
     // docs/handover/reports/faults-table-audit.md, which reads its implementation against this
     // list.
@@ -646,12 +641,9 @@ void registerBuiltinOperatorTraits() {
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
         // Every operator under `op/` is pure except the assignment family, which writes a
-        // variable, and `op/keep`, which is there for a node that must keep running: it is
-        // declared the way an operator nobody declared is (it has an effect, and it may fault),
-        // so no pass drops it, merges it, moves it or computes it early, which would undo the
-        // reason a pass inserted it (operators/ops.h). Every operator over Map and Set (coll/)
-        // returns a new value and changes nothing.
-        const bool pure = (key.starts_with("op/") && !storesIntoCell(key) && key != "op/keep") ||
+        // variable. Every operator over Map and Set (coll/) returns a new value and changes
+        // nothing.
+        const bool pure = (key.starts_with("op/") && !storesIntoCell(key)) ||
                           key.starts_with("coll/") || key.starts_with("enum/") ||
                           kPureHelpers.contains(key);
         // Declared either way: an operator without a declaration is treated the same as one

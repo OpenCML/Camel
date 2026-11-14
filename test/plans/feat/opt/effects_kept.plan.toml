@@ -151,76 +151,85 @@ expect_output_not_contains = ["[EFFECTS] RED", "[EFFECTS]   lost:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
-# The one shape `:op/keep` exists for, written at graph level because no compiler pass makes it
-# today: an effect a pass takes the last read of is a statement of a `sync` block in the graphs the
-# builder writes, and the block's chain keeps it (design principles 3.3's current guarantee -- the
-# chain, not this operator). `test::keepshape` takes the shape from the source: `keep_shape.cml`
-# writes the print in a function that is no `sync` block, so nothing in its graph has a sync edge,
-# and the pass removes the node that reads the print, which is what takes the print's last read.
+# Control edges are not a keeper (design principles 3.3, 9.7). `std::opt::fold` prunes a branch whose
+# condition it can read, and the nodes the branch had waited on inherited its control edge -- among
+# them an inner branch's `JOIN`, which is structure a read ran after but whose own running nothing
+# observes. The `CTRL` edge from it kept the whole inner branch -- its comparison, its `BRCH`, its
+# `JOIN` -- alive after the fold had taken its only read, and all three appeared in `std::tns`, the
+# order the surviving nodes run in. Nothing observed their running and nothing reads their value, so
+# they go with the arm that took the branch's place.
 #
-# Three readings, and only one of them needs the operator: `keep=1 uri=:op/keep data_user=1
-# standing=alive` is the rewrite's own answer (the operator stands in the value and the print is
-# kept by a data use), `wait_edge=0 waited_on=0` says the print has no order edge to lean on, and
-# the output does the rest -- `1` is the print running and the exit code `99` is the value the
-# removal stands for.
+# Two readings of one program, plus the run: the drawing has no `CTRL` edge at all, the scheduled
+# order names none of the three, and the program still prints what it printed.
 [[tests]]
-name = "keep_shape.replace"
-desc = "The shape `:op/keep` is for: the effect is read by one node that a pass removes, no `sync` edge stands under it, and the rewrite keeps it through the operator -- the print still runs, and the value is the replacement."
-case = "../../../cases/opt/effects/keep_shape.cml"
-args = ["${case}", "test::keepshape", "${backend}"]
-expect_exit = 99
-expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\n1\n"
-
-# `std::jgir` and not `std::gir`: the dot dump asserts `graph->exitNode() != nullptr`
-# (src/passes/trans/dot/graphviz.cpp#dumpGraph, "Runtime graph exit node is missing") and a graph that a
-# pass committed with a node removed trips it, while the same graph runs (`keep_shape.replace`
-# above exits 99) and `std::jgir` draws it. That is a defect of the dump, not of this rewrite, and
-# the plan reads the operator out of the JSON until the dump is looked at.
-[[tests]]
-name = "keep_shape.in_graph"
-desc = "The same rewrite, drawn: the graph holds an OPER node whose operator is `:op/keep`."
-case = "../../../cases/opt/effects/keep_shape.cml"
-args = ["${case}", "test::keepshape", "std::jgir"]
-# One backend: the graph is the same one on each, and the test reads the drawing, not a run.
+name = "fold_leaves_no_control_edge.gir"
+desc = "After the fold nothing waits on the branch that is gone: the drawing holds no `CTRL` edge."
+case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
+args = ["${case}", "std::opt::fold", "std::gir"]
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\"", "\"exit\": \"g2n3\""]
-# Two shapes of the same operator, side by side, because one alone would say the wrong thing about
-# where it lives. `keep_shapes.real_pipeline` is the operator as `std::opt` writes it over an
-# existing case -- two nodes, and the output `5` unchanged. `keep_shapes.no_order_edge` is the
-# rewound one: one node, no order edge anywhere (`waited_on=0`), and the line it prints is the
-# effect the operator is holding up.
+expect_output_not_contains = ["CTRL"]
+
+[[tests]]
+name = "fold_leaves_no_control_edge.tns"
+desc = "The order the nodes run in: the folded branch's comparison, its `BRCH` and its `JOIN` are not in it."
+case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
+args = ["${case}", "std::opt::fold", "std::tns"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_not_contains = ["<:op/le_l>", "BRCH:", "JOIN:"]
+expect_stdout_contains = ["CALL: <:io/println>"]
+
+[[tests]]
+name = "fold_leaves_no_control_edge.reference"
+desc = "No pass: the two prints of the source run, and the program returns the second one's value."
+case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 8
+expect_stdout_exact = "8\n8\n"
+
+[[tests]]
+name = "fold_leaves_no_control_edge.fold"
+desc = "`std::opt::fold` takes the same two prints on every back end."
+case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
+args = ["${case}", "std::opt::fold", "${backend}"]
+expect_exit = 8
+expect_stdout_exact = "8\n8\n"
+
+[[tests]]
+name = "fold_leaves_no_control_edge.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 8
+expect_stdout_exact = "8\n8\n"
+
+# The fault case that is not wired yet: test/cases/opt/effects/fold_keeps_inner_fault.cml. The fold
+# takes the last read of `1 / z > 0` -- the branch that compared it is pruned and nothing reads the
+# comparison any more -- and the keeper that should stand in its place is a `GATE` whose data port
+# reads that value and whose sync predecessor is the division (design principles 3.3, edges.cn.md
+# 5.3). It is not built: a `GATE` with no value reader and no sync user cannot end a sync edge
+# (src/runtime/graph_edges.cpp, `canEndSyncEdge`), so `keepThroughValue` erases it and the division
+# goes with the comparison. The reading is `std::opt::fold` over that case printing `4` and exiting 4
+# instead of faulting a division by zero, so the case is written and read by hand but no entry here
+# asserts it: a green entry would pin a behaviour the fold does not have, and a red one would pin a
+# rule the tree cannot keep yet.
+
+# "Is an operator the passes write still reachable?" is a number pinned by name: `:enum/tag` and
+# `:enum/field` over `test/cases/opt/defun`, and `:enum/make` pinned to zero, with the writer it
+# would have. A case whose effects the statement chain already reaches needs no redundant keeper;
+# that is not the same as losing an effect credential. One more case means a rule started writing
+# the operator, one fewer means a rule stopped. The denominator is the whole corpus and may grow;
+# the finding is what may not move.
 #
-# Note what the two have in common, measured rather than assumed: `in_chain=0` in both. The
-# operator is only written when the node it keeps has no sync user (`replaceNode`:
-# `syncUsers.empty() ? keepThroughValue(...) : replacement`), so a kept node never stands in a
-# `sync` block's chain -- what separates the two shapes is who wrote the operator and whether an
-# order edge is left to lean on, not a chain place.
-[[tests]]
-name = "keep_shapes.real_pipeline"
-desc = "The optimizer's own rewrite: the pure subtraction leaves the chain, while the print it contains stays reached through the block's GATE. No redundant `:op/keep` is needed, and the program still prints what it printed."
-case = "../../../cases/opt/effects/dce_effect_under_pure_arithmetic.cml"
-args = ["${case}", "std::opt", "test::keepinspect", "${backend}"]
-expect_exit = 7
-expect_stdout_exact = "KEEPSPOTS keeps=0 in_chain=0 out_of_chain=0 waited=0\n5\n"
-
-[[tests]]
-name = "keep_shapes.no_order_edge"
-desc = "The same operator on the shape with nothing else to hold the effect up: one node, no sync place and no order edge, and the print runs because the operator reads it."
-case = "../../../cases/opt/effects/keep_shape.cml"
-args = ["${case}", "test::keepshape", "test::keepinspect", "${backend}"]
-expect_exit = 99
-expect_stdout_exact = "KEEPSHAPE keep=1 uri=:op/keep data_user=1 sync_statement=0 wait_edge=0 waited_on=0 standing=alive\nKEEPSPOTS keeps=1 in_chain=0 out_of_chain=1 waited=0\n1\n"
-
-# "Is an operator the passes write still reachable?" is a number pinned by name: `:op/keep` over
-# `test/cases/opt/effects` (two cases, two nodes each), `:enum/tag` and `:enum/field` over
-# `test/cases/opt/defun`, and `:enum/make` pinned to zero. A case whose effects the statement chain
-# already reaches needs no redundant keeper; that is not the same as losing an effect credential.
-# One more case means a rule started writing the operator, one fewer means a rule stopped.
-# The denominator is the whole corpus and may grow; the finding is what may not move.
+# The keeper itself is no longer an operator (design principles 3.3, edges.cn.md 5.3): a removal that
+# takes the last use of an observed run hands it to a `GATE`, a node kind with a data port and a sync
+# predecessor, so it holds no URI and has no family here. `fold_keeps_arm_effect` and
+# `branch_keeps_outer_effect` still draw one each, and the arm that waits for the chain place a
+# dissolved branch held is measured by `inline_reduce_in_folded_arm` below.
 [[tests]]
 name = "pass_written.inventory"
-desc = "The operators the passes write, counted by case and pinned by name: `:op/keep` (two of the effect cases), `:enum/tag` and `:enum/field` (six and four of the defun cases), and `:enum/make` pinned to zero with the writer it would have."
+desc = "The operators the passes write, counted by case and pinned by name: `:enum/tag` and `:enum/field` (six and four of the defun cases), and `:enum/make` pinned to zero with the writer it would have."
 kind = "behavior"
 tool = "node"
 case = "../../../cases/opt/pass_written/check.mjs"
@@ -228,39 +237,10 @@ args = ["${case}"]
 # One run: the check runs the binary itself over the cases it names.
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["[FAMILY] :op/keep cases=2 nodes=4", "[FAMILY] :enum/tag cases=6 nodes=6", "[FAMILY] :enum/field cases=4 nodes=5", "[FAMILY] :enum/make cases=0 nodes=0", "[FAMILY] ok"]
+expect_stdout_contains = ["[FAMILY] :enum/tag cases=6 nodes=6", "[FAMILY] :enum/field cases=4 nodes=5", "[FAMILY] :enum/make cases=0 nodes=0", "[FAMILY] ok"]
 expect_output_not_contains = ["[FAMILY] RED"]
 timeout_ms = 300000
-# The three dumps of the same graph, read for content and not for "it did not crash". Before the
-# fix in `replaceNode` (src/passes/opt/generic/rewrite.cpp) the rewritten graph named no exit at
-# all: `std::nvm` ran it (exit 99, printing `1`), `std::jgir` printed `"exit": "g2n4294967295"` --
-# a name for a node the document did not hold -- and `std::gir` stopped at `Runtime graph exit node
-# is missing` (src/passes/trans/dot/graphviz.cpp#dumpGraph). Now the node that stands for the
-# removed value takes the graph's name, and the three dumps read the same graph:
-#   * gir/rgir draw the exchange: the `:op/keep` node feeds the graph's EXIT;
-#   * jgir names that same node (`g2n3`).
-[[tests]]
-name = "keep_shape.dot"
-desc = "The graph drawn by `std::gir` after the rewrite: the `:op/keep` node is there and it is what the graph's EXIT edge leaves from."
-case = "../../../cases/opt/effects/keep_shape.cml"
-args = ["${case}", "test::keepshape", "std::gir"]
-# One backend: the drawing is the graph, not a run.
-backends = ["nvm"]
-expect_exit = 0
-# The node identifiers are the dump's own; they move if the graph changes, and that is a red
-# someone should read rather than a number to keep green.
-expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "N04 [label=\":op/keep\", type=\"OPER\"", "N04 -> O02 [label=\"0\", type=\"EXIT\"]"]
 
-[[tests]]
-name = "keep_shape.rdot"
-desc = "The same graph drawn by `std::rgir`: the same operator, the same EXIT edge, in the styled form."
-case = "../../../cases/opt/effects/keep_shape.cml"
-args = ["${case}", "test::keepshape", "std::rgir"]
-backends = ["nvm"]
-expect_exit = 0
-# The rich dump wraps a label at its own width, so the operator reads `:op/\nkeep` there; the
-# edge into the EXIT node is the part that says what the drawing claims. Both are asserted.
-expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "label=\":op/\\nkeep\", type=\"OPER\"", "N04 -> O02 [label=\"0\", type=\"EXIT\", style=solid]"]
 
 # The other shape, and the reason the fix is not one-case-deep: a graph that names no exit at all
 # happens (the empty tuple and the field access of a static expansion), `std::nvm` runs it, and the

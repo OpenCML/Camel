@@ -187,8 +187,6 @@ orderedSources(const camel::runtime::GraphTransaction &transaction, gc_node_ref_
     return sources;
 }
 
-namespace {
-
 /// Whether the node's running is something the program observes, apart from its value being read:
 /// an operator with an effect or one that may fault (design principles 3.4's predicate, asked with
 /// the shapes of the types so that an elementwise operator over fixed shapes is a computation that
@@ -218,6 +216,8 @@ bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_
         return false;
     }
 }
+
+namespace {
 
 /// The nodes `removed` reads whose last read removing it takes: the nodes that carry ordering
 /// (an effect, a call, a computation that may fault) that its value is computed from, that nothing
@@ -264,8 +264,8 @@ gc_node_ref_t keepThroughValue(
     const std::function<bool(gc_node_ref_t)> &alsoGoing) {
     auto &draft = transaction.edit();
     // A value that is invalid is the removal with nothing in its place: the node going away is read
-    // by no one, so there is no reader to hand an effect's value to, and the operator carries the
-    // effect's own value -- it is the statement that reads it and stands where the node stood.
+    // by no one, so there is no reader to hand the node's own wait to, and the keeper reads that
+    // node's value -- it is the statement that reads it and stands where the node stood.
     const bool carried = value != kInvalidNodeRef;
     if (carried && !draft.alive(value)) {
         return value;
@@ -295,22 +295,31 @@ gc_node_ref_t keepThroughValue(
     if (region != insertAt) {
         draft.setInsertRegion(region);
     }
+    // What stands in the value is a `GATE` (design principles 3.3, docs/design/effects/edges.cn.md
+    // 5.3): one data port reading the value that was there, and one sync predecessor naming the
+    // node whose running the removal would otherwise take away -- a sync edge carries "used", so
+    // the effect still runs, while the other readers of the value are neither pushed behind a
+    // chain nor pulled alive by one. No order edge (it only orders, F2) and no keeper operator of
+    // its own: a second mechanism for the same thing is what 2.3 rules out.
     for (gc_node_ref_t source : goingOut) {
         const gc_node_ref_t passed = carried ? kept : source;
         const auto *header         = draft.header(passed);
         if (header == nullptr || header->dataType == nullptr) {
             break;
         }
-        const gc_node_ref_t node = draft.addOperNode(
-            header->dataType,
-            nullptr,
-            camel::core::kWellKnownOperatorUris[camel::core::oper::Keep]);
+        const gc_node_ref_t node = draft.addGateNode(header->dataType, header->dataIndex);
         if (node == kInvalidNodeRef) {
             break;
         }
-        const gc_node_ref_t inputs[2] = {source, passed};
-        draft.setNormInputs(node, inputs);
-        // Diagnostics on the value the operator passes on point where the effect was written: the
+        const gc_node_ref_t input[1] = {passed};
+        draft.setNormInputs(node, input);
+        if (!draft.setSyncPredecessor(node, source)) {
+            // The node already stands in the chain of a `sync` block: its place keeps it running,
+            // so there is no read to take away and nothing to keep. Leave the value as it was.
+            draft.eraseNode(node);
+            break;
+        }
+        // Diagnostics on the value the keeper passes on point where the effect was written: the
         // node the readers see is the one that took its place in the value.
         if (draft.nodeOrigin(node) == 0) {
             draft.setNodeOrigin(node, draft.nodeOrigin(source));
@@ -398,10 +407,10 @@ void replaceNode(
 
     if (replacement != kInvalidNodeRef) {
         // The value this node's readers take is the replacement, with every node whose last read
-        // this removal takes routed through `:op/keep(x, v)` on the way (design principles 3.3):
-        // the readers' data use is what keeps an effect, or a computation that may fault, running,
-        // and an order edge is not one (3.3 as amended, 9.7). A statement of a `sync` block is not
-        // this case: the block's chain hands it a place below, and that path is left as it is.
+        // this removal takes hung on a `GATE` on the way (design principles 3.3): the readers' use is
+        // what keeps an effect, or a computation that may fault, running, and an order edge is not
+        // one (3.3 as amended, 9.7). A statement of a `sync` block is not this case: the block's
+        // chain hands it a place below, and that path is left as it is.
         const gc_node_ref_t stood =
             syncUsers.empty() ? keepThroughValue(transaction, id, replacement) : replacement;
         draft.replaceAllValueUses(id, stood);

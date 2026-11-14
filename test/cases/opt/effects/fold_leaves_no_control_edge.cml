@@ -1,0 +1,17 @@
+/**
+ * Folding a branch leaves nothing of it behind (design principles 3.3, 3.4). The outer condition is
+ * `(if (if (x2 <= x1) then x2 else 3) > 3)`: both arms of the inner branch are `3`, so the inner
+ * comparison reads `3 <= 8` -- true -- and the outer one reads `3 > 3` -- false. The fold takes the
+ * `else` arm, the inner branch is dead, and nothing observes the running of the inner comparison,
+ * its `BRCH` or its `JOIN`: they are freely schedulable, so they go with the arm.
+ *
+ * They used to stay: the dropped nodes inherited the branch's control edge, and a `JOIN` -- the value
+ * a freely schedulable branch hands on -- was one of them, so `std::gir` drew `JOIN -> :io/println
+ * [CTRL]` and `std::tns` ran three nodes nothing reads. What runs here is the two prints, both `8`.
+ */
+
+func main(): int {
+    let x1 = (if ((if (4 <= 7) then 2 else 2) < 8) then println(8) else println(8))
+    let x2 = 3
+    return (if ((if (x2 <= x1) then x2 else 3) > 3) then x2 else println(x1))
+}

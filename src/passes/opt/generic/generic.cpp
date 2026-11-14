@@ -499,7 +499,31 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     }
 
-    std::vector<gc_node_ref_t> brchPreds = draft.waitInputsOf(brch);
+    // What the branch ran after is what still has to run after its place is taken: the waits it was
+    // given, the order it was written in, and the nodes its condition's value was computed from.
+    //
+    // Structure is not one of them. An inner branch and its join carry ordering -- a read of their
+    // value ran after them -- but their own running is not observed: the read they hand on is the
+    // running of the code inside them, and that code's last read is what `keepThroughValue` hands a
+    // `GATE` below. Writing a control edge from the structure instead kept a whole branch alive
+    // after the fold had taken its only read, and the branch, its join and the condition of a value
+    // nothing reads appeared in the run (design principles 3.3, 9.7).
+    const auto ranForItsOwnSake = [&](gc_node_ref_t n) {
+        const auto *h = draft.header(n);
+        if (h == nullptr) {
+            return false;
+        }
+        if (isObservedRun(transaction, n)) {
+            return true;
+        }
+        return h->kind != GCNodeKind::Brch && h->kind != GCNodeKind::Join;
+    };
+    std::vector<gc_node_ref_t> brchPreds;
+    for (gc_node_ref_t pred : draft.waitInputsOf(brch)) {
+        if (ranForItsOwnSake(pred)) {
+            brchPreds.push_back(pred);
+        }
+    }
     const std::vector<gc_node_ref_t> branchOrderPreds(
         draft.orderInputsOf(brch).begin(),
         draft.orderInputsOf(brch).end());
@@ -512,7 +536,8 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // is known may still wait on an effect (the result of a call that prints, seen through a
     // GATE). With the BRCH gone nothing else may reach that effect, and it was silently dropped.
     for (gc_node_ref_t source : orderedSources(transaction, brch)) {
-        if (source != brch && std::ranges::find(brchPreds, source) == brchPreds.end()) {
+        if (source != brch && ranForItsOwnSake(source) &&
+            std::ranges::find(brchPreds, source) == brchPreds.end()) {
             brchPreds.push_back(source);
         }
     }
@@ -719,12 +744,12 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     }
     const bool resultInArm = std::ranges::find(regions[*arm], result) != regions[*arm].end();
     // The code that goes away was the last reader of an effect, or of a computation that may fault
-    // (design principles 3.3, 9.7). What takes the branch's place in the value is `:op/keep(x, v)`
-    // rather than `v`, so the node keeps the data use that says it runs; an order edge it was left
-    // with would only order, and a branch folded away may leave it with none at all (3.3 as
-    // amended). The reads counted are the JOIN's own: an arm written as a name (`then a`) is read
-    // through the JOIN's `with` port, and the branch, the JOIN and the arms that go away read
-    // nothing that this removal has to keep.
+    // (design principles 3.3, 9.7). What takes the branch's place in the value is a `GATE` reading
+    // `v` whose sync predecessor is that node, rather than `v` itself, so the node keeps the use
+    // that says it runs; an order edge it was left with would only order, and a branch folded away
+    // may leave it with none at all (3.3 as amended). The reads counted are the JOIN's own: an arm
+    // written as a name (`then a`) is read through the JOIN's `with` port, and the branch, the JOIN
+    // and the arms that go away read nothing that this removal has to keep.
     const auto goingAway = [&](gc_node_ref_t n) { return n == join || n == brch || removed(n); };
     const gc_node_ref_t stood = keepThroughValue(transaction, join, result, goingAway);
     if (stood != result) {
@@ -1439,10 +1464,10 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
                 // The statement that goes away may be the last reader of an effect, or of a
                 // computation that may fault, written inside it (`println(5) - 1` read by nothing).
                 // Its value is unread -- that is why it goes -- so there is no reader to hand the
-                // effect's value to: what stands in its place is `:op/keep(x, v)` carrying the
-                // effect's own value, and the operator takes the place the statement had in the
-                // chain. The effect then keeps a data use, which is what says it runs, instead of
-                // being reached only by the order of the chain that used to pass through the
+                // node's wait to: what stands in its place is a `GATE` reading that node's own
+                // value, and the gate takes the place the statement had in the chain, with the node
+                // as its sync predecessor. The node then keeps the use that says it runs, instead
+                // of being reached only by the order of the chain that used to pass through the
                 // statement (design principles 3.3 as amended, 9.7).
                 if (!draft.syncUsersOf(id).empty()) {
                     if (h->kind == GCNodeKind::Gate && draft.syncInputsOf(id).size() == 1) {
