@@ -387,6 +387,7 @@ assert(stderr.includes(want), `the warning does not name the kind and the kind i
 const at = /json_kind_no_document[.]cml:([0-9]+):([0-9]+): .Warn/.exec(stderr)
 assert(at, `the warning has no position: ${stderr}`)
 assert(at[1] + ':' + at[2] === '12:59', `warned at ${at[1]}:${at[2]}, not where kind(v) stands`)
+assert(stderr.includes('name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015'), `the warning is not the constant-expression one: ${stderr}`)
 assert(input.normalized.stdout.trim() === 'error', `the run printed: ${input.normalized.stdout}`)
 }
 """
