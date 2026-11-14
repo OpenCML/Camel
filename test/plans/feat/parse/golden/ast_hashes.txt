@@ -433,7 +433,7 @@ d4a0932fc585aa7d ok examples/cli/temperature.cml
 01802cf5589b4268 ok examples/data/validate_input.cml
 ae1e40685963a781 ok examples/files/json_config.cml
 d47f0df97ea5aaa1 ok examples/files/read_write.cml
-b78d31a1064a4055 ok examples/functions/closures.cml
+8c4d545d49e55dd1 ok examples/functions/closures.cml
 255a27d19e19879f ok examples/functions/generic_helpers.cml
 1b0e390b0d2f6551 ok examples/ml/export_onnx.cml
 8a64ec52dcf1385b ok examples/ml/train_linear.cml
@@ -538,7 +538,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 cd98045d0d3ef21b ok stdlib/stream.cml
 95098d3e31cd398d ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
-cfa0255c014a234a ok stdlib/test_support.cml
+7412e62e8d9372be ok stdlib/test_support.cml
 3c4d85f022206889 ok stdlib/this.cml
 6a4fb7f37be2ed14 ok stdlib/tiles.cml
 0ff92f7d01468e66 ok stdlib/time.cml
@@ -1053,6 +1053,7 @@ d3e96c4df857bc04 ok test/cases/compile/match_guard/matched_value_evaluated_once.
 20992a18b8e234cf ok test/cases/compile/match_type_guard/err_shape_of_string.cml
 521558e4d2d2862b ok test/cases/compile/match_type_guard/guard_cache.cml
 8027c70aeb41bfd8 ok test/cases/compile/match_type_guard/guard_dispatch.cml
+1097613e93a083c5 ok test/cases/compile/match_type_guard/guard_same_text.cml
 18dc686508a26a24 ok test/cases/compile/match_type_guard/shape_of_before.cml
 c932c4fee5814de1 ok test/cases/compile/module_imports/conf_b.cml
 1bd679ca7b204680 ok test/cases/compile/module_imports/conf_c.cml
@@ -2015,6 +2016,7 @@ bf326af8aa04f422 ok test/cases/compile/transforms/vmap_capture_is_a_constant.cml
 c976ca79d603a706 ok test/cases/compile/transforms/vmap_layout_ops.cml
 9d04b3e37adf3e40 ok test/cases/compile/transforms/vmap_matmul.cml
 9fd724c477d6ab30 ok test/cases/compile/transforms/vmap_reductions.cml
+5c1e845f4d82ca1d ok test/cases/compile/transforms/vmap_rewritten_order.cml
 d53745599fb2eacc ok test/cases/compile/transforms/vmap_row_reductions.cml
 b7a72683990c0197 ok test/cases/compile/transforms/vmap_rule_outer_variable.cml
 ed807e2cc0dccee3 ok test/cases/compile/transforms/vmap_where_condition.cml
@@ -3352,6 +3354,9 @@ b184c6e048e0e743 ok test/cases/modules/selected_protection/effect.cml
 6ad7c13d5e82d6ea ok test/cases/modules/selected_protection/policy.cml
 06c629b4f9964bac ok test/cases/modules/selected_protection/pure.cml
 11b641251ad2068c ok test/cases/modules/selected_protection/shared.cml
+78560c1b7badecef ok test/cases/modules/stage_module_root/imports_bad.cml
+2019f45d911267fb ok test/cases/modules/stage_module_root/step.cml
+fe95229e3c415449 no test/cases/modules/stage_module_root/mods/bad.cml
 778dd4efcc5625fe ok test/cases/modules/std/array/every_operator.cml
 73c6e8b574977580 ok test/cases/modules/std/array/sort_basic.cml
 c64e8db2a11ef9f7 ok test/cases/modules/std/env/basic.cml
@@ -3788,8 +3793,16 @@ e5f1dda926825893 ok test/cases/opt/defun/family_shape.cml
 94ae362b8abacc94 ok test/cases/opt/defun/nested_signature.cml
 81f3343c0f081204 ok test/cases/opt/defun/value_tag.cml
 bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
+a697e5029bcc5876 ok test/cases/opt/devirtualize/recallee_arity.cml
+3ccda385a066a3b9 ok test/cases/opt/devirtualize/recallee_type.cml
+7c5dc5bad471b781 ok test/cases/opt/e9/rc00_seed27.cml
 bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
+ef56ce08a4ace568 ok test/cases/opt/e9/rc01_seed47.cml
+fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
+fc5dd9b72523c060 ok test/cases/opt/e9/rc03_seed30.cml
+2b621abdfd198a5b ok test/cases/opt/e9/rc04_seed72.cml
 4354ebdbd45852fb ok test/cases/opt/e9/rc08_seed324.cml
+4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
 1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
@@ -3849,6 +3862,7 @@ ca3d97c1b4140eb5 ok test/cases/opt/generic/interval_bounds_computed.cml
 ea9584bfca450b56 ok test/cases/opt/generic/interval_bounds_constant.cml
 3678fd4f027f82e2 ok test/cases/opt/generic/pruned_branch_keeps_condition_effect.cml
 18c652adaa7204b1 ok test/cases/opt/generic/recursion_unroll.cml
+a02921616f780e7d ok test/cases/opt/generic/rounds_exhausted.cml
 f0b01c65986bb7e0 ok test/cases/opt/generic/shape_unroll.cml
 de3e406180e622d0 ok test/cases/opt/generic/simplify_growth_budget.cml
 6e049f32641aa4d2 ok test/cases/opt/generic/specialization_survives_the_round.cml
@@ -3938,8 +3952,8 @@ f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 6182a103922f5823 ok test/cases/para/core/block_sort_merge.cml
 3b6f0e7de2defa16 ok test/cases/para/core/bootstrap_medians.cml
 2013ce9754175bb2 ok test/cases/para/core/concurrent_alloc.cml
-2b89fefd710e2882 ok test/cases/para/core/concurrent_calls.cml
-d798c3f984bfdac0 ok test/cases/para/core/concurrent_recursion.cml
+b5279b76c0fe923a ok test/cases/para/core/concurrent_calls.cml
+c55e011422ffd499 ok test/cases/para/core/concurrent_recursion.cml
 9ed3137575be6b23 ok test/cases/para/core/file_chunk_hash.cml
 138cf38f4c67c08c ok test/cases/para/core/filter_keeps_all.cml
 4f2311810be91532 ok test/cases/para/core/map_chunks.cml
@@ -3962,6 +3976,7 @@ a7ad6d7efb545b7c ok test/cases/para/core/unordered_foreach_timing.cml
 473cd0b411c4bfb2 ok test/cases/para/exec_pred/io.cml
 79d50493cd861314 ok test/cases/para/exec_pred/linear.cml
 583915c7bbf0286d ok test/cases/para/exec_pred/loop.cml
+4f1bfa68bd03edda ok test/cases/para/exec_pred/order_edge.cml
 43f99393757dedbd ok test/cases/para/exec_pred/sync_block.cml
 5d5e41664229caf5 ok test/cases/para/handoff/depth_across.cml
 ca0a00b243b1ae9e ok test/cases/para/handoff/fault_deep.cml
