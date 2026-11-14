@@ -1027,7 +1027,7 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     const camel::core::context::context_ptr_t &context, const Program *program,
     GCGraph *runtimeRoot, [[maybe_unused]] std::source_location location)
-    : context_(context), program_(program), runtimeRoot_(runtimeRoot) {
+    : context_(context), program_(*context, program), runtimeRoot_(runtimeRoot) {
     ASSERT(context_ != nullptr, "Runtime graph draft session requires a valid context.");
     ASSERT(program_ != nullptr, "Runtime graph draft session requires a program.");
     ASSERT(runtimeRoot_ != nullptr, "Runtime graph draft session requires a runtime root graph.");
@@ -1035,7 +1035,8 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
     // that program's (mayPublish_ in the header): remembered here, because a later commit cannot
     // tell an overtaken session from one that was never over the context's program.
     mayPublish_ = context_->currentRuntimeProgram() == program_;
-    work_       = std::make_unique<Program>(*program_);
+    work_       = ProgramHold(*context_, context_->reserveProgram());
+    *work_      = *program_;
 #ifndef NDEBUG
     // The safepoint check finds this session through DraftRootsDebug and reports the call site
     // when a draft is left unrooted. The session is a cell of its own so that a move of the
@@ -1598,7 +1599,7 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         }
         work_->setRoot(current->root());
         runtimeRoot_        = work_->root();
-        program_            = current;
+        program_            = ProgramHold(*context_, current);
         closureCache_.valid = false;
     }
 
@@ -1871,9 +1872,10 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     // The commit decided above whether this session installs (a session over the program's root,
     // a shape some back end runs, nothing detached) and published with a compare-and-swap; a
     // commit that did not publish stays a private program that remembers what it was made from.
-    program_            = committed;
+    program_            = ProgramHold(*context_, committed);
     runtimeRoot_        = program_->root();
-    work_               = std::make_unique<Program>(*program_);
+    work_               = ProgramHold(*context_, context_->reserveProgram());
+    *work_              = *program_;
     closureCache_.valid = false;
 #ifndef NDEBUG
     noteDraftsCleared(*debugRoots_);
@@ -1890,31 +1892,27 @@ GraphDraftGroup::GraphDraftGroup(
     : context_(context) {
     ASSERT(context_ != nullptr, "Graph draft group requires a valid context.");
     ASSERT(base != nullptr, "Graph draft group requires the program it is made over.");
-    program_  = context_->reserveProgram();
-    *program_ = *base;
-    program_->makeSatellite();
-    // The group holds its program in C++, not through a value the collector can reach, and a
-    // group made while a program runs is reserved while `running_` is not zero -- which is the
-    // branch of reserve() that does not root what it makes. So the holder roots it, here, for as
-    // long as the group lives: without this the graphs of the group are graphs the collector
+    // The group holds its program in C++, not through a value the collector can reach, and a group
+    // made while a program runs is reserved while `running_` is not zero -- which is the branch of
+    // reserve() that does not root what it makes. So the holder roots it, through ProgramHold,
+    // from the reservation itself: without this the graphs of the group are graphs the collector
     // never traces, and a safepoint that falls between the reservation and the bind into a
     // program the context knows leaves the old addresses of their static values in the slots
     // (--gc-check poison reports it as a use-after-safepoint; measured on the two `modules.nn`
-    // large-bytecode cases, whose rule expansion runs a group per instantiated rule).
-    context_->pinRuntimeProgram(program_);
+    // large-bytecode cases, whose rule expansion runs a group per instantiated rule). The copy
+    // from `base` happens with that root already taken: it binds graphs into the program.
+    program_  = ProgramHold(*context_, context_->reserveProgram());
+    *program_ = *base;
+    program_->makeSatellite();
 }
 
-GraphDraftGroup::~GraphDraftGroup() {
-    if (program_ != nullptr) {
-        context_->unpinRuntimeProgram(program_);
-    }
-}
+GraphDraftGroup::~GraphDraftGroup() = default;
 
 GraphId GraphDraftGroup::reserve(std::string mangledName, std::string name) {
     const GraphId id    = context_->graphIds().allocate();
     auto member         = std::make_unique<Member>();
     member->transaction = GraphTransaction::open(id);
-    member->transaction->edit().setProgram(program_);
+    member->transaction->edit().setProgram(program_.get());
     member->identity = RuntimeDraftIdentity{
         .sourceGraph = nullptr,
         .mangledName = std::move(mangledName),
@@ -1931,7 +1929,7 @@ void GraphDraftGroup::define(GraphId id, std::unique_ptr<GraphTransaction> trans
     ASSERT(transaction != nullptr, "Graph draft group member transaction cannot be null.");
     auto &draft = transaction->edit();
     draft.setId(id);
-    draft.setProgram(program_);
+    draft.setProgram(program_.get());
     member(id).transaction = std::move(transaction);
 }
 
@@ -1964,7 +1962,7 @@ void GraphDraftGroup::encode() {
             context_,
             m.identity,
             *m.transaction,
-            program_,
+            program_.get(),
             graphs.at(id),
             bytes.at(id));
         validateRuntimeGraphPayload(*program_, graph);

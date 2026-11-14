@@ -1231,10 +1231,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "gru_lite_large_bytecode"
-desc = "Same as gru_lite under a pipeline that specialises and simplifies before std::macro: the linked FastVM program has more than 65535 bytecode words, which the 16-bit call-target field used to truncate (crash, or zeros_like: RuntimeError)."
+desc = "Same as gru_lite under a pipeline that specialises and simplifies before std::macro: the linked FastVM program has more than 65535 bytecode words, which the 16-bit call-target field used to truncate (crash, or zeros_like: RuntimeError). Run with safepoint poisoning (--gc-check poison), in which every safepoint moves every young object and overwrites where it was: a Program a transform keeps in C++ across one of those safepoints is a Program the collector does not trace, so the old addresses of its static values are left in the slots and the run aborts. The page is docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md."
 kind = "behavior"
 case = "../../../cases/modules/nn/gru_lite.cml"
-args = ["${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+args = ["--gc-check", "poison", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1262,10 +1262,10 @@ timeout_ms = 10000
 
 [[tests]]
 name = "residual_mlp_large_bytecode"
-desc = "Same as residual_mlp under a pipeline whose linked FastVM program has jump targets beyond 65535 bytecode words (they were truncated to 16 bits: a crash, or subtract: Unsupported array element type)."
+desc = "Same as residual_mlp under a pipeline whose linked FastVM program has jump targets beyond 65535 bytecode words (they were truncated to 16 bits: a crash, or subtract: Unsupported array element type). Run with safepoint poisoning, like gru_lite_large_bytecode and for the same reason: a Program a transform keeps in C++ was not a root, and the page is docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md."
 kind = "behavior"
 case = "../../../cases/modules/nn/residual_mlp.cml"
-args = ["${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+args = ["--gc-check", "poison", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
 expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
@@ -1282,6 +1282,36 @@ assert(depth === 2, `expected the int field to survive sgd updates unchanged, go
 }
 """
 timeout_ms = 10000
+
+[[tests]]
+name = "gru_lite_large_bytecode.gc_stress"
+desc = "The ruler the author's ruling of 2026-11-13 asked for (docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md, section 1): the gru_lite_large_bytecode pipeline under --gc-stress safepoint=1,kind=minor, with no poison. Every safepoint collects the young generation and moves what it holds, so a Program a transform keeps in C++ without a root leaves the old addresses of its static values in the slots: this run segfaulted (rc=139) until a C++ holder rooted its program through `camel::runtime::ProgramHold` (include/camel/runtime/graph.h#ProgramHold). It is the same defect the two poison entries above report, without needing the poison mode."
+kind = "behavior"
+case = "../../../cases/modules/nn/gru_lite.cml"
+args = ["--gc-stress", "safepoint=1,kind=minor", "${case}", "std::opt::specialize", "std::opt", "tensor::fuse", "std::opt::dce", "std::opt::fold", "std::macro", "std::opt::devirtualize", "std::fvm"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert, approx, match }) => {
+assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
+const out = input.normalized.stdout
+const found = match(/gru_lite metrics before=([0-9.eE+-]+) step=([0-9.eE+-]+) after=([0-9.eE+-]+) train10=([0-9.eE+-]+)/, out)
+const [before, step, after, trained] = found.slice(1, 5).map(Number)
+assert([before, step, after, trained].every(Number.isFinite), 'metrics are not finite')
+assert(before > 0, `expected positive initial loss, got ${before}`)
+assert(approx(step, before, 1e-9), `with_grad loss ${step} should equal pre-update loss ${before}`)
+assert(after < before, `expected one sgd step to lower the loss: before=${before}, after=${after}`)
+assert(trained < after, `expected ten sgd steps to beat one: after=${after}, train10=${trained}`)
+for (const name of ['wxz', 'whz', 'wxn', 'whn', 'wxz_grad', 'whz_grad', 'wxn_grad', 'whn_grad']) {
+    match(new RegExp(`gru_lite ${name}=`), out)
+}
+const lines = out.trim().split(String.fromCharCode(10))
+assert(lines.length === 9, `the case prints one line per value: expected 9 lines, got ${lines.length}`)
+}
+"""
+# 60 s: a collection at every safepoint on the large-bytecode pipeline (0.6 s on a quiet host),
+# with room for a host that other lanes are loading.
+timeout_ms = 60000
 
 [[tests]]
 name = "residual_mlp_inline_large"
