@@ -1,0 +1,21 @@
+/**
+ * Escape route three read through a second closure (design principles 3.5, rule two): `inner`
+ * captures `acc`, a `var` of `make`'s call, and `outer` captures `inner`. Returning `outer` hands
+ * the cell out inside a value whose type cannot show it -- the capture travels one level down, so
+ * the rule has to follow a captured value into the closure it is, not just this body's own cells.
+ */
+
+func make(): (y: int) => int {
+    var acc = 0
+    let inner = (x: int): int => sync {
+        acc = acc + x
+        acc
+    }
+    return (y: int): int => inner(y) + 1
+}
+
+func main(): int sync {
+    let g = make()
+    println(g(1))
+    return 0
+}
