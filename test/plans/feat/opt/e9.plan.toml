@@ -1,8 +1,8 @@
 id = "opt.e9"
 order = 336
 tier = "fast"
-tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce"]
-desc = "The optimizer answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass"
+tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
+desc = "The optimizer answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, and the two a rewrite made the commit refuse with a read across a region"
 
 # Four programs of the E9 differential campaign (`defects.md` A4b-A4e, pin adb67e081), reduced to
 # between 240 and 679 bytes. Each one made the optimizer end the process instead of the program:
@@ -32,6 +32,28 @@ desc = "The optimizer answers what it cannot do with a diagnostic, not with a cr
 [defaults]
 kind = "behavior"
 backends = ["nvm", "fvm", "jit", "prl"]
+
+# Two more reduced programs, from the same campaign, reached a different end: the commit refused them
+# with a read across a region, at two steps of `std::opt`:
+#
+#   graph 'r1' node 18 in region 1 (Arm parent 0): it reads port 13 of region 4 (LoopBody parent 1),
+#   which is not the region the node runs in, nor one it sits in, nor the exit of a region it owns
+#
+# `rc00_seed74` meets it under `std::opt::fold` alone: the folding prunes the branch a loop body is
+# written as (`do if true then s else 0` becomes `do s`), the arm's value is the loop's state
+# **port**, and the body's place is handed to that port while the region record still says the body
+# ends in the `JOIN` that went. The `LOOP` still reads its body's exit; the record now names
+# another node, so the loop's one legitimate read is refused as a read of a port of another region
+# (`include/camel/runtime/graph.h#GCGraph::regionIsVisibleFrom`).
+#
+# `rc08_seed324` is the same shape reached through the pipeline: with `std::opt::devirtualize`,
+# `std::opt::specialize` and `std::opt::inline` before it, `std::opt::fold` hands a loop body's
+# place over the same way, and `std::opt` as a whole meets the sentence too (`node 11 in region 1
+# (Inline parent 0): it reads port 4 of region 2`). The first bad prefix of `std::opt` is `+fold`.
+#
+# Those two entries are what the fix must keep: exit 0, and the program prints what it prints with no
+# optimization pass at all (nothing), so a red here is the defect returning.
+
 
 [[tests]]
 name = "rc01_seed47.without_the_pass"
@@ -130,3 +152,59 @@ case = "../../../cases/opt/e9/x2_no_lambda_seed27.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
+
+[[tests]]
+name = "rc00_seed74.without_the_pass"
+desc = "`rc00_seed74` without any optimization pass: the reading the folded run is held to. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc00_seed74.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc00_seed74.fold"
+desc = "`rc00_seed74` under `std::opt::fold`, the step that used to hand a loop body's place to the state port and leave the region record on the `JOIN` that went. What it used to print is in `expect_output_not_contains`, so a run that meets it again is red: `the draft of graph 'r1' cannot be encoded: graph 'r1' node 18 in region 1 (Arm parent 0): it reads port 13 of region 4 (LoopBody parent 1), which is not the region the node runs in, nor one it sits in, nor the exit of a region it owns`."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc00_seed74.cml"
+args = ["${case}", "std::opt::fold", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = ""
+expect_output_not_contains = ["reads port", "cannot be encoded", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rc08_seed324.without_the_pass"
+desc = "`rc08_seed324` without any optimization pass: the reading the optimized run is held to. Exit 0 and no output."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc08_seed324.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc08_seed324.std_opt"
+desc = "`rc08_seed324` under `std::opt`: the same read across a region, made later in the integrated fixpoint, when a rewrite replaces the node a loop body ends in. The sentence the commit used to answer it with is in `expect_output_not_contains`: `the draft of graph '__root__' cannot be encoded: graph '__root__' node 11 in region 1 (Inline parent 0): it reads port 4 of region 2 (LoopBody parent 1), which is not the region the node runs in, nor one it sits in, nor the exit of a region it owns`."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc08_seed324.cml"
+args = ["${case}", "std::opt", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = ""
+expect_output_not_contains = ["reads port", "cannot be encoded", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
