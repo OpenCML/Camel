@@ -20,6 +20,7 @@
 #include "camel/parse/ast/builder.h"
 #include "camel/parse/parse.h"
 #include "camel/profile/profile.h"
+#include "camel/runtime/canonical.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/utils/command_line.h"
@@ -380,7 +381,7 @@ int runCommand(int argc, char *argv[]) {
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
                 !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags &&
-                !Inspect::dumpAttrs) {
+                !Inspect::dumpAttrs && !Inspect::dumpTies) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -393,7 +394,7 @@ int runCommand(int argc, char *argv[]) {
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
-                Inspect::dumpAttrs) {
+                Inspect::dumpAttrs || Inspect::dumpTies) {
                 mainModule->compile(CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
@@ -453,6 +454,18 @@ int runCommand(int argc, char *argv[]) {
                     camel::runtime::fact::FactStore &facts = ctx->facts();
                     camel::runtime::fact::computeFacts(facts, *ctx->runtimeProgram());
                     camel::runtime::fact::dumpFacts(facts, *ctx->runtimeProgram(), os);
+                }
+            }
+            if (Inspect::dumpTies) {
+                // The tie groups the canonical numbering met (design principles 9, "the graph
+                // interface does not see the spelling"). A part of a group too wide to enumerate
+                // is a known limitation of the numbering, and this is where it is reported: the
+                // numbering does not arrange such a part in the order the nodes were created in
+                // without saying so.
+                if (ctx->runtimeProgram()->root()) {
+                    const camel::runtime::CanonicalProgram numbering(
+                        *ctx->runtimeProgram(), *ctx->runtimeProgram()->root());
+                    os << numbering.tiesText();
                 }
             }
             if (Inspect::dumpAttrs) {

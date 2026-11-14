@@ -112,6 +112,7 @@ extern bool dumpFacts;     // Whether to compute and dump the graph facts of the
 extern bool
     dumpTags; // Whether to dump the tags the program declares and the facts on its declarations
 extern bool dumpAttrs; // Whether to dump the attribute-fate table and check its coverage
+extern bool dumpTies;  // Whether to dump the tie groups of the canonical numbering
 extern bool geneCode;  // Whether to dump generate code from GIR
 extern int passUntil;  // Pass until the given pass
 } // namespace Inspect
