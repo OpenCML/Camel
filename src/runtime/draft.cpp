@@ -1207,7 +1207,7 @@ void GraphDraft::appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdge
     if (node(id) == nullptr) {
         return;
     }
-    inheritRegion(id, userId);
+    inheritRegion(id, userId, slot);
     const auto appendUnique = [&](DraftEdgeSlot which) {
         auto &items           = userListOf(id, which);
         DraftUserLists &lists = *users_[id];
