@@ -24,6 +24,16 @@ other module object types, foreign-resource wrappers. Graphs, types and frames a
 in this sense: they live in spaces that never move or collect them (see
 `23_gc_runtime_lifetime.md`).
 
+**Program.** A `Program` is a graph-space object: it never moves, and it is freed when nothing
+reaches it. What it holds -- its graphs, and the references their static areas carry -- is
+traced only while the `Program` itself is reachable, so a `Program` that a C++ holder keeps
+across a safepoint is a root the holder has to take, the way rule 7 takes one for an auto-space
+object: **a C++ holder of a `Program` holds it only through `camel::runtime::ProgramHold`**
+(`include/camel/runtime/graph.h`), which pins it in its constructor and unpins it in its
+destructor. A bare `Program *` member is what `scripts/check-program-holders.mjs` reports; the
+page that decided it is
+`docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
+
 **Reference.** The address of an object: an `Object *` (or `Array *`, `String *`, ...), a
 `slot_t` whose static type is GC-traced, and also every pointer *into* an object: `data()` of an
 array or tensor, `view()` / `c_str()` of a string, a `slot_t *` to an element.
@@ -116,6 +126,9 @@ one step of a pass.
    only for object types that describe themselves (`Function`, tensors, foreign wrappers).
    `ForeignRootedHandle` is the same thing with accounting; `ForeignPinnedHandle` additionally
    refuses an object whose address is not stable, for native code that needs the address itself.
+   `ProgramHold` is the handle of the graph space: an object that does not move but is freed when
+   nothing reaches it, kept by a C++ holder across safepoints through this handle and no other
+   (section 1, "Program").
 
 8. **Foreign memory is owned by a wrapper, not held by address.** Memory and handles that come
    from outside (a `PyObject *`, a file, a buffer of another library) are owned by a
