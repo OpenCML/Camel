@@ -1177,8 +1177,11 @@ risk_tags = ["collections", "closures", "iterators"]  # plans whose sample is la
 risk_sample = 2                       # keep two or three of those instead
 ```
 
-Only `behavior` and `snapshot` tests of the `camel` tool are taken; a test marked
-`known_fail` or `sweep = false` is left out, and a sweep with `args` also leaves out the
+Every test of the `camel` tool is taken, whatever it expects: a program that runs to completion
+(`behavior`), a stored picture (`snapshot`), or a diagnostic, a refusal or a fault the test expects
+to see (`negative`). A benchmark is left out (it carries a budget, not a property), and so is a
+differential test (it compares two runs to each other, not one run to its assertions). A test
+marked `known_fail` or `sweep = false` is left out, and a sweep with `args` also leaves out the
 tests that do not drive a run (`check`, `inspect`, `--version`): the words go in front of the
 entry file of a run, and those tests have no entry file to put them in front of.
 

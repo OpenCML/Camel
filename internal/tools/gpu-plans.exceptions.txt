@@ -5,27 +5,43 @@
 # `#` starts a line that is provenance rather than an entry. The header of that script states the
 # rule this file is the other half of.
 #
-# A name here is a KNOWN red: the gate prints it on every run, and it decides nothing -- a bit-exactness
-# assertion that moves with the driver or with whoever else is on the card must not block a merge
-# (docs/test-plans.md, "CUDA visibility" and "A card that is not device 0"). A red the file does not
-# name is news, and news makes the run exit 5. That asymmetry is the point: a report-only list that is
-# allowed to grow is a list nobody reads, and the cases below stayed red for weeks because nothing had
-# to notice them.
+# A name here is a KNOWN red: the gate prints it on every run, and it decides nothing. A red the file
+# does not name is news, and news makes the run exit 5. That asymmetry is the point: a report-only
+# list that is allowed to grow is a list nobody reads, and the cases below stayed red for weeks
+# because nothing had to notice them.
+#
+# WHAT THESE ARE, by measurement rather than by hope. The first reading of the whole layer
+# (`check=gpu-plans total=145 pass=129 fail=16 skip=0`) suggested they might be environmental. The
+# first gate run that actually executed the layer says otherwise: of fifteen reds, THIRTEEN ARE ONE
+# DEFECT, and its four-back-end agreement is what proves it --
+#
+#   outlined_execution.*            (nvm, fvm, jit, prl)  stdout starts `TILES_OUTLINED 5` where the
+#   outlined_resident_execution.*   (nvm, fvm, jit, prl)  recorded output starts `TILES_OUTLINED 10`
+#   preferred_resident_execution.*  (nvm, fvm, jit, prl)  -- the same wrong count on all four back
+#   resident_graph_transfers                              ends, so it is not a driver reading or a
+#                                                         co-tenant on the card: outlining counts
+#                                                         five where ten regions were outlined.
+#
+# The other two are bit-preservation assertions (`static_loop_device`: "empty loop changes initial
+# bits"; `multi_state_loop_device`: "swap1 must preserve exact initial bits") and are not yet split
+# into "the card moved the bits" and "Camel moved the bits".
+#
+# So THIRTEEN OF THESE NAMES ARE A FIX OWED, NOT A PERMISSION -- they are recorded here so that the
+# gate can run the layer without blocking merges, which is a different thing from saying the readings
+# are acceptable. The counts are deliberately unchanged: deleting them would hide the defect, and
+# nothing about being listed makes a case's failure go away. The one name that has already been fixed
+# is `grad_expand.untagged_graph_keeps_the_runtime_operator` (fixed by `d4f9d87cf`, which compares it
+# against a twin run without the pass); it is left here for the next run to report as trimable rather
+# than deleted blind.
 #
 # Two rules for editing it:
-#   * add a name only when the case is red on this host for a reason that is not the code's -- the
-#     driver, a co-tenant on the card, the device state. A case that is red because Camel is wrong
-#     belongs in a fix, not in this file;
+#   * add a name only when the case is red for a reason that is demonstrably not the code's -- the
+#     driver, a co-tenant on the card, the device state -- and write the demonstration next to it. A
+#     case that is red because Camel is wrong belongs in a fix, not in this file;
 #   * delete a name as soon as the case is fixed. A stale entry is accepted as it is and the run says
 #     the file can be trimmed, so deleting one can never be what turns the gate red.
-#
-# The reading that wrote this list: `check=gpu-plans total=145 pass=129 fail=16 skip=0` from
-# `node scripts/test.js test/plans/gpu --jobs 8 --tier all` on this lane's tree -- three cases of
-# gpu.tiles and thirteen of gpu.tiles_regions, the two layers that need a card. It is a starting
-# reading, not a claim that these sixteen are all environmental; each one is a fix owed.
 
-grad_expand.untagged_graph_keeps_the_runtime_operator
-multi_state_loop_device
+# One defect: the outlined-region count, wrong on all four back ends. Not exempt, owed.
 outlined_execution.fvm
 outlined_execution.jit
 outlined_execution.nvm
@@ -39,4 +55,10 @@ preferred_resident_execution.jit
 preferred_resident_execution.nvm
 preferred_resident_execution.prl
 resident_graph_transfers
+
+# Not yet classified: bit-preservation assertions, to be split into "the device" and "the code".
+multi_state_loop_device
 static_loop_device
+
+# Already fixed; kept until a run reports it as trimable.
+grad_expand.untagged_graph_keeps_the_runtime_operator

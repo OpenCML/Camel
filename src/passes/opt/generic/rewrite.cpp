@@ -259,6 +259,10 @@ std::vector<gc_node_ref_t> lastReadsGoingOut(
 
 } // namespace
 
+bool holdsChainPlace(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+    const auto &draft = transaction.graph();
+    return !draft.syncInputsOf(id).empty() || !draft.syncUsersOf(id).empty();
+}
 gc_node_ref_t keepThroughValue(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,
     const std::function<bool(gc_node_ref_t)> &alsoGoing) {
