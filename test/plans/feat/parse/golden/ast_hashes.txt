@@ -3383,6 +3383,7 @@ b4c948dee6fe28f4 ok test/cases/modules/std/json/err_decode_as_shape.cml
 dfde453c4be9360a ok test/cases/modules/std/json/err_encode_no_form.cml
 6c3c31bf450ee097 ok test/cases/modules/std/json/json_accessor_error.cml
 254fc038030fbe29 ok test/cases/modules/std/json/json_decode_as_no_document.cml
+040d7424aac6ca1d ok test/cases/modules/std/json/json_encode_no_document.cml
 210ad97acdee85c3 ok test/cases/modules/std/json/json_gc.cml
 b237b3050c1f4b18 ok test/cases/modules/std/json/json_gc_macro.cml
 e8405f93b22c8c9c ok test/cases/modules/std/json/json_kind_failed.cml

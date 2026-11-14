@@ -420,3 +420,25 @@ assert(input.normalized.stdout.trim() === 'error', `the run printed: ${input.nor
 """
 timeout_ms = 20000
 
+[[tests]]
+name = "json.encode.no_document"
+desc = "The same slot at the third read, which this program shape does not reach: `encode`'s indent is a with-argument, and `opt::fold` calls an operator only when every argument is a value it holds, so the arm's empty slot never gets to the Json operand -- the arm is left as written and the run takes the error case, with and without the written indent. The operator refuses a Json that holds no document all the same, so a path that does reach it is a fault of the call and not a read through the empty slot. This case is the canary of that reading: if the fold ever starts calling encode here, it turns red and the guard's report is what the run shows."
+kind = "negative"
+case = "../../../cases/modules/std/json/json_encode_no_document.cml"
+args = ["${case}", "opt::fold", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_starts_with = "error\nerror"
+expect_output_not_contains = ["Segmentation fault", "core dumped", "terminate called", "Aborted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const stderr = input.stderr
+const lines = input.normalized.stdout.trim().split(/[\r\n]+/)
+assert(lines.length === 2 && lines[0] === 'error' && lines[1] === 'error', `the run printed: ${input.normalized.stdout}`)
+assert(!stderr.includes('[Warn]'), `the fold reached the operand after all, so this shape is no longer the defensible one: ${stderr}`)
+assert(input.diagnostics.length === 0, `the run reported a diagnostic: ${JSON.stringify(input.diagnostics)}`)
+}
+"""
+timeout_ms = 20000
