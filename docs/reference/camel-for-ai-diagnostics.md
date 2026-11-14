@@ -197,7 +197,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ResourceGroupCycle` | The resource group '{0}' contains itself: {1}. |
 | `HandleTypeNotNominal` | '{0}' is not a nominal type declaration, so '#resource' says nothing about it. |
 | `NativeResourceMismatch` | The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'. |
-| `ExternalResourceNeedsVar` | The external resource '{0}' is named without 'var' in the resource clause of '{1}'. |
+| `VariableInUses` | The variable '{0}' is named in the resource clause '{1}'. |
 | `CmlUnsupportedConstruct` | std::cml cannot print {0}: {1}. |
 | `CmlBigConstant` | std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}). |
 | `WhenConditionNotBool` | The 'when' condition of '{0}' is not a bool (it is '{1}'). |

@@ -1,5 +1,7 @@
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
+// handle parameter. A variable is never written in a clause -- a `var` parameter is declared by the
+// `var` in the parameter list and its uses are measured from the body -- so `bump` writes the cell
+// it is handed and every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
@@ -14,7 +16,7 @@ func read_id(s: Stream): int uses s {
 func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses var cell sync {
+func bump(var cell: int): int sync {
     cell += 1
     return cell
 }

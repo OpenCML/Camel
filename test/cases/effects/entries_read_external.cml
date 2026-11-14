@@ -1,0 +1,25 @@
+/**
+ * A bare entry names an external resource the call reads: `probe` promises a read of `clock` and
+ * touches nothing else, and `stamp` promises a write of `stdout` and prints, so it keeps its
+ * promise. An entry the call writes carries `var` (design principles 3.3); a resource the program
+ * does not own is read or written as the operator that touches it says, not always written.
+ *
+ *   1 stamp 2
+ */
+
+/// A read of an external resource: the entry carries no `var`.
+func probe(): int uses clock {
+    return 1
+}
+
+/// A write of an external resource: the entry carries `var`.
+func stamp(): int uses var stdout sync {
+    println('stamp')
+    return 2
+}
+
+func main(): int sync {
+    println(probe())
+    println(stamp())
+    return 0
+}

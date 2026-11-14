@@ -384,17 +384,6 @@ expectFix({
     accepted: true,
 })
 
-// An external resource named without `var`: the clause says it writes the resource, and the one
-// word the entry is missing is known from the name that stands there, so the repair is exact.
-expectFix({
-    label: 'external-resource-needs-var',
-    file: 'compile/diag_fixes/external_resource_needs_var.cml',
-    name: 'SemanticDiag::ExternalResourceNeedsVar',
-    title: "write 'var' before the resource",
-    edits: [{ range: { start: { line: 6, character: 22 }, end: { line: 6, character: 28 } }, replacement: 'var stdout' }],
-    accepted: true,
-})
-
 // A name that resolves to nothing: the compiler does not know which name was meant, and a fix that
 // picks one is worse than a sentence.
 expectNoFix({ label: 'unresolved-reference', file: 'compile/semantic/unresolved_reference.cml', name: 'SemanticDiag::UnresolvedReference' })

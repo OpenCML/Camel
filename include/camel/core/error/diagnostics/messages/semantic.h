@@ -247,8 +247,11 @@ enum class SemanticDiag : uint32_t {
     /// The `#resource` tag is what makes a handle type, so a nominal declaration cannot carry one.
     HandleTypeNotNominal = 0x0001A3,
     /// A body-less declaration's clause differs from the operator's declared resources.
-    NativeResourceMismatch   = 0x0001A4,
-    ExternalResourceNeedsVar = 0x00020C,
+    NativeResourceMismatch = 0x0001A4,
+    // 0x00020C held `ExternalResourceNeedsVar`, the rule that a clause must write `var` before every
+    // external resource. An external resource is read or written like any other resource (design
+    // principles 3.3), so the rule is gone and the number is not reused.
+    VariableInUses = 0x00020D,
 
     // `std::cml`, the source printer (step S1). 0x1A5 and up.
     /// A graph holds a construct the printer does not turn into source.

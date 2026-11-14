@@ -5,9 +5,12 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：0 页
+## 现在在等作者：2 页
 
-（目录为空：没有页在等回答。）
+| 页 | 问什么 |
+| --- | --- |
+| [`2026-11-14-should-a-structured-plan-obey-order-edges`](2026-11-14-should-a-structured-plan-obey-order-edges.cn.md) | 结构化计划该不该遵守 order 边？ |
+| [`2026-11-14-where-the-uses-boundary-sits`](2026-11-14-where-the-uses-boundary-sits.cn.md) | `uses` 的边界落在哪一格：变量、句柄、还是不透明的值 |
 
 ## 生成器不会删的行：82 行（页已不在 `questions/` 里）
 

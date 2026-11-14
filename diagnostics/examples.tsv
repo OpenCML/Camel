@@ -102,7 +102,6 @@ SemanticDiag::EnumWrittenWhereATypeIsExpected	test/cases/compile/semantic/enum_w
 SemanticDiag::ExitInUnusedBranch	test/cases/compile/diag_json/warning_with_error.cml
 SemanticDiag::ExtentNotADimension	test/cases/compile/extents/computed_negative.cml
 SemanticDiag::ExtentOfNeedsStatedShape	test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml
-SemanticDiag::ExternalResourceNeedsVar	test/cases/effects/err_external_without_var.cml
 SemanticDiag::FactArgumentNotConstant	test/cases/modules/rules/fact_arg_not_constant.cml
 SemanticDiag::FactCaseBindsNoVariable	test/cases/modules/rules/fact_case_binds_nothing.cml
 SemanticDiag::FactCaseDefaultMissing	test/cases/modules/rules/fact_no_default.cml
@@ -268,6 +267,7 @@ SemanticDiag::UnusedFallibleValue	test/cases/compile/unused_values/fallible_sync
 SemanticDiag::UnusedPureResult	test/cases/compile/native/para_unordered_pure_result.cml
 SemanticDiag::UsesPromiseViolated	test/cases/effects/err_promise_through_parameter.cml
 SemanticDiag::VarArgumentTypeMismatch	test/cases/linear/byref/var_argument_shape.cml
+SemanticDiag::VariableInUses	test/cases/effects/err_variable_in_clause.cml
 SemanticDiag::WhenConditionNotBool	test/cases/compile/when/non_bool.cml
 SemanticDiag::WhenConditionNotConstant	test/cases/compile/when/generic_decl_site.cml
 SemanticDiag::WhenConditionUnmet	test/cases/compile/type_packs/zip_not_array.cml
