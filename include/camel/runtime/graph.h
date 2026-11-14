@@ -264,6 +264,14 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 /// `isUnreadClosure` of a draft, read the way the other graph questions are asked of a frozen graph.
 bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
 
+/// The live set of a frozen graph, the same walk `liveNodesOf(const GraphDraft &)` runs (one kernel,
+/// two faces): the nodes backward reachable from entry, exit, output, return, the norm and `with`
+/// ports and the closure nodes the graph exports, over the norm, `with`, control and sync inputs,
+/// with a loop's region ports and a branch's join. A node outside it can never be run or read by the
+/// program, so a value it reads is read by nobody -- which is what lets a write whose only reader is
+/// such a node be called dead (design principles 3.1, 9.7). Sorted by ref.
+std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
+
 namespace graph {
 bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
 /// The exit of the statement `ref` names: a branch's JOIN, or `ref` itself for every other kind.

@@ -1684,73 +1684,178 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
         draft.syncUsersOf(node));
 }
 
-std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft) {
+namespace {
+
+/// The one walk behind both faces of a graph, with the smallest shim each side needs: a draft
+/// spells its edges with `syncInputsOf` and its region ports `regionPortsOf`, a frozen graph spells
+/// them `syncPredsOf` (edges, each naming its node) and `regionPorts`, and a branch's join lives in
+/// `DraftBrchPayload` on one side and in `GCBrchBody` on the other. Everything else -- what makes a
+/// node alive, what the roots are, which inputs carry reachability -- is written once, below.
+struct DraftLiveFace {
+    const GraphDraft &draft;
+
+    bool alive(gc_node_ref_t ref) const {
+        return draft.header(ref) != nullptr && draft.alive(ref);
+    }
+    GCNodeKind kindOf(gc_node_ref_t ref) const {
+        const DraftNodeHeader *header = draft.header(ref);
+        return header != nullptr ? header->kind : GCNodeKind::Dead;
+    }
+    void roots(std::vector<gc_node_ref_t> &into) const {
+        for (gc_node_ref_t ref :
+             {draft.entryNode(), draft.exitNode(), draft.outputNode(), draft.returnNode()}) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : draft.normPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : draft.withPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : draft.closureNodes()) {
+            into.push_back(ref);
+        }
+    }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return draft.normInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return draft.withInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const {
+        return draft.ctrlInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const {
+        return draft.syncInputsOf(ref);
+    }
+    uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
+        return draft.loopRegionOf(ref, part);
+    }
+    std::span<const gc_node_ref_t> regionPortsOf(uint32_t region) const {
+        return draft.regionPortsOf(region);
+    }
+    gc_node_ref_t joinOf(gc_node_ref_t ref) const {
+        const auto *payload =
+            reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(ref).data());
+        return payload != nullptr ? payload->join : kInvalidNodeRef;
+    }
+    gc_node_ref_t brchOf(gc_node_ref_t ref) const {
+        const auto *payload = reinterpret_cast<const GCJoinBody *>(draft.payloadOf(ref).data());
+        return payload != nullptr ? payload->brch : kInvalidNodeRef;
+    }
+};
+
+struct FrozenLiveFace {
+    const GCGraph &graph;
+
+    bool alive(gc_node_ref_t ref) const {
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        return node != nullptr && node->kind != GCNodeKind::Dead;
+    }
+    GCNodeKind kindOf(gc_node_ref_t ref) const {
+        const GCNode *node = graph.node(ref);
+        return node != nullptr ? node->kind : GCNodeKind::Dead;
+    }
+    void roots(std::vector<gc_node_ref_t> &into) const {
+        for (gc_node_ref_t ref : {graph.entryNodeRef(), graph.exitNodeRef(),
+                                  graph.outputNodeRef(), graph.returnNodeRef()}) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : graph.normPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : graph.withPorts()) {
+            into.push_back(ref);
+        }
+        for (gc_node_ref_t ref : graph.closureNodes()) {
+            into.push_back(ref);
+        }
+    }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return graph.normInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return graph.withInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> ctrlInputsOf(gc_node_ref_t ref) const {
+        return graph.ctrlInputsOf(ref);
+    }
+    /// The frozen graph carries a sync edge as an edge record that names its node; the walk wants
+    /// the node, so the shim unwraps it here rather than making the walk know two spellings.
+    std::vector<gc_node_ref_t> syncInputsOf(gc_node_ref_t ref) const {
+        std::vector<gc_node_ref_t> inputs;
+        for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+            inputs.push_back(edge.pred);
+        }
+        return inputs;
+    }
+    uint32_t loopRegionOf(gc_node_ref_t ref, GCRegionKind part) const {
+        return graph.loopRegionOf(ref, part);
+    }
+    std::span<const gc_node_ref_t> regionPortsOf(uint32_t region) const {
+        return graph.regionPorts(region);
+    }
+    gc_node_ref_t joinOf(gc_node_ref_t ref) const {
+        const auto *body = graph.nodeBodyAs<GCBrchBody>(ref);
+        return body != nullptr ? body->join : kInvalidNodeRef;
+    }
+    gc_node_ref_t brchOf(gc_node_ref_t ref) const {
+        const auto *body = graph.nodeBodyAs<GCJoinBody>(ref);
+        return body != nullptr ? body->brch : kInvalidNodeRef;
+    }
+};
+
+template <typename Face>
+std::vector<gc_node_ref_t> liveNodesWith(const Face &face) {
     std::unordered_set<gc_node_ref_t> visited;
     std::vector<gc_node_ref_t> worklist;
     auto pushRoot = [&](gc_node_ref_t ref) {
-        if (ref != kInvalidNodeRef && draft.header(ref) != nullptr && draft.alive(ref) &&
-            visited.insert(ref).second) {
+        if (ref != kInvalidNodeRef && face.alive(ref) && visited.insert(ref).second) {
             worklist.push_back(ref);
         }
     };
 
-    pushRoot(draft.entryNode());
-    pushRoot(draft.exitNode());
-    pushRoot(draft.outputNode());
-    pushRoot(draft.returnNode());
-    for (gc_node_ref_t ref : draft.normPorts()) {
-        pushRoot(ref);
-    }
-    for (gc_node_ref_t ref : draft.withPorts()) {
-        pushRoot(ref);
-    }
-    for (gc_node_ref_t ref : draft.closureNodes()) {
-        pushRoot(ref);
+    std::vector<gc_node_ref_t> roots;
+    face.roots(roots);
+    for (gc_node_ref_t root : roots) {
+        pushRoot(root);
     }
 
     while (!worklist.empty()) {
         const gc_node_ref_t current = worklist.back();
         worklist.pop_back();
-        for (gc_node_ref_t input : draft.normInputsOf(current)) {
+        for (gc_node_ref_t input : face.normInputsOf(current)) {
             pushRoot(input);
         }
-        for (gc_node_ref_t input : draft.withInputsOf(current)) {
+        for (gc_node_ref_t input : face.withInputsOf(current)) {
             pushRoot(input);
         }
-        for (gc_node_ref_t input : draft.ctrlInputsOf(current)) {
+        for (gc_node_ref_t input : face.ctrlInputsOf(current)) {
             pushRoot(input);
         }
         // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement written
         // before this one in the same `sync` block is live exactly as a data input is.
-        for (gc_node_ref_t input : draft.syncInputsOf(current)) {
+        for (gc_node_ref_t input : face.syncInputsOf(current)) {
             pushRoot(input);
         }
-        const DraftNodeHeader *header = draft.header(current);
-        if (header == nullptr) {
-            continue;
-        }
-        if (header->kind == GCNodeKind::Loop) {
+        const GCNodeKind kind = face.kindOf(current);
+        if (kind == GCNodeKind::Loop) {
             // The ports of its regions are part of it, whether the code reads them or not.
             for (auto part : {GCRegionKind::LoopCond, GCRegionKind::LoopBody}) {
-                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
-                    for (gc_node_ref_t port : draft.regionPortsOf(region)) {
+                if (const uint32_t region = face.loopRegionOf(current, part); region != 0) {
+                    for (gc_node_ref_t port : face.regionPortsOf(region)) {
                         pushRoot(port);
                     }
                 }
             }
         }
-        if (header->kind == GCNodeKind::Brch) {
-            const auto *payload = reinterpret_cast<const DraftBrchPayload *>(
-                draft.payloadOf(current).data());
-            if (payload != nullptr) {
-                pushRoot(payload->join);
-            }
-        } else if (header->kind == GCNodeKind::Join) {
-            const auto *payload =
-                reinterpret_cast<const GCJoinBody *>(draft.payloadOf(current).data());
-            if (payload != nullptr) {
-                pushRoot(payload->brch);
-            }
+        if (kind == GCNodeKind::Brch) {
+            pushRoot(face.joinOf(current));
+        } else if (kind == GCNodeKind::Join) {
+            pushRoot(face.brchOf(current));
         }
     }
 
@@ -1758,6 +1863,17 @@ std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft) {
     std::sort(live.begin(), live.end());
     return live;
 }
+
+} // namespace
+
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft) {
+    return liveNodesWith(DraftLiveFace{draft});
+}
+
+std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph) {
+    return liveNodesWith(FrozenLiveFace{graph});
+}
+
 bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr || !draft.alive(node) || header->kind != GCNodeKind::Func) {
