@@ -237,15 +237,25 @@ bool writesOperandAt(const GCOperBody &body, size_t index) {
 }
 
 /// The names a graph keeps: its entry, its exit, the node whose value it returns, its ports (a
-/// `var` parameter or a capture), its closure nodes, and the result of each region. One spelling of
-/// them for both representations of a graph; the region results are the one part the two answer
-/// differently, so `regionIsResult` is what they pass in.
-template <typename RegionIsResult>
+/// `var` parameter or a capture), its closure nodes, the result of each region, and the ports a
+/// control region is entered with. One spelling of them for both representations of a graph; the
+/// regions are the one part the two read differently, so `regionIsResult` and `regionNamesPort` are
+/// what they pass in.
+///
+/// A control region's ports belong to this list because the table is positional and the table is
+/// how the region is entered: `LoopDraftView::bodyStateParam(j)` and `condStateParam(j)` are the
+/// j-th entry, and the j-th state is that value. A port node an erasure took leaves the entry
+/// pointing at nothing, and a table that dropped the entry instead renames every state after it --
+/// two wrong answers to one question. `validateRuntimeRegions` refuses the first (a control region
+/// needs every port it lists), so an unread port of a control region is a name and not dead code.
+/// An annotation region is not in this: a rewrite may remove one of its ports, and the published
+/// graph then holds the entry as "none".
+template <typename RegionIsResult, typename RegionNamesPort>
 bool namesOf(
     gc_node_ref_t ref, std::span<const gc_node_ref_t> normPorts,
     std::span<const gc_node_ref_t> withPorts, std::span<const gc_node_ref_t> closureNodes,
     gc_node_ref_t entry, gc_node_ref_t exit, gc_node_ref_t output, gc_node_ref_t result,
-    RegionIsResult regionIsResult) {
+    RegionIsResult regionIsResult, RegionNamesPort regionNamesPort) {
     if (ref == kInvalidNodeRef) {
         return false;
     }
@@ -258,7 +268,14 @@ bool namesOf(
     if (names(normPorts) || names(withPorts) || names(closureNodes)) {
         return true;
     }
-    return regionIsResult(ref);
+    return regionIsResult(ref) || regionNamesPort(ref);
+}
+
+/// Whether a region of `kind` is one the graph enters with a port list: the condition and the body
+/// of a LOOP, and the arm of a BRCH (see `namesOf`).
+bool kindsRegionEntersWithPorts(GCRegionKind kind) {
+    return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+           kind == GCRegionKind::LoopBody;
 }
 
 /// A frozen graph, read the way the graph space lays it out.
@@ -286,6 +303,19 @@ struct FrozenGraphView {
                 for (uint32_t index = 0; index < graph.regionCount(); ++index) {
                     const GCRegion *region = graph.region(index);
                     if (region != nullptr && region->result == candidate) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < graph.regionCount(); ++index) {
+                    const GCRegion *region = graph.region(index);
+                    if (region == nullptr || !kindsRegionEntersWithPorts(region->kind)) {
+                        continue;
+                    }
+                    const auto ports = graph.regionPorts(index);
+                    if (std::find(ports.begin(), ports.end(), candidate) != ports.end()) {
                         return true;
                     }
                 }
@@ -330,6 +360,18 @@ struct DraftGraphView {
             [this](gc_node_ref_t candidate) {
                 for (uint32_t index = 0; index < draft.regionCount(); ++index) {
                     if (draft.region(index).result == candidate) {
+                        return true;
+                    }
+                }
+                return false;
+            },
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < draft.regionCount(); ++index) {
+                    if (!kindsRegionEntersWithPorts(draft.region(index).kind)) {
+                        continue;
+                    }
+                    const auto ports = draft.regionPortsOf(index);
+                    if (std::find(ports.begin(), ports.end(), candidate) != ports.end()) {
                         return true;
                     }
                 }
@@ -445,5 +487,7 @@ bool deadWriteOnceUnread(const GraphDraft &draft, gc_node_ref_t ref) {
 bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref) {
     return deadWriteWith(DraftGraphView{draft}, ref);
 }
+
+bool GraphDraft::namesNode(gc_node_ref_t ref) const { return DraftGraphView{*this}.isNamed(ref); }
 
 } // namespace camel::runtime

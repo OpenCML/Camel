@@ -59,3 +59,8 @@
 3. 删掉 `TypeOfType`、`TypeCode::TypeOf` 与 `TypeTable::Shape::TypeOf`；自检里 `typeof` 那三条改成测前端的旁表：同一次访问问两次得同一个变量，两次访问得两个变量。
 
 归第 1 路（核心与前端的边界），排在优先级一各项之后。合并时报 `reinterpret_cast<uintptr_t>` 在 `core/type` 里还剩几处，以及每处都是内部化内容或永久对象。
+
+## 默认建议（本轮按此开工）
+
+按作者裁定 `79127aecb` 走：**核心类型层不再持有任何前端指针**。删 `TypeOfType`、`TypeCode::TypeOf`、`TypeTable::Shape::TypeOf`；`typeof e` 在 builder 里解析掉，核心只见一个 `TypeVarType`，名字是 `typeof#<序号>`，序号到表达式的对应表放在前端侧。
+这一条已经不需要再裁，页上留着的三处「按地址认对象」也不是它的一部分——它们指的对象永不释放、内容在造类型时还不存在，应当保留。

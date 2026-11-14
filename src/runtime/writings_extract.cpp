@@ -3,10 +3,10 @@
 
 // Choosing and landing a writing: the cost models, `extract`, and the classes a dump draws.
 
-#include "camel/runtime/writings.h"
-#include "writings_internal.h"
 #include "camel/runtime/operator_instance.h"
 #include "camel/runtime/reachable.h"
+#include "camel/runtime/writings.h"
+#include "writings_internal.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/tags.h"
@@ -263,12 +263,14 @@ DraftWritings::extract(const CostModel &model, camel::core::context::Context *co
         select(regionResults.back());
         // A control region is entered with all its ports, as a function with all its parameters:
         // a loop condition that reads one state of two still has a port for the other. The ports
-        // stay whether or not something in the region reads them (the graph check requires every
-        // port of a control region; an annotation region may lose one a rewrite removed).
-        const GCRegionKind kind = draft_.region(r).kind;
-        if (kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
-            kind == GCRegionKind::LoopBody) {
-            for (gc_node_ref_t port : draft_.regionPortsOf(r)) {
+        // stay whether or not something in the region reads them, and which ports those are is the
+        // graph's own answer (`GraphDraft::namesNode`), not a second list kept here: the table is
+        // positional -- the j-th entry is the j-th state -- so an entry cannot be dropped to make
+        // the table agree with a smaller graph, and the node it names is kept instead (the graph
+        // check requires every port of a control region; an annotation region may lose one a
+        // rewrite removed).
+        for (gc_node_ref_t port : draft_.regionPortsOf(r)) {
+            if (draft_.namesNode(port)) {
                 select(port);
             }
         }

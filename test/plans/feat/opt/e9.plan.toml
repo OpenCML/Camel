@@ -4,7 +4,8 @@ tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
 desc = "The optimizer answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, and the two a rewrite made the commit refuse with a read across a region"
 
-# Four programs of the E9 differential campaign (`defects.md` A4b-A4e, pin adb67e081), reduced to
+# Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
+# author’s archive defect ledger, which is not in this repository), reduced to
 # between 240 and 679 bytes. Each one made the optimizer end the process instead of the program:
 #
 #   rc01_seed47  `std::opt::inline` up to `std::opt::fold` aborted with "Region 2 yields node
@@ -53,6 +54,23 @@ backends = ["nvm", "fvm", "jit", "prl"]
 #
 # Those two entries are what the fix must keep: exit 0, and the program prints what it prints with no
 # optimization pass at all (nothing), so a red here is the defect returning.
+
+# One more reduced program, from the same campaign and a different end: `rc11_seed352` is a loop over
+# `[1.0]` with two states whose body is `(c12 - c12, 0)`, so the subtraction of a value from itself
+# folds away and the body then reads **none** of the state ports it is entered with. Without a pass it
+# exits 0 and prints nothing; under `std::opt::algebra` and under `std::opt` it was refused with
+# `Runtime graph 'f1' has region 1 with a port the graph does not have`
+# (`validateRuntimeRegions`, src/runtime/graph.cpp) -- the commit refusing a graph a pass had already
+# broken. The region is the loop body and its port table is how the loop enters it: an entry a rewrite
+# took, or one dropped from the middle, renames every state after it
+# (`LoopDraftView::bodyStateParam(j)` is entry `j`). So a port of a control region is a name the graph
+# keeps even when nothing in the region reads it, and the policies that erase unread nodes now ask one
+# question (`GraphDraft::namesNode`) instead of each keeping its own list -- the rules driver's list and
+# extraction's list disagreed, which is the window this program fell through.
+#
+# Why not `known_fail` for these three: the mark says "this program is expected to be refused", and this
+# is a program the compiler is expected to run. A red here is the defect returning, and it goes away by
+# fixing the pass.
 
 
 [[tests]]
@@ -207,4 +225,54 @@ expect_exit = 0
 expect_stdout_exact = ""
 expect_output_not_contains = ["reads port", "cannot be encoded", "PassInternalError", "internal error"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "rc11_seed352.without_the_pass"
+desc = "`rc11_seed352` without any pass: the reading the two optimized runs must reproduce. Exit 0 and no output -- the program computes its loop's value and prints nothing."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc11_seed352.algebra"
+desc = "`rc11_seed352` under `std::opt::algebra`, the pass it was found with, in one pass and with no accumulated prefix: exit 0 and the same stdout as the reference. This is the run that used to be refused -- the fold of `c12 - c12` left the loop body reading none of its ports, the erasure of the unread port node left the body region naming a node the graph did not have, and the commit refused the graph before any back end saw it."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "std::opt::algebra"]
+expect_exit = 0
+expect_output_not_contains = ["has region 1 with a port the graph does not have", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc11_seed352.std_opt"
+desc = "The same program under the whole `std::opt` pipeline: exit 0 and the same stdout as the reference. The same refusal, under the pipeline the seed was found with."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["has region 1 with a port the graph does not have", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
 timeout_ms = 20000

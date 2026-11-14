@@ -1,0 +1,60 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+/**
+ * An explicit mutable reference: one cell that outlives the call that made it.
+ *
+ * `ref(v)` makes a cell holding `v` and answers a handle to it; `get` reads the content, `set` and
+ * `update` write it. The handle is a value: a closure may capture it, keep it after the call that
+ * made it returned, and two closures holding one handle see one content. No `var` and no cell of a
+ * `var` is captured by any of them (design principles 3.5, rule two).
+ *
+ * The storage behind every handle is this module's one `var`, and a `var` is one resource
+ * (design principles 3.3): every reference in a program is ordered with every other one, and a
+ * cell is never reclaimed. Holding another type than an integer, giving a cell a resource of its
+ * own, and releasing a cell are the three things this module cannot do; each needs the core's own
+ * `Ref<T>` (see `docs/handover/questions/2026-11-14-what-can-the-library-ref-hold.cn.md`).
+ */
+
+/// A handle to one cell: two handles made by two `ref` calls name two cells, and one handle read
+/// twice reads one cell.
+export type Ref<T> = { id: int }
+
+// The cells, by handle id. One `var` of the module, so one resource for the whole program.
+var cells: int[] = []
+
+/// A new cell holding `v`, and a handle to it.
+export func ref::<T>(v: T): Ref<T> sync {
+    return match type T {
+        case int => push(T(v))
+    }
+}
+
+/// The content of the cell `r` points at.
+export func get::<T>(r: Ref<T>): T sync {
+    return match type T {
+        case int => T(cells[r.id])
+    }
+}
+
+/// Write `v` into the cell `r` points at, and answer `v`.
+export func set::<T>(r: Ref<T>, v: T): T sync {
+    return match type T {
+        case int => write(r.id, T(v))
+    }
+}
+
+/// Write `f` of the content into the cell `r` points at, and answer the new content.
+export func update::<T>(r: Ref<T>, f: (x: T) => T): T sync {
+    return set(r, f(get(r)))
+}
+
+func push(v: int): Ref<int> sync {
+    cells = cells->append<v>
+    return { id: len(cells) - 1 }
+}
+
+func write(id: int, v: int): int sync {
+    cells[id] = v
+    return v
+}

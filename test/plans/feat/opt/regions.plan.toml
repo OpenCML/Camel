@@ -162,3 +162,15 @@ assert(printed === 'side 2 | side 2 | bd 1 1', `unexpected output: ${printed}`)
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "regions.table_refused"
+desc = "Every rule `validateRuntimeRegions` (src/runtime/graph.cpp) makes about the region table has a reading that is 1 only when the refusal carries that rule's own words: the body is a root, a region's parent is a region of the same table and leads to the body without a cycle, a region's ports are inside the port table, a control region names no port the graph does not have, a node's region is one the table holds, and a region names nodes the graph has. Five of the shapes cannot be written through a draft -- `addRegion` hands ids out in order and asserts the parent is below the count, `setRegionPorts` appends, the body is made as a `GCRegion{}`, and `setNodeRegion` asserts the region is below the count -- so `test::regions` builds them on the frozen record the commit validates, the way `test::edges` builds the order edge on a pure node."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS bad_body_kind_refused=1", "REGIONS parent_out_of_range_refused=1", "REGIONS root_outside_body_refused=1", "REGIONS parent_cycle_refused=1", "REGIONS ports_outside_table_refused=1", "REGIONS control_port_missing_refused=1", "REGIONS node_region_out_of_range_refused=1", "REGIONS result_ref_missing_refused=1", "REGIONS callsite_ref_missing_refused=1", "[8.0, 8.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

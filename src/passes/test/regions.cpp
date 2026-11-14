@@ -15,11 +15,17 @@
 
 #include "camel/passes/test/regions.h"
 
+#include "camel/core/type/base.h"
+#include "camel/core/type/composite/func.h"
 #include "camel/runtime/draft_session.h"
+#include "runtime/graph_build.h"
 
 #include <exception>
 #include <format>
+#include <functional>
 #include <string>
+#include <string_view>
+#include <vector>
 
 const camel::runtime::Program *
 RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
@@ -318,6 +324,233 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         }
         os << "\n";
     }
+
+    // The rest of the region table a commit reads (src/runtime/graph.cpp#validateRuntimeRegions).
+    // Each rule below is checked on every commit and, before this, none of them had a case that
+    // would tell a check that runs from a check that never runs. Five of them cannot be written
+    // through the draft at all, and that is why the shapes are built on the frozen record: the
+    // draft's `addRegion` asserts `parent < regions_.size()` and hands ids out in the order it
+    // makes the regions, so a parent always names a smaller id -- a draft's table has no parent
+    // past its end and no cycle -- `setRegionPorts` appends the ports it is given, so a region's
+    // span is always inside the table it was written into, the body is made as a `GCRegion{}`
+    // with no setter that changes a kind once the region is made, and `setNodeRegion` asserts
+    // `region < regions_.size()`, so a node's region is never past the count either. The graph a
+    // commit validates is the one the encoder writes, and a rule that guards the table's shape is
+    // therefore pinned by the record it refuses, not by a draft that could not make it -- the same
+    // reading `test::edges`' EdgesOrderPureTestPass takes of the order edge on a pure node
+    // (src/passes/test/edges.cpp#EdgesOrderPureTestPass).
+    // A reading is 1 only when the refusal carries that rule's own words, so a graph refused by a
+    // neighbouring rule reads 0 instead of counting for a check it did not exercise; when a
+    // reading is 0 the line says what came back instead, which is what a loosened check prints.
+    const auto frozenCase = [&](const GCGraphPayloadShape &shape,
+                                const std::function<void(GCGraphPayloadArena &)> &writeTable) {
+        std::vector<GraphId> noGraphs;
+        return GCGraphBuildAccess::create(
+            context_->graphIds().allocate(),
+            GCGraphDerivation{},
+            createGraphDebugRecord("test$region_table", "test$region_table"),
+            camel::core::type::FunctionType::create(),
+            std::nullopt,
+            nullptr,
+            nullptr,
+            kInvalidGraphId,
+            noGraphs,
+            noGraphs,
+            noGraphs,
+            noGraphs,
+            noGraphs,
+            shape,
+            [&](GCGraphPayloadArena &arena) {
+                // Two Data nodes: the least a graph the validator reads can hold. Everything the
+                // validator checks besides the regions is sound on them, so a graph the case reads
+                // 0 on is one the region rule alone would have refused.
+                for (gc_node_ref_t ref = 0; ref < static_cast<gc_node_ref_t>(shape.nodeCount);
+                     ++ref) {
+                    GCNode node;
+                    node.kind        = GCNodeKind::Data;
+                    node.typeId      = camel::core::type::Type::Float32()->typeId();
+                    arena.nodes[ref] = node;
+                }
+                arena.nodes[shape.nodeCount] = GCNode{};
+                arena.entryNode              = 0;
+                arena.exitNode               = 1;
+                arena.outputNode             = 0;
+                // A record of the table is zeroed when it is made, and zero names node 0 as the
+                // owner, which reads as "a control region that owns a node" on a region whose
+                // kind is not one of the three. The filler is "no node", and a case that means a
+                // ref sets it after this.
+                for (uint32_t r = 0; r < static_cast<uint32_t>(shape.regionCount); ++r) {
+                    arena.regionTable[r].owner    = kInvalidNodeRef;
+                    arena.regionTable[r].result   = kInvalidNodeRef;
+                    arena.regionTable[r].callSite = kInvalidNodeRef;
+                }
+                writeTable(arena);
+            },
+            std::span<const slot_t>{});
+    };
+    const auto reading = [&](std::string_view name, const GCGraph *graph, std::string_view words) {
+        std::string refusal;
+        try {
+            validateRuntimeGraphPayload(*program, graph);
+        } catch (const std::exception &e) {
+            refusal = e.what();
+        }
+        const bool saysIt = refusal.find(words) != std::string::npos;
+        os << "REGIONS " << name << "=" << (saysIt ? 1 : 0);
+        if (!saysIt) {
+            const std::string_view instead =
+                refusal.empty() ? std::string_view{"accepted"} : std::string_view(refusal);
+            os << " why=" << instead;
+        }
+        os << "\n";
+    };
+
+    // 1. `count != 0 && graph->region(0)->kind != GCRegionKind::Root` ->
+    //    "has region {} as its body, which is not a root."
+    {
+        GCGraphPayloadShape shape;
+        shape.nodeCount    = 2;
+        shape.regionCount  = 1;
+        const GCGraph *bad = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[0].kind = GCRegionKind::Block;
+        });
+        reading("bad_body_kind_refused", bad, "as its body, which is not a root");
+    }
+    // 2. `region.kind == GCRegionKind::Root || region.parent >= count` ->
+    //    "has region {} with a parent that is not a region." Both arms of that one condition are
+    //    read here, because either one alone is a table that is not a tree.
+    {
+        GCGraphPayloadShape shape;
+        shape.nodeCount           = 2;
+        shape.regionCount         = 2;
+        const GCGraph *pastTheEnd = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[1].kind   = GCRegionKind::Block;
+            arena.regionTable[1].parent = 2; // the table holds two regions, 0 and 1
+        });
+        reading("parent_out_of_range_refused", pastTheEnd, "with a parent that is not a region");
+        const GCGraph *secondRoot = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[1].kind = GCRegionKind::Root; // a body that is not region 0
+        });
+        reading("root_outside_body_refused", secondRoot, "with a parent that is not a region");
+    }
+    // 3. The walk up the parents: `if (hops > count) bad("that is in a cycle of regions", r)`.
+    //    Two regions that are each other's parent: the walk never reaches the body.
+    {
+        GCGraphPayloadShape shape;
+        shape.nodeCount      = 2;
+        shape.regionCount    = 3;
+        const GCGraph *cycle = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[1].kind   = GCRegionKind::Block;
+            arena.regionTable[1].parent = 2;
+            arena.regionTable[2].kind   = GCRegionKind::Block;
+            arena.regionTable[2].parent = 1;
+        });
+        reading("parent_cycle_refused", cycle, "that is in a cycle of regions");
+    }
+    // 4. `region.portBegin + region.portCount > graph->nodePayload()->regionPortCount` ->
+    //    "has region {} with ports outside the table." The span starts one past a table of two.
+    {
+        GCGraphPayloadShape shape;
+        shape.nodeCount        = 2;
+        shape.regionCount      = 2;
+        shape.regionPortCount  = 2;
+        const GCGraph *outside = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[1].kind      = GCRegionKind::Block;
+            arena.regionTable[1].portBegin = 2;
+            arena.regionTable[1].portCount = 1;
+            arena.regionPorts[0]           = kInvalidNodeRef;
+            arena.regionPorts[1]           = kInvalidNodeRef;
+        });
+        reading("ports_outside_table_refused", outside, "with ports outside the table");
+    }
+    // 5. `!inGraph(port) || (control && port == kInvalidNodeRef)` ->
+    //    "has region {} with a port the graph does not have." An annotation region may keep a port
+    //    a rewrite removed; a control region may not, because it is executed as a whole. This one
+    //    the draft can ask, so it is asked of a commit: the arm keeps every port it had and gains
+    //    one that names nothing, so the refusal is the port rule and not a read of the arm's ports
+    //    (which commit reports as "reads port ...", the rule the two cases above pin).
+    const GCGraph *armed = nullptr;
+    uint32_t armRegion   = 0;
+    for (GCGraph *graph : program->graphs()) {
+        for (uint32_t r = 1; armed == nullptr && r < graph->regionCount(); ++r) {
+            const GCRegion *region = graph->region(r);
+            if (region != nullptr && region->kind == GCRegionKind::Arm) {
+                armed     = graph;
+                armRegion = r;
+            }
+        }
+        if (armed != nullptr) {
+            break;
+        }
+    }
+    if (armed == nullptr) {
+        // No arm: the program cannot ask the question, and the reading says so instead of
+        // passing for a refusal.
+        os << "REGIONS control_port_missing_refused=none\n";
+    } else {
+        RuntimeGraphDraftSession portSession(context_, program);
+        auto &portDraft = portSession.edit(const_cast<GCGraph *>(armed)).edit();
+        std::vector<gc_node_ref_t> armPorts(
+            armed->regionPorts(armRegion).begin(),
+            armed->regionPorts(armRegion).end());
+        armPorts.push_back(kInvalidNodeRef);
+        portDraft.setRegionPorts(armRegion, std::span<const gc_node_ref_t>(armPorts));
+        std::string portRefusal;
+        try {
+            (void)portSession.commit();
+        } catch (const std::exception &e) {
+            portRefusal = e.what();
+        }
+        const bool portRefused =
+            portRefusal.find("with a port the graph does not have") != std::string::npos;
+        os << "REGIONS control_port_missing_refused=" << (portRefused ? 1 : 0);
+        if (!portRefused) {
+            const std::string_view instead =
+                portRefusal.empty() ? std::string_view{"accepted"} : std::string_view(portRefusal);
+            os << " why=" << instead;
+        }
+        os << "\n";
+    }
+    // 6. The node column: `region != 0 && (region >= count || region(kind) == Dead)` ->
+    //    "has node {} in region {}, which is not there." The Dead half is pinned where a rewrite
+    //    retires a region; this is the half no rewrite can reach, a node in a region past the end.
+    //    (`setNodeRegion` asserts the id is below the count, so the draft cannot write it either.)
+    {
+        GCGraphPayloadShape shape;
+        shape.nodeCount          = 2;
+        shape.regionCount        = 1;
+        shape.regions            = true; // the graph carries a region column
+        const GCGraph *pastCount = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regions[0] = 5; // a region the table does not have
+            arena.regions[1] = 0;
+        });
+        reading("node_region_out_of_range_refused", pastCount, "which is not there");
+    }
+    // 6b. The refs a region names, besides its owner: `!inGraph(region.result) ||
+    //     !inGraph(region.callSite)` -> "has region {} that names a node the graph does not have."
+    //     A result and a call site that name a node the graph does not hold.
+    {
+        GCGraphPayloadShape shape;
+        shape.nodeCount          = 2;
+        shape.regionCount        = 2;
+        const GCGraph *badResult = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[1].kind   = GCRegionKind::Block;
+            arena.regionTable[1].result = 2; // two nodes, so 2 names none
+        });
+        reading(
+            "result_ref_missing_refused",
+            badResult,
+            "that names a node the graph does not have");
+        const GCGraph *badCallSite = frozenCase(shape, [](GCGraphPayloadArena &arena) {
+            arena.regionTable[1].kind     = GCRegionKind::Inline;
+            arena.regionTable[1].callSite = 2;
+        });
+        reading(
+            "callsite_ref_missing_refused",
+            badCallSite,
+            "that names a node the graph does not have");
+    }
+
     // The largest graph that has arms, if any has, so that they are among the regions it keeps.
     GCGraph *largest   = nullptr;
     const auto hasArms = [](const GCGraph *graph) { return graph->regionCount() > 1; };

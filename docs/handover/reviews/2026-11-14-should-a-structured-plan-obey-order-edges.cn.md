@@ -94,3 +94,7 @@ order 边不是凭空来的：`src/compile/gir/builder_resources.cpp#orderEffect
 ## 决策者答复（2026-11-14）
 
 见 `docs/handover/reviews/questions-2026-10-29.md`"返工（2026-11-14）：taskflow 仍不守顺序边，不必等作者裁定"：taskflow 守所有顺序边，没有例外，`planObeysPredecessor` 删掉；两个并发用例的问题在 `rendezvous` 没有如实声明访问，改为声明一个 `unordered` 资源并标 `nondeterministic`，用例写明它在确定性保证之外。
+
+## 默认建议（本轮按此开工）
+
+**要遵守。** 每一条 order 边都必须在结构化计划里被表达出来；一条计划若无法兑现某条 order 边，**按名字拒绝**并说明是哪一条，不许静默降级成数据依赖——因为静默降级会让「执行顺序」在计划层消失，而那正是原则 3.1 要保住的东西。`rendezvous` 这类「无序点」必须显式声明（`unordered`），声明后要与 `externalUnorderedAmbient`/`resourceIdentities` 对得上。
