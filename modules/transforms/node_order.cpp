@@ -107,4 +107,10 @@ std::vector<gc_node_ref_t> dependencyOrderOf(const GCGraph &graph) {
     return order;
 }
 
+std::vector<gc_node_ref_t> reverseDependencyOrderOf(const GCGraph &graph) {
+    std::vector<gc_node_ref_t> order = dependencyOrderOf(graph);
+    std::reverse(order.begin(), order.end());
+    return order;
+}
+
 } // namespace camel::transforms
