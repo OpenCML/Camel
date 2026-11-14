@@ -1,0 +1,13 @@
+# lane-usesvar -> develop (146bb01ba)
+
+判据读数:
+- 96 文件 +602/-272; 新诊断 SemanticDiag::ExternalResourceNeedsVar = 0x00020C (打印 0x0300020C), 带可用修复
+- 30 条 corpus 子句迁移; 窄集 924 测试 -> 923 过 / 1 基线红
+- 闸门 (批次) total 8950 / pass 8903 / fail 7 / skip 8 / known 32; 13 项静态检查 0 fail; killed 0
+- 块数对账 blocks merge=6406 prev=6402 (+4 = usesvar 新增 4 个 [[tests]])
+
+## 合并时的两处冲突, 两条规矩 (写下来免得下次再错)
+1. test/cases/modules/rename/identity.mjs: 冲突的是**同一个 expected 摘要字段**, 双方各录一版 (canonorder 的 c7ba.../3e1d..., usesvar 的 8557.../5c08...). **"两边都留"在这里不成立**, 而且两边在合并树上都不对. 正确做法: 留任一侧先合, 然后**在合并树上实测真值** (888f2f44... env / a47eb096... process), 以 runner 判据为准. 教训: 金标/摘要类单字段冲突, 判据由 runner 给, 不由人挑边.
+2. 语义冲突: usesvar 要求外部资源一律写 `uses var`, opsem 的 --verify-ops 要求声明的写与算子访问一致; 两边同时成立时 ckpt:load_tree(fs) / test_support:thread_count(process) / tiles 的 source,inspect(driver) 这 4 个**只读**外部访问无写法可写. 解法: scripts/stdlib-reference.mjs 不再比较 ambient 条目的写标志 (参数照旧比较), 理由按设计原则 3.3 (命名外部资源即访问它, 子句永远带 var, 写标志在 ambient 上不携带信息). 待作者复核; 若判定该改算子访问表, 回退是一处条件 + 4 行声明.
+
+ast_hashes.txt 因本批 .cml 变化定点重录 26 增/21 删, 全落在被改文件上, 折进 usesvar 的合并提交 (无独立 regenerate 提交).
