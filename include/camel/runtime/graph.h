@@ -279,26 +279,21 @@ std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 /// below the last, so nothing has to be renumbered.
 uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
 
-/// Why an aggregate may or may not lose its last member. A judgement that refuses without saying why
-/// leaves its caller unable to tell a real refusal from a guard that is written wrong, so the reason
-/// is the answer and the yes/no is derived from it.
+/// What may be said about an aggregate, and nothing more. Two values, both refusals: a member's
+/// lifetime cannot be judged here, because a member is a frame slot the payload names
+/// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary inputs
+/// -- an aggregate with two members has one input. The four guards that used to live here (a root, a
+/// member with readers, a reader of the last member, droppable) all judged "member = input", which
+/// that reading disproves; keeping them would let the next reader believe this was covered.
 enum class AggregateTailVerdict : uint8_t {
-    Droppable,           // the four guards hold: the last member may go
-    NotAnAggregate,      // not an aggregate, or too few members to have a last one
-    MappingMismatch,     // its member count and its ordinary input count disagree: the mapping is not
-                         // "member i is input i", so nothing here may guess
-    AggregateIsRoot,     // a root names it: whoever runs the graph reads every member
-    MemberHasReaders,    // a node besides the aggregate reads the last member, or carries it beside
-    LastMemberIsRead,    // a reader of the aggregate takes the last member, or reads it in a way that
-                         // would have to be renumbered
+    NotAnAggregate,  // not an aggregate, or too few members to have a last one
+    MappingMismatch, // the member count and the input count disagree: member i is not input i
 };
 
 /// The name of a verdict, for a caller that prints what it decided (`test::deadwrite`).
 const char *aggregateTailVerdictName(AggregateTailVerdict verdict);
 
 AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref);
-
-bool lastMemberIsUnread(const GCGraph &graph, gc_node_ref_t ref);
 
 namespace graph {
 bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);

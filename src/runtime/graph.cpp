@@ -1893,76 +1893,6 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
         draft.syncUsersOf(node));
 }
 
-namespace {
-
-/// Whether some root names `ref`: an entry, exit, output or return, a norm or `with` port, a closure
-/// node the graph exports, or the result of a region. A root's value is read by whoever runs the
-/// graph, so an aggregate that is one is part of what the program sees.
-bool rootNames(const GraphDraft &draft, gc_node_ref_t ref) {
-    if (ref == kInvalidNodeRef) {
-        return false;
-    }
-    if (ref == draft.entryNode() || ref == draft.exitNode() || ref == draft.outputNode() ||
-        ref == draft.returnNode()) {
-        return true;
-    }
-    for (gc_node_ref_t port : draft.normPorts()) {
-        if (port == ref) {
-            return true;
-        }
-    }
-    for (gc_node_ref_t port : draft.withPorts()) {
-        if (port == ref) {
-            return true;
-        }
-    }
-    for (gc_node_ref_t closure : draft.closureNodes()) {
-        if (closure == ref) {
-            return true;
-        }
-    }
-    for (uint32_t index = 0; index < draft.regionCount(); ++index) {
-        if (draft.region(index).result == ref) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool rootNames(const GCGraph &graph, gc_node_ref_t ref) {
-    if (ref == kInvalidNodeRef) {
-        return false;
-    }
-    if (ref == graph.entryNodeRef() || ref == graph.exitNodeRef() ||
-        ref == graph.outputNodeRef() || ref == graph.returnNodeRef()) {
-        return true;
-    }
-    for (gc_node_ref_t port : graph.normPorts()) {
-        if (port == ref) {
-            return true;
-        }
-    }
-    for (gc_node_ref_t port : graph.withPorts()) {
-        if (port == ref) {
-            return true;
-        }
-    }
-    for (gc_node_ref_t closure : graph.closureNodes()) {
-        if (closure == ref) {
-            return true;
-        }
-    }
-    for (uint32_t index = 0; index < graph.regionCount(); ++index) {
-        const GCRegion *region = graph.region(index);
-        if (region != nullptr && region->result == ref) {
-            return true;
-        }
-    }
-    return false;
-}
-
-} // namespace
-
 uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref) {
     const DraftNodeHeader *header = draft.header(ref);
     if (header == nullptr || !draft.alive(ref) || header->kind != GCNodeKind::Fill) {
@@ -1973,67 +1903,12 @@ uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref) {
         return 0;
     }
     const auto *body = reinterpret_cast<const GCFillBody *>(payload.data());
-    // Only a tuple's members are its inputs one for one, in order. A struct's members are named and
-    // an array's are not spelled out, so neither is an aggregate here yet -- the mapping is the one
-    // thing a container brings, and the guards below ask nothing else about it.
     if (body->fillKind != GCFillKind::Tuple) {
         return 0;
     }
     return body->slotCount;
 }
 
-AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref) {
-    const uint32_t arity = aggregateArity(draft, ref);
-    if (arity < 2) {
-        // A one-member aggregate's member is the value itself: dropping it leaves nothing, and
-        // there is no shorter aggregate to build.
-        return AggregateTailVerdict::NotAnAggregate;
-    }
-    const auto members = draft.normInputsOf(ref);
-    if (members.size() != arity) {
-        return AggregateTailVerdict::MappingMismatch;
-    }
-    const gc_node_ref_t last = members.back();
-    if (last == kInvalidNodeRef || draft.header(last) == nullptr) {
-        return AggregateTailVerdict::NotAnAggregate;
-    }
-    // Guard: the aggregate is not a root, so nobody who runs the graph reads it.
-    if (rootNames(draft, ref)) {
-        return AggregateTailVerdict::AggregateIsRoot;
-    }
-    // Guard: nothing but this aggregate reads the member, and nothing carries it beside. Stronger
-    // than "no live node reads it", and cheaper: if no node at all does, no live one does.
-    if (!draft.withUsersOf(last).empty()) {
-        return AggregateTailVerdict::MemberHasReaders;
-    }
-    const auto readers = draft.normUsersOf(last);
-    if (readers.size() != 1 || readers.front() != ref) {
-        return AggregateTailVerdict::MemberHasReaders;
-    }
-    // Guard: every node that reads the aggregate reads a member that stays, so the shorter
-    // aggregate still satisfies all of them.
-    if (!draft.withUsersOf(ref).empty()) {
-        return AggregateTailVerdict::LastMemberIsRead;
-    }
-    for (gc_node_ref_t user : draft.normUsersOf(ref)) {
-        const DraftNodeHeader *header = draft.header(user);
-        if (header == nullptr || !draft.alive(user)) {
-            continue;
-        }
-        if (header->kind != GCNodeKind::Accs) {
-            return AggregateTailVerdict::LastMemberIsRead;
-        }
-        const auto payload = draft.payloadOf(user);
-        if (payload.size() < sizeof(GCAccsBody)) {
-            return AggregateTailVerdict::LastMemberIsRead;
-        }
-        const auto *accs = reinterpret_cast<const GCAccsBody *>(payload.data());
-        if (accs->accsKind != GCAccsKind::TupleIndex || accs->value + 1 >= arity) {
-            return AggregateTailVerdict::LastMemberIsRead;
-        }
-    }
-    return AggregateTailVerdict::Droppable;
-}
 uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     if (node == nullptr || node->kind != GCNodeKind::Fill) {
@@ -2046,73 +1921,36 @@ uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref) {
     return body->slotCount;
 }
 
-AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref) {
-    const uint32_t arity = aggregateArity(graph, ref);
+AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref) {
+    const uint32_t arity = aggregateArity(draft, ref);
     if (arity < 2) {
         return AggregateTailVerdict::NotAnAggregate;
     }
-    const auto members = graph.normInputsOf(ref);
-    if (members.size() != arity) {
-        return AggregateTailVerdict::MappingMismatch;
-    }
-    const gc_node_ref_t last = members.back();
-    if (last == kInvalidNodeRef) {
+    // The members of an aggregate are the frame slots its payload names (`GCFillBody::slots` is a
+    // span of `gc_slot_idx_t`), not its ordinary inputs: an aggregate with two members has one
+    // input. So the member-to-node mapping this question needs is the inversion "which node writes
+    // that slot", which no layer provides yet -- and until it does, the only honest answer is that
+    // the shape cannot be judged.
+    return AggregateTailVerdict::MappingMismatch;
+}
+
+AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref) {
+    if (aggregateArity(graph, ref) < 2) {
         return AggregateTailVerdict::NotAnAggregate;
     }
-    if (rootNames(graph, ref)) {
-        return AggregateTailVerdict::AggregateIsRoot;
-    }
-    if (!graph.withUsersOf(last).empty()) {
-        return AggregateTailVerdict::MemberHasReaders;
-    }
-    const auto readers = graph.normUsersOf(last);
-    if (readers.size() != 1 || readers.front() != ref) {
-        return AggregateTailVerdict::MemberHasReaders;
-    }
-    if (!graph.withUsersOf(ref).empty()) {
-        return AggregateTailVerdict::LastMemberIsRead;
-    }
-    for (gc_node_ref_t user : graph.normUsersOf(ref)) {
-        const GCNode *node = graph.node(user);
-        if (node == nullptr || node->kind == GCNodeKind::Dead) {
-            continue;
-        }
-        if (node->kind != GCNodeKind::Accs) {
-            return AggregateTailVerdict::LastMemberIsRead;
-        }
-        const auto *accs = graph.nodeBodyAs<GCAccsBody>(user);
-        if (accs == nullptr || accs->accsKind != GCAccsKind::TupleIndex ||
-            accs->value + 1 >= arity) {
-            return AggregateTailVerdict::LastMemberIsRead;
-        }
-    }
-    return AggregateTailVerdict::Droppable;
+    return AggregateTailVerdict::MappingMismatch;
 }
 
 const char *aggregateTailVerdictName(AggregateTailVerdict verdict) {
     switch (verdict) {
-    case AggregateTailVerdict::Droppable:
-        return "droppable";
     case AggregateTailVerdict::NotAnAggregate:
         return "not-an-aggregate";
     case AggregateTailVerdict::MappingMismatch:
         return "mapping-mismatch";
-    case AggregateTailVerdict::AggregateIsRoot:
-        return "aggregate-is-root";
-    case AggregateTailVerdict::MemberHasReaders:
-        return "member-has-readers";
-    case AggregateTailVerdict::LastMemberIsRead:
-        return "last-member-is-read";
     }
     return "unknown";
 }
-bool lastMemberIsUnread(const GraphDraft &draft, gc_node_ref_t ref) {
-    return aggregateTailVerdict(draft, ref) == AggregateTailVerdict::Droppable;
-}
 
-bool lastMemberIsUnread(const GCGraph &graph, gc_node_ref_t ref) {
-    return aggregateTailVerdict(graph, ref) == AggregateTailVerdict::Droppable;
-}
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) {
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr) {

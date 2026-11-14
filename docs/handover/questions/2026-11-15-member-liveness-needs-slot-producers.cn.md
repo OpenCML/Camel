@@ -48,3 +48,21 @@ AGGREGATE graph=probe node=12 arity=2 inputs=1 members=11:0, verdict=mapping-mis
   把它留成一条**读数**而不是断言某个 verdict——错误的 verdict 不该被写成期望值。
 - 另外五个 verdict 依然没有任何用例读到（见上一页的附表）；在判据换到槽位这一层之前，
   补守卫用例没有意义：守卫拦不住它看不懂的东西。
+## 裁定的落法（2026-11-15，作者裁决）
+
+**一、四条守卫已撤。** `droppable` / `aggregate-is-root` / `member-has-readers` / `last-member-is-read`
+连同「摘最后一个成员」那一步一起删掉，`AggregateTailVerdict` 只剩两个**真的触发过**的值：
+`not-an-aggregate` 与 `mapping-mismatch`。理由写进了枚举自己的注释：
+**这四条守卫的前提（成员住在输入上）被 `arity=2 inputs=1` 证伪，留着只会让下一个人以为这里覆盖过了。**
+撤代码不丢脸，留下看不懂的守卫才丢脸。
+
+**二、`memberProducer` 这一层先不建。** 依赖是硬的：
+
+> **上游「哪条规则负责删一个只被某张图持有的写」没答之前，这一层没有第一个调用方。**
+> （见 `2026-11-15-the-acceptance-assumes-the-chain-starts-at-the-sweep.cn.md`）
+
+那一页的读数已经说明：那条写第一次打印就 `dead=1`，闭包早已是一张图，清扫里没有任何对象可摘。
+在「谁负责删」定下来之前建反查层，只会建出一层没有使用者的东西——这正是今晚反复出现的那种「看起来像绿」。
+
+**三、新用例留成读数。** `dead_write.aggregate_two_members_reading` 只断言 `AGGREGATE graph=probe` 这一行存在，
+**不写成断言某个 verdict**：错的 verdict 不该被写成期望值。
