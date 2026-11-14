@@ -2778,7 +2778,7 @@ gc_node_ref_t GCGraph::returnNodeRef() const { return nativePayload_.returnNode;
 
 GCReturnKind GCGraph::returnKind() const { return nativePayload_.returnKind; }
 
-gc_cnt_t GCGraph::liveNodeCount() const {
+gc_cnt_t GCGraph::storedNodeCount() const {
     gc_cnt_t live = 0;
     for (gc_cnt_t c = 0; c < nativePayload_.chunkCount; ++c) {
         const GCNodeChunk &chunk = *nativePayload_.chunks[c];

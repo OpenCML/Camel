@@ -891,8 +891,11 @@ class GCGraph : public camel::core::rtdata::Object {
     const GCGraphNativePayload *nodePayload() const;
     /// Number of node places: NodeIds are 0 .. nodeCount() - 1, and some of them may be Dead.
     gc_cnt_t nodeCount() const { return nativePayload_.nodeCount; }
-    /// Number of nodes that are not Dead.
-    gc_cnt_t liveNodeCount() const;
+    /// Number of nodes that are not Dead: how many node records the graph stores, which is what the
+    /// encoder writes down. It is not the live set -- a node nothing can reach is still stored, and a
+    /// node a sweep erased is not -- so a reader that asks whether the program can still see a value
+    /// asks `camel::runtime::liveNodesOf`, never this.
+    gc_cnt_t storedNodeCount() const;
     /// Number of edges (input table entries).
     gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }
 

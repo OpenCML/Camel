@@ -203,7 +203,7 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
             largest = graph;
         }
     }
-    if (largest == nullptr || largest->liveNodeCount() < 8) {
+    if (largest == nullptr || largest->storedNodeCount() < 8) {
         return program;
     }
     RuntimeGraphDraftSession session(context_, program);

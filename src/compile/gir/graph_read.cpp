@@ -357,11 +357,11 @@ std::string firstDifference(const GraphRead &draft, const GraphRead &frozen) {
             draft.nodeSlotCount(),
             frozen.nodeSlotCount());
     }
-    if (draft.liveNodeCount() != frozen.liveNodeCount()) {
+    if (draft.storedNodeCount() != frozen.storedNodeCount()) {
         return std::format(
             "live nodes: draft has {}, frozen has {}",
-            draft.liveNodeCount(),
-            frozen.liveNodeCount());
+            draft.storedNodeCount(),
+            frozen.storedNodeCount());
     }
     for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
         if (draft.alive(ref) != frozen.alive(ref)) {
@@ -509,7 +509,7 @@ std::string describe(const GraphRead &graph) {
     }
     return std::format(
         "nodes={} kinds={} calls={} opers={}",
-        graph.liveNodeCount(),
+        graph.storedNodeCount(),
         kindsLine(graph),
         calls.empty() ? "-" : calls,
         opers.empty() ? "-" : opers);
