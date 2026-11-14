@@ -421,6 +421,8 @@ class CmlPrinter {
     }
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- the printer reads the program its pass
+    // was given; the driver owns it for the translation.
     const Program &program_;
     std::ostream &out_;
     size_t maxLiteralBytes_;

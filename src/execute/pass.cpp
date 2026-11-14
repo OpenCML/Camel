@@ -79,6 +79,7 @@
 #include "passes/test/index_semantics.h"
 #include "passes/test/native_call.h"
 #include "passes/test/resources.h"
+#include "passes/test/resource_transition.h"
 #include "passes/test/semantics.h"
 #include "passes/test/tags.h"
 #include "passes/trans/cpp/cpp_export.h"
@@ -1041,6 +1042,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kDefinitionsTestPass, DefinitionsTestPass),
         TEST_PASS(kExpandDefinitionsTestPass, ExpandDefinitionsTestPass),
         TEST_PASS(kResourcesTestPass, ResourcesTestPass),
+        TEST_PASS(kResourceTransitionTestPass, ResourceTransitionTestPass),
         TEST_PASS(kControlTestPass, ControlTestPass),
         TEST_PASS(kTagsTestPass, TagsTestPass),
         TEST_PASS(kImplBodyTestPass, ImplBodyTestPass),

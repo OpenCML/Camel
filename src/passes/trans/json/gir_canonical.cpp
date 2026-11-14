@@ -169,6 +169,8 @@ class CanonicalDocument {
     }
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- the document reads the program the pass
+    // was given and is written inside that call.
     const Program &program_;
     GCGraph *root_;
     std::vector<GCGraph *> graphs_;
