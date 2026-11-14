@@ -208,7 +208,44 @@ std::string_view to_string(OperatorPurity purity) {
     }
 }
 
+/// One access as JSON: the class and name of the resource, what binds it, and the mode the
+/// operator uses it in -- `read` or `write` (an access that both reads and writes is a write).
+std::string accessJson(const sem::ResourceAccess &access) {
+    std::string out = "{\"class\":" + jsonString(sem::resourceClassName(access.resource.cls));
+    if (!access.resource.name.empty()) {
+        out += ",\"name\":" + jsonString(access.resource.name);
+    }
+    switch (access.binding.kind) {
+    case sem::ResourceBinding::Kind::Norm:
+        out += std::format(",\"binding\":\"norm {}\"", access.binding.index);
+        break;
+    case sem::ResourceBinding::Kind::With:
+        out += std::format(",\"binding\":\"with {}\"", access.binding.index);
+        break;
+    case sem::ResourceBinding::Kind::Capture:
+        out += std::format(",\"binding\":\"capture {}\"", access.binding.index);
+        break;
+    case sem::ResourceBinding::Kind::Ambient:
+        out += ",\"binding\":\"ambient\"";
+        break;
+    }
+    out += ",\"mode\":" + jsonString(sem::accessModeName(access.mode));
+    return out + "}";
+}
+
+/// The access list as JSON: the effect declaration, printed item by item so that a reader (and
+/// the reference checker, `scripts/stdlib-reference.mjs --verify-ops`) can compare it with what a
+/// `.cml` declaration writes in its `uses` clause.
+std::string accessListJson(const std::vector<sem::ResourceAccess> &accesses) {
+    std::string out = "[";
+    for (size_t i = 0; i < accesses.size(); ++i) {
+        out += (i == 0 ? "" : ",") + accessJson(accesses[i]);
+    }
+    return out + "]";
+}
+
 void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
+    const auto &traits = OperatorTable::instance();
     for (const auto &module : modules) {
         if (!module) {
             continue;
@@ -219,6 +256,18 @@ void dumpOperators(const std::vector<module_ptr_t> &modules, std::ostream &os) {
                << ",\"with\":" << d.withCount << ",\"norm\":" << d.normCount
                << ",\"purity\":" << jsonString(to_string(d.purity))
                << ",\"signature\":" << jsonString(d.signature);
+            // The access list and the two facts derived from it and from the fault table: what the
+            // operator touches (each item with its read or write mode) and whether that reaches
+            // outside the program (design principles 3.3, docs/design/op-semantics/README.cn.md 4.2).
+            const auto id = traits.lookup(d.uri);
+            const auto declared = traits.find(d.uri);
+            const std::vector<sem::ResourceAccess> accesses =
+                id ? traits.accessList(*id) : std::vector<sem::ResourceAccess>{};
+            os << ",\"accesses\":" << accessListJson(accesses)
+               << ",\"accesses_declared\":"
+               << ((id && traits.declaresAccesses(*id)) ? "true" : "false")
+               << ",\"external\":" << ((id && traits.hasExternalEffect(*id)) ? "true" : "false")
+               << ",\"may_fault\":" << ((!declared || declared->mayFault) ? "true" : "false");
             if (d.isPrivate) {
                 os << ",\"private\":true";
             }

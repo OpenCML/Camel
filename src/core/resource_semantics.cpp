@@ -88,6 +88,17 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode) {
     return ResourceSpec{.accesses = {ambientAccess(std::move(name), mode)}, .externalEffect = true};
 }
 
+ResourceAccess globalAccess(AccessMode mode) {
+    // The class is Unknown on purpose: this is the reading of an operator that declares nothing,
+    // not something a module may write (design principles 3.3, the "global" resource).
+    return ResourceAccess{
+        .resource = Resource{.cls = ResourceClass::Unknown, .name = "global"},
+        .binding  = ResourceBinding{.kind = ResourceBinding::Kind::Ambient},
+        .region   = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
+        .mode     = mode,
+    };
+}
+
 ResourceSpec
 conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect) {
     ResourceSpec spec;

@@ -669,9 +669,19 @@ class OperatorTable {
         std::string_view protocol,
         std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators);
 
+    /// Declares the faults of the operator `uri` — the one place "it may fault" is stated
+    /// (design principles 3.3, docs/design/op-semantics/README.cn.md 4.2). An empty list declares the
+    /// operator has no fault path at all, which is what a pure one needs to be freely
+    /// schedulable (design principles 3.4); an operator that declares none may fault. The
+    /// record gets the table the way it gets a trait -- the same facts one step further, with no
+    /// version of its own, because a fault table says what the operator can raise and not what a
+    /// new release of it is. Writing a non-empty table where the record already says it never
+    /// faults throws std::invalid_argument (check 2 of declareSemantics).
+    void declareFaults(std::string_view uri, std::vector<sem::FaultSpec> faults);
+
     /// The declared semantics, or nullptr when nobody declared any. Lock-free; the record
-    /// stays valid until the process exits. A record that only carries traits (set without
-    /// declareSemantics) is not semantics: this returns nullptr for it.
+    /// stays valid until the process exits. A record that only carries the effect facts (set or
+    /// declareFaults without declareSemantics) is not semantics: this returns nullptr for it.
     const sem::OperatorSemantics *semantics(OperId id) const {
         return entries_[id].declared.load(std::memory_order_acquire);
     }
@@ -687,6 +697,21 @@ class OperatorTable {
     /// Whether the operator declares an access to a resource of class `cls` (`writesOnly`: a
     /// write). An undeclared operator declares none.
     bool touchesClass(OperId id, sem::ResourceClass cls, bool writesOnly = false) const;
+
+    /// The operator's access list (sem::OperatorSemantics::accessList): what it touches besides
+    /// its operands' values, one (resource, mode) per item, or -- for an operator that declares
+    /// none -- the conservative reading, one write of the global resource. Empty means the
+    /// operator is pure. `camel inspect --ops` prints it and the reference checker compares it
+    /// with the `uses` clause a declaration writes, so a declaration and its reader cannot mean
+    /// two different lists.
+    std::vector<sem::ResourceAccess> accessList(OperId id) const;
+
+    /// Whether the operator itemizes the accesses accessList returns: false for one that declares
+    /// none, whose list is the conservative reading of writing the global resource.
+    bool declaresAccesses(OperId id) const {
+        const sem::OperatorSemantics *facts = record(id);
+        return facts != nullptr && facts->resources.has_value();
+    }
 
     /// Whether the operator declares a write to a cell or to an object changed in place: state
     /// of the program itself (not ambient state, not a module's objects).

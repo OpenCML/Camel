@@ -480,164 +480,197 @@ const std::unordered_map<std::string, operator_t> &getOpsImplMap() {
 }
 
 void registerBuiltinOperatorTraits() {
-    // Pure: conversions, arithmetic, comparisons, logic, and indexing (everything under op/
-    // except the assignment family, which writes a variable), plus the string and array
-    // helpers, none of which changes its arguments: `append` and `extend` return a new array
-    // (design principles 11.3). io/, profiler/ and input are effectful.
-    static const std::unordered_set<std::string_view> kPureHelpers = {
-        "str/format",
-        "str/join",
-        "struct/len_str",
-        "struct/iter_str",
-        "struct/len_arr",
-        "struct/zip",
-        "struct/last_arr",
-        "op/idx_take",
-        "op/slice_sub",
-        "op/slice_str",
-        "op/slice_bytes",
-        "struct/len_bytes",
+    // The access list is the effect declaration (design principles 3.3; the record's fields are
+    // docs/design/op-semantics/README.cn.md 4.2). This list is the operators of the table that
+    // touch no resource at all,
+    // so each of them declares the empty list and purity is derived from it -- never from the
+    // shape of a name. The old rule read `op/`, `coll/` and `enum/` as prefixes, which cannot
+    // say that two operators under one prefix differ: `op/set_index` returns a new array and
+    // `op/set_index_in_place` writes it. The tables the registration is written in are per
+    // family, and so is this one.
+    //
+    // Arithmetic, comparisons, logic, indexing and the assignment-free part of `op/` do not
+    // change their arguments; `coll/` and `enum/` return a new value; the string and array
+    // helpers return a new array where they return one (`append` and `extend` do, design
+    // principles 11.3); a `tangent/` operator is inserted by autodiff into a gradient graph.
+    // The conversions answer the same for a whole table, one value in and one value out, so
+    // they are read from kConversions below rather than listed again.
+    static const std::unordered_set<std::string_view> kAccessFree = {
+        "coll/eq",
+        "coll/has",
+        "coll/keys",
+        "coll/len",
+        "coll/map_get",
+        "coll/map_get_or",
+        "coll/map_idx",
+        "coll/map_items",
+        "coll/map_put",
+        "coll/map_values",
+        "coll/merge",
+        "coll/remove",
+        "coll/set_add",
+        "coll/set_contains",
+        "coll/set_difference",
+        "coll/set_intersect",
+        "coll/set_is_subset",
+        "coll/set_items",
+        "coll/set_union",
+        "enum/field",
+        "enum/make",
+        "enum/tag",
+        "op/add_bf",
         "op/add_bytes",
-        "op/eq_bytes",
-        "struct/range",
-        "struct/concat_arr",
-        "struct/append_arr",
-        "struct/contains_arr",
-        "struct/contains_str",
-        "tangent/add_arr",
-        "tangent/zeros_arr",
-        "tangent/scatter_add_arr",
-        "tangent/scatter_slice_arr",
-        "tangent/scatter_take_arr",
-        "tangent/init_arr",
-        "tangent/last_arr",
-    };
-    // Declared never to fault, where the implementation has no fault path at all: integer
-    // addition and subtraction wrap, floating-point arithmetic and ordering cannot fail, and
-    // the strict boolean operators only read their operands. Everything else keeps the
-    // default (may fault). The passes do act on this list: `src/runtime/graph.cpp#nodeMayFault`
-    // reads `mayFault` beside `elementwise` to answer design principles 3.4's predicate, and
-    // `nodeIsFreelySchedulable` hands that answer to whoever may drop, move or recompute a node
-    // -- an operator left out of this list is a running the program observes, so `std::opt`
-    // keeps it alive with `:op/keep` when a removal takes its last read
-    // (`src/passes/opt/generic/rewrite.cpp#isObservedRun`). Each entry here is one operator of
-    // docs/handover/reports/faults-table-audit.md, which reads its implementation against this
-    // list.
-    static const std::unordered_set<std::string_view> kNeverFaults = {
+        "op/add_c",
+        "op/add_d",
+        "op/add_f",
+        "op/add_f6",
         "op/add_i",
         "op/add_l",
-        "op/add_f",
-        "op/add_d",
-        "op/sub_i",
-        "op/sub_l",
-        "op/sub_f",
-        "op/sub_d",
-        "op/lt_i",
-        "op/lt_l",
-        "op/lt_f",
-        "op/lt_d",
-        "op/le_i",
-        "op/le_l",
-        "op/le_f",
-        "op/le_d",
-        "op/gt_i",
-        "op/gt_l",
-        "op/gt_f",
-        "op/gt_d",
-        "op/ge_i",
-        "op/ge_l",
-        "op/ge_f",
-        "op/ge_d",
+        "op/add_s",
+        "op/add_z",
         "op/and",
-        "op/or",
-        "op/not",
-        // Multiplication and negation wrap like addition does; equality tests a value of a type
-        // that has one and string ordering reads two strings.
-        "op/mul_i",
-        "op/neg_i",
-        "op/mul_l",
-        "op/neg_l",
-        "op/mul_f",
-        "op/neg_f",
-        "op/mul_d",
-        "op/neg_d",
+        "op/div",
+        "op/div_bf",
+        "op/div_c",
+        "op/div_d",
+        "op/div_f",
+        "op/div_f6",
+        "op/div_i",
+        "op/div_l",
+        "op/div_z",
+        "op/eq",
+        "op/eq_b",
+        "op/eq_bf",
+        "op/eq_bytes",
+        "op/eq_c",
+        "op/eq_d",
+        "op/eq_f",
+        "op/eq_f6",
         "op/eq_i",
         "op/eq_l",
-        "op/eq_f",
-        "op/eq_d",
-        "op/eq_b",
         "op/eq_s",
-        "op/eq_c",
         "op/eq_z",
-        "op/lt_s",
-        "op/le_s",
-        "op/gt_s",
-        "op/ge_s",
-        // The same declarations for the two reduced-precision floating types (design principles
-        // 7.3): their arithmetic and ordering cannot fail, and `bf16(x) / y` keeps the fault of
-        // division by zero that f32 has.
-        "op/add_bf",
-        "op/sub_bf",
-        "op/mul_bf",
-        "op/neg_bf",
-        "op/pow_bf",
-        "op/lt_bf",
-        "op/le_bf",
-        "op/gt_bf",
+        "op/error_new",
+        "op/fail",
         "op/ge_bf",
-        "op/add_f6",
-        "op/sub_f6",
-        "op/mul_f6",
-        "op/neg_f6",
-        "op/pow_f6",
-        "op/lt_f6",
-        "op/le_f6",
-        "op/gt_f6",
+        "op/ge_d",
+        "op/ge_f",
         "op/ge_f6",
-        // `pow` of the wide scalar types and of the complex ones is the library call of the same
-        // name (ops.cpp#__builtin__pow__, ops.cpp#complexPowBinary): outside its domain it returns
-        // inf or NaN, and a negative whole exponent is the reciprocal of an integer power, which
-        // cannot fault either. The two reduced-precision entries above already say the same.
-        "op/pow_i",
-        "op/pow_l",
-        "op/pow_f",
-        "op/pow_d",
+        "op/ge_i",
+        "op/ge_l",
+        "op/ge_s",
+        "op/gt_bf",
+        "op/gt_d",
+        "op/gt_f",
+        "op/gt_f6",
+        "op/gt_i",
+        "op/gt_l",
+        "op/gt_s",
+        "op/idx_arr",
+        "op/idx_str",
+        "op/idx_take",
+        "op/inv_i",
+        "op/inv_l",
+        "op/le_bf",
+        "op/le_d",
+        "op/le_f",
+        "op/le_f6",
+        "op/le_i",
+        "op/le_l",
+        "op/le_s",
+        "op/lt_bf",
+        "op/lt_d",
+        "op/lt_f",
+        "op/lt_f6",
+        "op/lt_i",
+        "op/lt_l",
+        "op/lt_s",
+        "op/mem_blocks",
+        "op/mod",
+        "op/mod_i",
+        "op/mod_l",
+        "op/mul",
+        "op/mul_bf",
+        "op/mul_c",
+        "op/mul_d",
+        "op/mul_f",
+        "op/mul_f6",
+        "op/mul_i",
+        "op/mul_l",
+        "op/mul_z",
+        "op/ne",
+        "op/neg_bf",
+        "op/neg_c",
+        "op/neg_d",
+        "op/neg_f",
+        "op/neg_f6",
+        "op/neg_i",
+        "op/neg_l",
+        "op/neg_z",
+        "op/not",
+        "op/or",
+        "op/parse_float",
+        "op/parse_int",
+        "op/pow",
+        "op/pow_bf",
         "op/pow_c",
         "op/pow_c_i",
         "op/pow_c_l",
+        "op/pow_d",
+        "op/pow_f",
+        "op/pow_f6",
+        "op/pow_i",
+        "op/pow_l",
         "op/pow_z",
         "op/pow_z_i",
         "op/pow_z_l",
-        // `len` reads a stored count or, for a string, counts its code points
-        // (struct.cpp#__len_arr__, struct.cpp#__len_str__, collection.cpp#__coll_len__): there is
-        // no fault path, and none of the three has numeric semantics of its own, so the trait is
-        // where the declaration lives.
-        "struct/len_arr",
-        "struct/len_str",
-        "coll/len",
-        // The predicates over a collection: `has` and `contains` walk the entries looking for a
-        // key, `eq` and `neq` compare two collections by content, and `set_is_subset` walks one
-        // looking for each element of the other (collection.cpp#__coll_has__, #__coll_eq__,
-        // #__coll_set_is_subset__). None of them builds a value, so none of them
-        // can run out of memory either, which is the one fault the rest of `coll/` does have.
-        "coll/has",
-        "coll/set_contains",
-        "coll/eq",
-        "coll/set_is_subset",
-        // The read-only helpers of `prelude.cml`: `contains` over an array walks it comparing
-        // elements by content, `contains` over a string searches it, `len` of `Bytes` reads a
-        // length and `==`/`!=` of two `Bytes` compare them (struct.cpp#__contains_arr__,
-        // #__contains_str__, #__len_bytes__, #__eq_bytes__). None of them builds a
-        // value, so a failed allocation is not among their paths either.
+        "op/set_field",
+        "op/set_index",
+        "op/set_index_in_place",
+        "op/slice_bytes",
+        "op/slice_str",
+        "op/slice_sub",
+        "op/sub_bf",
+        "op/sub_c",
+        "op/sub_d",
+        "op/sub_f",
+        "op/sub_f6",
+        "op/sub_i",
+        "op/sub_l",
+        "op/sub_z",
+        "op/tag_error_info",
+        "op/tag_error_value",
+        "op/tag_is_error",
+        "op/tag_is_null",
+        "op/tag_null_value",
+        "op/tag_throw",
+        "str/format",
+        "str/join",
+        "struct/append_arr",
+        "struct/concat_arr",
         "struct/contains_arr",
         "struct/contains_str",
+        "struct/iter_str",
+        "struct/last_arr",
+        "struct/len_arr",
         "struct/len_bytes",
-        "op/eq_bytes",
+        "struct/len_str",
+        "struct/range",
+        "struct/zip",
+        "tangent/add_arr",
+        "tangent/init_arr",
+        "tangent/last_arr",
+        "tangent/scatter_add_arr",
+        "tangent/scatter_slice_arr",
+        "tangent/scatter_take_arr",
+        "tangent/zeros_arr",
     };
     // The conversions of an array apply to each element on its own; every other conversion reads
     // and writes one value. Which ones take an array is the source type kConversions states.
     std::unordered_set<std::string_view> arrayConversions;
+    std::unordered_set<std::string_view> conversionNames;
     for (const ConversionRegistration &conversion : kConversions) {
+        conversionNames.insert(conversion.name);
         if (conversion.source == TypeCode::Array) {
             arrayConversions.insert(conversion.name);
         }
@@ -645,20 +678,17 @@ void registerBuiltinOperatorTraits() {
     auto &registry = camel::core::OperatorTable::instance();
     for (const auto &[name, op] : getOpsImplMap()) {
         const std::string_view key(name);
-        // Every operator under `op/` is pure except the assignment family, which writes a
-        // variable, and `op/keep`, which is there for a node that must keep running: it is
-        // declared the way an operator nobody declared is (it has an effect, and it may fault),
-        // so no pass drops it, merges it, moves it or computes it early, which would undo the
-        // reason a pass inserted it (operators/ops.h). Every operator over Map and Set (coll/)
-        // returns a new value and changes nothing.
-        const bool pure = (key.starts_with("op/") && !storesIntoCell(key) && key != "op/keep") ||
-                          key.starts_with("coll/") || key.starts_with("enum/") ||
-                          kPureHelpers.contains(key);
-        // Declared either way: an operator without a declaration is treated the same as one
-        // declared to have effects, but only a declaration says that somebody looked.
+        // An operator outside kAccessFree has an effect and does not itemize it here: it
+        // declares that much and is read as writing the global resource until
+        // declareBuiltinOperatorResources says what it really touches (the variable
+        // operators, the console, the profiler). `op/keep` is in that group on purpose: a pass
+        // inserts it for a node that must keep running, and an operator nobody declared is
+        // read the same way, so no pass drops it, merges it, moves it or computes it early
+        // (`src/builtin/operators/ops.h`).
         registry.set(
             ":" + name,
-            {.pure = pure, .elementwise = arrayConversions.contains(key), .mayFault = !kNeverFaults.contains(key)});
+            {.pure = kAccessFree.contains(key) || conversionNames.contains(key),
+             .elementwise = arrayConversions.contains(key)});
     }
     // `extent_of` is the one operator declared without a kernel of its own: a call it accepts is
     // answered where it is built, so no path makes a node for a run to execute

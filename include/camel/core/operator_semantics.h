@@ -427,20 +427,31 @@ struct ElementCalls {
 // ---- The record --------------------------------------------------------------------------
 
 /**
- * What the operator does besides compute its result (design principles 3.3), the fact the
- * `OperatorTraits` effect bits are derived from. `Undeclared`: nobody said; an operator is then
- * treated as effectful, as if declared `Effectful` (the difference is that `find` still says
- * nobody declared it). `Effectful`: it can change something outside the program's own
- * variables. `StateOnly`: it creates, reads or changes a variable and nothing outside the
- * program's variables. `Pure`: its result depends only on its arguments.
+ * What the operator does besides compute its result (design principles 3.3), derived from its
+ * access list (`resources`) and its fault table (`faults`) and never declared on its own
+ * (docs/design/op-semantics/README.cn.md, 4.2). The `OperatorTraits` effect bits are read
+ * from this and are not a second declaration.
+ *
+ *   Pure        its access list is empty: nothing but its arguments decides its result. A read
+ *               of a variable is a dependence and is in the list, so an operator that reads a
+ *               cell is not pure (`StateOnly`)
+ *   StateOnly   it reaches the program's own variables or objects and nothing outside them
+ *   Effectful   it reaches a resource outside the program, or declares an external effect
+ *   Undeclared  nobody said; the operator is read as effectful (it writes the global resource),
+ *               and `find` still reports that nobody declared it
  */
 enum class Effect : uint8_t { Undeclared, Pure, StateOnly, Effectful };
 
 struct OperatorSemantics {
     OperatorKey key;
-    /// The effect fact; `OperatorTraits::pure` and `stateOnly` are derived from it, never
-    /// declared separately (operator_table.h, traitsOf).
-    Effect effect = Effect::Undeclared;
+    /// What the declaration said about the effect where no access list itemizes it: `Pure` when
+    /// it declared the empty access list in words (`OperatorTraits::pure`), `StateOnly` for an
+    /// operator whose only accesses are the program's own variables, `Effectful` for one that
+    /// declares an effect it does not itemize (it writes the global resource, design principles
+    /// 3.3), `Undeclared` when nobody declared it. It never overrides an access list that says
+    /// more: `effect()` reads the list first, and `Pure` is not storable as a claim about an
+    /// operator whose list has an access in it.
+    Effect declaredEffect = Effect::Undeclared;
     /// Output element i depends only on input elements i (after broadcasting). Also derived
     /// from a declared `binary.elementwise` law, so the two cannot disagree.
     bool elementwise = false;
@@ -492,6 +503,27 @@ struct OperatorSemantics {
     /// separate fact from the effect, because the two questions are different: whether running
     /// the call changes anything outside the program, and whether a pass may answer it instead.
     bool foldable = true;
+
+    // ---- The effect, derived (docs/design/op-semantics/README.cn.md 4.2) ----------------------
+
+    /// The effect, read from the access list and the fault table (see `Effect`). A declared
+    /// `Effectful` that the list does not itemize still counts as one: a module that has not
+    /// itemized its accesses yet says at least that they exist.
+    Effect effect() const;
+    /// It reaches a resource outside the program: `externalEffect`, an access whose resource is
+    /// not one of the program's own variables or objects, or a declaration that says so without
+    /// itemizing it. An operator nobody declared is external (the conservative reading).
+    bool external() const;
+    /// It can raise a fault. The fault table decides: a declared empty table is an operator with
+    /// no fault path at all, and an operator that declares none may fault (design principles
+    /// 3.3). It is the one place the fault fact lives: the traits and the may-fault reading of
+    /// a node both come here.
+    bool mayFault() const { return !faults || !faults->empty(); }
+    /// The access list: the accesses the operator declares, or -- for one that declares none --
+    /// the conservative reading, one write of the global resource (design principles 3.3). What
+    /// an effect analysis reads, and what `camel inspect --ops` prints, so a declaration and its
+    /// reader cannot mean two different lists.
+    std::vector<ResourceAccess> accessList() const;
 };
 
 } // namespace camel::core::sem

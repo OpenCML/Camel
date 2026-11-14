@@ -215,7 +215,7 @@ struct MacroEvaluator::ValueRoot {
 };
 
 MacroEvaluator::MacroEvaluator(const context_ptr_t &context, const camel::runtime::Program *program)
-    : context_(context), program_(program),
+    : context_(context), program_(*context, program),
       framePool_(std::max<size_t>(
           kMacroFramePoolSize,
           camel::execute::framePoolBytes(camel::execute::macroDepthLimit(*context)))),

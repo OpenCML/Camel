@@ -346,8 +346,8 @@ bool fail(JvpGraph &refusal) {
     return false;
 }
 
-bool fail(JvpGraph &refusal, const JvpGraph &why) {
-    refusal = why;
+bool fail(JvpGraph &refusal, JvpGraph &&why) {
+    refusal = std::move(why);
     return false;
 }
 
@@ -378,7 +378,9 @@ JvpGraph buildJvpGraphInGroup(
     os << "REINTERP jvp callees=" << state.callees.size() << '\n';
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
-    return JvpGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+    return JvpGraph{
+        camel::runtime::ProgramHold(*context, group.program()),
+        const_cast<camel::runtime::GCGraph *>(made)};
 }
 
 /// The same build for a caller that holds a frozen graph: the face is made here and lives for the
@@ -1045,7 +1047,7 @@ bool liftGraph(
                 const bool lifted =
                     liftGraph(state, calleeFace, calleeName, calleeId, liftedCallee, os, sub);
                 if (!lifted) {
-                    refusal = sub;
+                    refusal = std::move(sub);
                     return false;
                 }
             } else {
@@ -2146,7 +2148,7 @@ bool liftGraph(
                         static_cast<camel::source::origin_id_t>(function.nodeOrigin(ref));
                     refused.refusedUri = std::string(uri);
                     refused.refusedWhy = ruleWhy;
-                    return fail(refusal, refused);
+                    return fail(refusal, std::move(refused));
                 }
                 if (std::find(usedRules.begin(), usedRules.end(), ruleName) == usedRules.end()) {
                     usedRules.push_back(ruleName);
