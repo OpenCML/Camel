@@ -372,8 +372,8 @@ export function loadSelectionRules() {
  */
 /**
  * The directory rules: a changed file under one of these roots is first looked up by its
- * directory, so `modules/tensor/ops.cpp` selects `test/plans/feat/modules/tensor` (and
- * `test/cases/compile/enum/x.cml` selects `test/plans/feat/compile`) without a per-subsystem
+ * directory, so `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor` (and
+ * `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile`) without a per-subsystem
  * mapping. The deepest plan directory or plan file that matches wins; the file rules below are
  * the complement for a path no plan directory mirrors (a pass, the standard library, docs) and
  * for the plans outside the mirrored tree that a component needs.

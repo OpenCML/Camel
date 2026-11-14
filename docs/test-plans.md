@@ -436,9 +436,9 @@ local comparison.
 
 - **Directory rules** (`directoryRules`): a change under `modules/`, `tools/` or `test/cases/`
   selects the plan mirroring its directory. The deepest existing match wins, so
-  `modules/tensor/ops/matmul.cpp` selects `test/plans/feat/modules/tensor/`,
+  `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
-  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. This names
+  `test/cases/modules/tensor/comparison.cml` selects `test/plans/feat/modules/tensor/`. This names
   the plan that mirrors the path; it cannot name a plan that lives outside that tree.
 - **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
   reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under

@@ -88,7 +88,7 @@
 | 同步 | `syncUsersOf` / `syncInputsOf` | `syncUsersOf`（用户）/ `syncPredsOf`（前驱，边记录） |
 | 顺序 | `orderUsersOf` / `orderInputsOf` | `orderUsersOf`（用户）/ `orderPredsOf`（前驱，边记录） |
 
-图侧的 `syncUsersOf`、`orderUsersOf` 是本轮补的（`src/runtime/graph.h`、`src/runtime/graph.cpp`）；`isUnanchoredPure` 那 6 组因此两侧都读得到。前驱侧两侧的形状不同：草稿侧返回节点号，图侧返回边记录（取 `.pred`）。
+图侧的 `syncUsersOf`、`orderUsersOf` 是本轮补的（`include/camel/runtime/graph.h`、`src/runtime/graph.cpp`）；`isUnanchoredPure` 那 6 组因此两侧都读得到。前驱侧两侧的形状不同：草稿侧返回节点号，图侧返回边记录（取 `.pred`）。
 
 ## 7. 行号的用法
 

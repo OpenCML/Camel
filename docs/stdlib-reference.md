@@ -6599,7 +6599,7 @@ run_file: (path: string) => void!
 Runs the Python script at the path.
 
 - Failure: error value `PythonError` when the file cannot be read or the script raises.
-- Example: `'scripts/hello.py'->run_file`
+- Example: `'test/cases/modules/std/python/hello.py'->run_file`
 
 #### `import_module`
 
