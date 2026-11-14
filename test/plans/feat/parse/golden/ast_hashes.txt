@@ -529,7 +529,7 @@ aa72db8f6e84d419 ok stdlib/pyplot.cml
 efdc085be63d6bd3 ok stdlib/python.cml
 9d13882030f5bd77 ok stdlib/random.cml
 0215c2534c860e75 ok stdlib/re.cml
-09bd9dcc6ca53829 ok stdlib/rewrite.cml
+91182bece5ccfb9d ok stdlib/rewrite.cml
 6f2d557f8d7349a5 ok stdlib/rules.cml
 c4461fdf2d8323ee ok stdlib/sim.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
@@ -2427,6 +2427,7 @@ a81719fa7579a1b0 ok test/cases/definitions/grad.cml
 d003368ec6a13864 ok test/cases/effects/declared.cml
 7f49c2fed0c5c2ee ok test/cases/effects/effect_through_parameter.cml
 dd6ac7cc2e212adf ok test/cases/effects/err_callee_clause_reaches.cml
+c4aa969b736c9d37 ok test/cases/effects/err_capture_escapes.cml
 0fe195db9bab7769 ok test/cases/effects/err_closure_capture_pure.cml
 c4bcb3d7b4bdbf70 ok test/cases/effects/err_group_cycle.cml
 7a863dc0022102d5 ok test/cases/effects/err_handle_not_nominal.cml
@@ -2451,6 +2452,8 @@ b26826269d6b75f0 ok test/cases/effects/exported_resource_qualified.cml
 d1e590dc91c80d1e ok test/cases/effects/generic_parameter_takes_instantiation.cml
 2ef4fedc4207f406 ok test/cases/effects/inferred_recursive_is_empty.cml
 b294164520f56d92 ok test/cases/effects/native_clause_wrong.cml
+a8730a13c923746f ok test/cases/effects/ok_capture_local_var.cml
+a48db083475b0392 ok test/cases/effects/ok_capture_local_var_as_value.cml
 33aa2d442934e183 ok test/cases/effects/ok_recursive_pure.cml
 31d91b582abfff5e ok test/cases/effects/overcounted_writer_keeps_the_value.cml
 4e305b0e13dd0408 ok test/cases/effects/pure_parameter_takes_lambda.cml
@@ -3317,8 +3320,10 @@ e04815f4dc392d59 ok test/cases/modules/rules/with_generic_target.cml
 59272a8a08d7493c ok test/cases/modules/rules/with_rules.cml
 2ce57325ff8ac258 ok test/cases/modules/rules/with_target.cml
 63b9260b8279e79f ok test/cases/modules/selected_protection/both.cml
+4bd710dfcba1e9c6 ok test/cases/modules/selected_protection/capture.cml
 666de6322e468533 ok test/cases/modules/selected_protection/cli-last.cml
 2470761d763213f8 ok test/cases/modules/selected_protection/cli-retained.cml
+dea4527e05e241d0 ok test/cases/modules/selected_protection/effect.cml
 182cf29f8d58e7f0 ok test/cases/modules/selected_protection/fault.cml
 5883b7c397b2bb15 ok test/cases/modules/selected_protection/io.cml
 3bc06f41ebe8a161 ok test/cases/modules/selected_protection/policy.cml

@@ -403,7 +403,7 @@
 - `-c`, `-C`, `--gct`, `--graph-construct-tree`：打印图构造树（GCT）  
 - `-g`, `-G`, `--gir`, `--graph-ir`：打印图中间表示（GIR）  
 - `--tns`, `--topo-node-seq`：打印拓扑排序后的节点序列  
-- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名，例如 `OPERATOR {"module":"<builtin>","name":"__add__","uri":":op/add_l","with":0,"norm":2,"purity":"pure","signature":"(i64, i64) => i64"}`
+- `--ops`, `--operators`：列出内建模块与该程序导入的每个模块的算子，每个重载一行 `OPERATOR {json}`：模块、名字、URI、参数个数、声明的纯度（`pure`、`effectful`、`state`、`undeclared`）与签名，然后是算子的**访问列表**（每个它触及的资源一条，带这次访问的读/写模式）以及由它推出的三件事：访问列表是否逐条声明（`accesses_declared`）、是否触及程序之外的状态（`external`）、是否可能中止（`may_fault`）。没有逐条声明的算子按"写全局资源"读，打印的就是那一条。例如 `OPERATOR {"module":"<builtin>","name":"__add__","uri":":op/add_l","with":0,"norm":2,"purity":"pure","signature":"(i64, i64) => i64","accesses":[],"accesses_declared":true,"external":false,"may_fault":false}`
 - `--gen`, `--gene-code`：从 AST 生成代码  
 - `-p`, `-P`, `--pass-until <n>`：执行到指定的图优化阶段为止  
 - 可用的通用选项：`-v` / `-vv` / `-vvv` / `-vvvv`、`--verbose`、`--log-level`、`--log-preset`、`--log-include`

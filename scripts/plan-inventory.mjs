@@ -257,19 +257,15 @@ function readPlan(abs) {
 // output instead of being a silent pass. A plan file under `test/cases` is not a case: it must be
 // recorded too, or the check asks for it to move under `test/plans`.
 //
-// The list holds one file, and one kind of file is left in the tree on purpose: a trap fixture,
-// which a correct compiler never opens. Its whole function is to be there -- a regression that
-// searches a directory it must not search finds it and prints its value, and the pins above never
-// allow that value -- so no plan and no code reads it, and deleting it would remove the guard.
-export const CASE_EXCEPTIONS = [
-    {
-        file: 'test/cases/compile/module_imports/import_order/roots_trap/pkg/lib.cml',
-        reason:
-            'a trap fixture: the entry directory is not a module root, and this file is what a ' +
-            'regression that treats it as one would load (it returns 9, which the pins above never ' +
-            'allow). Nothing opens it in a correct run, and its presence is the check',
-    },
-]
+// The list is empty, and the one entry it held is recorded here instead of being forgotten: the
+// trap fixture `test/cases/compile/module_imports/import_order/roots_trap/pkg/lib.cml` stays in the
+// tree on purpose -- its whole function is to be there, so a regression that searches a directory it
+// must not search finds it and prints its value, which the pins above never allow -- and the entry
+// said nothing opens it in a correct run. That stopped being true when the AST snapshot began to
+// cover every `.cml` file of the repository: `test/tools/parsecheck/check.py` reads that file now,
+// which is what the `reached` map reports, so the file is reached by code and the exception it
+// needed is gone. The trap itself is unchanged, and a regression that loads it still fails the pins.
+export const CASE_EXCEPTIONS = []
 
 const CASE_ROOT = 'test/cases'
 // A case is a file of the repository, and a bytecode cache is not: the interpreter writes
