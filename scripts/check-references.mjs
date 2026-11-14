@@ -55,6 +55,11 @@
  * `fixture/` trees are not read at all (`isFixtureTree`): they are a synthetic checkout another
  * check builds and runs against, and one of their pages cites the file that must not be there.
  *
+ * Premise of that last rule, and the reason it cannot quietly widen: the fixture page's intent is
+ * locked by `test/plans/feat/docs_links.plan.toml`, which asserts the exact "no such file" reading
+ * of the path it names. Skip and assertion are one decision -- if that assertion is ever removed,
+ * the skip stops being a rule and starts being a cover-up, and the two come out together.
+ *
  * A `.md` fence is an example, not a claim: the path inside it is a path a command will write. So
  * are a plan's strings (`expect_output_contains`); only a comment line in code is read, and in a
  * document every line outside a fence is.
