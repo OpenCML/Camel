@@ -1,0 +1,16 @@
+/**
+ * A `var` parameter is a variable, and a clause names no variable (design principles 3.3): the
+ * `var` in the parameter list is where the cell is declared, and the write in the body is what
+ * makes a call touch it. The clause is refused where the entry is written.
+ */
+
+func bump(var acc: int): int uses var acc sync {
+    acc += 1
+    return acc
+}
+
+func main(): int sync {
+    var acc = 0
+    println(bump(acc))
+    return 0
+}

@@ -1117,11 +1117,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ExternalResourceNeedsVar,
+            SemanticDiag::VariableInUses,
             {
-                "ExternalResourceNeedsVar",
-                "The external resource '{0}' is named without 'var' in the resource clause of '{1}'.",
-                "An external resource is state the program does not own: the program and whatever else is outside it both read and write it, so a call that names one writes it, and a clause says so the way a parameter does (design principles 3.3). Write 'var {0}' before it. A resource a module declares with 'resource' and one every program has (stdout, stderr, stdin, clock, env, fs) are external; a module's own 'var' is internal, and there an entry reads it without 'var' and writes it with 'var'.",
+                "VariableInUses",
+                "The variable '{0}' is named in the resource clause '{1}'.",
+                "A clause names what a call touches outside the function's own variables: the external resources it reads or writes, and the handle parameters it is handed (design principles 3.3). A variable is declared once, where it is created: a `var` parameter in the parameter list, a module variable by the `var` in its declaration, a captured one by the `var` or `let` that binds it. Which of them a call touches is measured from the body, and the signature the compiler derives prints them. Remove the entry.",
             },
         },
         {

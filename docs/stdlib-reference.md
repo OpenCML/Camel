@@ -1338,7 +1338,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses var fs, var stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -5457,7 +5457,7 @@ showing that calls really run at the same time.
 #### `thread_count`
 
 ```camel
-thread_count: () => int uses var process
+thread_count: () => int uses process
 ```
 
 The number of threads this process has, the caller included: the count the operating system
@@ -6436,7 +6436,7 @@ program asks for the device with `#gpu`, not with this.
 #### `source`
 
 ```camel
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
 The CUDA source the function compiles to, without running it.
@@ -6446,7 +6446,7 @@ The CUDA source the function compiles to, without running it.
 #### `inspect`
 
 ```camel
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 ```
 
 A report on the function's device plan, without running it: the kernel, its launch shape and

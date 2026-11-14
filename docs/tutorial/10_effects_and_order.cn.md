@@ -283,7 +283,9 @@ camel docs/tutorial/examples/10_same_resource.cml
 
 ```cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
+// handle parameter. A variable is never written in a clause -- a `var` parameter is declared by the
+// `var` in the parameter list and its uses are measured from the body -- so `bump` writes the cell
+// it is handed and every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
@@ -298,7 +300,7 @@ func read_id(s: Stream): int uses s {
 func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses var cell sync {
+func bump(var cell: int): int sync {
     cell += 1
     return cell
 }
@@ -328,12 +330,16 @@ camel docs/tutorial/examples/10_resources.cml
 - **模块声明的资源**：`resource db`。一个模块可以声明它自己的资源，也可以把几个资源凑成一组：
   `resource console = [db, stdout]`。
 - **每个程序都有的资源**：`stdout`、`stderr`、`stdin`、`clock`、`env`、`fs`。
-- **一个形参**：`uses s`、`uses cell`。这是"这个调用会碰我传进去的那个值"——和 `var` 形参一样，是句柄式
-  的写法：同一个句柄的操作按书写顺序，不同句柄之间互不约束。
+- **一个句柄形参**：`uses s`。这是"这个调用会碰你传给我的那个值"——句柄式的写法：同一个句柄的操作按书写
+  顺序，不同句柄之间互不约束。`var` 形参不这样写：它是一个变量，见下一条。
 - **读写方式写在名字前面**：不带 `var` 是读，带 `var` 是写，与 `var` 形参同一个意思（设计原则 3.3）：
-  `uses s` 读句柄、`uses var cell` 写格子。外部资源前漏写 `var` 是编译错误
-  （`SemanticDiag::ExternalResourceNeedsVar`）：那几个资源是程序不拥有的状态，程序和其他东西都在读写它们，
-  所以命名它的进动就是写。推断出的类型、`tooltip` 和诊断都这样打印，`uses s` 与 `uses var s` 一眼分得开。
+  `uses s` 读句柄、`uses var s` 写句柄、`uses fs` 读文件、`uses var fs` 写文件。外部资源也遵守这一条，
+  没有"外部的一律要写 `var`"的例外：`clock`、`env` 这类只读的资源，子句里就是不带的写法。推断出的类型、
+  `tooltip` 和诊断都这样打印，`uses fs` 与 `uses var fs` 一眼分得开。
+- **变量不写进 `uses`**：`var` 形参、模块顶层的 `var`、捕获的变量、局部变量都是变量，子句里一个都不写
+  （`SemanticDiag::VariableInUses`）。变量的声明只有一处——形参表里的 `var`、模块里的 `var`、绑住它的
+  `var` 或 `let`；哪些调用碰它、读还是写，由函数体量出来，打印在推出来的签名上。上面 `bump` 就是这样：
+  子句空着，它的类型仍然写着 `uses var cell`。
 - **`#resource type` 声明的句柄类型**：`#resource type Stream = { id: int }`，它的**每个值**都是一个独立的
   资源，所以 `read_id` 声明的是"我会碰你给我的那个 `Stream`"，而不是"我会碰所有 Stream"。
 
@@ -352,6 +358,8 @@ camel docs/tutorial/examples/10_resources.cml
 写错了会看到什么（都是编译错误）：
 
 - 子句里写了一个既不是形参也不是资源的名字：`SemanticDiag::UnknownResource`。
+- 子句里写了变量（`var` 形参、模块的 `var`、捕获的变量）：`SemanticDiag::VariableInUses`——变量只声明一次，
+  读写它由函数体量出来，写在推出来的签名里。
 - 同一个签名上又写 `pure` 又写 `uses`：`SemanticDiag::PureAndUses`——`pure` 说的是"一个资源都不碰"，
   `uses` 说的是"碰这些"，两者只能写一个。
 - 没有函数体的声明（原生算子）写的子句与算子不符：`SemanticDiag::NativeResourceMismatch`——那种声明就是
