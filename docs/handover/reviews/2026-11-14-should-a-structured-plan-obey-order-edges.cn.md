@@ -66,3 +66,6 @@ order 边；`concurrent_calls.cml` 的注释写着"Not a sync block: nothing ord
 （或改写这两个程序让它们不再依赖 order 边未被执行）。
 
 `predecessor` 这条差异记在 `taskflow.cpp#planObeysPredecessor` 一处，便于作者一键翻转。
+## 决策者答复（2026-11-14）
+
+见 `docs/handover/reviews/questions-2026-10-29.md`"返工（2026-11-14）：taskflow 仍不守顺序边，不必等作者裁定"：taskflow 守所有顺序边，没有例外，`planObeysPredecessor` 删掉；两个并发用例的问题在 `rendezvous` 没有如实声明访问，改为声明一个 `unordered` 资源并标 `nondeterministic`，用例写明它在确定性保证之外。
