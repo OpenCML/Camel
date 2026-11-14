@@ -15,8 +15,8 @@
  *     write onto a type -- and so cannot be read back from the frozen graph's function type alone;
  *   - `runtime` is `runtime::footprintOf` over the frozen graph: the runtime's own walk.
  *
- * Both are written in the runtime's footprint text (runtime/resources.cpp#toString), because the
- * two answers are one claim in two notations and only the notation is shared.
+ * Both are written in the runtime's footprint text (src/runtime/resources.cpp#toString), because
+ * the two answers are one claim in two notations and only the notation is shared.
  *
  * Two parts of a footprint are outside the comparison, and the plan says why: `result` (the
  * builder's measurement answers what the body reaches and records the conservative `Unknown` there,

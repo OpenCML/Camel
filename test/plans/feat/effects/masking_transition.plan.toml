@@ -23,7 +23,7 @@ tags = ["feat", "effects", "resources", "runtime", "compile"]
 # reach of every body -- including a set a function type cannot carry, and a body whose type keeps the
 # clause it wrote -- because a type is not the whole of what the walk measured. The runtime's answer is
 # runtime::footprintOf over the frozen graph, its own walk. Only the notation is shared: both readings
-# are written in the runtime footprint's text (runtime/resources.cpp#toString), so the two are one
+# are written in the runtime footprint's text (src/runtime/resources.cpp#toString), so the two are one
 # claim in two spellings. Two parts of a footprint are outside the comparison: the result part, since
 # the builder's measurement answers what a body reaches and records the conservative Unknown there
 # while the runtime answers what the result aliases from the shapes the graph has, and the allocation

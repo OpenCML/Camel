@@ -336,9 +336,19 @@ $checkers = [ordered]@{
     # `sed -E` expression that reduces the checker's own summary line to its count, so the number
     # printed here is the number the checker printed -- the list is one work item, and the number
     # coming down is what this line exists to show. `--enforce` is deliberately absent: the checker
-    # offers it as the mode this entry becomes once its list is empty (`--enforce` exits 1 while a
-    # holder remains), and a lane that switched it on now would gate 51 holders on 2026-11-14.
-    'program-holders'     = @{ script = 'scripts/check-program-holders.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-program-holders: ([0-9]+) C\+\+ Program holder.*/\1/p' }
+    # offers it as the mode this entry becomes once its list is empty, and a lane that switched it
+    # on now would gate the baseline each entry printed on 2026-11-14.
+    'program-holders'       = @{ script = 'scripts/check-program-holders.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-program-holders: ([0-9]+) C\+\+ Program holder.*/\1/p' }
+    # The three layering rows of the target architecture's section 7 (守护), each read as its own
+    # script: only the semantic layer enumerates a kind of edge; an effect is answered by the fact
+    # layer and not assembled from `isPure`/`hasExternalEffect`; an operator's URI is spelled in its
+    # definition and its registry, not in business code. Each script's header comment states the
+    # rule it derives its boundary from -- the declaring header, the fact that answers the
+    # question, the files that define and register an operator -- because that boundary is the part
+    # a reader has to be able to argue with.
+    'edge-kind-layer'       = @{ script = 'scripts/check-edge-kind-layer.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-edge-kind-layer: ([0-9]+) edge-kind call.*/\1/p' }
+    'effect-facts'          = @{ script = 'scripts/check-effect-facts.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-effect-facts: ([0-9]+) effect-atom call.*/\1/p' }
+    'operator-uri-literals' = @{ script = 'scripts/check-operator-uri-literals.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-operator-uri-literals: ([0-9]+) operator URI literal.*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both

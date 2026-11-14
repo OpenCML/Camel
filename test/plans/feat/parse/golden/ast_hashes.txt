@@ -2455,6 +2455,8 @@ c90ca6b8bfe43728 ok test/cases/effects/exported_resource_imported.cml
 e4eadcfee18057e8 ok test/cases/effects/exported_resource_qualified.cml
 d1e590dc91c80d1e ok test/cases/effects/generic_parameter_takes_instantiation.cml
 2ef4fedc4207f406 ok test/cases/effects/inferred_recursive_is_empty.cml
+db1c9332ac315555 ok test/cases/effects/module_var_read.cml
+925cf39d4f0d2700 ok test/cases/effects/module_var_write.cml
 b294164520f56d92 ok test/cases/effects/native_clause_wrong.cml
 a8730a13c923746f ok test/cases/effects/ok_capture_local_var.cml
 a48db083475b0392 ok test/cases/effects/ok_capture_local_var_as_value.cml
