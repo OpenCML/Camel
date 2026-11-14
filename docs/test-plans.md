@@ -439,7 +439,12 @@ local comparison.
   `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
   `test/cases/modules/tensor/comparison.cml` selects `test/plans/feat/modules/tensor/`. This names
-  the plan that mirrors the path; it cannot name a plan that lives outside that tree.
+  the plan that mirrors the path; it cannot name a plan that lives outside that tree. Its `also`
+  list adds plans that read *every* change under the directory beside the mirrored one, which is
+  what a plan reading a class of files rather than a directory of them needs: the `test/cases/` rule
+  carries `{ "plan": "feat/parse/frontend.plan.toml", "layer": true }`, because the front-end AST
+  snapshot hashes every `.cml` of the repository, so a case that lands unrecorded is a file that
+  changed and no plan read.
 - **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
   reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
   `test/plans/gpu/` (a change to the tiles C++ used to select only the CPU tiles plan),
