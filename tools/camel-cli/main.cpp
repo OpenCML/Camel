@@ -274,13 +274,6 @@ int runCommand(int argc, char *argv[]) {
     // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
         ~ReleaseExternalResources() {
-            // Nothing is collected here: each scheduling pass takes its own reclamation point at the
-            // boundary its entry graph returns on (`std::nvm` in `NodeVMSchedPass::apply`, the call
-            // boundaries of `std::fvm` and `std::jit`), so by the time this reads anything there is
-            // nothing of the run left to free. Collecting here as well would run a collection on a
-            // run that ended because the heap was exhausted, from a destructor, where an exception
-            // has nowhere to go.
-            //
             // `--gc-check foreign`: what the program had not released when it stopped, read before
             // anything is disposed, and the counters of a lifetime that is a count (design
             // principles 3.3: a `Ref<T>` box is freed by the last handle to go).
@@ -291,8 +284,7 @@ int runCommand(int argc, char *argv[]) {
                 std::cout << "FOREIGN_RESOURCES"
                           << " created=" << foreignBefore.createdControlBlocks
                           << " released=" << foreignBefore.releasedControlBlocks
-                          << " live=" << foreignBefore.liveControlBlocks
-                          << " disposed=" << disposed
+                          << " live=" << foreignBefore.liveControlBlocks << " disposed=" << disposed
                           << " finalized=" << foreignBefore.finalizedWrappers << '\n';
                 std::cout.flush();
             }
@@ -493,7 +485,8 @@ int runCommand(int argc, char *argv[]) {
                 // without saying so.
                 if (ctx->runtimeProgram()->root()) {
                     const camel::runtime::CanonicalProgram numbering(
-                        *ctx->runtimeProgram(), *ctx->runtimeProgram()->root());
+                        *ctx->runtimeProgram(),
+                        *ctx->runtimeProgram()->root());
                     os << numbering.tiesText();
                 }
             }
@@ -727,21 +720,6 @@ int runCommand(int argc, char *argv[]) {
                         nullptr);
                     auto result = applyPassesDetailed(program, Run::resolvedPassList, ctx, os);
                     program     = result.program;
-                    // `--gc-check foreign`: the counted blocks read at the moment the pipeline is
-                    // over, which for a scheduling pass is the moment the entry graph has returned
-                    // and its frames are gone -- before the run closes. A block still counted here
-                    // is one the return did not release (design principles 10.5: the moment a
-                    // counted resource is reclaimed does not depend on the back end), and the line
-                    // at exit says the same thing again after the closing collection.
-                    if (camel::core::mm::allocatorChecks().printForeignResources) {
-                        const auto afterRun = camel::core::rtdata::foreignResourceStats();
-                        std::cout << "FOREIGN_RESOURCES_AT_RETURN"
-                                  << " created=" << afterRun.createdControlBlocks
-                                  << " released=" << afterRun.releasedControlBlocks
-                                  << " live=" << afterRun.liveControlBlocks
-                                  << " finalized=" << afterRun.finalizedWrappers << '\n';
-                        std::cout.flush();
-                    }
                     if (result.errored()) {
                         // The pass ended with an error value: the pipeline stopped there, and the
                         // error is reported the way an error value nobody handled is (design
@@ -885,8 +863,9 @@ int runCommand(int argc, char *argv[]) {
             // printed with it (it used to be printed bare: a line reading `bad any_cast`), and the
             // program is not blamed, and the text never asks the reader to send it.
             os << "camel: internal error: " << e.what()
-               << "\nThis is a defect of the compiler, not an error of the program. No shape the program "
-                   "can write reaches it."
+               << "\nThis is a defect of the compiler, not an error of the program. No shape the "
+                  "program "
+                  "can write reaches it."
                << endl;
         }
         ASSERT(false, e.what());

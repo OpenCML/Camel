@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：49 页
+## 现在在等作者：48 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -49,7 +49,6 @@
 | [`2026-11-15-can-a-commit-depend-on-unrelated-writes`](2026-11-15-can-a-commit-depend-on-unrelated-writes.cn.md) | 同一个图的提交结果，能不能取决于同一事务里有没有别的写入？ |
 | [`2026-11-15-does-a-returned-calls-slot-keep-a-box-alive`](2026-11-15-does-a-returned-calls-slot-keep-a-box-alive.cn.md) | 调用返回之后，它留下的句柄槽还让盒子活着吗？ |
 | [`2026-11-15-how-does-a-camel-pass-warn`](2026-11-15-how-does-a-camel-pass-warn.cn.md) | 一个用 Camel 写的 pass，怎么报告一条不致命的诊断？ |
-| [`2026-11-15-is-a-handles-count-the-slots-or-the-wrappers`](2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md) | 返回边界上清掉没人命名的盒子：清理点，还是「一个槽一个 wrapper」？ |
 | [`2026-11-15-is-the-inline-splices-program-observable`](2026-11-15-is-the-inline-splices-program-observable.cn.md) | 拼接进来的那段体，归属可观测吗 |
 | [`2026-11-15-live-node-count-is-not-the-live-set`](2026-11-15-live-node-count-is-not-the-live-set.cn.md) | `liveNodeCount()` 不是活集合 |
 | [`2026-11-15-member-liveness-needs-slot-producers`](2026-11-15-member-liveness-needs-slot-producers.cn.md) | 成员级活性需要的是「槽位 → 生产者」，不是「成员 = 输入」 |
