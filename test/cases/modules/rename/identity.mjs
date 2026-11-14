@@ -20,6 +20,11 @@
 // sync edge, with the legacy control edge written beside it. The samples gained that pair and
 // nothing else; their data edges are the ones the previous digests hashed.
 //
+// Recorded once more when `std::jgir` began numbering each graph's nodes by the graph's own
+// canonical order (`camel/runtime/canonical.h`, design principles 9) instead of the order the
+// nodes were created: every id in the document moved, so these two digests are of the new
+// numbering. The rename itself still changes only the module name.
+//
 // The sample programs hold literals only and `std::jgir` is a translation pass: no environment
 // read, hash or machine query is executed, so the graph is the same on every machine.
 //
@@ -46,13 +51,13 @@ const CASES = {
         old: 'sys',
         now: 'env',
         file: 'env_identity.cml',
-        expected: 'd6a236f3a28fc6ba368920822b9eda0fd6a4e831adba53fa74afbee3c698578a',
+        expected: 'c7ba996a3fef124a5ba72898eb79605d44a3d5361a8581c7cd2ed9f538de3896',
     },
     process: {
         old: 'os',
         now: 'process',
         file: 'process_identity.cml',
-        expected: '0c5f457573b1a368d19561c712ed37cb43d3598ba1cf7f2307c895b61ec8ae87',
+        expected: '3e1d8fdbf23094fbdf199e05564ea2a8e48b1f10ed65ec29b2a0b817f710e0ab',
     },
 }
 
