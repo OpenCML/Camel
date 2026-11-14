@@ -151,14 +151,14 @@ same process runner alternating the two programs; medians):
 The library pays only at d=1024, where the projection gradients are large enough; at d=64 and
 d=256 every product falls below the threshold and the two rows are the same kernel. The paired
 profile and the per-category rows are in
-[`results/2026-10-23-d1024-profile-shape.json`](results/2026-10-23-d1024-profile-shape.json).
+`results/2026-10-23-d1024-profile-shape.json`.
 d=256 remains
 behind: 66.1 against 50.0 (32%), with non-overlapping round ranges. At d=1024 the medians put
 Camel ahead of `torch.compile` this run (2570 against 2772), but the compiled range is
 2424–5466, so the numbers do not order the two. The d=1024 library-only cell was 3600 ms at load
 31; the shape step is 2570 ms at load 14–35, and the paired row shows the difference is the path,
 not only the host. The 16-thread cells are in
-[`results/2026-10-23-sweep-linux-shape.json`](results/2026-10-23-sweep-linux-shape.json); there
+`results/2026-10-23-sweep-linux-shape.json`; there
 Camel is 1146.6 against compiled 369.4 at d=1024, because the library pool is capped at four
 threads and the canonical kernels take the rest of the run.
 
@@ -171,7 +171,7 @@ cancel. Run 2026-10-23 11:44–12:52 +08:00, build `102dbc5d1` group (fingerprin
 `a39d2d4c570a`, `CAMEL_TENSOR_BLAS=ON`, OpenBLAS 0.3.20), load average 97–128 on 32 hardware
 threads. `camel-library` is the default path (`tensor::fuse`); `camel-canonical` is the same program
 with the pass removed. Both figures of every cell are given in
-[`results/2026-10-23-cpu-scale-scan.json`](results/2026-10-23-cpu-scale-scan.json):
+`results/2026-10-23-cpu-scale-scan.json`:
 
 | CPU ms/step, one thread | library (default) | canonical | library ÷ canonical |
 | --- | ---: | ---: | ---: |
@@ -218,7 +218,7 @@ ambient value, while task-clock went from 2.363 to 2.321, inside the 1–4% scat
 (11% across the recorded build's three). A control on the same tree, built with and without the
 system CBLAS, moves the count by 0.002%, so the option is not a confound. **No recorded number was
 changed.** Both build pairs, the load pair and the control are in
-[`results/2026-10-24-d64-instruction-counts.json`](results/2026-10-24-d64-instruction-counts.json).
+`results/2026-10-24-d64-instruction-counts.json`.
 
 **The d=1024 gap against `torch.compile`, and why it no longer divides.** On the same CPU basis,
 `torch.compile(naive)` costs 2 645.0 ms a step (CPU seconds 80.71 at 24 steps and 165.35 at 56, its
@@ -254,14 +254,14 @@ is about 22 ms, roughly 33 times the allocator time of a whole step, so the d=25
 time, not allocation. What this still cannot split is a `memcpy` inside a kernel, a BLAS
 library's own `malloc`-ed packing buffer, and the page faults of first touching a newly reserved
 segment; the file is
-[`results/2026-10-23-d256-d1024-alloc-profile.json`](results/2026-10-23-d256-d1024-alloc-profile.json)
+`results/2026-10-23-d256-d1024-alloc-profile.json`
 and the instrument is described in
 [`docs/technical/54_profiler_allocations.md`](../../../docs/technical/54_profiler_allocations.md).
 
 **Where one d=256 step goes.** The paragraph above says the d=256 gap is not the allocator. This one
 says which rows it is, with each row measured rather than attributed by subtraction:
 [`test/cases/perf/step_budget.py`](../../../test/cases/perf/step_budget.py), `measure` mode, results
-in [`results/2026-10-23-d256-step-budget.json`](results/2026-10-23-d256-step-budget.json).
+in `results/2026-10-23-d256-step-budget.json`.
 
 The host makes the naive method fail first. `std::profile` times operators with `steady_clock`, and
 the same 60 ms step reports 75 to 148 ms of wall time in a round depending on who else is building
@@ -410,7 +410,7 @@ saw the worst of it.
 
 `16 threads` is one thread per physical core, not all 32 hardware threads. Asking for 32 on a
 16-core SMT part measures the host rather than the frameworks: in
-[`results/2026-10-23-thread-scaling-linux.json`](results/2026-10-23-thread-scaling-linux.json) a
+`results/2026-10-23-thread-scaling-linux.json` a
 2048×1024 matmul takes 49.4 ms at 16 threads and 47.4 ms at 32 (no gain at all), while a 64×64
 matmul takes 0.0145 ms at one thread, 32.3 ms at 16 and 48.8 ms at 32 — the small operators this
 model is made of pay the whole wake-up bill for every thread they are given. That run saw load 72;
@@ -448,7 +448,7 @@ rule asks for cannot be measured. The GPU is not covered.
 on a busy host.  Neither report left its machine, command or revision in the tree—this
 repository contains neither number in a file or a commit message—so they are context, not a
 baseline.  The single-size table's 2.091 (2.029–2.195), in
-[`results/2026-10-23-linux.json`](results/2026-10-23-linux.json), is consistent with both, and
+`results/2026-10-23-linux.json`, is consistent with both, and
 2.062 vs 2.091 is below that measurement's spread: it is not evidence of a regression.
 
 ## What the naive program does
