@@ -1,0 +1,12 @@
+# lane-protect -> develop (862afb557)
+
+判据读数:
+- effects=false 下外部访问仍在图里 (jgir :io/println 计数 1) 且仍执行 (stdout 41; 改前 0 / 空)
+- 活得比调用长的变量的最终写入同样保留 (assn_l 计数 1; stdout 0/41, 改前 0/0)
+- protect_faults 语义未破: faults=false 可删 (exit 0, 0); faults=true 必留 (DivisionByZero, exit 1)
+- selected_protection 54/54 pass
+
+合并闸门: total 8941 / pass 8897 / fail 4 / skip 8 / known 32; killed 0.
+读数行: C++ +14 / tests +75 / docs +15 行; 中心文件 1 (writings.cpp, 2601); >2500 行 2; 反向引用 0.
+后果: cli-last.checked 由拒绝变接受, check_pass_boundary 的拒绝分支在规则路径上不可达; 要等"专门删效应的图接口操作"落地后补覆盖.
+未做: 图接口里专门删效应的操作本身; replace/graft 拒绝删效应; 死写收窄.
