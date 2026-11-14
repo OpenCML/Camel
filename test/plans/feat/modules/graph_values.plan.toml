@@ -76,6 +76,18 @@ expect_stdout_exact = "one: 0 5\ntwo: 0 5\ngiven: 1 6\n"
 timeout_ms = 20000
 
 [[tests]]
+name = "rewritten_callee_reads_the_same_on_every_back_end"
+desc = "The author's `p10c4`: a rewritten function's callee is the one its program holds, so the graph query and the run agree -- 0 `+ 1` nodes in the `target` reachable from `q` beside `q(5)` computing 5, and 1 beside 6 for the program the rewrite was taken from. The four back ends read the same line; a call site left on the old graph reads `val 6 6`."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/p10c4_rule_callee_value_vs_graph.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "gr 1 0\nval 6 5\n"
+timeout_ms = 20000
+
+[[tests]]
 name = "grad_leaves_loss_and_its_callers"
 desc = "grad(loss) and with_grad(loss) built at run time: loss and user, which calls it, compute the same before and after, and user's graph keeps its size."
 kind = "behavior"
