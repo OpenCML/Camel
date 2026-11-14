@@ -429,6 +429,18 @@ scratch tree, with `CAMEL_TEST_RESULTS_ROOT` and `CAMEL_TEST_RUN_DIRS_KEEP=1`, a
 
 ## Selecting Plans From A Change
 
+**A green `--changed` run says that the plans the selection named passed. It does not say the tree
+is good, and it cannot: the selection is the thing under test as much as the change is.** When the
+selection is incomplete, the run is green over a smaller question than the one it looks like it
+asked, and nothing in the report is worded differently. That is not a hypothetical: on 2026-11-15 a
+collection added after the entry graph returned in `src/passes/sched/nodevm/nodevm.cpp` selected
+`feat/linear`, `feat/para`, `feat/trans` and `smoke`, passed them at 1356/1352, and left nine
+`defun` tests red on a pushed `develop` -- eight of them killed by a signal -- because no rule tied a
+scheduler file to a plan that runs a program whose function values stay alive. So when a change
+touches a class of file that decides *when an object dies* (a scheduler, a collector, anything that
+names a root), the plans that depend on that timing belong in the rule, and the rule is written from
+the class and not from the last incident.
+
 `node scripts/test.js --changed` takes the files that differ from the base branch (committed,
 staged or not) and runs the plans they touch, so a small change does not start the whole fast
 layer. The base is `origin/develop`; `CAMEL_TEST_BASE` overrides it for a release branch or a
@@ -1580,6 +1592,19 @@ category, and findings that come down exit zero with the line that says to accep
 check that can only ever print is a number nobody has to answer for; the ratchet is what makes "may
 not grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count
 reaches zero, `--report-only` is the numbers without the exit code, and all three are one edit apart.
+
+The report keeps the two states apart, because they call for opposite actions and used to print the
+same three hundred lines. **A broken ratchet** -- the count moved, or a category did while the total
+did not -- prints the entries one by one, then one line saying how many entries the two disagree on,
+and exits non-zero: the set changed, the baseline has to follow, and the list is the evidence. **A
+tree in agreement** -- the count is exactly the baseline's and no category grew -- prints neither the
+rows nor any claim about them; the `ratchet=ok` line is the whole report and the exit code is zero.
+Nothing is claimed there because nothing is known: the baseline keeps a count and per-category
+counts, not per-entry identities, so with the total and every category unchanged the check has no
+evidence of a disagreement to name. A list that appears on every gate is a list that gets skipped,
+and a sentence that says "N entries do not match" on every green run is read as noise -- both cost
+what a false green costs.
+
 The table above is copied into that script, so `--verify-runner` fails by name when `validateTest`'s
 gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
 catch, one level up.

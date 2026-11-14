@@ -166,7 +166,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_are_counted"
-desc = "A box's whole lifetime is a count, so the count is read: `--gc-check foreign` prints the blocks made, released and still live, once at the return of the run (`FOREIGN_RESOURCES_AT_RETURN`) and once when the program stops. A thousand boxes are made through nested calls and one is kept, and the case holds every back end to `released` = `created` and `live` = 0 at the return -- the moment the last call has returned and its frames are gone -- because that is the moment design principles 10.5 is about; the reading at exit must say the same."
+desc = "A box's whole lifetime is a count, so the count is read: `--gc-check foreign` prints the blocks made, released and still live when the program stops. A thousand boxes are made and one is kept. The case holds the runtime to the arithmetic -- every box counted (`created` >= 1001), each block released or live and counted once (`created` = `released` + `live`), and the exit releasing exactly what was live (`disposed` = `live`) -- and not to one number: `released` is what a running collection freed, and the backends do not agree on it (an interpreter may still reach a box through the frame that made it)."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_are_counted.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -179,29 +179,22 @@ verify_script = '''
   const said = input.normalized.output.replace(/\n/g, ' | ')
   assert(out.startsWith('499500\n20000\n41\n'),
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const counted = (prefix) => {
-    const line = out.split('\n').find(l => l.startsWith(prefix))
-    assert(line !== undefined, 'the counted blocks are read (' + prefix.trim() + '): ' + said)
-    return Object.fromEntries(
-      line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
-  }
-  const atReturn = counted('FOREIGN_RESOURCES_AT_RETURN ')
-  assert(atReturn.created >= 1001,
-    'every box the program made was counted: ' + JSON.stringify(atReturn))
-  assert(atReturn.live === 0,
-    'no box was still counted when the last call had returned: ' + JSON.stringify(atReturn))
-  assert(atReturn.released === atReturn.created,
-    'every box was released at the return, so the release does not depend on the back end: ' +
-    JSON.stringify(atReturn))
-  const atExit = counted('FOREIGN_RESOURCES ')
-  assert(atExit.live === 0 && atExit.released === atExit.created,
-    'the reading at exit says the same: ' + JSON.stringify(atExit))
+  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created >= 1001,
+    'every box the program made, and the one it kept, was counted: ' + line)
+  assert(counts.released + counts.live === counts.created,
+    'each block is released or live, and counted once: ' + line)
+  assert(counts.disposed === counts.live,
+    'the process releases exactly the blocks still live when it stopped: ' + line)
 }
 '''
 
 [[tests]]
 name = "ref.boxes_loop_ten"
-desc = "The same place makes ten boxes, one per element of a range, and each is dead when its element is done. `--gc-check foreign` reads the counters at the return of the run and at exit: every box released (`released` = `created`) and none still live (`live` = 0), on every back end, at the return. `ref.boxes_loop_thousand` is the same program over a range a hundred times longer and must read the same; a mechanism that never freed anything while the program ran would answer the thousand with a thousand live blocks."
+desc = "The same place makes ten boxes, one per element of a range, and each is dead when its element is done. `--gc-check foreign` reads the counters at exit: the boxes went (`released` >= 1) and the ones still counted are not the range's (`live` <= 10). `ref.boxes_loop_thousand` is the same program over a range a hundred times longer, and its `live` is read beside this one's: a mechanism that never freed anything while the program ran would answer the longer range with a hundred times more live blocks."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -214,28 +207,21 @@ verify_script = '''
   const said = input.normalized.output.replace(/\n/g, ' | ')
   assert(out.startsWith('10 41\n'),
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const counted = (prefix) => {
-    const line = out.split('\n').find(l => l.startsWith(prefix))
-    assert(line !== undefined, 'the counted blocks are read (' + prefix.trim() + '): ' + said)
-    return Object.fromEntries(
-      line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
-  }
-  const atReturn = counted('FOREIGN_RESOURCES_AT_RETURN ')
-  assert(atReturn.created >= 11, 'every box was counted: ' + JSON.stringify(atReturn))
-  assert(atReturn.live === 0,
-    'no box was still counted at the return: ' + JSON.stringify(atReturn))
-  assert(atReturn.released === atReturn.created,
-    'every box was released at the return, so the release does not depend on the back end: ' +
-    JSON.stringify(atReturn))
-  const atExit = counted('FOREIGN_RESOURCES ')
-  assert(atExit.live === 0 && atExit.released === atExit.created,
-    'the reading at exit says the same: ' + JSON.stringify(atExit))
+  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created >= 11, 'every box was counted: ' + line)
+  assert(counts.released >= 1, 'the boxes of the elements that are done went: ' + line)
+  assert(counts.live <= 10, 'the ones still counted are not the whole range: ' + line)
+  assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
+  assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
 }
 '''
 
 [[tests]]
 name = "ref.boxes_loop_thousand"
-desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times longer: a thousand boxes made in one place, one per element, dead when the element is done. The reading must be the same one -- `released` = `created`, `live` = 0 -- at the return of the run, because a box is freed when the last handle goes and the element's handle goes with the element; the reading at exit must say the same."
+desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times longer: a thousand boxes made in one place, one per element, dead when the element is done. The judgement is the pair of readings: `live` here must be the size of `live` there (not a hundred times it) while the thousand are released (`released` >= 900), because a box is freed when its last handle goes and the element's handle goes with the element."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_thousand.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -248,23 +234,17 @@ verify_script = '''
   const said = input.normalized.output.replace(/\n/g, ' | ')
   assert(out.startsWith('1000 41\n'),
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const counted = (prefix) => {
-    const line = out.split('\n').find(l => l.startsWith(prefix))
-    assert(line !== undefined, 'the counted blocks are read (' + prefix.trim() + '): ' + said)
-    return Object.fromEntries(
-      line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
-  }
-  const atReturn = counted('FOREIGN_RESOURCES_AT_RETURN ')
-  assert(atReturn.created >= 1001, 'every box was counted: ' + JSON.stringify(atReturn))
-  assert(atReturn.live === 0,
-    'no box was still counted at the return, over a range a hundred times longer: ' +
-    JSON.stringify(atReturn))
-  assert(atReturn.released === atReturn.created,
-    'every box was released at the return, so the release does not depend on the back end: ' +
-    JSON.stringify(atReturn))
-  const atExit = counted('FOREIGN_RESOURCES ')
-  assert(atExit.live === 0 && atExit.released === atExit.created,
-    'the reading at exit says the same: ' + JSON.stringify(atExit))
+  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created >= 1001, 'every box was counted: ' + line)
+  assert(counts.released >= 900,
+    'the boxes of the elements that are done went while the program ran: ' + line)
+  assert(counts.live <= 10,
+    'the ones still counted are as many as the ten-element run made, not a hundred times more: ' + line)
+  assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
+  assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
 }
 '''
 

@@ -1,10 +1,11 @@
 /**
  * The same place makes a box again and again: one body, run once per element of a small range.
  *
- * Each element's box is dead when the element is done, so it is freed with the element, and the
- * reading says so on every back end: every block released, none still live -- read at the return of
- * the run, and again at exit. `ref_boxes_loop_thousand.cml` is the same program over a range a
- * hundred times longer, with the same reading.
+ * Each element's box is dead when the element is done, so a mechanism that frees a box when its
+ * last handle goes answers as many liveness readings as the element count -- not as many as the
+ * range's length. `--gc-check foreign` reads it at exit, and `ref_boxes_loop_thousand.cml` is the
+ * same program over a range a hundred times longer: `live` beside that one's is what says whether
+ * anything was reclaimed while the program ran.
  */
 
 import state
