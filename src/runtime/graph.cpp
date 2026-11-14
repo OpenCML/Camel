@@ -1893,6 +1893,201 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
         draft.syncUsersOf(node));
 }
 
+namespace {
+
+/// Whether some root names `ref`: an entry, exit, output or return, a norm or `with` port, a closure
+/// node the graph exports, or the result of a region. A root's value is read by whoever runs the
+/// graph, so an aggregate that is one is part of what the program sees.
+bool rootNames(const GraphDraft &draft, gc_node_ref_t ref) {
+    if (ref == kInvalidNodeRef) {
+        return false;
+    }
+    if (ref == draft.entryNode() || ref == draft.exitNode() || ref == draft.outputNode() ||
+        ref == draft.returnNode()) {
+        return true;
+    }
+    for (gc_node_ref_t port : draft.normPorts()) {
+        if (port == ref) {
+            return true;
+        }
+    }
+    for (gc_node_ref_t port : draft.withPorts()) {
+        if (port == ref) {
+            return true;
+        }
+    }
+    for (gc_node_ref_t closure : draft.closureNodes()) {
+        if (closure == ref) {
+            return true;
+        }
+    }
+    for (uint32_t index = 0; index < draft.regionCount(); ++index) {
+        if (draft.region(index).result == ref) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool rootNames(const GCGraph &graph, gc_node_ref_t ref) {
+    if (ref == kInvalidNodeRef) {
+        return false;
+    }
+    if (ref == graph.entryNodeRef() || ref == graph.exitNodeRef() ||
+        ref == graph.outputNodeRef() || ref == graph.returnNodeRef()) {
+        return true;
+    }
+    for (gc_node_ref_t port : graph.normPorts()) {
+        if (port == ref) {
+            return true;
+        }
+    }
+    for (gc_node_ref_t port : graph.withPorts()) {
+        if (port == ref) {
+            return true;
+        }
+    }
+    for (gc_node_ref_t closure : graph.closureNodes()) {
+        if (closure == ref) {
+            return true;
+        }
+    }
+    for (uint32_t index = 0; index < graph.regionCount(); ++index) {
+        const GCRegion *region = graph.region(index);
+        if (region != nullptr && region->result == ref) {
+            return true;
+        }
+    }
+    return false;
+}
+
+} // namespace
+
+uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref) {
+    const DraftNodeHeader *header = draft.header(ref);
+    if (header == nullptr || !draft.alive(ref) || header->kind != GCNodeKind::Fill) {
+        return 0;
+    }
+    const auto payload = draft.payloadOf(ref);
+    if (payload.size() < sizeof(GCFillBody)) {
+        return 0;
+    }
+    const auto *body = reinterpret_cast<const GCFillBody *>(payload.data());
+    // Only a tuple's members are its inputs one for one, in order. A struct's members are named and
+    // an array's are not spelled out, so neither is an aggregate here yet -- the mapping is the one
+    // thing a container brings, and the guards below ask nothing else about it.
+    if (body->fillKind != GCFillKind::Tuple) {
+        return 0;
+    }
+    return body->slotCount;
+}
+
+bool lastMemberIsUnread(const GraphDraft &draft, gc_node_ref_t ref) {
+    const uint32_t arity = aggregateArity(draft, ref);
+    if (arity < 2) {
+        // A one-member aggregate's member is the value itself: dropping it leaves nothing, and
+        // there is no shorter aggregate to build.
+        return false;
+    }
+    const auto members = draft.normInputsOf(ref);
+    if (members.size() != arity) {
+        return false;
+    }
+    const gc_node_ref_t last = members.back();
+    if (last == kInvalidNodeRef || draft.header(last) == nullptr) {
+        return false;
+    }
+    // Guard: the aggregate is not a root, so nobody who runs the graph reads it.
+    if (rootNames(draft, ref)) {
+        return false;
+    }
+    // Guard: nothing but this aggregate reads the member, and nothing carries it beside. Stronger
+    // than "no live node reads it", and cheaper: if no node at all does, no live one does.
+    if (!draft.withUsersOf(last).empty()) {
+        return false;
+    }
+    const auto readers = draft.normUsersOf(last);
+    if (readers.size() != 1 || readers.front() != ref) {
+        return false;
+    }
+    // Guard: every node that reads the aggregate reads a member that stays, so the shorter
+    // aggregate still satisfies all of them.
+    if (!draft.withUsersOf(ref).empty()) {
+        return false;
+    }
+    for (gc_node_ref_t user : draft.normUsersOf(ref)) {
+        const DraftNodeHeader *header = draft.header(user);
+        if (header == nullptr || !draft.alive(user)) {
+            continue;
+        }
+        if (header->kind != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto payload = draft.payloadOf(user);
+        if (payload.size() < sizeof(GCAccsBody)) {
+            return false;
+        }
+        const auto *accs = reinterpret_cast<const GCAccsBody *>(payload.data());
+        if (accs->accsKind != GCAccsKind::TupleIndex || accs->value + 1 >= arity) {
+            return false;
+        }
+    }
+    return true;
+}
+uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Fill) {
+        return 0;
+    }
+    const auto *body = graph.nodeBodyAs<GCFillBody>(ref);
+    if (body == nullptr || body->fillKind != GCFillKind::Tuple) {
+        return 0;
+    }
+    return body->slotCount;
+}
+
+bool lastMemberIsUnread(const GCGraph &graph, gc_node_ref_t ref) {
+    const uint32_t arity = aggregateArity(graph, ref);
+    if (arity < 2) {
+        return false;
+    }
+    const auto members = graph.normInputsOf(ref);
+    if (members.size() != arity) {
+        return false;
+    }
+    const gc_node_ref_t last = members.back();
+    if (last == kInvalidNodeRef) {
+        return false;
+    }
+    if (rootNames(graph, ref)) {
+        return false;
+    }
+    if (!graph.withUsersOf(last).empty()) {
+        return false;
+    }
+    const auto readers = graph.normUsersOf(last);
+    if (readers.size() != 1 || readers.front() != ref) {
+        return false;
+    }
+    if (!graph.withUsersOf(ref).empty()) {
+        return false;
+    }
+    for (gc_node_ref_t user : graph.normUsersOf(ref)) {
+        const GCNode *node = graph.node(user);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            continue;
+        }
+        if (node->kind != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto *accs = graph.nodeBodyAs<GCAccsBody>(user);
+        if (accs == nullptr || accs->accsKind != GCAccsKind::TupleIndex ||
+            accs->value + 1 >= arity) {
+            return false;
+        }
+    }
+    return true;
+}
 bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape) {
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr) {

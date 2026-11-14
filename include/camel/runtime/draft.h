@@ -1171,6 +1171,20 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
 /// needs the set asks it here rather than walking the graph again.
 std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 
+/// How many members an aggregate has, when its members are its own ordinary inputs one for one, in
+/// order: a tuple's are, and a struct's or an array's are not spelled that way yet (0 for a node
+/// that is not such an aggregate). The container brings only this mapping; the guards in
+/// `lastMemberIsUnread` ask nothing else about it, so a second container adds a case here and no
+/// rule of its own. Not named after a container for that reason.
+uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
+
+/// Whether the last member of the aggregate `ref` may be dropped: the aggregate is no root, nothing
+/// but the aggregate reads the member (nor carries it beside), and every node that reads the
+/// aggregate reads a member below the last -- so the shorter aggregate still satisfies all of them,
+/// and no member has to be renumbered. A member's own readers are asked about here, which is the
+/// same question the credential check asks of a write: can the program still see this value.
+bool lastMemberIsUnread(const GraphDraft &draft, gc_node_ref_t ref);
+
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
 /// inlined call gates its arguments after what the call waited for -- and changes nothing else
 /// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about

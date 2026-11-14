@@ -1,0 +1,22 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A guard: the unread member is not the last one. `(h, 1)` has the closure first, and `p.0` reads it;
+// moving it forward would renumber every member behind it, which this rule does not do.
+
+func probe(): int sync {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    let p = (h, 1)
+    let u = p.0
+    return w + p.1 + u()
+}
+
+func main(): int sync {
+    println(probe())
+    return 0
+}

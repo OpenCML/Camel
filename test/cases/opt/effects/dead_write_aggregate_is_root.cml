@@ -1,0 +1,22 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A guard: the aggregate is a root. `probe` returns the tuple itself, so whoever runs the graph reads
+// every member of it -- including the closure -- and nothing may be dropped.
+
+func probe(): (int, () => int) sync {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    println(w)
+    return (1, h)
+}
+
+func main(): int sync {
+    let p = probe()
+    println(p.0)
+    return 0
+}

@@ -272,6 +272,13 @@ bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
 /// such a node be called dead (design principles 3.1, 9.7). Sorted by ref.
 std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 
+/// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members the
+/// aggregate has (0 when it is not one), and whether its last member may be dropped -- no root names
+/// it, nothing but the aggregate reads that member, and every reader of the aggregate reads a member
+/// below the last, so nothing has to be renumbered.
+uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
+bool lastMemberIsUnread(const GCGraph &graph, gc_node_ref_t ref);
+
 namespace graph {
 bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
 /// The exit of the statement `ref` names: a branch's JOIN, or `ref` itself for every other kind.

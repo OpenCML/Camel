@@ -233,6 +233,14 @@ bool mayRemoveDead(const GCGraph &graph) {
             valueUsers[ref] > 0 && !joinOrBrchUser[ref]) {
             return true;
         }
+        // An aggregate whose last member nothing but the aggregate itself reads: the member may be
+        // dropped, and what it was is read by nobody afterwards. The judgement is the runtime's and
+        // is not written for one container (`camel::runtime::lastMemberIsUnread`); the screen asks it
+        // here because the aggregate does have a user -- the node reading a member that stays -- so
+        // the count below cannot see this shape.
+        if (camel::runtime::lastMemberIsUnread(graph, ref)) {
+            return true;
+        }
         // What nothing reads: a GATE or a value computed for nothing.
         if (valueUsers[ref] != 0) {
             continue;

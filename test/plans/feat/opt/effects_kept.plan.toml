@@ -526,6 +526,42 @@ args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
 expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
 [[tests]]
+name = "dead_write.aggregate_escapes_kept"
+desc = "Guard: the aggregate is handed to a call, which may read any member, so nothing is dropped."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_aggregate_escapes.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["SWEEP func=0", "1"]
+
+[[tests]]
+name = "dead_write.aggregate_member_read_kept"
+desc = "Guard: p.1 reads the last member, so dropping it would take a value the program uses."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_aggregate_member_read.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["SWEEP func=0"]
+
+[[tests]]
+name = "dead_write.aggregate_not_last_kept"
+desc = "Guard: the unread member is the first one; moving it forward would renumber the rest."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_aggregate_not_last.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["SWEEP func=0"]
+
+[[tests]]
+name = "dead_write.aggregate_is_root_kept"
+desc = "Guard: the aggregate is the graph result, so whoever runs the graph reads every member."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_aggregate_is_root.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["SWEEP func=0"]
+
+[[tests]]
 name = "dead_write.opt.same_output"
 desc = "And the program still prints the 1 that never depended on the write."
 kind = "behavior"

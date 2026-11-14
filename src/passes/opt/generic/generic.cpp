@@ -1580,9 +1580,57 @@ bool gateInputsSurvive(const camel::runtime::GraphTransaction &transaction, gc_n
 
 /// With valuesOnly, only the nodes that are no more than their value: constants and pure
 /// operations (also casts, copies, accesses and fills) that no node reads; gates and syncs stay.
+/// Drops the last member of every aggregate that may lose it (`camel::runtime::lastMemberIsUnread`:
+/// no root, nothing else reads the member, every reader of the aggregate reads a member below the
+/// last). A draft's payload is read-only, so this is a node replacement, not an input edit: the new
+/// aggregate is built from the shortened slot table and the shortened member type, the kept members
+/// are linked in order, the readers are handed across, and the old node goes. What the dropped
+/// member was is then read by nobody, which is what lets the next sweep round take it.
+size_t dropUnreadAggregateTails(camel::runtime::GraphTransaction &transaction) {
+    auto &draft    = transaction.edit();
+    size_t dropped = 0;
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!camel::runtime::lastMemberIsUnread(draft, id)) {
+            continue;
+        }
+        const auto payload = draft.payloadOf(id);
+        if (payload.size() < sizeof(camel::runtime::GCFillBody)) {
+            continue;
+        }
+        const auto members = draft.normInputsOf(id);
+        if (members.size() < 2) {
+            continue;
+        }
+        std::vector<camel::core::type::Type *> keptTypes;
+        for (size_t index = 0; index + 1 < members.size(); ++index) {
+            const camel::runtime::DraftNodeHeader *header = draft.header(members[index]);
+            if (header == nullptr || header->dataType == nullptr) {
+                keptTypes.clear();
+                break;
+            }
+            keptTypes.push_back(header->dataType);
+        }
+        if (keptTypes.size() + 1 != members.size()) {
+            continue;
+        }
+        auto body      = *reinterpret_cast<const camel::runtime::GCFillBody *>(payload.data());
+        body.slotCount = static_cast<uint32_t>(keptTypes.size());
+        auto *type     = camel::core::type::TupleType::create(keptTypes);
+        const camel::runtime::gc_node_ref_t created = draft.addFillNode(type, body);
+        if (created == camel::runtime::kInvalidNodeRef) {
+            continue;
+        }
+        const std::vector<camel::runtime::gc_node_ref_t> kept(members.begin(), members.end() - 1);
+        draft.setNormInputs(created, kept);
+        draft.replaceAllValueUses(id, created);
+        draft.eraseNode(id);
+        ++dropped;
+    }
+    return dropped;
+}
 size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly = false) {
     auto &draft           = transaction.edit();
-    size_t removed        = 0;
+    size_t removed        = valuesOnly ? 0 : dropUnreadAggregateTails(transaction);
     size_t gateEdgeBudget = std::min<size_t>(8192, draft.nodeSlotCount() * 8);
     for (bool changed = true; changed;) {
         changed = false;
