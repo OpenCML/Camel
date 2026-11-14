@@ -11,7 +11,12 @@
  *
  * The moment a counted resource is reclaimed does not depend on which back end ran the program
  * (design principles 10.5): a box whose last handle died while the program ran is freed by the
- * collection that closes the run, and every back end runs it.
+ * collection that closes the run, and every back end runs it. Two moments are read: the same line
+ * once at the return of the run (`FOREIGN_RESOURCES_AT_RETURN`) and once at exit. At exit all four
+ * back ends read 0; at the return fvm, jit and prl read 0 and nvm reads 1 -- a block whose last
+ * handle died with a frame and which no collection has looked at yet. That one block is the open
+ * handle-count question: see
+ * `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`.
  */
 
 import state

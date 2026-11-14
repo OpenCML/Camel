@@ -730,6 +730,21 @@ int runCommand(int argc, char *argv[]) {
                         nullptr);
                     auto result = applyPassesDetailed(program, Run::resolvedPassList, ctx, os);
                     program     = result.program;
+                    // `--gc-check foreign`: the counted blocks read at the moment the pipeline is
+                    // over, which for a scheduling pass is the moment the entry graph has returned
+                    // and its frames are gone -- before the run closes. A block still counted here
+                    // is one the return did not release (design principles 10.5: the moment a
+                    // counted resource is reclaimed does not depend on the back end), and the line
+                    // at exit says the same thing again after the closing collection.
+                    if (camel::core::mm::allocatorChecks().printForeignResources) {
+                        const auto afterRun = camel::core::rtdata::foreignResourceStats();
+                        std::cout << "FOREIGN_RESOURCES_AT_RETURN"
+                                  << " created=" << afterRun.createdControlBlocks
+                                  << " released=" << afterRun.releasedControlBlocks
+                                  << " live=" << afterRun.liveControlBlocks
+                                  << " finalized=" << afterRun.finalizedWrappers << '\n';
+                        std::cout.flush();
+                    }
                     if (result.errored()) {
                         // The pass ended with an error value: the pipeline stopped there, and the
                         // error is reported the way an error value nobody handled is (design

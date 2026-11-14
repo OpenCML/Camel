@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：41 页
+## 现在在等作者：42 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -46,6 +46,7 @@
 | [`2026-11-14-where-the-uses-boundary-sits`](2026-11-14-where-the-uses-boundary-sits.cn.md) | `uses` 的边界落在哪一格：变量、句柄、还是不透明的值 |
 | [`2026-11-14-who-migrates-the-module-level-var`](2026-11-14-who-migrates-the-module-level-var.cn.md) | 模块顶层的 `var` 与顶层外部写：谁来做那 35 个用例的迁移？ |
 | [`2026-11-15-does-a-returned-calls-slot-keep-a-box-alive`](2026-11-15-does-a-returned-calls-slot-keep-a-box-alive.cn.md) | 调用返回之后，它留下的句柄槽还让盒子活着吗？ |
+| [`2026-11-15-is-a-handles-count-the-slots-or-the-wrappers`](2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md) | 一个句柄槽记的那份计数，是槽的还是 wrapper 的？ |
 | [`2026-11-15-is-the-inline-splices-program-observable`](2026-11-15-is-the-inline-splices-program-observable.cn.md) | 拼接进来的那段体，归属可观测吗 |
 | [`2026-11-15-live-node-count-is-not-the-live-set`](2026-11-15-live-node-count-is-not-the-live-set.cn.md) | `liveNodeCount()` 不是活集合 |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 |
