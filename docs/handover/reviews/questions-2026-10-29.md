@@ -3531,3 +3531,11 @@ func main(): int sync { println(f(5)); return 0 }
 - **图接口加"端口序号"查询**：加，随 R4 改图接口时一起做。
 - **部分求值原型（前向求导的小样）、由值生成类型、代价模型**：推到收敛完成之后，与其他新功能一起排。
 - **分支**：`hold/fsh-dev` 已不在远端；`release` 作发布分支保留。
+
+## 负责人定（2026-11-14）：`match type` 的臂可以带守卫
+
+已写进原则第 5 节（`docs/design-principles.cn.md`"`match type` 的臂可以带守卫"），问题页 `2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type.cn.md` 结案。施工归第十一节第 3 路的语法部分：
+1. 语法 `case 模式 when 谓词 => …`，谓词用 `builder_when.cpp` 已有的编译期求值，不另写一套；一条臂都不生效时，在使用处报编译错误，并点出类型。
+2. 类型谓词的结果按（函数，类型实参）缓存。负责人担心常用谓词嵌套多层拖慢编译：加一条读数，编译标准库与全部用例时类型谓词的求值次数与命中率，进合并读数。
+3. `stdlib/types.cml` 的 `ShapeOf` 第三臂改为 `case _ when is_numeric::<T>() => int[0]`，加用例：`ShapeOf<string>` 报错。
+4. 扫一遍标准库里带兜底 `case _` 的 `match type`（`optim.cml` 的参数树遍历、`json.cml`、`ckpt.cml`、`math.cml` 的 `min`/`max` 等十几处）：叶子该是数值的加守卫，让非数值叶子在调用处报错；逐处列在合并说明里。

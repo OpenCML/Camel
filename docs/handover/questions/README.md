@@ -5,13 +5,11 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：1 页
+## 现在在等作者：0 页
 
-| 页 | 问什么 |
-| --- | --- |
-| [`2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type`](2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type.cn.md) | `match type` 的一条臂能不能带「这个叶子是不是数值」的守卫 |
+（目录为空：没有页在等回答。）
 
-## 生成器不会删的行：77 行（页已不在 `questions/` 里）
+## 生成器不会删的行：78 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -88,6 +86,7 @@
 | [`2026-11-05-a-type-position-pattern-is-not-expressible-only-inside-match-type`](../reviews/2026-11-05-a-type-position-pattern-is-not-expressible-only-inside-match-type.cn.md) | 包模式只在一个位置有读法：类型位置的 `match type` 的 case | 在 `reviews/` |
 | [`2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent`](../reviews/2026-11-05-does-the-transpose-of-a-tuple-construction-hand-each-member-its-cotangent.cn.md) | 构造元组（`FILL`）的转置，有没有把余切逐成员交给两个操作数 | 在 `reviews/` |
 | [`2026-11-05-firstof-hands-over-the-head-and-the-rest-has-no-generic-spelling`](../reviews/2026-11-05-firstof-hands-over-the-head-and-the-rest-has-no-generic-spelling.cn.md) | `FirstOf` 交出一个成员，`(W, ...Rest)` 要交出两个：泛型里「其余」那半没有写法 | 在 `reviews/` |
+| [`2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type`](../reviews/2026-11-05-should-a-match-type-case-take-a-guard-for-the-leaf-type.cn.md) | `match type` 的一条臂能不能带「这个叶子是不是数值」的守卫 | 在 `reviews/` |
 | [`2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion`](../reviews/2026-11-05-the-reading-ruling-two-gives-is-green-before-the-deletion.cn.md) | 第二条裁定给的那条读数，在删除前就是绿的 | 在 `reviews/` |
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](../reviews/2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 | 在 `reviews/` |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](../reviews/2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 | 在 `reviews/` |
