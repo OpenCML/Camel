@@ -2997,6 +2997,7 @@ e6704f3f915eaf57 no test/cases/modules/graph_pass/unparsable_pass_lib.cml
 4b0af59f4afb72e6 ok test/cases/modules/graph_pass/valuereader.cml
 6c573532502ad360 ok test/cases/modules/graph_pass/values.cml
 d3cab3999bf66cb2 ok test/cases/modules/graph_values/attempt_holders.cml
+7fa0be0978b55b3c ok test/cases/modules/graph_values/clone_program.cml
 f0a02d775249a045 ok test/cases/modules/graph_values/discard_pass.cml
 72c62c56fb1915b6 ok test/cases/modules/graph_values/discard_target.cml
 7fab9dbd99156f9e ok test/cases/modules/graph_values/function_txn.cml
@@ -3004,6 +3005,7 @@ f0a02d775249a045 ok test/cases/modules/graph_values/discard_pass.cml
 0402f4d99511cde2 ok test/cases/modules/graph_values/p10c4_rule_callee_value_vs_graph.cml
 0066b869fca34ac9 ok test/cases/modules/graph_values/pipeline_inline.cml
 44ce147a6fbe8bf3 ok test/cases/modules/graph_values/program_txn.cml
+2bfe87c36e34baee ok test/cases/modules/graph_values/reinterpret_copies_its_body.cml
 8a58fbdf87d8ff49 ok test/cases/modules/graph_values/rewrite_callee.cml
 7a3dd843b4a3d525 ok test/cases/modules/graph_values/rewrite_rule.cml
 1b0900485a0ccd73 ok test/cases/modules/import_audit/unused_let/main.cml
