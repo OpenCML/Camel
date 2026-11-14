@@ -499,31 +499,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     }
 
-    // What the branch ran after is what still has to run after its place is taken: the waits it was
-    // given, the order it was written in, and the nodes its condition's value was computed from.
-    //
-    // Structure is not one of them. An inner branch and its join carry ordering -- a read of their
-    // value ran after them -- but their own running is not observed: the read they hand on is the
-    // running of the code inside them, and that code's last read is what `keepThroughValue` hands a
-    // `GATE` below. Writing a control edge from the structure instead kept a whole branch alive
-    // after the fold had taken its only read, and the branch, its join and the condition of a value
-    // nothing reads appeared in the run (design principles 3.3, 9.7).
-    const auto ranForItsOwnSake = [&](gc_node_ref_t n) {
-        const auto *h = draft.header(n);
-        if (h == nullptr) {
-            return false;
-        }
-        if (isObservedRun(transaction, n)) {
-            return true;
-        }
-        return h->kind != GCNodeKind::Brch && h->kind != GCNodeKind::Join;
-    };
-    std::vector<gc_node_ref_t> brchPreds;
-    for (gc_node_ref_t pred : draft.waitInputsOf(brch)) {
-        if (ranForItsOwnSake(pred)) {
-            brchPreds.push_back(pred);
-        }
-    }
+    std::vector<gc_node_ref_t> brchPreds = draft.waitInputsOf(brch);
     const std::vector<gc_node_ref_t> branchOrderPreds(
         draft.orderInputsOf(brch).begin(),
         draft.orderInputsOf(brch).end());
@@ -536,8 +512,7 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     // is known may still wait on an effect (the result of a call that prints, seen through a
     // GATE). With the BRCH gone nothing else may reach that effect, and it was silently dropped.
     for (gc_node_ref_t source : orderedSources(transaction, brch)) {
-        if (source != brch && ranForItsOwnSake(source) &&
-            std::ranges::find(brchPreds, source) == brchPreds.end()) {
+        if (source != brch && std::ranges::find(brchPreds, source) == brchPreds.end()) {
             brchPreds.push_back(source);
         }
     }

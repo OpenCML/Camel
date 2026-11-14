@@ -151,35 +151,52 @@ expect_output_not_contains = ["[EFFECTS] RED", "[EFFECTS]   lost:"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 120000
 
-# Control edges are not a keeper (design principles 3.3, 9.7). `std::opt::fold` prunes a branch whose
-# condition it can read, and the nodes the branch had waited on inherited its control edge -- among
-# them an inner branch's `JOIN`, which is structure a read ran after but whose own running nothing
-# observes. The `CTRL` edge from it kept the whole inner branch -- its comparison, its `BRCH`, its
-# `JOIN` -- alive after the fold had taken its only read, and all three appeared in `std::tns`, the
-# order the surviving nodes run in. Nothing observed their running and nothing reads their value, so
-# they go with the arm that took the branch's place.
+# The fold runs the program it was handed. `fold_keeps_inner_fault` is the case where the value the
+# fold takes the last read of may fault: `1 / z > 0` is the condition of the inner branch, the fold
+# prunes the branch above it and nothing reads the comparison any more, so the division is the last
+# read this removal takes. It may fault, so it must still run, and it does: the fault is reported and
+# the program exits 1 instead of printing the arm's 4.
 #
-# Two readings of one program, plus the run: the drawing has no `CTRL` edge at all, the scheduled
-# order names none of the three, and the program still prints what it printed.
+# The keeper is not a `GATE` here. A gate stands in a value that somebody reads; after the fold
+# nothing reads the folded comparison, and a gate with no value reader and no sync user cannot end a
+# sync edge (src/runtime/graph_edges.cpp, `canEndSyncEdge`), so `keepThroughValue` cannot build one
+# and the code that took the branch's place waits on the division itself. That wait is the control
+# edge the residue of a pruned branch leaves, which is also why the control edge is still there.
 [[tests]]
-name = "fold_leaves_no_control_edge.gir"
-desc = "After the fold nothing waits on the branch that is gone: the drawing holds no `CTRL` edge."
-case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
-args = ["${case}", "std::opt::fold", "std::gir"]
-backends = ["nvm"]
-expect_exit = 0
-expect_output_not_contains = ["CTRL"]
+name = "fold_keeps_inner_fault.reference"
+desc = "No pass: the division runs and the program stops with the fault, not with the arm's value."
+case = "../../../cases/opt/effects/fold_keeps_inner_fault.cml"
+args = ["${case}", "${backend}"]
+kind = "negative"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 
 [[tests]]
-name = "fold_leaves_no_control_edge.tns"
-desc = "The order the nodes run in: the folded branch's comparison, its `BRCH` and its `JOIN` are not in it."
-case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
-args = ["${case}", "std::opt::fold", "std::tns"]
-backends = ["nvm"]
-expect_exit = 0
-expect_output_not_contains = ["<:op/le_l>", "BRCH:", "JOIN:"]
-expect_stdout_contains = ["CALL: <:io/println>"]
+name = "fold_keeps_inner_fault.fold"
+desc = "`std::opt::fold`: the fault still happens after the branch above it is pruned."
+case = "../../../cases/opt/effects/fold_keeps_inner_fault.cml"
+args = ["${case}", "std::opt::fold", "${backend}"]
+kind = "negative"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
 
+[[tests]]
+name = "fold_keeps_inner_fault.opt"
+desc = "The same program through the whole optimizer: the fault is not dropped."
+case = "../../../cases/opt/effects/fold_keeps_inner_fault.cml"
+args = ["${case}", "std::opt", "${backend}"]
+kind = "negative"
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+
+# The fold's own drawing and run of the branch it prunes: `fold_leaves_no_control_edge` is the
+# program of R1's second half, and it pins what the fold still does to it -- the two prints run, the
+# arm that is not taken never does, and the value is the taken arm's. The residue that this lane sets
+# out to remove is not removed: taking the control edge away from the pruned branch's structure takes
+# the division's last read with it (measured: the program prints `4` and exits 4 instead of faulting),
+# because the keeper that should stand in its place cannot be built. The two readings of the removed
+# edge -- no `CTRL` in the drawing, none of the inner three nodes in the run -- are written down here
+# rather than asserted.
 [[tests]]
 name = "fold_leaves_no_control_edge.reference"
 desc = "No pass: the two prints of the source run, and the program returns the second one's value."
@@ -203,17 +220,6 @@ case = "../../../cases/opt/effects/fold_leaves_no_control_edge.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 8
 expect_stdout_exact = "8\n8\n"
-
-# The fault case that is not wired yet: test/cases/opt/effects/fold_keeps_inner_fault.cml. The fold
-# takes the last read of `1 / z > 0` -- the branch that compared it is pruned and nothing reads the
-# comparison any more -- and the keeper that should stand in its place is a `GATE` whose data port
-# reads that value and whose sync predecessor is the division (design principles 3.3, edges.cn.md
-# 5.3). It is not built: a `GATE` with no value reader and no sync user cannot end a sync edge
-# (src/runtime/graph_edges.cpp, `canEndSyncEdge`), so `keepThroughValue` erases it and the division
-# goes with the comparison. The reading is `std::opt::fold` over that case printing `4` and exiting 4
-# instead of faulting a division by zero, so the case is written and read by hand but no entry here
-# asserts it: a green entry would pin a behaviour the fold does not have, and a red one would pin a
-# rule the tree cannot keep yet.
 
 # "Is an operator the passes write still reachable?" is a number pinned by name: `:enum/tag` and
 # `:enum/field` over `test/cases/opt/defun`, and `:enum/make` pinned to zero, with the writer it
