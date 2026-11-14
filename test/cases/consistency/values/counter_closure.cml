@@ -1,0 +1,24 @@
+/**
+ * A function whose counter lives in an explicit reference: each call makes its own cell, and the
+ * closure it returns writes that cell, so the state outlives the call that declared it.
+ */
+
+import state
+
+func counter(start: int): () => int sync {
+    let n = state::ref(start)
+    return (): int => sync {
+        return state::update(n, (x: int) => x + 1)
+    }
+}
+
+func main(): int sync {
+    let a = counter(0)
+    let b = counter(100)
+    println(a())
+    println(a())
+    println(b())
+    println(a())
+    println(b())
+    return 0
+}

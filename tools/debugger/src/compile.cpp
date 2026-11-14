@@ -101,7 +101,10 @@ getGirJsonByPath(const std::string &path, const std::string &graphId) {
     CompilationState state = createCompilationStateForPath(path);
     try {
         state.parser->parse(file);
-        state.mainModule->compile(CompileStage::Done);
+        // A file that does not parse is a diagnostic against the module, not an exception out of
+        // this query: compileForLoad records it on the module (camel/core/module/userdef.h), and
+        // the answer below is the same one every other failed compile gets.
+        camel::core::module::compileForLoad(state.mainModule, CompileStage::Done);
         if (!state.mainModule->loaded())
             return {"", "compile failed"};
         auto graph = camel::core::module::detail::UserDefinedModuleAccess::compileGraphOpaque(

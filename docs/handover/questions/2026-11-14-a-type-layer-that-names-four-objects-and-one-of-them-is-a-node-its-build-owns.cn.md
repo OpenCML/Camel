@@ -47,3 +47,7 @@
 
 - `docs/technical/59_typeid_keys_and_the_type_the_table_does_not_hold.md`（`kNoTypeId` 是通配符、表不持有什么）。
 - 本车道提交 `9f8d35ea9`（守卫的身份改成内容）。
+## 默认建议（本轮按此开工）
+
+按作者裁定 `79127aecb` 走：**核心类型层不再持有任何前端指针**。删 `TypeOfType`、`TypeCode::TypeOf`、`TypeTable::Shape::TypeOf`；`typeof e` 在 builder 里解析掉，核心只见一个 `TypeVarType`，名字是 `typeof#<序号>`，序号到表达式的对应表放在前端侧。
+这一条已经不需要再裁，页上留着的三处「按地址认对象」也不是它的一部分——它们指的对象永不释放、内容在造类型时还不存在，应当保留。

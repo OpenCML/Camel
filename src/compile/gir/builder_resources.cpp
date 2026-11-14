@@ -99,7 +99,8 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
             united.ambient.push_back(use);
             continue;
         }
-        found->mode = sem::uniteAccess(found->mode, use.mode);
+        found->mode      = sem::uniteAccess(found->mode, use.mode);
+        found->unordered = found->unordered || use.unordered;
     }
     united.captures.insert(united.captures.end(), b.captures.begin(), b.captures.end());
     united.anyOf.insert(united.anyOf.end(), b.anyOf.begin(), b.anyOf.end());
@@ -233,16 +234,19 @@ std::optional<std::string> Builder::moduleVariableOf(
     return std::nullopt;
 }
 
-void Builder::addAmbientUse(BodyReach &walk, const std::string &name, sem::AccessMode mode) const {
+void Builder::addAmbientUse(
+    BodyReach &walk, const std::string &name, sem::AccessMode mode, bool unordered) const {
     ResourceSignature &out = walk.reach;
     const auto found = std::find_if(out.ambient.begin(), out.ambient.end(), [&](const auto &use) {
         return use.name == name;
     });
     if (found == out.ambient.end()) {
-        out.ambient.push_back(ResourceSignature::AmbientUse{.name = name, .mode = mode});
+        out.ambient.push_back(
+            ResourceSignature::AmbientUse{.name = name, .mode = mode, .unordered = unordered});
         return;
     }
-    found->mode = sem::uniteAccess(found->mode, mode);
+    found->mode      = sem::uniteAccess(found->mode, mode);
+    found->unordered = found->unordered || unordered;
 }
 
 bool Builder::placeCapturedUse(
@@ -406,7 +410,7 @@ bool Builder::readCalleeSignature(
         }
     }
     for (const auto &use : sig.ambient) {
-        addAmbientUse(walk, use.name, use.mode);
+        addAmbientUse(walk, use.name, use.mode, use.unordered);
     }
     for (sem::ResourceClass cls : sig.anyOf) {
         walk.reach.anyOf.push_back(cls);
@@ -468,7 +472,7 @@ bool Builder::reachOfOper(
     }
     for (const sem::ResourceAccess &access : spec.accesses) {
         if (access.binding.kind == sem::ResourceBinding::Kind::Ambient) {
-            addAmbientUse(walk, access.resource.name, access.mode);
+            addAmbientUse(walk, access.resource.name, access.mode, access.unordered);
             continue;
         }
         if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
@@ -776,6 +780,8 @@ namespace {
 // the body, or an ambient resource (`stdout`, `fs`) by the name the declaration gave it. Two
 // effects reach the same resource exactly when their keys are equal (design principles 3.3);
 // a node whose reach the walk cannot place is `unnamed` and stands for every resource at once.
+// `unordered` ambient resources (`resource net unordered`) are left out: effects on one of them
+// keep no written order, so no order edge joins them (design principles 3.3).
 struct ResourceKeys {
     std::vector<std::string> keys;
     bool unnamed = false;
@@ -791,6 +797,9 @@ ResourceKeys resourceKeysOf(const camel::core::sem::ResourceSignature &reach) {
         out.keys.push_back(std::format("p{}", static_cast<int>(use.index)));
     }
     for (const auto &use : reach.ambient) {
+        if (use.unordered) {
+            continue;
+        }
         out.keys.push_back(std::format("a{}", use.name));
     }
     out.unnamed = !reach.anyOf.empty();
@@ -856,7 +865,11 @@ void Builder::orderEffectsOnOneResourceIn(DraftGraphBuilder *graph) {
             named.unnamed = true;
         }
         if (!named.unnamed && named.keys.empty()) {
-            continue; // an effect the walk places on no resource orders with nothing
+            // An effect the walk places on no resource orders with nothing -- and an effect whose
+            // only resource is `unordered` is one of those: the resource itself says the order the
+            // program wrote does not matter (design principles 3.3), so the plan is free to run
+            // two of them at the same time and `std::nvm` runs them one after the other.
+            continue;
         }
         BlockEffectOrder &block = blocks[runtime::controlRegionOf(draft, id)];
         std::vector<draft_node_ref_t> before;

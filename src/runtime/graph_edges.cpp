@@ -649,18 +649,10 @@ class EdgeChecker {
 
     static std::string show(const Type *type) { return type ? type->toString() : "<none>"; }
 
-    /// Two types a value can pass between: equal, or one refines the other (a tensor of a known
-    /// shape and the tensor of the same element type whose shape is not known), or either may
-    /// be assigned to the other. Names of parameters and fields do not matter. A node typed `void`
-    /// is a value nobody reads (the arms of a branch used as a statement, a discarded result),
-    /// which takes whatever reaches it.
-    static bool compatible(Type *a, Type *b) {
-        if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
-            return true;
-        }
-        return a == b || a->equals(b) || a->unify(b) != nullptr || a->assignableFrom(b) ||
-               b->assignableFrom(a);
-    }
+    /// Two types a value can pass between: the relation is one function, `typesCompatible`
+    /// (camel/runtime/graph.h), so a pass that judges a call before writing it and the seal that
+    /// judges it afterwards ask the same question.
+    static bool compatible(Type *a, Type *b) { return typesCompatible(a, b); }
 
     void report(gc_node_ref_t ref, const std::string &what) {
         violations_.push_back(
@@ -832,6 +824,17 @@ class EdgeChecker {
 };
 
 } // namespace
+
+bool typesCompatible(camel::core::type::Type *a, camel::core::type::Type *b) {
+    if (a == nullptr || b == nullptr) {
+        return true; // a type nobody wrote down is not another type (see isUndecidedType)
+    }
+    if (a->code() == TypeCode::Void || b->code() == TypeCode::Void) {
+        return true;
+    }
+    return a == b || a->equals(b) || a->unify(b) != nullptr || a->assignableFrom(b) ||
+           b->assignableFrom(a);
+}
 
 void validateRuntimeGraphEdges(const Program &program, const GCGraph *graph, GraphState state) {
     if (graph == nullptr || !graph->hasNodePayload()) {

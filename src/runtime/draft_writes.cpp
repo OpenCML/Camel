@@ -237,15 +237,25 @@ bool writesOperandAt(const GCOperBody &body, size_t index) {
 }
 
 /// The names a graph keeps: its entry, its exit, the node whose value it returns, its ports (a
-/// `var` parameter or a capture), its closure nodes, and the result of each region. One spelling of
-/// them for both representations of a graph; the region results are the one part the two answer
-/// differently, so `regionIsResult` is what they pass in.
-template <typename RegionIsResult>
+/// `var` parameter or a capture), its closure nodes, the result of each region, and the ports a
+/// control region is entered with. One spelling of them for both representations of a graph; the
+/// regions are the one part the two read differently, so `regionIsResult` and `regionNamesPort` are
+/// what they pass in.
+///
+/// A control region's ports belong to this list because the table is positional and the table is
+/// how the region is entered: `LoopDraftView::bodyStateParam(j)` and `condStateParam(j)` are the
+/// j-th entry, and the j-th state is that value. A port node an erasure took leaves the entry
+/// pointing at nothing, and a table that dropped the entry instead renames every state after it --
+/// two wrong answers to one question. `validateRuntimeRegions` refuses the first (a control region
+/// needs every port it lists), so an unread port of a control region is a name and not dead code.
+/// An annotation region is not in this: a rewrite may remove one of its ports, and the published
+/// graph then holds the entry as "none".
+template <typename RegionIsResult, typename RegionNamesPort>
 bool namesOf(
     gc_node_ref_t ref, std::span<const gc_node_ref_t> normPorts,
     std::span<const gc_node_ref_t> withPorts, std::span<const gc_node_ref_t> closureNodes,
     gc_node_ref_t entry, gc_node_ref_t exit, gc_node_ref_t output, gc_node_ref_t result,
-    RegionIsResult regionIsResult) {
+    RegionIsResult regionIsResult, RegionNamesPort regionNamesPort) {
     if (ref == kInvalidNodeRef) {
         return false;
     }
@@ -258,7 +268,14 @@ bool namesOf(
     if (names(normPorts) || names(withPorts) || names(closureNodes)) {
         return true;
     }
-    return regionIsResult(ref);
+    return regionIsResult(ref) || regionNamesPort(ref);
+}
+
+/// Whether a region of `kind` is one the graph enters with a port list: the condition and the body
+/// of a LOOP, and the arm of a BRCH (see `namesOf`).
+bool kindsRegionEntersWithPorts(GCRegionKind kind) {
+    return kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+           kind == GCRegionKind::LoopBody;
 }
 
 /// A frozen graph, read the way the graph space lays it out.
@@ -290,6 +307,19 @@ struct FrozenGraphView {
                     }
                 }
                 return false;
+            },
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < graph.regionCount(); ++index) {
+                    const GCRegion *region = graph.region(index);
+                    if (region == nullptr || !kindsRegionEntersWithPorts(region->kind)) {
+                        continue;
+                    }
+                    const auto ports = graph.regionPorts(index);
+                    if (std::find(ports.begin(), ports.end(), candidate) != ports.end()) {
+                        return true;
+                    }
+                }
+                return false;
             });
     }
     const GCOperBody *bodyOf(gc_node_ref_t ref) const { return graph.nodeBodyAs<GCOperBody>(ref); }
@@ -298,6 +328,13 @@ struct FrozenGraphView {
     }
     bool isRead(gc_node_ref_t ref) const {
         return !graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty();
+    }
+    bool isGate(gc_node_ref_t ref) const {
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        return node != nullptr && node->kind == GCNodeKind::Gate;
     }
 };
 
@@ -327,6 +364,18 @@ struct DraftGraphView {
                     }
                 }
                 return false;
+            },
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < draft.regionCount(); ++index) {
+                    if (!kindsRegionEntersWithPorts(draft.region(index).kind)) {
+                        continue;
+                    }
+                    const auto ports = draft.regionPortsOf(index);
+                    if (std::find(ports.begin(), ports.end(), candidate) != ports.end()) {
+                        return true;
+                    }
+                }
+                return false;
             });
     }
     const GCOperBody *bodyOf(gc_node_ref_t ref) const {
@@ -342,7 +391,37 @@ struct DraftGraphView {
     bool isRead(gc_node_ref_t ref) const {
         return !draft.normUsersOf(ref).empty() || !draft.withUsersOf(ref).empty();
     }
+    bool isGate(gc_node_ref_t ref) const {
+        const DraftNodeHeader *header = draft.header(ref);
+        return header != nullptr && header->kind == GCNodeKind::Gate;
+    }
 };
+
+/// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
+/// its value input, read here exactly as `isWrittenInPlace` reads a slot
+/// (`normInputsOf(id).back()`). So the cell a `var` parameter writes is the caller's cell, not the
+/// gate that carries it across the call: asking the gate alone answers "no root holds it" for every
+/// write made through a parameter, which is a write the caller can still read (design
+/// principles 3.5, 9.7).
+template <typename View> bool placeIsRootedWith(const View &view, gc_node_ref_t ref) {
+    std::unordered_set<gc_node_ref_t> seen;
+    gc_node_ref_t place = ref;
+    while (seen.insert(place).second) {
+        if (view.isNamed(place)) {
+            return true;
+        }
+        if (!view.isGate(place)) {
+            return false;
+        }
+        const auto inputs = view.normInputsOf(place);
+        if (inputs.empty()) {
+            return false;
+        }
+        place = inputs.back();
+    }
+    // A cycle of GATEs: nothing behind it, so no root holds it.
+    return false;
+}
 
 /// A root holds the value the write leaves, or the place it writes into.
 template <typename View> bool writeIsRootedWith(const View &view, gc_node_ref_t ref) {
@@ -355,7 +434,7 @@ template <typename View> bool writeIsRootedWith(const View &view, gc_node_ref_t 
     }
     const auto inputs = view.normInputsOf(ref);
     for (size_t index = 0; index < inputs.size(); ++index) {
-        if (writesOperandAt(*body, index) && view.isNamed(inputs[index])) {
+        if (writesOperandAt(*body, index) && placeIsRootedWith(view, inputs[index])) {
             return true;
         }
     }
@@ -391,8 +470,24 @@ bool writeIsRooted(const GraphDraft &draft, gc_node_ref_t ref) {
     return writeIsRootedWith(DraftGraphView{draft}, ref);
 }
 
+bool deadWriteOnceUnread(const GCGraph &graph, gc_node_ref_t ref) {
+    const FrozenGraphView view{graph};
+    const GCOperBody *body = view.bodyOf(ref);
+    return body != nullptr && isWriteOfProgramState(*body, view.normInputsOf(ref).size()) &&
+           !writeIsRootedWith(view, ref);
+}
+
+bool deadWriteOnceUnread(const GraphDraft &draft, gc_node_ref_t ref) {
+    const DraftGraphView view{draft};
+    const GCOperBody *body = view.bodyOf(ref);
+    return body != nullptr && isWriteOfProgramState(*body, view.normInputsOf(ref).size()) &&
+           !writeIsRootedWith(view, ref);
+}
+
 bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref) {
     return deadWriteWith(DraftGraphView{draft}, ref);
 }
+
+bool GraphDraft::namesNode(gc_node_ref_t ref) const { return DraftGraphView{*this}.isNamed(ref); }
 
 } // namespace camel::runtime

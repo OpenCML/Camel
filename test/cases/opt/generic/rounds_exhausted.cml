@@ -1,0 +1,15 @@
+/**
+ * A recursion of non-static depth: `total(40)` is unrolled about one level per round by
+ * `std::opt`, and each level is another `total` with a constant argument, so a fixed bound of
+ * rounds is reached with the program still changing. Nothing is wrong with the program -- it is
+ * the shape the optimizer's own bound exists for -- and what the case pins is that the compiler
+ * says so instead of stopping without a word.
+ */
+func total(n: int): int {
+    return if n <= 0 then 0 else n + total(n - 1)
+}
+
+func main(): int sync {
+    println(total(40))
+    return 0
+}

@@ -1027,6 +1027,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOrderOnlyEffectPass, OrderOnlyEffectTestPass),
+        TEST_PASS(kRecalleeArityPass, RecalleeArityTestPass),
+        TEST_PASS(kRecalleeTypePass, RecalleeTypeTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
         TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
         TEST_PASS(kBreakJoinTestPass, BreakJoinTestPass),
@@ -1223,6 +1225,12 @@ struct FoundPass {
     std::vector<PassParam> params;
     /// A declaration that exists but whose applicability condition does not hold.
     std::string inapplicable;
+    /// The module's declarations could not be read (its file does not parse): the sentence the
+    /// report gives, and the location of the parser's first error. This is the same answer pass
+    /// resolution gives a pass library that does not compile, and it is where the declaration
+    /// reader's failure arrives: it is a diagnostic against the module, not an exception.
+    std::string problem;
+    std::optional<DiagLabel> problemLocation;
 };
 
 /// Resolves a pass name to its declaration and implementation. Every pass is resolved the same
@@ -1251,6 +1259,16 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
         }
         const std::string path    = module + "::" + function;
         const auto implementation = findImplementation(path);
+        // The module's declaration file is read before the pass is looked for in it. A file that
+        // does not parse is a diagnostic against that module -- the same one the module loader
+        // would give -- and this is where that answer is carried: the report below turns it into
+        // the `InvalidPassParameter` a pass library that does not compile already gets.
+        if (auto problem = camel::execute::detail::declarationProblem(module, ctx)) {
+            FoundPass found;
+            found.problem         = std::move(problem->text);
+            found.problemLocation = std::move(problem->location);
+            return found;
+        }
         const auto *declaration =
             camel::execute::detail::findPassDeclaration(module, function, ctx);
         FoundPass found;
@@ -1380,6 +1398,14 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         return result;
     }
     result.known = true;
+    if (!descriptor->problem.empty()) {
+        // The module's declarations could not be read: the module did not load, and the answer is
+        // the one a module that does not compile gets, with the parser's first error as the
+        // secondary location.
+        result.problem       = descriptor->problem;
+        result.errorLocation = descriptor->problemLocation;
+        return result;
+    }
     if (!descriptor->inapplicable.empty()) {
         result.problem = descriptor->inapplicable;
         return result;

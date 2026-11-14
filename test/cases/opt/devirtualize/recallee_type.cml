@@ -1,0 +1,26 @@
+/**
+ * The type half of `test::recallee_arity`: two static functions of the same arity whose parameters
+ * have no assignment relation (`int` and `string` -- unlike `int` and `float`, which the type
+ * relation accepts either way, a retarget between them would not be a mismatch at all), so
+ * `test::recallee_type` can point the first call at a callee whose port takes nothing the call
+ * passes.
+ *
+ * `takes_int(2)` is 3 and `takes_text('xy')` is 2; without the retarget `std::opt::devirtualize`
+ * turns both calls into direct ones (`indirect_calls` 3 -> 0, `direct_calls` 0 -> 3).
+ */
+func takes_int(a: int): int {
+    return a + 1
+}
+
+func takes_text(a: string): int {
+    return len(a)
+}
+
+func main(): int sync {
+    let f = takes_int
+    let g = takes_text
+    let a = f(2)
+    let b = g('xy')
+    '{} {}'->format<a, b>->println
+    return 0
+}

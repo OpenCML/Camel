@@ -110,4 +110,17 @@ bool valueIsRead(const GCGraph &graph, gc_node_ref_t ref);
 /// a root or that is read may go -- it may not, and this function says so.
 bool deadWrite(const GCGraph &graph, gc_node_ref_t ref);
 
+/// `deadWrite` with the reads set aside: a write of the program's own state that no root of its
+/// graph holds. It is the judgement of a caller that is itself taking the reads away -- a rule
+/// removing a write's last reader, or a rewrite handing the last use of an effect to a keeper --
+/// because there the "no port reads it" half is the caller's doing and not something left to check.
+///
+/// Why this is the same judgement and not a second one (design principles 3.1 and 9.7): which uses
+/// an effect has is fixed when the graph is built and a pass may not change it, so a pass may not
+/// drop the running of an effect that still has one. What decides that a write's use is not worth
+/// keeping is that no root of the graph holds it any more -- the variable it writes is one nothing
+/// the program keeps can reach. A running that may fault is not this question: that is
+/// `nodeMayFault`, and the caller asks it.
+bool deadWriteOnceUnread(const GCGraph &graph, gc_node_ref_t ref);
+
 } // namespace camel::runtime

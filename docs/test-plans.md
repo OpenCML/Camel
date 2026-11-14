@@ -131,7 +131,9 @@ tests) or on one `[[tests]]` entry (an override), with the values `fast`, `slow`
   PyTorch comparisons and the perf/timeit plans -- the ones `scripts/plan-inventory.mjs` lists in
   `FORBIDDEN`, whose own files say `tier = "milestone"`), the copies a sweep did not sample, and
   any other test whose cost or whose measurement is a property of the machine. No ordinary run and
-  no gate selects them; `--tier milestone` does.
+  no gate selects them by tier; `--tier milestone` does. One of those plan files can still be *named*
+  by a rule -- `feat/opt/progen.plan.toml` is named by the rule for `test/tools/progen/`, and that
+  also runs its milestone entries, because a plan named in full is not filtered by tier.
   **From 2026-11-05 this layer also runs on a schedule: the merge lane runs it once a day at 09:00
   Asia/Shanghai and once before every release, as
   `node scripts/test.js test/plans --tier milestone --jobs 8`.** A red in it is an ordinary red:
@@ -504,8 +506,7 @@ What a rule deliberately does **not** select, because the project forbids it on 
 
 - `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
 - the GC-stress plans `feat/mm/gc`, `feat/mm/gc_collections`, `feat/mm/gc_elder_exhaustion`,
-  `feat/mm/gc_root_window`, `gpu/tiles_regions`;
-- the random-program check `feat/opt/progen.plan.toml`.
+  `feat/mm/gc_root_window`, `gpu/tiles_regions`.
 
 No file rule names them, and the `test/plans/` self rule excludes them: editing one of those plan
 files falls back to the fast layer instead of running the plan. A change that is only relevant to
@@ -514,9 +515,19 @@ way to run them is to name the plan file deliberately. The ordinary opt selectio
 `feat/opt`, but as a **directory**, so `--tier fast` runs its fast plans and filters the slow
 progen plan while `--tier all` runs it.
 
+The random-program plan `feat/opt/progen.plan.toml` is the one plan with a **door and a lock**. Its
+case is the generator itself, so a change under `test/tools/progen/` -- the generator, the model,
+the runner -- selects it, and nothing else does: a progen case or the plan file itself still
+selects nothing, and the self-test holds both ends of that (it also rejects the plan being
+*layered*, because a plan selected and then filtered down to one entry is the same "nobody runs
+it" in a new place). The reason for the door is that a check no change selects does not exist: the
+classes of red that `--tier fast` hid went unseen for exactly that reason. The reason for the lock
+is cost: the plan is 1,025 compiler runs (27 s of wall at `-Jobs 8`), which must not ride on an
+ordinary change of that corpus.
+
 Three ways the selection can come up empty are not the same answer and no longer read the same
 either. A change that matches no rule **widens** to the whole fast layer -- that is the policy for
-a change that only touches a class the project keeps out of `--changed` (perf, GC stress, progen)
+a change that only touches a class the project keeps out of `--changed` (perf, GC stress, a progen case)
 -- and the widening is printed as a widening, with the files that caused it and the size of the layer
 it runs. A change with **no file in it** selects nothing and starts nothing, and prints
 `changed: 0 target(s)` beside the size of the layer it did **not** run: an empty target list reaches
@@ -553,7 +564,7 @@ case out -- is not one of the branch's plans, and the self-test names it as a no
 failing the run: the live tree is shared with whoever is working in it, and two gates of another
 task went red on exactly such a draft. Committing the file makes the check red for real.
 The
-allowlist names only the deliberately unselectable layers (perf, GC stress, progen, the PyTorch
+allowlist names only the deliberately unselectable layers (perf, GC stress, the PyTorch
 comparisons) and files no plan reads (vendored code, packaging, CI configuration, repository
 metadata). A new kind of file therefore cannot appear without a rule or a reason: add
 the rule, or add the class and its reason to the self-test.
@@ -815,7 +826,7 @@ ordering (the same status lines as a serial run, tests really overlapping), the 
 `parallel = false` test overlaps nothing), the tier filter (`fast`, `slow` and `all` select
 the expected tests) and the `--changed` mapping (`src/passes/sched/` selects the scheduler
 plans, `docs/` the documentation checks, `modules/tiles/` the GPU plans, `modules/onnx/` a
-layered plan, a plan file itself, the forbidden perf/GC-stress/progen plans nothing, an unknown
+layered plan, a plan file itself, the forbidden perf/GC-stress plans nothing, an unknown
 path nothing); it runs with the default test set (`test/plans/feat/consistency/runner.plan.toml`).
 The `known_fail` gate has five plan files of its own under `test/tools/selftest/knownfail/`: four
 ways to be incomplete -- no owner, no reason, a placeholder reason and a reason that names no wall --

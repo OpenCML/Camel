@@ -47,6 +47,24 @@ args = ["--coll", "validate=on,leaf=2,fanout=4", "${case}"]
 golden = "golden/content_equality_trees.txt"
 
 [[tests]]
+name = "value.counter_closure"
+desc = "Each call of a counter factory makes its own reference, and the closure it returns writes that reference: the state outlives the call, and two calls keep a cell each."
+case = "../../../cases/consistency/values/counter_closure.cml"
+golden = "golden/counter_closure.txt"
+
+[[tests]]
+name = "value.ref_one_cell_two_holders"
+desc = "One reference held by a closure and by the call that made it: what either writes, the other reads (design principles 3.5, rule two: the exit for state that outlives a call is a reference)."
+case = "../../../cases/consistency/values/ref_one_cell_two_holders.cml"
+golden = "golden/ref_one_cell_two_holders.txt"
+
+[[tests]]
+name = "value.ref_takes_the_value"
+desc = "`ref` takes the value it is given, not the cell: a write to the var afterwards is invisible through the handle and a write through the handle leaves the var alone, so a reference carries no cell out of its evaluation."
+case = "../../../cases/consistency/values/ref_takes_the_value.cml"
+golden = "golden/ref_takes_the_value.txt"
+
+[[tests]]
 name = "value.effect_not_used"
 desc = "An effect whose result nothing uses, outside a sync block, does not run (design principles 3.1, 3.2)."
 case = "../../../cases/consistency/values/effect_not_used.cml"

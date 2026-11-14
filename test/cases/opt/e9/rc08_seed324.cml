@@ -1,0 +1,6 @@
+func main(): int sync {
+    let n66 = loop s63 = ('', false) for q64 in [('', false)] do sync {
+        return if true then q64 else ('', false);
+    };
+    return 0;
+}

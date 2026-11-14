@@ -1,0 +1,93 @@
+id = "opt.rounds_warning"
+order = 341
+tier = "fast"
+tags = ["feat", "opt", "diagnostics"]
+
+# `std::opt` runs a bounded number of rounds (16, docs/cli.md "Resource limits"), because a recursion
+# whose depth is not static unrolls about one level per round and no bound ends it. Every round keeps
+# the program's meaning, so reaching the bound is not a fault; what a user cannot see without being
+# told is that the optimizer stopped in the middle of its work. The bound used to be a line on the
+# log channel ("still changing after 16 rounds"), which the default log level (fatal) never prints,
+# so a `std::opt` that did less than its name says was silent. It is now a warning diagnostic
+# (`RuntimeDiag::OptimizationStoppedShort`, 0x04100019): always on, naming what did not settle, and
+# still not a failure.
+#
+# `test/cases/opt/generic/rounds_exhausted.cml` is `total(40)`, each level a `total` with a constant
+# argument: 16 rounds unroll 16 levels and the 17th would unroll the next one.
+
+[[tests]]
+name = "rounds.default"
+desc = "The program with no pass: 820, exit 0, nothing on stderr. The bound and its message belong to std::opt, not to the program."
+kind = "behavior"
+case = "../../../cases/opt/generic/rounds_exhausted.cml"
+args = ["${case}"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout.trim() === '820', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'no warning without the pass: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rounds.opt"
+desc = "std::opt on that program: the run is not affected (820, exit 0) and the warning is printed at the default log level, once, naming the round count and the graph the last round was still changing ('main'), with the code and the name of the diagnostic. Before this change the same program printed nothing at all."
+kind = "behavior"
+case = "../../../cases/opt/generic/rounds_exhausted.cml"
+args = ["${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout.trim() === '820', 'the program is unaffected: ' + JSON.stringify(input.normalized.stdout))
+const lines = input.normalized.stderr.trim().split('\n')
+assert(lines.length === 1, 'one warning line: ' + JSON.stringify(input.normalized.stderr))
+assert(lines[0].includes("[Warn]: `std::opt` stopped short of a fixed point: all 16 round(s) changed the program, the last changed 'main'."), lines[0])
+assert(!lines[0].includes('__root__'), 'the entry wrapper is not a function of the program: ' + lines[0])
+assert(lines[0].endsWith('(name=RuntimeDiag::OptimizationStoppedShort, code=0x04100019)'), lines[0])
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rounds.silenced"
+desc = "The diagnostic is a warning and is switchable like every other: -Wno-optimization-stopped-short prints nothing, and the program still prints 820."
+kind = "behavior"
+case = "../../../cases/opt/generic/rounds_exhausted.cml"
+args = ["-Wno-optimization-stopped-short", "${case}", "std::opt", "std::fvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout.trim() === '820', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'silenced: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rounds.promoted_by_werror"
+desc = "-Werror makes it the error the user asked for: the pipeline stops before the program runs (no 820 on stdout) and the same sentence is reported as an error. It appears on stdout and on stderr because a promoted pass warning is printed where the run-time errors are read and by the warning's own printer, which is how every -Werror promotion of a pass warning reads, not something this diagnostic added."
+kind = "behavior"
+case = "../../../cases/opt/generic/rounds_exhausted.cml"
+args = ["-Werror", "${case}", "std::opt", "std::fvm"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout
+assert(!out.includes('820'), 'the pipeline stops before the run: ' + JSON.stringify(out))
+assert(out.includes("[Error]: `std::opt` stopped short of a fixed point: all 16 round(s) changed the program, the last changed 'main'."), out)
+assert(out.includes('name=RuntimeDiag::OptimizationStoppedShort, code=0x04100019'), out)
+assert(input.normalized.stderr.includes('[Error]: `std::opt` stopped short of a fixed point'), input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000
+
+[[tests]]
+name = "rounds.fold_only"
+desc = "One pass of the loop is not the loop: std::opt::fold alone runs no rounds, so it says nothing about a bound it never reached, and the program prints 820."
+kind = "behavior"
+case = "../../../cases/opt/generic/rounds_exhausted.cml"
+args = ["${case}", "std::opt::fold", "std::fvm"]
+expect_exit = 0
+verify_script = """
+assert(input.normalized.stdout.trim() === '820', 'stdout: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stderr === '', 'no bound was reached: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 60000

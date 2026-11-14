@@ -21,8 +21,8 @@ from __future__ import annotations
 import random
 from typing import List, Optional
 
-from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, STR, TUP, Reject, effect_violations,
-                   evaluate, heavy_graphs, static_faults, walk)
+from model import (ARR, BOOL, FLOAT, FN, INT, MAX_HEAVY, N, OPT, REC, STR, TUP, Reject, carries_a_function,
+                   effect_violations, escape_violations, evaluate, heavy_graphs, static_faults, walk)
 
 FEATURES = {
     "float": "float arithmetic (exact values only), float(int), int(float), precision placeholders",
@@ -62,7 +62,7 @@ DEFAULT_FEATURES = frozenset(FEATURES) - {"modules"}
 
 # Part of the random stream: a change of the generator that changes the programs of existing
 # seeds gets a new number, so that "seed N" of an old report is not silently another program.
-VERSION = 7
+VERSION = 8
 
 
 def parse_features(text: Optional[str]) -> frozenset:
@@ -727,6 +727,16 @@ class Gen:
                 vargs.append(i)
             elif s.rec and s.rec[0] == i:
                 args.append(self.small(s.rec[1]))
+            elif pt[0] == "fn" and carries_a_function(s.ret if s.kind == "fn" else s.t[2]):
+                # A callee whose result can hold a function may keep what it is given, so a
+                # closure handed to it must hold no cell: the front end refuses a closure that
+                # carries a `var` out of the call that declares it (SemanticDiag::
+                # ClosureCaptureEscapes). Without the vars in scope the closure captures values.
+                saved, self.scope = self.scope, [x for x in self.scope if x.kind != "var"]
+                try:
+                    args.append(self.expr(pt, min(d - 1, 2)))
+                finally:
+                    self.scope = saved
             else:
                 args.append(self.expr(pt, min(d - 1, 2)))
         ret = s.ret if s.kind == "fn" else s.t[2]
@@ -963,26 +973,75 @@ class Gen:
         body = self.with_params(params, make)
         self.add_func(name, params, INT, body, sym, syncfn=True)
 
-    def counter_factory(self):
-        """A function that returns a lambda writing a variable of its own."""
+    def stateful_function(self):
+        """A function whose body owns a `var`, makes a closure over it, and calls that closure a
+        few times: the counter -- each call sees the write of the one before -- and the readings
+        are printed here.
+
+        It used to return the closure, a counter a caller could keep; a closure may capture a
+        `var` by reference only while it stays inside the call that declares the cell (design
+        principles 3.5, rule two), and returning it carried the cell out. What leaves this
+        function is a value."""
         name, start = self.fresh("k"), self.fresh("a")
         params = [(start, INT, False)]
-        ft = FN([INT], INT)
 
         def make():
             v = Sym(self.fresh("v"), INT, "var")
             decl = N("var", [self.expr(INT, 1)], name=v.name)
             self.scope.append(v)
+            # The parameter is in scope only while the lambda's own body is written.
             x = Sym(self.fresh("p"), INT, "let")
+            mark = len(self.scope)
             self.scope.append(x)
             stmts = [self.write(v, 1)]
             inner = N("blk", [stmts, self.expr(INT, 1)], t=INT, sync=True)
-            lam = N("lam", [inner], t=ft, params=[(x.name, INT, False)], ret=INT, syncfn=True)
-            return N("blk", [[decl], lam], t=ft, sync=True)
+            del self.scope[mark:]
+            lam = N("lam", [inner], t=FN([INT], INT), params=[(x.name, INT, False)], ret=INT, syncfn=True)
+            f = Sym(self.fresh("h"), FN([INT], INT), "let", eff=True)
+            self.scope.append(f)
+            out = [decl, N("let", [lam], name=f.name)]
+            reads = []
+            for _ in range(self.r.choice([2, 2, 3])):
+                r = Sym(self.fresh("n"), INT, "let", eff=True)
+                self.scope.append(r)
+                out.append(N("let", [N("call", [ref(f), self.expr(INT, 1)], t=INT, eff=True)], name=r.name))
+                reads.append(r)
+            self.label += 1
+            text = f"L{self.label}" + "".join(" {}" for _ in reads)
+            out.append(N("expr", [N("println", [N("fmt", [ref(r) for r in reads], t=STR, s=text)])]))
+            # The value the call answers with: the last reading, one step on.
+            return N("blk", [out, bin_("+", ref(reads[-1]), lit(INT, 1), INT)], t=INT, sync=True)
         body = self.with_params(params, make)
-        sym = self.fn_sym(name, params, ft, eff=True, ret_eff=True)
+        sym = self.fn_sym(name, params, INT, eff=True)
         sym.t = ("fneff",)
-        self.add_func(name, params, ft, body, sym)
+        self.add_func(name, params, INT, body, sym, syncfn=True)
+
+    def state_thread(self, d):
+        """The state as a value: it goes in as the argument of a pure function and the next value
+        comes back, twice or three times in a row, and the chain is written as one tuple so the
+        readings are the values of a `let`. This is the other thing the rule allows in place of a
+        closure that carries the cell out (design principles 3.5, rule one: in as a parameter,
+        back as the result)."""
+        cands = [s for s in self.scope if s.kind == "fn" and not s.eff and not s.rec
+                 and len(s.params) == 1 and s.params[0][1] == INT and not s.params[0][2] and s.ret == INT]
+        if not cands:
+            # A stepping function of its own, so that every program can write the shape: a value
+            # in, the next value out.
+            name, arg = self.fresh("t"), self.fresh("a")
+            params = [(arg, INT, False)]
+            step = bin_("%", bin_("+", bin_("*", N("ref", t=INT, name=arg), lit(INT, 3), INT),
+                                  lit(INT, 1), INT), lit(INT, 97), INT)
+            self.add_func(name, params, INT, N("blk", [[], step], t=INT), self.fn_sym(name, params, INT))
+            cands = [self.scope[-1]]
+        step = self.r.choice(cands)
+        base = self.expr(INT, 2)
+        parts, chain = [], base.clone()
+        for _ in range(self.r.choice([2, 3])):
+            chain = N("call", [ref(step), chain], t=INT)
+            parts.append(chain.clone())
+        s = Sym(self.fresh("t"), TUP(*([INT] * len(parts))), "let")
+        self.scope.append(s)
+        return N("let", [N("tup", parts, t=s.t)], name=s.name)
 
     # -- statements of a sync block ---------------------------------------------------------
     def write(self, v: Sym, d):
@@ -1116,6 +1175,7 @@ class Gen:
                 o.append((0.7, lambda: self.effect_reduce(d)))
             if self.on("capture") and self.on("closure") and self.on("var"):
                 o.append((1.0, lambda: self.writer_closure(d)))
+                o.append((0.6, lambda: self.state_thread(d)))
             if self.on("capture") and self.on("func"):
                 o.append((0.7, lambda: self.nested_function(d)))
         return self.pick(o)
@@ -1416,7 +1476,7 @@ class Gen:
                     if self.on("rec") and self.on("varparam") and self.on("var") and r < 0.25:
                         self.effect_recursion()
                     elif self.on("capture") and self.on("closure") and self.on("var") and r < 0.4:
-                        self.counter_factory()
+                        self.stateful_function()
                     else:
                         self.effect_function()
             if self.on("nullable"):
@@ -1495,6 +1555,8 @@ def generate(seed: int, features: frozenset = DEFAULT_FEATURES, module: Optional
             continue
         if effect_violations(prog):
             raise AssertionError(f"seed {seed}: generated an effect outside an effect position")
+        if escape_violations(prog):
+            continue                                   # a closure the front end would refuse
         if static_faults(prog):
             continue
         try:

@@ -1,4 +1,12 @@
 /**
+ * What this case observes is the scheduler's ability to run two calls at the same time, which is
+ * outside the language's determinism guarantee (design principles 3.3: `rendezvous` is
+ * nondeterministic, its result depends on whether another call is waiting). The two calls have
+ * nothing between them but an effect on one `unordered` resource, so no order edge joins them and
+ * a back end that runs them at once prints a different count from one that runs them one after
+ * the other: the expectation is written per back end (`feat/para/core.plan.toml`), never as one
+ * number two back ends must agree on, and the case is in no differential test.
+ *
  * Two calls with no path between them in the graph run at the same time under a parallel
  * scheduler. Each call waits at a rendezvous for one peer: `rendezvous(2, t)` returns 2 when
  * two calls were waiting together, and 1 after `t` seconds when the call stayed alone.
@@ -16,7 +24,9 @@ func right(timeout: float): int sync {
     return rendezvous(2, timeout)
 }
 
-// Not a sync block: nothing orders the two calls.
+// Not a sync block: nothing orders the two calls. They meet at one `unordered` resource, so the
+// builder writes no order edge between them either (design principles 3.3), and a plan is free to
+// start both before either waits.
 func both(timeout: float): int {
     let a = left(timeout)
     let b = right(timeout)

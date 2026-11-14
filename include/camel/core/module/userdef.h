@@ -174,4 +174,23 @@ class UserDefinedModule : public Module {
     }
 };
 
+/// Compile `module` to `till` for a caller that is not the import site: a pipeline stage, a tool
+/// that loads a module by path, the program of a pass. Anything that is not a module written in
+/// Camel answers false.
+///
+/// `compile` throws the diagnostic of a module whose file cannot be read or does not parse,
+/// because an `import` is what decides where that diagnostic is located (the import that named
+/// the module, `Builder::compileImportedModules`). A load that is not an import has no such
+/// site, and an exception leaving it ends the process instead of telling the writer what is
+/// wrong with the module. The answer here is the other one: false, with the diagnostic on the
+/// module. A module that already says why it failed keeps exactly the diagnostics it wrote while
+/// giving up -- the same ones the entry file's own compile leaves behind -- and the throw is
+/// recorded on the module only when it is the whole of the failure (a file that is not there, or
+/// not readable).
+///
+/// Every programmatic load goes through this function, so that "a module does not parse" is one
+/// diagnostic against that module wherever the module was loaded from, and the report a command
+/// prints is the one `tools/camel-cli/module_failures.h` asks for.
+bool compileForLoad(const std::shared_ptr<Module> &module, CompileStage till);
+
 } // namespace camel::core::module
