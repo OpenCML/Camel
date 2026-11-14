@@ -1504,8 +1504,12 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     struct Parameter {
         std::string name;
         uint8_t index = 0;
-        Type *type    = nullptr;
-        bool isVar    = false;
+        /// The parameter's place in the numbering a call uses, before it is narrowed to the one byte
+        /// a signature entry holds. A parameter past the 256th has no entry a signature can carry,
+        /// which is what the measurement gives up on (builder_resources.cpp: addVarParameters).
+        size_t runtime = 0;
+        Type *type     = nullptr;
+        bool isVar     = false;
     };
     std::vector<Parameter> parameters;
     const size_t withCount = built->withTypesCount();
@@ -1517,10 +1521,11 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
             continue;
         }
         Parameter param;
-        param.name  = std::string(built->argNameAt(i));
-        param.index = static_cast<uint8_t>(runtimeIndex++);
-        param.type  = isWith ? built->withTypeAt(i) : built->normTypeAt(i - withCount);
-        param.isVar = isWith ? built->withIsVarAt(i) : built->normIsVarAt(i - withCount);
+        param.name    = std::string(built->argNameAt(i));
+        param.index   = static_cast<uint8_t>(runtimeIndex);
+        param.runtime = runtimeIndex++;
+        param.type    = isWith ? built->withTypeAt(i) : built->normTypeAt(i - withCount);
+        param.isVar   = isWith ? built->withIsVarAt(i) : built->normIsVarAt(i - withCount);
         parameters.push_back(std::move(param));
     }
     std::vector<AmbientEntry> ambient;
@@ -1534,18 +1539,25 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
                 return use.resource.plain() && candidate.name == use.resource.ident();
             });
         if (param != parameters.end()) {
+            // A `var` parameter is a variable, and a clause never names one (design principles
+            // 3.3): the `var` in the parameter list is where the cell is declared, and which
+            // calls touch it is measured from the body. A handle parameter is the other kind of
+            // entry a clause may name -- it says which handle the call is handed.
+            if (param->isVar && !sem::isHandleType(param->type)) {
+                diags_->of(SemanticDiag::VariableInUses)
+                    .at(use.range)
+                    .commit(written, clause->geneCode());
+                throw BuildAbortException();
+            }
             sem::ResourceSignature::ParamUse paramUse;
             paramUse.index = param->index;
             // `var` in a clause says the call writes the resource; without it the call reads the
-            // resource and nothing else (design principles 3.3). A write of a cell or of an
-            // object is its whole value replaced, which is what a reader of the graph sees as a
-            // read-modify-write.
+            // resource and nothing else (design principles 3.3). A write of a handle is its whole
+            // value replaced, which is what a reader of the graph sees as a read-modify-write.
             paramUse.mode = use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read;
             if (sem::isHandleType(param->type)) {
                 paramUse.cls  = sem::ResourceClass::Handle;
                 paramUse.name = sem::handleResourceName(param->type);
-            } else if (param->isVar) {
-                paramUse.cls = sem::ResourceClass::Variable;
             } else {
                 paramUse.cls = sem::ResourceClass::Object;
             }
@@ -1574,15 +1586,14 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
             throw BuildAbortException();
         }
         for (const AmbientEntry &entry : ambient) {
-            // An external resource is state the program does not own, so a call that names one
-            // reads and writes it, and the clause says so the way a parameter does: with `var`
-            // (design principles 3.3). An entry that leaves the word out promises a read, which
-            // is a promise no call to an external resource keeps.
-            if (entry.external && !use.write) {
-                diags_->of(SemanticDiag::ExternalResourceNeedsVar)
+            // A module's own `var` is a variable of the outermost scope, not a resource a clause
+            // names (design principles 3.3): the functions of the module capture it, and which of
+            // them read or write it is measured from their bodies. An external resource is what a
+            // clause is for, and `var` says the call writes it rather than only reading it.
+            if (!entry.external) {
+                diags_->of(SemanticDiag::VariableInUses)
                     .at(use.range)
-                    .fix("write 'var' before the resource", use.range, "var " + written)
-                    .commit(sem::resourceDisplayName(entry.key), built->toString());
+                    .commit(sem::resourceDisplayName(entry.key), clause->geneCode());
                 throw BuildAbortException();
             }
             const auto known =
@@ -1612,6 +1623,30 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
     if (clause->pure()) {
         signature.params.clear();
         signature.ambient.clear();
+    } else {
+        // A `var` parameter is a resource by itself -- the caller's cell, which the call writes --
+        // and the parameter list is where the declaration says so (design principles 3.3). The
+        // body's measurement carries every `var` parameter whether its body reaches it or not, and
+        // a caller reads this signature to know what calling it touches, so the declaration adds
+        // them too. This is the one place they are written: a clause never names a variable.
+        for (const Parameter &param : parameters) {
+            const bool known = std::any_of(
+                signature.params.begin(),
+                signature.params.end(),
+                [&](const auto &other) { return other.index == param.index; });
+            if (!param.isVar || known || param.runtime > 0xFF) {
+                continue;
+            }
+            sem::ResourceSignature::ParamUse paramUse;
+            paramUse.index = param.index;
+            paramUse.cls   = sem::ResourceClass::Variable;
+            paramUse.mode  = sem::AccessMode::ReadModifyWrite;
+            signature.params.push_back(std::move(paramUse));
+        }
+        std::sort(
+            signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
+                return a.index < b.index;
+            });
     }
     // The resources the clause wrote are what it promises, and a resource the program does not own
     // brings its effect on the world with it (design principles 3.3): a clause that names one
