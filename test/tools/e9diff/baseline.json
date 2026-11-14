@@ -1,0 +1,23 @@
+{
+ "programs_wrong": 10,
+ "programs_refused": 17,
+ "programs_crashed": 3,
+ "cells_wrong": 321,
+ "cells_refused": 747,
+ "cells_crashed": 3,
+ "what": "the E9 three numbers a merge is compared with (only down, never up)",
+ "matrix": "full",
+ "pin": "(dirty: 5 files) camel built 2026-11-14T08:21:14",
+ "tree": "a8df99c13, plus the five uncommitted files under test/ this baseline is committed with",
+ "seeds": "1..500",
+ "programs": 500,
+ "generator_rejects": 180,
+ "programs_in_matrix": 320,
+ "cell_outcomes": {
+  "CPP_COMPILE_ERROR": 3,
+  "MISMATCH": 321,
+  "OK": 28997,
+  "REFUSED": 1612,
+  "REFUSED_UNLOCATED": 747
+ }
+}
