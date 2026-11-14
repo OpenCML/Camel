@@ -538,7 +538,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 cd98045d0d3ef21b ok stdlib/stream.cml
 95098d3e31cd398d ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
-7412e62e8d9372be ok stdlib/test_support.cml
+cfa0255c014a234a ok stdlib/test_support.cml
 3c4d85f022206889 ok stdlib/this.cml
 6a4fb7f37be2ed14 ok stdlib/tiles.cml
 0ff92f7d01468e66 ok stdlib/time.cml
@@ -3377,6 +3377,7 @@ dfde453c4be9360a ok test/cases/modules/std/json/err_encode_no_form.cml
 210ad97acdee85c3 ok test/cases/modules/std/json/json_gc.cml
 b237b3050c1f4b18 ok test/cases/modules/std/json/json_gc_macro.cml
 e8405f93b22c8c9c ok test/cases/modules/std/json/json_kind_failed.cml
+7c266a3d8130b172 ok test/cases/modules/std/json/json_kind_no_document.cml
 6d9d3f1346670deb ok test/cases/modules/std/json/json_value.cml
 ab51cfe0da9c7065 ok test/cases/modules/std/math/basic.cml
 beb22e0cb6009e01 ok test/cases/modules/std/process/basic.cml
@@ -3937,8 +3938,8 @@ f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 6182a103922f5823 ok test/cases/para/core/block_sort_merge.cml
 3b6f0e7de2defa16 ok test/cases/para/core/bootstrap_medians.cml
 2013ce9754175bb2 ok test/cases/para/core/concurrent_alloc.cml
-b5279b76c0fe923a ok test/cases/para/core/concurrent_calls.cml
-c55e011422ffd499 ok test/cases/para/core/concurrent_recursion.cml
+2b89fefd710e2882 ok test/cases/para/core/concurrent_calls.cml
+d798c3f984bfdac0 ok test/cases/para/core/concurrent_recursion.cml
 9ed3137575be6b23 ok test/cases/para/core/file_chunk_hash.cml
 138cf38f4c67c08c ok test/cases/para/core/filter_keeps_all.cml
 4f2311810be91532 ok test/cases/para/core/map_chunks.cml
