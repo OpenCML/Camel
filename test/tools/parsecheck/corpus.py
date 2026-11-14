@@ -14,9 +14,11 @@ Writes DIR/list.txt, one source path per line:
     examples, the standard library, the tutorial), the syntax-negative cases included, and the
     handover directory aside (HANDOVER): that directory holds the drafts the language author works
     from, and a module joins the corpus where it is integrated into the standard library. The
-    snapshot that check.py compares (test/plans/feat/parse/golden/ast_hashes.txt) is the parse
-    corpus: a snapshot of the parser's tests, not of the repository. The repository scope is what
-    check.py's format and fuzz checks traverse;
+    snapshot that check.py compares (test/plans/feat/parse/golden/ast_hashes.txt) holds the parse
+    corpus, every probe, and every other .cml file of the repository, which is the reading that
+    catches a graph that moved in stdlib, the exemplars, the examples or the benchmarks without a
+    test of their own noticing. The repository scope is what check.py's format and fuzz checks
+    traverse;
   * every ```cml block of the Markdown documents, extracted to DIR/docs/;
   * N programs of the random generator test/tools/progen (seeds 1..N) and M at --size 4,
     written to DIR/progen/.
@@ -61,9 +63,10 @@ def walk(root: Path, suffix: str):
 def repository_sources(root: Path = Path(".")):
     """Every .cml file of the repository (tests, benchmarks, exemplars, examples, the standard
     library, the tutorial), the syntax-negative cases included and the handover directory left
-    out (HANDOVER). This is the breadth the format and fuzz checks traverse: they are not
-    snapshots, and a program outside the parser's own cases is checked here rather than by the
-    snapshot."""
+    out (HANDOVER). This is the breadth the format and fuzz checks traverse and the part of the
+    AST snapshot that is not the parser's own cases: the checks are not snapshots of the parser's
+    tests, and a program outside test/cases/parse is read here too, so a graph that moved there
+    moves a reading rather than waiting for a plan that happens to assert it."""
     handover = (root / HANDOVER).parts
     for source in walk(root, ".cml"):
         if source.parts[:len(handover)] != handover:
@@ -71,8 +74,9 @@ def repository_sources(root: Path = Path(".")):
 
 
 def parse_cases():
-    """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot hashes these
-    and the probes: the snapshot is a snapshot of the tests that own the parser."""
+    """The parse corpus: every .cml case under test/cases/parse/. The AST snapshot holds these
+    first, then the probes, then the rest of the repository (repository_sources), in that order:
+    the parser's own tests lead the record, and the breadth follows them."""
     return walk(PARSE_ROOT, ".cml")
 
 
