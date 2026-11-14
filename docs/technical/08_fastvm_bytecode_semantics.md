@@ -13,7 +13,7 @@
   - `wargs() = operands[normCnt .. normCnt+withCnt-1]`。
 - **data_idx_t**：正数 = 动态区 slot 索引；负数 = 静态区索引的相反数；0 = 无效。
 
-详见 `src/builtin/passes/sched/linear/fastvm/bytecode.h`。
+详见 `src/passes/sched/fastvm/bytecode.h`。
 
 ---
 

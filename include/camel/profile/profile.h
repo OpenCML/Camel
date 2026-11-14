@@ -97,8 +97,8 @@ void loopRound(uint64_t origin) noexcept;
 /// no operator row; `runs * members.size()` is how many operator executions the group stood for,
 /// and the report counts them exactly once.
 void fusionGroup(
-    std::string_view key, std::string_view name,
-    std::span<const std::string_view> members, uint64_t ns);
+    std::string_view key, std::string_view name, std::span<const std::string_view> members,
+    uint64_t ns);
 
 /// One `tee` of the run (design principles 5.4). `s->tee<n>` reads `s` once and gives two streams
 /// over the same elements, each read once; a side that runs ahead of the other buffers what the
@@ -159,7 +159,7 @@ void setDevice(std::string device);
 struct HostLoopHint {
     uint64_t origin = 0;
     std::string graph;
-    /// The place in the source ("test/cases/x.cml:12:9"), when the origin resolves to one.
+    /// The place in the source ("test/cases/<name>.cml:12:9"), when the origin resolves to one.
     std::string position;
     /// The operators of the body, in source order, comma separated ("tensor:add, tensor:mul").
     std::string operators;

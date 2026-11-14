@@ -18,7 +18,7 @@
  *     rounded once into the element type (design principles 7.3); an integer element type is
  *     summed in itself and wraps around on overflow, as `+` does;
  *   - `mean` is the f64 sum divided by the extent in f64, rounded once, for a float element type;
- *   - `min` and `max` are IEEE 754-2019 minimum and maximum (modules/math/minmax.h, the one
+ *   - `min` and `max` are IEEE 754-2019 minimum and maximum (camel/core/math/minmax.h, the one
  *     statement of the comparison): a NaN gives NaN, -0 is below +0;
  *   - `argmax` and `argmin` give the position of the winner: the first NaN if there is one, +0
  *     above -0, the earlier position on a tie (design principles 7.7);
@@ -30,13 +30,13 @@
 
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/math/mean.h"
+#include "camel/core/math/minmax.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/bytes.h"
 #include "camel/core/rtdata/half.h"
 #include "camel/core/type.h"
 #include "camel/core/type/composite/array.h"
-#include "modules/math/mean.h"
-#include "modules/math/minmax.h"
 
 #include <algorithm>
 #include <array>
@@ -216,7 +216,7 @@ template <typename T> slot_t reduceAxis(Reduce op, ArgsView &norm, bool keepdims
                 }
             } break;
             case Reduce::Mean: {
-                // The normative form (design principles; modules/math/mean.h): the lane's sum is the
+                // The normative form (design principles; camel/core/math/mean.h): the lane's sum is the
                 // same accumulation `sum` uses -- f64 from +0 for a float element type, the exact
                 // integer accumulator for an integer one -- divided by the extent in f64, and the
                 // quotient converted into the element type once. An integer lane answers

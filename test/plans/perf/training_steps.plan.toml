@@ -64,7 +64,6 @@ kind = "benchmark"
 case = "../../cases/perf/dependency_chain.cml"
 args = ["${timeit_nvm_10}", "${case}", "--arg", "rounds=500", "${run_nvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
 
@@ -75,7 +74,6 @@ kind = "benchmark"
 case = "../../cases/perf/dependency_chain.cml"
 args = ["${timeit_fvm_10}", "${case}", "--arg", "rounds=500", "${run_fvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 180000
 
@@ -86,7 +84,6 @@ kind = "benchmark"
 case = "../../cases/perf/mlp_step.cml"
 args = ["${timeit_nvm_10}", "${case}", "--arg", "steps=50", "--arg", "batch=32", "--arg", "lr=0.001", "${run_nvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 
@@ -97,7 +94,6 @@ kind = "benchmark"
 case = "../../cases/perf/mlp_step.cml"
 args = ["${timeit_fvm_10}", "${case}", "--arg", "steps=50", "--arg", "batch=32", "--arg", "lr=0.001", "${run_fvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 perf_budget_platform = "local.sample"
@@ -111,7 +107,6 @@ kind = "benchmark"
 case = "../../cases/perf/transformer_step.cml"
 args = ["${timeit_nvm_10}", "${case}", "--arg", "steps=50", "--arg", "lr=0.01", "${run_nvm}"]
 expect_exit = 0
-snapshot_stream = "stdout"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 300000
 

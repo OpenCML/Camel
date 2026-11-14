@@ -40,7 +40,7 @@ function ensureDirSync(dir) {
  *   camel_lang-<ver>-py3-none-<platform>.whl    body only, any Python 3
  *
  * The build is the one `build({ rollupMm, ... })` makes for the **current compile-time** `python`
- * (or `CAMEL_PYPI_PYTHON`), matched to an SDK by `include/patchlevel.h`; CMake sees
+ * (or `CAMEL_PYPI_PYTHON`), matched to an SDK by its `patchlevel.h` (in the SDK's `include` directory); CMake sees
  * CAMEL_PYPI_SINGLE_SDK_MM and emits only that py_bridge + matching python.cmo. One wheel set is
  * all a platform needs now: `CAMEL_PYPI_ALL_SDKS=1` used to build one wheel per SDK folder and is
  * obsolete, because one abi3 extension covers every version.

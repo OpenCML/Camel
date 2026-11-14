@@ -123,7 +123,7 @@ timeout_ms = 20000
 # the graph had to land, and none of them is a patch at this program:
 #  - the reverse walk. `transpose`'s loop case iterates `range(n - 1, -1, -1)` and reads each round's
 #    element with `:op/idx_arr` instead of copying the sequence (author, 2026-11-03 18:50; path B of
-#    `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
+#    `docs/handover/reviews/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
 #    operator is added.
 #  - the residual taken *after* the loop. The tangent side of the exit states the length it reads
 #    (`pick_at(dxs, 0, len(xs))`), and that length is computed from the loop's
@@ -147,7 +147,7 @@ timeout_ms = 20000
 # answers now (7 and 14, on the route its own pins name -- see that case); `two_values_of_two_kinds`
 # is marked known_fail, because the number it asks for is a function of a value the transposed
 # signature does not carry
-# (`docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`).
+# (`docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`).
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -565,7 +565,7 @@ timeout_ms = 20000
 #
 # Pinned as a reading, not as an exit code: the exit is 1 because the program asks for something the
 # shapes do not allow, which is the point. The day the answer gets a width (a value port or a split
-# residual -- `docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
+# residual -- `docs/handover/reviews/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
 # road 丙) this entry is red on `dx= []` and says so, and the control next door
 # (`vjp_const_function_answers_zero`, `float[3]`) is what the new reading has to match.
 [[tests]]
@@ -696,13 +696,13 @@ timeout_ms = 30000
 # `src/` and `modules/`, so the engine side of the comparison is the tree's own.
 [[tests]]
 name = "vjp_api.the_two_tables_are_compared"
-desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new`; a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
+desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new` and `stale=0` under `--strict` (a row that has outlived its difference is a failure there, so the list cannot grow longer than the tree); a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-vjp-parity.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["the real tree has no difference the list does not hold", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
+expect_stdout_contains = ["the real tree has no difference the list does not hold, and no row without a difference", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -752,6 +752,29 @@ desc = "`vjp(f)(2.0)` on `f(x) = x*x*x` reads `(8.0, (12.0))` and `grad(f)(2.0)`
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["vjp_gradient value=8.0", "(12.0)", "vjp_gradient cotangent=12.0", "vjp_gradient grad=12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same program with the optimizing pipeline in front of the back end, which is not the same
+# program to a pass: `std::opt` runs `std::defunctionalize` first, and that pass lowers every value
+# of a function type to one variant of an enum. A program that imports `vjp` carries the rule graphs
+# of `stdlib/rulesets/jvp.cml` and `stdlib/rulesets/transpose.cml`, whose right sides are closures
+# (`pow_d(x, y) => (dx, dy) => ...`), so it has far more families than it looks like it has -- and
+# until this entry, `std::opt` refused it with `RuntimeDiag::ExitTypeMismatch` on
+# `rulesets.jvp::jvp_pow_d__rhs` (exit 1, before the program ran at all). The readings below are the
+# four lines the entry above pins, whole: `std::opt` changes which writings the graph has, never the
+# number a program computes (`vjp_gradient.cml` has no `std::nvm`-visible difference between the two
+# runs, which is what this pair of entries holds).
+[[tests]]
+name = "vjp_api.gradient_under_std_opt"
+desc = "The entry above, with `std::opt` before the back end: `vjp(f)(2.0)` on `f(x) = x*x*x` still reads `(8.0, (12.0))` and `grad(f)(2.0)` still reads `12.0`, so the optimizing pipeline neither refuses this program nor changes its numbers. It was refused: `std::defunctionalize` -- which `std::opt` runs whether or not the program names it -- retyped the signature of the rule graph `rulesets.jvp::jvp_pow_d__rhs` to another family's enum while leaving the closure node on the function type, and the graph's exit check reported the value's type against the declared one. The value read is the same one the unoptimized entry reads, line for line: the two entries are the comparison, and they are separate because one run per entry is what the plan runner does."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_gradient.cml"
+args = ["${case}", "std::opt", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
@@ -1060,7 +1083,7 @@ timeout_ms = 20000
 # carried=2 node=12 origin=0 captures=2 answer=per-target` and both `ESCAPE` lines, `kindOfTarget` 1 and
 # 11 -- so the channel the case was written for is there and the last number is not. The mark goes away
 # in the commit that answers
-# `docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`,
+# `docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`,
 # and the four pins above stay as the answer's, not as the refusal's.
 [[tests]]
 name = "transpose_loop_escape.two_values_of_two_kinds"
@@ -1105,9 +1128,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_owner = "lane-valports"
-known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/questions/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
+known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/reviews/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
 known_fail_msg = "skip=law-reads-a-value uri=:op/mul_d position=0"
-known_fail_note = "Waits on docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=law-reads-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
+known_fail_note = "Waits on docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=law-reads-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -1650,7 +1673,7 @@ timeout_ms = 15000
 # (`TRANSPOSE function=rulesets.jvp::index_into<float> graph=388 type=(int, float[], float) =>
 # (float[],)`), so the extent in the type is not what answers it -- the split's residual is. The
 # measurement of both sources, and why neither reaches a law, is
-# `docs/handover/questions/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`.
+# `docs/handover/reviews/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`.
 [[tests]]
 name = "grad_array_fixed_shape"
 desc = "A `float[3]` parameter read at two positions: `xs[1] * xs[0]` over `[3.0, 2.0, 5.0]` answers `6.0`, and the cotangent is `2.0`, `3.0`, `0.0` position by position -- the third one the zero the body never reads. This is `grad_array_no_int` with the extent stated in the type, which is the shape the ruling asks a caller to write."
@@ -2253,7 +2276,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
+desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
 kind = "negative"
 case = "../../../cases/compile/transforms/softmax_gradient_stops_at_split.cml"
 args = ["${case}", "${backend}"]
@@ -2287,7 +2310,7 @@ expect_output_not_contains = ["skip=arity uri=tensor:mean_axis", "skip=call-no-t
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # `exp` on the D1 difference set: the cheapest member, and the discriminator for the cut question
-# (`docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`).
+# (`docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`).
 [[tests]]
 name = "exp_gradient_through_the_engine"
 desc = "The gradient of `sum(exp(x))` through the engine's own rule (`expVjp`, `modules/tensor/ops/__elementwise_ops.cpp`, registered by `setVjp(defs, `"exp`", ...)`), both components written out: `[2.718281828459045, 7.38905609893065]` on `[1.0, 2.0]`. Both components are the criterion: a `exp_t` written as `ct` answers `[1.0, 1.0]` and one written as `ct * x` answers `[1.0, 2.0]`, so the pair separates the three laws without a tolerance, while a single component or an aggregate would not. This is the number the library's rules reproduce in the neighbouring case."

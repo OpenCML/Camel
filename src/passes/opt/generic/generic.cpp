@@ -51,6 +51,22 @@ namespace type = camel::core::type;
 
 namespace {
 
+/// How many constant branches this run left standing because dissolving one would have stranded
+/// an effect. Counted, not silent: what keeping the effects costs is read off the log.
+size_t g_foldsKeptForEffects = 0;
+
+/// Records a fold the optimizer refused to keep the effects around it running, and says why.
+void keepBranchForEffects(camel::runtime::gc_node_ref_t brch, const char *why) {
+    const size_t kept = ++g_foldsKeptForEffects;
+    CAMEL_LOG_INFO_S(
+        "Opt",
+        "std::opt: kept the constant branch at node {} ({}) -- {} fold(s) kept for effects in this "
+        "run",
+        (unsigned)brch,
+        why,
+        kept);
+}
+
 // ---------------------------------------------------------------- branch regions
 
 /**
@@ -190,18 +206,31 @@ staticValueOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t
 /// anchors follow it as well (`replaceFoldResult`). Leaving it pinned is what kept a conversion
 /// written in return position (the CAST a named result type adds) in the graph forever: every
 /// folding round skipped it, and every inlining of that function copied the unfolded conversion.
-bool isSyncWaitingGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
+bool holdsChainPlaceGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     const auto *node  = draft.header(id);
-    return node != nullptr && node->kind == GCNodeKind::Gate && !draft.syncInputsOf(id).empty();
+    if (node == nullptr || node->kind != GCNodeKind::Gate) {
+        return false;
+    }
+    // A statement of a block's chain holds its place from both sides: it is written after the one
+    // before it (`syncInputsOf`) and it is what the one after it is written after
+    // (`syncUsersOf`). Reading only the first leaves the statement that stands at the head of a
+    // chain -- or the one whose wait came to it as a control edge rather than a sync one -- looking
+    // like a plain value, and a rewrite that replaces it by the value it forwards takes the
+    // statement out of the chain: the successor keeps no predecessor, and everything written before
+    // stands in no chain at all (docs/design/effects/edges.cn.md 1.5, 4.6, 5.7; design principles
+    // 3.3, 5.7). `test/cases/compile/surface/dropped_value_statement.cml` draws exactly this
+    // shape -- a block-boundary gate with a control wait and a sync successor -- and `std::opt`
+    // used to drop two prints of it while `std::opt::inline`/`::fold` alone kept them.
+    return !draft.syncInputsOf(id).empty() || !draft.syncUsersOf(id).empty();
 }
 
-/// A GATE with a sync predecessor carries a chain place and cannot be folded into its input.
+/// A GATE that holds a place in a chain carries it and cannot be folded into its input.
 /// A returned value that waits on anything else is not folded either: it is the tail of the graph's
 /// effect order (docs/design/effects/edges.cn.md 1.5 and 5.3).
 bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
-    if (isSyncWaitingGate(transaction, id)) {
+    if (holdsChainPlaceGate(transaction, id)) {
         return false;
     }
     const bool waits       = !draft.ctrlInputsOf(id).empty() || !draft.syncInputsOf(id).empty();
@@ -642,6 +671,112 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     const std::vector<gc_node_ref_t> branchChainPreds(
         draft.syncInputsOf(brch).begin(),
         draft.syncInputsOf(brch).end());
+    const auto placeablePred = [&](gc_node_ref_t pred) {
+        return pred != brch && pred != join && pred != kInvalidNodeRef && draft.alive(pred) &&
+               !removed(pred);
+    };
+    // Where the branch stood, when the branch itself stands in no chain of its block: code the
+    // builder or the inliner spliced beside the chain, entered by a control edge (a statement of an
+    // arm is entered from its BRCH that way), leaves the branch ordered but chained to nothing. The
+    // place it then occupies is read off the chain it sits beside: the statement the branch ran
+    // after (`brchPreds`, the edges it waits on whichever kind they are) and the one statement that
+    // successor continues with. The arm's chain goes between them -- after `slot`, before `heir` --
+    // which is 5.7's "the arm's statements take the branch's place" for a place that was only ever
+    // derived from control edges.
+    //
+    // `heir` is reported only when exactly one statement follows `slot` and it is not the branch
+    // itself, not code of the arms that go away, and not the arm's own tail (a statement the arm
+    // already follows). A place with no successor is left alone: there is nothing to splice into,
+    // and a branch that cannot be placed is not dissolved below.
+    const auto spliceHeir = [&](gc_node_ref_t *slotOut) {
+        for (gc_node_ref_t pred : brchPreds) {
+            if (!placeablePred(pred)) {
+                continue;
+            }
+            const gc_node_ref_t slot = camel::runtime::chainExitOf(draft, pred);
+            if (slot == kInvalidNodeRef || !draft.alive(slot) || removed(slot) || slot == brch ||
+                slot == join) {
+                continue;
+            }
+            gc_node_ref_t heir = kInvalidNodeRef;
+            size_t count       = 0;
+            for (gc_node_ref_t user : draft.syncUsersOf(slot)) {
+                if (user == brch || user == join || removed(user) || inArm(user) ||
+                    user == armChainTail) {
+                    continue;
+                }
+                heir = user;
+                ++count;
+            }
+            if (count == 1 && heir != kInvalidNodeRef && heir != armChainHead) {
+                if (slotOut != nullptr) {
+                    *slotOut = slot;
+                }
+                return heir;
+            }
+        }
+        return kInvalidNodeRef;
+    };
+    // A branch is dissolved only where the arm's chain can take the place it held: entered from
+    // where the branch stood, and followed by the statements that waited on it (5.7). Where neither
+    // the branch's own chain predecessor nor the place derived from its control edges can be
+    // entered, the arm's statements would hang in no chain of the graph and an effect among them
+    // would stop running, silently (2, 9.7). The branch is left standing there instead: the runtime
+    // then takes it as the program wrote it, which costs the fold and keeps the effect.
+    const auto armPlaceable = [&] {
+        for (gc_node_ref_t pred : branchChainPreds) {
+            if (placeablePred(pred)) {
+                return true;
+            }
+        }
+        for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
+            if (placeablePred(pred)) {
+                return true;
+            }
+        }
+        // The place the branch held is also handed to the arm's tail: the statement written after
+        // the branch waits on the arm's code, so the arm's statements are reached from the graph's
+        // result and run (2) even where the entry side had no place to write.
+        for (gc_node_ref_t user : draft.syncUsersOf(join)) {
+            if (user != brch && user != armChainHead && draft.alive(user) && !removed(user)) {
+                return true;
+            }
+        }
+        return spliceHeir(nullptr) != kInvalidNodeRef;
+    };
+    if (armChainHead != kInvalidNodeRef) {
+        bool armCarriesOrder = false;
+        for (gc_node_ref_t n : armNodes) {
+            if (inArmRegion(n) && carriesOrdering(draft, n, true)) {
+                armCarriesOrder = true;
+                break;
+            }
+        }
+        if (armCarriesOrder && !armPlaceable()) {
+            keepBranchForEffects(brch, "its arm's chain has no place to be entered from");
+            return false;
+        }
+    }
+    // An arm that brings no chain of its own -- a constant value, or code its region does not hold
+    // -- leaves nothing for the branch's place to be handed to. `eraseNode` closes the chain over
+    // the branch and gives its predecessor the branch's successors, so a branch with no sync
+    // successor at all leaves that predecessor's chain ending with nothing: the statement written
+    // after the branch is only ordered after it, by a control edge, and the effects written before
+    // the branch stop running with it (a recursion that prints in its own body drops the prints
+    // under `std::opt`). The branch is left standing, and the fold it costs is counted.
+    if (armChainHead == kInvalidNodeRef && !branchChainPreds.empty()) {
+        bool continues = false;
+        for (gc_node_ref_t user : draft.syncUsersOf(join)) {
+            if (user != brch && draft.alive(user) && !removed(user)) {
+                continues = true;
+                break;
+            }
+        }
+        if (!continues) {
+            keepBranchForEffects(brch, "its arm brings no chain and nothing waits on its place");
+            return false;
+        }
+    }
     if (armChainTail != kInvalidNodeRef) {
         armTail = armChainTail;
     }
@@ -784,12 +919,48 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
             entered = entered || !erasedByBranch(pred);
         }
+        bool placed = entered;
         if (!entered) {
             for (gc_node_ref_t pred : branchChainPreds) {
-                if (pred != armChainHead && pred != join && draft.alive(pred) && !removed(pred)) {
-                    chainTo(armChainHead, pred);
-                    break;
+                if (pred == armChainHead || pred == join || !draft.alive(pred) || removed(pred)) {
+                    continue;
                 }
+                // The place the branch stood in is its predecessor's chain exit, and the branch is
+                // that place's successor. A block's statements are one chain (5.3), and the chain a
+                // place may continue is the one whose successor is gone: the branch is one of the
+                // nodes erased below, so its successor slot is released before the arm's head takes
+                // it. Without this the head is left unentered whenever the arm's code is the only
+                // thing that keeps an effect of the arm reachable, and the effect stops running
+                // (the exemplar `05_effect_order`).
+                const gc_node_ref_t slot = camel::runtime::chainExitOf(draft, pred);
+                if (slot == kInvalidNodeRef || !draft.alive(slot) || removed(slot)) {
+                    continue;
+                }
+                const std::vector<gc_node_ref_t> slotUsers(
+                    draft.syncUsersOf(slot).begin(),
+                    draft.syncUsersOf(slot).end());
+                for (gc_node_ref_t user : slotUsers) {
+                    if (erasedByBranch(user) && draft.alive(user)) {
+                        draft.setSyncInputs(user, {});
+                    }
+                }
+                chainTo(armChainHead, pred);
+                placed = true;
+                break;
+            }
+        }
+        // The branch stood in no chain of its own: its place is the one derived from the edges it
+        // waits on. The arm's chain takes that place, and the statement that place continued
+        // follows the arm's tail instead -- the arm's code is the block's code now, so its
+        // statements come before what is written after the branch (5.7).
+        if (!placed) {
+            gc_node_ref_t slot       = kInvalidNodeRef;
+            const gc_node_ref_t heir = spliceHeir(&slot);
+            if (heir != kInvalidNodeRef && armChainTail != kInvalidNodeRef &&
+                draft.alive(armChainTail) && draft.alive(heir)) {
+                draft.setSyncInputs(heir, {});
+                (void)draft.appendChainStatement(heir, armChainTail);
+                chainTo(armChainHead, slot);
             }
         }
     }
@@ -1278,9 +1449,9 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         // A JOIN still closes its BRCH and carries the condition and selected arm's effects.
-        // A GATE with a sync predecessor carries a chain place. Neither is replaced by its value.
+        // A GATE that holds a place in a chain carries it. Neither is replaced by its value.
         if (const auto *h = draft.header(id);
-            h && (h->kind == GCNodeKind::Join || isSyncWaitingGate(transaction, id))) {
+            h && (h->kind == GCNodeKind::Join || holdsChainPlaceGate(transaction, id))) {
             continue;
         }
         const auto value = staticValueOf(transaction, id);

@@ -1,0 +1,81 @@
+/**
+ * The function a rewrite produces calls the functions its program holds, not the ones the program
+ * it was taken from holds: a rewritten function's callee is the callee the graph shows.
+ *
+ * `user` calls `target`, and the rule drops `target`'s `+ 1`. The rewritten `user` is a function
+ * value of the commit's program, whose version of `target` has no `+ 1`, so `q(5)` computes 5;
+ * the program the rewrite was taken from keeps its `target`, so `user(5)` still computes 6. The
+ * graph side says the same thing: `graphs_of(q)` has no `+ 1` in `target`, and `graphs_of(user)`
+ * has one. A chain (`chain` -> `mid` -> `deep`) is the same reading one call deeper, where the
+ * rewritten function is not the graph that changed.
+ */
+import { Rule, rewrite } from rewrite
+import { Graph, Node, constant, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { ends_with } from str
+
+rule drop_one(x: int) { x + 1 => x }
+
+func target(x: int): int {
+    return x + 1
+}
+
+func user(n: int): int {
+    return target(n)
+}
+
+func deep(x: int): int {
+    return x + 1
+}
+
+func mid(n: int): int {
+    return deep(n)
+}
+
+func chain(n: int): int {
+    return mid(n)
+}
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func isOne(n: Node): bool {
+    return match constant::<int>(n) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of a `target` or a `deep`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+func named(label: string, g: Graph): bool {
+    return name(g)->ends_with<label>
+}
+
+/// The graph of the function `label` that `p` reaches.
+func graphNamed::<F>(p: F, label: string): Graph {
+    let found = graphs_of(p)->filter<(g: Graph): bool => named(label, g)>
+    return found[0]
+}
+
+func main(): int sync {
+    let rules: Rule[] = [drop_one]
+    let q = user->rewrite<rules> !! user
+    println(`one: ${addOnes(graphNamed(q, 'target'))} ${q(5)}`)
+    let r = chain->rewrite<rules> !! chain
+    println(`two: ${addOnes(graphNamed(r, 'deep'))} ${r(5)}`)
+    println(`given: ${addOnes(graphNamed(user, 'target'))} ${user(5)}`)
+    return 0
+}

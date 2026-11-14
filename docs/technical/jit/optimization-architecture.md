@@ -161,10 +161,10 @@ std::vector<MIR> buffer;
 
 ## 7. 相关文件与索引
 
-- **当前已实现的 L2 形态**：字节码 → **MIR buffer**（线性指令序列，含 **V* 虚拟寄存器** 指令）→ **optimizeMirBuffer** → **pcToOffset**（按 MIR 编码长度）→ **linearScanVReg**（vreg→preg）→ **encodeMirBuffer**（MIR→x64 字节）。V* 包括：VLoadFromFrame、VStoreToFrame、VLoadFromMemAt、VLoadImm32/64、VCopy、VTest、VCmove、VCmovnz、VAdd、VSub、VMul、VIdiv、VCmpSetL/LE/G/GE/E/NE、VXmmLoad/Store、VXmmAdd/Sub/Mul/Div、VXmmCmpSet*、VAdd32～VIdiv32、VCmpSet*32、VXmm32* 等；详见 `mir.h` 与 `docs/jit/bytecode-to-asm.md` 第 4 节。
+- **当前已实现的 L2 形态**：字节码 → **MIR buffer**（线性指令序列，含 **V* 虚拟寄存器** 指令）→ **optimizeMirBuffer** → **pcToOffset**（按 MIR 编码长度）→ **linearScanVReg**（vreg→preg）→ **encodeMirBuffer**（MIR→x64 字节）。V* 包括：VLoadFromFrame、VStoreToFrame、VLoadFromMemAt、VLoadImm32/64、VCopy、VTest、VCmove、VCmovnz、VAdd、VSub、VMul、VIdiv、VCmpSetL/LE/G/GE/E/NE、VXmmLoad/Store、VXmmAdd/Sub/Mul/Div、VXmmCmpSet*、VAdd32～VIdiv32、VCmpSet*32、VXmm32* 等；详见 `mir.h` 与 `docs/technical/jit/bytecode-to-asm.md` 第 4 节。
 - **MIR 层**：`jit/mir/` — `mir.h` / `mir.cpp`（MirOp 定义、`mirToString`/`mirPrint`、`mirSizeBytes`）、`mir_builder.h`（字节码→MIR）、`mir_optimize.h` / `mir_optimize.cpp`（Win64 冗余 mov 删除）、`mir_encode.h` / `mir_encode.cpp`（MIR→字节，依赖 x64 Encoder + VRegAllocation）。
 - **寄存器分配**：`jit/regalloc/` — `collectVRegDefUse`、`linearScanVReg`，对 MIR 中所有 V* 做 def/use 收集与线性扫描，得到 vreg→preg。
 - **x64 后端**：`jit/backend/x64/` — `x64_backend.cpp`（字节码→MIR→优化→pcToOffset→linearScanVReg→编码）、`x64_encoder.h`（机器码编码与 prologue/call 序列）。
 - **Debug 打印 MIR**：`camel … std::opt::inline std::rmir` 输出带 pc/槽注释的 MIR；或在 `encodeMirBuffer` 前调用 `x64::mirPrint(mirBuf, std::cerr, &pcToOffset)`。
 - 架构总览：`docs/technical/07_jit_architecture.md`。
-- 字节码→汇编注解：`docs/jit/bytecode-to-asm.md`。
+- 字节码→汇编注解：`docs/technical/jit/bytecode-to-asm.md`。

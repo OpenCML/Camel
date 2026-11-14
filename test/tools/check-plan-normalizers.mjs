@@ -82,7 +82,7 @@ function* planFiles(dir, skipNestedTestTrees = false) {
 }
 
 // A child that is Python: named as the tool, or reached through the file it runs (the python
-// runner `test/tools/run.py`, or a `*.py` case).
+// runner `test/tools/cppexec/run.py`, or a `*.py` case).
 function runsPython(test) {
     if (test.tool === 'python') {
         return true

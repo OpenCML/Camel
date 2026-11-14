@@ -56,6 +56,8 @@
 // library-only row, and a new `setRule` with no law beside it is an engine-only row.
 //
 //   node scripts/vjp-parity.mjs                  check: the tree's differences are the list
+//   node scripts/vjp-parity.mjs --strict         the same check, and a row that holds no
+//                                                difference is a failure (see `stale` below)
 //   node scripts/vjp-parity.mjs --tables         print the three tables and decide nothing
 //   node scripts/vjp-parity.mjs --json           the same as --tables, as JSON
 //   node scripts/vjp-parity.mjs --root DIR       read a tree other than this one (the self-test)
@@ -64,6 +66,22 @@
 // Exit: 0 when every difference is exempt, 1 when one is not, 2 when the tree cannot be read
 // (a missing file, a ruleset that files no rule at all -- a reader that stopped matching must
 // fail rather than report a clean tree).
+//
+// ---- `stale`, and why the count is printed every time ----------------------------------------
+//
+// The check above is one-directional: a difference with no row is debt, a row with no difference
+// is silence. Silence is the wrong reading. A row that has outlived its difference still carries
+// an owner and a reason, so to every reader it looks exactly like a live row -- the list grows,
+// and the day someone asks "what is `gelu` still exempt from" the answer is nothing, said in the
+// same three fields as the rows that are real. That is the shape of a lookup that answers with a
+// plausible value because the true one is not there.
+//
+// So every reading prints `stale=<n>`: how many rows name a marker the tree's differences no
+// longer carry. `--strict` turns that count into an exit code, for the gate; the default reading
+// prints it and stays green, because a lane may be looking at a tree whose library and engine
+// moved one commit apart, and a hard red there would be refused rather than read. The two
+// readings are one number apart on purpose: the number is always there, and failing on it is a
+// decision the caller makes by name.
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -147,6 +165,9 @@ if (rootOption && rootOption.error) {
 const ROOT = path.resolve(rootOption)
 const TABLES = process.argv.includes('--tables')
 const JSON_MODE = process.argv.includes('--json')
+// `stale > 0` is a failure only when asked for by name: the count is reported either way, and the
+// default reading stays green so a mid-merge tree can still be read.
+const STRICT = process.argv.includes('--strict')
 const DEFAULT_EXEMPTIONS = path.join(ROOT, 'scripts', 'vjp-parity-exemptions.tsv')
 const exemptionsOption = option('--exempt', DEFAULT_EXEMPTIONS)
 if (exemptionsOption && exemptionsOption.error) {
@@ -736,12 +757,13 @@ if (JSON_MODE) {
                 engineOnly: rows.engineOnly,
                 newDebt: newDebt.map((row) => row.key),
                 stale: stale.map((row) => row.marker),
+                staleCount: stale.length,
             },
             null,
             2
         )
     )
-    process.exit(newDebt.length === 0 ? 0 : 1)
+    process.exit(newDebt.length === 0 && !(STRICT && stale.length > 0) ? 0 : 1)
 }
 
 const where = (rule) => `${rule.file}#${rule.symbol}`
@@ -771,7 +793,7 @@ if (TABLES) {
     }
     console.log('')
     console.log(`${exemptions.length} exemption(s) in the list, ${stale.length} of them stale`)
-    process.exit(newDebt.length === 0 ? 0 : 1)
+    process.exit(newDebt.length === 0 && !(STRICT && stale.length > 0) ? 0 : 1)
 }
 
 if (newDebt.length > 0) {
@@ -803,12 +825,25 @@ if (stale.length > 0) {
                 `exempt and is no longer a difference: the row can go`
         )
     }
+    if (STRICT) {
+        // The list is the account, and a row that holds nothing makes the account longer than the
+        // fact it accounts for. `--strict` is the gate's reading: the count printed below is the
+        // same number, and this is the one place that spends it.
+        console.log(
+            `FAIL ${stale.length} exemption row(s) hold no difference: the list has ` +
+                `${exemptions.length} row(s) and the tree's differences carry ` +
+                `${new Set([...rows.libraryOnly, ...rows.engineOnly].map((row) => row.head)).size} ` +
+                `distinct marker(s). A dead row reads exactly like a live one, so it goes (drop ` +
+                `--strict to report this and still exit 0)`
+        )
+        process.exit(1)
+    }
 }
 console.log(
     `PASS the two derivative tables differ only where the list says so: ${library.rules.length} ` +
         `law(s) filed under ${libraryKeys.size} key(s), ${engine.length} engine registration(s) ` +
         `under ${engineKeys.size + engineUnkeyed.size} key(s), ${rows.both.length} key(s) both ` +
         `answer, ${rows.libraryOnly.length} library-only and ${rows.engineOnly.length} engine-only ` +
-        `exempt, 0 new`
+        `exempt, 0 new, stale=${stale.length}`
 )
 process.exit(0)

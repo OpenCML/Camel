@@ -174,7 +174,7 @@ template <std::floating_point T> T ieeeMax(T a, T b) {
 /// `math::min` and `math::max` of two int32 or int64 values (math:min_i, math:min_l and their max
 /// forms): the smaller and the larger of the two. These are the plain comparison and not the IEEE
 /// one above, because neither type has a NaN to answer nor a signed zero to order -- the library
-/// says the same thing of them (modules/math/minmax.h: the IEEE branch is for the floats, and the
+/// says the same thing of them (camel/core/math/minmax.h: the IEEE branch is for the floats, and the
 /// rest is `a < b ? b : a`).
 template <std::signed_integral T> T intMin(T a, T b) {
     return b < a ? b : a;

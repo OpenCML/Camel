@@ -1,0 +1,42 @@
+# The gpu cases that are red today, so that the gate can tell a known red from a new one.
+#
+# Read by internal/tools/camel-remote.ps1, the `gpu-plans` observation: one case name per line, in the
+# shape `node scripts/test.js test/plans/gpu --jobs 8 --tier all` prints it (`[FAIL] <name> ...`), and
+# `#` starts a line that is provenance rather than an entry. The header of that script states the
+# rule this file is the other half of.
+#
+# A name here is a KNOWN red: the gate prints it on every run, and it decides nothing -- a bit-exactness
+# assertion that moves with the driver or with whoever else is on the card must not block a merge
+# (docs/test-plans.md, "CUDA visibility" and "A card that is not device 0"). A red the file does not
+# name is news, and news makes the run exit 5. That asymmetry is the point: a report-only list that is
+# allowed to grow is a list nobody reads, and the cases below stayed red for weeks because nothing had
+# to notice them.
+#
+# Two rules for editing it:
+#   * add a name only when the case is red on this host for a reason that is not the code's -- the
+#     driver, a co-tenant on the card, the device state. A case that is red because Camel is wrong
+#     belongs in a fix, not in this file;
+#   * delete a name as soon as the case is fixed. A stale entry is accepted as it is and the run says
+#     the file can be trimmed, so deleting one can never be what turns the gate red.
+#
+# The reading that wrote this list: `check=gpu-plans total=145 pass=129 fail=16 skip=0` from
+# `node scripts/test.js test/plans/gpu --jobs 8 --tier all` on this lane's tree -- three cases of
+# gpu.tiles and thirteen of gpu.tiles_regions, the two layers that need a card. It is a starting
+# reading, not a claim that these sixteen are all environmental; each one is a fix owed.
+
+grad_expand.untagged_graph_keeps_the_runtime_operator
+multi_state_loop_device
+outlined_execution.fvm
+outlined_execution.jit
+outlined_execution.nvm
+outlined_execution.prl
+outlined_resident_execution.fvm
+outlined_resident_execution.jit
+outlined_resident_execution.nvm
+outlined_resident_execution.prl
+preferred_resident_execution.fvm
+preferred_resident_execution.jit
+preferred_resident_execution.nvm
+preferred_resident_execution.prl
+resident_graph_transfers
+static_loop_device

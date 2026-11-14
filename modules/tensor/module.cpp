@@ -65,7 +65,7 @@ class TensorExecutor : public Executor {
 /// type is a claim the value can contradict: the answer is the element itself when the reduction
 /// leaves rank 0 (design principles 5.4), and a cotangent typed array over a value that has no
 /// rank is read as a pointer (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`, and
-/// docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its
+/// docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its
 /// signature is computed, and it is recorded in `stdlib/signatures/tensor.cml`.
 ///
 /// `sum_stated` and `take_stated` stay declared: neither can answer an element. A stated sum is

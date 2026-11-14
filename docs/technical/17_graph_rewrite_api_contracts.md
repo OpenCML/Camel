@@ -146,7 +146,7 @@
 
 7. 每个 `FUNC` 的普通实参数与 `with` 实参数等于被调图的端口数。
 
-旧的 `src/compile/gir/validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
+旧的 `src/compile/gir/` 下的 `validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
 已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
 测试用的故障注入遍（`src/passes/test/fault.cpp`）是只供测试的遍：在流水线里写出名字即可用，没有任何环境变量门控，

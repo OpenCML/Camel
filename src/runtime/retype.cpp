@@ -162,6 +162,9 @@ GraphTypeSubstitution::GraphTypeSubstitution(std::span<const Pair> pairs)
     : pairs_(pairs.begin(), pairs.end()) {}
 
 void GraphTypeSubstitution::replace(TypeId from, TypeId to) {
+    // `kNoTypeId` is what a type the table does not hold answers, so an entry naming it would name
+    // every such type. That entry has to be kept by address instead (`replace(Type *, Type *)`).
+    ASSERT(from != kNoTypeId, "A substitution cannot name a type by the id it does not have.");
     for (Pair &pair : pairs_) {
         if (pair.first == from) {
             pair.second = to;
@@ -173,12 +176,35 @@ void GraphTypeSubstitution::replace(TypeId from, TypeId to) {
 
 void GraphTypeSubstitution::replace(Type *from, Type *to) {
     ASSERT(from != nullptr && to != nullptr, "A type substitution needs two types.");
-    replace(from->typeId(), to->typeId());
+    // A type the table does not hold has no id (`kNoTypeId` answers for every one of them), so the
+    // entry names the object: naming it by that sentinel would rewrite every un-interned type in
+    // the program (retype.h).
+    if (from->isInterned() && to->isInterned()) {
+        replace(from->typeId(), to->typeId());
+        return;
+    }
+    for (SameObjectPair &pair : sameObject_) {
+        if (pair.first == from) {
+            pair.second = to;
+            return;
+        }
+    }
+    sameObject_.emplace_back(from, to);
 }
 
 Type *GraphTypeSubstitution::apply(Type *type) const {
-    if (type == nullptr || pairs_.empty()) {
+    if (type == nullptr) {
         return type;
+    }
+    if (pairs_.empty() && sameObject_.empty()) {
+        return type;
+    }
+    // The object's own entry first: a type the table does not hold is told apart from its equals by
+    // where it is, not by an id it does not have.
+    for (const SameObjectPair &pair : sameObject_) {
+        if (pair.first == type) {
+            return pair.second;
+        }
     }
     for (const Pair &pair : pairs_) {
         if (pair.first == type->typeId()) {

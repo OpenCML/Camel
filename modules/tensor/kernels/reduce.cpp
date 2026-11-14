@@ -15,7 +15,7 @@
 #include "minmax.h"
 #include "parallel.h"
 
-#include "modules/math/mean.h"
+#include "camel/core/math/mean.h"
 
 #include <algorithm>
 #include <cmath>
@@ -213,7 +213,7 @@ Array *reduceAxis(
                 // `sum` uses -- f64 from +0 in ascending order for every float element type, the
                 // exact int64 accumulator (wrapping) for integers, converted to f64 once -- then
                 // divided by the extent in f64, and the quotient converted into the element type
-                // once by `meanValue<T>` (modules/math/mean.h, the one copy the `array` module's
+                // once by `meanValue<T>` (camel/core/math/mean.h, the one copy the `array` module's
                 // reduction calls too). An integer lane therefore answers `int(sum / numel)`:
                 // `[1, 2, 4]` gives `2`. A lane with no element divides 0.0 by 0.0: the
                 // canonical NaN.

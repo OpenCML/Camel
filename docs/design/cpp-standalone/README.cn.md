@@ -127,7 +127,7 @@
   └─ 发射       类型声明（元组、结构体、闭包）→ site 表 → 函数的前向声明 → 函数体 → 入口
 ```
 
-源文件（`src/passes/trans/cpp/`）按这几步分开：`program_emitter`（程序分析与整体布局）、`function_emitter`（一张图的块、分支、语句）、`cpp_types`（类型到 C++ 的映射与聚合类型的声明、常量的字面量）、`operator_rules`（算子译法表）、`fault_sites`（故障位置与报告文字）、`bridge`（运行时模块的边界）。今天的 `runtime_emitter.cpp`、`lower.cpp`（那张没有调用点的表）与 `include/camel/passes/trans/cpp/cpp_bridge.h` 的大部分随之删除。
+源文件（`src/passes/trans/cpp/`）按这几步分开：`program_emitter`（程序分析与整体布局）、`function_emitter`（一张图的块、分支、语句）、`cpp_types`（类型到 C++ 的映射与聚合类型的声明、常量的字面量）、`operator_rules`（算子译法表）、`fault_sites`（故障位置与报告文字）、`bridge`（运行时模块的边界）。今天的 `runtime_emitter.cpp`、`lower.cpp`（那张没有调用点的表）与 `include/camel/passes/trans/cpp/` 下的 `cpp_bridge.h` 的大部分随之删除。
 
 转译器只经过一处取算子的 URI（`operatorUri(graph, node)`）：图存储线合入后 `OPER` 节点带的是 `OperId`，那时只改这一处，并且改为从算子表项读纯度、`mayFault` 与 `callsGraphs`（图数据模型 3.5 的 `OPER` 卡片），转译器自己的表只剩“怎么写成 C++”。
 
@@ -434,7 +434,7 @@ const rt::Array<double> v5 = op_4.call<rt::Array<double>>(site_4, {rt::bridge::a
 
 **张量。** 张量是 `T[...]`，第 4 节那一行的原生数组，所以在桥上做的事和别的数组一样：结果从运行时的张量拷成程序自己的 `rt::Array<T>`（元素逐个按值取、维数一起带过来），需要时实参再拷回去。转换要拷贝，这一点接受；以后要零拷贝共享存储，那是不改语义的优化。于是 `println` 一个张量就是打印 `rt::Array`，嵌套格式与解释器逐字一致——同一个类型只有一种表示，值从哪个模块来不改变它。
 
-构建一个张量（`tensor:ones`、`tensor:zeros`）不是过桥，是写一个数组：形状是调用给的那个 `int[]`，元素类型是调用写明的那个 `T`，`rt::filledArray<T>(shape, fill, "<算子名>", site)` 把它建出来，所以这样的程序不链接运行时。元素类型就是张量模块存得下的那六种（f32、f64、i32、i64、bf16、f16），没有第二种写法：`bf16`、`f16` 的元素是 `rt::BF16`、`rt::F16`，填充值按自己的类型舍入一次，与 `[bf16(1.0), …]` 是同一个 `rt::Array`。其余的元素类型到不了这里，而且挡住它们的是语言、不是这个目标：签名写 `when is_numeric::<T>()`，而 `is_numeric::<string>()`、`is_numeric::<bool>()` 都是 false，所以哪个后端上都没有字符串或布尔的张量（`std::fvm` 给的是同一句 `NoMatchingFunction`）；`c64`/`c128` 虽然 `is_numeric` 说是真，连签名也不匹配——那份不一致归作者裁（`docs/handover/questions/questions-2026-10-31-can-a-tensor-hold-a-complex.md`）。因此规则里的 `default` 是一段不会走的兜底，不是它拒绝了谁。
+构建一个张量（`tensor:ones`、`tensor:zeros`）不是过桥，是写一个数组：形状是调用给的那个 `int[]`，元素类型是调用写明的那个 `T`，`rt::filledArray<T>(shape, fill, "<算子名>", site)` 把它建出来，所以这样的程序不链接运行时。元素类型就是张量模块存得下的那六种（f32、f64、i32、i64、bf16、f16），没有第二种写法：`bf16`、`f16` 的元素是 `rt::BF16`、`rt::F16`，填充值按自己的类型舍入一次，与 `[bf16(1.0), …]` 是同一个 `rt::Array`。其余的元素类型到不了这里，而且挡住它们的是语言、不是这个目标：签名写 `when is_numeric::<T>()`，而 `is_numeric::<string>()`、`is_numeric::<bool>()` 都是 false，所以哪个后端上都没有字符串或布尔的张量（`std::fvm` 给的是同一句 `NoMatchingFunction`）；`c64`/`c128` 虽然 `is_numeric` 说是真，连签名也不匹配——那份不一致归作者裁（`docs/handover/reviews/questions-2026-10-31-can-a-tensor-hold-a-complex.md`）。因此规则里的 `default` 是一段不会走的兜底，不是它拒绝了谁。
 
 **不透明对象**（`PyObject`、`Device<T>`）在语言里本来就不可拆开，独立的一侧写不出比名字更多的东西，只能由运行时拿着。它们在生成的程序里是 `rt::Foreign`：一个带计数的句柄，里面是一个 `mm::RootHandle`。计数减到零时释放 `RootHandle`，对象交回运行时的回收器。生成的程序在桥调用之间（此时它不拿着任何运行时的裸指针）调用一次 `mm::safepoint()`，回收器可以运行。这样“运行时对象只经句柄接触”（10.5）在生成的代码里同样成立。
 
