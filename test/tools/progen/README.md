@@ -280,12 +280,20 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   as reduced programs with their expected output, not as seeds.
 - **A seed is left out when a pass crashes on it.** The check batch holds seeds whose every
   cell passes, so a seed that stops being green is listed in `progen.py`'s `CHECK_EXCLUDED`
-  with what it shows: seed 4 of `generate.VERSION` 8 makes `std::opt::inline` end in SIGSEGV,
-  which is not something the front end says about the program and not something the generator
-  can avoid without dropping a shape the language accepts. Left out is not absent: the test plan
-  runs that seed on its own in `progen_known_crash`, a known failure, so every run of the plan
-  prints `seed 4 [inline@nvm]: CRASH` instead of passing over it, and the entry turns red if the
-  crash goes away or starts failing differently.
+  with what it shows, and left out is not absent: the test plan runs that seed on its own in a
+  fast-layer entry (`progen_seed_4` today), so the reading appears on every merge instead of
+  passing over it. `CHECK_EXCLUDED` is empty today. Its last entry was seed 4 of
+  `generate.VERSION` 8, which made all four cells of `std::opt::inline` end in SIGSEGV -- not
+  something the front end says about the program and not something the generator can avoid
+  without dropping a shape the language accepts -- until `edeaa9c41` laid a spliced body's wait
+  before the loop's first round; `test/cases/opt/inline/loop_wait_after_inline.cml` is its
+  25-line reduction.
+- **A seed number is not a program.** `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing seeds are
+  other programs") re-pointed every seed at another program, so a finding recorded as "seed 26"
+  alone names nothing a later version generates: the record survives, the program it named does
+  not. Every record of a seed therefore carries the generator version with it -- the entries of
+  `CHECK_EXCLUDED` (in the comment above it and in the entry itself), the plan's entries, and the
+  notes here.
 - **One program in fifty is still refused by the front end.** `SemanticDiag::GenericFunctionAsValue`
   is a generic function given a position that does not fix its type variables; seed 32 under
   `generate.VERSION` 8 shows it, seed 49 under version 7, so about one program in fifty and none
