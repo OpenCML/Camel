@@ -83,8 +83,8 @@ rtdata::Object *ProofObject::cloneImpl(mm::IAllocator &allocator, const Type *, 
 }
 
 void ProofObject::printImpl(std::ostream &os, const Type *) const {
-    os << "derivation under supplied rules; protect_effects="
-       << (record_->protection.effects ? "true" : "false")
+    os << "derivation under supplied rules; protect_order="
+       << (record_->protection.order ? "true" : "false")
        << ", protect_faults=" << (record_->protection.faults ? "true" : "false")
        << "; not a proof of full observational equality\n";
     if (chain_) {

@@ -1946,9 +1946,9 @@ DraftWritings::build(const Pattern &pattern, const Match &match, const DraftNode
 /// or a write of a variable that outlives the running function (design principles 9.7). Those are
 /// kept by the region or the exit that holds them, and only the graph interface's dedicated
 /// effect-deleting operation removes one, so this engine refuses the discard instead of letting a
-/// guard decide it: `protect_effects` does not reach them, and `protect_faults` is what the caller
-/// still chooses. A computation whose value nobody reads and which does neither is the one the
-/// guards are about.
+/// guard decide it: `protect_order` reaches the order a computation carries and not them, and
+/// `protect_faults` is what the caller still chooses. A computation whose value nobody reads and
+/// which does neither is the one the guards are about.
 bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
     std::vector<gc_node_ref_t> work{node};
     std::vector<gc_node_ref_t> seen;
@@ -1963,8 +1963,11 @@ bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
         if (h == nullptr || !draft_.alive(at)) {
             continue;
         }
-        // Keep the conservative compatibility guard when both protections are selected.
-        if (protection_.effects && protection_.faults &&
+        // The order guard keeps the computations whose place in the order is not the program's to
+        // drop: one that carries an ordering edge, one something waits on, one whose value is
+        // written in place. It asks only when the fault guard is selected too -- the conservative
+        // compatibility guard the two selections have always bought together.
+        if (protection_.order && protection_.faults &&
             (carriesOrdering(draft_, at, true) || !draft_.waitInputsOf(at).empty() ||
              writtenInPlace(at))) {
             return false;
@@ -2560,8 +2563,8 @@ RuleMiss DraftWritings::whyNot(const Rule &rule, gc_node_ref_t node) {
         miss.detail = std::format(
             "the discarded computation is an external access or a write that outlives the call, "
             "which no selected guard deletes, or the selected guards reject it "
-            "(protect_effects={}, protect_faults={})",
-            protection_.effects,
+            "(protect_order={}, protect_faults={})",
+            protection_.order,
             protection_.faults);
         return miss;
     }

@@ -1162,7 +1162,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool, protect_effects: bool, protect_faults: bool, ordered: bool> (f: F) => F!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool, protect_order: bool, protect_faults: bool, ordered: bool> (f: F) => F!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"

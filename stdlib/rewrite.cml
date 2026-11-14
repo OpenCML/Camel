@@ -95,7 +95,9 @@ export type CheckReport = { rows: CheckRow[] }
 /// `ordered: true` preserves operand positions throughout the pattern, including after guard
 /// rejection. The default also searches declared commutative and exact associative alternatives.
 /// `protect_faults` selects the conservative local deletion guard for a computation that may
-/// fault. `protect_effects` does not decide whether an external access or a final write to a
+/// fault. `protect_order` selects the guard for a computation whose place in the order is not the
+/// program's to drop -- one that carries an ordering edge, one something waits on, one whose value
+/// is written in place. Neither decides whether an external access or a final write to a
 /// variable that outlives the call may be dropped: the graph that holds them keeps them
 /// (design principles 9.7), so no choice here removes one, while remaining users and
 /// synchronization can still demand the input.
@@ -104,13 +106,13 @@ export type CheckReport = { rows: CheckRow[] }
 /// @example-fragment a rule set comes from the caller
 /// @example f->rewrite<rules>
 #op('rewrite:rewrite')
-with <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false>
+with <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false>
 export func rewrite::<F>(f: F): F! when is_function::<F>()
 
 /// Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
 /// every writing the saturation found; `extract` chooses among them. `protect_faults` selects
 /// candidate admission, and a candidate that would drop an external access or a final write to a
-/// variable that outlives the call is never admitted, whatever `protect_effects` says (design
+/// variable that outlives the call is never admitted, whatever `protect_order` says (design
 /// principles 9.7). Extraction cannot restore protection disabled during saturation.
 /// The resulting alternatives are derivations under the rules, not full observational equalities.
 /// `ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
@@ -119,7 +121,7 @@ export func rewrite::<F>(f: F): F! when is_function::<F>()
 /// @example-fragment a rule set comes from the caller
 /// @example f->saturate<rules, rounds: 20>
 #op('rewrite:saturate')
-with <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false>
+with <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false>
 export func saturate::<F>(f: F): F! when is_function::<F>()
 
 /// Chooses one writing of every value that has several, the one of least total cost. The cost of
@@ -140,7 +142,7 @@ export func extract::<F>(f: F): F! when is_function::<F>()
 /// @example-fragment a rule set comes from the caller
 /// @example f->run<rules, rounds: 8, explain: true>
 #op('rewrite:run')
-with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false>
+with <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false>
 export func run::<F>(f: F): Run<F>! when is_function::<F>()
 
 // ---- checking rules ----
