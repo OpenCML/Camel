@@ -35,8 +35,12 @@ namespace camel::execute {
 /**
  * The programs a back end runs graphs of: the one it was given and those of the function
  * values it meets (a function made in another program, such as a gradient the program built
- * while it ran). A frozen graph names the graphs it calls by id; the back end resolves them in
- * the program that holds the graph version, found here.
+ * while it ran). A frozen graph names the graphs it calls by id, and those ids mean the table
+ * of one program: the one that carries the graph. A caller that has the function value passes
+ * `function->program()` to call() and that is the answer (the value names its program, and
+ * `graphOf` returns the version that program holds); `of` is what is left for a graph no value
+ * names -- a root the run was handed -- and it answers with the program the run was given when
+ * that program holds the version.
  */
 class RunPrograms {
   public:
@@ -58,7 +62,12 @@ class RunPrograms {
         return function->graph();
     }
     void note(const camel::runtime::Program *program);
-    /// The program that holds this version of `graph`.
+    /// The program that holds this version of `graph`. A pass that has the function value in
+    /// hand must hand `function->program()` to call() instead: the value names the program it
+    /// was made in, while this can only look for a program that holds the version -- and a
+    /// version reached from a run-time table (the lambda a closure makes, a gradient) is held by
+    /// more than one program, so "who holds it" is not the same question as "whose table are
+    /// these ids read in". See the file comment.
     const camel::runtime::Program &of(const camel::runtime::GCGraph *graph) const {
         if (main_ != nullptr && main_->contains(graph)) {
             return *main_;

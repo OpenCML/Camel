@@ -317,7 +317,12 @@ slot_t NodeVMSchedPass::call(
         const camel::runtime::ExecPlan *currPlan = &currRuntimeGraph->execPlan();
         std::span<const gc_node_ref_t> currNodes = currPlan->topo;
         const camel::runtime::ExecNode *currRecords = currPlan->nodes().data();
-        // The program the running graph belongs to: its direct callees are in it.
+        // The program the running graph belongs to: its direct callees are in it. A root graph
+        // runs in the program the back end was given; a graph reached through a function value
+        // runs in the program that value names (every call below passes `->program()` of the
+        // value it came from), which is not the same question as which program holds the
+        // version: a version a closure makes at run time, or a rewrite commits, is held by more
+        // than one program, and only the value says whose table its ids are read in.
         const camel::runtime::Program *currProgram =
             rootProgram != nullptr ? rootProgram : &programs_.of(currRuntimeGraph);
 
@@ -626,7 +631,7 @@ slot_t NodeVMSchedPass::call(
                     currRuntimeGraph,
                     nodeRef);
 
-                slot_t callResult = call(funcRuntimeGraph, funcFrame);
+                slot_t callResult = call(funcRuntimeGraph, funcFrame, func->program());
                 if (n->dataIndex != 0) {
                     currFrame->set(n->dataIndex, callResult);
                 }
@@ -963,7 +968,7 @@ void NodeVMSchedPass::evalMarkedOperator_map_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(programs_.graphOf(func), frame);
+        slot_t result = call(programs_.graphOf(func), frame, func->program());
         currFrame.get<Array *>(resultSlot)->set<slot_t>(i, result, resultType);
     }
 }
@@ -992,7 +997,7 @@ void NodeVMSchedPass::evalMarkedOperator_filter_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        slot_t result = call(programs_.graphOf(func), frame);
+        slot_t result = call(programs_.graphOf(func), frame, func->program());
         if (fromSlot<bool>(result)) {
             Array *target = currFrame.get<Array *>(resultSlot);
             target->append(currFrame.get<Array *>(arrSlot)->getSlot(i), resultType);
@@ -1028,7 +1033,7 @@ void NodeVMSchedPass::evalMarkedOperator_reduce_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(args, 2));
-        currFrame.set(resultSlot, call(programs_.graphOf(func), frame));
+        currFrame.set(resultSlot, call(programs_.graphOf(func), frame, func->program()));
     }
 }
 
@@ -1050,7 +1055,7 @@ void NodeVMSchedPass::evalMarkedOperator_foreach_arr(
         requireRecursionRoom(graph);
         Frame *frame = framePool_.acquire(programs_.graphOf(func));
         bindMarkedFunctionFrame(frame, func, std::span<const slot_t>(&element, 1));
-        call(programs_.graphOf(func), frame);
+        call(programs_.graphOf(func), frame, func->program());
     }
     currFrame.set(dataIndexOf(graph, nodeRef), NullSlot);
 }
@@ -1084,7 +1089,7 @@ void NodeVMSchedPass::evalMarkedOperator_isolate(
     slot_t value = NullSlot;
     try {
         camel::core::error::FaultIsolationScope boundary;
-        value = call(target, frame);
+        value = call(target, frame, func->program());
     } catch (const Diagnostic &fault) {
         if (!camel::core::error::isIsolatedFault(fault)) {
             throw;
@@ -1151,7 +1156,7 @@ slot_t NodeVMSchedPass::evalNativeOperator(
             auto *target = programs_.graphOf(function);
             Frame *frame = framePool_.acquire(target);
             bindMarkedFunctionFrame(frame, function, normalArgs, withArgs);
-            return call(target, frame);
+            return call(target, frame, function->program());
         };
     }
     camel::execute::FunctionCallScope callScope(*context_, std::move(invoker));
