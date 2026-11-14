@@ -280,6 +280,8 @@ bool kindsRegionEntersWithPorts(GCRegionKind kind) {
 
 /// A frozen graph, read the way the graph space lays it out.
 struct FrozenGraphView {
+    explicit FrozenGraphView(const GCGraph &frozen) : graph(frozen) {}
+
     const GCGraph &graph;
 
     bool isNamed(gc_node_ref_t ref) const {
@@ -326,13 +328,37 @@ struct FrozenGraphView {
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         return graph.normInputsOf(ref);
     }
-    /// Any reader counts here: a frozen graph has no live set yet (`GCGraph::liveNodeCount` counts
-    /// the nodes that are not Dead, which is a payload size, not what the program can still see --
-    /// see docs/handover/questions/2026-11-15-live-node-count-is-not-the-live-set.cn.md). Until
-    /// that set exists this face answers the conservative way: a write some reader reads is not
-    /// called dead, so nothing is deleted on the strength of a set that was never computed.
+    /// Whether a value the write leaves is read by a reader the program can still see. A reader the
+    /// live set does not reach -- a closure definition nothing calls -- reads a value nobody will
+    /// ever look at; counting it is what kept a dead write alive, and it is why a graph whose only
+    /// last reader was dropped used to be refused by its own credential check with "has effect node
+    /// N with neither a read of its value nor a place in its chain". The criterion, in one line: a
+    /// write may be called dead when it is no root and every node that reads it lies outside this
+    /// set. The set is asked here, once per view, from `camel::runtime::liveNodesOf` -- the same walk
+    /// the draft face asks, one kernel behind both.
     bool isRead(gc_node_ref_t ref) const {
-        return !graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty();
+        const auto normUsers = graph.normUsersOf(ref);
+        const auto withUsers = graph.withUsersOf(ref);
+        if (normUsers.empty() && withUsers.empty()) {
+            return false;
+        }
+        if (!live_.has_value()) {
+            live_ = camel::runtime::liveNodesOf(graph);
+        }
+        auto isLive = [this](gc_node_ref_t user) {
+            return std::binary_search(live_->begin(), live_->end(), user);
+        };
+        for (gc_node_ref_t user : normUsers) {
+            if (isLive(user)) {
+                return true;
+            }
+        }
+        for (gc_node_ref_t user : withUsers) {
+            if (isLive(user)) {
+                return true;
+            }
+        }
+        return false;
     }
     bool isGate(gc_node_ref_t ref) const {
         if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
@@ -341,6 +367,11 @@ struct FrozenGraphView {
         const GCNode *node = graph.node(ref);
         return node != nullptr && node->kind == GCNodeKind::Gate;
     }
+
+  private:
+    /// The live set of this graph, asked once per view: the walk is `camel::runtime::liveNodesOf`,
+    /// so this face and the draft face answer the same question from the same code.
+    mutable std::optional<std::vector<gc_node_ref_t>> live_;
 };
 
 /// A draft under rewrite, read the way the transaction holds it: the same questions, spelled the
