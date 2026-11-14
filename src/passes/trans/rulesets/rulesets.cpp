@@ -62,8 +62,70 @@ void answerOne(const std::string &question, std::ostream &os) {
 
 } // namespace
 
+namespace {
+
+// One component of a rule's right-side signature, with whether the type table holds it. `absent`
+// says the signature has no such component (no result type decided, a hole the declaration did not
+// type); it is not the same answer as `no`, which is a type that exists and is not in the table.
+void printComponent(std::ostream &os, const std::string &graph, const std::string &slot,
+                    camel::core::type::Type *type) {
+    os << "SIG " << graph << ' ' << slot;
+    if (type == nullptr) {
+        os << " interned=absent\n";
+        return;
+    }
+    os << " interned=" << (type->isInterned() ? "yes" : "no") << " type=" << type->toString();
+    // A signature the table does not hold is open (intern.h: an open signature is the builder's
+    // working object), and that is the second half of the reading: the type exists, it is named,
+    // and it has no id because the table never holds this shape of it.
+    if (type->code() == camel::core::type::TypeCode::Function) {
+        const auto *signature = static_cast<const camel::core::type::FunctionType *>(type);
+        os << " open=" << (signature->isOpen() ? "yes" : "no")
+           << " exit=" << (signature->hasExitType() ? "yes" : "no");
+    }
+    os << '\n';
+}
+
+// Every component of one rule's right side: the result and each parameter of the signature the
+// program holds for it. The graph is the rule's right side itself (`<rule>__rhs`, under the scope it
+// was written in when it was written in a module), so this is the signature a frozen graph records
+// -- the one whose components a `TypeId` key compares.
+void printSignature(const camel::runtime::GCGraph &graph, std::ostream &os) {
+    const camel::core::type::FunctionType *signature = graph.funcType();
+    if (signature == nullptr) {
+        os << "SIG " << graph.name() << " signature=none\n";
+        return;
+    }
+    const std::string name = graph.name();
+    printComponent(os, name, "exit", signature->exitType());
+    for (size_t i = 0; i < signature->withTypesCount(); ++i) {
+        printComponent(os, name, "with " + std::to_string(i), signature->withTypeAt(i));
+    }
+    for (size_t i = 0; i < signature->normTypesCount(); ++i) {
+        printComponent(os, name, "norm " + std::to_string(i), signature->normTypeAt(i));
+    }
+}
+
+// A rule's right side is the graph the front end named `<rule>__rhs` (`builder_generics.cpp`).
+bool isRhsGraph(const camel::runtime::GCGraph &graph) {
+    const std::string &name = graph.name();
+    const size_t side       = name.rfind("__");
+    return side != std::string::npos && name.compare(side, std::string::npos, "__rhs") == 0;
+}
+} // namespace
+
 const camel::runtime::Program *
 RulesetsPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    // Every right side the program holds, before the index below: a rule's right side is a graph of
+    // its own, and the question `sig=true` answers is about the graphs, not about the index entry
+    // that names one.
+    if (sig_) {
+        for (const camel::runtime::GCGraph *graph : program->graphs()) {
+            if (isRhsGraph(*graph)) {
+                printSignature(*graph, os);
+            }
+        }
+    }
     for (const std::string &family : camel::parse::ast::ruleFamilies()) {
         for (const auto &entry : camel::parse::ast::rulesOf(family)) {
             os << "RULESET " << family << ' ' << entry.head << '/' << entry.arity << " -> "

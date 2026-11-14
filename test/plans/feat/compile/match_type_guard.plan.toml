@@ -1,0 +1,61 @@
+id = "compile.match_type_guard"
+order = 1009
+tier = "fast"
+tags = ["feat", "compile", "match_type", "when"]
+desc = "A `match type` case may carry a guard (`case pattern when predicate`): the case is taken when its pattern selects the subject and the predicate holds, and one whose guard does not hold falls through to the case written after it. The predicates stay in Camel -- the default arm of `ShapeOf` asks `is_numeric` -- and their answers are cached by function and type arguments. Before this change `when` was a syntax error in a case and `ShapeOf<string>` quietly answered `int[0]`."
+
+# The readings the four criteria of this step ask for, in the order the ruling gives them:
+# (1) a type function that divides by structure and then by property, in both positions;
+# (2) `ShapeOf<string>` refused, where it used to answer `int[0]`;
+# (3) the same predicate and type arguments evaluated once, however many cases ask;
+# (4) the library's default arms, which case 1 and case 2 both reach.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "match_type.guard_dispatch"
+desc = "The shape words decide first (`case array`, `case struct`) and the guards decide the leaves: `int`, `f64` and `c64` are `is_numeric`, `string` and `bool` are only `is_ordered`, so a guard that refuses its subject leaves it to the case written after it (`FamilyOf<string>`), and the only unguarded `case _` takes what nothing else reaches (`FamilyOf<Point?>`). The same division written for a value (`family::<T>`) gives the same answers on both backends."
+kind = "behavior"
+case = "../../../cases/compile/match_type_guard/guard_dispatch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true true\ntrue true\ntrue\ntrue true\ntrue\n1 2 3 3\n4 4 5\n"
+
+[[tests]]
+name = "match_type.shape_of_string_refused"
+desc = "`ShapeOf<string>` is a type function applied to a type it is not defined for: the last case of `ShapeOf` is `case _ when is_numeric::<T>() => int[0]`, so a leaf type that is not a number selects no case, and the report names the type function and the type it was given. The reading before this change is `shape_of_before`, beside it."
+kind = "negative"
+case = "../../../cases/compile/match_type_guard/err_shape_of_string.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::TypeFunctionNotApplicable"
+expect_diagnostic_line = 14
+expect_output_contains = ["no case selects string, and the guard of every case that matched it did not hold"]
+
+[[tests]]
+name = "match_type.shape_of_before"
+desc = "The reading `ShapeOf<string>` gave at `2dcd0a6`, kept beside the reading it gives now: `UnguardedShapeOf` is the library's three cases with the guard taken off, and its bare `case _` answers `int[0]` for a string and for `string?` alike -- `true`, `true`. That is the silent answer the guard removes."
+kind = "behavior"
+case = "../../../cases/compile/match_type_guard/shape_of_before.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true\ntrue\n"
+
+[[tests]]
+name = "match_type.guard_cached"
+desc = "A predicate is a pure function of the types it is given, so its answer is remembered by (function, type arguments): `NumericOnce` and `NumericAgain` ask `is_numeric` about `int`, `float` and `string`, and the run reports six guard questions about three pairs -- three answered by running the predicate, three from the cache. The answers themselves are what the rules say: a number takes the guarded case, a string falls through to the unguarded one."
+kind = "behavior"
+case = "../../../cases/compile/match_type_guard/guard_cache.cml"
+args = ["-vv", "--log-include", "MatchTypeGuard", "${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "true true\ntrue true\ntrue true\n"
+expect_output_contains = ["6 guard question(s) about 3 distinct (function, type arguments) pair(s), 3 answered by running the predicate and 3 from the cache"]

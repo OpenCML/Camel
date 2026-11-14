@@ -792,6 +792,46 @@ expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+# The transpose of a graph `std::opt::algebra` has rewritten, read against the same program with no
+# optimization at all. This is a differential pair and not two entries with the same expected strings
+# for a reason: the assertion being made is *the two paths answer the same numbers*, and a shared
+# expectation would have to be edited twice the day the program changes -- while a pair can only go
+# red where the two actually disagree.
+#
+# The shape is the one `float_combine` fires on: `2*x + 3*x` becomes `x * 5`, and
+# `(x*2 + x*3) * 4` becomes `(x*5) * 4`. Both rewritten graphs are legal -- a frozen graph keeps the
+# ids of the version it came from, and a node a rule adds is appended *after* the nodes that already
+# read it -- and the backward walk used to take descending ids for the graph's order, so it visited
+# the new node before the node that feeds it, found no cotangent on it yet, and dropped it without a
+# word: `transpose(chain)(1.0)` answered `0.0` where the unoptimized program answers `20.0`. The
+# 0.0 was printed as an ordinary result, which is why this pair pins the numbers of the *whole*
+# case on both paths rather than the one line that was wrong: 5/10 for the plain values, and the
+# pullbacks are each map's slope (5, 20, 40) times the cotangent handed in, read at two different
+# cotangents so a constant cannot pass for a slope. `deep` puts one more multiply above the node
+# the rewrite adds, so the added node is not the last one on the chain.
+[[tests]]
+name = "transpose_after_algebra.without_optimization"
+desc = "The reference reading of the pair below: the program unoptimized. `linear(x) = 2*x + 3*x` reads 5 and 10, and its pullback is the slope 5 applied to the cotangent handed in -- `(5.0)` at 1.0 and `(15.0)` at 3.0. `chain(x) = (x*2 + x*3) * 4` reads 20 and 40 with the pullback `(20.0)` and `(40.0)`, and `deep(x) = ((x*2 + x*3) * 4) * 2` answers `(40.0)` and `(80.0)`. Every number is the slope of the map times its cotangent; nothing here is computed by the optimizer."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_after_algebra.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["algebra linear f(1)=5.0 f(2)=10.0", "algebra linear back(1.0)=(5.0) back(3.0)=(15.0)", "algebra chain f(1)=20.0 f(2)=40.0", "algebra chain back(1.0)=(20.0) back(2.0)=(40.0)", "algebra deep back(1.0)=(40.0) back(2.0)=(80.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_after_algebra.with_algebra"
+desc = "The same program with `std::opt::algebra` in front of it, and the same numbers: the pass folds `2*x + 3*x` to `x * 5` and `(x*2 + x*3) * 4` to `(x*5) * 4`, and the transpose of the rewritten graph has to answer what the transpose of the original did. It answered `0.0` for `chain` -- the cotangent the walk dropped when it visited the rule's new node before the node reading it -- so this entry is the defect: a wrong number printed as an ordinary result. The comparison is against `transpose_after_algebra.without_optimization`, field by field, so a future rewrite that changes one path and not the other fails here without either entry having to name the number that moved."
+kind = "differential"
+case = "../../../cases/compile/transforms/transpose_after_algebra.cml"
+args = ["${case}", "std::opt::algebra", "std::nvm"]
+expect_exit = 0
+compare_to = "transpose_after_algebra.without_optimization"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The initial state's tangent rides the chain like any other tangent: `s0 = x` is a port, its tangent
 # is the seed, and the body reads the state twice, so the chain's tangent is `8 x^7` and not a zero
 # and not the last round's `2 x^3`.

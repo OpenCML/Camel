@@ -542,8 +542,12 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             const auto &caseNode = gct->at(i + 1);
             GUARD(caseNode->type() == GCT::NodeKind::TCASE, "A case of match type is a TCASE.");
             const uint16_t patterns = caseNode->typeCasePatterns();
-            const bool catchesAll   = (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
-                                                   typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
+            // A guarded `_` or `#leaf` selects the types its predicate holds for, not every type,
+            // so a case written after it is reachable (design principles 5.5, ruling of 2026-11-14).
+            const bool guarded      = tree_->caseGuardOf(caseNode) != nullptr;
+            const bool catchesAll =
+                !guarded && (patterns & (typeCaseBit(GCT::TypeCaseKind::Leaf) |
+                                         typeCaseBit(GCT::TypeCaseKind::Wildcard))) != 0;
             if (catchesAll && i + 1 < caseCount) {
                 diags_->of(SemanticDiag::StaticMatchUnreachableCase)
                     .atOrigin(caseNode->origin())
@@ -556,6 +560,11 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
             uint16_t earlierShapes = 0;
             for (size_t j = 0; j < i; ++j) {
                 const auto &other = gct->at(j + 1);
+                if (tree_->caseGuardOf(other) != nullptr) {
+                    // A guarded case selects nothing out of the pattern alone: it is not what keeps
+                    // this one from being reached.
+                    continue;
+                }
                 for (size_t k = 0; k < other->typeCaseTypeCount(); ++k) {
                     earlier.push_back(other->typeCaseTypeAt(k));
                 }
@@ -617,9 +626,26 @@ node_handle_t Builder::visitTypeMatchNode(const GCT::node_ptr_t &gct) {
         GCT::node_ptr_t selected = nullptr;
         for (size_t i = 0; i < caseCount; ++i) {
             const auto &caseNode = gct->at(i + 1);
-            if (typeCaseMatches(subject, caseNode)) {
+            if (!typeCaseMatches(subject, caseNode)) {
+                continue;
+            }
+            // The guard of the case is a Camel predicate, read here with the type arguments of the
+            // instance bound. A case whose guard does not hold sends the subject on to the case
+            // written after it, exactly as the guard of a value `match` does (design principles
+            // 5.5, ruling of 2026-11-14); a predicate that cannot be read here is reported as the
+            // defect it is, rather than as a type no case selects.
+            const GCT::node_ptr_t guardNode = tree_->caseGuardOf(caseNode);
+            if (guardNode == nullptr) {
                 selected = caseNode;
                 break;
+            }
+            const WhenResult answer = evaluateGuardNode(guardNode, nullptr, typeBindings_);
+            if (answer.holds()) {
+                selected = caseNode;
+                break;
+            }
+            if (!answer.fails()) {
+                reportWhenProblem(answer, "match type " + subject->toString(), guardNode);
             }
         }
         if (selected == nullptr) {
