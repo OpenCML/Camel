@@ -710,6 +710,14 @@ bool sameContent(const GCGraph &before, const GCGraph &after) {
     if (a->nodeCount != b->nodeCount || a->edgeCount != b->edgeCount ||
         a->payloadWordCount != b->payloadWordCount || a->normPortCount != b->normPortCount ||
         a->withPortCount != b->withPortCount || a->closureCount != b->closureCount ||
+        // The two side arrays: an order edge and a sync edge are not ports and not entries of the
+        // node columns, they are their own payload arrays (graph.h, GCGraphNativePayload). A
+        // comparison that read everything but them answered "the same graph" for a graph whose
+        // only difference was one of these edges, and the commit then released the copy it had
+        // encoded and handed back the graph the edit never reached.
+        a->orderEdgeCount != b->orderEdgeCount || a->syncEdgeCount != b->syncEdgeCount ||
+        !sameArray(a->orderEdges, b->orderEdges, a->orderEdgeCount) ||
+        !sameArray(a->syncEdges, b->syncEdges, a->syncEdgeCount) ||
         a->entryNode != b->entryNode || a->exitNode != b->exitNode ||
         a->outputNode != b->outputNode || a->returnNode != b->returnNode ||
         a->returnKind != b->returnKind ||

@@ -21,6 +21,7 @@ inline constexpr const char *kEdgesSyncForkTestPass      = "test::edges_sync_for
 inline constexpr const char *kEdgesSyncForkGateTestPass  = "test::edges_sync_fork_gate";
 inline constexpr const char *kEdgesSyncCycleTestPass     = "test::edges_sync_cycle";
 inline constexpr const char *kEdgeUsersTestPass          = "test::edge_users";
+inline constexpr const char *kEdgesEditOnlyTestPass      = "test::edges_edit_only";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -145,6 +146,22 @@ class EdgesSyncForkGateTestPass : public RuntimeGraphRewritePass {
 // the draft's side reports and then what the commit does with it. A freeze that walked four kinds
 // again would accept this graph, which is what this case is for.
 class EdgesSyncCycleTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// An edit whose only difference is one sync edge, and a session that changes nothing. The commit
+// keeps the graph a session edited only while the copy it encoded differs from that graph, and
+// `sameContent` decides. The order and sync edges are the graph's own arrays beside the node
+// columns, so a comparison that reads the columns, the ports and the regions but not those two
+// arrays answers "the same graph" for an edit that wrote an edge: the commit then releases the copy
+// and hands back the graph the edit never reached. The pass writes the edge between two statements
+// the graph already has (no node is added, removed or changed), prints whether the edge is in the
+// graph the commit made and whether the graph object is the one it was (`reused=1` is the copy
+// thrown away), and then commits a session that changed nothing, which must keep the old version.
+class EdgesEditOnlyTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *
