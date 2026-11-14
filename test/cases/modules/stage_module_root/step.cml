@@ -1,0 +1,6 @@
+/// The entry program of the cases beside it: it names no pass of `bad` itself, so the module is
+/// loaded only when the pipeline asks for `bad::report`.
+func main(): int sync {
+    println(42)
+    return 0
+}

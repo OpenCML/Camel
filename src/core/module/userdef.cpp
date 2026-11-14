@@ -200,6 +200,31 @@ bool UserDefinedModule::compile(CompileStage till) {
     return true;
 }
 
+bool camel::core::module::compileForLoad(
+    const std::shared_ptr<Module> &module, CompileStage till) {
+    const auto user = std::dynamic_pointer_cast<UserDefinedModule>(module);
+    if (!user) {
+        return false;
+    }
+    try {
+        return user->compile(till);
+    } catch (const Diagnostic &failure) {
+        // The module's own diagnostics already say what is wrong with it -- the parser writes them
+        // as it gives up -- and they are the ones an entry file's compile would have left behind.
+        // The throw only adds the sentence an import site prints for the module it could not load
+        // ("failed to parse module file: <path>", "module file not found or unreadable"), which
+        // has no place of its own here and must not be lost: it is recorded on the module when it
+        // is the whole of the failure.
+        const diagnostics_ptr_t &diagnostics = user->diagnostics();
+        if (diagnostics && !diagnostics->hasErrors()) {
+            Diagnostic recorded = failure;
+            recorded.persisted  = false;
+            diagnostics->add(std::move(recorded));
+        }
+        return false;
+    }
+}
+
 bool UserDefinedModule::compileAsLibrary() {
     if (stage_ == CompileStage::Done) {
         return true;
@@ -207,7 +232,7 @@ bool UserDefinedModule::compileAsLibrary() {
     if (compiling_) {
         return false;
     }
-    if (stage_ < CompileStage::GCT && !compile(CompileStage::GCT)) {
+    if (stage_ < CompileStage::GCT && !compileForLoad(shared_from_this(), CompileStage::GCT)) {
         return false;
     }
     struct Compiling {
@@ -317,15 +342,12 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     if (compiling_) {
         return ProgramStatus::Failed;
     }
-    // A module that does not parse throws its diagnostic out of compile(); the diagnostic is
-    // kept with the module, and the caller turns a failed program into the reason a pass is
-    // not available. A pass module the user is still editing is a problem of that pass
-    // specification, not an exception out of the pipeline, so the throw stops here.
-    try {
-        if (!compile(CompileStage::GCT)) {
-            return ProgramStatus::Failed;
-        }
-    } catch (const Diagnostic &) {
+    // A module that does not parse is a diagnostic against that module, and this load is one of
+    // the programmatic ones: compileForLoad is the one place that decides it, and the caller
+    // turns a failed program into the reason a pass is not available. A pass module the user is
+    // still editing is a problem of that pass specification, not an exception out of the
+    // pipeline.
+    if (!compileForLoad(shared_from_this(), CompileStage::GCT)) {
         return ProgramStatus::Failed;
     }
     struct Compiling {
@@ -353,7 +375,7 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
         if (mod.get() == this || !seen.insert(mod.get()).second) {
             return true;
         }
-        if (!mod->compile(CompileStage::GCT)) {
+        if (!compileForLoad(mod, CompileStage::GCT)) {
             return false;
         }
         for (const auto &site : mod->importSites()) {
@@ -443,9 +465,13 @@ UserDefinedModule::ProgramStatus UserDefinedModule::compileAsProgram(
     return ProgramStatus::Built;
 }
 
-void UserDefinedModule::declareTypes() { (void)compile(CompileStage::GCT); }
+void UserDefinedModule::declareTypes() {
+    (void)compileForLoad(shared_from_this(), CompileStage::GCT);
+}
 
-void UserDefinedModule::declareEntities() { (void)compile(CompileStage::Declared); }
+void UserDefinedModule::declareEntities() {
+    (void)compileForLoad(shared_from_this(), CompileStage::Declared);
+}
 
 std::vector<std::string> UserDefinedModule::operatorProtocols() const {
     return implementation_ ? implementation_->operatorProtocols() : Module::operatorProtocols();

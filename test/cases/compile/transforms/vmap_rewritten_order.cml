@@ -1,0 +1,22 @@
+/**
+ * `vmap(h)` where the body is one `std::opt` rewrites into nodes written after the node that
+ * reads them: `(x * 2.0 + x * 3.0) * 2.0` becomes a product of `x` with the folded `5.0` and then
+ * with `2.0`, and the pass appends those two after the place the outer product already had. The
+ * batched writing and the row-by-row `map` are printed beside each other, because the transform
+ * has to read the operands of a node before the node whatever order the pass wrote them in --
+ * reading the places in id order meets the reader first.
+ */
+import rulesets.vmap
+import { map } from array
+import { vmap } from transforms
+
+func h(x: float): float {
+    return (x * 2.0 + x * 3.0) * 2.0
+}
+
+func main(): int sync {
+    let xs: float[4] = [1.0, 2.0, 3.0, 0.5]
+    println(vmap(h)(xs))
+    println(xs->map<(x: float) => h(x)>)
+    return 0
+}

@@ -1377,7 +1377,9 @@ bool Builder::resolveAmbientResource(
                                        : in->name() + (decl->variable ? ":" : "::") + written,
                             // A `resource` declaration is state outside the program; a module's
                             // `var` is a cell only the program observes (design principles 3.3).
-                            .external = !decl->variable});
+                            .external = !decl->variable,
+                            // `resource net unordered`: the effects on it keep no written order.
+                            .unordered = decl->unordered});
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1606,12 +1608,14 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
                 known->mode = sem::uniteAccess(
                     known->mode,
                     use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read);
+                known->unordered = known->unordered || entry.unordered;
                 continue;
             }
             ambientUses.push_back(
                 sem::ResourceSignature::AmbientUse{
                     .name = entry.key,
-                    .mode = use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read});
+                    .mode = use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read,
+                    .unordered = entry.unordered});
         }
     }
     std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
@@ -7826,7 +7830,10 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
             // that keeps the case prints the guard back (`MatchTypeType::toString`), and the
             // reference the compiler publishes compares that text with the source.
             guard->text = armAst->loadAs<AST::TypeCaseLoad>()->guardText();
-            arm.guard   = std::move(guard);
+            // What the type layer identifies the guard by: this module and that text
+            // (`typeCaseGuardKey`). The two handles above are the build's, not the case's.
+            guard->module = module_ != nullptr ? module_->name() : std::string();
+            arm.guard     = std::move(guard);
         }
         arms.push_back(std::move(arm));
     }

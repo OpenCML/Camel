@@ -1,0 +1,115 @@
+id = "opt.devirtualize_callee"
+order = 340
+tier = "fast"
+tags = ["feat", "opt", "devirtualize", "typecheck"]
+
+# `std::opt::devirtualize` turns a call through a value into a direct call once it knows which
+# function the value is (src/runtime/draft_inline.cpp#devirtualizeStaticCallInDraft). A call site
+# says only what it passes and what it hands on; the signature is the callee's. So the question
+# these cases ask is what happens to a CALL that has been pointed at a function its arguments do not
+# fit -- a graph no source can write, because the front end type-checks a call against the value it
+# names, and the only way to build one is a transaction that retargets the call afterwards
+# (`test::recallee_arity`, `test::recallee_type`, src/passes/test/fault.h).
+#
+# What the readings say, and what each case therefore pins:
+#
+#  - the CALL itself is not checked at commit: a graph whose call passes two arguments to a function
+#    of one port is accepted (`callee_arity.commit_accepts_the_call`), and the refusal comes from the
+#    run ("Runtime indirect call norm-arity mismatch"). A retarget between types is worse: the run
+#    does not refuse it either, and the process dies of a segmentation fault. So a pass may not
+#    simply keep such a CALL and trust a later check to refuse it -- there is none.
+#  - the pass that knows the callee refuses it, and that is what the two `*.devirtualize` cases pin:
+#    the FUNC it writes is checked at commit against the callee's ports (17_graph_rewrite_api_contracts
+#    4 rule 7 for the counts, 4.2 for the types), and the commit says which argument and which
+#    parameter disagree. This is the "already blocked" answer: nothing is fixed here, the cases hold
+#    the behaviour still.
+#  - the same programs with no retarget are devirtualized completely (the two `callee_fits.*` cases):
+#    `indirect_calls` 3 -> 0 and `direct_calls` 0 -> 3, which is what the two cases above must not
+#    have switched off.
+
+[[tests]]
+name = "callee_fits.arity"
+desc = "A call through a static function value, both calls devirtualized: `std::stats` before the pass reads 3 calls through a value and no direct call, the same line after it reads 0 and 3, and the program prints 7 + 10 = 17. This is the reverse proof: the two calls the cases below build do get rewritten when the callee fits."
+kind = "behavior"
+case = "../../../cases/opt/devirtualize/recallee_arity.cml"
+args = ["${case}", "std::stats", "std::opt::devirtualize", "std::stats", "std::fvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines[lines.length - 1] === '17', 'the program runs as written: ' + JSON.stringify(input.normalized.stdout))
+const stats = lines.filter((l) => l.startsWith('GRAPH_STATS ')).map((l) => JSON.parse(l.slice('GRAPH_STATS '.length)))
+assert(stats.length === 2, 'two readings: ' + JSON.stringify(input.normalized.stdout))
+assert(stats[0].indirect_calls === 3 && stats[0].direct_calls === 0, 'before: ' + JSON.stringify(stats[0]))
+assert(stats[1].indirect_calls === 0 && stats[1].direct_calls === 3, 'after: ' + JSON.stringify(stats[1]))
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "callee_fits.type"
+desc = "The same for the type half: 3 calls through a value become 3 direct calls, and the program prints `3 2`."
+kind = "behavior"
+case = "../../../cases/opt/devirtualize/recallee_type.cml"
+args = ["${case}", "std::stats", "std::opt::devirtualize", "std::stats", "std::fvm"]
+expect_exit = 0
+verify_script = """
+const lines = input.normalized.stdout.trim().split('\n')
+assert(lines[lines.length - 1] === '3 2', 'the program runs as written: ' + JSON.stringify(input.normalized.stdout))
+const stats = lines.filter((l) => l.startsWith('GRAPH_STATS ')).map((l) => JSON.parse(l.slice('GRAPH_STATS '.length)))
+assert(stats.length === 2, 'two readings: ' + JSON.stringify(input.normalized.stdout))
+assert(stats[0].indirect_calls === 3 && stats[0].direct_calls === 0, 'before: ' + JSON.stringify(stats[0]))
+assert(stats[1].indirect_calls === 0 && stats[1].direct_calls === 3, 'after: ' + JSON.stringify(stats[1]))
+assert(input.normalized.stderr === '', 'nothing to report: ' + input.normalized.stderr)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "callee_arity.commit_accepts_the_call"
+desc = "The retarget alone: the commit of the pass that wrote the call says nothing about it -- the stats line is printed with the call still in the graph -- and what refuses the program is the run, at the call ('Runtime indirect call norm-arity mismatch: caller graph 'main' node 4 has 2 args, target graph 'shift1' has 1 norm ports'). The reading is the reason a pass may not keep such a call and leave it to a check that is not there."
+kind = "behavior"
+case = "../../../cases/opt/devirtualize/recallee_arity.cml"
+args = ["${case}", "test::recallee_arity", "std::stats"]
+expect_exit = 1
+verify_script = """
+const stats = input.normalized.stdout.split('\n').find((l) => l.startsWith('GRAPH_STATS '))
+assert(stats !== undefined, 'the graph is committed and read: ' + input.normalized.stdout)
+assert(JSON.parse(stats.slice('GRAPH_STATS '.length)).indirect_calls === 3, 'the call is still a call: ' + stats)
+assert(input.normalized.stdout.includes("Runtime indirect call norm-arity mismatch: caller graph 'main' node 4 has 2 args, target graph 'shift1' has 1 norm ports."), input.normalized.stdout)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "callee_arity.devirtualize_refused"
+desc = "The retarget and then std::opt::devirtualize: the pass rewrites the CALL into a direct call of the function the value is, and the commit refuses it -- 17_graph_rewrite_api_contracts 4 rule 7 (a FUNC's arguments equal the callee's ports) -- naming the callee and both counts. Refused, which is the reading this case pins; the reason is the commit's, not a diagnostic of the pass."
+kind = "behavior"
+case = "../../../cases/opt/devirtualize/recallee_arity.cml"
+args = ["${case}", "test::recallee_arity", "std::opt::devirtualize", "std::stats"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout
+assert(out.includes("Pass 'std::opt::devirtualize' failed with an internal error"), out)
+assert(out.includes("Runtime graph 'main' has FUNC node 4 passing 2 arguments and 0 'with' arguments to 'shift1', which takes 1 and 0."), out)
+assert(out.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), out)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000
+
+[[tests]]
+name = "callee_type.devirtualize_refused"
+desc = "The type half: the retarget and then std::opt::devirtualize, and the commit refuses the direct call it wrote -- 17_graph_rewrite_api_contracts 4.2, the arguments compatible with the callee's parameters -- saying which argument lands in which parameter of which function."
+kind = "behavior"
+case = "../../../cases/opt/devirtualize/recallee_type.cml"
+args = ["${case}", "test::recallee_type", "std::opt::devirtualize", "std::stats"]
+expect_exit = 1
+verify_script = """
+const out = input.normalized.stdout
+assert(out.includes("Pass 'std::opt::devirtualize' failed with an internal error"), out)
+assert(out.includes("Runtime graph 'main' breaks its edge invariants (1 violation(s)):"), out)
+assert(out.includes("graph 'main' node 3 (10): passes a int as ordinary argument 0 of 'takes_text', which takes a string."), out)
+assert(out.includes('name=RuntimeDiag::PassInternalError, code=0x0400000C'), out)
+"""
+normalizers = ["strip_ansi", "normalize_newlines"]
+timeout_ms = 20000

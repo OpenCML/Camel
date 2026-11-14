@@ -389,13 +389,17 @@ int runCommand(int argc, char *argv[]) {
         }
 
         if (selectedCommand == Command::Inspect) {
+            // A module that does not parse is a diagnostic against that module, not an exception
+            // out of the command: `compileForLoad` is the one place that decides it
+            // (camel/core/module/userdef.h), and the question below is the one report every
+            // compile of a module ends at.
             if (Inspect::dumpGCT || Inspect::dumpGIR || Inspect::dumpTNS) {
-                mainModule->compile(CompileStage::GCT);
+                camel::core::module::compileForLoad(mainModule, CompileStage::GCT);
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
                 Inspect::dumpAttrs || Inspect::dumpTies) {
-                mainModule->compile(CompileStage::Done);
+                camel::core::module::compileForLoad(mainModule, CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
             // once, before the first one: did anything fail? A dump of a partial tree is not an
@@ -420,7 +424,9 @@ int runCommand(int argc, char *argv[]) {
             }
         } else {
             phase::Scope phaseScope("compile", entryModuleName);
-            mainModule->compile(CompileStage::Done);
+            // The same one exit as every other load of a module (see the `inspect` branch above):
+            // the report this command ends at is `failIfModuleErrors`, below.
+            camel::core::module::compileForLoad(mainModule, CompileStage::Done);
         }
 
         if (selectedCommand == Command::Inspect) {
