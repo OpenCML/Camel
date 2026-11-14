@@ -74,6 +74,18 @@ const SKIP_DIRS = new Set([
 /** The records: history, not the tree as it stands. Read only when named by `--path`. */
 const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
 
+/**
+ * A synthetic checkout another check builds and runs against: the `fixture/` trees of the plans.
+ * A path in one of their pages is relative to *that* tree -- a `src/<name>.c` there is the
+ * fixture's own file beside its `notes.md`, and a fixture whose whole point is a file that is not
+ * there would be reported forever. The same reason the record directories are not read, one step
+ * further out.
+ */
+function isFixtureTree(full) {
+    const rel = path.relative(ROOT, full).split(path.sep).join('/')
+    return rel.startsWith('test/plans/') && path.basename(full) === 'fixture'
+}
+
 /** A runner writes these at run time; a page that names one names an output. */
 const RUN_OUTPUTS = new Set([
     'CLASSIFIER-RULES.md',
@@ -108,6 +120,7 @@ function walk(directory, skipRecordDirs) {
     const entered = (full) => {
         const rel = path.relative(ROOT, full).split(path.sep).join('/')
         if (skipRecordDirs && RECORD_DIRS.has(rel)) return false
+        if (isFixtureTree(full)) return false
         return true
     }
     const visit = (dir) => {
@@ -240,8 +253,14 @@ function resolve(file, cited) {
             // not there; the suffix rule below may still answer
         }
     }
-    const suffix = `/${cited.replace(/^\.{1,2}\//, '')}`
-    const matches = treePaths().filter((entry) => entry.endsWith(suffix) || entry === cited)
+    // Every leading `./` and `../` goes, not just one: a comment quotes a path from the directory
+    // the sentence is about, not from the file that holds it -- a test file's import example is
+    // written from where that test file will sit, and a transcript quotes the path the tool
+    // printed. Those segments are not evidence either way; the rule below still demands that
+    // exactly one file of the tree answer the rest.
+    const trimmed = cited.replace(/^(?:\.{1,2}\/)+/, '')
+    const suffix = `/${trimmed}`
+    const matches = treePaths().filter((entry) => entry.endsWith(suffix) || entry === cited || entry === trimmed)
     if (matches.length === 1) return { resolved: true }
     if (matches.length > 1) return { resolved: false, ambiguous: matches.length }
     return { resolved: false }
@@ -297,6 +316,11 @@ for (const file of files) {
         if (!markdown && !isComment(file, text, match.index)) continue
         const first = cited.split('/')[0]
         const fromHere = first === '.' || first === '..'
+        // `./name.ext` names no directory: it is the spelling a command line gives a bare name
+        // (`./counts.cml` and `counts.cml` take the same pass-name prefix), and a bare name is a
+        // sentence's shorthand which this check does not read. There is no place in it to be wrong
+        // about; two files that bear the name are not a question the sentence asked.
+        if (/^\.\/[^/]+$/.test(cited)) continue
         if (!fromHere && !rootTop.has(first)) {
             // Not a path this tree could hold from its root: a sentence's shorthand. The suffix
             // rule is the only thing that can still answer it, and only when it answers once.
