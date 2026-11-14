@@ -364,7 +364,8 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
         const auto norm           = graph.normInputsOf(ref);
         const GCGraph *callee     = program_.calleeOf(graph, ref);
         if (callee != nullptr && callee->funcType() != nullptr &&
-            callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete) {
+            callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete &&
+            callee->funcType()->resources().captures.empty()) {
             return fromSignature(
                 callee->funcType()->resources(),
                 callee->funcType()->withTypesCount(),
@@ -479,9 +480,14 @@ NodeResources Resolver::call(const GCGraph &graph, gc_node_ref_t ref) const {
     }
     // A callee whose type publishes its resources: the call takes its footprint from the type
     // (design effects plan 2.3), not by walking the body. A Generic type (a Camel body, until
-    // its signature is inferred) keeps the body walk.
+    // its signature is inferred) keeps the body walk. So does a signature that names a capture: the
+    // position says which value the callee captured but not what the resource is, and only the
+    // walk reads that use back onto the value this graph handed over (design principles 3.3, effect
+    // masking). A closure that writes a `var` it captured carries the capture in its type, so this
+    // is the common case for one.
     if (callee->funcType() != nullptr &&
-        callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete) {
+        callee->funcType()->resources().mode == sem::ResourceSignature::Mode::Concrete &&
+        callee->funcType()->resources().captures.empty()) {
         return fromSignature(
             callee->funcType()->resources(),
             callee->funcType()->withTypesCount(),

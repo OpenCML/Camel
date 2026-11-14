@@ -327,17 +327,33 @@ void Builder::reportResourceViolation(
     // this function can see only the clause, so the report names the resources the body reaches
     // that the clause leaves out.
     std::vector<std::string> unnamed;
+    // A promise that names `any` at its target has already said it may reach anything: nothing the
+    // body reaches is left out of it.
+    const bool anyPromised =
+        std::any_of(promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
+            return cls == sem::ResourceClass::Unknown;
+        });
     for (const auto &use : measured.ambient) {
         const bool promisedUse =
             std::any_of(promised.ambient.begin(), promised.ambient.end(), [&](const auto &other) {
                 return other.name == use.name;
             });
-        const bool anyPromised =
-            std::any_of(promised.anyOf.begin(), promised.anyOf.end(), [](auto cls) {
-                return cls == sem::ResourceClass::Unknown;
-            });
         if (!promisedUse && !anyPromised) {
             unnamed.push_back(sem::resourceDisplayName(use.name));
+        }
+    }
+    for ([[maybe_unused]] uint8_t capture : measured.captures) {
+        if (!anyPromised) {
+            // A capture is a variable of the function around this one: it lives longer than this
+            // call, so writing it is an effect of this one too (design principles 3.3).
+            unnamed.push_back("a variable it captured from the function around it");
+        }
+    }
+    for (sem::ResourceClass cls : measured.anyOf) {
+        if (!anyPromised) {
+            // A class the clause has no name for, or a cell of this function's own making that
+            // outlives the call because a closure holding it was handed out.
+            unnamed.push_back(std::format("any {}", sem::resourceClassName(cls)));
         }
     }
     for (const auto &use : measured.params) {

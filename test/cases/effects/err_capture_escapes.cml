@@ -1,0 +1,21 @@
+/**
+ * The other side of effect masking: the closure leaves the call, so the cell it captured lives
+ * longer than the call and a write of it is a resource the caller can reach (design principles
+ * 3.3). `make` promises `pure`, and it hands out `add`, which writes `acc`, so the promise is
+ * broken where it is written.
+ */
+
+func make(x: int): ((k: int) => int, int) pure {
+    var acc = 0
+    let add = (k: int): int => sync {
+        acc = acc + k
+        acc
+    }
+    (add, x)
+}
+
+func main(): int sync {
+    let (g, n) = make(0)
+    println(g(n))
+    return 0
+}

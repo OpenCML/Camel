@@ -451,6 +451,44 @@ args = ["${case}"]
 expect_exit = 0
 expect_stdout_contains = ["120 true true"]
 
+# ---- Effect masking: a body's own variable is not its resource ----
+#
+# A `pure` function promises none of its caller's resources, and a variable the function itself
+# makes is not one of them: the cell dies with the call and the caller cannot read it, so reads and
+# writes of it -- including through a closure that captures and writes it -- are not this function's
+# effects (design principles 3.3, effect masking). A closure that leaves the call is the exception:
+# what it captured then lives longer than the call, so writing it is an effect and the promise
+# breaks where it is written.
+
+[[tests]]
+name = "ok.capture_local_var"
+desc = "A closure captures a `var` of the function that made it and writes it in a loop; the function writes nothing its caller can see, so the program compiles and runs, and the answer is the sum the closure accumulated."
+kind = "behavior"
+case = "../../../cases/effects/ok_capture_local_var.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+[[tests]]
+name = "ok.capture_local_var_as_pure_value"
+desc = "The same function measured from its type: a function that writes only its own variables has the empty resource set, so the value it stands for fits a parameter written `pure`. This used to be refused (UsesPromiseViolated), because a capture the walk could not place was read as touching any variable."
+kind = "behavior"
+case = "../../../cases/effects/ok_capture_local_var_as_value.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "3\n"
+
+[[tests]]
+name = "err.capture_escapes"
+desc = "The closure escapes the call that made it, so the variable it captured outlives the call and writing it is a resource of the function that handed it out: `pure` on that function is refused where it is written."
+kind = "negative"
+case = "../../../cases/effects/err_capture_escapes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_capture_escapes.cml:"]
+
 # ---- A callback that writes a captured variable ----
 #
 # A parameter of function type that writes no resource clause is resource-generic: what a call
