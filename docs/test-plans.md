@@ -649,7 +649,10 @@ Every `[[tests]]` entry may use these common fields:
   code to compare.
 - `expect_signal`
   Optional signal the test's process must have been killed by, written as a name (`"ABRT"`,
-  `"SIGABRT"`) or as the number this platform numbers it by (`6`); the three are one expectation.
+  `"SIGABRT"`) or as the number this platform numbers it by (`15`, which is SIGTERM on both Windows
+  and Linux); the three are one expectation. A number is this platform's number and no other's --
+  `6` is SIGABRT on POSIX but no signal at all on Windows, where Node numbers SIGABRT 22 -- so a
+  name is what a plan writes when it means one particular signal.
   There is no default and no boolean form: an entry that expects a death has to name the signal,
   because "it dies somehow" is not a reading a reader can check and would pass a death by any other
   signal. It stands in place of `expect_exit`, so the entry is green when the process dies of

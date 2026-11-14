@@ -150,3 +150,26 @@ desc = "The users of a node in the five kinds a pass asks about -- a value port,
 case = "../../../cases/opt/generic/generic_passes.cml"
 args = ["${case}", "test::edge_users"]
 expect_stdout_contains = ["EDGES accepted", "EDGE_USERS norm=2 with=1 ctrl=1 sync=1 order=1", "disagree=0"]
+
+[[tests]]
+name = "an_edit_that_writes_only_an_edge_reaches_the_graph"
+desc = "The commit keeps the copy it encoded only while that copy differs from the graph it would replace, and `sameContent` decides. The order and sync edges are the graph's own arrays beside the node columns -- not ports, not entries of a node -- so a comparison that reads the columns, the ports and the regions but not those two arrays answers `the same graph` for an edit that wrote an edge, and the commit releases the copy it encoded and hands back the graph the edit never reached. The pass writes one sync edge between two statements the graph already has, so no node is added, removed or changed and the edge is the whole difference, and prints what the graph the commit made holds: `after` one more than `before`, the user's sync input present, and `reused=0` (the graph object is not the one it was). A second session changes nothing at all and must keep the graph where it is (`reused=1`, the copy released): that is the reason the comparison exists, and a fix that always made a new version would take it away."
+case = "../../../cases/opt/generic/generic_passes.cml"
+args = ["${case}", "test::edges_edit_only"]
+verify_script = '''
+({ input, assert }) => {
+  const lines = input.normalized.stdout.trim().split('\n')
+  const pair = lines.find(l => l.startsWith('EDITONLY pair '))
+  assert(pair !== undefined, input.normalized.stdout)
+  const sync = lines.find(l => l.startsWith('EDITONLY sync '))
+  assert(sync !== undefined, input.normalized.stdout)
+  assert(sync.includes('wrote=1'), 'the sync edge was not written: ' + sync)
+  assert(sync.includes('reused=0'), 'the commit kept the old graph over an edge-only edit: ' + sync)
+  assert(sync.includes('mine=1'), 'the edge the session wrote is not the one the graph holds: ' + sync)
+  assert(sync.includes('sync_in=1'), 'the user does not wait on one edge: ' + sync)
+  const untouched = lines.find(l => l.startsWith('EDITONLY untouched '))
+  assert(untouched !== undefined, input.normalized.stdout)
+  assert(untouched.includes('reused=1'),
+    'a session that changed nothing made a new version: ' + untouched)
+}
+'''

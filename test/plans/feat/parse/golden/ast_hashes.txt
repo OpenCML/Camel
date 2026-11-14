@@ -3400,6 +3400,8 @@ f109e2ac953d849b ok test/cases/modules/std/json/encode.cml
 b4c948dee6fe28f4 ok test/cases/modules/std/json/err_decode_as_shape.cml
 dfde453c4be9360a ok test/cases/modules/std/json/err_encode_no_form.cml
 6c3c31bf450ee097 ok test/cases/modules/std/json/json_accessor_error.cml
+254fc038030fbe29 ok test/cases/modules/std/json/json_decode_as_no_document.cml
+040d7424aac6ca1d ok test/cases/modules/std/json/json_encode_no_document.cml
 210ad97acdee85c3 ok test/cases/modules/std/json/json_gc.cml
 b237b3050c1f4b18 ok test/cases/modules/std/json/json_gc_macro.cml
 e8405f93b22c8c9c ok test/cases/modules/std/json/json_kind_failed.cml
@@ -3913,6 +3915,7 @@ eee54de81b0f3a00 ok test/cases/opt/inline/consecutive_sync_calls.cml
 17b22dc3333654fa ok test/cases/opt/inline/empty_entry_targets_fallback.cml
 a404d5bc0112c480 ok test/cases/opt/inline/entry_multi_target_with_sync.cml
 8903a8c5167ea4e3 ok test/cases/opt/inline/entry_single_target_no_sync.cml
+cfbe4c0d1ef632cd ok test/cases/opt/inline/loop_wait_after_inline.cml
 bf1e6f5fb7739a18 ok test/cases/opt/inline/no_param_reverse_root.cml
 ec1fe0f8d69d474e ok test/cases/opt/inline/registry_sweep_unique_arm.cml
 e7b1c7a68383c292 ok test/cases/opt/inline/scc_entry_guard_recursion.cml

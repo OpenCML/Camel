@@ -280,8 +280,12 @@ CHECK_RANGE = range(1, 26)
 # its own and prints the four cells, the test plan runs that command as `progen_known_crash` (a
 # known failure, so every run prints it and none is gated by it), and `progen.py show --seed 4`
 # draws the program.
-CHECK_EXCLUDED = {4: "std::opt::inline segfaults on the `f8(...)` call of `main`, which is a "
-                     "crash of that pass and not a refusal of the front end"}
+# Empty since 2026-11-15: seed 4 was the only member, and the `std::opt::inline` segfault on the
+# `f8(...)` call of its `main` is gone -- the spliced body's wait now lands before the loop's
+# first round (test/cases/opt/inline/loop_wait_after_inline.cml pins the 25-line form of it).
+# The batch holds the seed again, and `progen_seed_4` still runs it alone in the fast layer, so
+# a shape that comes back is a red in the layer a change is measured in.
+CHECK_EXCLUDED = {}
 CHECK_MATRIX = "cross"
 
 

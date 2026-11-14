@@ -1,0 +1,23 @@
+/**
+ * A `Json` the program does not hold reaching `encode`: the binding of the value case of a `Json!`
+ * that failed, in the arm the tag does not select (design principles 11.2). The arm is written
+ * both with the default indent and with one written at the call: `opt::fold` never calls
+ * `encode` here, because the indent is a with-argument and it always arrives as a value the fold
+ * does not hold (the default `null`, or a cast of the written one), so the empty slot never
+ * reaches the operator's Json operand. `encode` refuses such an operand all the same, so that a
+ * path that does reach it is a fault of the call and not a read through the empty slot.
+ */
+
+import { Json, decode, encode } from json
+
+func report(): int sync {
+    let bad = decode('{"a": ')
+    let other = decode('[1, ')
+    println(match bad { case error e => 'error' case v => encode(v) })
+    println(match other { case error e => 'error' case v => encode<indent: 2>(v) })
+    return 0
+}
+
+func main(): int sync {
+    return report()
+}

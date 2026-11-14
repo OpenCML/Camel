@@ -109,7 +109,24 @@ static std::optional<json> camelToJson(Type *t, slot_t s, Context &ctx) {
             RuntimeDiag::OperandTypeUnsupported, "json::encode", "<unknown>", "a value with a JSON form");
     }
     if (isJsonType(t)) {
-        return fromSlot<JsonValue *>(s)->toJson();
+        // The Json operand of `encode`. A Json that holds no document -- the zero slot a binding
+        // of a `match` arm has when the tag selects another case (see `__json_kind__`) -- has
+        // nothing to write, so the call is refused the way an operand the operator cannot take
+        // is, naming what it was given and what it takes. The sentence goes in the detail as
+        // well: a fold reports what it caught through `what()`, and the reader there has only
+        // that text.
+        const JsonValue *value = fromSlot<JsonValue *>(s);
+        if (value == nullptr) {
+            const std::vector<std::string> args{
+                "json::encode",
+                "Json holding no document (the slot of a `Json!` that failed)",
+                "a value with a JSON form; a Json among them must hold a document"};
+            throw RuntimeFault(
+                RuntimeDiag::OperandTypeUnsupported,
+                args,
+                runtimeDiagMessage(RuntimeDiag::OperandTypeUnsupported, args));
+        }
+        return value->toJson();
     }
     switch (t->code()) {
     case TypeCode::Int32:
@@ -480,8 +497,23 @@ slot_t __json_decode_as__(ArgsView &with, ArgsView &norm, Context &ctx) {
     Type *target              = result->payloadType();
     json document;
     if (isJsonType(norm.type(0))) {
-        // A Json decoded before: its document, read again with a type.
-        document = fromSlot<JsonValue *>(norm.slot(0))->toJson();
+        // A Json decoded before: its document, read again with a type. A Json that holds no
+        // document -- the zero slot a binding of a `match` arm has when the tag selects another
+        // case (see `__json_kind__`) -- has nothing to read, so the call is refused the way an
+        // operand the operator cannot take is, naming what it was given and what it takes. The
+        // sentence goes in the detail as well: a fold reports what it caught through `what()`.
+        const JsonValue *value = fromSlot<JsonValue *>(norm.slot(0));
+        if (value == nullptr) {
+            const std::vector<std::string> args{
+                "json::decode_as",
+                "Json holding no document (the slot of a `Json!` that failed)",
+                "a Json that holds a document, or a text"};
+            throw RuntimeFault(
+                RuntimeDiag::OperandTypeUnsupported,
+                args,
+                runtimeDiagMessage(RuntimeDiag::OperandTypeUnsupported, args));
+        }
+        document = value->toJson();
     } else {
         String *str = norm.get<String *>(0);
         const std::string_view text = str ? str->view() : std::string_view();

@@ -521,6 +521,20 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                     visit(edge.pred);
                 }
             }
+            // An order edge into the loop is a wait the loop itself carries: a splice writes the
+            // call's predecessors on a body whose entry root is a loop, and the rule is that the
+            // owner of a region takes the incoming wait (draft_inline.cpp, addSpliceOrderEdges).
+            // It runs before the loop's first round, exactly as the statement above does. Left to
+            // the walk below, which visits what only orders *after* the piece, it landed between
+            // the body's range and the LOOP, and buildLoopTables requires that range to end at the
+            // LOOP: an inlined body that starts with a loop aborted the plan with "The nodes of a
+            // loop are not one range in the execution order", and a release build, which compiles
+            // that check out, ran the loop table it would have stopped.
+            for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(index)) {
+                if (edge.pred < live.size() && live[edge.pred] != 0 && !inLoop(edge.pred)) {
+                    visit(edge.pred);
+                }
+            }
             for (gc_node_ref_t input : graph->normInputsOf(index)) {
                 visit(input);
             }
