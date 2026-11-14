@@ -5,9 +5,11 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：0 页
+## 现在在等作者：1 页
 
-（目录为空：没有页在等回答。）
+| 页 | 问什么 |
+| --- | --- |
+| [`2026-11-14-a-type-layer-that-names-four-objects-and-one-of-them-is-a-node-its-build-owns`](2026-11-14-a-type-layer-that-names-four-objects-and-one-of-them-is-a-node-its-build-owns.cn.md) | 类型层还按「对象地址」认四样东西：三样该留，一样是 `typeof` 的表达式节点 |
 
 ## 生成器不会删的行：87 行（页已不在 `questions/` 里）
 

@@ -384,6 +384,17 @@ export function loadDirectoryRules() {
     directoryRulesCache = (doc.directoryRules || []).map((rule) => ({
         paths: (rule.paths || []).map((entry) => String(entry).replace(/\\/g, '/')),
         plans: String(rule.plans || '').replace(/\\/g, '/').split('/').filter(Boolean),
+        // `also`: plans that read every change under this directory, beside the one its path
+        // mirrors. A directory rule names one mirror prefix (`test/cases/` -> `test/plans/feat`), and
+        // some plans read a whole class of files the mirror has no room for: the front-end AST
+        // snapshot hashes every `.cml` of the repository, so a case that lands without being
+        // recorded there is a file that changed and no plan read. The entry follows the rule's
+        // `layer` default like any other (`--tier` still filters a slow plan's slow tests).
+        also: (rule.also || []).map((entry) => selectionPlan(entry, rule.layer === true)),
+        // `except` on a directory rule is the same exclusion a file rule can carry: those paths are
+        // kept out of `--changed` on purpose (`test/cases/perf/` is the manual perf layer), so a
+        // change there must select nothing -- not the mirrored plan, not an `also` plan.
+        except: (rule.except || []).map((entry) => String(entry).replace(/\\/g, '/')),
     }))
     return directoryRulesCache
 }
@@ -397,20 +408,23 @@ function planForDirectory(file) {
     for (const rule of loadDirectoryRules()) {
         const prefix = rule.paths.find((entry) => file === entry || file.startsWith(entry))
         if (!prefix) continue
+        const also = rule.except.some((entry) => file === entry || file.startsWith(entry)) ? [] : rule.also
         const rest = file.slice(prefix.length)
         const dir = path.posix.dirname(rest)
         const segments = dir === '.' || dir === '' ? [] : dir.split('/').filter(Boolean)
         for (let length = segments.length; length >= 1; length--) {
             const candidate = path.join(PLANS_ROOT, ...rule.plans, ...segments.slice(0, length))
             if (fs.existsSync(candidate) && fs.statSync(candidate).isDirectory()) {
-                return { target: candidate, prefix }
+                return { target: candidate, prefix, also }
             }
             const planFile = `${candidate}.plan.toml`
             if (fs.existsSync(planFile) && fs.statSync(planFile).isFile()) {
-                return { target: planFile, prefix }
+                return { target: planFile, prefix, also }
             }
         }
-        return null
+        // The directory still matched: its `also` plans read this change even when no plan mirrors
+        // the path (`target: null`), and the caller must not read that as "no rule matched".
+        return { target: null, prefix, also }
     }
     return null
 }
@@ -502,7 +516,7 @@ export function plansForChanges(files) {
         // file rules do not replace it, they add the plans that live outside that mirrored tree
         // (a `modules/tiles/` change needs `gpu/**`, which no directory rule can reach).
         const byDirectory = planForDirectory(file)
-        if (byDirectory) {
+        if (byDirectory && byDirectory.target) {
             matched = true
             targets.add(byDirectory.target)
             added = true
@@ -514,6 +528,24 @@ export function plansForChanges(files) {
         let excluded = false
         if (rule) {
             const rulePath = rule.paths.find((prefix) => file === prefix || file.startsWith(prefix))
+            // `also`: the plans that read every change under a directory rule's paths. They are
+            // added beside the mirrored plan, never instead of it, and a layered one is named the
+            // way the file rules name theirs (in `names`, and in `layered` so the runner filters it
+            // by --tier). A path a file rule excludes keeps its exclusion: a perf, GC-stress or
+            // progen change selects nothing -- not even a plan that reads every `.cml` of the tree
+            // -- and the self-test's "these plans stay unselectable" readings are that promise.
+            excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
+            if (!excluded && byDirectory) {
+                for (const plan of byDirectory.also) {
+                    names.add(plan.name)
+                    if (plan.layer) layered.add(plan.name)
+                    matched = true
+                    added = true
+                    hits.push(
+                        `directory rule ${byDirectory.prefix} -> also ${plan.name}${plan.layer ? ' (follows --tier)' : ''}`
+                    )
+                }
+            }
             for (const plan of rule.plans) {
                 // An `ownCases` plan is added only for a case it actually names. A slow plan
                 // reached through a directory that also holds fast cases would otherwise run in
@@ -527,7 +559,6 @@ export function plansForChanges(files) {
                 added = true
                 hits.push(`rule ${rulePath} -> ${plan.name}${plan.layer ? ' (follows --tier)' : ''}`)
             }
-            excluded = rule.except.some((entry) => file === entry || file.startsWith(entry))
             if (rule.self && !excluded) {
                 if (file.endsWith('.plan.toml')) {
                     const target = path.join(REPO_ROOT, ...file.split('/'))
@@ -548,10 +579,27 @@ export function plansForChanges(files) {
                     }
                 }
             }
-            if (added) matched = true
+        }
+        // `also`: the plans a directory rule names for every change under its paths, beside the one
+        // the path mirrors. They are added beside it, never instead of it, and a layered one is
+        // named the way the file rules name theirs (in `names`, and in `layered` so the runner
+        // filters it by --tier). A path a file rule excludes keeps its exclusion: a perf,
+        // GC-stress or progen change selects nothing -- not even a plan that reads every `.cml` of
+        // the tree -- and the self-test's "these plans stay unselectable" readings are that promise.
+        if (!excluded && byDirectory) {
+            for (const plan of byDirectory.also) {
+                names.add(plan.name)
+                if (plan.layer) layered.add(plan.name)
+                matched = true
+                added = true
+                hits.push(
+                    `directory rule ${byDirectory.prefix} -> also ${plan.name}${plan.layer ? ' (follows --tier)' : ''}`
+                )
+            }
         }
         // A file the self rule deliberately excludes (a perf/GC/progen plan) is not a hole: the
     // policy is that an ordinary change does not run it. Everything else is named.
+        if (added) matched = true
         if (!added && !excluded) unmatched.push(file)
         if (added) reasons.push(`${file}: ${hits.join('; ')}`)
     }
