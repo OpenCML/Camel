@@ -72,9 +72,27 @@ class Program;
 /// A set of replacements of one type by another, by `TypeId` (the id a frozen node's record
 /// stores). Applying it to a type gives the type the table names for it, or -- when a component is
 /// named -- the same composite built with the components replaced.
+///
+/// A type the table does not hold has no id to be named by: `Type::typeId()` is `kNoTypeId` for it,
+/// and that value is a sentinel, not an id -- every such type answers it. Naming one of those by
+/// `kNoTypeId` therefore names all of them, and one entry would then rewrite every un-interned type
+/// in the program, including types in graphs this substitution was never asked about. So an entry
+/// whose `from` is not in the table is kept as the *object* it was given (`sameObject_`) and matched
+/// by address: a substitution reaches exactly the objects it was handed, and nothing else.
+///
+/// Such a case is not hypothetical. A rule's right side that is a closure leaves the rule's
+/// `name__rhs` graph with a signature result the table does not hold (`stdlib/rulesets/jvp.cml`,
+/// `stdlib/rulesets/transpose.cml`: `pow_d(x, y) => (dx, dy) => ...`), and `std::defunctionalize`
+/// collects every object equal to a value's type in order to retype all of them
+/// (`defunctionalize.cpp`, the `equivalents` table). Before this was kept by address, a program
+/// importing those rulesets was refused by `std::defunctionalize` with `RuntimeDiag::ExitTypeMismatch`
+/// on `rulesets.jvp::jvp_pow_d__rhs`: the signature result had been rewritten to an unrelated
+/// family's enum, which is `apply` answering a pair whose key was `kNoTypeId`.
 class GraphTypeSubstitution {
   public:
     using Pair = std::pair<camel::core::type::TypeId, camel::core::type::TypeId>;
+    /// An entry naming the object itself, for a type the table does not hold.
+    using SameObjectPair = std::pair<const camel::core::type::Type *, camel::core::type::Type *>;
 
     GraphTypeSubstitution() = default;
     GraphTypeSubstitution(std::initializer_list<Pair> pairs);
@@ -85,16 +103,19 @@ class GraphTypeSubstitution {
     void replace(camel::core::type::TypeId from, camel::core::type::TypeId to);
     void replace(camel::core::type::Type *from, camel::core::type::Type *to);
 
-    bool empty() const { return pairs_.empty(); }
-    size_t size() const { return pairs_.size(); }
+    bool empty() const { return pairs_.empty() && sameObject_.empty(); }
+    size_t size() const { return pairs_.size() + sameObject_.size(); }
     const std::vector<Pair> &pairs() const { return pairs_; }
 
-    /// The type this table gives for `type`: the entry naming it, else the same composite with
-    /// `apply` run over its components, else `type` itself. Never null for a non-null argument.
+    /// The type this table gives for `type`: the entry naming it -- the object's own entry first,
+    /// then the one naming its id -- else the same composite with `apply` run over its components,
+    /// else `type` itself. Never null for a non-null argument.
     camel::core::type::Type *apply(camel::core::type::Type *type) const;
 
   private:
     std::vector<Pair> pairs_;
+    /// Types the table does not hold, which have no id: kept by address (see the class comment).
+    std::vector<SameObjectPair> sameObject_;
 };
 
 /// What a rebuild may change beyond the table.
