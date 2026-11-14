@@ -132,6 +132,18 @@ camel::core::OperId operIdOf(const camel::runtime::GraphTransaction &transaction
 bool isPureOper(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
 /**
+ * Whether the node's running is something the program observes, apart from its value being read: an
+ * operator with an effect or one that may fault (design principles 3.4's predicate, asked with the
+ * shapes of the types so that an elementwise operator over fixed shapes is a computation that
+ * cannot fail), a conversion that can fail, or a call -- the callee may do either.
+ *
+ * An arm, a join, a gate, a loop or a function value is structure, and removing the last read of
+ * one removes no running of its own: the read a branch hands on is its arms' running, not the
+ * branch's. A removal that takes the last use of an observed run hands it to a `GATE` (3.3).
+ */
+bool isObservedRun(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
+
+/**
  * Replaces a pure operator by the constant its argument types fix, through the operator the core
  * registered a type folder for (`OperatorTable::typeFolder`), and returns whether a value was
  * written. `tensor:shape`, `tensor:numel` and `tensor:dim` are the three today
@@ -193,13 +205,15 @@ bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_
 
 /**
  * The value that stands for what a rewrite removes: `value`, with the nodes whose last read the
- * removal takes routed through `:op/keep(x, value)` on the way (design principles 3.3).
+ * removal takes hung on a `GATE` on the way (design principles 3.3).
  *
  * A pass that removes the last use of a node whose running is observed -- an effect, or a
- * computation that may fault -- may not leave it leaning on an order edge: a sequential edge only
- * orders, it keeps nothing alive (3.3 as amended, 9.7). It routes the node through `:op/keep(x, v)`
- * instead, whose result is `v` and whose `x` is an input no result takes, so `x` stays in the
- * data-use set the liveness function reads while `v` stands where the removed node's value did.
+ * computation that may fault -- may not leave it leaning on an order edge: an order edge only
+ * orders, it keeps nothing alive (3.3 as amended, 9.7). It hands that use to a `GATE` instead: one
+ * data port reading the value that was there, one sync predecessor naming that node, the value
+ * passed through unchanged (docs/design/effects/edges.cn.md 5.3). A sync edge carries "used", so
+ * the node still runs, while the other readers of the value are neither pushed behind a chain nor
+ * pulled alive by one. Written back to source, it is a `sync` block.
  *
  * `removed` is the node whose going takes the reads; `alsoGoing` names nodes whose reads do not
  * count because they go away too (a dissolved branch and its join, the code of an arm that is not
@@ -207,34 +221,26 @@ bool readsNoWrittenSlot(const camel::runtime::GraphTransaction &transaction, gc_
  *
  * This is reached, and it is not a corner only a test can build: `std::opt` over the three cases in
  * test/cases/opt/effects -- branch_keeps_outer_effect, dce_effect_under_pure_arithmetic,
- * fold_keeps_arm_effect -- draws two keepers each, six in all (`std::opt std::gir | grep -c
- * ':op/keep'`). Where a `sync` block gives the effect a place in its chain the older mechanism
- * below takes over instead -- the inherited waits and the order edges of a dissolved branch -- and
- * the cases that guard that mechanism are in test/plans/feat/opt/unused_value_chain.plan.toml
- * (`unused_effect_chain` and `unused_effect_chain_param`: with the inherited waits switched off,
- * twelve of them go red, and the cases one would expect to guard it, in
- * test/plans/feat/opt/effects_kept.plan.toml, stay green).
- *
- * The insertion is also built at the draft level, where the shape and its counter-cases can be read
- * side by side: src/passes/test/keepnode.cpp (test/plans/feat/opt/keep_node.plan.toml) reads
- * `KEEPNODE keep=1 reads_the_divisor=1`, `keep=0` with the insertion switched off, and
- * `KEEPNODE_PURE keep_pure=0 keep_shared=0` where no keeper may appear and none does.
+ * fold_keeps_arm_effect -- draws keepers for each of them. Where
+ * a `sync` block gives the effect a place in its chain the other mechanism below takes over instead
+ * -- the inherited waits and the chain place of a dissolved branch -- and the cases that guard that
+ * mechanism are in test/plans/feat/opt/unused_value_chain.plan.toml (`unused_effect_chain` and
+ * `unused_effect_chain_param`: with the inherited waits switched off, twelve of them go red, and
+ * the cases one would expect to guard it, in test/plans/feat/opt/effects_kept.plan.toml, stay
+ * green).
  *
  * With `value` invalid the removal leaves nothing in the value -- the node is read by no one, which
- * is why it goes -- and the operator carries the effect's own value (`:op/keep(x, x)`): it is then
- * the statement that reads the effect, and the caller hands it the place the removed node stood in
- * (`handChainPlaceTo`). The last node built is returned, or the invalid ref when
- * nothing goes out.
+ * is why it goes -- and the gate reads that node's own value: it is then the statement that reads
+ * the node, and the caller hands it the place the removed node stood in (`handChainPlaceTo`). The
+ * last node built is returned, or the invalid ref when nothing goes out.
  *
  * When this is reached: `replaceNode` calls it for a node with no sync user -- one that holds no
  * place in a `sync` block's chain. A node that does hold one is not this case: the block hands its
  * place on to the last reader instead (the block below in `replaceNode`, `handChainPlaceTo`), which
  * is what keeps 3.3 true for every graph the builder writes. The shape this answers is measured and
  * not hypothetical: `std::opt` over test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
- * holds two `:op/keep` nodes, and the test-only pass `test::keepshape`
- * (test/plans/feat/opt/effects_kept.plan.toml) writes it on purpose. With the operator off, the
- * commit refuses the graph -- "effect node 1 (':io/println') with neither a read of its value nor a
- * place in its chain" -- which is the reading the pass prints and the plan asserts.
+ * draws it. Without the gate, the commit refuses the graph -- "effect node 1
+ * (':io/println') with neither a read of its value nor a place in its chain".
  */
 gc_node_ref_t keepThroughValue(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t removed, gc_node_ref_t value,

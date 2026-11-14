@@ -38,8 +38,6 @@
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepfn.h"
-#include "camel/passes/test/keepnode.h"
-#include "camel/passes/test/keepshape.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/loop_inputs.h"
 #include "camel/passes/test/regions.h"
@@ -78,8 +76,8 @@
 #include "passes/test/impl_body.h"
 #include "passes/test/index_semantics.h"
 #include "passes/test/native_call.h"
-#include "passes/test/resources.h"
 #include "passes/test/resource_transition.h"
+#include "passes/test/resources.h"
 #include "passes/test/semantics.h"
 #include "passes/test/tags.h"
 #include "passes/trans/cpp/cpp_export.h"
@@ -1058,11 +1056,9 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
         TEST_PASS(kDanglePortTestPass, DanglePortTestPass),
         TEST_PASS(kNestedBreakTestPass, NestedBreakTestPass),
-        TEST_PASS(kKeepShapeTestPass, KeepShapeTestPass),
         TEST_PASS(kBoundsFlipTestPass, BoundsFlipTestPass),
         TEST_PASS(kInlineUseTestPass, InlineUseTestPass),
         TEST_PASS(kInlineUseDropTestPass, InlineUseDropTestPass),
-        TEST_PASS(kKeepInspectTestPass, KeepInspectTestPass),
         TEST_PASS(kContextLifetimeTestPass, ContextLifetimeTestPass),
         TEST_PASS(kContextsTestPass, ContextsTestPass),
         TEST_PASS(kDerivativesTestPass, DerivativesTestPass),
@@ -1098,8 +1094,6 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
-        TEST_PASS(kKeepNodeTestPass, KeepNodeTestPass),
-        TEST_PASS(kKeepNodePureTestPass, KeepNodePureTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
         TEST_PASS(kFactSeedTestPass, FactSeedTestPass),
@@ -2623,7 +2617,7 @@ bool passBoundaryViolation(
     // in its chain (design principles 3.1, 3.3 as amended). This is asked of the whole
     // program, not only what the pass touched. An effect retained after removing its last
     // reader still needs a credential; a preserving transformation may route it through
-    // a reader such as `:op/keep`. A selected intentional deletion may instead erase the
+    // a `GATE` that reads it. A selected intentional deletion may instead erase the
     // genuinely undemanded node. Neither route may leave an orphan effect behind.
     const EffectCredentialViolation credential = effectCredentialViolation(program, ctx);
     if (!credential.text.empty()) {

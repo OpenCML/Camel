@@ -177,11 +177,6 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
         {"struct/append_arr_in_place", __append_in_place_arr__},
         // The private copy of an array a rewritten loop starts from; likewise internal.
         {"struct/copy_arr", __copy_arr__},
-        // `:op/keep(x, v)`: `v`, with `x` kept as an input of an operator that must run, so that
-        // the node `x` names stays in the data-use set (operators/ops.h). Inserted by a pass that
-        // removes the last use of an effect or of a computation that may fault; not a group a
-        // program can name.
-        {"op/keep", __keep__},
 
         // variables
         {"var/new", __builtin__var_new__},
@@ -394,14 +389,11 @@ std::unordered_map<std::string, operator_t> makeOpsImplMap() {
 
         {"struct/last_arr", __last_arr__},
 
-
         {"struct/range", __range__},
-
 
         {"struct/concat_arr", __concat_arr__},
 
         {"struct/append_arr", __append_arr__},
-
 
         {"struct/contains_arr", __contains_arr__},
         {"struct/contains_str", __contains_str__},
@@ -687,7 +679,7 @@ void registerBuiltinOperatorTraits() {
         // (`src/builtin/operators/ops.h`).
         registry.set(
             ":" + name,
-            {.pure = kAccessFree.contains(key) || conversionNames.contains(key),
+            {.pure        = kAccessFree.contains(key) || conversionNames.contains(key),
              .elementwise = arrayConversions.contains(key)});
     }
     // `extent_of` is the one operator declared without a kernel of its own: a call it accepts is
@@ -697,16 +689,17 @@ void registerBuiltinOperatorTraits() {
     // every other one -- the loop above registers the operators that have an implementation, and
     // this one has none by design rather than by omission. It reads a type and nothing else, so it
     // is pure, it is not elementwise, and a run never reaches it to fault. The three answers are
-    // one decision and not three defaults: if a kernel is ever written for this operator, `mayFault`
-    // becomes a guard that says nothing about a path that now exists unless all three are decided
-    // again together.
+    // one decision and not three defaults: if a kernel is ever written for this operator,
+    // `mayFault` becomes a guard that says nothing about a path that now exists unless all three
+    // are decided again together.
     registry.set(":op/extent_of", {.pure = true, .elementwise = false, .mayFault = false});
     // Which types each conversion reads and writes: the fact a reader asks for instead of
     // decoding the letters of the URI (`src/core/forward.cpp#conversionKeyOf`). Written here,
     // where the operator is registered, and at no second place.
     for (const ConversionRegistration &conversion : kConversions) {
         registry.declareConversion(
-            std::string(":") + conversion.name, {conversion.source, conversion.target});
+            std::string(":") + conversion.name,
+            {conversion.source, conversion.target});
     }
     // The higher-order operators and function composition run a function the program passes
     // in: what they do is what that function does, and the passes that look at them look at
