@@ -34,31 +34,34 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 cpu_budget_ms = 150000
 timeout_ms = 300000
 
-# Seed 4, which used to be the one seed the batch left out: `std::opt::inline` ended in SIGSEGV on
-# the `f8(...)` call of its `main`, CHECK_EXCLUDED in test/tools/progen/progen.py kept it out of
-# `progen_check`, and this entry ran it alone so the crash was a reading on every run instead of an
-# absent seed. **The crash is gone** (the spliced body’s wait now lands before the loop’s first
-# round; test/cases/opt/inline/loop_wait_after_inline.cml pins the 25-line form), the seed is back in
-# the batch, and this entry keeps running it alone in the fast layer with no mark: the mark turned
-# red the first run after the fix, exactly as it was written to, and removing it is this commit.
+# Seed 4 of `generate.VERSION` 8, run on its own, and a fast reading of the seed the optimizer broke
+# last. It was the seed the batch left out and the entry carried `known_fail = true`; both are gone
+# because the crash is. `edeaa9c41` took `progen_4` of the E9 differential from crash 1 to crash 0,
+# and `test/cases/opt/inline/loop_wait_after_inline.cml` is its 25-line reduction: the four `inline`
+# cells (inline@nvm, @fvm, @jit, @prl) died of SIGSEGV because `addSpliceOrderEdges` writes the wait
+# of the statement a call was written after onto the nodes of the spliced body that own a region, and
+# `computeExecutionOrder` laid that predecessor between the body's range and the `LOOP`, which
+# `buildLoopTables` requires to be one range. `CHECK_EXCLUDED` in test/tools/progen/progen.py is
+# empty now, so the seed is back in `progen_check` as well; this entry stays because the batch is the
+# milestone layer and the seed the optimizer broke last is worth four seconds on every merge.
+#
+# The seed number alone does not name a program: `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing
+# seeds are other programs") re-pointed every seed at another program. Any entry that records a seed
+# records the generator version with it, or it names a program the next version will not generate.
 [[tests]]
 name = "progen_seed_4"
-desc = "Seed 4 of generate.VERSION 8, the seed the batch used to leave out, run through the same cross matrix on its own: it used to end in SIGSEGV in the four cells of the pipeline `inline` (inline@nvm, @fvm, @jit and @prl) while the same program ran under the other pipelines, which is a crash of std::opt::inline and not a refusal of the front end, and now it prints what the reference prints in every cell. It stays an entry of its own in the fast layer because it is the shape a loop inside an inlined body takes, and a shape that comes back must be a red where a change is measured. The expression that reaches it is the call `f8(...)` inside `let n69 = concat(...)` of `main`; neither `f8` alone nor either of its ingredients (a `for` loop over structs compared with the user `operator <`, and that operator on two struct literals) crashes on its own. Reproduction: `progen.py check --seeds 4 --with-excluded`, and `progen.py show --seed 4` for the program. The owner of that pass makes this entry green; until then it is the visible form of the seed the batch cannot hold."
+desc = "Seed 4 of `generate.VERSION` 8 through the cross matrix, alone: 41 cells (25 rewrite sequences on the node VM, and no rewrite, std::opt::inline, std::opt, std::opt and std::macro std::opt on the three other schedulers) all print the reference output. The four `inline` cells used to end in SIGSEGV; `edeaa9c41` fixed it, and `test/cases/opt/inline/loop_wait_after_inline.cml` is the 25-line reduction of the shape (`f8(...)` inside `let n69 = concat(...)` of `main`, whose spliced body owns a loop carrying the wait of the statement the call was written after). A red here is that crash returning: the entry reads `0 wrong` and `PASS`, and the program is `progen.py show --seed 4`."
 kind = "behavior"
-# A reading on every run, not only when someone runs the milestone layer: this entry costs four
-# compiler runs, so it is in the fast layer while the batch it belongs to stays in the milestone
-# one.
+# A reading on every run, not only when someone runs the milestone layer: measured at 5.4 s on
+# 2026-11-15, so it is in the fast layer while the batch it belongs to stays in the milestone one.
 tier = "fast"
 tool = "python"
 case = "../../../tools/progen/progen.py"
-args = ["${case}", "--camel", "${camel}", "check", "--seeds", "4", "--with-excluded"]
+args = ["${case}", "--camel", "${camel}", "check", "--seeds", "4"]
 expect_exit = 0
 expect_stdout_contains = ["0 wrong", "PASS"]
-expect_output_not_contains = ["FAIL"]
+expect_output_not_contains = ["FAIL", "CRASH"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-# Every run prints `seed 4 [inline@nvm]: CRASH: exit code -11;` and the summary, so a reader of the
-# gate sees the defect on every run instead of an absent seed.
-
 timeout_ms = 300000
 
 [[tests]]
