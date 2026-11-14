@@ -21,7 +21,7 @@
 不是写的返回值。所以一个 `dead=1` 的写可能仍然被程序看见。第一次把删除接进通用引擎时，`dead_write_rooted_closure`
 （闭包被调用、读 `c`）的输出从 `41\n41\n` 变成 `0\n0\n`，就是这个缺口。
 
-补过的写法（**现未保留**）：`deadWrite` 里加一条「它写进去的格子除它自己之外没有别的读者」。
+补过的写法之一（**现未保留，见新页的读数**）：`deadWrite` 里加一条「它写进去的格子除它自己之外没有别的读者」。
 它让反例墙重新站住（`dead_write_rooted_closure.opt` 回到 `41\n41\n`），但把正例也弄坏了：`std::opt` 之后
 格子上剩下的那个读者是**已经死掉的闭包节点** `h`，判据于是答 `dead=1` 变成 `dead=0`，pass 边界的检查
 （`pass.cpp#nodeRunsForItsEffect`）立刻报 `graph '__root__' has effect node 11 (':op/assn_l') with …`，
@@ -70,7 +70,10 @@
 「直接或经 GATE」）。所以缺的不是读者集合的宽窄，而是**这个位置到底是谁在写、谁在读**在内联之后没有被
 判据认出来——`placeIsReadElsewhere` 很可能连「写的那个操作数」都没在正确位置找到。
 这也是我停手的原因：再往里走就要动到内联/位置标记本身，不在「只改判据」的范围内。
+（后续：`writeIsRooted` 沿 GATE 向前走已经补进判据并落地；删除仍不安全，两次独立测量分别 **70 红**与
+**21 红**，读数与三条结论见 `2026-11-14-what-makes-a-reader-alive.cn.md`。）
 
 当前树回到**不删**的状态：判据（`deadWrite`，与准入同一处实现 `deadWriteOnceUnread`）与准入保留，
 通用引擎一行未动；正例于是又变回 `dead=1` 且节点仍在（`dead_write.opt.still_there` 就是这个读数）。
+
 
