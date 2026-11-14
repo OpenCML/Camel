@@ -3794,6 +3794,7 @@ e5f1dda926825893 ok test/cases/opt/defun/family_shape.cml
 bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
 a697e5029bcc5876 ok test/cases/opt/devirtualize/recallee_arity.cml
 3ccda385a066a3b9 ok test/cases/opt/devirtualize/recallee_type.cml
+2b68e1c7da848a36 ok test/cases/opt/e9/rc11_seed352.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
 1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml

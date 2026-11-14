@@ -680,6 +680,20 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// Whether the graph names `id` by something other than a read, so that a policy which erases a
+    /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
+    /// the entry, the exit, the node whose value it returns, its ports, its captures, the result of
+    /// each region, and the ports of a control region (an arm of a branch, the condition and the
+    /// body of a loop).
+    ///
+    /// The last of those is not bookkeeping: a control region is entered with its port list, and
+    /// the list is positional -- `LoopDraftView::bodyStateParam(j)` is entry `j`, which is the j-th
+    /// state -- so a port node an erasure took leaves the entry naming nothing, which the commit
+    /// refuses (`validateRuntimeRegions`), and a table that dropped the entry instead renames every
+    /// state after it. An unread port of such a region is therefore a name and not dead code. The
+    /// ports of an annotation region are not in this list: a rewrite may remove one, and the
+    /// published graph then holds that entry as "none" (src/runtime/graph.cpp, the encoder).
+    bool namesNode(gc_node_ref_t id) const;
     /// The statements written directly after `id` follow what `id` followed: the block's chain
     /// closes over a node the graph loses (docs/design/effects/edges.cn.md 4, removing a node
     /// splices the orderings that pass through it). The control edge names the same pair beside the

@@ -129,24 +129,12 @@ DraftWritings::rewrite(std::span<const Rule> rules, size_t maxRounds, RewriteLog
         countVars(rule.rhs);
     }
 
-    // Nodes the graph keeps by name; they are never erased.
-    const auto kept = [&](gc_node_ref_t node) {
-        if (node == draft_.entryNode() || node == draft_.exitNode() ||
-            node == draft_.outputNode() || node == draft_.returnNode()) {
-            return true;
-        }
-        for (auto list : {draft_.normPorts(), draft_.withPorts(), draft_.closureNodes()}) {
-            if (std::find(list.begin(), list.end(), node) != list.end()) {
-                return true;
-            }
-        }
-        for (uint32_t r = 0; r < draft_.regionCount(); ++r) {
-            if (draft_.region(r).result == node) {
-                return true;
-            }
-        }
-        return false;
-    };
+    // Nodes the graph keeps by name; they are never erased. The list is the draft's own answer
+    // (`GraphDraft::namesNode`), not a copy of it kept here: the names a graph keeps are the same
+    // ones extraction starts from, and the same ones the commit checks a region against, so a
+    // second spelling is a second policy -- it was one, and it did not know a control region is
+    // entered with its ports.
+    const auto kept = [&](gc_node_ref_t node) { return draft_.namesNode(node); };
     const auto unused = [&](gc_node_ref_t node) {
         return draft_.normUsersOf(node).empty() && draft_.withUsersOf(node).empty() &&
                draft_.ctrlUsersOf(node).empty() && draft_.syncUsersOf(node).empty();

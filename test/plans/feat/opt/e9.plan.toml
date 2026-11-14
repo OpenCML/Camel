@@ -1,0 +1,76 @@
+id = "opt.e9"
+order = 482
+tier = "fast"
+tags = ["feat", "opt", "regions", "defects"]
+desc = """
+The reduced program of result `29ea0a011` of the CC2027 evaluation
+(`Camel-Archive`, `CC2027/eval/results/29ea0a011/e9_reduced/`), copied unedited into
+`test/cases/opt/e9/`. It is a loop over `[1.0]` with two states, whose body is
+`(c12 - c12, 0)`: the subtraction of a value from itself folds away, and the loop body then reads
+none of the state ports it is entered with.
+
+The three entries are the reading the program had and lost. Without a pass it exited 0 and printed
+nothing; under `std::opt::algebra` and under `std::opt` it exited 1 with
+`Runtime graph 'f1' has region 1 with a port the graph does not have`, which is the commit's own
+refusal (`validateRuntimeRegions`, src/runtime/graph.cpp) of a graph a pass had already broken. The
+region is the loop body, and its port table is how the loop enters it: an entry a rewrite took, or
+an entry dropped from the middle of the table, renames every state after it
+(`LoopDraftView::bodyStateParam(j)` is entry `j`). So a port of a control region is a name the
+graph keeps even when nothing in the region reads it, and the policies that erase unread nodes now
+ask one question (`GraphDraft::namesNode`) instead of each keeping its own list -- the rules
+driver's list and extraction's list disagreed, which is exactly the window this program fell
+through.
+"""
+# Why not `known_fail`: the mark says "this program is expected to be refused", and this is a
+# program the compiler is expected to run. A red here is the defect returning, and it goes away by
+# fixing the pass.
+
+[[tests]]
+name = "e9.rc11_seed352_reference"
+desc = "`rc11_seed352` without any pass: the reading the two optimized runs must reproduce. Exit 0 and no output -- the program computes its loop's value and prints nothing."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "e9.rc11_seed352_algebra"
+desc = "`rc11_seed352` under `std::opt::algebra`, the pass it was found with, in one pass and with no accumulated prefix: exit 0 and the same stdout as the reference. This is the run that used to be refused -- the fold of `c12 - c12` left the loop body reading none of its ports, the erasure of the unread port node left the body region naming a node the graph did not have, and the commit refused the graph before any back end saw it."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "std::opt::algebra"]
+expect_exit = 0
+expect_output_not_contains = ["has region 1 with a port the graph does not have", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "e9.rc11_seed352_std_opt"
+desc = "The same program under the whole `std::opt` pipeline: exit 0 and the same stdout as the reference. The same refusal, under the pipeline the seed was found with."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc11_seed352.cml"
+args = ["${case}", "std::opt"]
+expect_exit = 0
+expect_output_not_contains = ["has region 1 with a port the graph does not have", "PassInternalError", "internal error"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 20000
