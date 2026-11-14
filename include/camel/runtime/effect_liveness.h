@@ -20,6 +20,8 @@
 
 #pragma once
 
+#include "camel/runtime/graph.h"
+
 #include <cstdint>
 
 namespace camel::runtime {
@@ -71,5 +73,34 @@ EffectStanding effectStandingOf(const EffectLivenessFacts &facts);
 
 /// Whether running the node is part of the program, as far as the liveness question goes.
 bool keepsEffectAlive(EffectStanding standing);
+
+/// Whether a root of the graph holds the write `ref` makes: the value it leaves, or the place it
+/// writes into. A place is rooted when the graph names it -- a `var` parameter, a capture, a result
+/// -- which is what a write into a variable the program keeps elsewhere looks like, and a value is
+/// rooted when it is one of the graph's own results.
+bool writeIsRooted(const GCGraph &graph, gc_node_ref_t ref);
+
+/// Whether a value of `ref` is read: a normal or a `with` input of another node, the two ways a
+/// reader takes a value (design principles 3.1). A GATE reading it counts, and so does a port of a
+/// graph the value is handed to; what they do with it is their business.
+bool valueIsRead(const GCGraph &graph, gc_node_ref_t ref);
+
+/// Whether the write `ref` makes is a **dead write**: no root of its graph holds it or the place it
+/// writes into, and no port reads it. Each half is asked of the graph as it stands, which is what
+/// makes this a judgement about a rewrite and not about the set of writes the program had. A
+/// rewrite may leave a variable captured by no escaping closure (say `fst((1, h))` drops the
+/// closure `h` that captured `c`); the write it held is then a write nobody can read, and it may
+/// go. What is checked is that **a deleted write is no root in the result and no port reads it**,
+/// not that the set of final writes is the same before and after (design principles 9.7).
+///
+/// Asked where a pass decides whether running a node is part of the program
+/// (`src/execute/pass.cpp#nodeRunsForItsEffect`, the pass boundary's effect credential check), and
+/// printed on its own for the tests by `test::deadwrite` (`src/passes/test/deadwrite.cpp`), so that
+/// the judgement is one function and can be asked without a pipeline around it.
+///
+/// Conservative where the graph does not answer: a node that is not an operator, or whose
+/// declaration the graph does not carry, is not a dead write, and nothing here says a write that is
+/// a root or that is read may go -- it may not, and this function says so.
+bool deadWrite(const GCGraph &graph, gc_node_ref_t ref);
 
 } // namespace camel::runtime

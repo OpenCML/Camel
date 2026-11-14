@@ -305,3 +305,85 @@ case = "../../../cases/opt/effects/inline_reduce_in_folded_arm.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
+
+# A write of the program's own state is judged on the graph the pass returns, not on the set of
+# writes the program was given: when a rewrite leaves the variable no longer held by anything the
+# program keeps, its last write is a write nobody can read -- no root of the graph holds it and no
+# port reads it -- and a pass may leave it behind. What is checked is that a deleted write is no
+# root in the result and no port reads it, not that the set of final writes is the same before and
+# after (design principles 9.7).
+#
+#   dead_write_dropped_closure  the closure that captured the cell reaches nothing the program keeps
+#                               (`p.0` reads the tuple's first member alone), and `x * 0 => 0` folds
+#                               away the write's only reader: the write may go
+#   dead_write_rooted_closure   the same write, with the closure called in the same `sync` block: the
+#                               value is still read, so it must run, and the program prints the 41
+#                               it wrote
+#
+# The judgement itself has its own reading below (`test::deadwrite`), which prints the answer for
+# each write without a pipeline around it.
+[[tests]]
+name = "dead_write_dropped_closure.reference"
+desc = "No pass: `h` is never called, so the program prints the 1 that `p.0` gives."
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "dead_write_dropped_closure.opt"
+desc = "`std::opt` folds `w * 0` and leaves the write with no reader and no root: the graph it returns is one a pass may hand back."
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "dead_write_rooted_closure.reference"
+desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left."
+case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+
+[[tests]]
+name = "dead_write_rooted_closure.opt"
+desc = "The write is read by the call of the closure: it is no dead write, it must run, and the same 41 is printed."
+case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+
+[[tests]]
+name = "dead_write.judgement_dropped"
+desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own: after the fold, the write nothing reads and no root holds is a dead write."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+
+[[tests]]
+name = "dead_write.judgement_rooted"
+desc = "The same judgement where the place the write writes into is one the graph names: the module's cell is a root, so the write is no dead write, and the answer names the half that says so."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["oper=:op/assn_l", "rooted=1 read=0 dead=0"]
+
+[[tests]]
+name = "dead_write_held_by_program.reference"
+desc = "No pass: the write's only reader is folded nowhere, and the program prints the 41 it wrote, twice."
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+
+[[tests]]
+name = "dead_write_held_by_program.opt"
+desc = "The module's cell is a place the graph names, so the write stays: the same 41 is printed after the fold."
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
