@@ -2231,6 +2231,12 @@ class CmlPrinter {
                 } else {
                     emit(std::format("{}return {}", indent_, expression(tail).text));
                 }
+            } else if (ifWithoutElse(tail)) {
+                // A body whose last statement is an `if` with no `else`: the branch has no value
+                // (design principles 3.7), and printing nothing dropped the arm that runs —
+                // `if debug then println('tail')` printed as an empty body
+                // (`consistency/if_without_else/statement.cml`).
+                emit(indent_ + expression(tail).text);
             }
         }
     }
@@ -2282,18 +2288,24 @@ class CmlPrinter {
         if (valueWrite != camel::runtime::kInvalidNodeRef) {
             tailPrintedAsStatement = true;
         }
-        if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement &&
-            !ifWithoutElse(tail)) {
-            // A region whose value is a gate with ordering in front of it was written as an
-            // explicit `return`; a bare last expression yields the value without that gate.
-            Expr value;
-            if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr) {
-                value = declared_.contains(tail) ? Expr{declared_[tail], 100}
-                                                 : expression(tail);
+        if (!functionBody && regionReturnsValue(region) && !tailPrintedAsStatement) {
+            if (ifWithoutElse(tail)) {
+                // An `if` with no `else` has no value: the branch stands as the statement it is,
+                // and no `return` stands in front of it (`IfWithoutElseAsValue`).
+                flushHeld(body.lines);
+                body.lines.push_back(indent_ + expression(tail).text);
+            } else {
+                // A region whose value is a gate with ordering in front of it was written as an
+                // explicit `return`; a bare last expression yields the value without that gate.
+                Expr value;
+                if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr) {
+                    value = declared_.contains(tail) ? Expr{declared_[tail], 100}
+                                                     : expression(tail);
+                }
+                flushHeld(body.lines);
+                body.lines.push_back(value.text.empty() ? indent_ + "return"
+                                                        : indent_ + "return " + value.text);
             }
-            flushHeld(body.lines);
-            body.lines.push_back(value.text.empty() ? indent_ + "return"
-                                                    : indent_ + "return " + value.text);
         } else if (tail != camel::runtime::kInvalidNodeRef && graph_->node(tail) != nullptr &&
                    !tailPrintedAsStatement) {
             body.hasTail = true;
