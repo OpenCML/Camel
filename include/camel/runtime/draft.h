@@ -1183,6 +1183,10 @@ uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
 /// aggregate reads a member below the last -- so the shorter aggregate still satisfies all of them,
 /// and no member has to be renumbered. A member's own readers are asked about here, which is the
 /// same question the credential check asks of a write: can the program still see this value.
+AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref);
+
+/// `aggregateTailVerdict(draft, ref) == AggregateTailVerdict::Droppable`, and nothing else: a caller
+/// that only needs the decision asks this, and a caller that has to say why asks the verdict.
 bool lastMemberIsUnread(const GraphDraft &draft, gc_node_ref_t ref);
 
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an

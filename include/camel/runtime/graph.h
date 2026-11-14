@@ -277,6 +277,26 @@ std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 /// it, nothing but the aggregate reads that member, and every reader of the aggregate reads a member
 /// below the last, so nothing has to be renumbered.
 uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
+
+/// Why an aggregate may or may not lose its last member. A judgement that refuses without saying why
+/// leaves its caller unable to tell a real refusal from a guard that is written wrong, so the reason
+/// is the answer and the yes/no is derived from it.
+enum class AggregateTailVerdict : uint8_t {
+    Droppable,           // the four guards hold: the last member may go
+    NotAnAggregate,      // not an aggregate, or too few members to have a last one
+    MappingMismatch,     // its member count and its ordinary input count disagree: the mapping is not
+                         // "member i is input i", so nothing here may guess
+    AggregateIsRoot,     // a root names it: whoever runs the graph reads every member
+    MemberHasReaders,    // a node besides the aggregate reads the last member, or carries it beside
+    LastMemberIsRead,    // a reader of the aggregate takes the last member, or reads it in a way that
+                         // would have to be renumbered
+};
+
+/// The name of a verdict, for a caller that prints what it decided (`test::deadwrite`).
+const char *aggregateTailVerdictName(AggregateTailVerdict verdict);
+
+AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref);
+
 bool lastMemberIsUnread(const GCGraph &graph, gc_node_ref_t ref);
 
 namespace graph {

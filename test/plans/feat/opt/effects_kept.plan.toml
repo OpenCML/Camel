@@ -526,6 +526,15 @@ args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
 expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
 [[tests]]
+name = "dead_write.aggregate_probe"
+desc = "PROBE: the verdict the judgement gives the aggregate in the closure case."
+kind = "inspect"
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["ZZZPROBE"]
+
+[[tests]]
 name = "dead_write.aggregate_escapes_kept"
 desc = "Guard: the aggregate is handed to a call, which may read any member, so nothing is dropped."
 kind = "behavior"
