@@ -83,6 +83,7 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-NoBuild` | Skip the build and run against the install already on the host. Refuses (exit 4) when that install was built from different sources. |
 | `-AllowStale` | Let `-NoBuild` proceed past that refusal. The mismatch is still printed, and the switch is never implied. |
 | `-Check <name>[,...]` | Run the repository's own static checkers on the host after the build and after the plan; `all` runs every one. An unknown name is exit 2 before anything runs. |
+| `-NoGpuWatch` | Leave out the gpu observation: every run that takes a reading also runs `test/plans/gpu` once and prints one `check=gpu-plans … mode=report` line. |
 | `-Changed` | Run the plans the change touches (`--changed`) instead of a written list. The change is listed here, where the base branch is readable, and handed to the host as `--changed-files`; a base that cannot be read is exit 2 before the push, and it never widens to the whole fast layer. |
 | `-ChangedBase <rev>` | The base for `-Changed`. Default `origin/develop`. Unreadable here is exit 2, naming the revision. |
 | `-UpdateGolden` | Rewrite the named plans' goldens instead of checking them. |
@@ -101,6 +102,14 @@ stops with PowerShell's "no positional parameter accepts 'smoke'" instead of qui
 Exit codes: the build's or the plan's own; `4` when the `-NoBuild` guard refused or a host lock was
 not obtained; `3` when the host is short of disk; `2` when the worktree, the push, the transfer or a
 `-Check` name was wrong.
+
+The gpu plans are in no other gate: the fast layer is `test/plans/smoke` plus `test/plans/feat`, and
+`test/plans/gpu` is under neither, so a red case there was read by nothing. Every run that takes a
+reading (a plan, `-Changed`, or `-Check`) therefore ends with one line a lane can paste --
+`check=gpu-plans total=<n> pass=<n> fail=<n> skip=<n> red=[<names>] red_more=<n> seconds=<n>
+mode=report` -- and that is the whole of what the gate says about the layer. It never decides the
+exit code and is not one of the checks counted in the summary above it; it makes a red gpu case
+visible, and it does not repair one. `-NoGpuWatch` leaves it out, and says so.
 
 Examples:
 

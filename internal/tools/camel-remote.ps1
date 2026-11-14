@@ -140,6 +140,42 @@
 # finds it through its own `$ORIGIN` rpath, so no stage needs a library export of its own; the one
 # global export further down serves older installs still sitting in host checkouts.
 #
+# --- the gpu layer is observed, and never gates -----------------------------
+# test/plans/gpu is in no timed gate. The fast layer is test/plans/smoke + test/plans/feat, and
+# `gpu/**` is under neither, so the red cases of test/plans/gpu/tiles.plan.toml -- one since
+# 2026-10-28, the other two CUDA bit-exactness assertions that move with the driver and with whoever
+# else is on the card -- were read by no gate at all. They ran only when a -Changed directory rule
+# named that plan file and "a plan file named as a target runs in full" skipped the layer, which is
+# why they stayed red for weeks. A red nobody reads is not one that was decided; it is one that was
+# never looked at.
+#
+# So the gate reads them and does not decide them. `gpu-plans` reuses the `reportOnly` slot of the
+# table below -- one machine-readable line, `check=gpu-plans total=<n> pass=<n> fail=<n> skip=<n>
+# red=[<names>] red_more=<n> seconds=<n> mode=report`, and an exit code kept out of `checkfail` --
+# but it is a plan run and not a checker, so it is emitted as a block of its own after the checkers
+# instead of a table row. `N run` in the closing summary is the static layer's count (16 under
+# `-Check all`), and a seventeenth row would have changed a number every lane compares. The number it
+# prints is the runner's own [SUMMARY] reduced to one line, never a second count kept here, and it is
+# `unknown` -- not zero -- when the runner printed no summary at all. It runs on the caller's -Jobs, after the
+# checkers, and under the host's plan lock: it *is* a plan run and not a reader of one, so a number
+# taken beside five other lanes would not be comparable. `-NoGpuWatch` leaves it out for a run that
+# wants its own readings without the extra sweep.
+#
+# **This is an observation, not a wall, and it does not stand in for the fix.** The line makes a red
+# gpu case visible; it does not guard the layer, and nothing here repairs a case. Those cases stay
+# red until someone fixes them, and that is exactly what the line is for. It is report-only because
+# a GPU reading depends on the card, the driver and the co-tenants -- a bit-exactness assertion that
+# fails on this host must not block a merge -- and because the gate used to run none of this layer,
+# so its red list is a starting reading and not a regression. Making it a wall is a separate
+# decision, and it means deleting `reportOnly` from this observation once the red list is empty and
+# the host's device state is something the gate can own.
+#
+# Two selection traps, each of which would print the same false green this line exists to remove:
+# `test/plans/gpu` is a directory, so it is read at a tier, and the default tier is `fast` while the
+# cases this observation exists for are `tier = "slow"` -- so `--tier all` is passed rather than the
+# caller's `-Tier`; and a run that selected nothing prints the same three numbers as a green one,
+# which is why the reading above is `unknown` when there is no summary line to reduce.
+#
 # --- the plan's stderr travels with its stdout ------------------------------
 # A plan's reason for being red is written to stderr by the runner ("this run selected no test at
 # all", the ENOENT stack of a mistyped plan path). That reason has to arrive, or a red gate hands
@@ -247,6 +283,12 @@ param(
     # An unknown name is exit 2 before anything runs; see "what the panel sees" and the -Check
     # section of the header for the stages and the exit code.
     [string[]]$Check = @(),
+    # Leave the gpu observation out. Every run that takes a reading also runs test/plans/gpu once and
+    # prints one `check=gpu-plans ... mode=report` line (see the header, "the gpu layer is observed,
+    # and never gates"); it never decides the exit code. This switch is for a run that wants the
+    # gate's own readings without that extra sweep -- and it names what it left out, because an
+    # absent line and a green one read the same from the outside.
+    [switch]$NoGpuWatch,
     # The toolchain's libstdc++ directory, put first on the single LD_LIBRARY_PATH this run exports
     # (see the header). A current build carries its own copy in `libs/` with a `$ORIGIN` rpath, so
     # the export only serves the older installs still sitting in host checkouts. Empty means the
@@ -385,6 +427,24 @@ $checkList = $checkNames -join ' '
 $checkHasAll = $Check -contains 'all'
 $planStageNames = @($checkers.Keys | Where-Object { $checkers[$_].planStage })
 $planStageSkipped = @($planStageNames | Where-Object { $checkNames -notcontains $_ })
+
+# The gpu observation, beside the table and deliberately not in it: it is a plan run, so it is no
+# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (16
+# under -Check all), which a seventeenth row would have changed for every lane that compares that
+# number. It reuses the report-only shape instead (one machine-readable line, an exit code that never
+# reaches `checkfail`) and is emitted as a block of its own after the checkers; the header section
+# "the gpu layer is observed, and never gates" states what it is and what it is not.
+#
+# It rides any run that takes a reading -- a plan, -Changed, or the check stage -- and not a
+# build-only run (nothing to compare) or a -UpdateGolden run (an authoring pass that rewrites goldens
+# and reads none of them back). `-NoGpuWatch` is the explicit way out, and it says so out loud: a
+# missing line and a green one read the same from the outside.
+$gpuObservationName = 'gpu-plans'
+$gpuReadingWanted = $Plan.Count -gt 0 -or $Changed -or $checkNames.Count -gt 0
+$gpuWanted = (-not $NoGpuWatch) -and (-not $UpdateGolden) -and $gpuReadingWanted
+if ($NoGpuWatch -and $gpuReadingWanted) {
+    Write-Host "[camel-remote] -NoGpuWatch: the gpu plans were not run, so this run prints no gpu reading (test/plans/gpu is observed and never gating; see the header)"
+}
 
 # A reading taken on a loaded host is not comparable to one taken on a quiet one: this machine also
 # runs every other lane's build, and several lanes at -Jobs 8 is more work than there are cores. So
@@ -985,6 +1045,78 @@ echo "[camel-remote] --- ${checkName}: exit `$c ---"
 "@
     }
 
+    # --- the gpu observation -------------------------------------------------
+    # The shape of a `reportOnly` entry, for a thing that is not a checker: the plan run's output is
+    # captured, one machine-readable line is printed, and the exit code never reaches `checkfail`.
+    # Three differences are the reading's own, and each is why the line can be trusted:
+    #   * it is a plan run (`scripts/test.js`, on the caller's -Jobs), and it takes the host's plan
+    #     lock for itself -- it is a second plan run and not a reader of the first one, and a number
+    #     taken while five other lanes are running plans is a different number;
+    #   * `--tier all` rather than the caller's `-Tier`: `test/plans/gpu` is a directory, so it is read
+    #     at a tier, and the default `fast` layer would leave out the slow cases this observation
+    #     exists for (the header states this trap);
+    #   * the reading is the runner's own [SUMMARY] reduced here, never a count of our own: `fail=`
+    #     is its `fail:`, `red=` is the names its own `[FAIL]` lines print, and a run that printed no
+    #     summary reads `unknown` because a zero nobody measured is the reading of a green run.
+    # `awk` prints the failing tests' own block (the `[FAIL]` line and the indented detail under it)
+    # and nothing about the tests that passed, because the line already counts those.
+    $gpuBlock = ''
+    if ($gpuWanted) {
+        $gpuReadingFile = "$remoteScratch/$gpuObservationName.out"
+        $shownGpu = "node scripts/test.js test/plans/gpu --jobs $Jobs --tier all"
+        $gpuBlock = @"
+
+# --- the gpu layer: observed, never gating (see the header) -----------------
+echo '[camel-remote] --- $($gpuObservationName): $shownGpu ---'
+exec 5>/tmp/camel-host-test.lock
+if ! flock -w 1800 5; then
+    # No slot is not a red: this observation decides nothing, so it says it did not read and goes.
+    echo '[camel-remote] $($gpuObservationName): no host test slot within 1800 s, so the gpu layer was not read'
+    echo "check=$($gpuObservationName) total=unknown pass=unknown fail=unknown skip=unknown red=[unknown] red_more=0 seconds=0 mode=report"
+else
+    # The sweep's own clock, because the checks stage's seconds now carry it: a lane comparing that
+    # number with an earlier run's has to be able to see what the extra time was.
+    gpu_started_ns=`$(date +%s%N)
+    $shownGpu > '$gpuReadingFile' 2>&1
+    gpu_code=`$?
+    gpu_ms=`$(( (`$(date +%s%N) - gpu_started_ns) / 1000000 ))
+    gpu_seconds=`$(( gpu_ms / 1000 ))
+    gpu_esc=`$(printf '\033')
+    gpu_clean=`$(sed "s/`${gpu_esc}\[[0-9;]*m//g" '$gpuReadingFile')
+    gpu_summary=`$(printf '%s\n' "`$gpu_clean" | grep -E '^\[SUMMARY\]' | head -n 1)
+    if [ -n "`$gpu_summary" ]; then
+        gpu_total=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/^\[SUMMARY\] total: ([0-9]+).*/\1/p')
+        gpu_pass=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/.*, pass: ([0-9]+).*/\1/p')
+        gpu_fail=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/.*, fail: ([0-9]+).*/\1/p')
+        # The runner prints `skip:` and `known failures:` only when they are non-zero; an absent one
+        # is a measured zero and not an unknown, so those two default to 0.
+        gpu_skip=`$(printf '%s\n' "`$gpu_summary" | sed -nE 's/.*, skip: ([0-9]+).*/\1/p')
+        gpu_skip=`${gpu_skip:-0}
+        gpu_reds=`$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^\[FAIL\] ([^ ]+).*/\1/p')
+        gpu_nfail=`$(printf '%s\n' "`$gpu_reds" | grep -c . || true)
+        # Twelve names is what a line can carry and still be read; the count is in `fail=` and the
+        # remainder is named as a number rather than dropped silently.
+        gpu_red=`$(printf '%s\n' "`$gpu_reds" | head -n 12 | awk 'NR>1{printf ","} {printf "%s"}')
+        gpu_more=`$(( (`${gpu_nfail:-0}`) > 12 ? (`${gpu_nfail:-0}`) - 12 : 0 ))
+        if [ "`${gpu_nfail:-0}" -gt 0 ]; then
+            printf '%s\n' "`$gpu_clean" | awk '/^\[FAIL\]/ {p=1} p && /^\[/ && !/^\[FAIL\]/ {p=0} p'
+        fi
+    else
+        # No summary line: the runner refused before it measured anything (a target it could not
+        # resolve, an install it could not start). Its tail is the reason, so the reason travels
+        # instead of a zero this run did not measure.
+        printf '%s\n' "`$gpu_clean" | tail -n 20
+        gpu_total=unknown; gpu_pass=unknown; gpu_fail=unknown; gpu_skip=unknown
+        gpu_red=unknown; gpu_more=0
+    fi
+    rm -f '$gpuReadingFile'
+    echo "check=$($gpuObservationName) total=`${gpu_total:-unknown} pass=`${gpu_pass:-unknown} fail=`${gpu_fail:-unknown} skip=`${gpu_skip:-unknown} red=[`${gpu_red}] red_more=`${gpu_more:-0} seconds=`${gpu_seconds:-0} mode=report"
+    echo "[camel-remote] --- $($gpuObservationName): exit `$gpu_code ---"
+fi
+exec 5>&-
+"@
+    }
+
     # Housekeeping first: a checkout whose local worktree is gone is only disk, and this run needs
     # room to build. LIVE is the list of worktrees that still exist on the workstation.
     $remoteScript = @"
@@ -1196,6 +1328,12 @@ $checkBlocks
         if [ `$code -eq 0 ]; then code=`$checkfail; fi
     fi
 fi
+# --- the gpu observation ----------------------------------------------------
+# After the checkers and outside their `if`: it is not one of the checks, so it does not need -Check
+# to be asked for, and it is not counted by `N run`. Its own block explains what it reads; the one
+# thing it does not do is touch `code` -- `checkfail` is untouched by it, so no reading it prints can
+# decide this run.
+$gpuBlock
 # The scratch directory goes with the run: doing it here saves a connection, and a run that dies
 # before this line leaves something the day-old prune in /tmp sweeps up.
 cd /tmp && rm -rf '$remoteScratch'
@@ -1399,6 +1537,15 @@ exit `$code
 
     # One line per checker: the output above is the command's own, and this list says which name
     # each exit code belongs to, next to the run's exit code.
+    #
+    # The gpu observation's footer travels on the same regex as a checker's, so its reading arrives
+    # in `$checkResults` too. It is taken out here rather than left in: `N run` below is the static
+    # layer's count (16 under -Check all), and the observation is a plan run that is not one of those
+    # checks -- a seventeenth name in that count would change a number every lane compares. It is
+    # listed on its own line instead, with the same "report only" tag and a word about the count, so
+    # that a green check summary is not read over a gpu layer somebody forgot to look at.
+    $gpuObserved = @($checkResults | Where-Object { $_.name -eq $gpuObservationName })
+    $checkResults = @($checkResults | Where-Object { $_.name -ne $gpuObservationName })
     if ($checkResults.Count -gt 0) {
         # A report-only entry's exit code does not decide the run, so it must not be counted in
         # `failed` here -- and it must not vanish either, because a number nobody sees cannot be
@@ -1426,6 +1573,13 @@ exit `$code
         foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].planStage })) {
             Write-Host ("[camel-remote] checks: {0} is a named-stage check, not part of -Check all; it ran because it was named" -f $result.name)
         }
+    }
+    # The gpu reading, named as what it is: one line, and the two things a reader could otherwise get
+    # wrong -- that it was one of the checks above (it was not) and that a red there decides this run
+    # (it does not). Printed after the check list so it is read after the count it is not part of.
+    foreach ($result in $gpuObserved) {
+        Write-Host ("[camel-remote]   {0} exit {1} (report only: does not decide the run, and is not one of the checks counted above)" -f `
+            $result.name, $result.exit)
     }
 
     if ($null -ne $planStartedAt) {
