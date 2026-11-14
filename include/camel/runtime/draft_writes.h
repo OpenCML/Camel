@@ -56,6 +56,7 @@ bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id);
  */
 bool writeIsRooted(const GraphDraft &draft, gc_node_ref_t ref);
 bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref);
+bool deadWriteOnceUnread(const GraphDraft &draft, gc_node_ref_t ref);
 
 /**
  * isWrittenInPlace for every node of a draft at once: the written slots are computed once, so a

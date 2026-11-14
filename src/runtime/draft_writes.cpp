@@ -382,6 +382,20 @@ bool writeIsRooted(const GraphDraft &draft, gc_node_ref_t ref) {
     return writeIsRootedWith(DraftGraphView{draft}, ref);
 }
 
+bool deadWriteOnceUnread(const GCGraph &graph, gc_node_ref_t ref) {
+    const FrozenGraphView view{graph};
+    const GCOperBody *body = view.bodyOf(ref);
+    return body != nullptr && isWriteOfProgramState(*body, view.normInputsOf(ref).size()) &&
+           !writeIsRootedWith(view, ref);
+}
+
+bool deadWriteOnceUnread(const GraphDraft &draft, gc_node_ref_t ref) {
+    const DraftGraphView view{draft};
+    const GCOperBody *body = view.bodyOf(ref);
+    return body != nullptr && isWriteOfProgramState(*body, view.normInputsOf(ref).size()) &&
+           !writeIsRootedWith(view, ref);
+}
+
 bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref) {
     return deadWriteWith(DraftGraphView{draft}, ref);
 }
