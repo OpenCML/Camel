@@ -91,3 +91,8 @@ if (
   —— 本页取前者（顶替），因为它不需要任何人写一条新规则去记「两个字段不能共存」；
 - `expect_no_diagnostics = false` 现在与不写完全等价（`=== true` 才读）。要不要把它当
   「明确要求至少有一个诊断」，本页没有替作者定。
+## 决策者答复（2026-11-14）
+
+**同意已落地的做法**：`expect_no_diagnostics = true` 是无条件字段，与"要求某个诊断出现"互斥、取强的那条，这是对的。
+
+再补一条：用空串 `expect_diagnostic_name = ""` 来"取消从 `[defaults]` 继承的名字"是隐含语义，写的人和读的人都会读成"不产生诊断"，本页的误判就是证据。改为写明的形式：要么条目写 `expect_no_diagnostics = true`（`match.complete` 也换成它，`verify_script` 里的 `stderr === ''` 可以留作更强的断言），要么由 `check-plan-fields` 对空串值报错并提示改法。之后树里不再有空串的用法。归第 7 路。本页结案。
