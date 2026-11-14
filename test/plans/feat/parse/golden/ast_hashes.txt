@@ -3944,6 +3944,13 @@ da53a2fc81e16081 ok test/cases/para/core/scalar_recursion_inline.cml
 9e032b14591979ab ok test/cases/para/core/unordered_foreach_smoke.cml
 a7ad6d7efb545b7c ok test/cases/para/core/unordered_foreach_timing.cml
 3c12d3ff6dcaa94e ok test/cases/para/core/unordered_reduce_sum.cml
+933f6625ac3fb51f ok test/cases/para/exec_pred/branch.cml
+548188d11af99c3c ok test/cases/para/exec_pred/fault.cml
+473cd0b411c4bfb2 ok test/cases/para/exec_pred/io.cml
+79d50493cd861314 ok test/cases/para/exec_pred/linear.cml
+583915c7bbf0286d ok test/cases/para/exec_pred/loop.cml
+4f1bfa68bd03edda ok test/cases/para/exec_pred/order_edge.cml
+43f99393757dedbd ok test/cases/para/exec_pred/sync_block.cml
 5d5e41664229caf5 ok test/cases/para/handoff/depth_across.cml
 ca0a00b243b1ae9e ok test/cases/para/handoff/fault_deep.cml
 2127747290ba21b5 ok test/cases/para/handoff/shapes.cml

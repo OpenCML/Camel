@@ -60,21 +60,12 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
 
-/// The edge kinds this scheduler's plan obeys. All of them but the order edge: an order edge only
-/// says which of two nodes that both run goes first (`docs/design/effects/edges.cn.md` 2), and the
-/// plan has never obeyed one. The graph's builder does write them, and on two programs the
-/// difference is what the reference and this back end disagree about:
-/// `test/cases/para/core/concurrent_calls.cml` prints `0` on `std::nvm` and `2` here, and
-/// `concurrent_recursion.cml` prints `0 of 8` against `8 of 8`, because a `sync` call's footprint
-/// is not named and the builder then orders it after every effect written before it in the block.
-/// Which of the two is right -- the graph orders the two calls, or effect ordering on an unnamed
-/// footprint is too strong -- is the language author's call, so the one place this schedule differs
-/// from `camel::execute::executionPredecessorsOf` is written here, once, and the differential test
-/// (`test/plans/feat/para/exec_pred.plan.toml`) uses programs that order no two concurrent nodes.
-/// The node-by-node task graph this pass also builds (`connectRuntimeDependencies`) obeys every kind.
-constexpr bool planObeysPredecessor(ExecutionPredecessor::Kind kind) {
-    return kind != ExecutionPredecessor::Kind::Order;
-}
+/// A structured plan obeys every edge kind, the order edge included. An order edge says which of
+/// two nodes that both run goes first (design principles 3.1, `docs/design/effects/edges.cn.md` 2),
+/// and no back end may ignore that: `std::nvm` walks one order and so obeys it, and the plan is cut
+/// along the same predecessor edges. A pair of effects that may run at once is a pair the graph
+/// builder left unordered -- an effect on an `unordered` resource, or two nodes of different
+/// resources in a body that is no `sync` block -- and never a pair it ordered.
 
 struct TaskflowHigherOrderCallSite {
     GCGraph *runtimeGraph = nullptr;
@@ -1082,13 +1073,11 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
             }
         };
         // What the node waits for is read from the one function that says it
-        // (camel::execute::executionPredecessorsOf), and this plan waits for
-        // planObeysPredecessor of them.
+        // (camel::execute::executionPredecessorsOf), every kind of edge included: the order edge
+        // orders two nodes that both run, and a plan that ignored it would run them at once.
         for (const camel::execute::ExecutionPredecessor &predecessor :
              camel::execute::executionPredecessorsOf(*graph, ref)) {
-            if (planObeysPredecessor(predecessor.kind)) {
-                addWait(predecessor.node);
-            }
+            addWait(predecessor.node);
         }
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -2712,15 +2701,13 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
     };
 
     // The BRCH waits for what every node waits for, from the one function that says what that
-    // is (camel::execute::executionPredecessorsOf), and this plan waits for planObeysPredecessor
-    // of them: the condition it reads, its control inputs, and the statement written before the
-    // branch (docs/design/effects/edges.cn.md 1.5).
+    // is (camel::execute::executionPredecessorsOf): the condition it reads, its control inputs,
+    // and the statement written before the branch (docs/design/effects/edges.cn.md 1.5), the
+    // order edge among them.
     std::vector<gc_node_ref_t> brchPredecessors;
     for (const ExecutionPredecessor &predecessor :
          camel::execute::executionPredecessorsOf(*runtimeGraph, brchRuntimeIndex)) {
-        if (planObeysPredecessor(predecessor.kind)) {
-            brchPredecessors.push_back(predecessor.node);
-        }
+        brchPredecessors.push_back(predecessor.node);
     }
     precedeFromInputs(brchPredecessors, selector);
 
