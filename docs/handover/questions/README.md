@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：27 页
+## 现在在等作者：28 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -35,6 +35,7 @@
 | [`2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge`](2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge.cn.md) | 一个既没有值读者、也没有同步后继的 `GATE`，怎么结束一条同步边？ |
 | [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，这条入口现在读的是「有没有这条遍都一样」 |
 | [`2026-11-14-delete-neutral-only`](2026-11-14-delete-neutral-only.cn.md) | 作者要删 `algebra.cpp` 的 `neutral_only`，可它是活代码：删还是留？ |
+| [`2026-11-14-how-does-a-plan-say-no-diagnostic-at-all`](2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md) | 一个计划怎么表达「这次运行一个诊断都不产生」？ |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 |
 
 ## 生成器不会删的行：54 行（页已不在 `questions/` 里）

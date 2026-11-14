@@ -83,7 +83,7 @@ const TEST_FIELDS = new Set([
     'expect_stdout_starts_with', 'expect_stdout_not_contains', 'expect_stderr_contains',
     'expect_output_contains', 'expect_output_not_contains',
     'expect_diagnostic_name', 'expect_diagnostic_code',
-    'expect_diagnostic_line', 'expect_diagnostic_column',
+    'expect_diagnostic_line', 'expect_diagnostic_column', 'expect_no_diagnostics',
     'expect_refusal',
     'perf_budget_mean_ms', 'perf_budget_tolerance_pct', 'perf_budget_platform',
     'verify_script', 'verify_script_path', 'verify_js',
@@ -2008,7 +2008,20 @@ async function validateTest(test, result, context) {
             }
         }
     }
-    if (
+    // "The run records no diagnostic at all" is a claim of its own, and until this field existed a
+    // plan had no way to make it: `expect_diagnostic_name = ""` only cancels the name `[defaults]`
+    // gave the entry (the block below is gated on truthiness) and asserts nothing. The flag is the
+    // stronger claim, so it stands in place of the per-diagnostic expectations rather than joining
+    // them -- an entry cannot both require a diagnostic and require none -- and an entry that does
+    // not name the field keeps exactly the meaning it had.
+    if (test.expect_no_diagnostics === true) {
+        if (result.diagnostics.length > 0) {
+            const seen = result.diagnostics
+                .map((diagnostic) => diagnostic.name || diagnostic.code || diagnostic.message)
+                .join('; ')
+            failures.push(`expected no diagnostics, got ${result.diagnostics.length}: ${seen}`)
+        }
+    } else if (
         test.expect_diagnostic_name
         || test.expect_diagnostic_code
         || typeof test.expect_diagnostic_line === 'number'

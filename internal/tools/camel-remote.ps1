@@ -330,6 +330,17 @@ $checkers = [ordered]@{
     # the gate's criteria are untouched and it runs in the same environment as every other command
     # in this script, with no per-stage prefix of its own.
     'gate-static'         = @{ script = 'scripts/release-gate.mjs'; args = @('--only', 'static'); compiler = $true }
+    # A plan field the entry's kind never evaluates is not a test: the entry reads as a comparison and
+    # makes none (`docs/test-plans.md`, "Fields a Kind Does Not Read"; the shape it was written for was
+    # a `negative` entry carrying `compare_to`, green for seven months while it checked only an exit
+    # code). It lives under test/tools/ because its subject is the plan tree, and its table is checked
+    # against `validateTest` by `--verify-runner`, so the guard cannot outlive the code it describes.
+    # A wall rather than a report-only entry: it is pure static analysis, deterministic, a few
+    # seconds, and its count is already ratcheted in test/tools/plan-fields-baseline.json -- findings
+    # may not grow past that file, and a missing baseline is itself a red rather than a pass over
+    # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
+    # going red is what says it went up.
+    'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
