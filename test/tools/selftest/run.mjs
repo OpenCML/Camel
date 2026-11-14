@@ -814,7 +814,7 @@ const RULELESS_ALLOWED = [
         why: 'the perf plans are deliberately not selectable',
     },
     {
-        match: /^test\/plans\/feat\/mm\/gc(\.plan\.toml|_collections\.plan\.toml|_elder_exhaustion\.plan\.toml)$/,
+        match: /^test\/plans\/feat\/mm\/gc(\.plan\.toml|_collections\.plan\.toml|_elder_exhaustion\.plan\.toml|_root_window\.plan\.toml)$/,
         why: 'the GC-stress plans are deliberately not selectable',
     },
     {

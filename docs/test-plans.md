@@ -499,7 +499,7 @@ What a rule deliberately does **not** select, because the project forbids it on 
 
 - `test/plans/perf/**` (benchmarks and the PyTorch showcase comparisons);
 - the GC-stress plans `feat/mm/gc`, `feat/mm/gc_collections`, `feat/mm/gc_elder_exhaustion`,
-  `gpu/tiles_regions`;
+  `feat/mm/gc_root_window`, `gpu/tiles_regions`;
 - the random-program check `feat/opt/progen.plan.toml`.
 
 No file rule names them, and the `test/plans/` self rule excludes them: editing one of those plan
