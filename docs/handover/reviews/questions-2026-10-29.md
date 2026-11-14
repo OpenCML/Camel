@@ -3675,4 +3675,7 @@ A16f 先在 taskflow 守所有顺序边（本日另一条返工）之后重跑�
   - 后端：nvm、fvm、jit、prl 各配 `--gc generational` 与 `--gc mark-sweep` 两种，加 `std::cpp`（`clang++ -std=c++20 -O2 -ffp-contract=off -I$CAMEL_HOME/include` 编译，不带回收器）。
 - **判定**：遍给出带位置的诊断（`REFUSED`）是合法结果。三个数：错值 = `MISMATCH`；拒绝 = `REFUSED_UNLOCATED`（`PassInternalError`）；崩溃 = `CRASH` + `HANG` + `ERROR_NO_DIAG` + `CPP_COMPILE_ERROR`。
 - **基线**（`29ea0a011`，按程序计）：错值 19 个（6 个根因）、无位置的拒绝 21 个、崩溃 12 个加 2 个 C++ 编译失败。按格计：`MISMATCH` 618、`REFUSED_UNLOCATED` 776、`CRASH` 72、`ERROR_NO_DIAG` 61、`CPP_COMPILE_ERROR` 3。
-- **实现**：参考 `Camel-Archive/CC2027/eval/scripts/e9_difftest.py`（run/analyze/reduce；根因按 nvm 上第一个失败的流水线前缀聚类）。归档仓库协调者未必读得到，请决策者转来；把它移植成 `test/tools/` 下的工具，进慢层（并发 4 时 500 个程序约一小时，适合每晚一次或合并前）。三个数按"只降不升"做棘轮，新增的错值让闸门失败。
+- **实现**：参考 `Camel-Archive/CC2027/eval/scripts/e9_difftest.py`（run/analyze/reduce；根因按 nvm 上第一个失败的流水线前缀聚类）。归档仓库协调者未必读得到，请决策者转来；把它移植成 `test/tools/` 下的工具，**分三档跑**（负责人 2026-11-14：完整跑很慢，应当有意识地跑）：
+  1. **快层**：已找到的最小复现程序（`rc*.cml` 这类）当普通用例，每次合并都跑，几秒。
+  2. **慢层**：50 个种子、只跑 nvm 与 prl 两个后端（各一种回收器）、11 条流水线都跑，约 1100 格，并发 4 时估计一两分钟；跑慢层时顺带。
+  3. **完整跑**：500 个种子、全部 99 格，并发 4 约一小时；由一个脚本手动触发，在发版前、改了优化遍或后端之后跑，有空闲机器时每晚跑。"错值、拒绝、崩溃"三个数的棘轮只拿完整跑的结果比较（只降不升），读数记在那次完整跑的提交说明里。
