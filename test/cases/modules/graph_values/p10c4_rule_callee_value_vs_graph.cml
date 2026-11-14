@@ -1,0 +1,72 @@
+/**
+ * The smallest program in which a rewrite changes a callee: the graph a rewritten function shows
+ * and the value its call computes are one reading, and it must agree on every back end.
+ *
+ * `user` calls `target`, and `drop_one` removes `target`'s `+ 1`. A function value names a program
+ * and a graph, and every function its graph calls is read in that program, so the rewritten `user`
+ * calls the `target` of the program the commit handed back: 0 `+ 1` nodes reachable from `q`, and
+ * `q(5)` is 5. The program the rewrite was taken from keeps its own `target`: 1 `+ 1` node and
+ * `user(5)` is 6.
+ *
+ * The two numbers on each line are the disagreement this case exists for. A call site that kept
+ * the callee of the program it was taken from reads "gr 1 0" beside "val 6 6": the graph query
+ * says the rewrite reached the callee and the run says it did not.
+ */
+import { Rule, rewrite } from rewrite
+import { Graph, Node, constant, graphs_of, inputs, name, nodes, op, op_name } from graph
+import { ends_with } from str
+
+rule drop_one(x: int) { x + 1 => x }
+
+func target(x: int): int {
+    return x + 1
+}
+
+func user(n: int): int {
+    return target(n)
+}
+
+/// The text of a node's operator, or '' for a node that is not an operator.
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+/// Whether a node is the constant 1.
+func isOne(n: Node): bool {
+    return match constant::<int>(n) {
+        case null => false
+        case v => v == 1
+    }
+}
+
+/// The `x + 1` of a `target`: an int addition whose second operand is the constant 1.
+func isAddOne(n: Node): bool {
+    let ins = inputs(n)
+    return opText(n) == ':op/add_l' && len(ins) == 2 && isOne(ins[1])
+}
+
+/// How many `+ 1` nodes the graph of a function has.
+func addOnes(g: Graph): int {
+    return len(nodes(g)->filter<isAddOne>)
+}
+
+func isTarget(g: Graph): bool {
+    return name(g)->ends_with<'target'>
+}
+
+/// The graph of `target` that `p` reaches.
+func targetIn::<F>(p: F): Graph {
+    let found = graphs_of(p)->filter<isTarget>
+    return found[0]
+}
+
+func main(): int sync {
+    let rules: Rule[] = [drop_one]
+    let q = user->rewrite<rules> !! user
+    println('gr', addOnes(targetIn(user)), addOnes(targetIn(q)))
+    println('val', user(5), q(5))
+    return 0
+}
