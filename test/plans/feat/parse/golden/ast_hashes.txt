@@ -1486,9 +1486,9 @@ df2285a6921cfa9b ok test/cases/compile/prelude_signatures/imported_name.cml
 61a3771632cfbbfe ok test/cases/compile/prelude_signatures/with_pack_with_body.cml
 d5bfbf7a13058125 ok test/cases/compile/ref/err_holds_ref.cml
 c7bf8d2161fb4912 ok test/cases/compile/ref/err_holds_ref_closure.cml
-a603f90011a7fd12 ok test/cases/compile/ref/ref_boxes_are_counted.cml
-c87e262c61f310e1 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
-d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
+bc399446668c0497 ok test/cases/compile/ref/ref_boxes_are_counted.cml
+03181332155b589a ok test/cases/compile/ref/ref_boxes_loop_ten.cml
+1e1c6f1136609f46 ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 6e031bde2d13dbbf ok test/cases/compile/ref/ref_closure.cml
 9c5ed6009d7896e0 ok test/cases/compile/ref/ref_closure_capture.cml
 2dc36a2971e3b790 ok test/cases/compile/ref/ref_content_survives.cml
