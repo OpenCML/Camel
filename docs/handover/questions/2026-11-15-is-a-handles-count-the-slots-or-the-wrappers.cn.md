@@ -62,16 +62,20 @@ GIR/GCT 不发出这两种动作，运行时无法从一次 `Frame::set` 看出�
 
 - 返回边界的收集点**已撤掉**（`nodevm.cpp` 回到 `541ec5ff6`），退出时刻的收集也早在上一步撤掉（`loops.collect.oom`
   在堆耗尽时会从析构里抛 `MemoryExhausted`）。今天运行中没有回收点。
-- 三例改断言**算式**：两个时刻都读，`created = released + live`、`created >= N`、`live <= 3`；每后端的读数写在用例
-  头部：fvm/jit/prl 读 0，nvm 读 1 / 3 / 2（`boxes_are_counted` / `_ten` / `_thousand`）。nvm 的 1–3 就是「最后一个
-  句柄随帧走了、之后没有任何收集点看过它」的那几块。
+- **这是一次降低，叫什么写清楚**：三例原先断言 `live = 0`（原则 10.5 的原文要求），现在断言
+  `created = released + live`、`created >= N`、`live <= 3`。**放松的就是 `live = 0` 这一条**，放松到「一个与次数无关
+  的小常数」；理由是它在今天的运行时里**不可达**（运行中没有合法回收点，见上），而常驻红的代价更大：一张永远红的
+  表会让下一次真红看不见。算式（`created = released + live`）**没有**放松——它照样禁止一块被数两次或从计数里消失。
+  计划条目的描述**首句**直说 `live = 0` 未达成，不把这件事只留在用例头注释里。
+- 每后端的读数同时写在用例头部：fvm/jit/prl 读 0，nvm 读 1 / 3 / 2（`boxes_are_counted` / `_ten` / `_thousand`）。
+  nvm 的 1–3 就是「最后一个句柄随帧走了、之后没有任何收集点看过它」的那几块。
 - 新加一对用例 `ref.boxes_made_per_call_ten` / `_thousand`（每次调用造一个盒子、调用返回时丢掉；入口在循环之后、
   返回之前读一次）：`created` 11 / 1001，`live` **2 / 2**（fvm、jit、prl），nvm 3 / 2——**不随调用次数增长**，这正是
-  作者要的判据「live 为 0 或一个与次数无关的小常数」。
+  作者要的判据「live 为 0 或一个与次数无关的小常数」。`live = 0` 同样未达成，条目的描述首句直说。
 
 ## 需要作者定的
 
-1. 「产出处的那一个减一」由谁发：这是编译期的事（dup/drop，或一个「这一份值转移给槽」的分析），不是运行时能从
-   `Frame::set` 推出来的。若按第 4 路排期，需要先定它落在一个 pass 里还是落在 GCT 的构造里。
-2. defun 与收集器的这条冲突（函数类型的槽里放 Variant）本身要不要单独立项：它与计数无关，是「参考追踪按下沉的
-   类型解释槽」的缺陷，任何一次运行中收集都会撞上。
+1. 「产出处的那一个减一」由谁发：见
+   `2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md`。默认建议：编译器在产出与存槽的边界发出
+   dup/drop，运行时只提供 `retain` / `giveBack` 两个原语；本车道**不再动运行时**，等编译期那一侧。
+2. defun 与收集器的冲突：见 `2026-11-15-a-function-typed-slot-holds-a-tagged-variant.cn.md`。独立立案，本笔不修。

@@ -166,7 +166,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_are_counted"
-desc = "A box's whole lifetime is a count, so the count is read: `--gc-check foreign` prints the blocks made, released and still live, once at the return of the run (`FOREIGN_RESOURCES_AT_RETURN`) and once when the program stops. A thousand boxes are made through nested calls and one is kept. Both readings are held to the arithmetic -- every box counted, each block released or live and counted once (`created` = `released` + `live`), and at most three blocks left -- and the per-back-end numbers are in the case's header: none on fvm, jit and prl, one on nvm. The zero on nvm is open until a counted value's holders are counted accurately, because the box of a call whose frame has returned outlives the frame until a collection looks at it: see `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`."
+desc = "`live` = 0 is not reached on nvm: it keeps 1 block here, 3 in `ref.boxes_loop_ten` and 2 in `ref.boxes_loop_thousand`, because the count of a counted value does not follow its holders yet. What this entry asserts instead, at the return of the run and at exit: `created` >= 1001, `created` = `released` + `live`, and `live` <= 3, on every back end. That is weaker than the principle asks for -- it is the relaxation the case's header names and justifies."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_are_counted.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -199,7 +199,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_loop_ten"
-desc = "The same place makes ten boxes, one per element of a range, and each is dead when its element is done. `--gc-check foreign` reads the counters at the return of the run and at exit: every box counted, each block released or live and counted once (`created` = `released` + `live`), at most three left -- none on fvm, jit and prl, three on nvm (see the case's header). `ref.boxes_loop_thousand` is the same program over a range a hundred times longer and reads two, so the number of live blocks does not follow the range."
+desc = "`live` = 0 is not reached on nvm: it keeps 3 blocks here and 2 in `ref.boxes_loop_thousand`, because the count of a counted value does not follow its holders yet. What this entry asserts instead, at the return of the run and at exit: ten boxes made in one place, `created` >= 11, `created` = `released` + `live`, and `live` <= 3. The judgement of the pair is that a hundred times the elements do not leave a hundred times the live blocks."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -231,7 +231,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_loop_thousand"
-desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times longer: a thousand boxes made in one place, one per element, dead when the element is done. Read at the return of the run and at exit, the counts are held to the arithmetic -- every box counted, each block released or live and counted once (`created` = `released` + `live`), at most three left -- and the per-back-end numbers are in the case's header: none on fvm, jit and prl, two on nvm. A hundred times more elements do not leave a hundred times more alive, which is what the pair says."
+desc = "`live` = 0 is not reached on nvm: it keeps 2 blocks here and 3 in `ref.boxes_loop_ten`, because the count of a counted value does not follow its holders yet. What this entry asserts instead, at the return of the run and at exit: a thousand boxes made in one place, `created` >= 1001, `created` = `released` + `live`, and `live` <= 3. The judgement of the pair is that a hundred times the elements do not leave a hundred times the live blocks."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_loop_thousand.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -264,7 +264,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_made_per_call_ten"
-desc = "A box made inside a call and dropped by it, ten times over, read at the return of the run. The judgement is that the number of live blocks does not follow the number of calls whose boxes are over: `live` <= 3, and `released` = `created` - `live`. Its pair `ref.boxes_made_per_call_thousand` is the same program over a range a hundred times longer and reads 2 live blocks, so the pair says what a mechanism that kept a box per call could not."
+desc = "`live` = 0 is not reached: a call makes a box and drops it, ten times over, and 2 blocks are still counted at the return of the run (3 on nvm), because the count of a counted value does not follow its holders yet. What this entry asserts instead: `created` >= 11, `created` = `released` + `live`, and `live` <= 3. Its pair `ref.boxes_made_per_call_thousand` is the same program over a range a hundred times longer and reads the same size, so the number of live blocks does not follow the number of calls whose boxes are over."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_made_per_call_ten.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
@@ -295,7 +295,7 @@ verify_script = '''
 
 [[tests]]
 name = "ref.boxes_made_per_call_thousand"
-desc = "The same program as `ref.boxes_made_per_call_ten` over a range a hundred times longer: a box made inside a call and dropped by it, a thousand times. The reading must be the same size -- `live` <= 3, `released` = `created` - `live` -- so a thousand calls leave behind what ten left behind, not a hundred times more."
+desc = "`live` = 0 is not reached: the same program as `ref.boxes_made_per_call_ten` over a range a hundred times longer, and 2 blocks are still counted at the return of the run (3 on nvm). What this entry asserts instead: `created` >= 1001, `created` = `released` + `live`, and `live` <= 3 -- a thousand calls leave behind what ten left behind, not a hundred times more."
 kind = "behavior"
 case = "../../../cases/compile/ref/ref_boxes_made_per_call_thousand.cml"
 backends = ["nvm", "fvm", "jit", "prl"]
