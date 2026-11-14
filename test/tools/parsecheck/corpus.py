@@ -43,8 +43,9 @@ PARSE_ROOT = Path("test/cases/parse")
 # decision is prepared: his version of a standard library module, the notes that go with it, and
 # the tombstone of a file whose content moved elsewhere. Those .cml files are material for a
 # decision, not the repository's language surface - the corpus is the programs the repository
-# holds - and a module enters the corpus where it is integrated, as
-# docs/handover/stdlib/<module>.cml becomes stdlib/<module>.cml. The document guards read the
+# holds - and a module enters the corpus where it is integrated into the standard library, not
+# while a draft of it still sits there. (The draft copies of the library modules were deleted on
+# 2026-11-14; the directory keeps its notes and the questions.) The document guards read the
 # directory the same way: test/tools/check-doc-pass-forms.mjs keeps docs/handover/ out of its
 # pages, because a note there quotes a spelling it is calling removed.
 HANDOVER = Path("docs/handover")
