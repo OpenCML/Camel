@@ -13,6 +13,17 @@ tags = ["showcase", "slow", "c2", "mlp", "mnist"]
 #
 # The plan runs in the slow tier: `npm run test` skips it and `--tier all` runs it;
 # the small profile takes seconds, not minutes.
+#
+# Deliberately not selectable by `--changed`: `test/plan-selection.json` names `test/plans/perf/**`
+# under "Deliberately not selectable", because the project forbids perf plans on a shared host, and
+# `scripts/perf-gate.mjs` refuses this plan by name for the same reason (`perf.showcase_c2`,
+# `refusal: 'policy'`). Nothing selects it on a change and the perf gate does not measure it, so the
+# one list that reaches it is the sweep -- `npm run test:all` (`node scripts/test.js --all --tier
+# all`), which the release run and the periodic full read take. That is on purpose, and it is why
+# this plan has to be named in that list: a plan that is deliberately unselectable and is never
+# named anywhere is the same silence as a plan that is selected and then filtered down to nothing.
+# Spelled out here because "deliberately not selectable" and "nobody ran it" read identically in
+# every report that does not say whether the plan was expected to run.
 
 [[tests]]
 name = "small"
