@@ -1938,6 +1938,7 @@ cfbc875da509361e ok test/cases/compile/transforms/stop_gradient_gradient_through
 c75538ac14b806b0 ok test/cases/compile/transforms/tanh_gradient_of_a_stated_shape.cml
 edc0091c0e7595bc ok test/cases/compile/transforms/tanh_gradient_through_the_engine.cml
 9a260be256b4eff3 ok test/cases/compile/transforms/tanh_gradient_through_the_library.cml
+6e09e74641fc7168 ok test/cases/compile/transforms/transpose_after_algebra.cml
 c3c058350e49dff8 ok test/cases/compile/transforms/transpose_array_literal_member_projection.cml
 21ca087e657880ab ok test/cases/compile/transforms/transpose_array_literal_open_extent_refuses.cml
 c8931c71de4d9c3d ok test/cases/compile/transforms/transpose_array_product.cml
