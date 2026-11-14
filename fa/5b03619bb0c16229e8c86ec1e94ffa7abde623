@@ -1,0 +1,11 @@
+# lane-effmask -> develop (44c90a2f6, 045c13c30)
+
+判据读数:
+- 题面 total 编译运行 exit 0, 打印 3 (题面的 while 不是 Camel 语法, 用例用等价 loop...while)
+- let f: (int) => int pure = total 通过, 打印 3
+- 闭包逃逸仍拒: SemanticDiag::UsesPromiseViolated / 0x030001F1, exit 1
+- effects_syntax 71/71 pass
+
+合并闸门: total 8944 / pass 8901 / fail 4 / skip 7 / known 32; killed 0; 红集四条.
+读数行: C++ +242 / tests +109 行; 中心文件 5 (builder.cpp, builder.h, builder_diagnostics.cpp, builder_resources.cpp, runtime/resources.cpp); >2500 行 1 (builder.h 3385); 反向引用 0.
+未做: 逃逸只按"返回类型装得下函数值"粗判; 模块级 var 存储、被别的调用长期持有、嵌套具名函数的直接调用都没查 (R3 3.3 会取代这套判定).
