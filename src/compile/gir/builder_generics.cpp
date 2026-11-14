@@ -2730,13 +2730,16 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     // that number (GCT::Tree::makeTypeOfPlaceholder). The tree asked is the one the type was
     // written in -- `at`'s -- because an instance of a generic function is built by the module that
     // calls it while the type was written in the module that declared it.
+    const auto operandNamed = [&](const std::string &name) -> GCT::node_ptr_t {
+        const GCT::Tree *written = at != nullptr ? GCT::Tree::of(at) : tree_;
+        return written != nullptr ? written->typeOfOperandOf(name) : nullptr;
+    };
     const auto operandOf = [&](Type *held) -> GCT::node_ptr_t {
         if (!GCT::isTypeOfPlaceholder(held)) {
             return nullptr;
         }
-        const auto *variable     = tt::as_ptr<TypeVarType>(held);
-        const GCT::Tree *written = at != nullptr ? GCT::Tree::of(at) : tree_;
-        return written != nullptr ? written->typeOfOperandOf(variable->name()) : nullptr;
+        const auto *variable = tt::as_ptr<TypeVarType>(held);
+        return operandNamed(variable->name());
     };
     // `typeof e`: the type of the value `e` would have, inferred without evaluating it. A
     // build-time tuple is taken without a FILL, as `indices` and `...` take one.
@@ -2853,7 +2856,7 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     if (GCT::hasTypeOfPlaceholder(type)) {
         diags_->of(SemanticDiag::TypeOfNotWholeType)
             .atOrigin(at != nullptr ? at->origin() : 0)
-            .commit(type->toString());
+            .commit(describeTypeOfPlaceholders(type, at != nullptr ? GCT::Tree::of(at) : tree_));
         throw BuildAbortException();
     }
     Type *bound = boundType(type);

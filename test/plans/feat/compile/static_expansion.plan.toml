@@ -988,12 +988,27 @@ timeout_ms = 8000
 
 [[tests]]
 name = "typeof_inside_type_is_refused"
-desc = "`typeof` stands for a whole type: `typeof(1)[]` is refused where the array type is expanded."
+desc = "`typeof` stands for a whole type: `typeof(1)[]` is refused where the array type is expanded. The reading names the expression that was written -- `typeof(1)`, not the internal `typeof#0` -- and the brackets that stay are the array's own."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/typeof_inside_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeOfNotWholeType"
+expect_output_contains = ["typeof is written inside the larger type typeof(1)[]."]
+expect_output_not_contains = ["typeof#"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_inside_tuple_is_refused"
+desc = "The same name, where the enclosing type is not an array and no bracket appears at all: a tuple's member is a type a literal is converted against before the placeholder is resolved, and the refusal names the type `(typeof(1), int)` -- the expression restored, no internal number, no bracket of the placeholder's own."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_inside_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_output_contains = ["cannot be represented as type '(typeof(1), int)'"]
+expect_output_not_contains = ["typeof#", "[]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

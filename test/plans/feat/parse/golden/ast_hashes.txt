@@ -1639,6 +1639,7 @@ bc07e4bc418dc0e9 ok test/cases/compile/static_expansion/type_position_empty_tupl
 ebf5e9593ac84931 ok test/cases/compile/static_expansion/typeof_declaration_type.cml
 7455c6b65422cc05 ok test/cases/compile/static_expansion/typeof_derived_type.cml
 e58f7bc57f3b0c60 ok test/cases/compile/static_expansion/typeof_inferred_not_evaluated.cml
+eaa72ffd71907daa ok test/cases/compile/static_expansion/typeof_inside_tuple.cml
 7eacc37d2e7ed2a2 ok test/cases/compile/static_expansion/typeof_inside_type.cml
 f9e2a0efbf7de4ac ok test/cases/compile/static_expansion/typeof_only_here.cml
 08a0d221862995c2 ok test/cases/compile/static_expansion/typeof_same_number.cml
