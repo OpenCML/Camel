@@ -296,6 +296,11 @@ def cmd_check(args):
         seeds = list(CHECK_RANGE)
     if not args.with_excluded:
         seeds = [s for s in seeds if s not in CHECK_EXCLUDED]
+    elif not CHECK_EXCLUDED:
+        # A flag that silently changes nothing is the same shape as a reading that cannot fail:
+        # it looks like it did something. Say so, so a run that passes it is not mistaken for one
+        # that widened the batch.
+        print("CHECK_EXCLUDED is empty: --with-excluded changed nothing")
     records = run_batch(seeds, features, cells, None, args.jobs)
     bad = [(r["seed"], cid, info["outcome"], info.get("detail", "")) for r in records for cid, info in r["bad"].items()]
     for seed, cid, outcome, detail in bad:
@@ -417,7 +422,8 @@ def main(argv=None):
     p.add_argument("--jobs", type=int, default=4)
     p.add_argument("--seeds", help="a seed or an interval (4, 1-25) to check instead of CHECK_RANGE")
     p.add_argument("--with-excluded", action="store_true",
-                   help="run the seeds CHECK_EXCLUDED leaves out, to see what they show")
+                   help="run the seeds CHECK_EXCLUDED leaves out, to see what they show (CHECK_EXCLUDED "
+                        "is empty today, and passing the flag then prints that it changed nothing)")
     p.set_defaults(fn=cmd_check)
     p = sub.add_parser("findings")
     p.add_argument("--dir")
