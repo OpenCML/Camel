@@ -53,7 +53,7 @@
  * of either type (`math::nan` is a float constant, and a tensor constructor refuses a NaN element),
  * so the canonical quiet NaN the two operations return has no spelling to pin its bytes with. The
  * f32 overloads of the same comparison are pinned elsewhere, and the two reduced-precision
- * overloads are the same `minOf`/`maxOf` (modules/math/minmax.h), which is where the NaN rule is
+ * overloads are the same `minOf`/`maxOf` (camel/core/math/minmax.h), which is where the NaN rule is
  * written once for every float type.
  */
 

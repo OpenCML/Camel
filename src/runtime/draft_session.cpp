@@ -1713,10 +1713,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
     }
     if (!replaced.empty()) {
         // A function value names a graph in the program it was made in, and runs what that
-        // program holds of everything the graph calls. So a graph that holds a function value
-        // of a graph that reaches a new version (by calls or by function values) needs a new
-        // version too, which names the commit's program. The graphs that reach a new version
-        // are found backwards over the calls and the function values of the closure.
+        // program holds of everything the graph calls. So a graph that reaches a graph with a
+        // new version -- by calling it, or by holding a function value of it -- needs a new
+        // version too, whichever graph of the closure it is: entered from the program this
+        // commit hands back, such a graph would otherwise be the version the old program holds
+        // (it is one graph version in two programs), and its calls would name the old callees
+        // there. The graphs that reach a new version are found backwards over the calls and the
+        // function values of the closure.
         constexpr uint32_t kNone = UINT32_MAX;
         uint32_t maxId           = 0;
         for (GCGraph *graph : closure) {
@@ -1778,17 +1781,12 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
             if (fresh.contains(holder)) {
                 continue;
             }
-            for (size_t r = 0; r < holder->refs().size(); ++r) {
-                if (!(holder->refRoles(r) & kGraphRefStatic)) {
-                    continue;
-                }
-                const uint32_t held = indexOfId(holder->refs()[r]);
-                if (held != kNone && reaches[held]) {
-                    allocate(holder);
-                    encode(holder);
-                    break;
-                }
+            const uint32_t at = indexOfId(holder->id());
+            if (at == kNone || !reaches[at]) {
+                continue;
             }
+            allocate(holder);
+            encode(holder);
         }
     }
 

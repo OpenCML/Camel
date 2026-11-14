@@ -223,7 +223,7 @@ template <typename Format> std::string halfText(const Half<Format> &value) {
     });
 }
 
-/// One comparison of two values of the same type, IEEE 754-2019 (modules/math/minmax.h, the one
+/// One comparison of two values of the same type, IEEE 754-2019 (camel/core/math/minmax.h, the one
 /// statement of it the runtime has): a NaN on either side gives the canonical quiet NaN of the
 /// type, `-0` is below `+0`, and otherwise the answer is one of the two operands.
 ///

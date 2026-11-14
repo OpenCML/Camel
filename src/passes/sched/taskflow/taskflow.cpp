@@ -50,6 +50,7 @@ namespace {
 
 using runtime_data_idx_t = camel::runtime::gc_data_idx_t;
 
+using camel::execute::ExecutionPredecessor;
 using camel::execute::RuntimeBranchArmRegion;
 using camel::runtime::gc_node_ref_t;
 using camel::runtime::GCAccsBody;
@@ -58,6 +59,22 @@ using camel::runtime::GCNode;
 using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::kInvalidNodeRef;
+
+/// The edge kinds this scheduler's plan obeys. All of them but the order edge: an order edge only
+/// says which of two nodes that both run goes first (`docs/design/effects/edges.cn.md` 2), and the
+/// plan has never obeyed one. The graph's builder does write them, and on two programs the
+/// difference is what the reference and this back end disagree about:
+/// `test/cases/para/core/concurrent_calls.cml` prints `0` on `std::nvm` and `2` here, and
+/// `concurrent_recursion.cml` prints `0 of 8` against `8 of 8`, because a `sync` call's footprint
+/// is not named and the builder then orders it after every effect written before it in the block.
+/// Which of the two is right -- the graph orders the two calls, or effect ordering on an unnamed
+/// footprint is too strong -- is the language author's call, so the one place this schedule differs
+/// from `camel::execute::executionPredecessorsOf` is written here, once, and the differential test
+/// (`test/plans/feat/para/exec_pred.plan.toml`) uses programs that order no two concurrent nodes.
+/// The node-by-node task graph this pass also builds (`connectRuntimeDependencies`) obeys every kind.
+constexpr bool planObeysPredecessor(ExecutionPredecessor::Kind kind) {
+    return kind != ExecutionPredecessor::Kind::Order;
+}
 
 struct TaskflowHigherOrderCallSite {
     GCGraph *runtimeGraph = nullptr;
@@ -1064,16 +1081,14 @@ void TaskflowExecSchedPass::buildStructuredPlan(GraphPlan &plan) {
                 out.insert(out.end(), inner.begin(), inner.end());
             }
         };
-        for (auto inputs :
-             {graph->ctrlInputsOf(ref), graph->normInputsOf(ref), graph->withInputsOf(ref)}) {
-            for (gc_node_ref_t input : inputs) {
-                addWait(input);
+        // What the node waits for is read from the one function that says it
+        // (camel::execute::executionPredecessorsOf), and this plan waits for
+        // planObeysPredecessor of them.
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(*graph, ref)) {
+            if (planObeysPredecessor(predecessor.kind)) {
+                addWait(predecessor.node);
             }
-        }
-        // A sync edge is a use and an order at once (docs/design/effects/edges.cn.md 1.5): the
-        // statement written before this one runs before it, exactly as a control input does.
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(ref)) {
-            addWait(edge.pred);
         }
         std::sort(out.begin(), out.end());
         out.erase(std::unique(out.begin(), out.end()), out.end());
@@ -2545,12 +2560,6 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         }
         taskMap[inputRef].precede(task);
     };
-    auto addEdges = [&](std::span<const gc_node_ref_t> inputs, tf::Task task) {
-        for (gc_node_ref_t inputRef : inputs) {
-            addEdge(inputRef, task);
-        }
-    };
-
     for (gc_node_ref_t nodeRef : graph->execPlan().topo) {
         const auto *node = requireNode(graph, nodeRef);
         if (node->kind == GCNodeKind::Brch) {
@@ -2562,18 +2571,14 @@ void TaskflowExecSchedPass::connectRuntimeDependencies(
         if (nodeRef < buildInfo->skipNodes.size() && buildInfo->skipNodes[nodeRef] != 0) {
             continue;
         }
-        addEdges(graph->normInputsOf(nodeRef), taskMap[nodeRef]);
-        addEdges(graph->withInputsOf(nodeRef), taskMap[nodeRef]);
-        addEdges(graph->ctrlInputsOf(nodeRef), taskMap[nodeRef]);
-        // An order edge is a precedence between two tasks that both run; a predecessor that has
-        // no task of its own is skipped by addEdge, so the order never creates work.
-        for (const camel::runtime::GCGraphOrderEdge &edge : graph->orderPredsOf(nodeRef)) {
-            addEdge(edge.pred, taskMap[nodeRef]);
-        }
-        // A sync edge orders the two statements as well (docs/design/effects/edges.cn.md 1.5),
-        // and both of them run: the predecessor's task is there whenever the node's is.
-        for (const camel::runtime::GCGraphSyncEdge &edge : graph->syncPredsOf(nodeRef)) {
-            addEdge(edge.pred, taskMap[nodeRef]);
+        // The whole precedence of the node, from the one function that says what it is
+        // (camel::execute::executionPredecessorsOf): its control inputs, its data ports, the
+        // statement a sync edge writes before it, and its order predecessors. An order edge is a
+        // precedence between two tasks that both run; a predecessor that has no task of its own is
+        // skipped by addEdge, so the order never creates work.
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(*graph, nodeRef)) {
+            addEdge(predecessor.node, taskMap[nodeRef]);
         }
     }
 }
@@ -2706,16 +2711,18 @@ void TaskflowExecSchedPass::buildRuntimeBranchJoinRegion(
         }
     };
 
-    precedeFromInputs(runtimeGraph->normInputsOf(brchRuntimeIndex), selector);
-    precedeFromInputs(runtimeGraph->ctrlInputsOf(brchRuntimeIndex), selector);
-    // The statement written before the branch waits for it the same way when the block's chain
-    // names it with a sync edge (docs/design/effects/edges.cn.md 1.5).
-    std::vector<gc_node_ref_t> brchChainPreds;
-    for (const camel::runtime::GCGraphSyncEdge &edge :
-         runtimeGraph->syncPredsOf(brchRuntimeIndex)) {
-        brchChainPreds.push_back(edge.pred);
+    // The BRCH waits for what every node waits for, from the one function that says what that
+    // is (camel::execute::executionPredecessorsOf), and this plan waits for planObeysPredecessor
+    // of them: the condition it reads, its control inputs, and the statement written before the
+    // branch (docs/design/effects/edges.cn.md 1.5).
+    std::vector<gc_node_ref_t> brchPredecessors;
+    for (const ExecutionPredecessor &predecessor :
+         camel::execute::executionPredecessorsOf(*runtimeGraph, brchRuntimeIndex)) {
+        if (planObeysPredecessor(predecessor.kind)) {
+            brchPredecessors.push_back(predecessor.node);
+        }
     }
-    precedeFromInputs(brchChainPreds, selector);
+    precedeFromInputs(brchPredecessors, selector);
 
     selector.precede(joiner);
 

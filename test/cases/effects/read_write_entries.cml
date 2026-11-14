@@ -1,32 +1,32 @@
 /**
- * A `uses` entry writes how the call touches its resource (design principles 3.3): without `var`
- * it reads the resource and with `var` it writes it, the way a parameter is written. `times` reads
- * `scale`, `add` writes `acc`, `shout` writes the group `console`, and `peek` writes `scale` in its
- * clause while its body only reads it -- `var` promises a write and asks for nothing else, so a
- * body inside the promise keeps it.
+ * A `uses` entry says how the call touches its resource (design principles 3.3): without `var` it
+ * reads the resource and with `var` it writes it, the way a parameter is written. A resource a
+ * module declares is external state, so an entry may say either: `reads` promises a read of
+ * `scale`, `writes` a write of `acc`, `maybe` promises a write and its body asks for nothing more
+ * -- `var` promises a write and asks for no less -- and `shout` writes the group `console`, which
+ * expands to `stdout`. A variable is never written in a clause: a `var` parameter is declared by
+ * the `var` in the parameter list and a module `var` by its declaration.
  *
- *   6 5 3 shout 1 5
+ *   3 5 1 shout 1
  */
 
+resource scale
+resource acc
 resource console = [stdout]
 
-var scale: int = 3
-var acc: int = 0
-
-/// A read of the variable: the entry carries no `var`.
-func times(x: int): int uses scale {
-    return x * scale
+/// A read of the resource: the entry carries no `var`.
+func reads(): int uses scale {
+    return 3
 }
 
-/// A write of the variable: the entry carries `var`.
-func add(x: int): int uses var acc {
-    acc = acc + x
-    return acc
+/// A write of the resource: the entry carries `var`.
+func writes(): int uses var acc {
+    return 5
 }
 
 /// `var` says the entry may write, not that the body must.
-func peek(): int uses var scale {
-    return scale
+func maybe(): int uses var scale {
+    return 1
 }
 
 /// The group expands to `stdout`, which every call to this writes: the entry carries `var`.
@@ -36,10 +36,9 @@ func shout(): int uses var console sync {
 }
 
 func main(): int sync {
-    println(times(2))
-    println(add(5))
-    println(peek())
+    println(reads())
+    println(writes())
+    println(maybe())
     println(shout())
-    println(acc)
     return 0
 }

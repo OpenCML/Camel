@@ -9,13 +9,20 @@
 #
 # The rows are one of these, and the reason says which:
 #
-#   甲  a gap this account is not allowed to leave open. None is left: `pick_at` is the one that
-#       was, and it is settled on `lane-pickatvjp` (below) rather than here.
+#   甲  a gap this account is not allowed to leave open. None is left: `pick_at` was the one that
+#       was, and the merge that closed it (`lane-pickatvjp`) took this file's row with it -- which
+#       is the rule for the whole file, see below.
 #   乙  the law belongs to the library alone: the operator is machinery the engine's own rules
 #       build (`:tangent/*`, `:struct/*`, `cast_like`, ...), or it answers an integer or a mask and
 #       has no tangent to carry.
 #   丙  the rule belongs to the engine alone: the library's forward half (`rulesets.jvp`) files no
 #       `jvp_<op>`, so the reverse question is never asked of the library at all.
+#
+# A row leaves this file the moment it stops holding a difference -- the law landed, the engine row
+# landed, or the key derivation moved the row under another marker. A row that stays past that
+# point is not harmless: it carries an owner and a reason, so it reads exactly like a live row, and
+# the list stops being an account of what is still owed. That is why `scripts/vjp-parity.mjs`
+# prints `stale=<n>` on every reading and `--strict` fails on a non-zero count.
 #
 # marker	owner	reason
 
@@ -59,7 +66,6 @@ numel	engine-autodiff	answers an integer: a discrete value's derivative is zero 
 dim	engine-autodiff	answers an integer: a discrete value's derivative is zero by definition
 shape	engine-autodiff	answers an integer list: a discrete value's derivative is zero by definition
 one_hot	engine-autodiff	its input is a label: locally constant, the rows do not move with it
-stop_gradient	engine-autodiff	the operator says its result carries no gradient, and the engine's row says so
 strict_eq	engine-autodiff	a comparison: a boolean has no tangent space to carry
 strict_neq	engine-autodiff	a comparison: a boolean has no tangent space to carry
 ge	engine-autodiff	a comparison: a boolean has no tangent space to carry
@@ -76,42 +82,27 @@ int	engine-autodiff	the conversion's destination is `int`, a discrete type with 
 # question is asked. The law is therefore the engine's alone, and the engine's leg is the only leg
 # there is. The row is listed one operator at a time rather than as a class because the day one of
 # them gains a `jvp_*`, the reverse side becomes a gap and this file must say so by not holding it.
+#
+# That is how this block shrinks: twenty-two rows left it on 2026-11-14, when the laws they were
+# waiting for landed and the keys they named became keys both tables answer (`abs`, `divide`,
+# `erf`, `erfc`, `gelu`, `linear`, `log`, `max`, `max_axis`, `maximum`, `mean`, `min`, `min_axis`,
+# `minimum`, `neg`, `rsqrt`, `sqrt`, `sum_axis`, `transpose`, `where`, and the two axis markers
+# `argmax_axis`/`argmin_axis`, whose key now lands under `argmax`/`argmin`). The ones left are the
+# ones still owed.
 
-abs	lane-rulesets	no `jvp_abs`: the library's forward half stops a program before the reverse is asked
 argmax	lane-rulesets	no `jvp_argmax`: the library's forward half stops a program before the reverse is asked
-argmax_axis	lane-rulesets	no `jvp_argmax_axis`: the library's forward half stops a program before the reverse is asked
 argmin	lane-rulesets	no `jvp_argmin`: the library's forward half stops a program before the reverse is asked
-argmin_axis	lane-rulesets	no `jvp_argmin_axis`: the library's forward half stops a program before the reverse is asked
 concat	lane-rulesets	no `jvp_concat`: the library's forward half stops a program before the reverse is asked
-divide	lane-rulesets	no `jvp_divide`: the library's forward half stops a program before the reverse is asked
-erf	lane-rulesets	no `jvp_erf`: the library's forward half stops a program before the reverse is asked
 erf_d	lane-rulesets	`math:erf_d` has no `jvp_erf_d`, and `math:` is a module the rulesets do not file for
 erf_f	lane-rulesets	`math:erf_f` has no `jvp_erf_f`, and `math:` is a module the rulesets do not file for
-erfc	lane-rulesets	no `jvp_erfc`: the library's forward half stops a program before the reverse is asked
 erfc_d	lane-rulesets	`math:erfc_d` has no `jvp_erfc_d`, and `math:` is a module the rulesets do not file for
 erfc_f	lane-rulesets	`math:erfc_f` has no `jvp_erfc_f`, and `math:` is a module the rulesets do not file for
-gelu	lane-rulesets	no `jvp_gelu`: the library's forward half stops a program before the reverse is asked
 layer_norm	lane-rulesets	no `jvp_layer_norm`: the library's forward half stops a program before the reverse is asked
-linear	lane-rulesets	no `jvp_linear`: the library's forward half stops a program before the reverse is asked
-log	lane-rulesets	no `jvp_log`: the library's forward half stops a program before the reverse is asked
-max	lane-rulesets	no `jvp_max`: the library's forward half stops a program before the reverse is asked
-max_axis	lane-rulesets	no `jvp_max_axis`: the library's forward half stops a program before the reverse is asked
-maximum	lane-rulesets	no `jvp_maximum`: the library's forward half stops a program before the reverse is asked
-mean	lane-rulesets	no `jvp_mean`: the forward half states a lane mean as `mean_axis`, so the whole-tensor form is unasked
-min	lane-rulesets	no `jvp_min`: the library's forward half stops a program before the reverse is asked
-min_axis	lane-rulesets	no `jvp_min_axis`: the library's forward half stops a program before the reverse is asked
-minimum	lane-rulesets	no `jvp_minimum`: the library's forward half stops a program before the reverse is asked
 permute	lane-rulesets	no `jvp_permute`: the library's forward half states a reshape, not a permutation
 pow	lane-rulesets	the law is filed under `^` for `:op/pow_d`; `tensor:pow` has no `jvp_` of its own
-neg	lane-rulesets	the law is filed under `-` for `:op/neg_d`; `tensor:neg` has no `jvp_` of its own
-rsqrt	lane-rulesets	no `jvp_rsqrt`: the library's forward half stops a program before the reverse is asked
 slice_sub	lane-rulesets	no `jvp_slice_sub`: the library's forward half stops a program before the reverse is asked
-sqrt	lane-rulesets	no `jvp_sqrt` for `tensor:sqrt` or `math:sqrt`: the forward half has no square-root law
 sqrt_d	lane-rulesets	`math:sqrt_d` has no `jvp_sqrt_d`, and `math:` is a module the rulesets do not file for
-sum_axis	lane-rulesets	no `jvp_sum_axis`: the forward half states a lane sum through `sum`'s whole-tensor law
-transpose	lane-rulesets	no `jvp_transpose`: the forward half states a reshape, and a swap of two axes is unasked
 unsqueeze	lane-rulesets	no `jvp_unsqueeze`: the forward half states a reshape, not a new axis
-where	lane-rulesets	no `jvp_where`: the library's forward half stops a program before the reverse is asked
 idx_take	lane-rulesets	the subscript read's forward law is `jvp_idx_arr` for the two-word form; the slab form has no `jvp_*`
 
 # ---- 丙: the model operators (`modules/nn`), none of which the rulesets file for ---------------
@@ -124,9 +115,8 @@ max_pool2d	lane-rulesets	an `modules/nn` operator: the rulesets declare and impo
 softmax_cross_entropy	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
 softmax_cross_entropy_labels	lane-rulesets	an `modules/nn` operator: the rulesets declare and import nothing from `nn`
 
-# ---- 甲, settled elsewhere: the one gap that was one ------------------------------------------
+# ---- 甲, settled elsewhere: the rows another lane owns ----------------------------------------
 
-pick_at	lane-pickatvjp	settled on that lane (`a7ad16758`) and not yet merged; this row goes with the merge
 log_d	lane-missinglaws	the law is filed for the backward half only (`rulesets/transpose.cml#log_d_t`); the engine's derivative table has no `log_d` row, and no reading asks it for one
 pow_d	lane-missinglaws	the law is filed for the backward half only (`rulesets/transpose.cml#pow_d_t`); `tensor:pow`'s forward question is answered at `^`, and the engine has no `pow_d` row
 max_axis_stated	lane-axistated	`rulesets/transpose.cml#max_axis_stated_t` files the reverse law and the engine's table has no row for the stated key: the stated readings in `test/plans/feat/compile/stated_extents.plan.toml` ask the library

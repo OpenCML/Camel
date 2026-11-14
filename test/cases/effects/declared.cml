@@ -1,8 +1,10 @@
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. How it touches each one is written the way a parameter is (design principles 3.3): an
-// entry without `var` reads the resource and one with `var` writes it, and an external resource is
-// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
@@ -18,9 +20,11 @@ func consume(s: Stream): int uses var s {
 func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses var t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {

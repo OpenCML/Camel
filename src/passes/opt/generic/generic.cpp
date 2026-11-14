@@ -213,12 +213,11 @@ staticValueOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t
 /// anchors follow it as well (`replaceFoldResult`). Leaving it pinned is what kept a conversion
 /// written in return position (the CAST a named result type adds) in the graph forever: every
 /// folding round skipped it, and every inlining of that function copied the unfolded conversion.
-
 /// A GATE that stands in a chain is a statement of it, and a statement is not the value it passes
 /// on: folding it into that value would put the value where the statement was, and the statement
 /// after it would be left with a control wait only (`holdsChainPlace`, src/passes/opt/generic/
-/// rewrite.h), which the constant merge below reads too). A returned value that
-/// waits on anything else is not folded either: it is the tail of the graph's effect order
+/// rewrite.h -- the judgement the constant merge below reads as well). A returned value that waits
+/// on anything else is not folded either: it is the tail of the graph's effect order
 /// (docs/design/effects/edges.cn.md 1.5 and 5.3).
 bool isSyncWaitingGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto *node = transaction.graph().header(id);

@@ -1608,21 +1608,46 @@ assert(!text.includes('macro operator no pass has expanded'), 'an untagged progr
 timeout_ms = 30000
 
 [[tests]]
-name = "grad_expand.untagged_graph_keeps_the_runtime_operator"
-kind = "negative"
+name = "grad_expand.untagged_graph_runs_without_the_pass"
+kind = "behavior"
 case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
-# The same program without the dump: the reading is that the pass is silent where no scope covers
-# the call site -- it neither expands the operator nor refuses it, so neither of its two messages
-# may appear -- and that the run then reaches the runtime operator, whose refusal is its own. The
-# value it names is the one the compiled region hands back: `tiles::compile` cut `loss` into a
-# region and the region's result is an f32 scalar, so the resident value that reaches
-# `tiles:download` and carries no gradient channel is `Device<f32>` (a resident tensor keeps its
-# extents in the name: the same dump prints the parameters as `(Device<f32[2, 3]>, Device<f32[3]>)`).
+# The reference the entry below compares against: the same program with no `tiles::compile` in the
+# pipeline. `loss` is an ordinary `sync` function of three floats by three, so the run-time
+# operator differentiates it on the host and the program prints the derivative itself -- `sum(x)`
+# of the row-major `x`, which is `[5.0, 7.0, 9.0]` -- with its own distance to that answer, `0.0`.
+# This is the number the pair pins: not a number copied here but the one the operator produces.
+args = ["--devices", "cpu", "${case}", "std::nvm"]
+envs = ["CUDA_VISIBLE_DEVICES=-1"]
+expect_exit = 0
+expect_stdout_contains = ["gradient [5.0, 7.0, 9.0]", "wrong 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+[[tests]]
+name = "grad_expand.untagged_graph_keeps_the_runtime_operator"
+kind = "differential"
+case = "../../cases/gpu/nofallback/grad_expand_plain.cml"
+# Adding the pass to the pipeline changes nothing, and this entry states that as a comparison
+# rather than as a second copy of the expected text: the language author's ruling of 2026-10-24
+# evening (`docs/handover/reviews/questions-2026-10-24-evening.md`,
+# `tiles-compile-resident-value-gradient`) has it that a program with no `#gpu` scope is not
+# touched by `tiles::compile` -- the values outside a scope stay on the host and do not become
+# resident `Device<T>` -- so its output is "identical word for word" with and without the pass
+# (item 1), and this entry reads exactly that (item 3) by naming the twin above instead of
+# writing the text twice.
+#
+# What the pass must still not do is answer for the program: neither of its two messages may
+# appear. The refusal the resident value `Device<f32>` used to raise belongs to the ruling's
+# item 2, which is owed elsewhere (a resident value has to be able to carry a gradient, so upload
+# and download get derivative rules); a program that really is compiled into a scope still meets
+# that refusal today.
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]
 envs = ["CUDA_VISIBLE_DEVICES=-1"]
-expect_exit = 1
-expect_output_contains = ["RuntimeDiag::RuntimeError", "depends on a differentiated parameter", "Device<f32>"]
+expect_exit = 0
+compare_to = "grad_expand.untagged_graph_runs_without_the_pass"
+compare_fields = ["exit_code", "stdout_normalized"]
 expect_output_not_contains = ["macro operator no pass has expanded", "cannot run on the device", "has no device program"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
 
 # --- Residency is derived from the graph (GPU design 3.2) --------------------------------------

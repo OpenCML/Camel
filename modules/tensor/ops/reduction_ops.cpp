@@ -237,7 +237,7 @@ slot_t meanAllKernel(ArgsView &, ArgsView &norm, context::Context &) {
         // is the only rounding of the whole reduction — never a sum rounded to the element type
         // and then divided again. An integer element type takes the conversion `int(·)` already
         // has (toward zero): `mean([1, 2, 4])` is `int(7 / 3) = 2`, which is the normative form
-        // (modules/math/mean.h), not a lost average.
+        // (camel/core/math/mean.h), not a lost average.
         const double mean = k::sumAll(t) / static_cast<double>(t->numel());
         if (result == TypeCode::Int64) {
             return camel::core::rtdata::toSlot(static_cast<int64_t>(mean));

@@ -411,7 +411,7 @@ func elements::<T>(xs: T[...]): T[]
 // one executor per element type, so one declaration per element type; its `when` names the type,
 // and a call is written `sum(xs)`, never with a kernel's name.
 //
-// How to add and how to compare is written once, in modules/math/minmax.h, which these kernels
+// How to add and how to compare is written once, in camel/core/math/minmax.h, which these kernels
 // and the tensor kernels both call.
 
 // sum: an f64 accumulator rounded once for f32 and float, the element type itself for i32 and int.

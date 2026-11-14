@@ -1,0 +1,26 @@
+/**
+ * The positive side of the rule that a mutable cell does not outlive its scope's evaluation
+ * (design principles 3.5, rule two): a closure may capture a `var` by reference, and the cell it
+ * captures dies with the call that made it -- so the closure has to stay inside that call.
+ *
+ * `add` reads and writes `acc`, `total` calls it in its own body, and the cell never leaves: the
+ * write is real and visible to the caller of `add`, and the answer is the sum 0..x-1.
+ */
+
+func total(x: int): int sync {
+    var acc = 0
+    let add = (k: int): int => sync {
+        acc = acc + k
+        acc
+    }
+    let _ = loop i = 0 while i < x do sync {
+        add(i)
+        i + 1
+    }
+    return acc
+}
+
+func main(): int sync {
+    println(total(4))
+    return 0
+}

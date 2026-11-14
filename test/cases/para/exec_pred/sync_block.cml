@@ -1,0 +1,26 @@
+/**
+ * Sync blocks: a block's statements run in the order they are written, a call inside one is a
+ * statement of that block, and a value the block hands on that is not its own is forwarded through
+ * a GATE -- the node whose sync predecessor the shared predecessor function has to keep. A block
+ * inside a block, a whole function body that is a block, and a lambda whose body is one are all
+ * here.
+ */
+func inner(a: int): int sync {
+    println("inner 1", a)
+    let s = a * 2
+    println("inner 2", s)
+    return s
+}
+
+func main(): int sync {
+    println("main 1")
+    let block = (a: int): int => sync {
+        println("block 1", a)
+        let y = inner(a)
+        println("block 2", y)
+        y + 1
+    }
+    let x = block(5)
+    println("main 2", x)
+    return 0
+}

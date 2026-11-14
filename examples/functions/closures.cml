@@ -1,6 +1,24 @@
 // Functions as values: returning a closure, composing functions, a table of operations,
-// `with` parameters, and a counter that keeps its own state.
+// `with` parameters, and state threaded through a function as values.
 // Run: camel examples/functions/closures.cml
+//
+// State a closure would keep for itself is state the program writes as values that go in and come
+// back out (design principles 3.5, rule two; the author's ruling of 2026-11-14): a `var` lives in
+// the call that declares it, so a closure may capture one by reference only while it stays inside
+// that call. The shape this example used to show -- a factory returning a closure over its own
+// `var count` -- is a compile error now, and it is worth seeing what it says:
+//
+//     func make_counter(): () => int {
+//         var count = 0
+//         return (): int => sync { count = count + 1 return count }
+//     }
+//
+//     error: 'count' cannot leave the call that declares it: a closure captures it by reference,
+//     and this value is carried out. (SemanticDiag::ClosureCaptureEscapes, 0x03000210)
+//
+// The report names two rewrites, and the counter below uses the second: pass the state as a value,
+// in as a parameter and back out as the result. A cell a program really must share, rather than
+// thread, is written with `Ref<T>`.
 
 type IntFn = (x: int) => int
 
@@ -23,13 +41,11 @@ func scale(x: int): int {
     return x * factor
 }
 
-// Each call makes a new counter with its own `count`.
-func make_counter(): () => int {
-    var count = 0
-    return (): int => sync {
-        count = count + 1
-        return count
-    }
+// One count, taken as a value and given back as the next one: three calls read 1, 2 and 3, and a
+// second count that starts at 0 reads 1 -- the same reading the factory gave, with nothing kept
+// between the calls.
+func tick(count: int): int {
+    return count + 1
 }
 
 func main(): int sync {
@@ -45,8 +61,10 @@ func main(): int sync {
     let piped = 7->scale<10>
     println(direct, piped)
 
-    let next = make_counter()
-    let other = make_counter()
-    println(next(), next(), next(), other())
+    let once = tick(0)
+    let twice = tick(once)
+    let thrice = tick(twice)
+    let other = tick(0)
+    println(once, twice, thrice, other)
     return 0
 }

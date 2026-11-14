@@ -29,6 +29,7 @@
 #include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/contexts.h"
 #include "camel/passes/test/control.h"
+#include "camel/passes/test/deadwrite.h"
 #include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/draft_node_owner.h"
 #include "camel/passes/test/edges.h"
@@ -1078,6 +1079,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kGraphReleaseTestPass, GraphReleaseTestPass),
         TEST_PASS(kFactNodeTestPass, FactNodeTestPass),
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
+        TEST_PASS(kDeadWriteTestPass, DeadWriteTestPass),
         TEST_PASS(kTabledTestPass, TabledTestPass),
         TEST_PASS(kSaturateTestPass, SaturateTestPass),
         TEST_PASS(kRulesTestPass, RulesTestPass),
@@ -2428,14 +2430,19 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
     return {};
 }
 /// Whether running the node is something the program observes: it touches state the program does
-/// not own (an ambient resource: stdout, the filesystem, the clock, the environment, the generator)
-/// or it writes state the program does own (a cell, an object, a handle -- a write nothing reads
-/// afterwards is a write the program lost). Reading a variable is not one of them, and neither is a
-/// computation whose value nobody reads: dropping one changes nothing the program can see, which is
-/// exactly what a pass is allowed to do with it. This is the line the check below draws, and it is
-/// what makes it a check about *effects* rather than about every node: without it the invariant
-/// would ask a pure operation for a credential it never needs, and the first graph a program builds
-/// would fail it.
+/// not own (an ambient resource: stdout, the filesystem, the clock, the environment, the
+/// generator), or it writes state the program does own and that state is still there. Reading a
+/// variable is not one of them, and neither is a computation whose value nobody reads: dropping one
+/// changes nothing the program can see, which is exactly what a pass is allowed to do with it.
+///
+/// A write is not judged by the set of writes the program was given but by the graph the pass
+/// returns: a write that is no root of its graph and that no port reads is a dead write
+/// (`camel::runtime::deadWrite`, which is where the judgement lives so that a pass and a test can
+/// ask it on its own), and a dead write is not an effect. Without that reading, a rewrite that
+/// drops the last closure capturing a variable cannot leave that variable's last write behind
+/// (design principles 9.7). This is the line the check below draws, and it is what makes it a check
+/// about *effects* rather than about every node: without it the invariant would ask a pure
+/// operation for a credential it never needs, and the first graph a program builds would fail it.
 bool nodeRunsForItsEffect(
     const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
     camel::runtime::gc_node_ref_t ref) {
@@ -2447,13 +2454,19 @@ bool nodeRunsForItsEffect(
     if (resources.external) {
         return true;
     }
+    bool writes = false;
     for (const camel::runtime::NodeAccess &access : resources.accesses) {
-        if (access.resource.cls == camel::core::sem::ResourceClass::Ambient ||
-            access.mode != camel::core::sem::AccessMode::Read) {
+        if (access.resource.cls == camel::core::sem::ResourceClass::Ambient) {
             return true;
         }
+        if (access.mode != camel::core::sem::AccessMode::Read) {
+            writes = true;
+        }
     }
-    return false;
+    if (!writes) {
+        return false;
+    }
+    return !camel::runtime::deadWrite(graph, ref);
 }
 
 /// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives

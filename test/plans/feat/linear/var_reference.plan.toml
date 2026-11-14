@@ -2500,7 +2500,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.default"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: default (no pass)."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}"]
@@ -2509,14 +2509,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::fvm."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::fvm"]
@@ -2525,14 +2525,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::jit."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::jit"]
@@ -2541,14 +2541,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::tf."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::tf"]
@@ -2557,14 +2557,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::inline."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline"]
@@ -2573,14 +2573,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.specialize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::specialize."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::specialize"]
@@ -2589,14 +2589,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.devirtualize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::devirtualize."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::devirtualize"]
@@ -2605,14 +2605,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.fold"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::fold."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::fold"]
@@ -2621,14 +2621,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.cse"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::cse."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::cse"]
@@ -2637,14 +2637,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.dce"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::dce."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::dce"]
@@ -2653,14 +2653,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt"]
@@ -2669,14 +2669,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.simplify"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt"]
@@ -2685,14 +2685,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro"]
@@ -2701,14 +2701,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_inline"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -2717,14 +2717,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_specialize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::specialize."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
@@ -2733,14 +2733,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_devirtualize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::devirtualize."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
@@ -2749,14 +2749,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_fold"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::fold."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
@@ -2765,14 +2765,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_cse"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::cse."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
@@ -2781,14 +2781,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_dce"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::dce."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
@@ -2797,14 +2797,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_opt"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -2813,14 +2813,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_simplify"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -2829,14 +2829,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.all_6"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
@@ -2845,14 +2845,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.all_macro_9"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
@@ -2861,14 +2861,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt_fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::fvm."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -2877,14 +2877,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -2893,14 +2893,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::tf."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -2909,14 +2909,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline_fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::inline std::fvm."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -2925,14 +2925,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::inline std::jit."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
@@ -2941,14 +2941,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::inline std::tf."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
@@ -2957,14 +2957,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.specialize_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt::specialize std::jit."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
@@ -2973,14 +2973,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.simplify_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -2989,14 +2989,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_opt_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::jit."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -3005,14 +3005,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_opt_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a returned counter, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::tf."
+desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
@@ -3021,7 +3021,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 1 2 3 | 1 1 | 8 | 21', `unexpected output: ${out}`)
+assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000

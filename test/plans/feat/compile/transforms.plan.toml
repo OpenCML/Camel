@@ -696,13 +696,13 @@ timeout_ms = 30000
 # `src/` and `modules/`, so the engine side of the comparison is the tree's own.
 [[tests]]
 name = "vjp_api.the_two_tables_are_compared"
-desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new`; a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
+desc = "`scripts/vjp-parity.mjs` reads both derivative tables out of the source -- the library's laws and the engine's `setVjp`/`setRule` registrations, reduced to the same `head@arity` key -- and reports every difference the exemption list does not hold. This entry runs `test/tools/check-vjp-parity.mjs`, which pins three readings: the real tree answers `0 new` and `stale=0` under `--strict` (a row that has outlived its difference is a failure there, so the list cannot grow longer than the tree); a `fake_parity_op_t` law appended to a copy of `stdlib/rulesets/transpose.cml` (with `src/` and `modules/` linked to the real tree, so the engine's table is the tree's own) is reported by name with exit 1; and the same law with the row it would need appended to a copy of the exemption list is not reported, with exit 0. A gate that answered `0 new` for the second reading would be green on the day someone files a law no engine rule answers, which is the debt this comparison exists to catch."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-vjp-parity.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["the real tree has no difference the list does not hold", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
+expect_stdout_contains = ["the real tree has no difference the list does not hold, and no row without a difference", "a law with no engine rule is reported", "the same law is not reported once the list holds it", "PASS the parity gate answers the three readings it exists for"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
@@ -752,6 +752,29 @@ desc = "`vjp(f)(2.0)` on `f(x) = x*x*x` reads `(8.0, (12.0))` and `grad(f)(2.0)`
 kind = "behavior"
 case = "../../../cases/compile/transforms/vjp_gradient.cml"
 args = ["${case}", "${backend}"]
+backends = ["nvm"]
+backends_agree = ["exit_code", "diagnostics"]
+expect_exit = 0
+expect_stdout_contains = ["vjp_gradient value=8.0", "(12.0)", "vjp_gradient cotangent=12.0", "vjp_gradient grad=12.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The same program with the optimizing pipeline in front of the back end, which is not the same
+# program to a pass: `std::opt` runs `std::defunctionalize` first, and that pass lowers every value
+# of a function type to one variant of an enum. A program that imports `vjp` carries the rule graphs
+# of `stdlib/rulesets/jvp.cml` and `stdlib/rulesets/transpose.cml`, whose right sides are closures
+# (`pow_d(x, y) => (dx, dy) => ...`), so it has far more families than it looks like it has -- and
+# until this entry, `std::opt` refused it with `RuntimeDiag::ExitTypeMismatch` on
+# `rulesets.jvp::jvp_pow_d__rhs` (exit 1, before the program ran at all). The readings below are the
+# four lines the entry above pins, whole: `std::opt` changes which writings the graph has, never the
+# number a program computes (`vjp_gradient.cml` has no `std::nvm`-visible difference between the two
+# runs, which is what this pair of entries holds).
+[[tests]]
+name = "vjp_api.gradient_under_std_opt"
+desc = "The entry above, with `std::opt` before the back end: `vjp(f)(2.0)` on `f(x) = x*x*x` still reads `(8.0, (12.0))` and `grad(f)(2.0)` still reads `12.0`, so the optimizing pipeline neither refuses this program nor changes its numbers. It was refused: `std::defunctionalize` -- which `std::opt` runs whether or not the program names it -- retyped the signature of the rule graph `rulesets.jvp::jvp_pow_d__rhs` to another family's enum while leaving the closure node on the function type, and the graph's exit check reported the value's type against the declared one. The value read is the same one the unoptimized entry reads, line for line: the two entries are the comparison, and they are separate because one run per entry is what the plan runner does."
+kind = "behavior"
+case = "../../../cases/compile/transforms/vjp_gradient.cml"
+args = ["${case}", "std::opt", "${backend}"]
 backends = ["nvm"]
 backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0

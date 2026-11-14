@@ -1,0 +1,21 @@
+/**
+ * Escape route one, "handed out as a result" (design principles 3.5, rule two): `make` makes the
+ * closure `add`, which captures `acc` -- a `var` of `make`'s call -- and returns it. The result's
+ * type can hold a function, so the cell goes out with it and would outlive the call that made it:
+ * compile error, and the two ways out are to capture the value the cell holds (`let x = acc;
+ * () => x`) or to pass the state as a value in and out.
+ */
+
+func make(): (x: int) => int {
+    var acc = 0
+    return (x: int): int => sync {
+        acc = acc + x
+        acc
+    }
+}
+
+func main(): int sync {
+    let g = make()
+    println(g(1))
+    return 0
+}

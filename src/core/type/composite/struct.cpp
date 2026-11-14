@@ -33,16 +33,15 @@ std::atomic<uint32_t> structDeclCounter{1};
 
 } // namespace
 
-StructDecl::StructDecl(
-    const std::string &name, std::vector<std::string> params, std::string module)
+StructDecl::StructDecl(const std::string &name, std::vector<std::string> params, std::string module)
     : name_(name), module_(std::move(module)), params_(std::move(params)),
       id_(structDeclCounter.fetch_add(1)) {
     const size_t at = name_.rfind("::");
     shortName_      = at == std::string::npos ? name_ : name_.substr(at + 2);
 }
 
-StructDecl *StructDecl::create(
-    const std::string &name, std::vector<std::string> params, std::string module) {
+StructDecl *
+StructDecl::create(const std::string &name, std::vector<std::string> params, std::string module) {
     return new StructDecl(name, std::move(params), std::move(module));
 }
 
@@ -54,8 +53,8 @@ void StructDecl::define(std::vector<std::pair<std::string, Type *>> fields) {
 
 namespace {
 
-StructTypeLayout computeLayout(
-    size_t size, size_t refCount, size_t refCapacity, size_t fieldNamesDataSize) {
+StructTypeLayout
+computeLayout(size_t size, size_t refCount, size_t refCapacity, size_t fieldNamesDataSize) {
     size_t typesSize       = size * sizeof(Type *);
     size_t typeCodesSize   = size * sizeof(TypeCode);
     size_t nameOffsetsSize = size * sizeof(size_t);
@@ -90,10 +89,30 @@ namespace {
 /// compares its arguments with `equals` (text.cpp: sameType), so the names in them are erased
 /// here exactly as they are there: the declaration's own parameter object and a use's argument
 /// object are one entry, which is how a forward declaration and its definition share it.
+///
+/// The declaration enters the key by its `id()`, not by its address. The id answers the same
+/// question -- which declaration -- in a form that is not a fact about memory: it is handed out
+/// once per declaration from a counter that never repeats a number, so two declarations are two
+/// ids for all time, and a declaration's id says nothing about where its object lives or how long
+/// it lives.
+///
+/// What cannot enter the key is the declaration's **content**, which is why this is not the
+/// content identity the guard of a `match type` case now has: the type is made before its fields
+/// are read (`StructType::declare`, then the fields, then `completeFields`), because a field may
+/// name the type itself, so when the key is made there are no fields to be the key. And a
+/// re-declaration -- the same source read a second time, `test/passes/test/retype.cpp`'s
+/// `PullbackValue` -- has to be **another** type, not the one the first read made, or retyping an
+/// edited declaration inside one process would answer with the fields it used to have.
+///
+/// No behaviour case depends on which of the two it is: switching this word to the declaration's
+/// module and name leaves every case of the `type_identity`, `struct_entry`, `struct_join`,
+/// `recursive_struct` and `enum` plans reading as it did, and only `debugRunTypeIdentitySelfTest`
+/// goes red. That self-test is therefore what stands in the way of "fixing" this into a content
+/// identity, which would break re-declaration.
 std::vector<uintptr_t> declaredKey(const StructDecl *decl, std::span<Type *const> args) {
     std::vector<uintptr_t> key;
     key.reserve(1 + args.size());
-    key.push_back(reinterpret_cast<uintptr_t>(decl));
+    key.push_back(static_cast<uintptr_t>(decl->id()));
     for (Type *arg : args) {
         key.push_back(typeKeyWord(TypeTable::instance().canonical(arg)));
     }
@@ -143,9 +162,10 @@ StructType *StructType::get(StructDecl *decl, std::span<Type *const> args) {
     }
     std::vector<std::string> refs = refsOf(fields);
     std::vector<Type *> typeArgs(args.begin(), args.end());
-    return static_cast<StructType *>(TypeTable::instance().intern(
-        TypeTable::Shape::DeclaredStruct, key,
-        [&]() -> Type * { return allocate(fields, refs, decl, std::move(typeArgs)); }));
+    return static_cast<StructType *>(
+        TypeTable::instance().intern(TypeTable::Shape::DeclaredStruct, key, [&]() -> Type * {
+            return allocate(fields, refs, decl, std::move(typeArgs));
+        }));
 }
 
 StructType::StructType(
@@ -201,15 +221,16 @@ StructType *StructType::fromFactoryData(
         plainFields.emplace_back(name, canonical);
     }
     Type *interned = TypeTable::instance().intern(
-        TypeTable::Shape::Struct, key, [&]() -> Type * { return allocate(fields, refs); },
+        TypeTable::Shape::Struct,
+        key,
+        [&]() -> Type * { return allocate(fields, refs); },
         TypeTable::Canonical{plain, [&]() -> Type * { return allocate(plainFields, refs); }});
     return static_cast<StructType *>(interned);
 }
 
 StructType *StructType::allocate(
-    const std::vector<std::pair<std::string, Type *>> &fields,
-    const std::vector<std::string> &refs, StructDecl *decl, std::vector<Type *> typeArgs,
-    size_t refCapacity) {
+    const std::vector<std::pair<std::string, Type *>> &fields, const std::vector<std::string> &refs,
+    StructDecl *decl, std::vector<Type *> typeArgs, size_t refCapacity) {
     size_t size     = fields.size();
     size_t refCount = refs.size();
     // A declaration being read reserves one refs slot per field: the field types, and so which
@@ -286,8 +307,8 @@ StructType *StructType::declare(
     // still being read. The object is therefore mutable until completeFields() runs, which the
     // table allows for this one shape: the key is the declaration, not the fields.
     const std::vector<uintptr_t> key = declaredKey(decl, args);
-    return static_cast<StructType *>(TypeTable::instance().intern(
-        TypeTable::Shape::DeclaredStruct, key, [&]() -> Type * {
+    return static_cast<StructType *>(
+        TypeTable::instance().intern(TypeTable::Shape::DeclaredStruct, key, [&]() -> Type * {
             return allocate(fields, {}, decl, std::move(typeArgs), fieldNames.size());
         }));
 }
@@ -300,7 +321,8 @@ void StructType::completeFields(const std::vector<std::pair<std::string, Type *>
         GUARD(
             fields[i].first == fieldName(i),
             std::format(
-                "field {} is named '{}' here but sits at index {}: a struct instance keeps the order of "
+                "field {} is named '{}' here but sits at index {}: a struct instance keeps the "
+                "order of "
                 "the declaration, so every field after it reads another field's value",
                 i,
                 fieldName(i),
@@ -417,7 +439,8 @@ Type *StructType::clone(bool deep /* = false */) const {
 
 bool StructType::equals(Type *type) const { return typeEquals(this, type); }
 
-StructRelation camel::core::type::relateStructs(const StructType *target, const StructType *source) {
+StructRelation
+camel::core::type::relateStructs(const StructType *target, const StructType *source) {
     if (target == nullptr || source == nullptr) {
         return StructRelation::None;
     }
@@ -555,7 +578,8 @@ Type *StructType::unify(Type *other) const {
     }
     StructTypeFactory factory;
     for (size_t i = 0; i < size(); ++i) {
-        if (fieldName(i) != rhs->fieldName(i) || typeAt(i) == nullptr || rhs->typeAt(i) == nullptr) {
+        if (fieldName(i) != rhs->fieldName(i) || typeAt(i) == nullptr ||
+            rhs->typeAt(i) == nullptr) {
             return nullptr;
         }
         Type *field = typeAt(i)->unify(rhs->typeAt(i));

@@ -48,13 +48,13 @@ export func run_preferred_resident(inputs: (f32, f32)): Device<f32> uses var dri
 /// The CUDA source the function compiles to, without running it.
 /// @example (f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>
 with <fn: (a: f32, b: f32) => f32>
-export func source(inputs: (f32, f32)): string uses var driver
+export func source(inputs: (f32, f32)): string uses driver
 
 /// A report on the function's device plan, without running it: the kernel, its launch shape and
 /// the values it would keep on the device.
 /// @example (f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>
 with <fn: (a: f32, b: f32) => f32>
-export func inspect(inputs: (f32, f32)): string uses var driver
+export func inspect(inputs: (f32, f32)): string uses driver
 
 /// Times the function on the device, and on the host for comparison, and gives the report as JSON
 /// text.

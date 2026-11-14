@@ -1,0 +1,25 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A write the rewrite leaves behind: `h` captured `c` and reaches nothing the program keeps --
+// `p.0` reads the tuple's first member alone -- and `w * 0` is the write's only reader, so folding
+// it leaves a write no root holds and no port reads: a dead write, which a rule may drop
+// (design principles 9.7). The rewrite policy here is the library's own `policy::direct`, so what
+// this case reads is the engine deleting it, not only the pass boundary accepting the graph.
+// `main` prints 1 whether or not the write ran, which is what "the behaviour is unchanged" means.
+
+func probe(): int sync {
+    var c = 0
+    let h = (): int => sync {
+        println(c)
+        return c
+    }
+    let w = (c = 41) * 0
+    let p = (1, h)
+    return w + p.0
+}
+
+func main(): int sync {
+    println(probe())
+    return 0
+}

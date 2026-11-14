@@ -1293,7 +1293,7 @@ Rules buildRules() {
     // `tensor:max_axis` / `tensor:min_axis` (modules/tensor/kernels/reduce.cpp, reduceAxis): the
     // same lanes as the sum, folded from the operation's identity instead of from +0, with the one
     // comparison the interpreter makes -- a NaN on either side gives the canonical quiet NaN and -0
-    // is below +0 (modules/math/minmax.h), so a single NaN element makes the answer NaN and no
+    // is below +0 (camel/core/math/minmax.h), so a single NaN element makes the answer NaN and no
     // order or grouping changes the bits. Nothing is rounded here and no accumulator takes part.
     //
     // `tensor:argmax_axis` / `tensor:argmin_axis` are the same fold answering the position of that
@@ -1620,7 +1620,7 @@ Rules buildRules() {
         r[std::format("math:floor_{}", t)] = cmath("floor");
     }
     // `math::min`, `math::max` and `math::abs` of a bf16 or an f16 (modules/math/operators.cpp,
-    // modules/math/minmax.h): the IEEE 754-2019 comparison of the values widened to f32, whose
+    // camel/core/math/minmax.h): the IEEE 754-2019 comparison of the values widened to f32, whose
     // answer is one of the two operands (a NaN gives the canonical quiet NaN, -0 is below +0), and
     // the sign bit cleared for abs. Neither rounds, so `rt::halfMin` and friends return a pattern
     // rather than a computed value.
@@ -1641,7 +1641,7 @@ Rules buildRules() {
         r[std::format("math:max_{}", t)] = runtimeFunction("ieeeMax");
     }
     // The integers (math:min_i, math:min_l and their max forms): the library compares them the
-    // plain way -- no NaN to answer, no signed zero to order (modules/math/minmax.h) -- and the
+    // plain way -- no NaN to answer, no signed zero to order (camel/core/math/minmax.h) -- and the
     // two values are the only answer either way, so this is not the IEEE pair above.
     for (const char *t : {"i", "l"}) {
         r[std::format("math:min_{}", t)] = runtimeFunction("intMin");

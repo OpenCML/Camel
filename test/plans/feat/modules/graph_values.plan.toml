@@ -65,6 +65,17 @@ expect_stdout_contains = ["current: 1\n"]
 timeout_ms = 20000
 
 [[tests]]
+name = "rewrite_callee_runs_the_graph_it_shows"
+desc = "user->rewrite<[x + 1 => x]> and chain->rewrite<[x + 1 => x]>: the rewritten function calls the version of its callee that its own program holds, so `graphs_of(q)` having no `+ 1` in target and `q(5)` computing 5 are one reading -- the graph and the run agree. The program the rewrite was taken from keeps its caller and its callee, so `user(5)` still computes 6."
+kind = "behavior"
+case = "../../../cases/modules/graph_values/rewrite_callee.cml"
+backends = ["nvm", "fvm", "jit"]
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "one: 0 5\ntwo: 0 5\ngiven: 1 6\n"
+timeout_ms = 20000
+
+[[tests]]
 name = "grad_leaves_loss_and_its_callers"
 desc = "grad(loss) and with_grad(loss) built at run time: loss and user, which calls it, compute the same before and after, and user's graph keeps its size."
 kind = "behavior"

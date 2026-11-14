@@ -610,7 +610,9 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
     // The graph's own edges, the way a back end follows them: a node runs after its data, `with`
     // and control inputs, after the statement a sync edge writes before it, and after what an
     // order edge orders before it. Anything else the graph leaves unordered, and `std::prl` runs
-    // it in any order (see laterUsersAreOrderedAfter).
+    // it in any order (see laterUsersAreOrderedAfter). What the edges are is the one shared
+    // answer (camel/execute/graph_runtime_support.h: executionPredecessorsOf); this walk only
+    // turns it round, into who runs after whom.
     std::vector<std::vector<gc_node_ref_t>> successors(nodeCount);
     const auto noteSuccessor = [&](gc_node_ref_t from, gc_node_ref_t to) {
         if (from < successors.size()) {
@@ -623,27 +625,29 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
         if (at < position.size()) {
             position[at] = idx;
         }
-        for (const gc_node_ref_t in : graph.normInputsOf(at)) {
-            if (in < users.size()) {
-                users[in].push_back(at);
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(graph, at)) {
+            // The two data roles (`normal` and `with`) are the same edge kind here (edges.cn.md
+            // 1.5): both are a value the node reads, and both make the writer run first.
+            if (predecessor.kind == camel::execute::ExecutionPredecessor::Kind::Data &&
+                predecessor.node < users.size()) {
+                users[predecessor.node].push_back(at);
             }
-            noteSuccessor(in, at);
-        }
-        for (const gc_node_ref_t in : graph.withInputsOf(at)) {
-            if (in < users.size()) {
-                users[in].push_back(at);
-            }
-            noteSuccessor(in, at);
-        }
-        for (const gc_node_ref_t in : graph.ctrlInputsOf(at)) {
-            noteSuccessor(in, at);
+            noteSuccessor(predecessor.node, at);
         }
     }
+    // A sync or order edge whose user the plan does not hold points at a node that does not run,
+    // and it is in the index all the same: the walk below follows `successors` from the update it
+    // starts at, and a node the plan does not hold can be the step between two that it does.
     for (const camel::runtime::GCGraphSyncEdge &edge : graph.syncEdges()) {
-        noteSuccessor(edge.pred, edge.user);
+        if (edge.user >= position.size() || position[edge.user] == count) {
+            noteSuccessor(edge.pred, edge.user);
+        }
     }
     for (const camel::runtime::GCGraphOrderEdge &edge : graph.orderEdges()) {
-        noteSuccessor(edge.pred, edge.user);
+        if (edge.user >= position.size() || position[edge.user] == count) {
+            noteSuccessor(edge.pred, edge.user);
+        }
     }
     std::vector<uint8_t> escapeCache(nodeCount, 0);
     std::vector<uint8_t> owned(nodeCount, 0);

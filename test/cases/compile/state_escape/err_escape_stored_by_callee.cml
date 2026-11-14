@@ -1,0 +1,25 @@
+/**
+ * Escape route three, "handed to a function that stores it" (design principles 3.5, rule two):
+ * `keep` takes a function value and returns a pair that holds it, so the value handed to it is
+ * kept past the call. `make` passes a closure over `acc`, a `var` of its own call, and the cell
+ * would be read after the call is over: compile error.
+ */
+
+func keep(f: (x: int) => int): ((x: int) => int, int) {
+    return (f, 0)
+}
+
+func make(): int sync {
+    var acc = 0
+    let add = (x: int): int => sync {
+        acc = acc + x
+        acc
+    }
+    let (kept, n) = keep(add)
+    return kept(n)
+}
+
+func main(): int sync {
+    println(make())
+    return 0
+}

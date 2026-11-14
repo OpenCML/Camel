@@ -1,0 +1,25 @@
+/**
+ * Escape route two, "written into a place that is not part of this evaluation" (design principles
+ * 3.5, rule two): the closure made in `fill` captures `acc`, a `var` of `fill`'s call, and stores
+ * it into `b.f`, a field of the caller's own variable. The cell outlives `fill`'s call and the
+ * caller can reach the closure afterwards: compile error.
+ */
+
+type Box = { f: (x: int) => int, n: int }
+
+func fill(var b: Box) {
+    var acc = 0
+    sync {
+        b.f = (x: int): int => sync {
+            acc = acc + x
+            acc
+        }
+    }
+}
+
+func main(): int sync {
+    var box: Box = { f: (x: int): int => x, n: 0 }
+    fill(box)
+    println(box.f(1))
+    return 0
+}

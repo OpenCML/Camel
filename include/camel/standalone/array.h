@@ -1204,7 +1204,7 @@ Array<T> sumAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site 
 ///
 /// An integer lane answers `int(sum / numel)`, the conversion `int(·)` already has (toward zero):
 /// `mean_axis([1, 2, 4], 0, false)` is `2`, which is the normative form of `mean` (design
-/// principles; modules/math/mean.h), not a lost average -- a program that wants a floating mean
+/// principles; camel/core/math/mean.h), not a lost average -- a program that wants a floating mean
 /// writes `float(xs)` first. So the answer keeps the element type, as the whole form's does.
 ///
 /// A lane with no element is not refused here: the interpreter does not refuse it either, it
@@ -1236,7 +1236,7 @@ Array<T> meanAxis(const Array<T> &xs, int64_t axisArg, bool keepDims, const Site
         });
 }
 
-/// IEEE 754-2019 maximum of two values (modules/math/minmax.h, `maxOf`): a NaN on either side gives
+/// IEEE 754-2019 maximum of two values (camel/core/math/minmax.h, `maxOf`): a NaN on either side gives
 /// the canonical quiet NaN, -0 is below +0, and otherwise the larger operand -- chosen on the
 /// values but returned as its own bits, so the sign of a zero survives.
 template <typename T> T maxOf(T a, T b) {

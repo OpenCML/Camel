@@ -6,6 +6,10 @@
  * version and commits again, and prints what it finds for the test plan:
  *   REGIONS count=3 in_inner=2 in_outer=1 result=ok ports=1 within=1
  *   REGIONS recommit same=1
+ * It also builds the two shapes a region may not take -- a control region whose owner is gone, and
+ * a node whose region is gone -- and reports whether the commit refused each and named it:
+ *   REGIONS orphan_owner_refused=1 region=1 gone=1 rule=1 named_region=1
+ *   REGIONS orphan_member_refused=1 region=2 rule=1
  * The regions mean nothing to the back ends yet; the program runs on as before.
  */
 
@@ -21,9 +25,9 @@ const camel::runtime::Program *
 RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
     using namespace camel::runtime;
     // A refusal is worth reading only if it is the refusal the case is about: the check's own text
-    // ends by naming what the read would have had to be ("... nor the exit of a region it owns"), so
-    // a reading that finds those words says the rule fired and not a neighbour of it -- an encoder
-    // that refused the same draft for another reason would fail this part of the line.
+    // ends by naming what the read would have had to be ("... nor the exit of a region it owns"),
+    // so a reading that finds those words says the rule fired and not a neighbour of it -- an
+    // encoder that refused the same draft for another reason would fail this part of the line.
     const auto saysTheRule = [](const std::string &refusal) {
         return refusal.find("nor the exit of a region it owns") != std::string::npos;
     };
@@ -59,7 +63,8 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
             if (sibling == 0) {
                 continue;
             }
-            for (gc_node_ref_t ref = 0; ref < graph->nodeCount() && port == kInvalidNodeRef; ++ref) {
+            for (gc_node_ref_t ref = 0; ref < graph->nodeCount() && port == kInvalidNodeRef;
+                 ++ref) {
                 if (graph->nodeRegion(ref) != r) {
                     continue;
                 }
@@ -107,23 +112,25 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         }
         // Named, not just refused: the commit has to say which port and which reader, or a reader
         // of the diagnostic cannot tell this refusal from the next one.
-        const bool namedPort   = refusal.find(std::format("reads port {}", port)) != std::string::npos;
+        const bool namedPort =
+            refusal.find(std::format("reads port {}", port)) != std::string::npos;
         const bool namedReader =
-            refusal.find(std::format("node {} in region {}", reader, readerArm)) != std::string::npos;
+            refusal.find(std::format("node {} in region {}", reader, readerArm)) !=
+            std::string::npos;
         os << "REGIONS sibling_refused=" << (wasRefused ? 1 : 0) << " port=" << port
            << " reader=" << reader << " arm=" << readerArm << " sibling=" << portArm
-           << " rule=" << (saysTheRule(refusal) ? 1 : 0) << " named_port=" << (namedPort ? 1 : 0) << " named_reader=" << (namedReader ? 1 : 0)
-           << "\n";
+           << " rule=" << (saysTheRule(refusal) ? 1 : 0) << " named_port=" << (namedPort ? 1 : 0)
+           << " named_reader=" << (namedReader ? 1 : 0) << "\n";
     }
-    // The shape the owner's exception is drawn around: the node that owns a region reading a port of
-    // it that is **not** its exit. The tree has one owner read -- a LOOP consuming its body's exit
-    // port, `loop_parts.cml` / `through_match`, `g6n10` reading `g6n9` of `g6r2` -- so the shape is
-    // built by taking that exit away: the body's result becomes invalid, and the loop's read of the
-    // port is then a read of a port the region no longer ends in. Under the wider exception (the
-    // owner reads any port of its region) this draft would commit; a rule that asks "is this port
-    // the region's exit" refuses it.
-    const GCGraph *looped = nullptr;
-    uint32_t bodyRegion   = 0;
+    // The shape the owner's exception is drawn around: the node that owns a region reading a port
+    // of it that is **not** its exit. The tree has one owner read -- a LOOP consuming its body's
+    // exit port, `loop_parts.cml` / `through_match`, `g6n10` reading `g6n9` of `g6r2` -- so the
+    // shape is built by taking that exit away: the body's result becomes invalid, and the loop's
+    // read of the port is then a read of a port the region no longer ends in. Under the wider
+    // exception (the owner reads any port of its region) this draft would commit; a rule that asks
+    // "is this port the region's exit" refuses it.
+    const GCGraph *looped  = nullptr;
+    uint32_t bodyRegion    = 0;
     gc_node_ref_t loopNode = kInvalidNodeRef;
     gc_node_ref_t bodyExit = kInvalidNodeRef;
     for (GCGraph *graph : program->graphs()) {
@@ -133,7 +140,8 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
                 continue;
             }
             const GCNode *exit = graph->node(body->result);
-            if (exit == nullptr || exit->kind != GCNodeKind::Port || body->owner == kInvalidNodeRef) {
+            if (exit == nullptr || exit->kind != GCNodeKind::Port ||
+                body->owner == kInvalidNodeRef) {
                 continue;
             }
             // The check walks the readers that are in a region; an owner in the body is not one of
@@ -155,10 +163,10 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
             if (!ownerReads) {
                 continue;
             }
-            looped    = graph;
+            looped     = graph;
             bodyRegion = r;
-            loopNode  = body->owner;
-            bodyExit  = body->result;
+            loopNode   = body->owner;
+            bodyExit   = body->result;
         }
         if (looped != nullptr) {
             break;
@@ -181,7 +189,8 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         const bool ownerNamesPort =
             ownerRefusal.find(std::format("reads port {}", bodyExit)) != std::string::npos;
         const bool ownerNamesReader =
-            ownerRefusal.find(std::format("node {} in region {}", loopNode, looped->nodeRegion(loopNode))) !=
+            ownerRefusal.find(
+                std::format("node {} in region {}", loopNode, looped->nodeRegion(loopNode))) !=
             std::string::npos;
         size_t violations = ownerRefused ? 1 : 0;
         for (size_t at = ownerRefusal.find("; "); at != std::string::npos;
@@ -190,12 +199,127 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         }
         os << "REGIONS owner_refused=" << (ownerRefused ? 1 : 0) << " port=" << bodyExit
            << " owner=" << loopNode << " region=" << bodyRegion
-           << " rule=" << (saysTheRule(ownerRefusal) ? 1 : 0) << " named_port=" << (ownerNamesPort ? 1 : 0)
+           << " rule=" << (saysTheRule(ownerRefusal) ? 1 : 0)
+           << " named_port=" << (ownerNamesPort ? 1 : 0)
            << " named_reader=" << (ownerNamesReader ? 1 : 0) << " violations=" << violations
            << "\n";
     }
+    // The two shapes a rewrite leaves behind when it removes the node a region belonged to, in the
+    // two directions the commit's region check reads them (`validateRuntimeRegions`,
+    // src/runtime/graph.cpp): a control region whose owner the graph no longer has, and a node
+    // whose region the graph no longer has. Neither is reachable through the draft's own writers --
+    // erasing a BRCH or a LOOP dissolves its regions and hands what they held to the region around
+    // them (`dissolveRegionsOf`, on the draft), and erasing any other node takes no region with it
+    // -- so the only program that asks the commit to judge them is this pass. That is the point of
+    // asking: with no case that asks, a check that had stopped reading either direction would look
+    // exactly like one that reads it, and the pruning that leaves a region behind would publish.
+    //
+    // The owner is a node the draft makes and then erases, so the region's record is what a pruning
+    // pass leaves when it takes the loop or the branch away and forgets the region: the region
+    // still names a node, and the graph no longer has it. The refusal has to name the region --
+    // nobody can act on "a region is wrong" -- and it has to be the owner's own wording and not a
+    // neighbour's: the port and member rules refuse other shapes of the same draft.
+    const GCGraph *lostRegionGraph = nullptr;
+    uint32_t lostRegion            = 0;
+    for (GCGraph *graph : program->graphs()) {
+        for (uint32_t r = 1; r < graph->regionCount(); ++r) {
+            const GCRegion *region = graph->region(r);
+            if (region == nullptr || region->owner == kInvalidNodeRef) {
+                continue;
+            }
+            if (region->kind != GCRegionKind::Arm && region->kind != GCRegionKind::LoopCond &&
+                region->kind != GCRegionKind::LoopBody) {
+                continue;
+            }
+            lostRegionGraph = graph;
+            lostRegion      = r;
+            break;
+        }
+        if (lostRegionGraph != nullptr) {
+            break;
+        }
+    }
+    if (lostRegionGraph == nullptr) {
+        os << "REGIONS orphan_owner_refused=none\n";
+    } else {
+        RuntimeGraphDraftSession orphanOwner(context_, program);
+        auto &wrongOwner          = orphanOwner.edit(const_cast<GCGraph *>(lostRegionGraph)).edit();
+        const gc_node_ref_t owner = wrongOwner.addCopyNode(camel::core::type::Type::Int32());
+        std::string refusal;
+        bool refused = false;
+        if (owner != kInvalidNodeRef) {
+            wrongOwner.setRegionOwner(lostRegion, owner, 0);
+            wrongOwner.eraseNode(owner);
+            try {
+                (void)orphanOwner.commit();
+            } catch (const std::exception &e) {
+                refused = true;
+                refusal = e.what();
+            }
+        }
+        // The two wordings the owner's own direction of the check has: the node the region names is
+        // not in the graph, or a control region has no owner at all. A refusal that names a port or
+        // a member instead answers a different question and says nothing about this one.
+        const bool ownerRule =
+            (refusal.find("that names a node the graph does not have") != std::string::npos ||
+             refusal.find("whose owner does not fit its kind") != std::string::npos) &&
+            !refusal.empty();
+        const bool namedRegion =
+            refusal.find(std::format("has region {} ", lostRegion)) != std::string::npos;
+        os << "REGIONS orphan_owner_refused=" << (refused ? 1 : 0) << " region=" << lostRegion
+           << " gone=" << (wrongOwner.alive(owner) ? 0 : 1) << " rule=" << (ownerRule ? 1 : 0)
+           << " named_region=" << (namedRegion ? 1 : 0);
+        if (refused && !(ownerRule && namedRegion)) {
+            os << " said=\"" << refusal.substr(0, 140) << "\"";
+        }
+        os << "\n";
+    }
+    // The other direction: a node the graph has, in a region the graph does not. A rewrite that
+    // retires a region and leaves a node pointing at it asks the same question from the node's
+    // side, and only that side can refuse it -- a region has no member table to be short of one.
+    // The node is one the draft makes, so nothing reads it and no region names it: the one thing
+    // wrong with this graph is that the node's region is not there, which is what the refusal has
+    // to name. A node of the program moved into a retired region would say the same thing and, if
+    // an arm read it, would be refused by the port rule first -- a different question.
+    const GCGraph *strandedGraph = lostRegionGraph;
+    if (strandedGraph == nullptr && !program->graphs().empty()) {
+        strandedGraph = *program->graphs().begin();
+    }
+    if (strandedGraph == nullptr) {
+        os << "REGIONS orphan_member_refused=none\n";
+    } else {
+        RuntimeGraphDraftSession stranded(context_, program);
+        auto &wrongRegion         = stranded.edit(const_cast<GCGraph *>(strandedGraph)).edit();
+        const uint32_t goneRegion = wrongRegion.addRegion(GCRegionKind::Block, 0);
+        wrongRegion.retireRegion(goneRegion, false);
+        const gc_node_ref_t strandedNode =
+            wrongRegion.addCopyNode(camel::core::type::Type::Int32());
+        std::string refusal;
+        bool refused = false;
+        if (strandedNode != kInvalidNodeRef) {
+            wrongRegion.setNodeRegion(strandedNode, goneRegion);
+            try {
+                (void)stranded.commit();
+            } catch (const std::exception &e) {
+                refused = true;
+                refusal = e.what();
+            }
+        }
+        // The node is named by the number the graph gave it, which is not the draft's number, so
+        // the reading anchors on the region: region ids are the table's own and are not renumbered.
+        const bool namedRegion =
+            refusal.find(std::format("in region {}, which is not there", goneRegion)) !=
+            std::string::npos;
+        const bool namesNode = refusal.find("has node ") != std::string::npos;
+        os << "REGIONS orphan_member_refused=" << (refused ? 1 : 0) << " region=" << goneRegion
+           << " rule=" << (namedRegion && namesNode ? 1 : 0);
+        if (refused && !(namedRegion && namesNode)) {
+            os << " said=\"" << refusal.substr(0, 140) << "\"";
+        }
+        os << "\n";
+    }
     // The largest graph that has arms, if any has, so that they are among the regions it keeps.
-    GCGraph *largest = nullptr;
+    GCGraph *largest   = nullptr;
     const auto hasArms = [](const GCGraph *graph) { return graph->regionCount() > 1; };
     for (GCGraph *graph : program->graphs()) {
         if (largest == nullptr || (hasArms(graph) && !hasArms(largest)) ||
@@ -257,9 +381,10 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
         inInner += after->nodeRegion(id) == inner;
         inOuter += after->nodeRegion(id) == outer;
     }
-    const bool resultOk = after && after->region(inner) && after->region(inner)->result == live.at(4);
-    const bool portsOk  = after && after->regionPorts(outer).size() == 1 &&
-                         after->regionPorts(outer)[0] == outerPort;
+    const bool resultOk =
+        after && after->region(inner) && after->region(inner)->result == live.at(4);
+    const bool portsOk =
+        after && after->regionPorts(outer).size() == 1 && after->regionPorts(outer)[0] == outerPort;
     os << "REGIONS count=" << (after ? after->regionCount() : 0) << " in_inner=" << inInner
        << " in_outer=" << inOuter << " result=" << (resultOk ? "ok" : "bad")
        << " ports=" << (portsOk ? 1 : 0) << " within=" << (inInner == 2 ? 1 : 0) << "\n";

@@ -1,0 +1,17 @@
+/**
+ * A module `var` is a variable of the outermost scope -- the module's functions capture it -- and
+ * a clause names no variable: which functions touch it is measured from their bodies, and the
+ * signature the compiler derives prints it (design principles 3.3).
+ */
+
+var cnt: int = 0
+
+func bump(): int uses var cnt sync {
+    cnt += 1
+    return cnt
+}
+
+func main(): int sync {
+    println(bump())
+    return 0
+}
