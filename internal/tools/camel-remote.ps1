@@ -349,6 +349,16 @@ $checkers = [ordered]@{
     'edge-kind-layer'       = @{ script = 'scripts/check-edge-kind-layer.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-edge-kind-layer: ([0-9]+) edge-kind call.*/\1/p' }
     'effect-facts'          = @{ script = 'scripts/check-effect-facts.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-effect-facts: ([0-9]+) effect-atom call.*/\1/p' }
     'operator-uri-literals' = @{ script = 'scripts/check-operator-uri-literals.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-operator-uri-literals: ([0-9]+) operator URI literal.*/\1/p' }
+    # A plan field the entry's kind never evaluates is not a test: the entry reads as a comparison
+    # and makes none (`docs/test-plans.md`, "Fields a Kind Does Not Read"; the shape it was written
+    # for was a `negative` entry carrying `compare_to`, green for seven months while it checked
+    # only an exit code). The script lives under test/tools/ because its subject is the plan tree,
+    # and its table is checked against `validateTest` by `--verify-runner`. Report only here does
+    # not mean un-ratcheted: the checker compares its count with test/plan-fields-baseline.json and
+    # exits non-zero when the count grows, so the footer's exit code is a reading even though this
+    # entry does not decide the run's. It becomes a wall by losing `reportOnly` and gaining
+    # `--enforce`, and `--update-baseline` is how the number moves down. 330 on 2026-11-14.
+    'plan-fields'           = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*plan-fields fields=[0-9]+ findings=([0-9]+) mode=report.*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both
