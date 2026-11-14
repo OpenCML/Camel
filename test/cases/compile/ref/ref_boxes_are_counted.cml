@@ -1,0 +1,35 @@
+/**
+ * A box is counted, and the count is read: `--gc-check foreign` prints one line when the program
+ * stops, with the blocks that were made, released and still live.
+ *
+ * This program makes a thousand boxes and keeps one, then allocates so that collections follow the
+ * call that made them. What the line says, and what this case holds the runtime to:
+ *
+ *   created >= 1001       every box the program made, and the one it kept, was counted;
+ *   created = released + live   each block is one or the other, counted once;
+ *   disposed = live       the process releases exactly what was still live when it stopped.
+ *
+ * `released` is the number the collection freed while the program ran, and it is read rather than
+ * assumed: the four backends do not agree on it (an interpreter may still reach a box through the
+ * frame that made it when the program stops), so the case compares the counters with each other and
+ * not with a number. A mechanism whose whole lifetime is a count has to have this line.
+ */
+
+import state
+
+func drop_many(i: int, n: int): int {
+    let r = state::ref(i)
+    let v = state::get(r)
+    return if i + 1 >= n then v else v + drop_many(i + 1, n)
+}
+
+func main(): int sync {
+    let kept = state::ref(41)
+    println(drop_many(0, 1000))
+    // A tail that allocates: a box is freed when the collector finds its last handle gone, so the
+    // collections the allocations below cause are the ones that would notice a dead one.
+    let tail = 0..20000
+    println(len(tail))
+    println(state::get(kept))
+    return 0
+}

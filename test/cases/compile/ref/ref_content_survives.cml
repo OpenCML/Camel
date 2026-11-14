@@ -1,0 +1,33 @@
+/**
+ * A reference keeps its content across collections, including a content written into the box
+ * after the box's own handle was promoted.
+ *
+ * The box is a C++ object and the collector does not walk it; a box holds a root of its own for a
+ * traced content, so the collector keeps the value alive and rewrites the root when it moves it.
+ * Run under `--gc-stress` (a collection every three allocations and at every safepoint) and
+ * `--gc-check verify=both,poison`, a missing root is a wrong value read here, not a surprise
+ * later: `early` and `pair` were written before the collections, `late` was written after its
+ * handle had been promoted, and the value it holds was allocated after that.
+ */
+
+import state
+
+type Pair = { name: string, at: int }
+
+func main(): int sync {
+    let early = state::ref('early')
+    let point: Pair = { name: 'pair', at: 3 }
+    let pair = state::ref(point)
+    let late = state::ref('nothing yet')
+    // Two allocations big enough to collect on their own, and the write below happens between the
+    // box being promoted and the value being written into it.
+    let warm = 0..50000
+    state::set(late, 'written after the box was promoted')
+    let warm2 = 0..50000
+    println(len(warm) + len(warm2))
+    println(state::get(early))
+    let back = state::get(pair)
+    println(back.name, back.at)
+    println(state::get(late))
+    return 0
+}
