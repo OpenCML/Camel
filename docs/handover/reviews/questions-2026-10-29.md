@@ -3667,3 +3667,12 @@ A16f 先在 taskflow 守所有顺序边（本日另一条返工）之后重跑�
 **验收**：每个最小程序收进 `test/cases/opt/e9/`，在 `std::nvm` 上与不加遍的输出逐字相同，或者给出一条具名诊断；崩溃一律变成诊断。CC 的 E9 生成器（种子、条数）请协调者问 CC 会话要来，作为慢层的随机差分，每次合并报"错值 / 拒绝 / 崩溃"三个数，只降不升。
 
 **另**：`std::cpp` 在 `std::opt` 之后生成的 C++ 编译不过（2 个程序），归第 1 路，排在上面各条之后。
+
+**补充：E9 生成器与矩阵**（CC 会话提供，供慢层随机差分照搬；归第 7 路，优先级一）
+- **生成**：`test/tools/progen`，`generate(seed)`，默认特性，规模 1，种子 1..500（`--n 500 --start 1`）。期望输出来自独立的 `model.py`。第一格就被编译器拒绝（解析或类型检查）的程序算生成器的废品，不进矩阵；`29ea0a011` 上 500 个里有 14 个。
+- **矩阵**：每个程序 99 格 = 11 条流水线 × 9 个后端。
+  - 流水线：`p00` 不加遍；`p01` `std::macro`；`p02..p09` 是 `std::macro` 之后依次加上 `[devirtualize specialize inline fold cse algebra dce order]` 的前 k 个，每个作为单独的 `std::opt::<名字>` 一站；`p10` `std::macro std::opt`。
+  - 后端：nvm、fvm、jit、prl 各配 `--gc generational` 与 `--gc mark-sweep` 两种，加 `std::cpp`（`clang++ -std=c++20 -O2 -ffp-contract=off -I$CAMEL_HOME/include` 编译，不带回收器）。
+- **判定**：遍给出带位置的诊断（`REFUSED`）是合法结果。三个数：错值 = `MISMATCH`；拒绝 = `REFUSED_UNLOCATED`（`PassInternalError`）；崩溃 = `CRASH` + `HANG` + `ERROR_NO_DIAG` + `CPP_COMPILE_ERROR`。
+- **基线**（`29ea0a011`，按程序计）：错值 19 个（6 个根因）、无位置的拒绝 21 个、崩溃 12 个加 2 个 C++ 编译失败。按格计：`MISMATCH` 618、`REFUSED_UNLOCATED` 776、`CRASH` 72、`ERROR_NO_DIAG` 61、`CPP_COMPILE_ERROR` 3。
+- **实现**：参考 `Camel-Archive/CC2027/eval/scripts/e9_difftest.py`（run/analyze/reduce；根因按 nvm 上第一个失败的流水线前缀聚类）。归档仓库协调者未必读得到，请决策者转来；把它移植成 `test/tools/` 下的工具，进慢层（并发 4 时 500 个程序约一小时，适合每晚一次或合并前）。三个数按"只降不升"做棘轮，新增的错值让闸门失败。
