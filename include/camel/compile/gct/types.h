@@ -7,6 +7,11 @@
 
 #include <cstdint>
 #include <string>
+#include <vector>
+
+namespace camel::core::type {
+class Type;
+}
 
 namespace camel::compile::gct {
 
@@ -16,6 +21,30 @@ class Tree;
 /// A node of the tree. Nodes belong to the Tree that made them and live as long as it; a
 /// null pointer is "no node".
 using node_ptr_t = Node *;
+
+/// The name the type layer holds for a `typeof e` before the front end resolves it: this prefix
+/// and the number `Tree::makeTypeOfPlaceholder` gave the expression. `#` is not a character an
+/// identifier can hold, so a type variable a program writes can never collide with one. The type
+/// layer knows nothing else about it: it is an ordinary type variable there.
+inline constexpr const char *kTypeOfPlaceholderPrefix = "typeof#";
+
+/// Whether `type` is such a placeholder (and not a type variable a program wrote).
+bool isTypeOfPlaceholder(const camel::core::type::Type *type);
+
+/// Whether a placeholder occurs anywhere in `type`, in any position: the ones the front end
+/// resolves (an argument of a type function, the subject of a `match type`, the arguments of a
+/// named type) and the ones it refuses with `TypeOfNotWholeType` (inside an array, a tuple, a
+/// function type) alike. A type function that is not applied yet is not searched: its body is not
+/// part of the type.
+bool hasTypeOfPlaceholder(const camel::core::type::Type *type);
+
+/// The type variables of `type`, as `collectTypeVars` names them, without the placeholders: a
+/// placeholder is not a variable a signature binds -- the front end resolves it where the type is
+/// used -- so a caller asking which variables a signature declares must not see one. Every number
+/// it does not answer for is the same before and after the placeholders were moved out of the type
+/// layer, since the type layer never held them as variables.
+void collectTypeVarsWithoutPlaceholders(
+    camel::core::type::Type *type, std::vector<std::string> &names);
 
 /// The kind of a node: what it stands for and which accessors of Node apply to it.
 enum class NodeKind : uint8_t {
