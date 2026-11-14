@@ -3525,3 +3525,9 @@ func main(): int sync { println(f(5)); return 0 }
 ## 返工（2026-11-14）：变换的调试输出
 
 `modules/transforms` 在发布构建里往 stderr 打 `REINTERP`/`TRANSPOSE` 行（`jvp.cpp` 11 处、`split.cpp` 45 处、`transpose.cpp` 29 处等）。用规则写的 `vjp`/`grad` 每次调用都打这些行，ECOOP 的"一步训练"例子要求它什么都不打印。改为走日志等级（`-vvv` 才出），发布构建默认不出；用到这些行的测试改用 `-vvv` 或改读结果。归第 1 路。**验收**：`camel step.cml`（库的 `grad` 一步训练）的 stdout 与 stderr 除程序自己的打印外都为空。
+
+## 决策者定（2026-11-14，负责人交决策者定）：几件挂着的旧事
+
+- **图接口加"端口序号"查询**：加，随 R4 改图接口时一起做。
+- **部分求值原型（前向求导的小样）、由值生成类型、代价模型**：推到收敛完成之后，与其他新功能一起排。
+- **分支**：`hold/fsh-dev` 已不在远端；`release` 作发布分支保留。
