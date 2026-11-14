@@ -261,6 +261,10 @@ inline bool nodeIsFreelySchedulable(const GCGraph &graph, gc_node_ref_t ref) {
 /// reads its operands and types.
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 
+/// `isUnreadClosure` of a draft, read the way the other graph questions are asked of a frozen
+/// graph.
+bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
+
 namespace graph {
 bool is_chain_statement(const GCGraph &graph, gc_node_ref_t ref);
 /// The exit of the statement `ref` names: a branch's JOIN, or `ref` itself for every other kind.

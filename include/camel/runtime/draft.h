@@ -1170,6 +1170,21 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape =
 /// statement and stays.
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
 
+/// Whether the node is a closure definition nothing can call: a FUNC node the graph does not export
+/// (`closureNodes`), with no control, order or sync edge on either side. A FUNC node is a value,
+/// not a statement (design principles 3.1): what runs is the CALL of it, so an unread definition
+/// runs nothing, drops no effect and faults nothing. What it captured is read only by its body,
+/// which is why letting it go is what leaves a write nothing else reads a dead write (9.7).
+bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
+
+/// The live set of a graph: the nodes backward reachable from its roots -- entry, exit, output,
+/// return, the norm and `with` ports, the closure nodes it exports -- over the norm, `with`,
+/// control and sync inputs, with a loop's region ports and a branch's join. A node outside it can
+/// never be run or read by the program, so a value it reads is read by nobody. Sorted by ref.
+/// One implementation: `camel::compile::gir::liveDraftNodes` is this function, and every caller
+/// that needs the set asks it here rather than walking the graph again.
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
+
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
 /// inlined call gates its arguments after what the call waited for -- and changes nothing else
 /// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about

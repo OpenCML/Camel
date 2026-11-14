@@ -18,6 +18,7 @@
 #include "camel/core/type/intern.h"
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstring>
 #include <format>
@@ -26,6 +27,29 @@
 #include <vector>
 
 namespace camel::passes::generic {
+
+namespace {
+
+/// What the sweep has taken, counted by the kind of node it took. A count is the only reading that
+/// says an extension to the sweep is doing work rather than leaving the graph it was written for
+/// untouched: a plan can assert that a case loses a closure, but not how many it lost.
+std::array<size_t, static_cast<size_t>(camel::runtime::GCNodeKind::Dead) + 1> sweepRemovals{};
+
+} // namespace
+
+void noteSweepRemoval(camel::runtime::GCNodeKind kind) {
+    const auto index = static_cast<size_t>(kind);
+    if (index < sweepRemovals.size()) {
+        ++sweepRemovals[index];
+    }
+}
+
+size_t sweepRemovalsOf(camel::runtime::GCNodeKind kind) {
+    const auto index = static_cast<size_t>(kind);
+    return index < sweepRemovals.size() ? sweepRemovals[index] : 0;
+}
+
+void resetSweepRemovals() { sweepRemovals.fill(0); }
 
 using camel::runtime::GCGraph;
 using camel::runtime::GCNodeKind;
@@ -87,6 +111,12 @@ bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_re
 bool isDeadWhenUnread(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     if (isValueOnly(transaction, id)) {
+        return true;
+    }
+    // A closure definition nothing can call is a value nobody uses, not a statement (design
+    // principles 3.1): the sweep may take it like a pure computation, and taking it is what leaves
+    // the cells it captured with no reader at all (9.7).
+    if (camel::runtime::isUnreadClosure(draft, id)) {
         return true;
     }
     return camel::runtime::isUnanchoredPure(draft, id);

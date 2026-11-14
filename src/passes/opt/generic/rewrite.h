@@ -178,6 +178,12 @@ bool isValueOnly(const camel::runtime::GraphTransaction &transaction, gc_node_re
 /// fault and is on a `sync` chain stays: its fault is observable (3.4).
 bool isDeadWhenUnread(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
+/// The sweep counted by the kind of node it took: what says an extension to the kinds it takes is
+/// doing work, and how much (`test::deadwrite` prints it, so a plan can assert it).
+void noteSweepRemoval(camel::runtime::GCNodeKind kind);
+size_t sweepRemovalsOf(camel::runtime::GCNodeKind kind);
+void resetSweepRemovals();
+
 /// True unless `id` anchors the graph (exit, output, return, or a branch-arm head/tail).
 bool isReplaceable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
 
