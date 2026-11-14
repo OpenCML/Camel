@@ -2413,6 +2413,21 @@ class CmlPrinter {
         return false;
     }
 
+    /// Whether the block hands this node's value on as its own: the tail of a block that yields a
+    /// value, in a graph that has one to hand on. Nothing in the graph reads the tail's value (the
+    /// exit gate carries it), which is why a reader count cannot tell this apart from a value nobody
+    /// wants; printing it in the statement form drops what the block answers.
+    /// `opt/effects/fold_keeps_inner_fault.cml` is the case: the body is one `if` whose JOIN is the
+    /// exit, and the printed function answered nothing at all.
+    bool handsBlockValue(gc_node_ref_t ref, gc_node_ref_t tail, const camel::runtime::GCNode *node)
+        const {
+        if (isRoot_ || node == nullptr || ref != tail) {
+            return false;
+        }
+        const Type *type = node->dataType();
+        return type != nullptr && type->code() != TypeCode::Void;
+    }
+
     /// The write whose value the block yields, when the block has no chain to run it: the gate at
     /// the exit hands the block's value on and waits on that write. `kInvalidNodeRef` otherwise --
     /// a block with a chain runs its statements anyway, and a value that is no write's value has
@@ -2679,8 +2694,10 @@ class CmlPrinter {
                 "{}let {}{} = {}", indent_, name, annotationOf(node->dataType()), value.text));
         } else if (effect) {
             if (users == 0) {
-                if (ref == tail && !functionBody) {
-                    // The region's value: `buildBody` writes it as the block's tail.
+                if (ref == tail && (!functionBody || handsBlockValue(ref, tail, node))) {
+                    // The region's value: `buildBody` writes it as the block's tail, and a function
+                    // body's value is what the function answers -- `return <region>`, never the
+                    // statement form.
                     return;
                 }
                 branchAsStatement_ = true;
@@ -2747,6 +2764,15 @@ class CmlPrinter {
             const camel::runtime::GCNodeKind region = node->kind;
             if (region == camel::runtime::GCNodeKind::Loop ||
                 region == camel::runtime::GCNodeKind::Brch) {
+                // A region the block yields is the block's value, and nothing in the graph reads it
+                // here: the exit gate hands it on, which is why its reader count is no help. The
+                // statement form would drop that value, so the region is left to the caller, which
+                // writes it where a value stands (`return <region>`, or the block's tail):
+                // `opt/effects/fold_keeps_inner_fault.cml`'s body is one `if`, its JOIN's value is
+                // what the function answers, and the printed function had no value at all.
+                if (handsBlockValue(ref, tail, node)) {
+                    return;
+                }
                 // The statement form the source writes: `loop ... do ...` / `if ... then ...`. A
                 // JOIN is not written here -- it is the branch's merge point and `expression` of
                 // the BRCH already writes it.
