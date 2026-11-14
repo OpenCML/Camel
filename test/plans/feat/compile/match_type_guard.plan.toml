@@ -62,14 +62,14 @@ expect_output_contains = ["6 guard question(s) about 3 distinct (function, type 
 
 [[tests]]
 name = "match_type.guard_same_text"
-desc = "A guard is identified by what it says: three type functions write the same guard text (`is_numeric::<T>()`) over the same subjects, and every case gets the answer its own function states -- a number takes each function's guarded case, a string falls through to each function's own default, and the order the questions are asked in changes nothing. A shape word still decides before any guard is read. This is the case that says two guards with one spelling are one question and still two cases."
-tool = "node"
-case = "../../../cases/compile/match_type_guard/guard_same_text.mjs"
-args = ["${case}", "--camel", "${camel}"]
+desc = "A guard is identified by what it says: three type functions write the same guard text (`is_numeric::<T>()`) over the same subjects, and every case gets the answer its own function states -- a number takes each function's guarded case, a string falls through to each function's own default, and the order the questions are asked in changes nothing. A shape word still decides before any guard is read. This is the case that says two guards with one spelling are one question and still two cases; it is a `.cml` case so that the AST snapshot records it too (`camel-remote.ps1 -UpdateAstHashes`)."
+kind = "behavior"
+case = "../../../cases/compile/match_type_guard/guard_same_text.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm"]
+backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_contains = ["GUARD same_text=yes", "GUARD backends_agree=yes"]
-expect_output_not_contains = ["GUARD same_text=no"]
-timeout_ms = 120000
+expect_stdout_exact = "true true\ntrue true\ntrue true\ntrue true\ntrue\n"
 
 [[tests]]
 name = "match_type.guard_order"

@@ -239,6 +239,22 @@ param(
     # Rewrite the goldens of the named plans instead of checking them: runs the golden tool,
     # not the runner, because a golden mismatch cannot be fixed through the checking path.
     [switch]$UpdateGolden,
+    # Re-record the front-end AST snapshot instead of checking it: runs
+    # `test/tools/parsecheck/check.py snapshot --update` on the host, after the build and before the
+    # plan, and brings `test/plans/feat/parse/golden/ast_hashes.txt` back into this tree.
+    #
+    # This exists because `-UpdateGolden` cannot record that file: `--update-golden` rewrites only
+    # `kind = "snapshot"` goldens, while `frontend.ast_snapshot` is `tool = "python"` and the runner
+    # never passes `--update` to it. A `.cml` case added to the tree therefore had no way of getting
+    # into the record through the gate at all -- the record had to be made by hand on the host, which
+    # a lane cannot do, and a lane that skipped it left a red window on the base branch. The record is
+    # a file of *this* tree, so the tool runs where the sources are and the file travels back on the
+    # same stream as the reading (base64, between two markers), which needs no second connection.
+    #
+    # The stage runs before the plan on purpose: the plan reads the record, so a record that failed
+    # must stop the run rather than be read later as a plan that failed. `-Plan <the parse plan>`
+    # beside it is the verification, and needs no separate call.
+    [switch]$UpdateAstHashes,
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
@@ -683,6 +699,11 @@ $syncedAt = $null
 # what was asked for.
 $checksStartedAt = $null
 $checkResults = @()
+# The AST snapshot's own exit (`-UpdateAstHashes`) and the file it sent back. The record is written to
+# this tree only after the host says it made one, so a failed stage leaves the tree as it was.
+$astExit = $null
+$astCapture = $null
+$astPayloadText = $null
 $lastRunPublish = [datetime]::MinValue
 
 # One line per run for the panel's run registry. `slot` stays null (the host does not report which
@@ -934,6 +955,28 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         "fi"
     } else { ':' }
 
+    # The AST snapshot record, when `-UpdateAstHashes` asks for one. A single-quoted here-string: the
+    # shell's `$R` and `$?` must reach the host verbatim, and only the build tag is substituted
+    # (`out/latest` for a Release run, `out/debug` for a Debug one -- the install this run built, not
+    # whichever one happens to be newest). The recorded file leaves base64-encoded between two
+    # markers, so it costs no second connection and cannot be mangled by the line filter above it.
+    $astStage = if ($UpdateAstHashes) {
+        @'
+echo '__CAMEL_REMOTE_AST_START__'
+echo '[camel-remote] recording the AST snapshot (frontend.ast_snapshot) on the host'
+CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --update 2>&1
+astc=$?
+echo "AST_UPDATE_EXIT=$astc"
+if [ $astc -ne 0 ]; then
+    echo '__CAMEL_REMOTE_AST_FAILED__'
+    exit $astc
+fi
+echo '__CAMEL_REMOTE_AST_FILE_BEGIN__'
+base64 "$R/test/plans/feat/parse/golden/ast_hashes.txt"
+echo '__CAMEL_REMOTE_AST_FILE_END__'
+'@ -replace 'TAG', $verifyTag
+    } else { ':' }
+
     # One block per checker: a header naming it and the command it runs, the command's own stdout and
     # stderr verbatim, and a footer naming its exit code. The footer is also what this script reads
     # back, so the console shows one line per checker and the run can summarise them at the end;
@@ -1156,6 +1199,9 @@ if [ '$NoBuild' != 'True' ]; then
     exec 9>&- 2>/dev/null; exec 8>&- 2>/dev/null
     if [ `$code -ne 0 ]; then echo '__CAMEL_REMOTE_BUILD_FAILED__'; exit `$code; fi
 fi
+# The AST snapshot record (only with -UpdateAstHashes): before the plan, because the plan reads the
+# record this stage writes.
+$astStage
 $vscodeDeps
 # One plan run at a time, the way the build has two slots and for the same reason: the readings a
 # gate produces are only comparable when the machine is not carrying six other lanes' tests. The
@@ -1225,6 +1271,37 @@ exit `$code
             $line = "$_"
             # NOT $clean: PowerShell is case-insensitive and the script has a [switch]$Clean.
             $cleanLine = ($line -replace $ansiPattern, '').Trim()
+            # -UpdateAstHashes sends the recorded file back on this stream, base64 between two markers.
+            # It is a file and not a reading, so it is not printed: the lines are collected and the
+            # file is written once the run has ended (the markers bracket the payload in order, so a
+            # truncated stream leaves `$astCapture` non-null and nothing is written).
+            if ($line -match '__CAMEL_REMOTE_AST_FILE_BEGIN__') {
+                $astCapture = New-Object System.Text.StringBuilder
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_AST_FILE_END__') {
+                # The payload is complete: capture ends here and everything after this line (the plan's
+                # own output) goes to the console again. Leaving `$astCapture` open would swallow the
+                # plan and decode the two together -- which is how the first run of this switch failed.
+                $astPayloadText = $astCapture.ToString()
+                $astCapture = $null
+                return
+            }
+            if ($null -ne $astCapture) {
+                [void]$astCapture.Append($cleanLine)
+                return
+            }
+            if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
+                $astExit = [int]$Matches[1]
+                $run.lastLine = if ($astExit -eq 0) {
+                    '[camel-remote] the AST snapshot was recorded on the host'
+                } else {
+                    "[camel-remote] recording the AST snapshot failed on the host (exit $astExit)"
+                }
+                Publish-Run
+                Write-Host $line
+                return
+            }
             if ($line -match '__CAMEL_REMOTE_PLAN_START__') {
                 if ($null -eq $planStartedAt) {
                     $planStartedAt = Get-Date
@@ -1397,6 +1474,43 @@ exit `$code
     $run.phase = if ($code -eq 0) { 'done' } else { 'fail' }
     Publish-Run
 
+    # The AST snapshot record (`-UpdateAstHashes`): the host sent back the file it recorded, and this is
+    # where it lands in this tree. All three conditions must hold -- the stage said it recorded, the
+    # stream carried the payload to its end marker, and the run did not fail -- so a failed or truncated
+    # stage leaves the file exactly as it was. The text is written as UTF-8 without a BOM and with LF
+    # endings, because the record is compared byte for byte by `check.py` on a Linux host.
+    if ($null -ne $astPayloadText -and $astExit -eq 0) {
+        $astPayload = ($astPayloadText -replace '\s', '')
+        $astTarget = Join-Path $Path 'test/plans/feat/parse/golden/ast_hashes.txt'
+        # A payload that is not base64 means the stream carried something else (a shell message on
+        # stdout, a last line cut in half). Writing a half-decoded record would be worse than writing
+        # none: it is reported, the file is left alone, and the run is red -- exit 2 is the transfer's
+        # failure, which is what this is.
+        if ($astPayload.Length -eq 0 -or $astPayload.Length % 4 -ne 0 -or
+            $astPayload -notmatch '^[A-Za-z0-9+/]*={0,2}$') {
+            Write-Host ("[camel-remote] AST snapshot: the record did not arrive intact ({0} chars, length mod 4 = {1}); the file was left alone: {2}" -f `
+                $astPayload.Length, ($astPayload.Length % 4),
+                $astPayload.Substring(0, [Math]::Min(80, $astPayload.Length)))
+            $code = 2
+        } else {
+            $astText = [System.Text.Encoding]::UTF8.GetString(
+                [System.Convert]::FromBase64String($astPayload)) -replace "`r`n", "`n"
+            $astBefore = if (Test-Path -LiteralPath $astTarget) { @(Get-Content -LiteralPath $astTarget) } else { @() }
+            [System.IO.File]::WriteAllText($astTarget, $astText, (New-Object System.Text.UTF8Encoding($false)))
+            $astAfter = @(Get-Content -LiteralPath $astTarget)
+            $astBeforeSet = [System.Collections.Generic.HashSet[string]]::new()
+            foreach ($astLine in $astBefore) { [void]$astBeforeSet.Add($astLine) }
+            $astAfterSet = [System.Collections.Generic.HashSet[string]]::new()
+            foreach ($astLine in $astAfter) { [void]$astAfterSet.Add($astLine) }
+            $astAdded = @($astAfter | Where-Object { -not $astBeforeSet.Contains($_) })
+            $astRemoved = @($astBefore | Where-Object { -not $astAfterSet.Contains($_) })
+            Write-Host ("[camel-remote] AST snapshot: {0} lines recorded, {1} added and {2} removed ({3})" -f `
+                $astAfter.Count, $astAdded.Count, $astRemoved.Count, $astTarget)
+            foreach ($astLine in $astAdded) { Write-Host ("[camel-remote]   + {0}" -f $astLine) }
+            foreach ($astLine in $astRemoved) { Write-Host ("[camel-remote]   - {0}" -f $astLine) }
+        }
+    }
+
     # One line per checker: the output above is the command's own, and this list says which name
     # each exit code belongs to, next to the run's exit code.
     if ($checkResults.Count -gt 0) {
@@ -1447,7 +1561,8 @@ exit `$code
         # code covers a dead connection and a red checker. The timestamps are the build's, so
         # history shows slot wait + compile, never transfer + queue folded into compile time; a
         # checks run is credited with its own stage, because it is work this entry must not hide.
-        $recordedExit = if ($null -ne $buildExit -and $checkNames.Count -eq 0) { $buildExit } else { $code }
+        $recordedExit = if ($null -ne $astExit -and $astExit -ne 0) { $astExit }
+            elseif ($null -ne $buildExit -and $checkNames.Count -eq 0) { $buildExit } else { $code }
         $buildStartForPanel = if ($null -ne $buildStartedAt) { $buildStartedAt } elseif ($null -ne $syncedAt) { $syncedAt } else { $startedAt }
         $queueForPanel = if ($null -ne $queueStartedAt) { $queueStartedAt } else { $startedAt }
         $buildEndForPanel = if ($null -ne $buildFinishedAt -and $checkNames.Count -eq 0) { $buildFinishedAt } else { $finishedAt }

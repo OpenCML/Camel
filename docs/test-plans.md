@@ -1441,6 +1441,22 @@ Snapshot tests require:
 
 When the runner is called with `--update-golden`, the selected snapshot stream overwrites the golden file before comparison.
 
+That switch reaches `kind = "snapshot"` and nothing else. The one test of the front end that
+records a file of its own, `frontend.ast_snapshot`, is `kind = "behavior"` with `tool = "python"`
+(it runs `test/tools/parsecheck/check.py snapshot`), and the runner never passes it `--update`: its
+record is `test/plans/feat/parse/golden/ast_hashes.txt`, written by the tool. A `.cml` case added to
+the tree is therefore *not* recorded by `--update-golden`, and until it is recorded the parse plan
+reports it as a file with no reading. Record it with the tool itself, from the repository root:
+
+```bash
+python3 test/tools/parsecheck/check.py snapshot --update
+```
+
+Through the gate, `internal/tools/camel-remote.ps1 -UpdateAstHashes` runs exactly that on the build
+host, before the plan, and brings the file back into the calling tree; `-UpdateAstHashes -Plan
+test/plans/feat/parse/frontend.plan.toml` records and then verifies in one call. A lane on a
+workstation that cannot build has no other way to record it, which is why the switch exists.
+
 ## Differential Tests
 
 Differential tests require:

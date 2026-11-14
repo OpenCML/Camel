@@ -1054,6 +1054,7 @@ d3e96c4df857bc04 ok test/cases/compile/match_guard/matched_value_evaluated_once.
 20992a18b8e234cf ok test/cases/compile/match_type_guard/err_shape_of_string.cml
 521558e4d2d2862b ok test/cases/compile/match_type_guard/guard_cache.cml
 8027c70aeb41bfd8 ok test/cases/compile/match_type_guard/guard_dispatch.cml
+1097613e93a083c5 ok test/cases/compile/match_type_guard/guard_same_text.cml
 18dc686508a26a24 ok test/cases/compile/match_type_guard/shape_of_before.cml
 c932c4fee5814de1 ok test/cases/compile/module_imports/conf_b.cml
 1bd679ca7b204680 ok test/cases/compile/module_imports/conf_c.cml
