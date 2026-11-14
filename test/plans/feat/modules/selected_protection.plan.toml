@@ -2,7 +2,7 @@ id = "modules.selected_protection"
 order = 932
 tier = "fast"
 tags = ["feat", "modules", "rewrite", "effects"]
-desc = "Caller-selected deletion guards, extraction and explicit pass-boundary checking."
+desc = "Caller-selected deletion guards, extraction and explicit pass-boundary checking. An external access and a final write to a variable that outlives the call are kept by the graph, not by a guard: `protect_effects=false` drops neither, and only `protect_faults` still selects a deletion (design principles 9.7)."
 
 [defaults]
 kind = "behavior"
@@ -91,7 +91,7 @@ name = "io.direct.00"
 case = "../../../cases/modules/selected_protection/io.cml"
 args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.saturated.11"
@@ -119,7 +119,7 @@ name = "io.saturated.00"
 case = "../../../cases/modules/selected_protection/io.cml"
 args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "fault.direct.11"
@@ -202,8 +202,8 @@ expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 name = "both.direct.00"
 case = "../../../cases/modules/selected_protection/both.cml"
 args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
-expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.saturated.11"
@@ -230,8 +230,8 @@ expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 name = "both.saturated.00"
 case = "../../../cases/modules/selected_protection/both.cml"
 args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
-expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "shared.direct.11"
@@ -294,49 +294,49 @@ name = "cli-last.unchecked"
 case = "../../../cases/modules/selected_protection/cli-last.cml"
 args = ["${case}", "policy::unchecked", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = ""
+expect_stdout_exact = "41\n"
 
 [[tests]]
 name = "cli-last.checked"
 case = "../../../cases/modules/selected_protection/cli-last.cml"
 args = ["${case}", "policy::checked", "std::nvm"]
-expect_exit = 1
-expect_output_contains = ["graph::check_pass_boundary (selected)", "before stdout (write), after nothing"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
 
 [[tests]]
 name = "cli-last.omitted_check"
 case = "../../../cases/modules/selected_protection/cli-last.cml"
 args = ["${case}", "policy::omitted_check", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = ""
+expect_stdout_exact = "41\n"
 
 [[tests]]
 name = "cli-retained.unchecked"
 case = "../../../cases/modules/selected_protection/cli-retained.cml"
 args = ["${case}", "policy::unchecked", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "cli-retained.checked"
 case = "../../../cases/modules/selected_protection/cli-retained.cml"
 args = ["${case}", "policy::checked", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "cli-retained.omitted_check"
 case = "../../../cases/modules/selected_protection/cli-retained.cml"
 args = ["${case}", "policy::omitted_check", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "wrapper.forwarded"
 case = "../../../cases/modules/selected_protection/io.cml"
 args = ["${case}", "policy::forwarded", "effects=false", "faults=false", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "0\n"
+expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "wrapper.omitted"
@@ -344,3 +344,45 @@ case = "../../../cases/modules/selected_protection/io.cml"
 args = ["${case}", "policy::omitted", "effects=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
+
+[[tests]]
+name = "effect.direct.00"
+case = "../../../cases/modules/selected_protection/effect.cml"
+args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+
+[[tests]]
+name = "effect.direct.01"
+case = "../../../cases/modules/selected_protection/effect.cml"
+args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "41\n"
+
+[[tests]]
+name = "effect.graph.00"
+case = "../../../cases/modules/selected_protection/effect.cml"
+args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::jgir"]
+expect_exit = 0
+expect_output_contains = [":io/println"]
+
+[[tests]]
+name = "capture.direct.00"
+case = "../../../cases/modules/selected_protection/capture.cml"
+args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "0\n41\n"
+
+[[tests]]
+name = "capture.direct.01"
+case = "../../../cases/modules/selected_protection/capture.cml"
+args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "0\n41\n"
+
+[[tests]]
+name = "capture.graph.00"
+case = "../../../cases/modules/selected_protection/capture.cml"
+args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::jgir"]
+expect_exit = 0
+expect_output_contains = [":op/assn_l"]
