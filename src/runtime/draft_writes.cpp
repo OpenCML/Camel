@@ -2,7 +2,8 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * In-place writes on a graph draft (see draft_writes.h).
+ * In-place writes on a graph draft (see draft_writes.h), and the dead-write judgement asked of either
+ * side of a commit (see effect_liveness.h).
  */
 
 #include "camel/runtime/draft_writes.h"
@@ -10,10 +11,13 @@
 #include "camel/core/mm/alloc/growable.h"
 #include "camel/core/operator_traits.h"
 #include "camel/core/type/composite/func.h"
+#include "camel/runtime/effect_liveness.h"
 #include "camel/runtime/graph_txn.h"
 
+#include <algorithm>
 #include <mutex>
 #include <optional>
+#include <span>
 #include <string>
 #include <unordered_map>
 #include <unordered_set>
@@ -214,6 +218,172 @@ WrittenSlots::WrittenSlots(const GraphTransaction &transaction)
     for (gc_node_ref_t id = 0; id < parent.size(); ++id) {
         written_[id] = written_[root(id)];
     }
+}
+
+// ---- The dead-write judgement, both sides of a commit ---------------------------------------
+//
+// One reading of one rule (design principles 9.7): "written in place" above says where a write goes;
+// these say whether the write itself is still anybody's. It lives in this file because the question
+// is asked twice about the same graph -- once on the draft a rule is admitted on, once on the frozen
+// graph the pass boundary checks -- and the two must not be two readings. The operator-level half
+// (`isWriteOfProgramState`, `writesProgramState`: what counts as a write) stays in effects.cpp.
+
+namespace {
+
+/// Whether the declaration says the operator writes the operand at `index`.
+bool writesOperandAt(const GCOperBody &body, size_t index) {
+    return camel::core::OperatorTable::instance().writesOperand(body.oper, false, index);
+}
+
+/// The names a graph keeps: its entry, its exit, the node whose value it returns, its ports (a
+/// `var` parameter or a capture), its closure nodes, and the result of each region. One spelling of
+/// them for both representations of a graph; the region results are the one part the two answer
+/// differently, so `regionIsResult` is what they pass in.
+template <typename RegionIsResult>
+bool namesOf(
+    gc_node_ref_t ref, std::span<const gc_node_ref_t> normPorts,
+    std::span<const gc_node_ref_t> withPorts, std::span<const gc_node_ref_t> closureNodes,
+    gc_node_ref_t entry, gc_node_ref_t exit, gc_node_ref_t output, gc_node_ref_t result,
+    RegionIsResult regionIsResult) {
+    if (ref == kInvalidNodeRef) {
+        return false;
+    }
+    if (ref == entry || ref == exit || ref == output || ref == result) {
+        return true;
+    }
+    const auto names = [ref](std::span<const gc_node_ref_t> values) {
+        return std::find(values.begin(), values.end(), ref) != values.end();
+    };
+    if (names(normPorts) || names(withPorts) || names(closureNodes)) {
+        return true;
+    }
+    return regionIsResult(ref);
+}
+
+/// A frozen graph, read the way the graph space lays it out.
+struct FrozenGraphView {
+    const GCGraph &graph;
+
+    bool isNamed(gc_node_ref_t ref) const {
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            return false;
+        }
+        return namesOf(
+            ref, graph.normPorts(), graph.withPorts(), graph.closureNodes(), graph.entryNodeRef(),
+            graph.exitNodeRef(), graph.outputNodeRef(), graph.returnNodeRef(),
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < graph.regionCount(); ++index) {
+                    const GCRegion *region = graph.region(index);
+                    if (region != nullptr && region->result == candidate) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+    }
+    const GCOperBody *bodyOf(gc_node_ref_t ref) const {
+        return graph.nodeBodyAs<GCOperBody>(ref);
+    }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return graph.normInputsOf(ref);
+    }
+    bool isRead(gc_node_ref_t ref) const {
+        return !graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty();
+    }
+};
+
+/// A draft under rewrite, read the way the transaction holds it: the same questions, spelled the
+/// way this side spells them (`header` and `payloadOf` where the frozen graph says `node` and
+/// `nodeBodyAs`).
+struct DraftGraphView {
+    const GraphDraft &draft;
+
+    bool isNamed(gc_node_ref_t ref) const {
+        if (draft.header(ref) == nullptr || !draft.alive(ref)) {
+            return false;
+        }
+        return namesOf(
+            ref, draft.normPorts(), draft.withPorts(), draft.closureNodes(), draft.entryNode(),
+            draft.exitNode(), draft.outputNode(), draft.returnNode(),
+            [this](gc_node_ref_t candidate) {
+                for (uint32_t index = 0; index < draft.regionCount(); ++index) {
+                    if (draft.region(index).result == candidate) {
+                        return true;
+                    }
+                }
+                return false;
+            });
+    }
+    const GCOperBody *bodyOf(gc_node_ref_t ref) const {
+        const std::span<const std::byte> payload = draft.payloadOf(ref);
+        if (payload.size() < sizeof(GCOperBody)) {
+            return nullptr;
+        }
+        return reinterpret_cast<const GCOperBody *>(payload.data());
+    }
+    std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
+        return draft.normInputsOf(ref);
+    }
+    bool isRead(gc_node_ref_t ref) const {
+        return !draft.normUsersOf(ref).empty() || !draft.withUsersOf(ref).empty();
+    }
+};
+
+/// A root holds the value the write leaves, or the place it writes into.
+template <typename View>
+bool writeIsRootedWith(const View &view, gc_node_ref_t ref) {
+    if (view.isNamed(ref)) {
+        return true;
+    }
+    const GCOperBody *body = view.bodyOf(ref);
+    if (body == nullptr) {
+        return false;
+    }
+    const auto inputs = view.normInputsOf(ref);
+    for (size_t index = 0; index < inputs.size(); ++index) {
+        if (writesOperandAt(*body, index) && view.isNamed(inputs[index])) {
+            return true;
+        }
+    }
+    return false;
+}
+
+template <typename View>
+bool deadWriteWith(const View &view, gc_node_ref_t ref) {
+    const GCOperBody *body = view.bodyOf(ref);
+    if (body == nullptr) {
+        return false;
+    }
+    if (!isWriteOfProgramState(*body, view.normInputsOf(ref).size())) {
+        return false;
+    }
+    return !writeIsRootedWith(view, ref) && !view.isRead(ref);
+}
+
+} // namespace
+
+bool valueIsRead(const GCGraph &graph, gc_node_ref_t ref) {
+    return FrozenGraphView{graph}.isRead(ref);
+}
+
+bool writeIsRooted(const GCGraph &graph, gc_node_ref_t ref) {
+    return writeIsRootedWith(FrozenGraphView{graph}, ref);
+}
+
+bool deadWrite(const GCGraph &graph, gc_node_ref_t ref) {
+    return deadWriteWith(FrozenGraphView{graph}, ref);
+}
+
+bool writeIsRooted(const GraphDraft &draft, gc_node_ref_t ref) {
+    return writeIsRootedWith(DraftGraphView{draft}, ref);
+}
+
+bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref) {
+    return deadWriteWith(DraftGraphView{draft}, ref);
 }
 
 } // namespace camel::runtime

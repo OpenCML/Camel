@@ -74,12 +74,27 @@ bool DraftWritings::deletionAllowed(gc_node_ref_t node) {
         // variable lives in, or an argument an operator or a `var` parameter writes -- which is the
         // write that outlives the call when the variable is not this function's own. A call, a
         // loop and a control region carry no local summary, so they are kept as if they had one.
+        //
+        // A write of the program's own state is its own case, and its judgement is
+        // `camel::runtime::isWriteOfProgramState` + `camel::runtime::writeIsRooted` -- the two
+        // halves the pass boundary's check answers "is this a dead write" from, asked here on the
+        // draft instead of on the committed graph, so admission and the check cannot disagree. Only
+        // the rooted half is asked: the reads this deletion takes away are what the rule is doing,
+        // and under the ruling they are no reason to keep the write. What decides is whether a root
+        // of the graph still holds it, and a write no root holds may go (design principles 9.7).
         bool effect = writtenInPlace(at);
         if (h->kind == GCNodeKind::Oper) {
             const auto bytes = draft_.payloadOf(at);
-            effect |= bytes.size() < sizeof(GCOperBody) ||
-                      !camel::core::OperatorTable::instance().mayBeRecomputed(
-                          reinterpret_cast<const GCOperBody *>(bytes.data())->oper);
+            if (bytes.size() < sizeof(GCOperBody)) {
+                effect = true;
+            } else {
+                const auto *body = reinterpret_cast<const GCOperBody *>(bytes.data());
+                if (!camel::core::OperatorTable::instance().mayBeRecomputed(body->oper)) {
+                    effect |= !camel::runtime::isWriteOfProgramState(
+                                  *body, draft_.normInputsOf(at).size()) ||
+                              camel::runtime::writeIsRooted(draft_, at);
+                }
+            }
         } else if (
             h->kind == GCNodeKind::Call || h->kind == GCNodeKind::Func ||
             h->kind == GCNodeKind::Loop || h->kind == GCNodeKind::Brch ||

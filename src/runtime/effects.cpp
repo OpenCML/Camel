@@ -10,6 +10,7 @@
 #include "camel/runtime/effect_liveness.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/runtime/draft.h"
 
 #include <algorithm>
 #include <span>
@@ -138,79 +139,33 @@ bool keepsEffectAlive(EffectStanding standing) {
 
 namespace {
 
-/// The places a node writes into, as its declaration names them: every ordinary input
-/// `OperatorTable::writesOperand` says it writes. A node that creates a cell of its own writes into
-/// no operand -- the cell is the node's own value, which `deadWrite` asks about on its own.
-std::vector<gc_node_ref_t> writtenPlacesOf(const GCGraph &graph, gc_node_ref_t ref) {
-    std::vector<gc_node_ref_t> places;
-    const auto *body = graph.nodeBodyAs<GCOperBody>(ref);
-    if (body == nullptr) {
-        return places;
-    }
-    const auto &table = camel::core::OperatorTable::instance();
-    const auto inputs = graph.normInputsOf(ref);
-    for (size_t index = 0; index < inputs.size(); ++index) {
-        if (table.writesOperand(body->oper, false, index)) {
-            places.push_back(inputs[index]);
-        }
-    }
-    return places;
+/// Whether the declaration says the operator writes the operand at `index`.
+bool writesOperandAt(const GCOperBody &body, size_t index) {
+    return camel::core::OperatorTable::instance().writesOperand(body.oper, false, index);
 }
 
 } // namespace
 
-bool valueIsRooted(const GCGraph &graph, gc_node_ref_t ref) {
-    if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+bool isWriteOfProgramState(const GCOperBody &body, size_t operandCount) {
+    const auto &table = camel::core::OperatorTable::instance();
+    // An ambient write is state outside the program whatever else the operator does; it is not a
+    // write this judgement is about.
+    if (table.touchesClass(body.oper, camel::core::sem::ResourceClass::Ambient, true)) {
         return false;
     }
-    const GCNode *node = graph.node(ref);
-    if (node == nullptr || node->kind == GCNodeKind::Dead) {
-        return false;
-    }
-    if (ref == graph.entryNodeRef() || ref == graph.exitNodeRef() ||
-        ref == graph.outputNodeRef() || ref == graph.returnNodeRef()) {
+    // A store into a cell or into an object the program owns. An assignment says so as a family
+    // (`OperatorTable::isAssignment`) rather than through a resource declaration, which is why the
+    // two are asked together; the operand clause below catches a store the declaration names on the
+    // operand itself (a `var` parameter's cell).
+    if (table.isAssignment(body.oper) || table.writesProgramState(body.oper)) {
         return true;
     }
-    const auto names = [ref](std::span<const gc_node_ref_t> values) {
-        return std::find(values.begin(), values.end(), ref) != values.end();
-    };
-    if (names(graph.normPorts()) || names(graph.withPorts()) || names(graph.closureNodes())) {
-        return true;
-    }
-    for (uint32_t index = 0; index < graph.regionCount(); ++index) {
-        const GCRegion *region = graph.region(index);
-        if (region != nullptr && region->result == ref) {
+    for (size_t index = 0; index < operandCount; ++index) {
+        if (writesOperandAt(body, index)) {
             return true;
         }
     }
     return false;
-}
-
-bool valueIsRead(const GCGraph &graph, gc_node_ref_t ref) {
-    return !graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty();
-}
-
-bool writeIsRooted(const GCGraph &graph, gc_node_ref_t ref) {
-    // The two things a root can hold: the value the write leaves, and the place it writes into. The
-    // place is what a capture port or a `var` parameter is -- the graph names it, so the program
-    // keeps it whatever a rewrite does with the write itself.
-    if (valueIsRooted(graph, ref)) {
-        return true;
-    }
-    for (gc_node_ref_t place : writtenPlacesOf(graph, ref)) {
-        if (valueIsRooted(graph, place)) {
-            return true;
-        }
-    }
-    return false;
-}
-
-bool deadWrite(const GCGraph &graph, gc_node_ref_t ref) {
-    const GCNode *node = graph.node(ref);
-    if (node == nullptr || node->kind != GCNodeKind::Oper) {
-        return false;
-    }
-    return !writeIsRooted(graph, ref) && !valueIsRead(graph, ref);
 }
 
 } // namespace camel::runtime

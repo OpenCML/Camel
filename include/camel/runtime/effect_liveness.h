@@ -74,6 +74,13 @@ EffectStanding effectStandingOf(const EffectLivenessFacts &facts);
 /// Whether running the node is part of the program, as far as the liveness question goes.
 bool keepsEffectAlive(EffectStanding standing);
 
+/// Whether `oper`, called with `operandCount` ordinary inputs, writes state the program owns: an
+/// assignment (the cell its first operand is), an operator that writes an operand in place, or one
+/// whose declaration names a write to a cell or an object. An external access is none of these --
+/// what it changes is outside the program -- and neither is a computation, however pure or impure,
+/// that stores nothing.
+bool isWriteOfProgramState(const GCOperBody &body, size_t operandCount);
+
 /// Whether a root of the graph holds the write `ref` makes: the value it leaves, or the place it
 /// writes into. A place is rooted when the graph names it -- a `var` parameter, a capture, a result
 /// -- which is what a write into a variable the program keeps elsewhere looks like, and a value is

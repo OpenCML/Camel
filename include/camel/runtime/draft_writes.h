@@ -47,6 +47,17 @@ camel::core::type::FunctionType *operatorOverloadType(
 bool isWrittenInPlace(const GraphDraft &draft, gc_node_ref_t id);
 
 /**
+ * The dead-write judgement of effect_liveness.h, asked of the draft a pass is rewriting: whether a
+ * root of the graph holds the write (the value it leaves, or the place it writes into), and whether
+ * the write is a dead write at all. It is declared here, and implemented next to `isWrittenInPlace`,
+ * because that header is the one that names the draft: the two sides of a commit answer the same
+ * question with one implementation, so a rule admitted on the draft and the check made on the graph
+ * cannot disagree (design principles 9.7).
+ */
+bool writeIsRooted(const GraphDraft &draft, gc_node_ref_t ref);
+bool deadWrite(const GraphDraft &draft, gc_node_ref_t ref);
+
+/**
  * isWrittenInPlace for every node of a draft at once: the written slots are computed once, so a
  * pass that asks about many nodes does not walk the users of each. A snapshot: valid while the
  * pass adds no writer and no alias, as a rewrite of unwritten pure nodes does not.
