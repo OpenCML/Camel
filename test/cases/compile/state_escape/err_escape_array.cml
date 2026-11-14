@@ -1,0 +1,23 @@
+/**
+ * Escape route two again, as an element of the caller's array (design principles 3.5, rule two):
+ * `fill` makes a closure over `acc`, a `var` of its own call, and writes it into `out[0]`, an
+ * array that belongs to the caller. The array outlives the call, so the cell the closure captured
+ * would be read after it is gone: compile error.
+ */
+
+func fill(var out: ((x: int) => int)[]) {
+    var acc = 0
+    sync {
+        out[0] = (x: int): int => sync {
+            acc = acc + x
+            acc
+        }
+    }
+}
+
+func main(): int sync {
+    var fs: ((x: int) => int)[] = [(x: int): int => x]
+    fill(fs)
+    println(fs[0](1))
+    return 0
+}

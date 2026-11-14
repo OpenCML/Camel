@@ -784,6 +784,13 @@ class Builder {
     // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
     // that resource (builder_resources.cpp).
     std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
+    // The stores each body wrote, as (cell, node that stores into it), recorded by `recordWrite`
+    // where the write is not the callee's: the cell is where the value goes, and a body that stores
+    // a value which can carry a closure into a cell it does not own has put that closure where the
+    // call does not own it either (the state rule, builder_state.cpp). A write through a callee is
+    // the call's own use and is read there, from the callee's signature.
+    std::unordered_map<DraftGraphBuilder *, std::vector<std::pair<node_handle_t, node_handle_t>>>
+        storeSites_;
     // The `with` arguments written after the explicit type arguments being applied
     // (`f::<int><n: 2>`): their count and names choose among generic overloads that differ in their
     // `with` parameters, exactly as they choose among the others (visitTypeApplication). A type
@@ -1405,7 +1412,7 @@ class Builder {
     // instance replaced.
     Type *boundType(Type *type) const {
         Type *substituted = camel::core::type::substituteTypeVars(type, typeBindings_);
-        substituted = camel::core::type::substituteExtentValues(substituted, extentBindings_);
+        substituted       = camel::core::type::substituteExtentValues(substituted, extentBindings_);
         // A `match type` case a guard decides is selected inside `substituteTypeVars`, which asks
         // this build for the predicate's answer (typevar.h `typeCaseGuardEvaluator`). A type with
         // nothing left to bind is not substituted at all, so the last step is taken here: its
@@ -1916,7 +1923,8 @@ class Builder {
     /// asks for the answer while it selects a case, and this reads the Camel predicate that
     /// answers it (design principles 5.5, ruling of 2026-11-14).
     WhenResult evaluateCaseGuard(
-        const camel::core::type::TypeCaseGuard &guard, const camel::core::type::type_bindings_t &bindings);
+        const camel::core::type::TypeCaseGuard &guard,
+        const camel::core::type::type_bindings_t &bindings);
     /// The guard a case writes, read where it is written: `moduleContext` is the module's own
     /// pointer (the compiler's, held opaquely in the guard) or null for a case of a value-level
     /// `match type`, whose guard is read where the match is. What the predicate may ask about is
@@ -2038,9 +2046,9 @@ class Builder {
     /// library's declarations are checked while a program is built, so the totals are a reading of
     /// the build rather than of the guards. A question is answered once however many cases ask it,
     /// and the reading says so in its own terms (`logPredicateCounts`).
-    mutable size_t guardAsks_  = 0;
-    mutable size_t guardRuns_  = 0;
-    mutable size_t guardHits_  = 0;
+    mutable size_t guardAsks_ = 0;
+    mutable size_t guardRuns_ = 0;
+    mutable size_t guardHits_ = 0;
     mutable std::unordered_map<std::string, bool> guardPairs_;
     /// How deep the condition of a `when`, or the predicate of a case, is being read: the
     /// outermost call is the one the guard asked, and the conditions a predicate's own body
@@ -2606,6 +2614,30 @@ class Builder {
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
     // while the bodies are still in hand.
     void checkInferredResources();
+    // Then holds each body to the state rule (design principles 3.5, rule two; the author's ruling
+    // of 2026-11-14): a `var` local lives in the call that declares it and a `var` parameter is the
+    // caller's cell lent to the call that received it, so a closure may capture one by reference
+    // only while it stays inside that evaluation. A body that makes such a closure and then lets it
+    // leave
+    // -- as its result, into a place it does not own, or into a function that keeps it -- is a
+    // ClosureCaptureEscapes at the cell. Reported with the other per-module diagnostics, while the
+    // bodies are still in hand (builder_state.cpp).
+    void checkCellEscapes();
+    // The cells of `body` the state rule speaks of: the mutable cells the body itself made, and its
+    // `var` parameters, which its caller made and lent to it.
+    std::unordered_set<node_handle_t> cellsOfBody(DraftGraphBuilder *body) const;
+    // Where a closure of `body` over one of `cells` leaves the call, or nothing when it stays
+    // inside it. The three ways out in the order the rule names them.
+    std::optional<std::pair<node_handle_t, std::string>>
+    carryOutOf(DraftGraphBuilder *body, const std::unordered_set<node_handle_t> &cells) const;
+    // Whether a call node may carry a function value it is handed out of this evaluation, and the
+    // words the report says it in: its result can carry a function or it writes a `var` parameter
+    // of one (a call that keeps what it is given), or it is an operator that writes an external
+    // resource (a reader the program does not own). A signature that says nothing may do anything.
+    std::optional<std::string> carriedOffAt(DraftGraphBuilder *body, draft_node_ref_t id) const;
+    // One cell, reported: where it is declared, and where the closure over it gets out.
+    void reportCellEscape(
+        DraftGraphBuilder *body, node_handle_t cell, node_handle_t at, const std::string &where);
     // The first node of `graph` whose own reach the clause does not cover: the use where the body
     // stopped matching it, which is what the report points at. 0 when no such node is found.
     camel::source::origin_id_t firstUnpromisedEffectOrigin(

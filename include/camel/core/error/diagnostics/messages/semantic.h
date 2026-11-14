@@ -479,6 +479,14 @@ enum class SemanticDiag : uint32_t {
     DuplicateRuleForOperator   = 0x000205,
     RuleRightUsesOuterVariable = 0x000207,
     ExtentOfNeedsStatedShape   = 0x00020B,
+    /// The state rule (design principles 3.5, rule two; the author's ruling of 2026-11-14, origin/fsh-dev
+    /// c8af40747): a `var` local lives in the call that declares it, and a `var` parameter is the caller's
+    /// cell lent to the call that received it, so a closure may capture one by reference only while it
+    /// stays inside that evaluation. The rule names three ways out -- a result, a store into a place the
+    /// call does not own, and a hand to a function that keeps it -- and the report gives the two rewrites
+    /// the author named and no third one, because capturing by value would change what the program means
+    /// without saying so. 0x20D and up, after the extent-of codes.
+    ClosureCaptureEscapes = 0x000210,
 
     // Warnings
     IgnoredSideEffect = 0x100002,

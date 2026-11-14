@@ -1551,6 +1551,13 @@ f29e87578951bafb ok test/cases/compile/semantic/type_alias_recursion_array.cml
 f3ee7fc7143321cb ok test/cases/compile/semantic/type_contains_itself.cml
 5e66337df190e034 ok test/cases/compile/semantic/type_recursion_through_map.cml
 34d8a96e554a64c1 ok test/cases/compile/semantic/unresolved_reference.cml
+11b0ac10bd3e4bf5 ok test/cases/compile/state_escape/err_escape_array.cml
+df37832c609db5ad ok test/cases/compile/state_escape/err_escape_field.cml
+34569a4d8fbef260 ok test/cases/compile/state_escape/err_escape_into_closure.cml
+dcf7ff986fe30b0b ok test/cases/compile/state_escape/err_escape_return.cml
+69d2aba6548ad19a ok test/cases/compile/state_escape/err_escape_stored_by_callee.cml
+3ace87028cc3d06e ok test/cases/compile/state_escape/ok_capture_within.cml
+794e40cb47b22c73 ok test/cases/compile/state_escape/ok_top_level_value.cml
 fa56acf80774ec26 ok test/cases/compile/static_expansion/comprehension_field_order.cml
 a8d417a3bae14fb1 ok test/cases/compile/static_expansion/comprehension_value_type.cml
 75719bf79263c78b ok test/cases/compile/static_expansion/comprehension_void_element.cml
@@ -2182,7 +2189,7 @@ f4a6a6e184130e6c ok test/cases/consistency/decorated_overloads_export/use_plain.
 d67ce9d43ef7c9b9 ok test/cases/consistency/entering/arm_cell.cml
 7521f2040acf9ec5 ok test/cases/consistency/entering/arm_cell_void.cml
 c2a6bbfa30152763 ok test/cases/consistency/entering/arms_folded.cml
-91e9e55ceee563d2 ok test/cases/consistency/entering/assignment.cml
+12ee4976359d588d ok test/cases/consistency/entering/assignment.cml
 84228a58a0f28f3a ok test/cases/consistency/entering/empty_array.cml
 4fd452947a789312 ok test/cases/consistency/entering/err_arg_reverse.cml
 5567cd32a25fe728 ok test/cases/consistency/entering/err_arm_cell_unrelated.cml
@@ -2390,7 +2397,6 @@ a1f4c5a5b5efa833 ok test/cases/consistency/unused_fallible/outside_sync.cml
 c1be0bc9301a8129 ok test/cases/consistency/values/closure_var.cml
 221d0b84c26b091d ok test/cases/consistency/values/content_equality.cml
 5991ad966a8e747f ok test/cases/consistency/values/content_equality_trees.cml
-f0b25db4aca1702a ok test/cases/consistency/values/counter_closure.cml
 84641ddb4f8ced2a ok test/cases/consistency/values/deep_enum_chain.cml
 6f397ec6fcb7bb79 ok test/cases/consistency/values/deep_json_depth.cml
 dd1c3071ce1d75cd ok test/cases/consistency/values/deep_nested_enum.cml
@@ -2603,7 +2609,7 @@ a115744b731bf807 ok test/cases/linear/byref/var_argument_declared.cml
 6b54ece00315d63f ok test/cases/linear/byref/var_argument_reads_the_nearest_write.cml
 ecea883b0c1a24bc ok test/cases/linear/byref/var_argument_shape.cml
 8cc68398ab281745 ok test/cases/linear/byref/var_argument_statement_place.cml
-5c3c4dded4800585 ok test/cases/linear/byref/var_capture_reference.cml
+5a01799bfa8655ab ok test/cases/linear/byref/var_capture_reference.cml
 3ef7e3177575e622 ok test/cases/linear/byref/var_function_as_value_function.cml
 67d2c3eb1b6d6c25 ok test/cases/linear/byref/var_function_to_operator.cml
 6459ea9ecca389d9 ok test/cases/linear/byref/var_param_jit.cml
@@ -3944,6 +3950,12 @@ da53a2fc81e16081 ok test/cases/para/core/scalar_recursion_inline.cml
 9e032b14591979ab ok test/cases/para/core/unordered_foreach_smoke.cml
 a7ad6d7efb545b7c ok test/cases/para/core/unordered_foreach_timing.cml
 3c12d3ff6dcaa94e ok test/cases/para/core/unordered_reduce_sum.cml
+933f6625ac3fb51f ok test/cases/para/exec_pred/branch.cml
+548188d11af99c3c ok test/cases/para/exec_pred/fault.cml
+473cd0b411c4bfb2 ok test/cases/para/exec_pred/io.cml
+79d50493cd861314 ok test/cases/para/exec_pred/linear.cml
+583915c7bbf0286d ok test/cases/para/exec_pred/loop.cml
+43f99393757dedbd ok test/cases/para/exec_pred/sync_block.cml
 5d5e41664229caf5 ok test/cases/para/handoff/depth_across.cml
 ca0a00b243b1ae9e ok test/cases/para/handoff/fault_deep.cml
 2127747290ba21b5 ok test/cases/para/handoff/shapes.cml
@@ -4032,7 +4044,7 @@ b58deeca9af24c00 ok test/cases/trans/annotated/boundaries.cml
 631bb89f68b159ce ok test/cases/trans/cml/arm_read.cml
 10749909b05a0f66 ok test/cases/trans/cml/arm_write.cml
 47ff81794b0c84b5 ok test/cases/trans/cml/branch.cml
-0af06f32b4bbfc43 ok test/cases/trans/cml/closure.cml
+202c162de17681e5 ok test/cases/trans/cml/closure.cml
 ec7a01a9c4accae4 ok test/cases/trans/cml/interval.cml
 fc40e8436db3fc2d ok test/cases/trans/cml/linear.cml
 2fee2e1c1aacc8e0 ok test/cases/trans/cml/loop.cml
