@@ -1,0 +1,20 @@
+/**
+ * The program of R1's second half: a fold whose residue is a control edge on structure. The outer
+ * condition is `(if (if (x2 <= x1) then x2 else 3) > 3)`: both arms of the inner branch are `3`, so
+ * the inner comparison reads `3 <= 8` -- true -- and the outer one reads `3 > 3` -- false. The fold
+ * takes the `else` arm, and the inner branch's comparison, its `BRCH` and its `JOIN` are freely
+ * schedulable: nothing observes their running and nothing reads their value.
+ *
+ * They should go with the arm, and they do not: the nodes the dropped branch had waited on inherit
+ * its control edge, that edge counts as a use, and the inner three stay alive and appear in the run.
+ * Removing the edge is not this lane's to do yet -- the division case next door shows what breaking
+ * the edge costs, `std::opt::fold` over `fold_keeps_inner_fault.cml` losing a fault that must happen
+ * -- so what this case pins is the folding itself: the two prints run, in order, and the value is
+ * the taken arm's.
+ */
+
+func main(): int {
+    let x1 = (if ((if (4 <= 7) then 2 else 2) < 8) then println(8) else println(8))
+    let x2 = 3
+    return (if ((if (x2 <= x1) then x2 else 3) > 3) then x2 else println(x1))
+}

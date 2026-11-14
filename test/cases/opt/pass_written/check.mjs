@@ -6,17 +6,22 @@
  * The operators the passes write, and the number of cases that hold each of them.
  *
  * These are the operators whose writer is a pass and not the builder, so "is it reachable?" has no
- * answer in the table -- the answer is the corpus. `:op/keep` is written by `replaceNode` when the
- * node it removes has no sync place; `:enum/tag`, `:enum/field` and `:enum/make` are written by the
- * defunctionalizer. The numbers below are pinned by name, because a count with no names goes red
- * without saying anything: one more case means a rule started writing the operator where it did
- * not, one fewer means a rule stopped, and either way someone has to look at which case moved.
+ * answer in the table -- the answer is the corpus. `:enum/tag`, `:enum/field` and `:enum/make` are
+ * written by the defunctionalizer. The numbers below are pinned by name, because a count with no
+ * names goes red without saying anything: one more case means a rule started writing the operator
+ * where it did not, one fewer means a rule stopped, and either way someone has to look at which case
+ * moved.
+ *
+ * The keeper a pass writes when a removal takes the last use of a node whose running is observed is
+ * a `GATE` -- a node kind, not an operator (design principles 3.3, edges.cn.md 5.3) -- so it holds no
+ * URI and has no family here. `src/passes/opt/generic/rewrite.cpp#keepThroughValue` writes it, as a
+ * node of the draft's own (`GraphDraft::addGateNode`, include/camel/runtime/draft.h).
  *
  * The denominator is printed and not pinned: it is every case of the corpus directory, so it moves
  * when anyone adds a case there, and a red on it would say nothing about the passes. The numerator
  * is the pinned part: which cases hold the operator, and how many nodes each one holds. So a case
- * added to `opt/effects` changes `of 5` to `of 6` in the reading and leaves the check green, while
- * a case that starts holding `:op/keep` is red -- the population is allowed to grow, the finding
+ * added to `opt/defun` changes `of 5` to `of 6` in the reading and leaves the check green, while
+ * a case that starts holding `:enum/tag` is red -- the population is allowed to grow, the finding
  * is not allowed to move.
  *\n * A count of zero is pinned like any other, and it has an owner: `:enum/make` is written by the
  * defunctionalizer and no case of `test/cases/opt/defun` reaches that path today. Zero is a
@@ -49,17 +54,6 @@ const env = {
 /// operator pinned to nothing is pinned to zero (`names` empty): that is a reading too, and the
 /// owner line says who would write it.
 const FAMILY = [
-    {
-        uri: ':op/keep',
-        corpus: 'effects',
-        owner:
-            '`replaceNode` -> `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), for a node ' +
-            'with no sync user that takes a last read',
-        names: {
-            'branch_keeps_outer_effect.cml': 2,
-            'fold_keeps_arm_effect.cml': 2
-        }
-    },
     {
         uri: ':enum/tag',
         corpus: 'defun',
@@ -109,7 +103,7 @@ const histogram = (file) => {
     return counts
 }
 
-/// The measured map for one corpus: `{ 'case.cml': { ':op/keep': 2, ... } }`.
+/// The measured map for one corpus: `{ 'case.cml': { ':enum/tag': 1, ... } }`.
 const sweep = (corpus) => {
     const files = fs
         .readdirSync(path.join(CASES, corpus))

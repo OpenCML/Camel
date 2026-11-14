@@ -151,7 +151,7 @@ digraph GraphIR {
         N2F -> N31 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N32 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="19:0-26:1", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="() => int uses env, stdout"];
+    N32 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="19:0-26:1", srcfile="exemplars/08_structured_control_flow/program.cml", value_type="() => int uses env, var stdout"];
     N33 [label="CALL", type="CALL", value_type="int"];
     N33 -> O00 [label="0", type="EXIT"];
     N32 -> N33 [label="0|0", type="WITH"];

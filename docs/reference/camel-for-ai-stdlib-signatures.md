@@ -187,8 +187,8 @@ to_array: (content: Bytes) => int[]
 
 ```text
 tree_leaves: (tree: T) => L
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses var fs, var stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
@@ -476,8 +476,8 @@ permutation: (k: Key, n: int) => int[]
 shuffle: <k: Key> (xs: T[]) => T[]
 choice: <k: Key> (xs: T[]) => T
 sample: <k: Key, n: int> (xs: T[]) => T[]
-seed: (value: int) => void uses rng
-next_key: () => Key uses rng
+seed: (value: int) => void uses var rng
+next_key: () => Key uses var rng
 rand: () => float
 randn: () => float
 ```
@@ -526,7 +526,7 @@ clear_input_buffer: () => void
 
 ```text
 sleep: (seconds: float) => void
-exit: (code: int) => never uses process
+exit: (code: int) => never uses var process
 user_name: () => string!
 cpu_count: () => int
 ```
@@ -610,8 +610,8 @@ unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 **`test_support`** — import { ... } from test_support — 5 name(s)
 
 ```text
-rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
-thread_count: () => int uses process
+rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
+thread_count: () => int uses var process
 with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
 with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
 arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_function::<F>()
@@ -668,22 +668,22 @@ effects: (g: Graph) => Effects
 shape_text: (n: Node) => string?
 permissions: (n: Node) => int
 open: (f: F) => Txn<F> when is_function::<F>()
-replace: (t: Txn<F>, old: Node, new: Node) => void uses t
-erase: (t: Txn<F>, n: Node) => void uses t
-eval: (t: Txn<F>, n: Node) => Node? uses t
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
-commit: (t: Txn<F>) => F! uses t
-abort: (t: Txn<F>) => void uses t
+replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
+erase: (t: Txn<F>, n: Node) => void uses var t
+eval: (t: Txn<F>, n: Node) => Node? uses var t
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
+commit: (t: Txn<F>) => F! uses var t
+abort: (t: Txn<F>) => void uses var t
 check_pass_boundary: (before: F, after: F) => F! when is_function::<F>()
 ```
 
 **`rewrite`** — import { ... } from rewrite — 15 name(s)
 
 ```text
-rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 extract: <cost: (o: Op, inputs: float[]) => float> (f: F) => F! when is_function::<F>()
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 check: <samples: int = 100, seed: int = 0> (rules: Rule[]) => CheckReport
 check: <samples: int = 100, seed: int = 0> (rules: Rule[], over: F) => CheckReport when is_function::<F>()
 check_text: (r: CheckReport) => string
@@ -700,15 +700,15 @@ rule_consts: (r: Rule) => int
 **`tiles`** — import { ... } from tiles — 9 name(s)
 
 ```text
-upload: (value: f32[...]) => Device<f32[...]> uses driver
-download: (value: Device<f32[...]>) => f32[...] uses driver
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
-regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
-available: () => bool uses driver
-device: () => string! uses driver
+upload: (value: f32[...]) => Device<f32[...]> uses var driver
+download: (value: Device<f32[...]>) => f32[...] uses var driver
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses var driver
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
+available: () => bool uses var driver
+device: () => string! uses var driver
 ```
 
 **`pyplot`** — import { ... } from pyplot — 1 name(s)

@@ -1,0 +1,198 @@
+id = "effects.masking_transition"
+order = 975
+tier = "fast"
+tags = ["feat", "effects", "resources", "runtime", "compile"]
+
+# Effect masking (design principles 3.3) is implemented twice today: in the builder's resource walk
+# (src/compile/gir/builder_resources.cpp#placeCapturedUse, #placeCalleeCapture, #typeCarriesFunction,
+# #bodyResultCanHoldAFunction) and in the runtime's (src/runtime/resources.cpp#FootprintWalk, which
+# drops an access whose origin is Fresh, and #call). R3 replaces both with one analysis; until then
+# this plan is the guard the author's review of 2026-11-14 (origin/fsh-dev f3be47bf3) asked for:
+#
+#   "Masking landed in the builder's resource walk that R3 deletes, with a second copy in the
+#    runtime walk; it moves into the one analysis, with a case that asks both sides meanwhile."
+#
+# The case is `test::resource_transition`. For every body of one program it prints the builder's
+# measured reach beside the runtime's footprint of the same frozen graph and says whether the two are
+# one answer:
+#
+#   MASK <graph> builder=<...> runtime=<...> agree=yes|no
+#
+# Neither side is read through the other. The builder's answer is its own walk, read back through the
+# transition bridge (include/camel/compile/gir/resource_transition.h), which hands over the measured
+# reach of every body -- including a set a function type cannot carry, and a body whose type keeps the
+# clause it wrote -- because a type is not the whole of what the walk measured. The runtime's answer is
+# runtime::footprintOf over the frozen graph, its own walk. Only the notation is shared: both readings
+# are written in the runtime footprint's text (src/runtime/resources.cpp#toString), so the two are one
+# claim in two spellings. Two parts of a footprint are outside the comparison: the result part, since
+# the builder's measurement answers what a body reaches and records the conservative Unknown there
+# while the runtime answers what the result aliases from the shapes the graph has, and the allocation
+# part, which a GraphFootprint does not carry.
+#
+# The programs, and which half of the rule each asks:
+#
+#   capture_local_var       a closure writes a `var` of the body that made it: the body reaches
+#                           nothing, and the closure's own body reaches that cell as its capture
+#   capture_local_var_as_value   the same body read from its type, fitted to a `pure` parameter
+#   resources_effects       the resource plan's own program, as the control: cells, a `var`
+#                           parameter, an in-place array, the generator, the file system, the
+#                           console, and a closure that writes a cell of its caller's body
+#   module_var_read         a module's top-level `var` read from a function: not masked, the caller
+#                           reads the same cell
+#   module_var_write        the same cell written from a function: not masked
+#   capture_escapes         a closure that leaves the call: the builder refuses the `pure` promise
+#                           the body breaks, so this program never reaches a frozen graph and the
+#                           runtime walk is never asked about it
+#
+# Three of the programs carry one disagreement each between the two answers, and each entry pins it
+# where it is read, with the reason:
+#
+#   resources_effects  `effects`'s `main`: the runtime adds `rmw object (any)`, the builder does not.
+#                      The extra one comes from a read of a cell the body made itself (`xs->sort`,
+#                      whose operand is read out of `xs`): the runtime's origin tracking cannot place
+#                      a value read from a variable (`Unknown`) and answers "any object", while the
+#                      builder knows the cell is the body's own and masks it.
+#   module_var_read    `peek` reads the module's `counter`: the builder names the cell as the ambient
+#                      resource `module_var_read:counter`, the runtime names the port it arrives on
+#                      (`variable with 0`). Both agree it is not masked; only the vocabulary differs,
+#                      because the runtime's walk has no notion of a module-level cell.
+#   module_var_write   the same for `bump`'s write of that cell.
+#
+# None of the three is made to agree here: this plan reads what the two implementations say, and R3
+# is the change that makes them one. When either side moves, the pinned line moves with it -- that is
+# the point of pinning it.
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "capture_local_var"
+desc = "A closure writes a `var` the body that made it owns, and the two walks agree that the body reaches nothing: `total` is `none` on both sides, and the closure's own body reaches the captured cell as `rmw variable capture 0 whole` on both. The program's `main` prints, and both read it as `external; write ambient stdout`."
+kind = "behavior"
+case = "../../../cases/effects/ok_capture_local_var.cml"
+args = ["${case}", "test::resource_transition"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MASK '))
+assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
+const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
+assert(disagree.length === 0, 'the two sides answer differently: ' + disagree.join(' | '))
+const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
+pinned('MASK total builder=none runtime=none agree=yes')
+pinned('MASK main builder=external; write ambient stdout runtime=external; write ambient stdout agree=yes')
+// The closure is an anonymous graph named after the number of graphs the compilation had reached
+// (`modules/resources` says the same of `__g_5__` and `__g_125__`), so it is named by what it says:
+// one captured cell, written, read the same way by both walks.
+const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole agree=yes$/.test(l))
+assert(capture.length === 1, "the closure's captured cell, asked of both sides: " + JSON.stringify(capture))
+}
+"""
+
+[[tests]]
+name = "capture_local_var_as_value"
+desc = "The same body read from its type: it fits a `pure` parameter, and the two walks still agree that it reaches nothing -- `total` is `none` on both sides and the closure's capture is one written cell on both."
+kind = "behavior"
+case = "../../../cases/effects/ok_capture_local_var_as_value.cml"
+args = ["${case}", "test::resource_transition"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MASK '))
+assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
+const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
+assert(disagree.length === 0, 'the two sides answer differently: ' + disagree.join(' | '))
+const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
+pinned('MASK total builder=none runtime=none agree=yes')
+pinned('MASK main builder=external; write ambient stdout runtime=external; write ambient stdout agree=yes')
+const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole agree=yes$/.test(l))
+assert(capture.length === 1, "the closure's captured cell, asked of both sides: " + JSON.stringify(capture))
+}
+"""
+
+[[tests]]
+name = "resources_effects"
+desc = "The resource plan's program, asked of both walks: a `var` parameter, a recursion through one, a closure writing a cell of its caller's body and an ambient set all come out the same. The one difference is pinned: `main` reads a cell it made itself, the runtime cannot place a value read from a variable and adds `rmw object (any)`, and the builder masks it."
+kind = "behavior"
+case = "../../../cases/resources/effects.cml"
+args = ["${case}", "test::resource_transition"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MASK '))
+assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
+const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
+pinned('MASK bump builder=rmw variable norm 0 whole runtime=rmw variable norm 0 whole agree=yes')
+pinned('MASK countdown builder=rmw variable norm 0 whole runtime=rmw variable norm 0 whole agree=yes')
+pinned('MASK random::rand builder=external; rmw ambient rng runtime=external; rmw ambient rng agree=yes')
+// The closure `inc` writes `c`, a cell of `main`'s body: both walks reach it as one captured cell.
+const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole agree=yes$/.test(l))
+assert(capture.length === 1, "the closure's captured cell, asked of both sides: " + JSON.stringify(capture))
+// Exactly one disagreement, at `main`, and it is the runtime's reading of a value taken out of a
+// variable: the cell is `main`'s own, so the builder masks the access and the runtime answers "any
+// object" for it (see the plan header).
+const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
+assert(disagree.length === 1, 'exactly one answer differs here: ' + disagree.join(' | '))
+const line = disagree[0]
+assert(line.startsWith('MASK main builder='), 'the difference is `main`\'s: ' + line)
+const [head, tail] = line.split(' runtime=')
+const builderText = head.replace(/^MASK \S+ builder=/, '')
+const runtimeText = tail.replace(/ agree=no$/, '')
+assert(!builderText.includes('rmw object (any)'), 'the builder masks the cell it made: ' + builderText)
+assert(runtimeText.includes('rmw object (any)'), 'the runtime answers any object for it: ' + runtimeText)
+}
+"""
+
+[[tests]]
+name = "module_var_read"
+desc = "Reading a module's top-level `var` is not masked: both sides record a read of that cell. They name it differently -- the builder as the ambient resource `module_var_read:counter`, the runtime as the port it arrives on -- and the line is pinned with that difference, which the plan header explains."
+kind = "behavior"
+case = "../../../cases/effects/module_var_read.cml"
+args = ["${case}", "test::resource_transition"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MASK '))
+assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
+const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
+// The cell reaches the function as a port, and both sides say the read is the function's: the builder
+// names the module's cell, the runtime the port it comes in on (the plan header explains why).
+pinned('MASK peek builder=read ambient module_var_read:counter runtime=read variable with 0 whole agree=no')
+// `main` is the same program one level up, and there both sides name the cell the same way.
+pinned('MASK main builder=external; read ambient module_var_read:counter; write ambient stdout runtime=external; read ambient module_var_read:counter; write ambient stdout agree=yes')
+const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
+assert(disagree.length === 1, 'only `peek` differs here: ' + disagree.join(' | '))
+}
+"""
+
+[[tests]]
+name = "module_var_write"
+desc = "Writing a module's top-level `var` is not masked either: both sides record the write. The builder names the cell as the ambient resource `module_var_write:counter`, the runtime names the port it arrives on -- pinned, with the plan header's explanation."
+kind = "behavior"
+case = "../../../cases/effects/module_var_write.cml"
+args = ["${case}", "test::resource_transition"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MASK '))
+assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
+const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
+pinned('MASK bump builder=rmw ambient module_var_write:counter runtime=rmw variable with 0 whole agree=no')
+pinned('MASK main builder=external; rmw ambient module_var_write:counter; write ambient stdout runtime=external; rmw ambient module_var_write:counter; write ambient stdout agree=yes')
+const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
+assert(disagree.length === 1, 'only `bump` differs here: ' + disagree.join(' | '))
+}
+"""
+
+[[tests]]
+name = "capture_escapes"
+desc = "The closure leaves the call, so the builder reads the promise as broken where it is written and refuses the program: this is the one half of the masking rule the runtime walk does not have (a body that hands a closure out), and it is why no frozen graph is ever asked about this program -- nothing is printed by the pass."
+kind = "negative"
+case = "../../../cases/effects/err_capture_escapes.cml"
+args = ["${case}", "test::resource_transition"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_diagnostic_code = "0x030001F1"
+expect_output_contains = ["err_capture_escapes.cml:"]
+expect_output_not_contains = ["MASK "]

@@ -4,7 +4,7 @@
  * outside the promise (design principles 3.3).
  */
 
-func bump(var c: int): int uses c sync {
+func bump(var c: int): int uses var c sync {
     c += 1
     println(c)
     return c

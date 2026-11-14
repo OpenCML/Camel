@@ -161,6 +161,8 @@ class LoopView {
     EffectSummary effects() const;
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- a view of a graph of a program the
+    // caller holds; it is made and dropped inside the call that reads the loop.
     const Program *program_;
     const GCGraph *graph_;
     gc_node_ref_t node_;

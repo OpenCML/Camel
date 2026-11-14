@@ -11,10 +11,10 @@ func read_id(s: Stream): int uses s {
     return s.id
 }
 
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses cell sync {
+func bump(var cell: int): int uses var cell sync {
     cell += 1
     return cell
 }

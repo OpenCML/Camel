@@ -104,6 +104,8 @@ inline constexpr KindId kNoKind = UINT32_MAX;
 /// `program` is the program the graph is read in: the graphs it refers to are the ones that
 /// program holds.
 struct Anchor {
+    // program-holder-exempt: long-lived-cache -- the fact store keeps anchors across queries,
+    // and a pin here would root every program a fact ever read.
     const Program *program = nullptr;
     const GCGraph *graph   = nullptr;
     gc_node_ref_t node     = kInvalidNodeRef;

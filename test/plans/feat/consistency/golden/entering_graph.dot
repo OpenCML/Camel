@@ -42,7 +42,7 @@ digraph GraphIR {
         N0A -> N0C [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N0D [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=7053, span="1:0-5:1", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="() => int uses stdout"];
+    N0D [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=7053, span="1:0-5:1", srcfile="<ROOT>/test/cases/consistency/entering/graph_explicit.cml", value_type="() => int uses var stdout"];
     N0E [label="CALL", type="CALL", value_type="int"];
     N0E -> O00 [label="0", type="EXIT"];
     N0D -> N0E [label="0|0", type="WITH"];

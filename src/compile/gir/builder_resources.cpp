@@ -12,6 +12,7 @@
 #include "builder.h"
 #include "builder_helpers.h"
 
+#include "camel/compile/gir/resource_transition.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/type/composite/array.h"
@@ -682,6 +683,10 @@ void Builder::measureInferredResources() {
     // before, and the answer it settles at is the least one its body satisfies. The sets only grow,
     // so the rounds end.
     std::vector<compile_graph_ptr_t> bodies;
+    // TEST-ONLY, the R3 transition: a GraphId belongs to one program, and a later compile in this
+    // process may give the same id to another body, so this compile's measurements replace the
+    // earlier ones (resource_transition.h).
+    clearMeasuredReaches();
     for (const ModuleUnit *unit : unitOrder_) {
         for (const compile_graph_ptr_t &graph : unit->builtBodies) {
             bodies.push_back(graph);
@@ -732,10 +737,16 @@ void Builder::measureInferredResources() {
     // (`anyOf`: a class the clause has no name for) leaves the signature as it is rather than
     // promising too little; a call through it is read conservatively.
     for (const auto &graph : bodies) {
+        const auto &settled = inferredResources_[graph.get()];
+        // TEST-ONLY, the R3 transition: the settled reach of every body, including a set the clause
+        // language cannot carry and a body whose type keeps the clause it wrote. A type is the place
+        // a caller reads a function's resources from; it is not the whole of what this walk
+        // measured, and the case that asks both copies of the masking rule the same question reads
+        // the measurement here (resource_transition.h).
+        publishMeasuredReach(graph->graphId(), settled);
         if (!inferredSignatures_.contains(graph.get())) {
             continue;
         }
-        const auto &settled = inferredResources_[graph.get()];
         if (settled.anyOf.empty()) {
             graph->setResources(settled);
         }
@@ -924,4 +935,31 @@ void Builder::checkInferredResources() {
             firstUnpromisedEffectOrigin(graph, promised));
     }
 }
+
+// ---- The transition bridge (TEST-ONLY; see resource_transition.h) -------------------------------
+
+namespace {
+
+// The reach of every body of the compile in hand, by the GraphId the frozen graph keeps. One table
+// for the process: a compile replaces its entries (measureInferredResources clears them first), and
+// the test that reads them does so in the process that wrote them.
+std::unordered_map<runtime::GraphId, ResourceSignature> &measuredReaches() {
+    static std::unordered_map<runtime::GraphId, ResourceSignature> table;
+    return table;
+}
+
+} // namespace
+
+void publishMeasuredReach(runtime::GraphId graph, const ResourceSignature &reach) {
+    measuredReaches().insert_or_assign(graph, reach);
+}
+
+const ResourceSignature *measuredReachOf(runtime::GraphId graph) {
+    const auto &table = measuredReaches();
+    const auto found  = table.find(graph);
+    return found == table.end() ? nullptr : &found->second;
+}
+
+void clearMeasuredReaches() { measuredReaches().clear(); }
+
 } // namespace camel::compile::gir

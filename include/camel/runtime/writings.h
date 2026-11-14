@@ -319,10 +319,13 @@ struct Budget {
     size_t unions      = 1u << 22;
 };
 
-/// Local deletion guards, independent of numeric permissions and structural validity.
+/// Local deletion guards, independent of numeric permissions and structural validity. The
+/// `order` guard keeps the computations whose place in the order is the program's to keep: one
+/// that carries an ordering edge, one something waits on, one whose value is written in place.
+/// The `faults` guard keeps a computation that may fault.
 struct DeletionProtection {
-    bool effects = true;
-    bool faults  = true;
+    bool order  = true;
+    bool faults = true;
 };
 
 struct RewriteStats {

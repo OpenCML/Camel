@@ -58,6 +58,8 @@ struct Value {
     std::vector<Value> fields;
     // Borrowed function graph and captured values, used only while reading the graph.
     rt::GCGraph *function              = nullptr;
+    // program-holder-exempt: borrow-or-foreign-type -- the graph and its program are read only
+    // while this value is being built.
     const rt::Program *functionProgram = nullptr; // the program `function` is a graph of
     bool loopElement = false; // Exact i64 body port, materialized only by an explicit conversion.
 };
@@ -136,6 +138,8 @@ class Compiler {
     Program program;
     rt::fact::FactStore &facts;
     /// The program the graphs being compiled are of; null for a compiler that reads no graph.
+    // program-holder-exempt: borrow-or-foreign-type -- the graphs compiled are of a program the
+    // caller holds for the compile.
     const rt::Program *runtimeProgram;
     Compiler(rt::fact::FactStore &store, const rt::Program *graphs)
         : facts(store), runtimeProgram(graphs) {}
@@ -324,7 +328,11 @@ class Compiler {
         const std::vector<Value> &captures = {}, const rt::Program *home = nullptr) {
         // The graphs `g` calls are named in the program it is of.
         struct HomeScope {
+            // program-holder-exempt: borrow-or-foreign-type -- the scope only saves and restores
+            // the compiler's borrowed program pointer.
             const rt::Program *&current;
+            // program-holder-exempt: borrow-or-foreign-type -- the value `current` had when the
+            // scope opened; the pointer itself is borrowed.
             const rt::Program *saved;
             ~HomeScope() { current = saved; }
         } homeScope{runtimeProgram, runtimeProgram};

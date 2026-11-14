@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：24 页
+## 现在在等作者：25 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -32,6 +32,7 @@
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 |
 | [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ |
+| [`2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge`](2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge.cn.md) | 一个既没有值读者、也没有同步后继的 `GATE`，怎么结束一条同步边？ |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 |
 
 ## 生成器不会删的行：54 行（页已不在 `questions/` 里）

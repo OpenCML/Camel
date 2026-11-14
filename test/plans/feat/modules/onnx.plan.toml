@@ -188,7 +188,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "export_import_order"
-desc = "Importing onnx before tensor keeps a single tensor module (one operator registry), so inference still knows shapes: the export of the layer_norm/matmul graph reaches emission, and the operator it names there is the one it cannot export. That operator is `keep`, which the lowering of `layer_norm` leaves in the graph and the purity check refuses (`impure operator ':op/keep'` uses a slot the model cannot carry), so no model is written today -- a defect of the exporter, recorded here rather than worked around. What the case pins is the pair the ruling asks for: the refused program says why and does not print `exported`, exits non-zero, and leaves no model on disk. Before the refusal was handled the same program printed `exported` and exited 0 with no file."
+desc = "Importing onnx before tensor keeps a single tensor module (one operator registry), so inference still knows shapes: the export of the layer_norm/matmul graph reaches emission and writes a model. The lowering of `layer_norm` leaves a keeper in the graph, and what it leaves is a `GATE` -- one data port, one sync predecessor (design principles 3.3, edges.cn.md 5.3) -- which the export carries as the plain value it forwards, so the purity check no longer refuses the program. Until the keeper operator `:op/keep` was removed this case was the record of an exporter defect: the purity check read `impure operator ':op/keep'` and no model was written. What it pins now is the pair: the program says `exported`, exits 0, and leaves a model on disk that the importer reads back."
 kind = "behavior"
 case = "../../../cases/modules/onnx/export_import_order.cml"
 args = ["${case}"]
@@ -199,10 +199,12 @@ async ({ input, assert }) => {
 const fs = await import('fs')
 const out = input.normalized.stdout
 const err = input.normalized.stderr + input.normalized.stdout
-assert(!out.includes('exported'), `a refused export must not say it exported: ${out}`)
-assert(input.exit_code !== 0, `the refusal must be visible: exit ${input.exit_code}`)
-assert(err.includes("impure operator ':op/keep'"), `the refusal must name the impure operator: ${err}`)
-assert(!fs.existsSync(`${input.test_tmp}/export_import_order.onnx`), 'a refused export must leave no model on disk')
+assert(out.includes('exported'), `an accepted export must say it exported: ${out}`)
+assert(input.exit_code === 0, `the export must succeed: exit ${input.exit_code}, ${err}`)
+assert(!err.includes(':op/keep'), `no keeper operator may reach the exporter: ${err}`)
+const model = `${input.test_tmp}/export_import_order.onnx`
+assert(fs.existsSync(model), 'an accepted export must write the model')
+assert(fs.statSync(model).size > 0, 'the model must not be empty')
 }
 """
 timeout_ms = 10000

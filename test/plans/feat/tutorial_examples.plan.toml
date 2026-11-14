@@ -611,7 +611,7 @@ backends = false
 args = ["${case}"]
 expect_exit = 1
 expect_output_not_contains = []
-expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
+expect_output_contains = ["10_uses_beyond.cml:8:1: [Error]: '() => int uses var db' does not keep its resource promise", "stdout", "(name=SemanticDiag::UsesPromiseViolated, code=0x030001F1)"]
 
 [[tests]]
 name = "tutorial.examples.10_exercise"

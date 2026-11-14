@@ -1,0 +1,17 @@
+/**
+ * Writing a module-level `var` is not masked either: the cell outlives the call, so a write of it
+ * is a resource of the function that makes it and reaches every caller of the module's value
+ * (design principles 3.3). `bump` writes `counter` and must be measured as touching it.
+ */
+
+var counter = 1
+
+func bump(): int sync {
+    counter = counter + 1
+    return counter
+}
+
+func main(): int sync {
+    println(bump())
+    return 0
+}

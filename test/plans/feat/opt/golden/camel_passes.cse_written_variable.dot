@@ -172,7 +172,7 @@ digraph GraphIR {
         N36 -> N38 [label="0|1", type="NORM"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N39 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="40:0-45:1", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="() => int uses stdout"];
+    N39 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="40:0-45:1", srcfile="<ROOT>/test/cases/opt/generic/written_variable.cml", value_type="() => int uses var stdout"];
     N3A [label="CALL", type="CALL", value_type="int"];
     N3A -> O00 [label="0", type="EXIT"];
     N39 -> N3A [label="0|0", type="WITH"];

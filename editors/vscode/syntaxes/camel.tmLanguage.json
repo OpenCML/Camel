@@ -294,6 +294,7 @@
         { "include": "#with-parameters" },
         { "include": "#function-declaration" },
         { "include": "#type-declaration" },
+        { "include": "#resource-clause-write" },
         { "include": "#let-declaration" },
         { "include": "#var-declaration" }
       ]
@@ -408,6 +409,11 @@
         },
         { "include": "#carrier-punctuation" }
       ]
+    },
+    "resource-clause-write": {
+      "comment": "contextual keywords: the 'var' of a resource clause entry -- `uses var fs` writes the resource where `uses fs` reads it (design principles 3.3). It is written after `uses` or after a comma of the same clause, so it is told apart from a `var` declaration, and it opens no declaration block: the name that follows is the resource.",
+      "match": "(?<=\\buses\\s+|,\\s*)\\b(var)\\b(?=\\s+[A-Za-z_])",
+      "name": "storage.modifier.var.camel"
     },
     "var-declaration": {
       "comment": "dataDecl: VAR carrier (':' typeList)? '=' dataList. The names of the carrier are mutable variables.",

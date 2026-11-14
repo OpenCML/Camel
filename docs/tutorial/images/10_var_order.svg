@@ -20,7 +20,7 @@
 </g>
 <g id="clust2" class="cluster">
 <title>cluster_F03</title>
-<g id="a_clust2"><a xlink:title="(var counter: int) =&gt; int uses counter">
+<g id="a_clust2"><a xlink:title="(var counter: int) =&gt; int uses var counter">
 <polygon fill="none" stroke="black" points="235,-120.09 235,-979.18 401,-979.18 401,-120.09 235,-120.09"/>
 <text text-anchor="middle" x="318" y="-963.98" font-family="Times,serif" font-size="14.00">bump</text>
 </a>

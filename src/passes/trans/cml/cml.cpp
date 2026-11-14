@@ -426,6 +426,8 @@ class CmlPrinter {
     }
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- the printer reads the program its pass
+    // was given; the driver owns it for the translation.
     const Program &program_;
     /// The context the program was compiled on, for the one fact the printer cannot read off a
     /// graph: which module a name belongs to (see `collectOperatorModules`). Null when a caller

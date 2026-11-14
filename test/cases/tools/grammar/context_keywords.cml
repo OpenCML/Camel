@@ -24,7 +24,7 @@ rule add_zero::<T>(x: T) when is_integer::<T>() {
     x + 0 => x
 }
 
-func writes(path: string): unit uses fs {
+func writes(path: string): unit uses var fs {
     return null
 }
 
@@ -32,7 +32,7 @@ func pure_only(x: int): int pure {
     return x
 }
 
-func clamped(x: int): int uses fs when is_ready() {
+func clamped(x: int): int uses var fs when is_ready() {
     return x
 }
 

@@ -1,0 +1,23 @@
+/**
+ * The same fold with a condition that may fault: the inner condition is `1 / z > 0`, and `z` is 0.
+ * The inner branch cannot be folded (its condition reads a variable), but both of its arms are `3`,
+ * so the fold reads the `JOIN` as `3`, the outer condition as `3 > 3` -- false -- and the outer
+ * branch takes the print.
+ *
+ * The fold takes the inner branch's only read (the comparison above it), and the division is what
+ * that branch's condition was computed from: a computation that may fault is not one whose last use
+ * a removal may take (design principles 3.3), so the division keeps a use -- the wait that orders the
+ * print after it, which is the ordering the branch itself stood in. The division therefore still
+ * runs, before the print, and `1 / 0` faults there.
+ *
+ * The use is not a `GATE`. A gate stands in a value somebody reads, and after the fold nothing reads
+ * the folded comparison: a gate with no value reader and no sync user cannot end a sync edge
+ * (src/runtime/graph_edges.cpp, `canEndSyncEdge`), which is the gap this case is here to show. The
+ * wait that keeps the division is the control edge the pruned branch's residue leaves behind.
+ */
+
+func main(): int {
+    var z = 0
+    let x2 = 3
+    return (if ((if (1 / z > 0) then x2 else 3) > 3) then x2 else println(4))
+}

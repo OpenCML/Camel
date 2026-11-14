@@ -89,8 +89,8 @@ export const CONTEXT_KEYWORDS = [
     {
         word: 'uses',
         group: 'clause',
-        zh: '资源子句：函数签名或函数类型里声明效应集合的 `uses`（`uses fs`、`uses s, t`）',
-        en: "the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses fs`, `uses s, t`)",
+        zh: '资源子句：函数签名或函数类型里声明效应集合的 `uses`（`uses s` 读、`uses var fs` 写，与 `var` 形参同一种写法）',
+        en: "the `uses` of a resource clause: the effects a function's signature or a function type declares (`uses s` reads, `uses var fs` writes, written the way a `var` parameter is)",
         evidence: ['if (atWord(0, "uses") || atWord(0, "pure")) {'],
     },
     {

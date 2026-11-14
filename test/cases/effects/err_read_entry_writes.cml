@@ -1,0 +1,14 @@
+// A clause is an upper bound on what a body may touch, and an entry says how much of its resource
+// the body may use (design principles 3.3): `uses acc` reads the cell, so `grow` reaches past its
+// promise when it writes it. The report quotes the signature as it stands, entry without `var`.
+
+func grow(var acc: int): int uses acc {
+    acc = acc + 1
+    return acc
+}
+
+func main(): int sync {
+    var acc = 0
+    println(grow(acc))
+    return 0
+}
