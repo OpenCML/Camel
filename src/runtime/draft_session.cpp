@@ -1616,7 +1616,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (draft.writings().empty() && draft.normalizeChainPlaces() > 0) {
             edited_.insert(graph);
         }
-        if (draft.dissolveUnorderedGates() > 0) {
+        const bool dissolved = draft.dissolveUnorderedGates() > 0;
+        // An order edge whose two ends a rewrite left in different control regions is written on
+        // the node that owns the region the deeper end runs in (docs/design/effects/edges.cn.md
+        // 4.6). It is the last thing a commit does to the edges: dissolving gates above splices
+        // order edges over the nodes it removes.
+        const bool rehomed = draft.rehomeOrderEdges() > 0;
+        if (dissolved || rehomed) {
             edited_.insert(graph);
         } else if (!drafted) {
             GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);

@@ -3811,6 +3811,7 @@ bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
 ef56ce08a4ace568 ok test/cases/opt/e9/rc01_seed47.cml
 fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
 fc5dd9b72523c060 ok test/cases/opt/e9/rc03_seed30.cml
+7c110c4d62370a1a ok test/cases/opt/e9/rc03_seed56.cml
 2b621abdfd198a5b ok test/cases/opt/e9/rc04_seed72.cml
 4354ebdbd45852fb ok test/cases/opt/e9/rc08_seed324.cml
 2b68e1c7da848a36 ok test/cases/opt/e9/rc11_seed352.cml
