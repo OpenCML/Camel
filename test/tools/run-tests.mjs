@@ -2601,22 +2601,65 @@ function invalidPlan(planPath, error) {
  *
  * It is how a property that every program must keep (here: no raw pointer is held across a
  * safepoint) is checked against whatever the other plans exercise, including tests added
- * later. Benchmarks and differential tests are left out, and so is a test that sets
+ * later: every test of the `camel` tool is copied, whatever it expects -- a program that runs to
+ * completion, a stored picture, or a diagnostic, a refusal or a fault it expects to see. A
+ * benchmark (it carries a budget, not a property) and a differential test (it compares two runs to
+ * each other, not one run to its assertions) are left out, and so is a test that sets
  * `sweep = false`.
  */
+const SWEPT_KINDS = new Set(['behavior', 'snapshot', 'negative'])
+
+/**
+ * The plan files one `[[sweeps]]` entry reads: its `plans` entries, minus `exclude`, minus the plan
+ * that lists the sweep, one copy each -- a plan named twice (a directory target and a file inside
+ * it, say) is one source, because two expansions of it would be two copies with the same name and
+ * the same work.
+ */
+export function sweepSources(sweep, planPath) {
+    const exclude = (sweep.exclude || []).map((item) => String(item))
+    return [...new Set(sweep.plans
+        .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
+        .filter((source) => source !== planPath)
+        .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item))))]
+        .sort()
+}
+
+/**
+ * Why this sweep leaves a source test out, or null when it copies the test. One function for the
+ * question, so that the count of what a sweep covers (`negativeSweepAccounting`) cannot answer it
+ * differently from what the sweep runs.
+ */
+function sweepExclusion(sweep, test) {
+    if (!SWEPT_KINDS.has(test.kind)) return `kind ${test.kind}`
+    if (test.sweep === false) return 'sweep = false'
+    if (test.__knownFail) return 'known_fail'
+    if ((test.tool || 'camel') !== 'camel') return 'not the camel tool'
+    // A sweep that sets its own options skips a source test that already names one of them: the
+    // copy would otherwise say --gc-check poison ... --gc-check poison and the parser would see
+    // the option twice.
+    const own = (test.envs || []).map((entry) => String(entry))
+    if (sweep.skip_env_prefix && own.some((entry) => entry.startsWith(sweep.skip_env_prefix))) {
+        return 'names the sweep\'s variable'
+    }
+    const ownArgs = (test.args || []).map((entry) => String(entry))
+    if (sweep.skip_args_prefix && ownArgs.some((entry) => entry.startsWith(sweep.skip_args_prefix))) {
+        return 'names the sweep\'s option'
+    }
+    // Options are read by a run: the words go in front of its entry file. A test that asks the
+    // compiler (`check`, `inspect`, `--version`) has no run to put them in front of, and they would
+    // land on the wrong parser.
+    const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
+    if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) return 'does not drive a run'
+    return null
+}
+
 export function expandSweeps(doc, planPath) {
     const out = []
     for (const sweep of doc.sweeps || []) {
         if (!sweep.name || !Array.isArray(sweep.plans)) {
             throw new Error(`a [[sweeps]] entry of ${planPath} needs a name and plans`)
         }
-        const exclude = (sweep.exclude || []).map((item) => String(item))
         const scale = Number.isFinite(sweep.timeout_scale) ? sweep.timeout_scale : 1
-        const prefix = sweep.skip_env_prefix || null
-        // A sweep that sets its own options skips a source test that already names one of them:
-        // the copy would otherwise say --gc-check poison ... --gc-check poison and the parser
-        // would see the option twice.
-        const argPrefix = sweep.skip_args_prefix || null
         // `fast_sample = N` keeps N tests per source plan in the fast layer and puts the rest in
         // the milestone layer: the default developer run still checks the property against every
         // plan, and the full sweep (every eligible test) is `--tier milestone` away. The
@@ -2629,14 +2672,7 @@ export function expandSweeps(doc, planPath) {
         const fastSample = Number.isInteger(sweep.fast_sample) && sweep.fast_sample > 0 ? sweep.fast_sample : 0
         const riskTags = new Set((sweep.risk_tags || []).map((tag) => String(tag)))
         const riskSample = Number.isInteger(sweep.risk_sample) && sweep.risk_sample > 0 ? sweep.risk_sample : 0
-        // A plan named twice (a directory target and a file inside it, say) is one source: two
-        // expansions of it would be two copies with the same name and the same work.
-        const sources = [...new Set(sweep.plans
-            .flatMap((entry) => walkPlans(path.resolve(path.dirname(planPath), entry)))
-            .filter((source) => source !== planPath)
-            .filter((source) => !exclude.some((item) => source.split(path.sep).join('/').includes(item))))]
-            .sort()
-        for (const source of sources) {
+        for (const source of sweepSources(sweep, planPath)) {
             const { doc: sourceDoc, tests: sourceTests } = loadPlanTests(source)
             // A copy is named after the sweep, its source plan and the source test. The source
             // plan is part of the name because two plans may both have a test called `shapes`
@@ -2649,19 +2685,7 @@ export function expandSweeps(doc, planPath) {
             const sampleCount = fastSample > 0 && risky && riskSample > fastSample ? riskSample : fastSample
             const eligible = []
             for (const test of sourceTests) {
-                if (test.kind !== 'behavior' && test.kind !== 'snapshot') continue
-                if (test.sweep === false || test.__knownFail) continue
-                if ((test.tool || 'camel') !== 'camel') continue
-                const own = (test.envs || []).map((entry) => String(entry))
-                if (prefix && own.some((entry) => entry.startsWith(prefix))) continue
-                const ownArgs = (test.args || []).map((entry) => String(entry))
-                if (argPrefix && ownArgs.some((entry) => entry.startsWith(argPrefix))) continue
-                // Options are read by a run: the words go in front of its entry file. A test
-                // that asks the compiler (`check`, `inspect`, `--version`) has no run to put them
-                // in front of, and they would land on the wrong parser.
-                const RUNDRIVING = new Set(["${case}", "--timeit", "--output-format"])
-                if ((sweep.args || []).length > 0 && !RUNDRIVING.has(ownArgs[0])) continue
-                eligible.push(test)
+                if (sweepExclusion(sweep, test) === null) eligible.push(test)
             }
             const sampled = new Set()
             if (sampleCount > 0) {
@@ -2692,6 +2716,55 @@ export function expandSweeps(doc, planPath) {
         }
     }
     return out
+}
+
+/**
+ * What the tree's `[[sweeps]]` entries cover and what they leave out, counted through the same two
+ * functions the expansion uses (`sweepSources`, `sweepExclusion`): `declared` `negative` entries in
+ * the source plans of a sweep, `swept` copies of them, `excluded` the rest, and the reason each
+ * excluded one fell out. `reason` says which reading the code implements -- `a` when a `negative`
+ * entry is copied like any other test, `b` when its kind is left out -- so that the coverage a
+ * comment claims and the coverage the code has cannot move apart without this line moving.
+ *
+ * The line is a reading and not a decision: the runner prints it from its self-test and asserts
+ * nothing about the numbers, only that they are printed. It exists because the two did move apart
+ * once: `expandSweeps` left `negative` out from the sweep's first commit while its comment named
+ * only benchmarks and differential tests as left out, so 1258 entries of the sweep's source plans
+ * were declared `negative` and never copied, and no count, summary or gate line said so -- the
+ * missing copies were green because they had not run.
+ */
+export function negativeSweepAccounting(planPaths) {
+    const counts = {
+        declared: 0,
+        swept: 0,
+        reasons: new Map(),
+        reason: SWEPT_KINDS.has('negative') ? 'a' : 'b',
+    }
+    for (const planPath of planPaths) {
+        const doc = loadPlanTests(planPath).doc
+        for (const sweep of doc.sweeps || []) {
+            if (!sweep.name || !Array.isArray(sweep.plans)) continue
+            for (const source of sweepSources(sweep, planPath)) {
+                for (const test of loadPlanTests(source).tests) {
+                    if (test.kind !== 'negative') continue
+                    counts.declared += 1
+                    const why = sweepExclusion(sweep, test)
+                    if (why === null) counts.swept += 1
+                    else counts.reasons.set(why, (counts.reasons.get(why) || 0) + 1)
+                }
+            }
+        }
+    }
+    return counts
+}
+
+/** The reading as one line, then the reasons the rest of them are not swept, one per kind. */
+export function negativeSweepLine(counts) {
+    const line = `negative-sweeps declared=${counts.declared} swept=${counts.swept} `
+        + `excluded=${counts.declared - counts.swept} reason=${counts.reason}`
+    const reasons = [...counts.reasons.entries()].sort()
+    if (reasons.length === 0) return line
+    return `${line}\n  negative-sweeps: not swept -- ${reasons.map(([why, n]) => `${n} ${why}`).join(', ')}`
 }
 
 /**
