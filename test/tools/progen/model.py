@@ -1074,6 +1074,81 @@ def effect_violations(prog: N) -> list:
 
 
 
+def carries_a_function(t) -> bool:
+    """A type whose value can be a function: the closure a call answers with is one."""
+    return t is not None and t[0] == "fn"
+
+
+def escape_violations(prog: N) -> list:
+    """Closures that would carry a `var` cell out of the call that declares it.
+
+    A `var` local lives in the evaluation that declares it, and a `var` parameter is a cell the
+    caller lent that evaluation, so a closure may capture one by reference only while it stays
+    inside that evaluation (design principles 3.5, rule two). The front end refuses a closure
+    that leaves -- as the result of the declaring call, or handed to a callee that keeps what it
+    is given -- with SemanticDiag::ClosureCaptureEscapes. This mirrors the two exits the
+    generator can reach, so a program the language would refuse is discarded here instead: the
+    reference evaluator would happily answer for it, and a program the compiler does not accept
+    is not a finding of any pass.
+
+    Names are unique in a generated program, so a cell is identified by its name."""
+    bad = []
+    rets = {f.a["name"]: f.a.get("ret") for f in prog_funcs(prog)}
+
+    def cells_of(body: N, params) -> set:
+        """The cells this body's own evaluation owns: the vars it declares itself (not those of
+        a lambda or function written inside it, which belong to that one) and its var
+        parameters."""
+        out = {p[0] for p in params if p[2]}
+        stack = [body]
+        while stack:
+            n = stack.pop()
+            if isinstance(n, list):
+                stack.extend(n)
+                continue
+            if not isinstance(n, N):
+                continue
+            if n is not body and n.k in ("lam", "func"):
+                continue                                   # a cell of the body that made it
+            if n.k == "var":
+                out.add(n.a["name"])
+            stack.extend(n.c)
+        return out
+
+    def uses(node: N, cells: set) -> bool:
+        return any(x.k in ("ref", "assign") and x.a.get("name") in cells for x in walk(node))
+
+    def check(body: N, ret, params, where: str):
+        cells = cells_of(body, params)
+        if not cells:
+            return
+        closures = [x for x in walk(body) if x.k in ("lam", "func")]
+        holding = [c for c in closures if uses(c, cells)]
+        if not holding:
+            return
+        if carries_a_function(ret):
+            bad.append(f"{where}: a closure holds a cell of this call and the call's result "
+                       f"carries a function")
+            return
+        for call in (x for x in walk(body) if x.k == "call"):
+            args = call.c[1:]
+            if not any(a.k in ("lam", "func") and uses(a, cells) for a in args):
+                continue
+            if call.c[0].k != "ref":
+                continue
+            callee = call.c[0].a.get("name")
+            if callee in rets and carries_a_function(rets[callee]):
+                bad.append(f"{where}: a closure holds a cell of this call and is handed to "
+                           f"{callee}, whose result carries a function")
+
+    for f in prog_funcs(prog):
+        check(f.c[0], f.a.get("ret"), f.a.get("params", []), f.a["name"])
+    for n in walk(prog):
+        if n.k == "lam":
+            check(n.c[0], n.a.get("ret"), n.a.get("params", []), "<lambda>")
+    return bad
+
+
 HEAVY_KINDS = {"fmt", "join", "arr", "tup", "rec"}
 
 

@@ -34,6 +34,39 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 cpu_budget_ms = 150000
 timeout_ms = 300000
 
+# The seed the batch above leaves out, run on its own. `progen_check` holds only seeds whose every
+# cell passes, so the one seed that does not pass is left out of it -- see CHECK_EXCLUDED in
+# test/tools/progen/progen.py for why, and `progen.py show --seed 4` for the program. Left out is
+# not absent: this entry runs the same check over that seed alone, with `--with-excluded`, so every
+# run of this plan prints what it shows, and it is marked `known_fail` so that the reading is a
+# reading and not a decision the gate takes. When the crash goes away this entry passes and the
+# marker turns red until it is removed, and if the seed starts failing differently the marker turns
+# red the same way, because the mark pins its sentence.
+[[tests]]
+name = "progen_known_crash"
+desc = "The one seed the batch of progen_check leaves out (seed 4 of generate.VERSION 8), run through the same cross matrix on its own: the four cells of the pipeline `inline` (inline@nvm, inline@fvm, inline@jit, inline@prl) end in SIGSEGV while the same program runs under the other pipelines, so this is a crash of std::opt::inline and not a refusal of the front end. The expression that reaches it is the call `f8(...)` inside `let n69 = concat(...)` of `main`; neither `f8` alone nor either of its ingredients (a `for` loop over structs compared with the user `operator <`, and that operator on two struct literals) crashes on its own. Reproduction: `progen.py check --seeds 4 --with-excluded`, and `progen.py show --seed 4` for the program. The owner of that pass makes this entry green; until then it is the visible form of the seed the batch cannot hold."
+kind = "behavior"
+# A reading on every run, not only when someone runs the milestone layer: this entry costs four
+# compiler runs, so it is in the fast layer while the batch it belongs to stays in the milestone
+# one.
+tier = "fast"
+tool = "python"
+case = "../../../tools/progen/progen.py"
+args = ["${case}", "--camel", "${camel}", "check", "--seeds", "4", "--with-excluded"]
+expect_exit = 0
+expect_stdout_contains = ["0 wrong", "PASS"]
+expect_output_not_contains = ["FAIL"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+# Every run prints `seed 4 [inline@nvm]: CRASH: exit code -11;` and the summary, so a reader of the
+# gate sees the defect on every run instead of an absent seed.
+known_fail = true
+known_fail_owner = "the pass owner of std::opt::inline"
+known_fail_reason = "`std::opt::inline` ends in SIGSEGV on the `f8(...)` call of seed 4's `main` (CHECK_EXCLUDED in test/tools/progen/progen.py keeps the seed out of the batch for the same crash)"
+known_fail_msg = "seed 4 [inline@nvm]: CRASH"
+# Printed beside the mark on every run, so the reading does not depend on opening the log.
+known_fail_note = "known crash: seed 4 under std::opt::inline (inline@nvm, @fvm, @jit and @prl end in SIGSEGV); the other pipelines of the same program agree with the reference, so this is a crash of that pass and not a refusal of the front end, and no seed of this shape is missing from the batch -- it is this one, named."
+timeout_ms = 300000
+
 [[tests]]
 name = "progen_fixed"
 desc = "The archived progen findings that are recorded as fixed (test/cases/opt/progen/findings.json, key `fixed`): reduced programs on which std::opt::inline, std::opt or a pass after them ran code of a branch arm that is not taken, dropped or reordered an effect of a sync block, produced a wrong value, or crashed. Each runs under the rewrite sequence it was found with and under std::opt::inline, std::opt, std::opt::inline std::opt::dce, std::opt and std::opt::specialize, on the node VM, the bytecode VM, the JIT and the parallel scheduler, and every run must print exactly the output the generator's reference evaluator computed."
