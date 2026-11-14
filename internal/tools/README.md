@@ -86,7 +86,8 @@ altogether, so an unchanged re-run costs one build pass and the plan.
 | `-NoGpuWatch` | Leave out the gpu observation: every run that takes a reading also runs `test/plans/gpu` once and prints one `check=gpu-plans … mode=report` line. |
 | `-Changed` | Run the plans the change touches (`--changed`) instead of a written list. The change is listed here, where the base branch is readable, and handed to the host as `--changed-files`; a base that cannot be read is exit 2 before the push, and it never widens to the whole fast layer. |
 | `-ChangedBase <rev>` | The base for `-Changed`. Default `origin/develop`. Unreadable here is exit 2, naming the revision. |
-| `-UpdateGolden` | Rewrite the named plans' goldens instead of checking them. |
+| `-UpdateGolden` | Rewrite the named plans' goldens instead of checking them. It rewrites `kind = "snapshot"` goldens only. |
+| `-UpdateAstHashes` | Re-record the front-end AST snapshot: runs `test/tools/parsecheck/check.py snapshot --update` on the host, before the plan, and writes `test/plans/feat/parse/golden/ast_hashes.txt` back into this tree. It is the only way a new `.cml` case reaches that record, because `-UpdateGolden` cannot (`frontend.ast_snapshot` is `tool = "python"` and the runner never passes it `--update`). Name the parse plan beside it to verify the record in the same call. |
 | `-Clean` | Delete this worktree's host checkout, build directory included, and stop. |
 | `-StackTrace` | Diagnostic build with assertion stack traces. Its readings do not decide green or red. |
 | `-StateDir <dir>` | Override the settings file's `stateDir`. |

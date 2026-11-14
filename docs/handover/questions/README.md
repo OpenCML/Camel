@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：33 页
+## 现在在等作者：34 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -33,6 +33,7 @@
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 |
 | [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ |
 | [`2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge`](2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge.cn.md) | 一个既没有值读者、也没有同步后继的 `GATE`，怎么结束一条同步边？ |
+| [`2026-11-14-a-type-layer-that-names-four-objects-and-one-of-them-is-a-node-its-build-owns`](2026-11-14-a-type-layer-that-names-four-objects-and-one-of-them-is-a-node-its-build-owns.cn.md) | 类型层还按「对象地址」认四样东西：三样该留，一样是 `typeof` 的表达式节点 |
 | [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，这条入口现在读的是「有没有这条遍都一样」 |
 | [`2026-11-14-delete-neutral-only`](2026-11-14-delete-neutral-only.cn.md) | 作者要删 `algebra.cpp` 的 `neutral_only`，可它是活代码：删还是留？ |
 | [`2026-11-14-how-does-a-plan-say-no-diagnostic-at-all`](2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md) | 一个计划怎么表达「这次运行一个诊断都不产生」？ |

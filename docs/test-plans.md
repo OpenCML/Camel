@@ -439,7 +439,12 @@ local comparison.
   `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
   `test/cases/modules/tensor/comparison.cml` selects `test/plans/feat/modules/tensor/`. This names
-  the plan that mirrors the path; it cannot name a plan that lives outside that tree.
+  the plan that mirrors the path; it cannot name a plan that lives outside that tree. Its `also`
+  list adds plans that read *every* change under the directory beside the mirrored one, which is
+  what a plan reading a class of files rather than a directory of them needs: the `test/cases/` rule
+  carries `{ "plan": "feat/parse/frontend.plan.toml", "layer": true }`, because the front-end AST
+  snapshot hashes every `.cml` of the repository, so a case that lands unrecorded is a file that
+  changed and no plan read.
 - **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
   reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
   `test/plans/gpu/` (a change to the tiles C++ used to select only the CPU tiles plan),
@@ -1444,6 +1449,22 @@ Snapshot tests require:
   Golden file path, resolved relative to the plan file
 
 When the runner is called with `--update-golden`, the selected snapshot stream overwrites the golden file before comparison.
+
+That switch reaches `kind = "snapshot"` and nothing else. The one test of the front end that
+records a file of its own, `frontend.ast_snapshot`, is `kind = "behavior"` with `tool = "python"`
+(it runs `test/tools/parsecheck/check.py snapshot`), and the runner never passes it `--update`: its
+record is `test/plans/feat/parse/golden/ast_hashes.txt`, written by the tool. A `.cml` case added to
+the tree is therefore *not* recorded by `--update-golden`, and until it is recorded the parse plan
+reports it as a file with no reading. Record it with the tool itself, from the repository root:
+
+```bash
+python3 test/tools/parsecheck/check.py snapshot --update
+```
+
+Through the gate, `internal/tools/camel-remote.ps1 -UpdateAstHashes` runs exactly that on the build
+host, before the plan, and brings the file back into the calling tree; `-UpdateAstHashes -Plan
+test/plans/feat/parse/frontend.plan.toml` records and then verifies in one call. A lane on a
+workstation that cannot build has no other way to record it, which is why the switch exists.
 
 ## Differential Tests
 
