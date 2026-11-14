@@ -37,12 +37,23 @@
  *    design, and the sweep that untracked those files left such references behind on purpose
  *    (`examples/models/naive-in-expert-out/results/`); each one is counted and printed as local;
  *  - a path with a placeholder (`<module>.cml`, `*.json`, `{a,b}.cml`) is a pattern, not a claim;
+ *  - `./name.ext`, a `./`-prefixed path with no directory in it, is that same bare name's spelling
+ *    on a command line (`./counts.cml` takes the pass-name prefix `counts.cml` would): there is no
+ *    place in it to be wrong about, so it is the shorthand and not a claim;
  *  - a URL is not a path of this tree.
+ *
+ * Every leading `./` and `../` is taken off before the suffix rule is asked (`../../a/<file>.c` is
+ * asked as `a/<file>.c`): a comment quotes a path from the directory its sentence is about -- a
+ * test file's import example is written from where that test will sit, a transcript quotes what the
+ * tool printed -- so those segments are not evidence either way, and the suffix rule still demands
+ * exactly one file of the tree as the answer.
  *
  * The record directories are not read by default (`RECORD_DIRS`, the same rule the citation check
  * keeps): `docs/handover` and `docs/reviews` are the history of decisions, a page there quotes a
  * path as it stood when the decision was taken, and rewriting it would be rewriting the record.
- * `--path docs/handover` reads them anyway, which is how a sweep checks its own deletions.
+ * `--path docs/handover` reads them anyway, which is how a sweep checks its own deletions. A plan's
+ * `fixture/` trees are not read at all (`isFixtureTree`): they are a synthetic checkout another
+ * check builds and runs against, and one of their pages cites the file that must not be there.
  *
  * A `.md` fence is an example, not a claim: the path inside it is a path a command will write. So
  * are a plan's strings (`expect_output_contains`); only a comment line in code is read, and in a
