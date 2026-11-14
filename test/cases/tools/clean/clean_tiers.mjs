@@ -7,7 +7,7 @@
  * log, source-tree pollution the guard reports, and a source declaration. Two files must
  * survive because they are source, not build output:
  *
- *   - `stdlib/keep.cml` — a declaration file (`stdlib/*.cml`);
+ *   - `keep.cml` in the fake checkout's `stdlib/` — a declaration file (`stdlib/*.cml`);
  *   - `stdlib/keep.cmo` — a file that looks exactly like the pollution the source tier deletes,
  *     but it is in the fake checkout's git index (`git add`), so the tracked-path rule keeps it.
  *

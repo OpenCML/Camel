@@ -463,8 +463,8 @@ class EncodeSession {
                 ruleGraphPtrs,
                 // A graph compiled from the IR is not lifted from another: the lift is a runtime
                 // operator's own build (draft.cpp passes the list), and the compile-time one lifts
-                // into a program of its own (modules/transforms/jvp_instantiate.cpp), so nothing
-                // to reserve here.
+                // into a program of its own (the `jvp_instantiate.cpp` that was under
+                // `modules/transforms/`, since deleted), so nothing to reserve here.
                 {},
                 prepared.payloadShape,
                 prepared.staticSlots,

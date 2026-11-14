@@ -37,7 +37,7 @@
 2. **Q4 接口指纹里放什么**：导出函数传递捕获的模块级值、效应摘要、推断出的返回类型、泛型函数体都算接口——这些变了，导入方的缓存失效。
 3. **第 8 节命名空间的五个选择**：其中 `import x from m` 现在的实现（给模块起别名）与语言文档（导入一个名字）相反，需要定一个。
 
-**调查中最值得知道的事实**（第 1 节）：编译一个 84 行的程序，前端在建图与编码两步上做了约 2.5 万次堆分配（每个图节点约 67 次），占启动之后全部分配的七成；每张图被完整地构造三遍；`src/compile/gir/validate.cpp` 的校验没有任何调用点；命名空间比"做了一半"要完整（限定名、嵌套、`using`、类型同名命名空间都能用），缺的是块内的非限定查找、块里的值、别名与作用域规则。发现的现有缺陷见附录 B。
+**调查中最值得知道的事实**（第 1 节）：编译一个 84 行的程序，前端在建图与编码两步上做了约 2.5 万次堆分配（每个图节点约 67 次），占启动之后全部分配的七成；每张图被完整地构造三遍；`src/compile/gir/` 下的 `validate.cpp` 的校验没有任何调用点；命名空间比"做了一半"要完整（限定名、嵌套、`using`、类型同名命名空间都能用），缺的是块内的非限定查找、块里的值、别名与作用域规则。发现的现有缺陷见附录 B。
 
 ---
 
@@ -145,7 +145,7 @@
 
 没有检查的：类型（边两端的类型是否相容）、无环（靠取执行序时自然暴露）、图引用是否指向仍然存在的图。
 
-`src/compile/gir/validate.cpp`（412 行）里的 `assertGraphSealingPreconditions` 等三个函数是用 `ASSERT` 写的旧校验，除了彼此之外**没有调用点**。【读码，检索 `src/`、`include/`、`modules/`、`tools/`】
+`src/compile/gir/` 下的 `validate.cpp`（412 行）里的 `assertGraphSealingPreconditions` 等三个函数是用 `ASSERT` 写的旧校验，除了彼此之外**没有调用点**。【读码，检索 `src/`、`include/`、`modules/`、`tools/`】
 
 ### 1.8 遍与后端怎样使用图
 
@@ -229,7 +229,7 @@
 |---|---|
 | 节点种类 `BIND` | 无创建者（1.2） |
 | 节点种类 `DREF` 出现在运行期枚举里 | 只在建图期存在，编码时遇到即报错（`graph_encode.cpp#DREF`） |
-| `src/compile/gir/validate.cpp` 全文 | 无调用点（1.7） |
+| `src/compile/gir/` 下的 `validate.cpp` 全文 | 无调用点（1.7） |
 | ~~`src/compile/gir/debug_json.cpp`（304 行）~~ | 更正（2026-10-14）：它**有**调用点，调试器的 `tools/debugger/src/compile.cpp` 链接 `getGirJsonFromCompileGraph`；不是包袱，保留 |
 | `DraftGraphBuilder::looped_` | 读写函数都没有调用者 |
 | 四个锚点 `entry`/`exit`/`output`/`return` 加 `GCReturnKind` 的四个值 | 前端总是把 `output` 与 `exit` 设成同一个节点，`returnKind` 只用 `None`/`Self`（`include/camel/runtime/graph.h#GCReturnKind`） |
@@ -1527,7 +1527,7 @@ export func simplify(p: Program): Program! {
 
 | 步 | 状态 | 做了什么 | 没做的与原因 |
 |---|---|---|---|
-| 1 | **已完成（一项留待第 3 步）** | 删除 `src/compile/gir/validate.cpp` 与头文件、`DraftGraphBuilder::looped_`、没人用的 `gir::NodeType`、`addBindNode`；`GCNodeKind` 写明数值，`Bind`、`Dref` 标为保留；三个调度器、`std::cpp`、DOT 转储、调试器索引里为这两种节点留的分支删掉 | **`debug_json.cpp` 没有删**：本稿 1.11 与附录 B 的 D5 说它没有调用点，这是错的——调试器的 `/gir` 查询经 `tools/debugger/src/compile.cpp` 链接它（删掉后 `camel-db` 链接失败）。**四个锚点收成 `exit`/`result` 没有做**：`entry`/`output`/`return`/`returnKind` 在 23 个文件里有 165 处使用（内联、自动微分、四个后端），它改的正是第 3 步要重排的图头，放到第 3 步一起做 |
+| 1 | **已完成（一项留待第 3 步）** | 删除 `src/compile/gir/` 下的 `validate.cpp` 与头文件、`DraftGraphBuilder::looped_`、没人用的 `gir::NodeType`、`addBindNode`；`GCNodeKind` 写明数值，`Bind`、`Dref` 标为保留；三个调度器、`std::cpp`、DOT 转储、调试器索引里为这两种节点留的分支删掉 | **`debug_json.cpp` 没有删**：本稿 1.11 与附录 B 的 D5 说它没有调用点，这是错的——调试器的 `/gir` 查询经 `tools/debugger/src/compile.cpp` 链接它（删掉后 `camel-db` 链接失败）。**四个锚点收成 `exit`/`result` 没有做**：`entry`/`output`/`return`/`returnKind` 在 23 个文件里有 165 处使用（内联、自动微分、四个后端），它改的正是第 3 步要重排的图头，放到第 3 步一起做 |
 | 2 | **完成（验收数字的一项要等第 3 步，见下）** | **符号表**（`include/camel/core/symbol.h`）：`ACCS` 的字段名改存 `SymId`。**算子表**（`include/camel/core/operator_table.h`）：`OperId`；`OPER` 节点负载定长、不再内嵌 URI；原来三张按 URI 查的注册表（性质、类型规则、类型折叠）并入表项；新增 `mayFault`（缺省为真）与 `callsGraphs` 两个声明。**遍与后端按编号认算子**：核心认得的算子有编译期常量编号（`camel::core::oper::VarGet`、`MapArr` 等 `:mark/` 算子、`Isolate`），模块自己的遍把本模块的 URI 驻留一次再比较编号；"内建"（`:` 开头）、"带标记"（`:mark/`）、"赋值"（`:op/assn`）三族是表项上的标志。**类型表**（`include/camel/core/type/intern.h`）：`TypeId`；元组（帧布局与静态区布局在内）、数组、结构体、函数类型全部结构驻留。Q11 裁定之后，数组、元组、结构体到自身类型的 `as` 按结构判断、什么也不做。**函数类型不可变**：形参名以 `SymId` 存在类型对象里（参与驻留键，不参与相容）；捕获名移到图上（`GraphDraft`/`GCGraph::captureNames`）；前端正在建的函数的签名是 `OpenFunctionType`（不驻留，唯一的修改操作是填返回类型），其余一切函数类型都由类型表给出，没有修改操作——"驻留的类型不会被改"由类构造保证，不再靠 `ASSERT`。`CAMEL_TYPE_STATS=1` 按种类印出类型对象的个数与字节数 | 帧布局仍是永久空间里的元组类型对象（第 3 步换成图块里的 `TypeId` 数组）；算子的实现指针仍按 URI 向执行器管理器查（第 3 步的 `ExecPlan`） |
 | 3 | **进行中：3a 帧布局进图块；3b 定长节点、稠密序号、边存一份** | 每张图的帧布局不再是类型表里驻留的元组类型，而是在图自己那块内存的末尾就地构造（`TupleType::constructFrameLayout`），随图释放（4.1 的"槽位类型表"）。草稿只存槽位类型的数组（`GraphDraft::runtimeSlotTypes`），编码时才构造；帧仍按这个元组类型追踪槽位，所以回收器、四个后端与宏求值器不用改 | 布局仍是一个 `TupleType` 对象（每槽一个类型指针、一个类型码），不是设计里的 `TypeId` 数组；静态区布局仍驻留（静态区的元组会被宏求值器克隆，克隆可能比图活得久）；图引用表、位置列、`ExecPlan`、四个锚点收成 `exit`/`result` 还没做 |
 | 3b | **已完成** | 节点是 16 字节的定长记录（`GCNode`：种类、标志、槽位、`TypeId`、三组输入的起点、负载偏移），序号就是数组下标；每条边只在输入表里存一次，三组输入是一段连续的表项，下一个记录的起点结束它，末尾有一个哨兵记录；各种类的附加数据在负载区（8 字节一字，`nodeBodyAs`）；使用者方向不存，`GCGraph::uses()` 第一次被问到时建反向索引、随图释放，`normOutputsOf` 等读它，次序与唯一性与原先编码器存的相同。四个后端、宏求值器、导出器、`std::cpp`、调试器只是把 `n->dataType` 换成 `n->dataType()`、`nodeBlockCount()` 换成 `nodeCount()` | 负载按 8 字节一字而不是设计的 4 字节：`FUNC` 的被调图与 `OPER` 缓存的实现还是指针，要等图引用表与 `ExecPlan`；容量从"节点块"变成"节点、边、负载字"，`GraphTooLarge` 的数量名随之改变（见下） |
@@ -1907,7 +1907,7 @@ let u  = t as (int, int)    // 今天：同上，'(int, int)' to '(int, int)'
 | D2 | `import sqrt from math` 之后 `sqrt(9.0)` 是 `UnresolvedReference`：实现把单个名字当作模块的别名，而 `docs/language/05_modules.md` 5.2 把这种写法列为"引入一个名字" | `import sqrt from math` 之后调用 `sqrt(9.0)` | 实现与文档一致（8.2 N4） |
 | D3 | 写在函数体里的 `using namespace` 对整个模块生效 | `camel test/cases/compile/namespace_rules/p24_using_scope.cml` 打印 `2 11`（`b` 里没有写 `using` 也能用 `inc`） | 按 8.2 N2：`b` 里的 `inc` 是 `UnresolvedReference` |
 | D4 | 带类型标注的结构体字面量里有算出来的字段时是 `LiteralNotRepresentable`：`let p: P = { x: a, y: b }`；去掉标注可以 | 带类型标注的结构体字面量，字段是算出来的 | 通过，打印 `2` |
-| D5 | `src/compile/gir/validate.cpp` 没有调用点（`debug_json.cpp` 原列在此处，有误：调试器在用，见第 7 节的实施状态）；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
+| D5 | `src/compile/gir/` 下的 `validate.cpp` 没有调用点（`debug_json.cpp` 原列在此处，有误：调试器在用，见第 7 节的实施状态）；`GCNodeKind::Bind` 没有创建者；`DraftGraphBuilder::looped_` 没有读写者 | 检索 `assertGraphTreeSealingPreconditions`、`getGirJsonFromCompileGraph`、`addBindNode`、`setLooped` | 删除（第 7 节第 1 步） |
 | D6 | NodeVM 对冻结的图做 `const_cast` 并写入（把解析到的算子函数指针写回节点负载）。冻结图按约定是只读的（`docs/technical/17_graph_rewrite_api_contracts.md` 2.2） | 【读码 `src/passes/sched/nodevm/nodevm.cpp#NodeVMSchedPass`】；未构造出可观察的错误 | 解析结果放在后端自己的结构里（4.1 的 `ExecPlan`） |
 
 D4 与图模型无关，是做 `FILL` 的例子时碰到的。

@@ -33,7 +33,7 @@ object: **a C++ holder of a `Program` holds it only through `camel::runtime::Pro
 destructor. A bare `Program *` member is a defect unless it declares at the declaration one of the
 four reasons rule 7 lists, which `scripts/check-program-holders.mjs` reads and checks; the page
 that decided it is
-`docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
+`docs/handover/questions/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
 
 **Reference.** The address of an object: an `Object *` (or `Array *`, `String *`, ...), a
 `slot_t` whose static type is GC-traced, and also every pointer *into* an object: `data()` of an

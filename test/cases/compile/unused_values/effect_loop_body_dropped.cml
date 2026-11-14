@@ -3,7 +3,7 @@
  * body is not a sync block. Nothing depends on it, so it does not run -- the loop's value `3` is
  * what prints, not the three `i=` lines -- and the warning's help names the writing that does work
  * there, `do sync` (author's ruling of 2026-11-05, `080778522`; the reading is
- * `docs/handover/questions/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`).
+ * `docs/handover/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`).
  */
 
 func main(): int sync {

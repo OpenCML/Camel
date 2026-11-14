@@ -20,7 +20,7 @@ desc = "Every example beside the tutorial runs as the file it is: what a tutoria
 #
 #     [[tests]]
 #     name = "tutorial.examples.NN_name"
-#     case = "../../../docs/tutorial/examples/NN_name.cml"
+#     case = "../../../docs/tutorial/examples/<name>.cml"
 #     golden = "golden/tutorial_examples/NN_name.txt"
 #
 # and the output it prints today is recorded once with

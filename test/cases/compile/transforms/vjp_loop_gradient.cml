@@ -16,7 +16,7 @@
 // What this does *not* pin is the order of the rounds: every round's map is `ds + 2x*dx*i`, a sum of
 // scalars, and a sum does not care in which order it is added. `vjp` over a loop does not walk the
 // rounds backwards yet -- that is `docs/design/program-transforms` 4.2/4.3 and the open question
-// `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md` -- so a
+// `docs/handover/reviews/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md` -- so a
 // case that pinned the order would pin a number the tree cannot yet produce.
 import { grad, vjp } from vjp
 

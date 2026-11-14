@@ -669,7 +669,7 @@ export function sourceFingerprint(root = BASEDIR) {
 // absolute paths, the user name, the ccache launcher (a cache returns the same bytes it was given)
 // and the clang *version* -- probing it would make `-NoBuild` depend on PATH and refuse every
 // install after a toolchain update, which is why the question is open in
-// docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md.
+// docs/handover/reviews/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md.
 export const BUILD_OPTIONS_VERSION = 1
 
 /** `CAMEL_SKIP_PYTHON` as `cmake/Options.cmake` reads it: case-sensitive, the same four spellings. */

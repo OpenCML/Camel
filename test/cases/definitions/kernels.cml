@@ -1,4 +1,4 @@
-// The kernels of the operators that have a definition (stdlib/definitions/tensor.cml), on
+// The kernels of the operators that have a definition (stdlib/tensor_definitions.cml), on
 // inputs with special values, several shapes and axes, and pseudo-random values. Run as it is,
 // the kernels compute; run after test::expand_definitions, the definitions do: the two outputs
 // must be the same text, every element printed exactly (the shortest decimal that reads back to

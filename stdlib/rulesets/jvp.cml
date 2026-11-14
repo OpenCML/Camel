@@ -412,7 +412,7 @@ func subtract::<T>(x: T[...], w: T[...]): T[...] when is_float::<T>() {
 /// a number, `(T[...], T)` -- cannot be spelled here: a union in a parameter list is a syntax error
 /// (`Expected ',' or ')' before '|'`), so one key cannot hold both shapes with one rule, and this
 /// rule is the array-to-array one, which is the shape a layer norm writes. The gap and its
-/// measurements are `docs/handover/questions/2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md`.
+/// measurements are `docs/handover/reviews/2026-11-03-one-rule-key-cannot-hold-an-array-and-a-number.cn.md`.
 export rule jvp_subtract::<T>(x: T[...], w: T[...]) when is_float::<T>() {
     subtract(x, w) => (dx: T[...], dw: T[...]) => dx - dw
 }
@@ -485,7 +485,7 @@ export rule jvp_relu::<T>(x: T[...]) when is_float::<T>() {
 ///
 /// This rule is the smallest tangent that **recomputes a forward value**: `exp(x)` is written again
 /// on the right, and the cut has to carry it to the backward half as a residue. Whether it may is
-/// exactly the question `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
+/// exactly the question `docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
 /// asks -- `softmax` stopped there, `relu`'s mask did not, and the two differ only in what the
 /// recomputed call carries. So this rule is a measurement as much as a law.
 export rule jvp_exp::<T>(x: T[...]) when is_float::<T>() {
