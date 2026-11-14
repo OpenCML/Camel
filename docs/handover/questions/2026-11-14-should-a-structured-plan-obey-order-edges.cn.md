@@ -90,3 +90,6 @@ order 边不是凭空来的：`src/compile/gir/builder_resources.cpp#orderEffect
 `feat/para/exec_pred` 里那条"计划可以无视 order 边"的限制句连同它举的两个例子一起删了，换成一个
 反方向的用例 `order_edge.cml`（两次 `println` 之间唯一的边就是顺序边，`std::nvm` 与 `std::prl`
 的三种配置必须逐行相同）。
+## 默认建议（本轮按此开工）
+
+**要遵守。** 每一条 order 边都必须在结构化计划里被表达出来；一条计划若无法兑现某条 order 边，**按名字拒绝**并说明是哪一条，不许静默降级成数据依赖——因为静默降级会让「执行顺序」在计划层消失，而那正是原则 3.1 要保住的东西。`rendezvous` 这类「无序点」必须显式声明（`unordered`），声明后要与 `externalUnorderedAmbient`/`resourceIdentities` 对得上。
