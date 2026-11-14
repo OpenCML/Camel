@@ -300,4 +300,10 @@ class ExecPlan {
 /// the result.
 std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph);
 
+/// TEST-ONLY: builds the loop tables of `plan` again from `plan.topo`, exactly as buildExecPlan
+/// does once (buildLoopTables), so that a test pass that reorders a plan's `topo` gets the tables
+/// that order deserves -- and the same refusal for a loop that is not one range of it. Nothing in a
+/// run calls this: a plan is built once, with these tables.
+void rebuildLoopTablesForTests(const GCGraph &graph, ExecPlan &plan);
+
 } // namespace camel::runtime
