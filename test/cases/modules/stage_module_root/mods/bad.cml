@@ -1,0 +1,7 @@
+/// A module that does not parse: it uses `for`, which the language does not have.
+export func report(p: int): int sync {
+    for (let i = 0; i < 3; i = i + 1) {
+        println(i)
+    }
+    return p
+}
