@@ -6,7 +6,7 @@
 
 ## 1. 层与方向
 
-`utils` < `core` < `graph`（现在的 `src/runtime`）< `frontend`（`parse`、`compile`）< `execute`（`Context`、模块加载、遍的执行）< `backends` < `passes`；`modules`、`tools` 在最上，只经内核接口。只许上层引用下层，而 `core` 今天向上伸手八条（6.1 的 #1–#8），另有五处值层与 profiler 的落点留给后面（6.2）。
+`utils` < `core` < `graph`（现在的 `src/runtime`）< `frontend`（`parse`、`compile`）< `execute`（`Context`、模块加载、遍的执行）< `backends` < `passes`；`modules`、`tools` 在最上，只经内核接口。只许上层引用下层：`core` 今天向上伸手六条，另有两条同层耦合随 `Context` 上移自然断开（6.1 逐条）；`core` 里还剩五处落点留给后面（6.2）。
 
 ## 2. 今天：两处各在哪、被谁依赖
 
@@ -52,7 +52,7 @@
 ## 4. `graph_id.h`、`entry_args.h` 为什么下移
 
 - **`graph_id.h`**：`GraphId` 是 `enum class` 加一个计数器，零依赖。今天 5 个 `core` 头（`context.h`、`node_attrs.h`、`data/composite/func.h`、`rtdata/func.h`、`source/manager.h`）为了这一个 id，把 `graph` 层的头目录带进了 `core`。下移之后 `include/camel/core/` 里这 5 条边同时消失，另外 5 个包含者（`runtime/` 的 4 个与 `modules/graph/handle.h`）只换一行路径。受影响 10 个文件。
-- **`entry_args.h`**：它今天在 `execute`，而 `frontend` 的建图器（`src/compile/gir/builder.cpp` 与 10 个 `builder_*.cpp`，共 11 个文件）为了 `entryFunctionOrigin`、`unboundEntryParameters`、`boundEntryArguments` 三个查询向上包含它——这是 `frontend` → `execute` 的边，也是 `compile` 里唯一的向上引用。入口参数是"建入口图时把值绑成常量"，属于 `graph` 层，不是驱动的事；下到 `include/camel/runtime/` 之后这条边变成向下。`execute` 那半（`bindEntryArguments`、`writeEntryResultTo`、loader/saver 登记、`reportPassErrorValue`）留在同一页：下到 `graph` 之后，两个调用方——`frontend` 的建图器与 `execute` 的驱动——都在它上面，都是向下引用。受影响 21 个文件。
+- **`entry_args.h`**：它今天在 `execute`，而 `frontend` 的建图器（`builder.cpp`、9 个 `builder_*.cpp` 与 `builder_helpers.h`，共 11 个文件）为了 `entryFunctionOrigin`、`unboundEntryParameters`、`boundEntryArguments` 三个查询向上包含它——这是 `compile` 向上的三条边里最宽的一条（另两条都在 `builder_modules.cpp`，见 6.2 的第 7 条）。入口参数是"建入口图时把值绑成常量"，属于 `graph` 层，不是驱动的事；下到 `include/camel/runtime/` 之后这条边变成向下。`execute` 那半（`bindEntryArguments`、`writeEntryResultTo`、loader/saver 登记、`reportPassErrorValue`）留在同一页：下到 `graph` 之后，两个调用方——`frontend` 的建图器与 `execute` 的驱动——都在它上面，都是向下引用。受影响 21 个文件。
 
 ## 5. 内核接口目录
 
@@ -78,7 +78,7 @@
 | 8 | `src/core/module/userdef.cpp` → `camel/compile/gir/encode.h`、`camel/parse/parse.h` | 源里包含 | 同上 |
 | 9 | `src/compile/gir/builder*.cpp`（11 个文件）→ `camel/execute/entry_args.h` | `frontend` 向上拿三个建图期查询 | `entry_args.h` 下移，边变向下 |
 | 10 | `include/camel/execute/entry_args.h` → `camel/core/context/context.h` | `execute` → `core`，合法；下移后它会变成 `graph` → `execute`，**必须**改成前置声明 | 见 Q4 |
-| 11 | `modules/tensor/kernels/minmax.h` → `modules/math/minmax.h` | 模块 → 模块，今天唯一的一条模块间头引用 | 已改成 `camel/core/math/minmax.h`（模块 → `core`，向下） |
+| 11 | `modules/tensor/kernels/minmax.h` → `modules/math/minmax.h` | 模块 → 模块；同级的直接包含别处也有（`tiles` → `tensor` 等，6.2 的第 6 条），但这一条搬起来不改任何模块的接口 | 已改成 `camel/core/math/minmax.h`（模块 → `core`，向下） |
 
 ### 6.2 这次不动、要单列（别当成已经解决）
 
@@ -89,6 +89,8 @@
 | 3 | `src/core/mm/{block,gen,growable}.cpp`、`core/rtdata/{array,variant}.cpp` → `camel/profile/*`（5 个文件、5 个 include） | 内存分配要报给 profiler | profiler 改成 `core` 侧的回调或计数接口；不在本路 |
 | 4 | `include/camel/core/forward.h` → `camel/parse/ast/rule_head.h` | 前向规则索引要 `RuleMatch`；文件在本路独占名单里，但内容属于路线三 | Q6 |
 | 5 | `modules/` 的 45 个文件 → `execute/executor.h`、25 → `runtime/graph.h`、21 → `core/operator_table.h` | 模块今天直接拿内核 | `camel/kernel/` 立起来之后逐模块改（Q5） |
+| 6 | `modules/tiles/src/*.cpp`（7 个文件、17 个 include）→ `modules/tensor/{tensor.h,type.h,ops/registry.h,ops/support.h}`；`modules/pyplot/module.cpp` → `modules/python/embed.h`；`modules/graph/txn.cpp` → `src/passes/opt/generic/rewrite.h`；`modules/rewrite/{fact,module}.cpp` → `src/passes/sched/nodevm/nodevm.h` | 模块之间直接包含，模块今天是编译在一起的 | 第 7 路与路线三之后按模块边界收；`tiles` → `tensor` 是接口级的（张量类型），不是搬一个头能解决的 |
+| 7 | `src/compile/gir/builder_modules.cpp` → `camel/execute/executor.h`、`camel/execute/fault_isolation.h` | `compile` 向上的另两条边（故障隔离的两个标记名来自后者） | 与 `entry_args.h` 同一类：要先给 `compile` 一份它真要的接口，本路不动 |
 
 ## 7. `modules/math` 的头文件（本轮已落地）
 
