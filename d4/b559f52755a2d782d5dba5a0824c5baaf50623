@@ -1,0 +1,11 @@
+Say why a plan is unselectable, version a finding quoted by seed, and stop reading a missing CPU figure as a crossed budget
+
+Readings: `test/tools/run-tests.mjs` +26, `test/tools/e9diff/README.md` +29/-1, `test/tools/progen/progen.py` +30/-16, `test/tools/progen/README.md` +20/-6, `test/plans/perf/showcase_c2.plan.toml` +20, `test/plans/feat/opt/progen.plan.toml` +35/-17 (the seed-4 mark removal as it landed on develop), `test/plan-selection.json` one line. No C++, no case, no golden. Gate: `-Changed -ChangedBase be5cb26da` -- see the follow-up `c71598e33`, which is the reading this merge needed.
+
+**The mark audit, with the base it was taken against**: the whole tree holds **30 marks in 6 plan files** -- 9 as `= true`, 21 as a per-backend list -- and **0 are stale**. One message has changed: `perf/showcase_c2#implementations`, and the gate host **confirmed it as a host problem** (the `[XFAIL]` line shows the pin matched and the original message holds).
+
+**The denominator moved twice, and that is the finding, not a footnote**: before the merge this was counted as "28 in 7 files", and both numbers were wrong -- it was counted **before** the merge, and the **list-shaped marks were undercounted**. Since then `develop` took 18 more commits (new transforms marks) and the progen one was removed. **The object being counted changes, so any total has to carry a base sha**, exactly like every other reading tonight.
+
+Two comments, no rule changes: the file header now says the plan is **deliberately unselectable** and that the only thing that reaches it is `npm run test:all`; the `implementations` entry says its reading **has to be taken on the gate host** because a 600 s budget on a local machine never gets that far. **Both give "deliberate" a piece of evidence; without one, "deliberate" and "forgotten" look the same in the ledger.**
+
+**One reading worth keeping as a general rule**: the same case takes **300 s / 600 s locally and 1.87 s / 2.07 s on the gate host** -- 150x. **A difference of two orders of magnitude is not "slower", it is "hangs on that platform"**, and it should be treated as the latter until a load explanation is proved.
