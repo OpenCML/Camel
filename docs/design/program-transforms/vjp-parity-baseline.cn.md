@@ -75,7 +75,8 @@ exempt, 0 new
 
 2 + 4 + 10 + 5 + 14 + 23 = 58。A 与 F 是两条能动的方向，B/C/D/E 是账，不是债。
 
-每组一个代表例子，两侧逐行对照（`--tables` 的原样行）：
+每组一个代表例子，两侧逐行对照。差的那几组是 `--tables` 的原样行；"一致"那一组它不列（它只列差），
+那两行是从两份表里读出来的，读法与 `--tables` 的行同形。
 
 **一致（48 个键，一个代表）**——`+@2`，两侧都答：
 
@@ -162,9 +163,9 @@ F 的 16 个核心键：`argmax` `argmax@1` `argmin` `argmin@1` `concat` `idx_ta
    今天一条规则也没写过的命名空间，先要有"规则集能不能给一个模块的拼法写律"的决定。
 4. **7 个 `modules/nn` 键放最后**：规则集不 `import` 任何 `nn`，对齐它们要先定"规则集看不看得见 `nn`"。这与第 3 条最后那 5 个
    是同一个问题的两个面，先答一次，两处一起动。
-5. **24 行陈旧项随手删，但不单独成一笔**：它们描述的差已经不存在（`abs` `log` `sqrt` `maximum` `minimum` `where` `neg`
-   `divide` `gelu` `linear` `erf` `erfc` `rsqrt` `transpose` `sum_axis` `max_axis` `min_axis` `mean` `argmax_axis` `argmin_axis`
-   `stop_gradient` `pick_at` 等），删掉让清单等于树；单独删的合并只是把账本变短，不会让任何一行从差变成 both。
+5. **24 行陈旧项随手删，但不单独成一笔**：它们描述的差已经不存在（`abs` `log` `sqrt` `maximum` `minimum` `max` `min`
+   `where` `neg` `divide` `sum_axis` `max_axis` `min_axis` `mean` `argmax_axis` `argmin_axis` `transpose` `gelu` `linear`
+   `erf` `erfc` `rsqrt` `stop_gradient` `pick_at`——正好 24 行），删掉让清单等于树；单独删的合并只是把账本变短，不会让任何一行从差变成 both。
 
 ## 5. 复现
 
