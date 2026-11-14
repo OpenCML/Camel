@@ -1,0 +1,11 @@
+# lane-opsem -> develop (97f7681b7)
+
+判据读数 (R3 第一步: 算子定义成为唯一的效应来源):
+- 795 行 OPERATOR 全部带 accesses (0 行缺); 三行实例: :var/get read variable norm 0; :op/assn_i write variable norm 0; :io/println write ambient stdout + external:true
+- kNeverFaults 从此不存在 (git grep 为空); 86 条故障表进 builtin_semantics.cpp
+- 新旧判决差集为空: 纯 615 / state 5 / effectful 175 / undeclared 0; 永不出故障 104; 纯集 227 = 168 名单 + 59 转换, 与旧规则逐个相同
+- 证伪: stdlib/signatures/tiles.cml:51 的 uses driver 改成 uses var driver -> -Check stdlib-reference exit 1, 唯一差异 "declares a write of driver and the operator only reads it"; 改回 exit 0
+- 合并闸门 (批次): total 8390 / pass 8355 / fail 4 / skip 7 / known 24 (-Changed 选出 429 个 plan 文件); killed 0; 红集四条
+
+已知偏差 (原文): external 仍把"声明 effectful 但未逐条"的算子读成 external, 与定义有出入; uses var 只做校验、未迁移任何声明 (归 lane-usesvar).
+注释指向 docs/design/op-semantics/README.cn.md 4.2 与 docs/design/effects/plan.cn.md, 因为 analysis.cn.md 只在 fsh-dev 上.
