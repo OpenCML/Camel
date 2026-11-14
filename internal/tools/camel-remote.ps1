@@ -1008,7 +1008,10 @@ try {
     }
     $isMainCheckout = ($gitDir -ne '' -and $gitDir -eq $commonDir)
     if ($dirtyTracked.Count -gt 0) {
-        $allowed = @($AllowDirty | Where-Object { $_ -ne '' })
+        # A comma also separates, because `pwsh -File` hands every argument over as one string: the
+        # array syntax the parameter asks for is read literally there, so a whitelist written that
+        # way matches nothing and refuses every run. Measured, not predicted: it did exactly that.
+        $allowed = @($AllowDirty | ForEach-Object { $_ -split ',' } | Where-Object { $_ -ne '' })
         $foreign = @($dirtyTracked | Where-Object {
             $rel = $_
             -not ($allowed | Where-Object { $rel -eq $_ -or $rel -like $_ })

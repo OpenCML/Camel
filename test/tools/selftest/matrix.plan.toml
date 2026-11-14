@@ -1,5 +1,11 @@
 # Fixture of test/tools/selftest/run.mjs. It is not under test/plans: several of its tests fail on
 # purpose. What each must give is asserted in run.mjs.
+#
+# A failure this plan asks for is written as a `known_fail` mark with the wall it is stuck on, so it
+# is reported `[XFAIL]` and counted as a known failure -- the runner vocabulary for "expected to fail",
+# not a second word invented here. One entry stays red on purpose and cannot be marked:
+# `known_but_passes` is the fixture for "a mark that has healed is reported and must be removed", and
+# marking it would be the same mistake in the other direction.
 id = "selftest.matrix"
 order = 1
 tier = "fast"
@@ -21,6 +27,11 @@ expect_stdout_contains = ["42"]
 [[tests]]
 name = "stdout_differs"
 args = ["${case}", "stdout_differs_on_jit", "${backend}"]
+known_fail = ["jit"]
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture's `jit` prints 41 and the other three print 42: this entry exists to prove a per-back-end disagreement is reported (`differs from stdout_differs.nvm: stdout_normalized`)"
+known_fail_msg = "differs from stdout_differs.nvm: stdout_normalized"
+known_fail_note = "the fixture's jit prints 41 on purpose"
 
 [[tests]]
 name = "stdout_differs_known"
@@ -44,10 +55,20 @@ name = "column_differs"
 args = ["${case}", "column_differs_on_fvm", "${backend}"]
 expect_exit = 1
 expect_diagnostic_name = "RuntimeDiag::DivisionByZero"
+known_fail = ["fvm"]
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture's `fvm` puts the division by zero at another column: this entry exists to prove a diagnostic difference is reported (`differs from column_differs.nvm: diagnostics`), which the exit code alone would hide"
+known_fail_msg = "differs from column_differs.nvm: diagnostics"
+known_fail_note = "the fixture's fvm reports the same diagnostic at another column"
 
 [[tests]]
 name = "exit_differs"
 args = ["${case}", "exit_differs_on_prl", "${backend}"]
+known_fail = ["prl"]
+known_fail_owner = "the runner self-test"
+known_fail_reason = "the fixture's `prl` exits differently while printing the same text: this entry exists to prove the exit code is compared (`differs from exit_differs.nvm: exit_code`)"
+known_fail_msg = "differs from exit_differs.nvm: exit_code"
+known_fail_note = "the fixture's prl exits 0 where nvm exits 1"
 
 [[tests]]
 name = "fields_not_listed"
@@ -67,6 +88,10 @@ name = "starts_with_fails"
 backends = false
 args = ["${case}", "same", "std::nvm"]
 expect_stdout_starts_with = "2\n"
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "this entry exists to prove `expect_stdout_starts_with` is not a substring test: the program prints forty-two and the assertion asks that the output start with a two"
+known_fail_msg = 'stdout does not start with "2\n"'
 
 [[tests]]
 name = "exact"
@@ -81,6 +106,10 @@ desc = "A trailing space is a difference: the whole output is compared, byte for
 backends = false
 args = ["${case}", "same", "std::nvm"]
 expect_stdout_exact = "42 \n"
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "this entry exists to prove `expect_stdout_exact` compares the whole output: the program prints `42` and the assertion asks for a trailing space as well"
+known_fail_msg = "expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)"
 
 [[tests]]
 name = "exact_legacy"
@@ -109,3 +138,7 @@ desc = "The same assertion fails when the text is there: 42 is printed, so it is
 backends = false
 args = ["${case}", "same", "std::nvm"]
 expect_stdout_not_contains = ["42"]
+known_fail = true
+known_fail_owner = "the runner self-test"
+known_fail_reason = "this entry exists to prove `expect_stdout_not_contains` fails when the text is there: the program prints `42` and the assertion says it must be absent"
+known_fail_msg = "stdout contains '42'"
