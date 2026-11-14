@@ -99,17 +99,29 @@ a bare token that is not a switch at all: parameter binding is named-only, so `-
 stops with PowerShell's "no positional parameter accepts 'smoke'" instead of quietly becoming
 `-LocalConfig smoke` -- a run that looks right and reads another settings file.
 
-Exit codes: the build's or the plan's own; `4` when the `-NoBuild` guard refused or a host lock was
-not obtained; `3` when the host is short of disk; `2` when the worktree, the push, the transfer or a
-`-Check` name was wrong.
+Exit codes: the build's or the plan's own; `5` when the gpu observation read a case red that its
+baseline does not record; `4` when the `-NoBuild` guard refused or a host lock was not obtained; `3`
+when the host is short of disk; `2` when the worktree, the push, the transfer or a `-Check` name was
+wrong.
 
 The gpu plans are in no other gate: the fast layer is `test/plans/smoke` plus `test/plans/feat`, and
 `test/plans/gpu` is under neither, so a red case there was read by nothing. Every run that takes a
 reading (a plan, `-Changed`, or `-Check`) therefore ends with one line a lane can paste --
 `check=gpu-plans total=<n> pass=<n> fail=<n> skip=<n> red=[<names>] red_more=<n> seconds=<n>
-mode=report` -- and that is the whole of what the gate says about the layer. It never decides the
-exit code and is not one of the checks counted in the summary above it; it makes a red gpu case
-visible, and it does not repair one. `-NoGpuWatch` leaves it out, and says so.
+state=<read|noslot|nosummary> mode=report` -- and that is the whole of what the gate says about the
+layer. It is not one of the checks counted in the summary above it.
+
+A report-only reading with no ratchet is a list nobody has to act on, so the red set is compared with
+`internal/tools/gpu-plans.exceptions.txt` (one case name per line, `#` for provenance). A red the file
+records is a known red: printed, and it decides nothing -- a bit-exactness assertion that moves with
+the driver or a co-tenant must not block a merge. A red the file does not record, or a reading that
+named only part of its reds, makes the run exit `5`, because that is news and news is what a gate is
+for. A recorded name that is no longer red is accepted as it is, and the run says the file can be
+trimmed, so a fix never waits for the bookkeeping. `-NoGpuWatch` leaves the sweep out, and says so.
+
+None of this stands in for the fix: it makes a red gpu case visible and the next one visible without a
+person watching, and it repairs nothing. The layer is guarded when the file is empty because the cases
+were fixed, not because the reading is loud.
 
 Examples:
 
