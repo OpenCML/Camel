@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：29 页
+## 现在在等作者：30 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -36,6 +36,7 @@
 | [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，这条入口现在读的是「有没有这条遍都一样」 |
 | [`2026-11-14-delete-neutral-only`](2026-11-14-delete-neutral-only.cn.md) | 作者要删 `algebra.cpp` 的 `neutral_only`，可它是活代码：删还是留？ |
 | [`2026-11-14-how-does-a-plan-say-no-diagnostic-at-all`](2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md) | 一个计划怎么表达「这次运行一个诊断都不产生」？ |
+| [`2026-11-14-what-makes-a-reader-alive`](2026-11-14-what-makes-a-reader-alive.cn.md) | 一个格子「有活着的读者」是怎么算出来的？ |
 | [`2026-11-14-where-do-the-engines-still-keep-a-dead-write`](2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md) | 死写「可以删」之后，两个引擎分别卡在哪一处？ |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 |
 
