@@ -3837,6 +3837,7 @@ ca3d97c1b4140eb5 ok test/cases/opt/generic/interval_bounds_computed.cml
 ea9584bfca450b56 ok test/cases/opt/generic/interval_bounds_constant.cml
 3678fd4f027f82e2 ok test/cases/opt/generic/pruned_branch_keeps_condition_effect.cml
 18c652adaa7204b1 ok test/cases/opt/generic/recursion_unroll.cml
+a02921616f780e7d ok test/cases/opt/generic/rounds_exhausted.cml
 f0b01c65986bb7e0 ok test/cases/opt/generic/shape_unroll.cml
 de3e406180e622d0 ok test/cases/opt/generic/simplify_growth_budget.cml
 6e049f32641aa4d2 ok test/cases/opt/generic/specialization_survives_the_round.cml

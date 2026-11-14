@@ -279,6 +279,16 @@ class RewriteMemo {
 };
 
 /**
+ * The hash a `RewriteMemo` remembers about a graph: everything a pass of this file may look at
+ * (its nodes, constants, types, ports, regions, writings and signature), and nothing about where
+ * the graph object lives. Two reads of the same content answer the same value, so a caller that
+ * takes it before and after a round of passes learns which graphs the round changed -- the
+ * question `std::opt` answers to name the function it stopped short in. 0 for a graph with nothing
+ * to hash.
+ */
+uint64_t graphContentHash(const camel::runtime::GCGraph &graph);
+
+/**
  * Whether the pass named may rewrite something in a graph, read from the frozen graph. They are
  * necessary conditions, not exact ones: false means the pass would find nothing, true means it
  * might. Opening a draft of a graph costs more than looking at it, and most graphs have nothing

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-312 diagnostics: 291 errors, 21 warnings. 16 carry a machine-applicable edit, 296 say why they carry none.
+313 diagnostics: 291 errors, 22 warnings. 16 carry a machine-applicable edit, 297 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -331,6 +331,7 @@ prints one entry.
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
 | `0x04100017` | [RuntimeDiag::DefunctionalizationIncomplete](#defunctionalizationincomplete) | Warn | no |
 | `0x04100018` | [RuntimeDiag::JitWithoutCodeGenerator](#jitwithoutcodegenerator) | Warn | no |
+| `0x04100019` | [RuntimeDiag::OptimizationStoppedShort](#optimizationstoppedshort) | Warn | no |
 
 ## Internal (`InternalDiag`)
 
@@ -11259,6 +11260,39 @@ func main(): int sync {
     println('cmp {} {} {} {}'->format<cmp(1, 2, 3, 4, 0), cmp(1, 2, 3, 4, 3), cmp(4, 4, 4, 2, 5), cmp(9, 1, 9, 1, 6)>)
     println('fmix {} {} {}'->format<fmix(1.5, 2.5, 3.5, 4.5, 5.5, 0), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 4), fmix(1.5, 2.5, 3.5, 4.5, 5.5, 7)>)
     println('fcmp {} {} {} {}'->format<fcmp(1.0, 2.0, 3.0, 4.0, 0), fcmp(1.0, 2.0, 3.0, 4.0, 3), fcmp(4.0, 4.0, 4.0, 2.0, 5), fcmp(9.0, 1.0, 9.0, 1.0, 6)>)
+    return 0
+}
+```
+
+### OptimizationStoppedShort
+
+`0x04100019` · Warn · `RuntimeDiag::OptimizationStoppedShort`
+
+**Fix**
+
+None: choice: how far to unroll a recursion of non-static depth is the writer's decision, and the program is correct at every bound
+
+**Message**
+
+```text
+`std::opt` stopped short of a fixed point: {0}.
+```
+
+**Help**
+
+```text
+Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The round count is the pass's own bound, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.
+```
+
+**Example** (`test/cases/opt/generic/rounds_exhausted.cml`, run as `camel test/cases/opt/generic/rounds_exhausted.cml std::opt std::fvm`)
+
+```camel
+func total(n: int): int {
+    return if n <= 0 then 0 else n + total(n - 1)
+}
+
+func main(): int sync {
+    println(total(40))
     return 0
 }
 ```

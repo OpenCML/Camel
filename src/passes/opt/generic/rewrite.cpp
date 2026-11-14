@@ -650,6 +650,8 @@ void RewriteMemo::remember(std::string_view passName, const GCGraph *graph) {
     }
 }
 
+uint64_t graphContentHash(const GCGraph &graph) { return contentHash(graph); }
+
 const camel::runtime::Program *rewriteReachableGraphs(
     const camel::core::context::context_ptr_t &context, const camel::runtime::Program *program,
     std::string_view passName,

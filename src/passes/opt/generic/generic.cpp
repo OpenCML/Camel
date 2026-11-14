@@ -28,10 +28,12 @@
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/operator_instance.h"
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <optional>
@@ -1802,6 +1804,33 @@ const camel::runtime::Program *simplifyGraph(
         config.growthSpentNodes = &growthSpent;
     }
     RewriteMemo memo;
+    /// The contents of every graph `p` reaches, by name (see graphContentHash). Two graphs of one
+    /// name -- a graph and a newer version of it are one name -- are one entry, sorted, so a name
+    /// that appears twice is compared as a set.
+    const auto graphContentsOf = [&](const camel::runtime::Program *p) {
+        std::map<std::string, std::vector<uint64_t>> contents;
+        camel::runtime::RuntimeGraphDraftSession session(context, p);
+        for (camel::runtime::GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+            contents[graph->name()].push_back(graphContentHash(*graph));
+        }
+        for (auto &entry : contents) {
+            std::sort(entry.second.begin(), entry.second.end());
+        }
+        return contents;
+    };
+    /// The graphs whose contents differ between the two readings. A name the later reading has and
+    /// the earlier one does not is a graph the round added.
+    const auto graphsChangedBy = [](const auto &before, const auto &after) {
+        std::vector<std::string> changed;
+        for (const auto &entry : after) {
+            const auto found = before.find(entry.first);
+            if (found == before.end() || found->second != entry.second) {
+                changed.push_back(entry.first);
+            }
+        }
+        return changed;
+    };
+    std::vector<std::string> stoppedShort;
     const auto finish = [&](const camel::runtime::Program *result) {
         return rewriteReachableGraphs(
             context,
@@ -1818,6 +1847,14 @@ const camel::runtime::Program *simplifyGraph(
             config.checkScreens);
     };
     for (size_t round = 0; round < maxRounds; ++round) {
+        const bool lastRound = round + 1 == maxRounds;
+        // What the last round changes is what the message about a bound reached says, so its
+        // contents are taken before the round (a round is every stage below, and the graphs a
+        // stage adds -- a specialization of a call -- are graphs the round changed).
+        std::map<std::string, std::vector<uint64_t>> contentsBefore;
+        if (lastRound) {
+            contentsBefore = graphContentsOf(program);
+        }
         bool optChanged = false;
         program         = applyOptimizeRewritePass(context, program, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
@@ -1871,10 +1908,45 @@ const camel::runtime::Program *simplifyGraph(
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(program);
         }
+        if (lastRound) {
+            stoppedShort = graphsChangedBy(contentsBefore, graphContentsOf(program));
+        }
     }
-    CAMEL_LOG_WARN_S(
-        "Opt",
-        "std::opt: still changing after {} rounds (a recursion of non-static depth?)",
-        maxRounds);
+    // Every round keeps the program's meaning, so the result is right; what the user cannot see
+    // without this is that the optimization stopped in the middle of its work. The bound is not a
+    // fault of the program (a recursion whose depth is not static is a legal program), so this is
+    // a warning and the run continues with the program as it stands -- but a warning on the log
+    // channel is invisible at the default log level, which is why it is a diagnostic: the pass
+    // driver hands it to the place the compiler's other warnings go (`raisePassWarning`,
+    // src/execute/pass.cpp; the JIT's message is the shape it follows). `stoppedShort` names the
+    // graphs the last round changed, which is the question the user asks ("which function?"), and
+    // the entry wrapper is left out: `__root__` is where the run starts, not a function of the
+    // program, so naming it says nothing about what did not settle.
+    std::vector<std::string> settled;
+    for (const std::string &graph : stoppedShort) {
+        if (graph != "__root__") {
+            settled.push_back(graph);
+        }
+    }
+    std::string where;
+    for (size_t i = 0; i < settled.size(); ++i) {
+        if (i == 4) {
+            where += std::format(" and {} more graph(s)", settled.size() - i);
+            break;
+        }
+        if (i != 0) {
+            where += ", ";
+        }
+        where += "'" + settled[i] + "'";
+    }
+    if (where.empty()) {
+        where = "no graph";
+    }
+    raisePassWarning(
+        *context,
+        camel::core::error::RuntimeDiag::OptimizationStoppedShort,
+        camel::source::kInvalidOriginId,
+        std::format(
+            "all {} round(s) changed the program, the last changed {}", maxRounds, where));
     return finish(program);
 }

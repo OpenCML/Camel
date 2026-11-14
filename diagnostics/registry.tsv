@@ -554,6 +554,14 @@ runtime	DefunctionalizationIncomplete	0x100017	warn	Defunctionalization left {0}
 # and the program runs on the bytecode interpreter with the same result, which is why this is a
 # warning and not an error: what it reports is that the pass named does less here than its name says.
 runtime	JitWithoutCodeGenerator	0x100018	warn	`std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same.	The JIT generates code for x86-64 only: every other processor turns ENABLE_FASTVM_JIT off in cmake/Options.cmake (arm64 Linux and Apple Silicon), and a build may switch it off by hand. The pass is accepted rather than refused, because a command line has to run on every platform, so this says what the pass does here instead: the program is interpreted. Silence it with `-Wno-jit-without-code-generator`, or make it an error with `-Werror`.	none: choice: which processor a build targets is the build's, and a pipeline is written to run wherever it is compiled
+# `std::opt` runs a bounded number of rounds, because a recursion whose depth is not static would
+# otherwise unroll about one level per round for ever. Every round keeps the program's meaning, so
+# reaching the bound is no fault and does not stop the run; what it leaves behind is a program that
+# still holds the calls and the computations the next round would have rewritten. That is worth
+# telling the user -- and at the default log level a line on the log channel is never seen, which is
+# why it is a warning on the diagnostics channel, naming the graph (one function) the last round was
+# still changing.
+runtime	OptimizationStoppedShort	0x100019	warn	`std::opt` stopped short of a fixed point: {0}.	Every round of `std::opt` keeps the program's meaning, so the program that reaches this bound still does what it says; what it keeps is work the next round would have done (a call that is still a call, a computation left unfolded), which costs run time and nothing else. The round count is the pass's own bound, because a recursion whose depth is not static unrolls about one level per round and no bound ends it. Silence it with `-Wno-optimization-stopped-short`, or make it an error with `-Werror`.	none: choice: how far to unroll a recursion of non-static depth is the writer's decision, and the program is correct at every bound
 # #impl(f) (design principles 10.4): the Camel body of the function is its semantics and the
 # body-less declaration f of the same module is the operator that runs it. The graph builder
 # resolves the tag when it declares the module, so no pass reads it and it names no reader.
