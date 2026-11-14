@@ -41,6 +41,7 @@
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/loop_inputs.h"
+#include "camel/passes/test/loop_range.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/rules.h"
@@ -1099,6 +1100,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
+        TEST_PASS(kBreakLoopRangeTestPass, BreakLoopRangeTestPass),
+        TEST_PASS(kInterleaveLoopRangeTestPass, InterleaveLoopRangeTestPass),
         TEST_PASS(kLoopCollectSummaryTestPass, LoopCollectSummaryTestPass),
         TEST_PASS(kFactStoreTestPass, FactStoreTestPass),
         TEST_PASS(kFactLoadRulesTestPass, FactLoadRulesTestPass),
