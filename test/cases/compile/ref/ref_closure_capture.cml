@@ -1,0 +1,15 @@
+/**
+ * The control of `err_holds_ref_closure`: a closure that captures a plain value goes into a
+ * reference, so the refusal there is about the reference the closure holds and not about a closure
+ * being a closure.
+ */
+
+import state
+
+func main(): int sync {
+    let k = 7
+    let r = state::ref((x: int): int => x + k)
+    let f = state::get(r)
+    println(f(35))
+    return 0
+}
