@@ -288,6 +288,7 @@ add_subdirectory(modules/autodiff)
 add_subdirectory(modules/ckpt)
 add_subdirectory(modules/bytes)
 add_subdirectory(modules/graph)
+add_subdirectory(modules/state)
 # The translation layer of the rule verifier: a source list for modules/rewrite, not a module
 # (modules/verify/CMakeLists.txt).
 add_subdirectory(modules/verify)

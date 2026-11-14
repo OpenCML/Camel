@@ -1,0 +1,301 @@
+# `Ref<T>` is a handle the core provides: one resource per value (design principles 3.3, "handle
+# types"), created by `ref`, read by `get`, written by `set` and `update`, and passed as a value.
+#
+# The type's content may be any type but a `Ref`: a reference that can hold a reference would let
+# two boxes hold each other's handles, the count would never reach zero, and the program's values
+# would no longer be reclaimed by counting alone. The rule looks one layer at a time into what `T`
+# holds -- the type itself, a field, an element, a variant's payload, what a function takes and
+# returns, and the values a closure captures -- and each of the two refusals below has a control
+# beside it that must stay legal, so a refusal cannot be green for the wrong reason.
+#
+# Two references made in one body are two resources: no order edge joins the operations on one to
+# the operations on the other, while two operations on one reference keep the order they are
+# written in. One entry runs the program (the read of `same` answers 22 only if the order is
+# there) and the `inspect --gir` entry reads the edges themselves: that reading would silently
+# disappear -- with nothing failing -- if the operations were put back on one module cell.
+#
+# `state.cml` declares the operators; the kernels are C++ (modules/state). The four operations
+# declare what they touch on the handle (operator contract), so `get` is a read and `set`/`update`
+# are writes of the resource the handle value names.
+
+id = "compile.ref"
+order = 1011
+tier = "fast"
+tags = ["feat", "compile", "effects", "state", "ref"]
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+# ---- the content: any type, and the reference's own resource ----
+
+[[tests]]
+name = "ref.float"
+desc = "A reference holds a float: `ref` takes the value, `get` reads it, `set` writes it and `update` advances it with a `pure` function of the content. The old library version admitted `int` only."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_float.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '1.25\n2.5\n5.0\n',
+    'the float goes in, comes back, is written and advanced: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.closure"
+desc = "A reference holds a closure: the function value goes in as a value, is read back, called, and replaced by another closure with `set`."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_closure.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '42\n42\n',
+    'a closure goes into a reference and comes back callable: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.struct_control"
+desc = "The control of `ref.holds_ref`: a reference whose content is a record holding an integer is legal, so the refusal of `Ref<Ref<int>>` is about the reference inside the content and not about a content with a shape."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_struct.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '3\n30\n',
+    'a record of integers is a legal content: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.closure_capture_control"
+desc = "The control of `ref.holds_ref_closure`: a closure that captures a plain value goes into a reference and is called (7 + 35 = 42), so the other refusal is about the reference the closure holds and not about a closure being a closure."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_closure_capture.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '42\n',
+    'a closure with a captured value is a legal content: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+# ---- the content: no Ref, one layer at a time ----
+
+[[tests]]
+name = "ref.holds_ref"
+desc = "`Ref<Ref<int>>` is refused where the outer reference is made, by name: the content is a reference itself. The report says what the rule is (the count would never reach zero), not that two types did not match."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
+  assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
+  assert(text.includes('reclaimed by counting'), 'the consequence is named: ' + text)
+}
+'''
+
+[[tests]]
+name = "ref.holds_ref_closure"
+desc = "A closure that holds a reference is a content that holds a reference, so putting it into a reference is refused. A function type does not spell its captures, so the refusal follows the value into the closure it is and names what the closure captures."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref_closure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
+  assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
+  assert(text.includes('captures'), 'the report names the closure capture the Ref is reached through: ' + text)
+}
+'''
+
+# ---- two references are two resources ----
+
+[[tests]]
+name = "ref.content_survives_collection"
+desc = "A reference keeps its content across collections, including a value written into the box after the box's handle was promoted. The box is a C++ object the collector does not walk, so this is what its own root is for; under `--gc-stress` and `--gc-check verify=both,poison` a missing root reads a wrong value here."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_content_survives.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "poison,verify=both", "--gc", "generational", "${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '100000\nearly\npair 3\nwritten after the box was promoted\n',
+    'every content is what was written, across the collections: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.boxes_are_counted"
+desc = "A box's whole lifetime is a count, so the count is read: `--gc-check foreign` prints the blocks made, released and still live when the program stops. A thousand boxes are made and one is kept. The case holds the runtime to the arithmetic -- every box counted (`created` >= 1001), each block released or live and counted once (`created` = `released` + `live`), and the exit releasing exactly what was live (`disposed` = `live`) -- and not to one number: `released` is what a running collection freed, and the backends do not agree on it (an interpreter may still reach a box through the frame that made it)."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_boxes_are_counted.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out.startsWith('499500\n20000\n41\n'),
+    'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created >= 1001,
+    'every box the program made, and the one it kept, was counted: ' + line)
+  assert(counts.released + counts.live === counts.created,
+    'each block is released or live, and counted once: ' + line)
+  assert(counts.disposed === counts.live,
+    'the process releases exactly the blocks still live when it stopped: ' + line)
+}
+'''
+
+[[tests]]
+name = "ref.boxes_loop_ten"
+desc = "The same place makes ten boxes, one per element of a range, and each is dead when its element is done. `--gc-check foreign` reads the counters at exit: the boxes went (`released` >= 1) and the ones still counted are not the range's (`live` <= 10). `ref.boxes_loop_thousand` is the same program over a range a hundred times longer, and its `live` is read beside this one's: a mechanism that never freed anything while the program ran would answer the longer range with a hundred times more live blocks."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_boxes_loop_ten.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out.startsWith('10 41\n'),
+    'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created >= 11, 'every box was counted: ' + line)
+  assert(counts.released >= 1, 'the boxes of the elements that are done went: ' + line)
+  assert(counts.live <= 10, 'the ones still counted are not the whole range: ' + line)
+  assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
+  assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+}
+'''
+
+[[tests]]
+name = "ref.boxes_loop_thousand"
+desc = "The same program as `ref.boxes_loop_ten` over a range a hundred times longer: a thousand boxes made in one place, one per element, dead when the element is done. The judgement is the pair of readings: `live` here must be the size of `live` there (not a hundred times it) while the thousand are released (`released` >= 900), because a box is freed when its last handle goes and the element's handle goes with the element."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_boxes_loop_thousand.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-stress", "alloc=7,safepoint=3,kind=both", "--gc-check", "foreign,verify=both", "--gc", "generational", "${case}", "${backend}"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out.startsWith('1000 41\n'),
+    'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created >= 1001, 'every box was counted: ' + line)
+  assert(counts.released >= 900,
+    'the boxes of the elements that are done went while the program ran: ' + line)
+  assert(counts.live <= 10,
+    'the ones still counted are as many as the ten-element run made, not a hundred times more: ' + line)
+  assert(counts.released + counts.live === counts.created, 'each block is released or live: ' + line)
+  assert(counts.disposed === counts.live, 'the exit releases what was still live: ' + line)
+}
+'''
+
+[[tests]]
+name = "ref.unrelated_values"
+desc = "Two references made in one body are two resources, and their operations still run: `apart` writes once into each of its two references (33) and `same` writes twice into one and reads it back, which answers 22 only if the write order was kept (33 55)."
+kind = "behavior"
+case = "../../../cases/compile/ref/refs_unrelated.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '33\n55\n',
+    'the operations on two references and on one both run: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.unrelated_order"
+desc = "Two references made in one body are two resources: `camel inspect --gir` shows no ORDER edge in graph `apart` (the operations on `a` and on `b` are unrelated) and one in graph `same` (two writes to one reference keep the order they are written in). The body is not `sync`, so an order edge there is the resource's and not the block's."
+kind = "behavior"
+case = "../../../cases/compile/ref/refs_unrelated.cml"
+args = ["inspect", "--gir", "${case}"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const dot = input.normalized.stdout
+  const blocks = []
+  const stack = []
+  for (const line of dot.split('\n')) {
+    const t = line.trim()
+    if (t.startsWith('subgraph cluster_')) { stack.push({ name: null, order: [] }); continue }
+    if (t === '}') { if (stack.length) blocks.push(stack.pop()); continue }
+    if (t.startsWith('label="')) {
+      const m = t.match(/^label="(.*)";$/)
+      if (m && stack.length && stack[stack.length - 1].name === null) stack[stack.length - 1].name = m[1]
+      continue
+    }
+    if (t.includes('type="ORDER"') && stack.length) stack[stack.length - 1].order.push(t)
+  }
+  const of = (name) => blocks.find((b) => b.name === name)
+  const seen = blocks.map((b) => b.name + '=' + b.order.length).join(' ')
+  assert(of('apart') && of('same'), 'both bodies are in the dump: ' + seen)
+  assert(of('apart').order.length === 0,
+    'no order edge joins two unrelated references (graph apart): ' + seen + ' ' + of('apart').order.join(' '))
+  assert(of('same').order.length >= 1,
+    'two writes to one reference keep their written order (graph same): ' + seen)
+}
+'''

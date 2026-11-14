@@ -1122,6 +1122,8 @@ bool parseArgs(int argc, char *argv[]) {
                         checks.markCheck = true;
                 } else if (word.key == "config") {
                     checks.printConfig = true;
+                } else if (word.key == "foreign") {
+                    checks.printForeignResources = true;
                 } else if (word.key == "verify") {
                     if (word.value == "before" || word.value == "pre") {
                         checks.verifyBefore = true;
@@ -1137,7 +1139,7 @@ bool parseArgs(int argc, char *argv[]) {
                     }
                 } else {
                     std::cerr << "Invalid --gc-check word: '" << word.key
-                              << "'. Expected moves, poison, config or verify=...." << std::endl;
+                              << "'. Expected moves, poison, foreign, config or verify=...." << std::endl;
                     std::exit(1);
                 }
             }

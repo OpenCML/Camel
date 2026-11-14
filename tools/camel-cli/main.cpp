@@ -273,7 +273,23 @@ int runCommand(int argc, char *argv[]) {
     // the external resources the program still holds are released first, before the context
     // and the modules that own their release code go away (design principles 3.9).
     struct ReleaseExternalResources {
-        ~ReleaseExternalResources() { camel::core::rtdata::disposeAllForeignResources(); }
+        ~ReleaseExternalResources() {
+            // `--gc-check foreign`: what the program had not released when it stopped, read before
+            // anything is disposed, and the counters of a lifetime that is a count (design
+            // principles 3.3: a `Ref<T>` box is freed by the last handle to go).
+            const bool reportForeign = camel::core::mm::allocatorChecks().printForeignResources;
+            const auto foreignBefore = camel::core::rtdata::foreignResourceStats();
+            const size_t disposed    = camel::core::rtdata::disposeAllForeignResources();
+            if (reportForeign) {
+                std::cout << "FOREIGN_RESOURCES"
+                          << " created=" << foreignBefore.createdControlBlocks
+                          << " released=" << foreignBefore.releasedControlBlocks
+                          << " live=" << foreignBefore.liveControlBlocks
+                          << " disposed=" << disposed
+                          << " finalized=" << foreignBefore.finalizedWrappers << '\n';
+                std::cout.flush();
+            }
+        }
     } releaseExternalResources;
     ctx->runtimeDiagSink()->setConfig(runtimeDiagsConfig);
 

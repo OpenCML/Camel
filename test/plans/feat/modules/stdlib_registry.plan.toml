@@ -253,7 +253,12 @@ const oneNamePerSet = (what, rules, position, expected) => {
   }
 }
 oneNamePerSet('json.get', ops.filter((o) => o.uri === 'json:get'), 0, 'key')
-oneNamePerSet('get', ops.filter((o) => o.name === 'get'), 0, 'key')
+// `get` answers two questions after `state` landed, so it is two sets and not one loosened one:
+// the collection rules name their first position `key` (a member key or an element index), and
+// `state:get` names it `r` (the handle whose box is read). A reference is not a key, so the
+// split is written here; each family is still held to one name.
+oneNamePerSet('get the collection forms', ops.filter((o) => o.name === 'get' && o.module !== 'state'), 0, 'key')
+oneNamePerSet('get the state form', ops.filter((o) => o.name === 'get' && o.module === 'state'), 0, 'r')
 oneNamePerSet('json.as_int', ops.filter((o) => o.uri === 'json:as_int'), 0, 'j')
 oneNamePerSet('len', ops.filter((o) => o.name === 'len'), 0, 'x')
 oneNamePerSet('items', ops.filter((o) => o.name === 'items'), 0, 'm')

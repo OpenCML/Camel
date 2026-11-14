@@ -254,6 +254,16 @@ const MODULES = [
         declaration: true,
     },
     {
+        name: 'state',
+        title: '`state`: an explicit mutable reference',
+        kind: 'cpp',
+        // The declarations, in stdlib/state.cml: `Ref<T>` and the four operators `ref`, `get`,
+        // `set` and `update`. The module keeps the kernels and the resource contract of each
+        // operator (design principles 10.4), so nothing here is computed.
+        source: 'state.cml',
+        declaration: true,
+    },
+    {
         name: 're',
         title: '`re`: regular expressions',
         kind: 'cpp',
@@ -2711,6 +2721,8 @@ const EXCEPTIONS = {
                 'parameter 1 is `<W...>(N...) => (float, aux)`, a function type with a `with` pack',
             'jvp (transforms:jvp)#parameter':
                 'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
+            'update (state:update)#parameter':
+                'parameter 2 is `(x: T) => T pure`, a function type the operator applies inside itself; the declaration writes it `(x: T) => T`, so the two sides are one function type and this checker does not compare a function type',
             'first_with_as_param (transforms:first_with_as_param)#parameter':
                 'parameter 1 is `(...) => any`, a function type whose positions are not spelled',
             'remat (transforms:remat)#parameter':
@@ -2781,6 +2793,10 @@ const EXAMPLE_STOPS = {
             'the example compares the read against `encode(\'\')`, which is `bytes`\'s name and not this module\'s',
         'stdlib/fs.cml#write_bytes#1':
             'the example builds its `Bytes` with `encode(\'abc\')`, which is `bytes`\'s name',
+        'stdlib/state.cml#set#1':
+            'the example writes through `r`, a handle the surrounding program holds: an example program has no box to write',
+        'stdlib/state.cml#update#1':
+            'the example updates through `r`, a handle the surrounding program holds: an example program has no box to update',
         'stdlib/graph.cml#constant#1':
             '`n` is a node of the surrounding pass, and no example program has one',
         'stdlib/graph.cml#erase#1':

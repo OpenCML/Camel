@@ -185,6 +185,8 @@ bool selectAllocatorChecks(const AllocatorChecks &checks) {
     checksSelected.store(true, std::memory_order_release);
     return true;
 }
+
+const AllocatorChecks &allocatorChecks() { return selectedChecks; }
 bool selectBlockSpaceLimit(size_t bytes) {
     if (blockSpaceCreated.load(std::memory_order_acquire)) {
         return false;
