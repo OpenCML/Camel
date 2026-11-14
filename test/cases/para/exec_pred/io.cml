@@ -1,0 +1,25 @@
+/**
+ * External access: `println` is the effect, and the work around it is a module operator (`sqrt`), a
+ * literal array, an array built by a comprehension and a reduction over it. The lines are the
+ * program's observable order, and every back end must produce the same ones.
+ */
+import { sqrt } from math
+
+func scale(x: float): float {
+    return sqrt(x * x + 1.0)
+}
+
+func main(): int sync {
+    println("io 1", scale(3.0))
+    let xs = [1, 2, 3]
+    println("io 2", xs)
+    let ys = [x * x for x in xs]
+    println("io 3", ys)
+    println("io 4", scale(ys->reduce<(s: float, x: int) => s + float(x), 0.0>))
+    // Two higher-order calls over two arrays: neither waits for the other, and both are work the
+    // parallel scheduler cuts into tasks of its own.
+    let doubled = xs->map<(x: int) => x * 2>
+    let shifted = [x + 1 for x in ys]
+    println("io 5", doubled, shifted)
+    return 0
+}

@@ -1,0 +1,26 @@
+/**
+ * A plain chain: every statement of the body prints, so the order the lines come out in is the
+ * order the nodes ran in, and every call reads the value the one before it made. Nothing but the
+ * chain and those values orders the statements; on every back end the lines must come out in this
+ * order (the differential test `para.exec_pred` runs it on NodeVM and on the parallel scheduler).
+ */
+func step(n: int): int {
+    return n * 2 + 1
+}
+
+func main(): int sync {
+    println("linear 0")
+    let a = step(1)
+    println("linear 1", a)
+    let b = step(a)
+    println("linear 2", b)
+    let c = step(a) + step(b)
+    println("linear 3", c)
+    // Two calls neither of which waits for the other, and the sum that waits for both: the one
+    // place in this case where a back end may run two nodes at once, and the value only one of
+    // them can have made is what the last line prints.
+    let p = step(40)
+    let q = step(41)
+    println("linear 4", p + q)
+    return 0
+}
