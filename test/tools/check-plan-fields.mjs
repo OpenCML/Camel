@@ -78,13 +78,33 @@
  *   label-without-check  `kind = "negative"` with neither `expect_exit` nor `expect_signal`
  *   kind-unread          `kind` is missing, or is a value no block in the runner reads
  *
- * It is **ratcheted**: it prints its findings and the line
- * `plan-fields fields=<n> findings=<n> mode=report`, then compares the count with
- * `test/tools/plan-fields-baseline.json`. Findings that grow past that file exit non-zero -- by name
- * and by category -- and findings that come down exit zero with the line that says to accept the
- * new number (`--update-baseline` is the only writer). A missing baseline is a red too, never a pass
- * over nothing. This is what makes the check a wall rather than a reading: the gate runs it on every
- * run and its exit code decides, so "may not grow" holds and "came down" is the reward.
+ * It is **ratcheted**: it prints the line `plan-fields fields=<n> findings=<n> mode=report`, then
+ * compares the count with `test/tools/plan-fields-baseline.json`. Findings that grow past that file
+ * exit non-zero -- by name and by category -- and findings that come down exit zero with the line
+ * that says to accept the new number (`--update-baseline` is the only writer). A missing baseline is
+ * a red too, never a pass over nothing. This is what makes the check a wall rather than a reading:
+ * the gate runs it on every run and its exit code decides, so "may not grow" holds and "came down"
+ * is the reward.
+ *
+ * ## Two states, two reports, because a false red costs what a false green costs
+ *
+ * The baseline keeping a count means the tree can disagree with it in two different ways, and
+ * printing both as the same three hundred lines taught the reader to skip the list -- on the day it
+ * is the only useful thing there is.
+ *
+ *   ratchet broken   the count moved, or a category did while the total did not. Entries were added,
+ *                    removed or re-kinded, the baseline has to follow, and the per-entry list is the
+ *                    evidence: it is printed, with one line saying how many entries the two disagree
+ *                    on, and the exit code is non-zero.
+ *   in agreement     the count is exactly the baseline's and no category grew. Nothing is printed
+ *                    entry by entry, and nothing is claimed about the entries either: the report is
+ *                    the `ratchet=ok` line, and the exit code is zero.
+ *
+ * The list is therefore not "the report"; it is what a broken ratchet prints. Nor can the quiet
+ * case be described entry by entry: the baseline keeps a count and per-category counts, not
+ * per-entry identities, so with the total and every category unchanged the check has nothing to say
+ * about which entries they are -- and a line that says "N entries do not match" on every green run
+ * is a claim about nothing, read as noise, and noise is where the real red hides.
  *
  * `--enforce` is the stricter mode: *any* finding fails, baseline or not. It is what the entry
  * becomes once the list reaches zero, and the two are one edit apart.
@@ -360,25 +380,38 @@ function scanTree(rootDir) {
     return { findings, plansRead, entriesRead, fields: fieldsRead.size }
 }
 
-function report(result) {
-    for (const finding of result.findings) {
+// The per-entry list, and only the per-entry list: who calls it decides whether it is the report
+// (a broken ratchet, `--enforce`, `--report-only`) or noise (a baseline that is merely stale).
+function printFindings(findings) {
+    for (const finding of findings) {
         const where = finding.line > 0 ? `${finding.file}:${finding.line}` : finding.file
         const kind = finding.kind === undefined ? '<none>' : finding.kind
         console.log(
             `plan-field ${where} ${finding.name} [${kind}] ${finding.category} ${finding.field} (${finding.note})`,
         )
     }
+}
+
+// What was read, in two lines, whatever the verdict: the counts a reader compares across runs.
+function printReading(result) {
     const mode = ENFORCE ? 'enforce' : 'report'
     console.log(`plan-fields fields=${result.fields} findings=${result.findings.length} mode=${mode}`)
     console.log(
         `plan-fields read ${result.plansRead} plan file(s) and ${result.entriesRead} entries; ` +
             'a field the kind does not evaluate is not a test',
     )
+}
+
+function report(result) {
     if (ENFORCE) {
+        printFindings(result.findings)
+        printReading(result)
         return result.findings.length > 0 ? 1 : 0
     }
     if (REPORT_ONLY) {
         // The posture this check had before it became a wall: the same lines, no exit code.
+        printFindings(result.findings)
+        printReading(result)
         console.log('plan-fields report only: the count is not compared with the baseline')
         return 0
     }
@@ -418,11 +451,41 @@ function ratchet(result, baselinePath) {
         .map((category) => `${category}=${counted[category]}`)
         .join(' ')
     const where = path.relative(path.resolve(HERE, '..', '..'), baselinePath).split(path.sep).join('/')
+    // Which of the two disagreements this is decides whether the list is printed, and it is decided
+    // before anything is. `broken` is a ratchet that grew: the set of entries moved (the count, or a
+    // category under an unchanged total), so the baseline has to follow and the list is the evidence
+    // -- it names the entries. `lowered` also prints it, for the same reason: entries changed. Only a
+    // tree whose count is exactly the baseline's and whose categories are all within it is the other
+    // state -- nothing broke, the baseline is stale, and 300 lines of the findings it already
+    // accepted are what made a reader stop reading them.
+    const broken = delta > 0 || grown.length > 0
+    if (broken || delta < 0) {
+        printFindings(result.findings)
+    }
+    printReading(result)
     console.log(
         `plan-fields baseline=${baseline.count} delta=${delta >= 0 ? `+${delta}` : delta} ` +
-            `ratchet=${delta > 0 || grown.length > 0 ? 'grown' : delta < 0 ? 'lowered' : 'ok'} ` +
+            `ratchet=${broken ? 'grown' : delta < 0 ? 'lowered' : 'ok'} ` +
             `counted(${categoryLine})`,
     )
+    if (broken) {
+        // The set of entries moved, so the baseline no longer describes the tree: say in one line
+        // how many entries the two disagree on, then the rows themselves. This line is printed
+        // *only* here. An earlier revision printed it whenever the count happened to equal the
+        // baseline's as well -- "333 existing entries do not match, ratchet unbroken" beside
+        // `delta=+0 ratchet=ok` -- which is a claim about nothing: the baseline keeps a count and
+        // per-category counts, not per-entry identities, so with the total and every category
+        // unchanged there is no evidence of a disagreement to report. A line that appears on every
+        // green run says "something is wrong" every day and is read as noise, which costs exactly
+        // what the false green costs.
+        const moved =
+            delta === 0
+                ? `${result.findings.length} entries, a category moved under an unchanged total`
+                : `${Math.abs(delta)} entr${Math.abs(delta) === 1 ? 'y' : 'ies'} ${
+                      delta > 0 ? 'the baseline does not record' : 'the tree no longer carries'
+                  } (${baseline.count} -> ${result.findings.length})`
+        console.log(`baseline not in sync with the working tree: ${moved}, ratchet broken`)
+    }
     if (grown.length > 0 && delta <= 0) {
         console.log(
             `FAIL plan-fields a category grew while the total did not (${grown.join(', ')}): ` +
