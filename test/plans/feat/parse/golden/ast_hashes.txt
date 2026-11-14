@@ -3782,7 +3782,11 @@ bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
 a4d7f13da29104db ok test/cases/opt/effects/fold_keeps_arm_effect.cml
+2f78e2337519b9c3 ok test/cases/opt/effects/fold_keeps_arm_effect_chain.cml
 35692af85ef94ddb ok test/cases/opt/effects/fold_keeps_inner_fault.cml
+084501fa18bf0687 ok test/cases/opt/effects/fold_keeps_nested_arm_effect.cml
+a5088427058ceda2 ok test/cases/opt/effects/fold_keeps_recursion_arm_effect.cml
+58bb49925d7903b6 ok test/cases/opt/effects/fold_keeps_taken_arm_only.cml
 eacee1f7e1330a9d ok test/cases/opt/effects/fold_leaves_no_control_edge.cml
 79cf4d3529f71424 ok test/cases/opt/effects/inline_argument_effect.cml
 eb2ff0f38f12c634 ok test/cases/opt/effects/inline_keeps_stdout.cml
