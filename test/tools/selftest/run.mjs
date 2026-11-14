@@ -162,9 +162,9 @@ const backends = ['nvm', 'fvm', 'jit', 'prl']
 const expected = {
     plain: 'PASS',
     starts_with: 'PASS',
-    starts_with_fails: 'FAIL',
+    starts_with_fails: 'XFAIL',
     exact: 'PASS',
-    exact_fails: 'FAIL',
+    exact_fails: 'XFAIL',
     exact_legacy: 'PASS',
 }
 const expectAll = (name, status, exceptions = {}) => {
@@ -173,14 +173,20 @@ const expectAll = (name, status, exceptions = {}) => {
     }
 }
 expectAll('agree', 'PASS')
-expectAll('stdout_differs', 'PASS', { jit: 'FAIL' })
+// The six entries whose failure is the point are marked `known_fail` in the plan, so they report
+// `[XFAIL]` and are counted as known failures. One entry is red on purpose and stays red:
+// `known_but_passes` is the fixture for a mark that has healed, and marking it would be the same
+// mistake the other way round. If one of the marked ones ever passes, the runner reports
+// "marked known_fail on '<backend>' but passes: remove the mark" and this fixture turns red --
+// which is what keeps "expected to fail" from becoming "never fails".
+expectAll('stdout_differs', 'PASS', { jit: 'XFAIL' })
 expectAll('stdout_differs_known', 'PASS', { jit: 'XFAIL' })
 expectAll('known_but_passes', 'PASS', { prl: 'FAIL' })
-expectAll('column_differs', 'PASS', { fvm: 'FAIL' })
-expectAll('exit_differs', 'PASS', { prl: 'FAIL' })
+expectAll('column_differs', 'PASS', { fvm: 'XFAIL' })
+expectAll('exit_differs', 'PASS', { prl: 'XFAIL' })
 expectAll('fields_not_listed', 'PASS')
 expected['not_contains'] = 'PASS'
-expected['not_contains_fails'] = 'FAIL'
+expected['not_contains_fails'] = 'XFAIL'
 
 const actual = {}
 for (const [, status, name] of output.matchAll(/^\[(PASS|FAIL|XFAIL|SKIP)\] (\S+)/gm)) {
@@ -201,7 +207,7 @@ const mustContain = [
     'stdout does not start with "2\\n"',
     "stdout contains '42'",
     'expect_stdout_exact differs: first difference at offset 2 (expected 4 chars, got 3 chars)',
-    '[SUMMARY] total: 36, pass: 28, fail: 7, known failures: 1',
+    '[SUMMARY] total: 36, pass: 28, fail: 1, known failures: 7',
 ]
 for (const text of mustContain) {
     if (!output.includes(text)) problems.push(`output lacks: ${text}`)
