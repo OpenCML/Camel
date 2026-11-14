@@ -3,7 +3,7 @@
 
 """Canonical order: the numbering is the graph's, not the spelling's.
 
-Three readings, each named after the rule it belongs to (docs/design-principles.cn.md 9, "the
+Five readings, each named after the rule it belongs to (docs/design-principles.cn.md 9, "the
 graph interface does not see the spelling"):
 
   `order`  two programs that differ only in the order two values were captured in -- which is also
@@ -22,6 +22,20 @@ graph interface does not see the spelling"):
 
   `run`    the numbering is a query: `std::nvm` runs the program to the same output. A tie may
            change what a document says and never what the program does.
+
+  `program`  the minimum is taken over the whole program: two graphs that each reach their smallest
+           table under more than one arrangement, with a binder that reads the graph it binds
+           through that graph's port numbers, must write one canonical (`canonical=true`) document
+           whatever order the source captured the values in. A numbering that fixed one arrangement
+           of each graph before its binders were numbered would give the two spellings two
+           different tables.
+
+  `wide`   a tie wider than kMaxTieWidth is ordered by the node key -- the type of the value a node
+           makes is part of it, so eight captures of eight different types are ordered without
+           enumerating 8! arrangements -- and a part the key leaves equal and that is still that
+           wide is reported by `camel inspect --ties`, not arranged in the order the source wrote it
+           in. Both are read here: the swapped capture order writes one document, and the report has
+           no part left over the limit.
 
 `--camel` names the install under test (the gate passes `${camel}`). `--probe` prints the document
 it reads and exits 1: it is how this case is debugged by hand, and the plan never uses it.
@@ -108,6 +122,94 @@ func main(): int sync {
 }
 """
 
+# Two graphs that each reach their smallest table under more than one arrangement, and a binder
+# that reads the graph it binds by that graph's port numbers. Two cells are made and tied (the same
+# operator on two constants), the closure captures both, and the body reads them in the other order
+# in the second program -- so the capture table's order, which is the order the source mentioned
+# them in, moves. Per graph either arrangement reaches the same table; the binder is what decides
+# which one the program takes, and it decides it the same way in both spellings (design principles
+# 9.5: the minimum is taken over the combinations across graphs, not fixed per graph).
+PROGRAM_AB = """
+func main(): int sync {
+    var a = 1
+    var b = 2
+    let read = (u: int): int => {
+        let p = a
+        let q = b
+        return u + p + q
+    }
+    return read(0)
+}
+"""
+
+PROGRAM_BA = """
+func main(): int sync {
+    var a = 1
+    var b = 2
+    let read = (u: int): int => {
+        let q = b
+        let p = a
+        return u + p + q
+    }
+    return read(0)
+}
+"""
+
+# Eight captured values of eight different types: a tie group wider than kMaxTieWidth, and one whose
+# members the node key tells apart (the type of the value is part of the key), so the numbering
+# orders them without enumerating 8! arrangements. A group that the key leaves equal and that is
+# still that wide is reported by `camel inspect --ties` instead of being arranged in the order the
+# source wrote it in.
+WIDE_AB = """
+func main(): int sync {
+    var a = 1
+    var b = 2.5
+    var c = true
+    var d = "s"
+    var e = 3
+    var f = 4.5
+    var g = false
+    var h = "t"
+    let read = (u: int): int => {
+        let p = a
+        let q = b
+        let r = c
+        let s = d
+        let t = e
+        let w = f
+        let x = g
+        let y = h
+        return u + p + t
+    }
+    return read(0)
+}
+"""
+
+WIDE_BA = """
+func main(): int sync {
+    var a = 1
+    var b = 2.5
+    var c = true
+    var d = "s"
+    var e = 3
+    var f = 4.5
+    var g = false
+    var h = "t"
+    let read = (u: int): int => {
+        let y = h
+        let x = g
+        let w = f
+        let t = e
+        let s = d
+        let r = c
+        let q = b
+        let p = a
+        return u + p + t
+    }
+    return read(0)
+}
+"""
+
 
 def camel_env():
     env = dict(os.environ)
@@ -127,18 +229,36 @@ def run_camel(camel, path, args, timeout=180):
     )
 
 
-def jgir(camel, workdir, name, text):
+def jgir(camel, workdir, name, text, passes=("std::jgir",)):
     """The `std::jgir` document of a program, or None and the process when it did not compile."""
     path = os.path.join(workdir, name)
     with open(path, "w", encoding="utf-8", newline="\n") as handle:
         handle.write(text)
-    proc = run_camel(camel, path, ["std::jgir"])
+    proc = run_camel(camel, path, list(passes))
     if proc.returncode != 0:
         return None, proc
     start = proc.stdout.find("{")
     if start < 0:
         raise SystemExit(f"no jgir document in the output of {name}:\n{proc.stdout[:2000]}")
     return json.loads(proc.stdout[start:]), proc
+
+
+def inspect(camel, workdir, name, text):
+    """What `camel inspect --ties` says about a program, or None and the process."""
+    path = os.path.join(workdir, name)
+    with open(path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(text)
+    # `inspect` is a command, not a pass: the program is its target.
+    proc = subprocess.run(
+        [camel, "inspect", "--ties", path],
+        capture_output=True,
+        text=True,
+        timeout=180,
+        env=camel_env(),
+    )
+    if proc.returncode != 0:
+        return None, proc
+    return proc.stdout, proc
 
 
 def without_positions(value):
@@ -405,6 +525,88 @@ def read_run(camel, workdir):
     return "std::nvm printed '1 2', exit 0"
 
 
+def canonical_documents(camel, workdir, left_name, left, right_name, right):
+    """The two programs' canonical (`canonical=true`) documents, compared byte for byte."""
+    first, proc = jgir(camel, workdir, left_name, left, ("std::jgir", "canonical=true"))
+    if first is None:
+        raise AssertionError(f"{left_name} did not compile: {proc.stderr[:2000]}")
+    second, proc = jgir(camel, workdir, right_name, right, ("std::jgir", "canonical=true"))
+    if second is None:
+        raise AssertionError(f"{right_name} did not compile: {proc.stderr[:2000]}")
+    left_lines = document_text(first).splitlines()
+    right_lines = document_text(second).splitlines()
+    for index, (a, b) in enumerate(zip(left_lines, right_lines)):
+        if a != b:
+            raise AssertionError(
+                f"{left_name} and {right_name} wrote different canonical documents "
+                f"({len(left_lines)} and {len(right_lines)} lines) at line {index + 1}:\n"
+                f"  {left_name}: {a.strip()}\n"
+                f"  {right_name}: {b.strip()}"
+            )
+    if len(left_lines) != len(right_lines):
+        raise AssertionError(
+            f"{left_name} and {right_name} wrote canonical documents of different lengths "
+            f"({len(left_lines)} and {len(right_lines)} lines)"
+        )
+    return first, len(left_lines)
+
+
+def tie_report(camel, workdir, name, text):
+    """What `camel inspect --ties` says the numbering met in a program."""
+    report, proc = inspect(camel, workdir, name, text)
+    if report is None:
+        raise AssertionError(f"inspect --ties failed on {name} (exit {proc.returncode}):\n"
+                             f"{proc.stderr[:2000]}")
+    summary = [line for line in report.splitlines() if line.startswith("canonical ties:")]
+    if not summary:
+        raise AssertionError(f"inspect --ties printed no summary for {name}:\n{report[:2000]}")
+    return report, summary[0]
+
+
+def read_program(camel, workdir):
+    """Reading 4: the tie is taken over the whole program, not fixed per graph."""
+    document, lines = canonical_documents(
+        camel, workdir, "program_ab.cml", PROGRAM_AB, "program_ba.cml", PROGRAM_BA
+    )
+    if len(document["graphs"]) < 2:
+        raise AssertionError(
+            f"the program has one graph ({len(document['graphs'])}), so no binder reads a bound "
+            f"graph and the reading says nothing"
+        )
+    # The binding is what the two spellings had to agree on: the graph the closure binds is a graph
+    # of the document, its capture ports are numbered there, and the closure's context slots are the
+    # values in that order.
+    captures = {}
+    for graph in document["graphs"]:
+        if graph["capturePorts"]:
+            captures[graph["id"]] = graph["capturePorts"]
+    if not captures:
+        raise AssertionError("no graph of the document has capture ports")
+    report, summary = tie_report(camel, workdir, "program_ab.cml", PROGRAM_AB)
+    return (
+        f"the two capture orders wrote one canonical document ({lines} lines, "
+        f"{len(document['graphs'])} graphs, {len(captures)} with capture ports); "
+        f"inspect --ties: {summary.strip()}"
+    )
+
+
+def read_wide(camel, workdir):
+    """Reading 5: a tie wider than the enumeration limit is ordered by the key, not by the source."""
+    document, lines = canonical_documents(
+        camel, workdir, "wide_ab.cml", WIDE_AB, "wide_ba.cml", WIDE_BA
+    )
+    report, summary = tie_report(camel, workdir, "wide_ab.cml", WIDE_AB)
+    if "not enumerated" in report:
+        raise AssertionError(
+            "a tie part the key leaves equal was left over the limit on the eight-capture "
+            f"program, where the eight types tell the members apart:\n{report[:2000]}"
+        )
+    return (
+        f"eight captures of eight types, capture order swapped: one canonical document "
+        f"({lines} lines); inspect --ties: {summary.strip()}"
+    )
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--camel", required=True, help="the compiler of the build under test")
@@ -427,6 +629,8 @@ def main():
         readings.append("order: the two capture orders wrote one document")
         readings.append("tie: " + read_tie(args.camel, workdir))
         readings.append("run: " + read_run(args.camel, workdir))
+        readings.append("program: " + read_program(args.camel, workdir))
+        readings.append("wide: " + read_wide(args.camel, workdir))
     print("canonical order: PASS")
     for reading in readings:
         print(f"  {reading}")
