@@ -119,6 +119,13 @@
 #     entries that leaves out instead of leaving it to the reader: the line after "N run" names every
 #     `planStage` entry this run skipped, and a run that named one prints that it is not part of
 #     `all`. Both read the table as it stands, so a new `planStage` entry appears there by itself;
+#   * an entry marked `reportOnly` is not a wall yet: it runs on every gate and prints one line a
+#     lane can paste, `check=<name> findings=<n> mode=report`, where the number is the checker's own
+#     count and never a second count kept here. Its exit code does not decide the run's, so `-Check
+#     all` stays green while the number is still coming down; the closing summary tags it `report
+#     only`, because a red check that does not fail the run must not be read as a green one either.
+#     An entry becomes a wall by losing that marking, and the checker's own `--enforce` is the mode
+#     it then runs in;
 #   * the stages are build -> plan -> checks, so one call answers both questions and a failing plan
 #     still gets its checkers (their readings are not thrown away with the plan's);
 #   * the run exits non-zero when any checker failed, and the exit code is the plan's when it failed,
@@ -323,6 +330,15 @@ $checkers = [ordered]@{
     # the gate's criteria are untouched and it runs in the same environment as every other command
     # in this script, with no per-stage prefix of its own.
     'gate-static'         = @{ script = 'scripts/release-gate.mjs'; args = @('--only', 'static'); compiler = $true }
+    # --- report only -----------------------------------------------------------
+    # The checks the target architecture asks for before they are walls: they run on every gate and
+    # publish their own reading, and their exit code does not decide the run's. `findings` is the
+    # `sed -E` expression that reduces the checker's own summary line to its count, so the number
+    # printed here is the number the checker printed -- the list is one work item, and the number
+    # coming down is what this line exists to show. `--enforce` is deliberately absent: the checker
+    # offers it as the mode this entry becomes once its list is empty (`--enforce` exits 1 while a
+    # holder remains), and a lane that switched it on now would gate 51 holders on 2026-11-14.
+    'program-holders'     = @{ script = 'scripts/check-program-holders.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-program-holders: ([0-9]+) C\+\+ Program holder.*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both
@@ -928,6 +944,27 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
         # interpreter because their generators are python (see the table above).
         $interp = if ($entry.interpreter) { $entry.interpreter } else { 'node' }
         $shownCommand = "$interp $($entry.script) $($entry.args -join ' ')$camelArg"
+        if ($entry.reportOnly) {
+            # The same invocation, with one difference that is the whole point of the entry: its
+            # output is captured so the reading can be reduced out of the checker's own summary, and
+            # its exit code is kept out of `checkfail`, so a report that finds something does not
+            # turn the gate red. The reading is `unknown` when the checker printed no summary (a
+            # missing script, an early refusal) -- never a zero this run did not measure.
+            $readingFile = "$remoteScratch/check-$checkName.out"
+            $checkBlocks += @"
+
+echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
+out='$readingFile'
+$shownCommand > "`$out" 2>&1
+c=`$?
+cat "`$out"
+n=`$(sed -nE '$($entry.findings)' "`$out" | head -n 1)
+rm -f "`$out"
+echo "check=${checkName} findings=`${n:-unknown} mode=report"
+echo "[camel-remote] --- ${checkName}: exit `$c ---"
+"@
+            continue
+        }
         $checkBlocks += @"
 
 echo '[camel-remote] --- check ${checkName}: $shownCommand ---'
@@ -1353,11 +1390,17 @@ exit `$code
     # One line per checker: the output above is the command's own, and this list says which name
     # each exit code belongs to, next to the run's exit code.
     if ($checkResults.Count -gt 0) {
-        $checkFailed = @($checkResults | Where-Object { $_.exit -ne 0 })
+        # A report-only entry's exit code does not decide the run, so it must not be counted in
+        # `failed` here -- and it must not vanish either, because a number nobody sees cannot be
+        # watched coming down. It is counted as run, and named as report only in the list below.
+        $checkFailed = @($checkResults | Where-Object { $_.exit -ne 0 -and -not $checkers[$_.name].reportOnly })
         $checksSeconds = if ($null -ne $checksStartedAt) { [math]::Round(($finishedAt - $checksStartedAt).TotalSeconds) } else { 0 }
         Write-Host ("[camel-remote] checks: {0} run, {1} failed ({2} s)" -f `
             $checkResults.Count, $checkFailed.Count, $checksSeconds)
-        foreach ($result in $checkResults) { Write-Host ("[camel-remote]   {0} exit {1}" -f $result.name, $result.exit) }
+        foreach ($result in $checkResults) {
+            $only = if ($checkers[$result.name].reportOnly) { ' (report only: does not decide the run)' } else { '' }
+            Write-Host ("[camel-remote]   {0} exit {1}{2}" -f $result.name, $result.exit, $only)
+        }
 
         # `N run` above is the static layer, not the whole table, and that count has been read as
         # "every check ran" while a named-stage check had not run at all. So the count is followed by
