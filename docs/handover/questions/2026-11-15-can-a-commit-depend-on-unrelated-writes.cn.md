@@ -82,4 +82,42 @@ is」）。**A 里提交结果没有变化，B 里有变化**——如果 A 的�
 
 ## 6. 一句可以带走的话
 
-> **不是「不可判」，是「判错了」——它判的是草稿，而交付的是图。**
+> **不是「不可判」，是「判错了」——它判的是草稿，而交付的是图。**## 7. 机制已定位并修复
+
+上一节把「落地那一步判错了」定位到一次比较，这一节是它的名字、修法和证据。
+
+`RuntimeGraphDraftSession::commit` 决定「这张图还沿用旧版本吗」时调用 `sameContent(旧图, 编码后的副本)`。
+`sameContent` 逐个比了节点列、端口、闭包、权限/属性/区域、`writings`、区域表和静态槽，**唯独没比
+`orderEdges`/`orderEdgeCount` 与 `syncEdges`/`syncEdgeCount`** ——这四条是冻结图自己的旁挂数组
+（`include/camel/runtime/graph.h`，`GCGraphNativePayload`），既不是端口也不是节点列的一项。
+
+于是「只写了一条边」的编辑被判成「内容相同」：编码后的副本被 `releaseRuntimeGraph(copy)` 释放，
+提交把旧图交回去。补这四条字段就是全部改动。语义因此干净：
+
+- 编码与旧图的比较**只决定要不要新版本号，不决定要不要保留一次编辑**；
+- 一次真正什么都没改的事务，比较仍为真，旧图仍被沿用、副本仍被释放——这个优化不能丢。
+
+没被这个比较看、也**不该**被它看的还有两项：`name()` 是诊断用的标签，`flags()` 是每张图的记账，
+两者都不是图的内容。除此之外，这个比较现在没有盲区。
+
+### 证据（同一份用例，两次构建）
+
+`test::edges_edit_only`（`test/plans/feat/opt/edges.plan.toml`）在一张**合法**图上只写一条 sync 边：
+用户是「还没有前驱的语句」，前驱是它**够不到**、也没有同步用户的一个节点；节点一个不加不删不改，
+那条边就是全部差异。比较未修时：
+
+    [same-probe] graph=main sameContent=1 syncOld=8 syncCopy=9 discard=1
+    EDITONLY sync wrote=1 before=8 after=8 sync_in=0 mine=0 reused=1
+
+——编码器写了边（`syncCopy=9`），比较说「同一张图」（`sameContent=1`），副本被丢弃（`discard=1`），
+交回来的图上没有那条边（`after=8`、`mine=0`），而且就是旧对象（`reused=1`）。修好之后：
+
+    EDITONLY sync wrote=1 before=8 after=9 sync_in=1 mine=1 reused=0
+    EDITONLY untouched reused=1
+
+——边到了图上，而「什么都没改」的事务仍然沿用旧版本（第二行）。
+
+### 缺口：这一笔在本树没有 Camel 层用例
+
+今天没有能从源码写边的算子（`set_sync_predecessor` 已随 `0e860af5c` 的 Revert 消失），
+所以证据是 `test::` pass 的两次读数，不是一条 `.cml` 用例。
