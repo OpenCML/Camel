@@ -382,7 +382,7 @@ P4 的终点：
 | `modules/tensor/type.cpp#tensorFactsOf` 的 `isNumericUnknown()` 分支 | 读过渡类型的事实（无元素类型） | 该分支随标记一起删；事实只剩"数值数组"一种 |
 | `modules/tensor/ops/support.cpp#tensorOf(facts)` 的 `!facts.dtype` 两支 | 造过渡类型（`numericUnknown` / `numericUnknownFromForms`） | 元素类型必有时删掉，改成断言 |
 | `modules/tensor/ops/vjp.cpp#vjpTensorType()` | VJP 结果类型是过渡类型（`ArrayType::numericUnknown()`） | 改为由被微分值的切线类型给出具体元素类型 |
-| `include/camel/core/derivative.h`/`src/core/derivative.cpp#setTangentType`/`statedTangentType` | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
+| `include/camel/core/derivative.h` 与 `src/core/derivative.cpp` 的 `setTangentType`/`statedTangentType` 钩子 | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
 | `modules/autodiff/pullback.cpp#carriesGradient` 的 `Array` 分支 | 同上（`tangentTypeOf` 判据） | 可恢复为 `carriesGradient(elemType)` |
 | `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
 | `modules/tensor/ops/gradient_ops.cpp#registerTensorTangentSpace` | 判断过渡类型有没有切线 | 随钩子删除：切线类型由元素类型给出 |

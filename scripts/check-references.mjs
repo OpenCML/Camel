@@ -88,9 +88,9 @@ const RECORD_DIRS = new Set(['docs/handover', 'docs/reviews'])
 /**
  * A synthetic checkout another check builds and runs against: the `fixture/` trees of the plans.
  * A path in one of their pages is relative to *that* tree -- a `src/<name>.c` there is the
- * fixture's own file beside its `notes.md`, and a fixture whose whole point is a file that is not
- * there would be reported forever. The same reason the record directories are not read, one step
- * further out.
+ * fixture's own file beside the page that cites it, and a fixture whose whole point is a file that
+ * is not there would be reported forever. The same reason the record directories are not read, one
+ * step further out.
  */
 function isFixtureTree(full) {
     const rel = path.relative(ROOT, full).split(path.sep).join('/')
