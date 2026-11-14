@@ -351,6 +351,9 @@ class Evaluator {
     Value mergeValues(Activation &act, const std::string &cond, const Value &a, const Value &b);
     Value evalEagerBranch(Activation &act, const Value &cond, std::span<const gc_node_ref_t> arms);
     std::optional<Value> probeSpecialClosure(Activation &act, gc_node_ref_t ref);
+    /// The element of an aggregate a deferred closure marker (`evalFill`) stands for, evaluated
+    /// with closures wanted; nothing when the element cannot be evaluated or is not in a FILL.
+    std::optional<Value> deferredElement(Activation &act, gc_node_ref_t aggregate, size_t index);
     std::deque<LinearFrame> linearFrames_;
     std::vector<LoopClosureRef> loopClosures_;
     const HoleCall *holeCall_ = nullptr;
@@ -3047,6 +3050,64 @@ std::optional<Value> Evaluator::probeSpecialClosure(Activation &act, gc_node_ref
     }
 }
 
+/// A closure element of an aggregate is left as a marker when nothing at the point that builds
+/// the aggregate wants functions as values (see evalFill). An access that reads the element back
+/// -- a call of it, or a closure that captures it -- wants the value, so it is evaluated here,
+/// through the FILL the projection reads, with closures wanted.
+///
+/// The marker exists so that a (value, pullback) pair whose pullback the exported path never
+/// uses emits nothing; it must not outlive that assumption. An element that cannot be evaluated
+/// stays a marker: it is only ever reached where the export would have failed anyway.
+std::optional<Value> Evaluator::deferredElement(
+    Activation &act, gc_node_ref_t aggregate, size_t index) {
+    GCGraph *g           = act.graph;
+    gc_node_ref_t source = aggregate;
+    for (size_t steps = 0; steps < 8; ++steps) {
+        const auto *header = g->node(source);
+        if (header == nullptr) {
+            return std::nullopt;
+        }
+        if (header->kind == GCNodeKind::Fill) {
+            const auto slots = g->nodeBodyAs<camel::runtime::GCFillBody>(source)->slots();
+            const auto refs  = g->withInputsOf(source);
+            for (size_t k = 0; k < slots.size() && k < refs.size(); ++k) {
+                if (static_cast<size_t>(slots[k]) != index) {
+                    continue;
+                }
+                ++closuresWanted_;
+                try {
+                    Value element = eval(act, refs[k]);
+                    --closuresWanted_;
+                    return element;
+                } catch (const ExportError &) {
+                    --closuresWanted_;
+                    return std::nullopt;
+                }
+            }
+            return std::nullopt;
+        }
+        // A cast, a copy and a gate pass their input on unchanged: the aggregate a projection
+        // reads is the one behind them.
+        if (header->kind != GCNodeKind::Cast && header->kind != GCNodeKind::Copy &&
+            header->kind != GCNodeKind::Gate) {
+            return std::nullopt;
+        }
+        const auto norm = g->normInputsOf(source);
+        if (header->kind == GCNodeKind::Gate && norm.empty()) {
+            const auto with = g->withInputsOf(source);
+            if (with.empty()) {
+                return std::nullopt;
+            }
+            source = with.back();
+        } else if (!norm.empty()) {
+            source = norm.back();
+        } else {
+            return std::nullopt;
+        }
+    }
+    return std::nullopt;
+}
+
 Value Evaluator::mergeValues(
     Activation &act, const std::string &cond, const Value &a, const Value &b) {
     std::vector<Value> la, lb;
@@ -4291,20 +4352,32 @@ Value Evaluator::symbolicIntArray(
 }
 
 Value Evaluator::evalAccs(Activation &act, gc_node_ref_t ref) {
-    GCGraph *g         = act.graph;
-    const Value source = eval(act, g->normInputsOf(ref).front());
+    GCGraph *g               = act.graph;
+    const gc_node_ref_t from = g->normInputsOf(ref).front();
+    const Value source       = eval(act, from);
+    // The read-back a deferred closure waits for (see deferredElement): the element is wanted
+    // here, so it is evaluated instead of being passed on as the marker evalFill left.
+    const auto element = [&](size_t index) -> Value {
+        if (!isDeferredClosure(source.fields.at(index))) {
+            return source.fields.at(index);
+        }
+        if (std::optional<Value> deferred = deferredElement(act, from, index)) {
+            return *deferred;
+        }
+        return source.fields.at(index);
+    };
     const auto *body   = g->nodeBodyAs<camel::runtime::GCAccsBody>(ref);
     type::Type *result = g->node(ref)->dataType();
     if (source.isAggregate()) {
         if (body->accsKind == camel::runtime::GCAccsKind::TupleIndex) {
-            return source.fields.at(body->value);
+            return element(static_cast<size_t>(body->value));
         }
         const auto field =
             static_cast<type::StructType *>(source.camelType)->findField(body->key());
         if (!field) {
             unsupported(act, std::format("no field '{}'", body->key()));
         }
-        return source.fields[*field];
+        return element(*field);
     }
     if (!source.isConstant()) {
         unsupported(act, "field access on a value that depends on the model input");
