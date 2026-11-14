@@ -286,6 +286,13 @@ VmapGraph buildVmapGraph(
     std::vector<std::string> usedRules;
     std::vector<std::string> usedElements;
     std::vector<gc_node_ref_t> liftOf;
+    /// Whether a node's lift is the **batch of one row** `liftConstant` makes of a constant, rather
+    /// than a batch of the caller's rows. Such a value is a fine operand (every rule reads one row as
+    /// that row at every index, `rulesets/vmap.cml#at`), and it is a wrong *answer*: the caller's
+    /// batch has as many rows as it has, and nothing in this graph spreads one row over it. Asked of
+    /// the exit below, so that a body whose whole answer is a constant is refused instead of
+    /// answering a one-row array (`docs/handover/questions/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`).
+    std::vector<char> oneRowOf;
 
     camel::runtime::GraphDraftGroup group(context, program);
     const GraphId member = group.reserve(
@@ -469,6 +476,7 @@ VmapGraph buildVmapGraph(
         };
 
         liftOf.assign(function->nodeCount(), rt::kInvalidNodeRef);
+        oneRowOf.assign(function->nodeCount(), 0);
         std::string why;
         bool complete = true;
         // The body is read in the order its own edges impose, not in the order of its places: a
@@ -519,6 +527,8 @@ VmapGraph buildVmapGraph(
                         complete              = false;
                         break;
                     }
+                    // A capture enters as the batch of one row: it is a constant of the batched body.
+                    oneRowOf[ref] = 1;
                     ++copiedKinds;
                     break;
                 }
@@ -563,6 +573,8 @@ VmapGraph buildVmapGraph(
                     complete              = false;
                     break;
                 }
+                // A constant is the batch of one row; a rule broadcasts it over the batch it meets.
+                oneRowOf[ref] = 1;
                 ++copiedKinds;
                 break;
             }
@@ -738,6 +750,29 @@ VmapGraph buildVmapGraph(
             return refused;
         }
         const gc_node_ref_t liftedValue = copyOf[out];
+        if (oneRowOf[out] != 0) {
+            // The body's whole answer is a constant, so its batch is the one row `liftConstant`
+            // wrote and not the batch the caller has: `vmap((x: float) => 3.0)` over a `float[4]`
+            // answered `[3.0]`, silently, with the pass and without it. A constant is a fine operand
+            // -- every rule reads one row as that row at every index -- but as an answer it is a
+            // length the caller did not ask for, and everything downstream (`len`, `sum`, an index)
+            // is then off by the batch's extent. Refused by name instead, which is design principles
+            // 9.9's rule and the rule the port above already states; what the answer *should* be is
+            // the author's (docs/handover/questions/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md).
+            refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(out));
+            refused.refusedConstruct = "an answer of one row";
+            refused.refusedWhy =
+                "the body's answer is a constant, whose batch is one row, and the batched graph has "
+                "no node that spreads one row over the caller's batch";
+            os << "REINTERP vmap function=" << function->name()
+               << " skip=" << refusalCauseName(RefusalCause::Body)
+               << " construct=" << refused.refusedConstruct << " uri=the exit"
+               << askedFoundMissing(refused) << '\n';
+            noteRefusal(
+                RefusalReading("vmap", function->name(), RefusalCause::Body)
+                    .atConstruct(refused.refusedConstruct));
+            return refused;
+        }
         const rt::DraftNodeHeader *header = draft.header(liftedValue);
         if (header == nullptr || header->dataType == nullptr) {
             refused.refusedConstruct = "the exit";
