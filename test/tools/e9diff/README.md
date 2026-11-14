@@ -131,3 +131,30 @@ What `test/tools/progen` does not generate (its README lists it), module passes,
 order of effects under parallelism -- the providers of those are that tool's and `benchmarks/
 pipeline`'s business. A `std::cpp` cell is compared with the model like any other, but `reduce`
 does not shrink one: `reduce.py` runs the camel back ends only.
+
+## A finding quoted by seed is a finding quoted by nothing
+
+Every number this tool prints is keyed by seed, and a seed is not a program: the generator's
+`generate.VERSION` decides which program a seed writes, and `0ddbb92af` took it from 7 to 8 with
+"existing seeds are other programs". A note like "seed 26 is a `std::opt::dce` MISMATCH" therefore
+outlives the program it was measured on; the next version writes another one, the note still reads
+the same, and the run that would have shown it is a run nobody kept. Quote the generator version
+with the seed, or the finding is unfalsifiable: `progen.py show --seed 26` draws the program and
+does not print the version, `generate.VERSION` is where it lives, and it is what a note has to
+carry.
+
+Measured on 2026-11-15, for the two departures such a note had recorded against the slow tier:
+
+- **seed 4, `std::opt::inline`, CRASH.** Gone. `edeaa9c41` fixed the shape (`progen_4` crash 1 ->
+  0; `test/cases/opt/inline/loop_wait_after_inline.cml` is its 25-line reduction), and the seed
+  is back in the progen batch with the mark removed.
+- **seed 26, `std::opt::dce`, MISMATCH.** Not reproducible, and not a masked defect either. Under
+  `generate.VERSION` 8 (the program the seed writes today) every cell of the slow matrix is `OK`.
+  Under `generate.VERSION` 7 -- the program the seed wrote from 2026-11-02 until `0ddbb92af`, and
+  byte-identical at `5ec45c70f` = `4fae172f2^`, the last compiler that accepts it -- all eleven
+  pipelines of the slow matrix, `std::opt::dce` alone and `std::opt` all equal the model's eight
+  lines exactly, exit 0. Under `generate.VERSION` 6 the same holds. Today's front end refuses that
+  version-7 program with `SemanticDiag::ClosureCaptureEscapes` (rule of `4fae172f2`), so the seed
+  cannot reach a pass at all any more; "unreachable" would be the wrong thing to write down, but
+  so would "fixed" -- what the readings support is that no program this seed can name ever
+  miscompiled under `std::opt::dce`, in any tree that still accepted it.
