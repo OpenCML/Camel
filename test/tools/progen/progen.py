@@ -276,23 +276,35 @@ CHECK_RANGE = range(1, 26)
 # small program does not, and neither does either of its two ingredients (a `for` loop over
 # structs compared with the user `operator <`, and that operator on two struct literals). The
 # pass therefore needs more of the program than a case file would show, and the seed is left out
-# until it is fixed; `progen.py show --seed 4` draws the program.
-CHECK_EXCLUDED = {4: "std::opt::inline segfaults on the `f8(...)` call of `main`"}
+# until it is fixed. It is not a silence: `progen.py check --seeds 4 --with-excluded` runs it on
+# its own and prints the four cells, the test plan runs that command as `progen_known_crash` (a
+# known failure, so every run prints it and none is gated by it), and `progen.py show --seed 4`
+# draws the program.
+CHECK_EXCLUDED = {4: "std::opt::inline segfaults on the `f8(...)` call of `main`, which is a "
+                     "crash of that pass and not a refusal of the front end"}
 CHECK_MATRIX = "cross"
 
 
 def cmd_check(args):
     features = parse_features(None)
     cells = matrix(CHECK_MATRIX)
-    seeds = [s for s in CHECK_RANGE if s not in CHECK_EXCLUDED]
+    known = [s for s in CHECK_RANGE if s in CHECK_EXCLUDED]
+    if args.seeds:
+        a, _, b = args.seeds.partition("-")
+        seeds = list(range(int(a), int(b or a) + 1))
+    else:
+        seeds = list(CHECK_RANGE)
+    if not args.with_excluded:
+        seeds = [s for s in seeds if s not in CHECK_EXCLUDED]
     records = run_batch(seeds, features, cells, None, args.jobs)
     bad = [(r["seed"], cid, info["outcome"], info.get("detail", "")) for r in records for cid, info in r["bad"].items()]
     for seed, cid, outcome, detail in bad:
         print(f"seed {seed} [{cid}]: {outcome}: {detail}")
     n = sum(len(r["outcomes"]) for r in records)
     refused = sum(len(r["refused"]) for r in records)
+    left = [s for s in known if s not in seeds]
     print(f"progen check: {len(records)} programs x {len(cells)} pipelines = {n} cells "
-          f"({refused} located refusals), {len(CHECK_EXCLUDED)} seed(s) left out as known failures")
+          f"({refused} located refusals), {len(left)} seed(s) left out as known failures")
     print(f"{len(bad)} wrong")
     print("PASS" if not bad and n > 0 else "FAIL")
     return 0 if not bad and n > 0 else 1
@@ -403,6 +415,9 @@ def main(argv=None):
     p.set_defaults(fn=cmd_reduce)
     p = sub.add_parser("check")
     p.add_argument("--jobs", type=int, default=4)
+    p.add_argument("--seeds", help="a seed or an interval (4, 1-25) to check instead of CHECK_RANGE")
+    p.add_argument("--with-excluded", action="store_true",
+                   help="run the seeds CHECK_EXCLUDED leaves out, to see what they show")
     p.set_defaults(fn=cmd_check)
     p = sub.add_parser("findings")
     p.add_argument("--dir")

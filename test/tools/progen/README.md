@@ -145,13 +145,19 @@ checks it on every generated and every reduced program:
    `REFUSED` and is not a finding.
 8. **A closure does not carry a `var` out of the call that declares it** (3.5, rule two; the
    front end's `SemanticDiag::ClosureCaptureEscapes`). `model.escape_violations` checks it on
-   every generated and reduced program, over the two exits a generated program can reach: a
-   closure over one of the call's own cells in a call whose result can hold a function, and such
-   a closure handed to a callee whose result can hold a function. The state a closure used to
-   carry out is written two other ways: the counter is called inside the call that declares the
-   cell, and a chain of calls passes the state in as a value and takes the next value back. A
-   closure that owns a cell across calls after leaving the call cannot be written at all until
-   `Ref<T>` exists.
+   every generated and reduced program, over the two ways such a closure can leave: as the result
+   of the call whose cell it holds, and handed to a callee whose result can carry a function. The
+   state it used to carry out is written two other ways: the counter is declared and called
+   inside the call that owns the cell, so the readings leave as values, and a chain of calls
+   passes the state in as a value and takes the next value back.
+
+   One dimension is missing here, and the gap is the language's rather than this tool's: **a
+   closure that keeps a writable cell across calls, after leaving the call that declared it** (a
+   counter a caller can hold and call later) has no legal spelling in this tree. There is no
+   `Ref<T>`, and no `stdlib/state.cml` on `develop` -- that file is on the `reftype` branch only --
+   so the front end refuses the closure instead of lending it the cell. Until `Ref<T>` exists the
+   dimension is written as the two shapes above, or it is a permanent blank; what it may not be is
+   a dimension dropped from the plan without a word, which is why it is written down here.
 
 What the hand probes established and the reference therefore models: a read of a `var` is a
 snapshot of its value (`let k = c` does not follow later writes) while a lambda that reads a
@@ -276,7 +282,10 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   cell passes, so a seed that stops being green is listed in `progen.py`'s `CHECK_EXCLUDED`
   with what it shows: seed 4 of `generate.VERSION` 8 makes `std::opt::inline` end in SIGSEGV,
   which is not something the front end says about the program and not something the generator
-  can avoid without dropping a shape the language accepts.
+  can avoid without dropping a shape the language accepts. Left out is not absent: the test plan
+  runs that seed on its own in `progen_known_crash`, a known failure, so every run of the plan
+  prints `seed 4 [inline@nvm]: CRASH` instead of passing over it, and the entry turns red if the
+  crash goes away or starts failing differently.
 - **One program in fifty is still refused by the front end.** `SemanticDiag::GenericFunctionAsValue`
   is a generic function given a position that does not fix its type variables; seed 32 under
   `generate.VERSION` 8 shows it, seed 49 under version 7, so about one program in fifty and none
