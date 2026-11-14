@@ -1318,7 +1318,7 @@ The leaves of a tree, as a tuple.
 #### `save_tree`
 
 ```camel
-save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses fs when has_ckpt_form::<T>()
+save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
 ```
 
 Saves a tree to a directory, one file per leaf named by its path (`blocks.0.w.npy` for an
@@ -1338,7 +1338,7 @@ time; one of two racing saves fails, and a reader still sees a complete checkpoi
 #### `load_tree`
 
 ```camel
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses var fs, var stderr when has_ckpt_form::<T>()
 ```
 
 Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
@@ -4602,7 +4602,7 @@ n elements of xs drawn without replacement, as a new array.
 #### `seed`
 
 ```camel
-seed: (value: int) => void uses rng
+seed: (value: int) => void uses var rng
 ```
 
 Starts the global stream: the same seed gives the same sequence of keys.
@@ -4612,7 +4612,7 @@ Starts the global stream: the same seed gives the same sequence of keys.
 #### `next_key`
 
 ```camel
-next_key: () => Key uses rng
+next_key: () => Key uses var rng
 ```
 
 The next key of the global stream, and the stream moves on: two calls give two keys.
@@ -5010,7 +5010,7 @@ never folded away and the work of other ready nodes goes on meanwhile.
 #### `exit`
 
 ```camel
-exit: (code: int) => never uses process
+exit: (code: int) => never uses var process
 ```
 
 Ends the program with the given exit code, after the buffered output is written and the
@@ -5444,7 +5444,7 @@ scheduler visible.
 #### `rendezvous`
 
 ```camel
-rendezvous: (parties: int, timeout: float) => int uses rendezvous_point
+rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
 ```
 
 Blocks until `parties` calls are waiting at the meeting point, or until `timeout` seconds have
@@ -5457,7 +5457,7 @@ showing that calls really run at the same time.
 #### `thread_count`
 
 ```camel
-thread_count: () => int uses process
+thread_count: () => int uses var process
 ```
 
 The number of threads this process has, the caller included: the count the operating system
@@ -6031,7 +6031,7 @@ Nothing changes until `commit`.
 #### `replace`
 
 ```camel
-replace: (t: Txn<F>, old: Node, new: Node) => void uses t
+replace: (t: Txn<F>, old: Node, new: Node) => void uses var t
 ```
 
 Puts the node `new` of the same graph in the place of `old`, which is removed; what `old`
@@ -6044,7 +6044,7 @@ ordered stays ordered.
 #### `erase`
 
 ```camel
-erase: (t: Txn<F>, n: Node) => void uses t
+erase: (t: Txn<F>, n: Node) => void uses var t
 ```
 
 Removes a node whose value nobody reads.
@@ -6056,7 +6056,7 @@ Removes a node whose value nobody reads.
 #### `eval`
 
 ```camel
-eval: (t: Txn<F>, n: Node) => Node? uses t
+eval: (t: Txn<F>, n: Node) => Node? uses var t
 ```
 
 Evaluates the pure operator of the node over its constant operands and gives the node holding
@@ -6071,7 +6071,7 @@ is left as written and warned about, as the C++ fold does.
 #### `add_constant`
 
 ```camel
-add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses t when is_ordered::<T>()
+add_constant: (t: Txn<F>, g: Graph, value: T) => Node uses var t when is_ordered::<T>()
 ```
 
 Adds a value the transaction creates to the graph's static values and gives the node that
@@ -6084,7 +6084,7 @@ traced.
 #### `commit`
 
 ```camel
-commit: (t: Txn<F>) => F! uses t
+commit: (t: Txn<F>) => F! uses var t
 ```
 
 Checks the edits and makes the changed function: the same type as the one that was opened, with
@@ -6096,7 +6096,7 @@ the values it captured, sharing every graph nothing changed. The transaction is 
 #### `abort`
 
 ```camel
-abort: (t: Txn<F>) => void uses t
+abort: (t: Txn<F>) => void uses var t
 ```
 
 Drops the transaction.
@@ -6391,7 +6391,7 @@ the tests use) are in `stdlib/signatures/tiles.cml`.
 #### `upload`
 
 ```camel
-upload: (value: f32[...]) => Device<f32[...]> uses driver
+upload: (value: f32[...]) => Device<f32[...]> uses var driver
 ```
 
 Uploads every leaf of the value -- an array, or a scalar of the element type it is written
@@ -6404,7 +6404,7 @@ with, alone or inside a tuple or a struct -- and gives the same tree with each l
 #### `download`
 
 ```camel
-download: (value: Device<f32[...]>) => f32[...] uses driver
+download: (value: Device<f32[...]>) => f32[...] uses var driver
 ```
 
 Downloads every device leaf of the value and gives the host value it came from. A tree with a
@@ -6416,7 +6416,7 @@ leaf that is not a device value is refused when the call is compiled.
 #### `run_preferred_resident`
 
 ```camel
-run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses driver
+run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses var driver
 ```
 
 Runs the function through the device path the pipeline prepared for it -- the device when a
@@ -6429,7 +6429,7 @@ program asks for the device with `#gpu`, not with this.
 #### `source`
 
 ```camel
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
 ```
 
 The CUDA source the function compiles to, without running it.
@@ -6439,7 +6439,7 @@ The CUDA source the function compiles to, without running it.
 #### `inspect`
 
 ```camel
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
 ```
 
 A report on the function's device plan, without running it: the kernel, its launch shape and
@@ -6450,7 +6450,7 @@ the values it would keep on the device.
 #### `benchmark`
 
 ```camel
-benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
 ```
 
 Times the function on the device, and on the host for comparison, and gives the report as JSON
@@ -6461,7 +6461,7 @@ text.
 #### `regions`
 
 ```camel
-regions: <fn: (a: f32, b: f32) => f32> () => string uses driver
+regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
 ```
 
 The regions the compiler would take for the whole program, as text: which nodes would run on
@@ -6472,7 +6472,7 @@ the device and why the others would not.
 #### `available`
 
 ```camel
-available: () => bool uses driver
+available: () => bool uses var driver
 ```
 
 Whether this machine can run a program on a CUDA device: false when the driver, the toolkit or
@@ -6484,7 +6484,7 @@ a visible device is missing. A capability question only -- a device the run name
 #### `device`
 
 ```camel
-device: () => string! uses driver
+device: () => string! uses var driver
 ```
 
 A description of the CUDA device the run selects: its ordinal, name, compute capability and

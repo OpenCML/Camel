@@ -1,0 +1,14 @@
+// The other half of the pair: `uses var acc` writes the cell and nothing else, so a body that also
+// prints reaches past the promise, and the signature the report quotes carries `var` on the entry --
+// a reader of the message tells the two clauses apart (design principles 3.3).
+
+func bump(var acc: int): int uses var acc sync {
+    acc = acc + 1
+    println(acc)
+    return acc
+}
+
+func main(): int sync {
+    var acc = 0
+    return bump(acc)
+}

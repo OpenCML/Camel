@@ -411,7 +411,7 @@ void ParserImpl::parseFuncType() {
     close(m, NK::FuncType);
 }
 
-/// resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+/// resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
 ///
 /// What a function type says about the resources a call touches (design effects plan 3.1):
 /// `pure` says none; `uses` names parameters (the values a call touches) and resources
@@ -426,13 +426,29 @@ void ParserImpl::parseResourceClause() {
             continue;
         }
         bump(); // `uses`
-        parseIdentRef(NK::IdentRef);
-        while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+        parseUsesEntry();
+        while (cur_ == TK::Comma && (peek(1) == TK::Identifier || peek(1) == TK::KwVar) &&
+               !panic_) {
             bump();
-            parseIdentRef(NK::IdentRef);
+            parseUsesEntry();
         }
     }
     close(m, NK::ResourceClause);
+}
+
+/// usesEntry : 'var'? identRef
+///
+/// One resource of the clause, written the way a parameter is (design principles 3.3): without
+/// `var` the call reads it, with `var` it writes it. `var` is a reserved word, so an entry that
+/// starts with it can only be the written one; a resource whose name is `var` cannot be named in
+/// a clause, as it cannot be named anywhere.
+void ParserImpl::parseUsesEntry() {
+    const size_t m = mark();
+    if (cur_ == TK::KwVar) {
+        bump();
+    }
+    parseIdentRef(NK::IdentRef);
+    close(m, NK::UsesEntry);
 }
 
 /// typeList : typeExpr (',' typeExpr)*

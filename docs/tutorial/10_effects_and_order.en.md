@@ -294,7 +294,7 @@ compiler to guess.
 
 ## Effects as resources: `uses` in a signature
 
-Which resources a call touches is **part of its type**: `func save(p: Params): unit uses fs`. In Camel you may write it
+Which resources a call touches is **part of its type**: `func save(p: Params): unit uses var fs`. In Camel you may write it
 by hand or leave it out -- the compiler infers it from the callees of the body (taking a fixed point on recursion) and
 records it in the function type it displays. This program puts the forms side by side
 ([`examples/10_resources.cml`](examples/10_resources.cml)):
@@ -313,10 +313,10 @@ func read_id(s: Stream): int uses s {
     return s.id
 }
 
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses cell sync {
+func bump(var cell: int): int uses var cell sync {
     cell += 1
     return cell
 }
@@ -347,9 +347,14 @@ What may follow `uses`: the grammar is `resourceClause` in
 - **A resource the module declares**: `resource db`. A module may declare its own resources, and may group several of
   them: `resource console = [db, stdout]`.
 - **A resource every program has**: `stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`.
-- **A parameter**: `uses s`, `uses cell`. This says "the call reads and writes the value I pass in" -- handle-style,
-  like a `var` parameter: operations on one handle keep the written order, different handles do not constrain each
-  other.
+- **A parameter**: `uses s`, `uses cell`. This says "the call touches the value I pass in" -- handle-style, like a
+  `var` parameter: operations on one handle keep the written order, different handles do not constrain each other.
+- **How the call touches it is written in front of the name**: without `var` the entry reads, with `var` it writes,
+  the same meaning a `var` parameter has (design principles 3.3): `uses s` reads the handle, `uses var cell` writes
+  the cell. An **external** resource written without `var` is a compile error
+  (`SemanticDiag::ExternalResourceNeedsVar`): that state is not the program's, the program and whatever else is
+  outside it both read and write it, so a call that names one writes it. An inferred type, a `tooltip` and a
+  diagnostic all print the entry that way, so `uses s` and `uses var s` are told apart at a glance.
 - **A handle type declared with `#resource type`**: `#resource type Stream = { id: int }`. **Every value** of it is a
   resource of its own, so `read_id` claims "I touch the `Stream` you give me", not "I touch all streams".
 
@@ -357,8 +362,8 @@ Draw the graph of this program and the `tooltip` of a function node is the resou
 
 ```text
             tooltip="(s: Stream) => int uses s";
-            tooltip="() => void uses db, stdout";
-            tooltip="(var cell: int) => int uses cell";
+            tooltip="() => void uses var db, var stdout";
+            tooltip="(var cell: int) => int uses var cell";
 ```
 
 All three lines say what a call touches: `read_id` touches the handle it is given, `tick` touches the `console` group
@@ -391,7 +396,7 @@ writes the standard output.
 
 resource db
 
-func stamp(): int uses db sync {
+func stamp(): int uses var db sync {
     println('x')
     return 1
 }
@@ -407,11 +412,11 @@ camel docs/tutorial/examples/10_uses_beyond.cml
 ```
 
 ```text
-error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: stdout.
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: stdout.
    --> docs/tutorial/examples/10_uses_beyond.cml:8:1
     |
-  8 | func stamp(): int uses db sync {
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  8 | func stamp(): int uses var db sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   9 |     println('x')
     |     ^^^^^^^^^^^^
  10 |     return 1
@@ -428,7 +433,7 @@ help: A signature is a promise the compiler checks against the resources the fun
 camel: 1 error
 ```
 
-The diagnostic says three things: **which promise** (`'() => int uses db'`), **what the body reached past it**
+The diagnostic says three things: **which promise** (`'() => int uses var db'`), **what the body reached past it**
 (`stdout`), and **which use crossed it** (the `note` points at the first use the signature does not name). There are
 two repairs: the body stops reaching for it, or the clause is widened to name it.
 

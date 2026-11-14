@@ -238,25 +238,36 @@ class FuncTypeLoad : public TypeLoad {
 };
 
 /// The resources a function type publishes (design effects plan 3.1): `pure` says a call
-/// touches none, `uses x, fs` names the parameters and the resources it touches. Attached to the
-/// function type it is written after; a declaration's clause is attached to the function type of
-/// its signature, so a body-less declaration and a function type carry the same thing.
+/// touches none, `uses x, var fs` names the parameters and the resources it touches. Attached to
+/// the function type it is written after; a declaration's clause is attached to the function type
+/// of its signature, so a body-less declaration and a function type carry the same thing.
 class ResourceClauseLoad : public Load {
   public:
     ResourceClauseLoad() : Load(LoadType::ResourceClause) {}
 
+    /// One resource of the clause, as it was written (design principles 3.3): an entry without
+    /// `var` reads the resource and one with `var` writes it, the way a parameter is written.
+    /// `range` is where the entry stands, so the report that refuses it can offer the text to add.
+    struct Uses {
+        Reference resource;
+        bool write = false;
+        camel::core::error::TokenRange range;
+    };
+
     bool pure() const { return pure_; }
     void setPure(bool pure) { pure_ = pure; }
 
-    void addUse(Reference use) { uses_.push_back(std::move(use)); }
-    const std::vector<Reference> &uses() const { return uses_; }
+    void addUse(Reference use, bool write, camel::core::error::TokenRange range) {
+        uses_.push_back(Uses{std::move(use), write, range});
+    }
+    const std::vector<Uses> &uses() const { return uses_; }
 
     const std::string toString() const override;
     const std::string geneCode() const override;
 
   private:
     bool pure_ = false;
-    std::vector<Reference> uses_;
+    std::vector<Uses> uses_;
 };
 
 class InferTypeLoad : public TypeLoad {

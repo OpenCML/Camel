@@ -1331,7 +1331,7 @@ void Builder::checkResourceGroups() {
         if (decl == nullptr || decl->members.empty()) {
             continue;
         }
-        std::vector<std::string> expanded;
+        std::vector<AmbientEntry> expanded;
         std::vector<std::string> active;
         std::string failed;
         if (!resolveAmbientResource(module_, Reference(name), expanded, active, &failed, ast)) {
@@ -1345,7 +1345,7 @@ void Builder::checkResourceGroups() {
 
 bool Builder::resolveAmbientResource(
     const camel::core::module::module_ptr_t &in, const Reference &name,
-    std::vector<std::string> &out, std::vector<std::string> &active, std::string *failed,
+    std::vector<AmbientEntry> &out, std::vector<std::string> &active, std::string *failed,
     const AST::node_ptr_t &where) {
     const std::string written = name.toString();
     const std::string key     = (in ? in->name() : std::string()) + "::" + written;
@@ -1370,10 +1370,13 @@ bool Builder::resolveAmbientResource(
                     // there is nothing to tell it apart from; the module the resource is declared
                     // in is half of its identity, and that is what the operator's own declaration
                     // and this clause are compared as (see resourceIdentities).
-                    out.push_back(
-                        in.get() == module_.get() && !decl->variable
-                            ? written
-                            : in->name() + (decl->variable ? ":" : "::") + written);
+                    out.push_back(AmbientEntry{
+                        .key = in.get() == module_.get() && !decl->variable
+                                   ? written
+                                   : in->name() + (decl->variable ? ":" : "::") + written,
+                        // A `resource` declaration is state outside the program; a module's `var`
+                        // is a cell only the program observes (design principles 3.3).
+                        .external = !decl->variable});
                     return true;
                 }
                 for (const Reference &member : decl->members) {
@@ -1386,7 +1389,7 @@ bool Builder::resolveAmbientResource(
         }
     }
     if (sem::isStandardResource(written)) {
-        out.push_back(written);
+        out.push_back(AmbientEntry{.key = written, .external = true});
         return true;
     }
     if (in) {
@@ -1519,19 +1522,24 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
         param.isVar = isWith ? built->withIsVarAt(i) : built->normIsVarAt(i - withCount);
         parameters.push_back(std::move(param));
     }
-    std::vector<std::string> ambient;
+    std::vector<AmbientEntry> ambient;
+    std::vector<sem::ResourceSignature::AmbientUse> ambientUses;
     std::vector<std::string> active;
     std::string failed;
-    for (const Reference &use : clause->uses()) {
-        const std::string written = use.toString();
+    for (const AST::ResourceClauseLoad::Uses &use : clause->uses()) {
+        const std::string written = use.resource.toString();
         const auto param =
             std::find_if(parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
-                return use.plain() && candidate.name == use.ident();
+                return use.resource.plain() && candidate.name == use.resource.ident();
             });
         if (param != parameters.end()) {
             sem::ResourceSignature::ParamUse paramUse;
             paramUse.index = param->index;
-            paramUse.mode  = sem::AccessMode::ReadModifyWrite;
+            // `var` in a clause says the call writes the resource; without it the call reads the
+            // resource and nothing else (design principles 3.3). A write of a cell or of an
+            // object is its whole value replaced, which is what a reader of the graph sees as a
+            // read-modify-write.
+            paramUse.mode = use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read;
             if (sem::isHandleType(param->type)) {
                 paramUse.cls  = sem::ResourceClass::Handle;
                 paramUse.name = sem::handleResourceName(param->type);
@@ -1551,30 +1559,54 @@ Builder::resourceSignatureOf(const AST::node_ptr_t &funcTypeAst, const FunctionT
             signature.params.push_back(std::move(paramUse));
             continue;
         }
-        if (use.plain() &&
+        if (use.resource.plain() &&
             std::any_of(parameters.begin(), parameters.end(), [&](const Parameter &candidate) {
-                return candidate.name == use.ident();
+                return candidate.name == use.resource.ident();
             })) {
             continue;
         }
-        if (!resolveAmbientResource(module_, use, ambient, active, &failed, funcTypeAst)) {
+        ambient.clear();
+        if (!resolveAmbientResource(
+                module_, use.resource, ambient, active, &failed, funcTypeAst)) {
             diags_->of(SemanticDiag::UnknownResource)
                 .at(clause->tokenRange())
                 .commit(written, built->toString());
             throw BuildAbortException();
         }
+        for (const AmbientEntry &entry : ambient) {
+            // An external resource is state the program does not own, so a call that names one
+            // reads and writes it, and the clause says so the way a parameter does: with `var`
+            // (design principles 3.3). An entry that leaves the word out promises a read, which
+            // is a promise no call to an external resource keeps.
+            if (entry.external && !use.write) {
+                diags_->of(SemanticDiag::ExternalResourceNeedsVar)
+                    .at(use.range)
+                    .fix("write 'var' before the resource", use.range, "var " + written)
+                    .commit(sem::resourceDisplayName(entry.key), built->toString());
+                throw BuildAbortException();
+            }
+            const auto known = std::find_if(
+                ambientUses.begin(), ambientUses.end(), [&](const auto &other) {
+                    return other.name == entry.key;
+                });
+            if (known != ambientUses.end()) {
+                // One ambient resource is one use: `uses fs, var fs` says nothing twice.
+                known->mode = sem::uniteAccess(known->mode, use.write ? sem::AccessMode::ReadModifyWrite
+                                                                      : sem::AccessMode::Read);
+                continue;
+            }
+            ambientUses.push_back(sem::ResourceSignature::AmbientUse{
+                .name = entry.key,
+                .mode = use.write ? sem::AccessMode::ReadModifyWrite : sem::AccessMode::Read});
+        }
     }
     std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
         return a.index < b.index;
     });
-    std::sort(ambient.begin(), ambient.end());
-    ambient.erase(std::unique(ambient.begin(), ambient.end()), ambient.end());
-    for (std::string &name : ambient) {
-        signature.ambient.push_back(
-            sem::ResourceSignature::AmbientUse{
-                .name = std::move(name),
-                .mode = sem::AccessMode::ReadModifyWrite});
-    }
+    std::sort(ambientUses.begin(), ambientUses.end(), [](const auto &a, const auto &b) {
+        return a.name < b.name;
+    });
+    signature.ambient = std::move(ambientUses);
     if (clause->pure()) {
         signature.params.clear();
         signature.ambient.clear();

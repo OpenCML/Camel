@@ -2564,7 +2564,8 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
 }
 
 /*
-resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+resourceClause : ('uses' useEntry (',' useEntry)* | 'pure')+
+useEntry : 'var'? identRef
 */
 Value Builder::visitResourceClause(cst::ResourceClause context) {
     ENTER("ResourceClause");
@@ -2578,8 +2579,15 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
     if (context->text().starts_with("pure")) {
         clause->setPure(true);
     }
-    for (const auto use : context->all<cst::IdentRef>()) {
-        clause->addUse(value_cast<Reference>(visitIdentRef(use)));
+    for (const auto entry : context->all<cst::UsesEntry>()) {
+        // One resource, and whether it is written with `var` (design principles 3.3): the entry
+        // reads the resource without it and writes the resource with it. The entry's own token
+        // range goes with it, so a clause that breaks the rule is reported where the word belongs.
+        const auto ident = entry->get<cst::IdentRef>();
+        clause->addUse(
+            value_cast<Reference>(visitIdentRef(ident)),
+            entry->has(TK::KwVar),
+            extractTokenRangeFromContext(ident));
     }
     LEAVE("ResourceClause");
     return clauseNode;

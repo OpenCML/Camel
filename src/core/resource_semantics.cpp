@@ -499,21 +499,24 @@ std::string toString(const ResourceSignature &signature) {
     }
     std::string out = "uses ";
     bool first      = true;
-    const auto add  = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    // An entry is named the way it is written (design principles 3.3): a resource the call writes
+    // carries `var`, and one it only reads does not, so a reader of the signature can tell the
+    // two promises apart.
+    const auto add = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : signature.params) {
-        add(std::format("#{}", use.index));
+        add(writes(use.mode), std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        add(resourceDisplayName(use.name));
+        add(writes(use.mode), resourceDisplayName(use.name));
     }
     for (ResourceClass cls : signature.anyOf) {
-        add(std::format("any {}", resourceClassName(cls)));
+        add(false, std::format("any {}", resourceClassName(cls)));
     }
     for (uint8_t capture : signature.captures) {
-        add(std::format("capture {}", capture));
+        add(false, std::format("capture {}", capture));
     }
     return out;
 }

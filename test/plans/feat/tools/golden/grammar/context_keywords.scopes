@@ -131,7 +131,7 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->func writes(path: string): unit uses fs {
+>func writes(path: string): unit uses var fs {
 #^^^^ meta.function.definition.camel storage.type.function.camel
 #     ^^^^^^ meta.function.definition.camel entity.name.function.camel
 #           ^ meta.parens.camel punctuation.section.parens.begin.camel
@@ -141,7 +141,8 @@
 #                        ^ meta.parens.camel punctuation.section.parens.end.camel
 #                         ^ punctuation.separator.colon.camel
 #                                ^^^^ keyword.other.contextual-clause.camel
-#                                        ^ meta.block.camel punctuation.section.block.begin.camel
+#                                     ^^^ storage.modifier.var.camel
+#                                            ^ meta.block.camel punctuation.section.block.begin.camel
 >    return null
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 #           ^^^^ meta.block.camel constant.language.null.camel
@@ -165,7 +166,7 @@
 >}
 #^ meta.block.camel punctuation.section.block.end.camel
 >
->func clamped(x: int): int uses fs when is_ready() {
+>func clamped(x: int): int uses var fs when is_ready() {
 #^^^^ meta.function.definition.camel storage.type.function.camel
 #     ^^^^^^^ meta.function.definition.camel entity.name.function.camel
 #            ^ meta.parens.camel punctuation.section.parens.begin.camel
@@ -176,11 +177,12 @@
 #                    ^ punctuation.separator.colon.camel
 #                      ^^^ support.type.primitive.camel
 #                          ^^^^ keyword.other.contextual-clause.camel
-#                                  ^^^^ keyword.other.contextual-clause.camel
-#                                       ^^^^^^^^ entity.name.function.call.camel
-#                                               ^ meta.parens.camel punctuation.section.parens.begin.camel
-#                                                ^ meta.parens.camel punctuation.section.parens.end.camel
-#                                                  ^ meta.block.camel punctuation.section.block.begin.camel
+#                               ^^^ storage.modifier.var.camel
+#                                      ^^^^ keyword.other.contextual-clause.camel
+#                                           ^^^^^^^^ entity.name.function.call.camel
+#                                                   ^ meta.parens.camel punctuation.section.parens.begin.camel
+#                                                    ^ meta.parens.camel punctuation.section.parens.end.camel
+#                                                      ^ meta.block.camel punctuation.section.block.begin.camel
 >    return x
 #    ^^^^^^ meta.block.camel keyword.control.flow.camel
 >}

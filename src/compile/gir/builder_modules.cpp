@@ -400,25 +400,26 @@ std::string describeResources(
     }
     std::string out     = "uses ";
     bool first          = true;
-    const auto add      = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    const auto add      = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : signature.params) {
         if (type != nullptr && use.index < type->argNamesCount()) {
-            add(std::string(type->argNameAt(use.index)));
+            add(camel::core::sem::writes(use.mode), std::string(type->argNameAt(use.index)));
         } else {
-            add(std::format("#{}", use.index));
+            add(camel::core::sem::writes(use.mode), std::format("#{}", use.index));
         }
     }
     for (const auto &use : signature.ambient) {
-        add(camel::core::sem::resourceDisplayName(use.name));
+        add(camel::core::sem::writes(use.mode),
+            camel::core::sem::resourceDisplayName(use.name));
     }
     for (camel::core::sem::ResourceClass cls : signature.anyOf) {
-        add(std::format("any {}", camel::core::sem::resourceClassName(cls)));
+        add(false, std::format("any {}", camel::core::sem::resourceClassName(cls)));
     }
     if (signature.external) {
-        add("external");
+        add(false, "external");
     }
     return out;
 }

@@ -240,6 +240,13 @@ class Builder {
     /// parameter nor a resource (UnknownResource) and a group that contains itself
     /// (ResourceGroupCycle) are reported here, before a clause expands one.
     void checkResourceGroups();
+    /// One resource a clause names, expanded: the key it is stored under, and whether it is
+    /// external (design principles 3.3: state something outside the program also reads and
+    /// writes, so a clause that names it writes it).
+    struct AmbientEntry {
+        std::string key;
+        bool external = false;
+    };
     /// The resources a function type's `uses`/`pure` clause publishes (design effects plan 3.1),
     /// in the numbering of `built`: parameters by class (a handle type a Handle, a `var` a
     /// Variable, any other an Object), ambient resources (a group expanded), or nothing for
@@ -251,7 +258,7 @@ class Builder {
     /// those; `where` locates the diagnostic (UnknownResource, ResourceGroupCycle).
     bool resolveAmbientResource(
         const camel::core::module::module_ptr_t &in, const Reference &name,
-        std::vector<std::string> &out, std::vector<std::string> &active, std::string *failed,
+        std::vector<AmbientEntry> &out, std::vector<std::string> &active, std::string *failed,
         const AST::node_ptr_t &where);
     /// The tag uses written before `ast`, lowered: the `RepeatedLoad("TagUse")` child of a
     /// function, type or block declaration, and the one of each of its fields.

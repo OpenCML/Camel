@@ -261,7 +261,7 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
     return parts;
 }
 
-/// The resource clause of a function type, as written: "pure" or "uses s, fs". `mangle` writes
+/// The resource clause of a function type, as written: "pure" or "uses s, var fs". `mangle` writes
 /// the stable encoding that takes part in the mangled name instead.
 std::string resourceClause(const FunctionType *fn, bool mangle) {
     const sem::ResourceSignature &sig = fn->resources();
@@ -308,26 +308,29 @@ std::string resourceClause(const FunctionType *fn, bool mangle) {
     }
     out = "uses ";
     bool first = true;
-    const auto add = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    // An entry prints the way it is written (design principles 3.3): a resource the call writes
+    // carries `var`, and one it only reads does not. Without the word a reader of the type could
+    // not tell the two clauses apart, and the two are different promises.
+    const auto add = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : sig.params) {
         if (fn->hasArgNames() &&
             use.index < fn->withTypesCount() + fn->normTypesCount()) {
-            add(std::string(fn->argNameAt(use.index)));
+            add(sem::writes(use.mode), std::string(fn->argNameAt(use.index)));
         } else {
-            add(std::format("#{}", use.index));
+            add(sem::writes(use.mode), std::format("#{}", use.index));
         }
     }
     for (const auto &use : sig.ambient) {
-        add(sem::resourceDisplayName(use.name));
+        add(sem::writes(use.mode), sem::resourceDisplayName(use.name));
     }
     for (sem::ResourceClass cls : sig.anyOf) {
-        add(std::format("any {}", sem::resourceClassName(cls)));
+        add(false, std::format("any {}", sem::resourceClassName(cls)));
     }
     for (uint8_t capture : sig.captures) {
-        add(std::format("capture {}", capture));
+        add(false, std::format("capture {}", capture));
     }
     return out;
 }

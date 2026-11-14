@@ -29,13 +29,13 @@
 /// `Device<...>`. A leaf of any other type is refused when the call is compiled.
 /// @example-fragment `host` is a host tensor the caller has: the example writes the move, and a doc example has no device to move a value to
 /// @example host->upload    // a Device<f32[...]>
-export func upload(value: f32[...]): Device<f32[...]> uses driver
+export func upload(value: f32[...]): Device<f32[...]> uses var driver
 
 /// Downloads every device leaf of the value and gives the host value it came from. A tree with a
 /// leaf that is not a device value is refused when the call is compiled.
 /// @example-fragment `resident` is a value already on the device: the example writes the download, and a doc example has no device to take one from
 /// @example resident->download    // the array resident holds
-export func download(value: Device<f32[...]>): f32[...] uses driver
+export func download(value: Device<f32[...]>): f32[...] uses var driver
 
 /// Runs the function through the device path the pipeline prepared for it -- the device when a
 /// program can be made for it, the host otherwise -- and gives the resident form of its result.
@@ -43,27 +43,27 @@ export func download(value: Device<f32[...]>): f32[...] uses driver
 /// program asks for the device with `#gpu`, not with this.
 /// @example (f32(2.0), f32(3.0))->run_preferred_resident<(a: f32, b: f32): f32 => a + b>    // a Device<f32>
 with <fn: (a: f32, b: f32) => f32>
-export func run_preferred_resident(inputs: (f32, f32)): Device<f32> uses driver
+export func run_preferred_resident(inputs: (f32, f32)): Device<f32> uses var driver
 
 /// The CUDA source the function compiles to, without running it.
 /// @example (f32(2.0), f32(3.0))->source<(a: f32, b: f32): f32 => a + b>
 with <fn: (a: f32, b: f32) => f32>
-export func source(inputs: (f32, f32)): string uses driver
+export func source(inputs: (f32, f32)): string uses var driver
 
 /// A report on the function's device plan, without running it: the kernel, its launch shape and
 /// the values it would keep on the device.
 /// @example (f32(2.0), f32(3.0))->inspect<(a: f32, b: f32): f32 => a + b>
 with <fn: (a: f32, b: f32) => f32>
-export func inspect(inputs: (f32, f32)): string uses driver
+export func inspect(inputs: (f32, f32)): string uses var driver
 
 /// Times the function on the device, and on the host for comparison, and gives the report as JSON
 /// text.
 /// @example (f32(2.0), f32(3.0))->benchmark<(a: f32, b: f32): f32 => a + b>
 with <fn: (a: f32, b: f32) => f32>
-export func benchmark(inputs: (f32, f32)): string uses driver
+export func benchmark(inputs: (f32, f32)): string uses var driver
 
 /// The regions the compiler would take for the whole program, as text: which nodes would run on
 /// the device and why the others would not.
 /// @example regions<(a: f32, b: f32): f32 => a + b>()
 with <fn: (a: f32, b: f32) => f32>
-export func regions(): string uses driver
+export func regions(): string uses var driver

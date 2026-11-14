@@ -926,21 +926,26 @@ any Formatter::visitResourceDecl(cst::ResourceDecl context) {
 }
 
 /*
-resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
+usesEntry : 'var'? identRef
 */
 any Formatter::visitResourceClause(cst::ResourceClause context) {
-    // `pure` has no name to print; `uses` prints the names as written. A clause that says both
-    // is refused by the semantic check (PureAndUses), and formatting keeps what was written.
-    const auto refs = context->all<cst::IdentRef>();
+    // `pure` has no name to print; `uses` prints every entry as it was written. The `var` of an
+    // entry is part of what the entry promises -- without it the call reads the resource, with it
+    // the call writes it (design principles 3.3) -- so it is written back, not dropped. A clause
+    // that says both is refused by the semantic check (PureAndUses), and formatting keeps what was
+    // written.
+    const auto entries = context->all<cst::UsesEntry>();
     const bool pure = context->firstToken() && context->firstToken()->text() == "pure";
     string result   = pure ? "pure" : "";
-    if (!refs.empty()) {
+    if (!entries.empty()) {
         if (!result.empty()) {
             result += " ";
         }
         result += "uses ";
-        for (size_t i = 0; i < refs.size(); ++i) {
-            result += (i > 0 ? ", " : "") + any_cast<string>(visitIdentRef(refs[i]));
+        for (size_t i = 0; i < entries.size(); ++i) {
+            result += (i > 0 ? ", " : "") + (entries[i]->has(TK::KwVar) ? string("var ") : "") +
+                      any_cast<string>(visitIdentRef(entries[i]->get<cst::IdentRef>()));
         }
     }
     return result;

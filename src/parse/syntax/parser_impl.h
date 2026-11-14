@@ -250,10 +250,14 @@ class ParserImpl {
     /// At `resource` naming a resource declaration (offset `n`).
     bool atResourceDecl(uint32_t n) const;
     void parseResourceDecl();
-    /// resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+    /// resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
     /// The clause after a function's result type (design effects plan 3.1): the resources a call
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
+    /// usesEntry : 'var'? identRef
+    /// One resource of the clause, and whether the entry writes it (design principles 3.3): an
+    /// entry without `var` reads the resource, one with `var` writes it.
+    void parseUsesEntry();
     /// whenClause : 'when' ('...' dataExpr | logicalOrExpr)
     /// A declaration's applicability condition, after its signature (design principles 4.4). A
     /// condition written with `...` holds for every member of the pack its body names (5.6).
