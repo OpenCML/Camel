@@ -2,12 +2,9 @@
  * The same place makes a box again and again: one body, run once per element of a small range.
  *
  * Each element's box is dead when the element is done, so it is freed with the element, and the
- * reading says so on every back end: every block released, none still live. `--gc-check foreign`
- * reads it at exit, and `ref_boxes_loop_thousand.cml` is the same program over a range a hundred
- * times longer, with the same reading. Read at exit the two agree on every back end; read at the
- * return of the run they are 0 on fvm, jit and prl and 3 here (nvm), which is the one handle-count
- * question left open: see
- * `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`.
+ * reading says so on every back end: every block released, none still live -- read at the return of
+ * the run, and again at exit. `ref_boxes_loop_thousand.cml` is the same program over a range a
+ * hundred times longer, with the same reading.
  */
 
 import state

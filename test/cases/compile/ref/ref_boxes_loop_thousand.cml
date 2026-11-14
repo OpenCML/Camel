@@ -4,9 +4,7 @@
  *
  * Read with `--gc-check foreign`, the counters of the two runs are the judgement: `live` here must
  * be the same size as `live` there, or the boxes of the elements that are over are still counted.
- * Read at exit the two agree; read at the return of the run they are 0 on fvm, jit and prl and 2
- * here (nvm), which is the one handle-count question left open: see
- * `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`.
+ * They are 0 in both runs, at the return of the run and at exit, on every back end.
  */
 
 import state
