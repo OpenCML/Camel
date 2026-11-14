@@ -538,7 +538,7 @@ eba878f8d66c3dbe ok stdlib/statistics.cml
 cd98045d0d3ef21b ok stdlib/stream.cml
 95098d3e31cd398d ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
-7412e62e8d9372be ok stdlib/test_support.cml
+cfa0255c014a234a ok stdlib/test_support.cml
 3c4d85f022206889 ok stdlib/this.cml
 6a4fb7f37be2ed14 ok stdlib/tiles.cml
 0ff92f7d01468e66 ok stdlib/time.cml
@@ -3353,6 +3353,9 @@ b184c6e048e0e743 ok test/cases/modules/selected_protection/effect.cml
 6ad7c13d5e82d6ea ok test/cases/modules/selected_protection/policy.cml
 06c629b4f9964bac ok test/cases/modules/selected_protection/pure.cml
 11b641251ad2068c ok test/cases/modules/selected_protection/shared.cml
+78560c1b7badecef ok test/cases/modules/stage_module_root/imports_bad.cml
+2019f45d911267fb ok test/cases/modules/stage_module_root/step.cml
+fe95229e3c415449 no test/cases/modules/stage_module_root/mods/bad.cml
 778dd4efcc5625fe ok test/cases/modules/std/array/every_operator.cml
 73c6e8b574977580 ok test/cases/modules/std/array/sort_basic.cml
 c64e8db2a11ef9f7 ok test/cases/modules/std/env/basic.cml
@@ -3937,8 +3940,8 @@ f31da0d4506eeace ok test/cases/para/core/asian_option_mc.cml
 6182a103922f5823 ok test/cases/para/core/block_sort_merge.cml
 3b6f0e7de2defa16 ok test/cases/para/core/bootstrap_medians.cml
 2013ce9754175bb2 ok test/cases/para/core/concurrent_alloc.cml
-b5279b76c0fe923a ok test/cases/para/core/concurrent_calls.cml
-c55e011422ffd499 ok test/cases/para/core/concurrent_recursion.cml
+2b89fefd710e2882 ok test/cases/para/core/concurrent_calls.cml
+d798c3f984bfdac0 ok test/cases/para/core/concurrent_recursion.cml
 9ed3137575be6b23 ok test/cases/para/core/file_chunk_hash.cml
 138cf38f4c67c08c ok test/cases/para/core/filter_keeps_all.cml
 4f2311810be91532 ok test/cases/para/core/map_chunks.cml

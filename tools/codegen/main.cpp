@@ -105,7 +105,10 @@ int main(int argc, char *argv[]) {
     file.close();
     CAMEL_LOG_INFO_S("codegen", "run | parse | done | {}", inputPath);
 
-    mainModule->compile(CompileStage::Done);
+    // A module that does not parse is a diagnostic against the module, and this tool loads it
+    // outside any import site: compileForLoad is the one place that decides it
+    // (camel/core/module/userdef.h), and `loaded()` below is the one question that reports it.
+    camel::core::module::compileForLoad(mainModule, CompileStage::Done);
     if (!mainModule->loaded()) {
         mainModule->diagnostics()->dump(std::cerr, false);
         return 1;

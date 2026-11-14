@@ -159,11 +159,54 @@ void collectDeclarations(
     }
 }
 
-std::vector<PassDeclaration> readDeclarations(
-    const std::string &module, const std::string &path) {
+/// What one file said: its declarations, or why it could not be read. Never both, and never a
+/// throw: a file that does not parse is a diagnostic against that file, not an exception out of
+/// the pipeline (see `DeclarationProblem`).
+struct DeclarationFile {
+    std::vector<PassDeclaration> declarations;
+    std::optional<DeclarationProblem> problem;
+};
+
+/// The first error of a container of parse diagnostics, as the same answer the module loader
+/// gives a module that does not compile: "its library 'x' does not compile", which the message
+/// that carries it finishes, and the parser's first error as the secondary location. The range is
+/// left as the token range the parser gave it until it is resolved here, with the same
+/// `RangeConverter` every other reader of a parse uses, so the two paths report the same file,
+/// line, column and text.
+DeclarationProblem problemOf(
+    const camel::core::error::Diagnostics &diags,
+    const camel::parse::CamelParser &parser,
+    const std::string &module,
+    const std::string &path) {
+    DeclarationProblem problem{
+        std::format("its library '{}' does not compile", module), std::nullopt};
+    const auto errors = diags.errors();
+    if (errors.empty()) {
+        problem.text += std::format(": the declarations in {} do not parse", path);
+        return problem;
+    }
+    camel::core::error::Diagnostic first = *errors.front();
+    first.fetchRange(camel::core::error::RangeConverter(parser.tokenPositions()));
+    if (const auto *range = std::get_if<camel::core::error::CharRange>(&first.range)) {
+        problem.location = camel::core::error::DiagLabel{
+            *range, first.name + ": " + first.message, camel::core::error::diagnosticPath(first)};
+    } else {
+        problem.text += std::format(" {}: {}", first.name, first.message);
+    }
+    return problem;
+}
+
+DeclarationFile readDeclarations(const std::string &module, const std::string &path) {
+    DeclarationFile read;
     std::ifstream in(path, std::ios::binary);
     if (!in) {
-        throw std::runtime_error(std::format("cannot read the pass declarations in {}", path));
+        read.problem = DeclarationProblem{
+            std::format(
+                "its library '{}' does not compile: the declarations in {} cannot be read",
+                module,
+                path),
+            std::nullopt};
+        return read;
     }
     auto sources = std::make_shared<camel::source::SourceContext>();
     auto diags =
@@ -171,36 +214,52 @@ std::vector<PassDeclaration> readDeclarations(
     camel::parse::CamelParser parser(diags);
     parser.setSourceContext(sources);
     if (!parser.parse(in) || diags->hasErrors() || !parser.ast()) {
-        const auto errors = diags->errors();
-        throw std::runtime_error(std::format(
-            "{}: {}",
-            path,
-            errors.empty() ? "the module does not parse" : errors.front()->message));
+        read.problem = problemOf(*diags, parser, module, path);
+        return read;
     }
-    std::vector<PassDeclaration> declarations;
-    // Module -> Stmts.
-    collectDeclarations(parser.ast()->at(2), module, declarations);
-    return declarations;
+    // Module -> Stmts. A declaration the reader refuses (a pass with a body whose parameters no
+    // pass can take) is a problem of this file's declarations, not an exception out of it: it
+    // leaves this function the same way a file that does not parse does.
+    try {
+        collectDeclarations(parser.ast()->at(2), module, read.declarations);
+    } catch (const std::exception &e) {
+        read.declarations.clear();
+        read.problem = DeclarationProblem{
+            std::format(
+                "its library '{}' does not compile: the declarations in {} are refused: {}",
+                module,
+                path,
+                e.what()),
+            std::nullopt};
+    }
+    return read;
+}
+
+/// The one cache: a file is read once, and both answers it can give (its declarations, the reason
+/// it has none) come from that one read. Keyed by path, in the order the search found them.
+const DeclarationFile *declarationFileOf(
+    const std::string &module, const camel::core::context::context_ptr_t &ctx) {
+    static std::mutex mutex;
+    static std::map<std::string, std::shared_ptr<const DeclarationFile>> cache;
+    const std::string path = declarationPathFor(module, ctx);
+    if (path.empty()) {
+        return nullptr;
+    }
+    std::lock_guard lock(mutex);
+    if (const auto it = cache.find(path); it != cache.end()) {
+        return it->second.get();
+    }
+    auto read = std::make_shared<const DeclarationFile>(readDeclarations(module, path));
+    const DeclarationFile *result = read.get();
+    cache.emplace(path, std::move(read));
+    return result;
 }
 
 const std::vector<PassDeclaration> &declarationsOf(
     const std::string &module, const camel::core::context::context_ptr_t &ctx) {
-    static std::mutex mutex;
-    static std::map<std::string, std::shared_ptr<const std::vector<PassDeclaration>>> cache;
-    const std::string path = declarationPathFor(module, ctx);
-    if (path.empty()) {
-        static const std::vector<PassDeclaration> none;
-        return none;
-    }
-    std::lock_guard lock(mutex);
-    if (const auto it = cache.find(path); it != cache.end()) {
-        return *it->second;
-    }
-    auto declarations = std::make_shared<const std::vector<PassDeclaration>>(
-        readDeclarations(module, path));
-    const auto &result = *declarations;
-    cache.emplace(path, std::move(declarations));
-    return result;
+    static const std::vector<PassDeclaration> none;
+    const DeclarationFile *read = declarationFileOf(module, ctx);
+    return read == nullptr ? none : read->declarations;
 }
 
 bool isIdentifierText(const std::string &text) {
@@ -237,6 +296,15 @@ std::vector<std::string> moduleDeclarationCandidates(
 const std::vector<PassDeclaration> &passDeclarations(
     const std::string &module, const camel::core::context::context_ptr_t &ctx) {
     return declarationsOf(module, ctx);
+}
+
+std::optional<DeclarationProblem> declarationProblem(
+    const std::string &module, const camel::core::context::context_ptr_t &ctx) {
+    const DeclarationFile *read = declarationFileOf(module, ctx);
+    if (read == nullptr) {
+        return std::nullopt;
+    }
+    return read->problem;
 }
 
 const PassDeclaration *findPassDeclaration(
