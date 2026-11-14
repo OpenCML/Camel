@@ -100,3 +100,44 @@ assert(text.includes('0x03000210'), 'and it names the code the rule landed with:
 }
 """
 timeout_ms = 20000
+[[tests]]
+name = "adb67e081.rc04_seed72_within_call_no_pass"
+desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above)."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
+args = ["${case}", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 2, 'no pass: 2 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 0, 'the program says nothing, read ' + JSON.stringify(lines))
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "adb67e081.rc04_seed72_within_call_inline"
+desc = "The same program under `std::opt::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red."
+kind = "behavior"
+case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
+args = ["${case}", "std::opt::inline", "std::stats", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 0, 'inline: 0 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 0, 'the program says nothing after the pass too, read ' + JSON.stringify(lines))
+}
+"""
+timeout_ms = 20000

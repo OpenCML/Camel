@@ -79,3 +79,41 @@ verify_script = """
     assert(said.includes('0x03000210'), 'and the report names the code the rule landed with: ' + said)
 }
 """
+
+[[tests]]
+name = "inline_cycle.within_call_no_pass"
+desc = "The legal half of seed 23 with no pass: the program runs, prints its sixteen lines, and `std::stats` reads 24 direct calls -- the number the entry below must move. This is the reading that is still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above)."
+kind = "behavior"
+case = "../../../cases/opt/inline_cycle/seed23_fold_inline_within_call.cml"
+args = ["${case}", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 24, 'no pass: 24 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 16, 'the program prints its sixteen lines, read ' + lines.length)
+}
+"""
+
+[[tests]]
+name = "inline_cycle.within_call_fold_then_inline"
+desc = "The same program under the pair that found the defect: 3 direct calls remain (from 24), so the inlining this shape still exercises really happened, and the sixteen lines are the ones the run without the passes prints. A pipeline that stops inlining leaves 24 here and turns the entry red."
+kind = "behavior"
+case = "../../../cases/opt/inline_cycle/seed23_fold_inline_within_call.cml"
+args = ["${case}", "std::opt::fold", "std::opt::inline", "std::stats", "std::nvm"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 3, 'fold+inline: 3 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 16, 'the sixteen lines survive the pair, read ' + lines.length)
+}
+"""
