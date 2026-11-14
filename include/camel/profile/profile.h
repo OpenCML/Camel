@@ -159,7 +159,7 @@ void setDevice(std::string device);
 struct HostLoopHint {
     uint64_t origin = 0;
     std::string graph;
-    /// The place in the source ("test/cases/x.cml:12:9"), when the origin resolves to one.
+    /// The place in the source ("test/cases/<name>.cml:12:9"), when the origin resolves to one.
     std::string position;
     /// The operators of the body, in source order, comma separated ("tensor:add, tensor:mul").
     std::string operators;

@@ -2,7 +2,7 @@
 
 **这是第二份计划。** 第一份是 [plan.cn.md](plan.cn.md)（决策者 2026-10-22 已批复，答复见任务书），它已经定下：`std::cml` 是翻译遍、打印的是当前的图而不是原始源码；`canon(P)` 的等价定义（§2.2）；S0–S5 的划分；§7 七问的答案（`let` 名字用源码名、声明标签用程序级事实表、`#tag { }` 建 `Block` 区域、泛型实例打印成具体函数、v1 一个文件摊平、大常量超限拒绝、打印抽取后的可执行图）。本文件不重复那些结论，只写**剩余工作**、**随仓库变化的修订**与**实测证据**；与第一份冲突的地方以本文件为准并写明原因。
 
-实测基线：`develop 102dbc5d1`（本计划的提交基底），在 88zjwei 上构建后的 `out/latest/bin/camel`。下面每个数字、每条诊断都是这一版跑出来的；测量脚本是本次临时加入、**不提交**的 `test/cases/trans/cml_probe.py`（11 个探针），命令形式是 `camel <file> std::cml [passes]`。反例程序都写在下文里，可逐条重跑。
+实测基线：`develop 102dbc5d1`（本计划的提交基底），在 88zjwei 上构建后的 `out/latest/bin/camel`。下面每个数字、每条诊断都是这一版跑出来的；测量脚本是本次临时加入、**不提交**的 `test/cases/trans/` 下的 `cml_probe.py`（11 个探针），命令形式是 `camel <file> std::cml [passes]`。反例程序都写在下文里，可逐条重跑。
 
 **基线与移动的目标**：写这份文件时 `origin/develop` 已经前进到 `38fbbb7b1`（图的边重构的数据边与顺序边语义、两份裁定——《一元算子比 `->` 结合得松》与《改写保持源码程序运行的每个效应》、数组归约内核，以及两份问题文件）。本计划依据的文件在这段区间里**只有一处变化**：`src/compile/gir/builder_expr.cpp#Builder::orderAfterLastWriter` 的注释（把待办指向裁定后的说明），行为没有变；`src/passes/trans/json/**`、`src/passes/trans/cml/**`、`test/tools/cml_roundtrip.py`、`include/camel/runtime/graph.h` 都没有改动。所以下面的数字与缺口在新基线上同样成立；实施 S3a 时以当时的 `develop` 为准，并注意 §8 第 5 问已经由那份裁定回答了一半。
 
@@ -794,7 +794,7 @@ func pick(x: int): string { return 'wide' }
 代价：这是**表**的工作，不是语义的工作：每个 URI 要么给一条语法（`x->map<f>` 这类高阶形式），要么确认它是编译期/内部算子（`:mark/*`、`:struct/*`）而应当写成它降级前的源码形式。判断需要逐 URI 的证据，所以它是 S5 里最大的一块。
 
 **缺口 B：命名类型与声明（273 + 66 + 35 + 31 = 405 个用例）。**
-复现：`camel test/cases/trans/cml/refuse/named_type.cml std::cml` → `std::cml cannot print get: a parameter is the named type 'Point'.`；`camel test/cases/compile/enum/generic_tree.cml std::cml` → `... a parameter has the type 'Option<int>', which std::cml does not print.`；`camel test/cases/modules/onnx/export_train_step.cml std::cml` → `a 'with' parameter is the named type 'Mlp'`。
+复现：`camel test/cases/trans/cml/named_type.cml std::cml` → `std::cml cannot print get: a parameter is the named type 'Point'.`；`camel test/cases/compile/enum/generic_tree.cml std::cml` → `... a parameter has the type 'Option<int>', which std::cml does not print.`；`camel test/cases/modules/onnx/export_train_step.cml std::cml` → `a 'with' parameter is the named type 'Mlp'`。
 停在哪：`cml.cpp#checkType`（命名 struct 与 `default` 分支）、`cml.cpp#checkType` 的元组分支（带标签元组）。
 代价：要打印声明本身（`type`/`enum` 声明、字段名、类型参数），还要一条**程序级声明表**（第一份计划 §7 问题 2 已答「程序级事实表，键为声明身份」）。`Tensor`、`Node`、`Program` 也是命名类型，所以 ONNX/autodiff/graph 三个模块语料的 38+ 个用例都挂在这一类上——它是**整程序**能不能打印的前提。
 
