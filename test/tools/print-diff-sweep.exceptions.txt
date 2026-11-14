@@ -1,0 +1,6 @@
+# Programs this sweep expects to print fewer lines under `std::opt`, and why.
+#
+# One entry per line: the path (relative to the repository root), a tab, and the reason. A line
+# without a reason is refused by the sweep, so an entry cannot be added just to make the count
+# zero. Nothing is registered yet: every program that prints is expected to print the same lines
+# after `std::opt` as before it.

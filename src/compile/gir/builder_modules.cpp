@@ -393,7 +393,10 @@ std::string resourceIdentity(std::string_view name, std::string_view declaring) 
 /// bound to (`#i`), or the name of an ambient resource. The clause says which resources a call
 /// touches, not how (its modes are the upper bound a call uses), so the modes and the class of
 /// a parameter are not compared: a handle a declaration names and the `Foreign` resource the
-/// operator's module wraps are the same operand.
+/// operator's module wraps are the same operand. `unordered` is a fact about the resource itself,
+/// not about how a call uses it, so it is part of the identity: a declaration that writes
+/// `resource r unordered` and an operator whose module declares it ordered are two different
+/// statements about one name, and that is a mismatch rather than a spelling difference.
 std::set<std::string> resourceIdentities(
     const camel::core::sem::ResourceSignature &signature, std::string_view declaring) {
     std::set<std::string> identities;
@@ -401,7 +404,8 @@ std::set<std::string> resourceIdentities(
         identities.insert(std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        identities.insert(resourceIdentity(use.name, declaring));
+        identities.insert(
+            resourceIdentity(use.name, declaring) + (use.unordered ? " unordered" : ""));
     }
     return identities;
 }

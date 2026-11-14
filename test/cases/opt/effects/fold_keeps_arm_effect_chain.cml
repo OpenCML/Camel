@@ -1,0 +1,18 @@
+/**
+ * The taken arm of a constant branch holds two effects written one after the other: both run, in
+ * the order they are written (design principles 3.3), and folding the condition must not take
+ * either of them away with the arm that is dropped.
+ */
+
+func pick(c: bool): int sync {
+    return if c then sync {
+        println(1)
+        println(2)
+        return 3
+    } else 0
+}
+
+func main(): int sync {
+    println(pick(true))
+    return 0
+}

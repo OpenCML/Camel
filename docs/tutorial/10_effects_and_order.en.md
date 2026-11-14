@@ -301,7 +301,9 @@ records it in the function type it displays. This program puts the forms side by
 
 ```cml
 // What a call touches: a resource of the module, a group of them, a handle type and `uses` on a
-// parameter. The bodies touch nothing, so every clause here names exactly what its body reaches.
+// handle parameter. A variable is never written in a clause -- a `var` parameter is declared by the
+// `var` in the parameter list and its uses are measured from the body -- so `bump` writes the cell
+// it is handed and every clause here names exactly what its body reaches.
 // Run: camel docs/tutorial/examples/10_resources.cml
 
 resource db
@@ -316,7 +318,7 @@ func read_id(s: Stream): int uses s {
 func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses var cell sync {
+func bump(var cell: int): int sync {
     cell += 1
     return cell
 }
@@ -347,14 +349,20 @@ What may follow `uses`: the grammar is `resourceClause` in
 - **A resource the module declares**: `resource db`. A module may declare its own resources, and may group several of
   them: `resource console = [db, stdout]`.
 - **A resource every program has**: `stdout`, `stderr`, `stdin`, `clock`, `env`, `fs`.
-- **A parameter**: `uses s`, `uses cell`. This says "the call touches the value I pass in" -- handle-style, like a
-  `var` parameter: operations on one handle keep the written order, different handles do not constrain each other.
-- **How the call touches it is written in front of the name**: without `var` the entry reads, with `var` it writes,
-  the same meaning a `var` parameter has (design principles 3.3): `uses s` reads the handle, `uses var cell` writes
-  the cell. An **external** resource written without `var` is a compile error
-  (`SemanticDiag::ExternalResourceNeedsVar`): that state is not the program's, the program and whatever else is
-  outside it both read and write it, so a call that names one writes it. An inferred type, a `tooltip` and a
-  diagnostic all print the entry that way, so `uses s` and `uses var s` are told apart at a glance.
+- **A handle parameter**: `uses s`. This says "the call touches the value you hand it" -- handle-style: operations on one
+  handle keep the written order, different handles do not constrain each other. A `var` parameter is not written this
+  way: it is a variable, see the next entry.
+- **How the call touches it is written in front of the name**: without `var` the entry reads, with `var` it writes, the
+  same meaning a `var` parameter has (design principles 3.3): `uses s` reads the handle, `uses var s` writes it,
+  `uses fs` reads a file, `uses var fs` writes it. An **external** resource follows the same rule -- there is no
+  exception that one of them always carries `var`: for a resource a call only reads, such as `clock` or `env`, the
+  entry is written without it. An inferred type, a `tooltip` and a diagnostic all print the entry that way, so
+  `uses fs` and `uses var fs` are told apart at a glance.
+- **A variable is not written in `uses`**: a `var` parameter, a module-level `var`, a captured variable and a local
+  are all variables, and a clause names none of them (`SemanticDiag::VariableInUses`). A variable is declared in one
+  place -- the `var` in a parameter list, the `var` of a module declaration, the `var` or `let` that binds it -- and
+  which calls touch it, reading or writing, is measured from the body and printed in the signature the compiler
+  derives. `bump` above is that case: its clause is empty and its type still reads `uses var cell`.
 - **A handle type declared with `#resource type`**: `#resource type Stream = { id: int }`. **Every value** of it is a
   resource of its own, so `read_id` claims "I touch the `Stream` you give me", not "I touch all streams".
 
@@ -374,6 +382,9 @@ error (the errors below).
 What a wrong clause looks like (all compile errors):
 
 - a name that is neither a parameter nor a resource: `SemanticDiag::UnknownResource`.
+- a variable in a clause (a `var` parameter, a module `var`, a captured variable): `SemanticDiag::VariableInUses` --
+  a variable is declared once, and which calls touch it is measured from the body and printed in the derived
+  signature.
 - `pure` together with `uses` in one signature: `SemanticDiag::PureAndUses` -- `pure` says "no resource at all",
   `uses` says "these", and only one of the two may be written.
 - a body-less declaration (a native operator) whose clause is not the operator's: `SemanticDiag::NativeResourceMismatch`

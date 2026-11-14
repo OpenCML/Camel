@@ -39,9 +39,9 @@
 
 #include <algorithm>
 #include <cctype>
+#include <cstdlib>
 #include <format>
 #include <functional>
-#include <cstdlib>
 #include <iostream>
 #include <unordered_map>
 #include <unordered_set>
@@ -63,8 +63,8 @@ class Builder::UnitContext {
           tree_(builder.tree_), graph_(builder.currGraph_), nodeScope_(builder.nodeScope_),
           graphScope_(builder.graphScope_), decoratedScope_(builder.decoratedScope_),
           templateScope_(builder.templateScope_), bindings_(builder.typeBindings_),
-          depth_(builder.instantiationDepth_), synced_(builder.synced_),
-          varied_(builder.varied_), declaresVariable_(builder.declaresVariable_),
+          depth_(builder.instantiationDepth_), synced_(builder.synced_), varied_(builder.varied_),
+          declaresVariable_(builder.declaresVariable_),
           calleeAllowed_(builder.genericCalleeAllowed_), lastSynced_(builder.lastSyncedNode_),
           refOrigin_(builder.refOrigin_), namespacePath_(builder.namespacePath_),
           usingFrames_(builder.usingFrames_) {
@@ -200,15 +200,15 @@ bool isWrittenName(const std::string &name) {
 /// rule's right side: such a family has nothing to bind its pattern's names with, so its rules may
 /// not read them (`SemanticDiag::RuleRightUsesOuterVariable`).
 ///
-/// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands and
-/// then with what it answers, so its rules write `x` and `w` on the right side and must
+/// `rulesets.jvp` is not one of these: `jvp` calls the right side itself, once with the operands
+/// and then with what it answers, so its rules write `x` and `w` on the right side and must
 /// (`modules/transforms/jvp.cpp`). `rulesets.vmap` is: the batched graph has no unbatched value to
 /// give the outer arrow, so the transform reads `rhsCalleeOf` and calls the named function with the
 /// batch (`modules/transforms/vmap.cpp`), and a rule that reads `x` has nothing to read.
 bool familyCallsOnlyItsCallee(const std::string &family) {
     // `rulesets.probe_batch` is the fixture of the same shape: the refusal is reachable on purpose
-    // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing rule
-    // reachable for `jvp`.
+    // there (stdlib/rulesets/probe_batch.cml), the way `rulesets.probe_missing` makes a missing
+    // rule reachable for `jvp`.
     return family == "rulesets.vmap" || family == "rulesets.probe_batch";
 }
 
@@ -438,8 +438,7 @@ void Builder::buildTopLevelValue(TopLevelDeclaration &declaration) {
             for (const std::string &name : declaration.names) {
                 if (const auto cell = declaration.unit->nodeScope->get(name, false);
                     cell.has_value()) {
-                    moduleVariableResources_[*cell] =
-                        declaration.unit->module->name() + ":" + name;
+                    moduleVariableResources_[*cell] = declaration.unit->module->name() + ":" + name;
                 }
             }
         }
@@ -690,8 +689,7 @@ void Builder::scanProgramWriters() {
         std::set<std::string> &names = parametersOf[function];
         if (function != nullptr && function->size() > 0 && function->at(0) != nullptr) {
             if (auto *type = function->at(0)->dataType(); type != nullptr) {
-                if (const auto *signature = tt::as_ptr<FunctionType>(type);
-                    signature != nullptr) {
+                if (const auto *signature = tt::as_ptr<FunctionType>(type); signature != nullptr) {
                     for (size_t index = 0; index < signature->argNamesCount(); ++index) {
                         names.emplace(signature->argNameAt(index));
                     }
@@ -708,9 +706,9 @@ void Builder::scanProgramWriters() {
     }
     // The names a function declares itself: `var x = e` is a `VARI` over the reference that names
     // the cell. A function that writes a name it declared writes its own cell -- nothing outside it
-    // reaches that cell but the functions written inside it, which are writers of their own and stay
-    // in the set. The declaring function's own write is left out: a call through a function value
-    // cannot write a cell it was never handed.
+    // reaches that cell but the functions written inside it, which are writers of their own and
+    // stay in the set. The declaring function's own write is left out: a call through a function
+    // value cannot write a cell it was never handed.
     std::unordered_map<const GCT::Node *, std::set<std::string>> declaredOf;
     const auto declaredNamesOf = [](GCT::node_ptr_t vari, std::set<std::string> &names) {
         std::function<void(GCT::node_ptr_t, int)> collect = [&](GCT::node_ptr_t node, int depth) {
@@ -738,8 +736,7 @@ void Builder::scanProgramWriters() {
         if (node == nullptr) {
             continue;
         }
-        const GCT::Node *function =
-            node->type() == GCT::NodeKind::FUNC ? node : current.function;
+        const GCT::Node *function = node->type() == GCT::NodeKind::FUNC ? node : current.function;
         if (node->type() == GCT::NodeKind::VARI) {
             declaredNamesOf(node, declaredOf[function]);
         }
@@ -764,7 +761,7 @@ void Builder::scanProgramWriters() {
         std::set<const GCT::Node *> &functions = entry->second;
         for (auto writer = functions.begin(); writer != functions.end();) {
             const GCT::Node *function = *writer;
-            const auto declared = declaredOf.find(function);
+            const auto declared       = declaredOf.find(function);
             if (function != nullptr && declared != declaredOf.end() &&
                 declared->second.count(entry->first) != 0) {
                 writer = functions.erase(writer);
@@ -856,8 +853,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         // (a rule's `__lhs` has no body at that stage, so nothing here could read them); they are
         // indexed here, where the module and its diagnostics are in hand: one index per ruleset,
         // taken once, and a second rule under one head is refused rather than chosen by order.
-        if (!unit->failed && unit->module &&
-            unit->module->name().rfind("rulesets.", 0) == 0) {
+        if (!unit->failed && unit->module && unit->module->name().rfind("rulesets.", 0) == 0) {
             const std::string ruleset = unit->module->name();
             std::vector<camel::parse::ast::RuleHead> rules =
                 camel::parse::ast::takeRuleHeads(ruleset);
@@ -880,8 +876,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     continue;
                 }
                 // A family whose transform reads a rule's callee name and calls that function with
-                // the batch never calls the rule's right side itself, so nothing binds the names its
-                // left side's pattern writes. A rule that reads one of them is a rule no such
+                // the batch never calls the rule's right side itself, so nothing binds the names
+                // its left side's pattern writes. A rule that reads one of them is a rule no such
                 // transform can use -- and the place to say so is here, where the rule is written,
                 // not the call that would have used it (the author's ruling of 2026-11-01 05:10:
                 // the outer arrow is not called, so nothing may depend on it).
@@ -891,8 +887,7 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                     diag.commit(rule.rule, rule.outerUses);
                     continue;
                 }
-                const std::string first =
-                    camel::parse::ast::indexRule(ruleset, rule);
+                const std::string first = camel::parse::ast::indexRule(ruleset, rule);
                 if (!first.empty()) {
                     auto diag = unit->diags->of(SemanticDiag::DuplicateRuleForOperator);
                     diag.at(TokenRange{rule.tokenStart, rule.tokenEnd});
@@ -904,7 +899,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
         }
     }
     bool ok = std::none_of(order.begin(), order.end(), inError);
-
 
     // Step three: link.
     if (ok) {
@@ -959,6 +953,10 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportEffectfulConditions();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
+                // The state rule (design principles 3.5, rule two): a closure may not carry a `var`
+                // capture out of the evaluation that declared it. Also before the bodies are let
+                // go.
+                checkCellEscapes();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`
@@ -987,9 +985,8 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // skips for an ordinary dump or pass, and Program::implBodies still lists it.
     std::vector<compile_graph_ptr_t> imported;
     for (const compile_graph_ptr_t &graph : rootGraph_->subGraphs()) {
-        const auto owner = rootSubGraphOwners_.find(graph.get());
-        const bool semanticBody =
-            (graph->view().flags() & camel::runtime::kGraphFlagImplBody) != 0;
+        const auto owner        = rootSubGraphOwners_.find(graph.get());
+        const bool semanticBody = (graph->view().flags() & camel::runtime::kGraphFlagImplBody) != 0;
         if (owner != rootSubGraphOwners_.end() && owner->second != nullptr &&
             !owner->second->entry && !semanticBody) {
             imported.push_back(graph);
@@ -1008,6 +1005,5 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     }
     return ok;
 }
-
 
 } // namespace camel::compile::gir

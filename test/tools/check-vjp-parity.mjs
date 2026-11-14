@@ -8,8 +8,13 @@
 // does not hold is a debt. That claim is only worth what the three readings below are worth, and a
 // gate that has never been red on purpose is a gate nobody has seen work:
 //
-//   the real tree          -- `0 new`: every difference the two tables have is written down, with
-//                             an owner and a reason. This is the reading the plan pins.
+//   the real tree          -- `0 new` **and** `stale=0`, read with `--strict`: every difference
+//                             the two tables have is written down with an owner and a reason, and
+//                             no row in the list has outlived the difference it holds. This is the
+//                             reading the plan pins, and `stale=0` is what makes it bite: before
+//                             2026-11-14 the gate was silent about a row with no difference, and
+//                             the list had grown to 80 rows for 56 differences -- a dead row reads
+//                             exactly like a live one, so nothing named the difference.
 //   a law with no rule     -- a copy of the rulesets with **one** rule added (`fake_parity_op_t`,
 //                             an operator whose name appears in neither table) and the engine's
 //                             table untouched: the gate must name that operator and exit 1. The
@@ -69,12 +74,21 @@ function report(name, ok, detail) {
 }
 
 // ---- the real tree ---------------------------------------------------------------------------
+//
+// `--strict` on purpose: the default reading prints `stale=<n>` and stays green, so a reading taken
+// without the flag would go green on a list that is mostly dead rows. This is the reading the plan
+// pins, and it is the one that says the account and the fact are the same length.
 
-const real = runGate([])
+const real = runGate(['--strict'])
+const realOk = real.code === 0 && /0 new/.test(real.output) && /stale=0\b/.test(real.output)
 report(
-    'the real tree has no difference the list does not hold',
-    real.code === 0 && /0 new/.test(real.output),
-    real.code === 0 ? 'exit 0, 0 new' : `exit ${real.code}: ${real.output.trim().split('\n').slice(-3).join(' | ')}`
+    'the real tree has no difference the list does not hold, and no row without a difference',
+    realOk,
+    real.code === 0
+        ? /stale=0\b/.test(real.output)
+            ? 'exit 0, 0 new, stale=0'
+            : `exit 0, 0 new, but the count is not zero: ${real.output.trim().split('\n').slice(-1)}`
+        : `exit ${real.code}: ${real.output.trim().split('\n').slice(-3).join(' | ')}`
 )
 
 // ---- a copy of the rulesets with one law nothing answers --------------------------------------

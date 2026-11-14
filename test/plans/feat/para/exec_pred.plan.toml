@@ -1,0 +1,337 @@
+id = "para.exec_pred"
+order = 352
+tier = "fast"
+tags = ["feat", "para", "consistency"]
+desc = "The nodes one node waits for have one implementation, and the differential test that pins it: the same seven programs on std::nvm (the reference) and on the parallel scheduler, whose task graph is cut by that implementation, print the same lines in the same order"
+
+# What this plan is for
+# ---------------------
+# "Which nodes must run before this one" used to be worked out in four places that each read the
+# graph's edges themselves: the execution order (src/execute/graph_runtime_support.cpp,
+# computeExecutionOrder), the parallel scheduler's node-by-node task graph
+# (src/passes/sched/taskflow/taskflow.cpp, connectRuntimeDependencies), its structured plan
+# (the same file, the `collectWaits` of buildStructuredPlan) and the storage-reuse proof of the
+# plan (src/execute/exec_plan.cpp, planStorageReuse). They are now one function,
+# `camel::execute::executionPredecessorsOf` (include/camel/execute/graph_runtime_support.h), and
+# the four read it, every kind of edge included: the plan waits for the order edge as it waits for
+# the data, control and sync edges, so what is left is one answer and no exception.
+#
+# This entry is the differential test: the same programs, run by std::nvm -- the linear reference,
+# which walks the order the plan computes -- and by the parallel scheduler, whose scopes are cut
+# into tasks exactly along the predecessor edges. Both must print the same lines in the same
+# order, and `expect_stdout_exact` freezes that text here so that a divergence is reported as the
+# first differing line (`describeTextDifference` in test/tools/run-tests.mjs) rather than as a
+# bare "differs".
+#
+# Four configurations of the scheduler are run, because they reach the predecessor edges by
+# different paths, and a change that breaks one need not break the others:
+#
+#   run_prl               the default: a serial graph goes to the bytecode interpreter, and the
+#                         rest is laid out from the plan;
+#   run_prl_fanout_all    every scope whose items are not totally ordered becomes a task graph
+#                         (`fanout_all=true`), so the edges are what cuts it. Measured on these
+#                         six programs with `segments=true`: the arm of `sumTo` in branch.cml,
+#                         the body of `inner` in sync_block.cml and `main` in fault.cml are cut
+#                         into chains of tasks. The others are totally ordered (a linear chain, a
+#                         loop, and an io body whose statements are all on the chain), which is
+#                         what those three are here to keep true. By that same rule the program
+#                         this entry adds is cut too: `two` of order_edge.cml has two constant
+#                         pairs with no path between them, so it is not totally ordered either;
+#   run_prl_no_bytecode   the scheduler evaluates every graph itself instead of handing a serial
+#                         one to the interpreter.
+#
+# The seven programs cover the shapes the predecessor function has to answer for: a linear chain,
+# a branch (both arms, and the arm's own pure computation, which is where a task graph appears),
+# a loop (evaluated node by node, so this case is the path where no task graph is cut at all), a
+# sync block (GATEs forwarding a value along the chain, a block body in a function and in a
+# lambda), a computation that may fault and is caught (`GATE`, the fault becoming an error
+# value), external access (`println`, a module operator, a comprehension and a higher-order
+# call) and two effectful calls that only an order edge orders (`order_edge.cml`: the two calls
+# of `mark` both write the console, the builder orders them in the order they are written, and
+# that edge is the one thing that says which line comes first).
+#
+# The six differential entries compare what two back ends print, which catches an answer that makes
+# a program print the wrong thing and cannot catch an answer that is merely larger than it should
+# be: an extra predecessor that orders two nodes which were already in that order changes no line.
+# The three structural entries at the end close that: `std::tfdump` writes, after its digraph, what
+# every node that runs waits for and the kind of edge that says so, one node per line and sorted
+# (`# <node> <- [<kind>:<node>, ...]`), read from camel::execute::executionPredecessorsOf. The
+# entry holds that whole section to the text it should be, line for line, so a predecessor that is
+# missing and one that should not be there each fail on one line and the message names it.
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+expect_output_not_contains = ["not reached", "Segmentation fault", "dumped core"]
+timeout_ms = 60000
+
+[[tests]]
+name = "linear"
+desc = "A linear chain: every statement of the body prints, so the order the lines come out in is the order the nodes ran in. The last line prints a value two unordered calls made, which only a back end that ran both before it can print."
+case = "../../../cases/para/exec_pred/linear.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """linear 0
+linear 1 3
+linear 2 7
+linear 3 22
+linear 4 164
+"""
+
+[[tests]]
+name = "branch"
+desc = "A branch: one arm runs and the other does not, what an arm reads from outside the branch is computed before it is taken, and the arm's own arithmetic is a scope the parallel scheduler cuts into tasks."
+case = "../../../cases/para/exec_pred/branch.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """pick enter 3
+arm odd 3
+pick leave 60
+branch 1 60
+pick enter 4
+arm even 4
+pick leave 10
+branch 2 10
+"""
+
+[[tests]]
+name = "loop"
+desc = "A loop: the rounds run in order and each round prints once. The scheduler evaluates a graph with a loop node by node, so this case is the path where the shared function cuts no task graph and the lines must still be the reference's."
+case = "../../../cases/para/exec_pred/loop.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """loop before
+round 0 3
+round 3 1
+round 4 4
+loop after 8
+while 2
+while 1
+loop done 0
+"""
+
+[[tests]]
+name = "sync_block"
+desc = "A sync block: its statements run in the order they are written, and a value it hands on that is not its own is forwarded through a GATE -- the node whose sync predecessor the shared function has to keep. A block body in a function and in a lambda."
+case = "../../../cases/para/exec_pred/sync_block.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """main 1
+block 1 5
+inner 1 5
+inner 2 10
+block 2 10
+main 2 11
+"""
+
+[[tests]]
+name = "fault"
+desc = "A computation that may fault: `divide` stays on the sync chain and its value reaches the next statement through a GATE; the fault itself is caught by `attempt` and becomes an error value, and the statements after it still run in order."
+case = "../../../cases/para/exec_pred/fault.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """fault 1
+fault 2 4
+fault 3 DivisionByZero
+fault 4 3
+"""
+
+[[tests]]
+name = "io"
+desc = "External access: println, a module operator, a value built by a comprehension and a reduction over an array, then two higher-order calls neither of which waits for the other."
+case = "../../../cases/para/exec_pred/io.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """io 1 3.1622776601683795
+io 2 [1, 2, 3]
+io 3 [1, 4, 9]
+io 4 14.035668847618199
+io 5 [2, 4, 6] [2, 5, 10]
+"""
+
+[[tests]]
+name = "order_edge"
+desc = "Two effectful calls with nothing between them but an order edge: both write the console, so the builder orders the call written first before the call written second, and the plan must wait for that edge like for any other (it used to run them at once, and the two lines could come out in either order). The first two lines are the edge's answer; the third is the sum the two calls returned."
+case = "../../../cases/para/exec_pred/order_edge.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "prl", "prl_fanout_all", "prl_no_bytecode"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_stdout_exact = """order 1
+order 2
+order 30
+"""
+
+[[tests]]
+name = "linear.predecessors"
+desc = "The linear chain's predecessor set, line by line: what every node that runs waits for, and the kind of edge that says so. The two calls the last line adds are the case's only unordered pair (`# 11 <- [data:9, data:10]`), and the order edges the builder writes before the printing statements are in it too, which the plan now waits for like NodeVM does."
+case = "../../../cases/para/exec_pred/linear.cml"
+args = ["${case}", "std::tfdump"]
+verify_script = """({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const start = lines.findIndex((line) => line.startsWith('# predecessors:'))
+assert(start >= 0, `the dump has no predecessor section: ${out.slice(0, 200)}`)
+const got = lines.slice(start).filter((line) => line.startsWith('#'))
+const want = `# predecessors: what each node that runs waits for, and the edge that says so
+# graph __root__
+# 0 <- []
+# 1 <- [data:0]
+# graph main
+# 0 <- []
+# 1 <- [data:0]
+# 2 <- []
+# 3 <- [control:1, sync:1, data:2]
+# 4 <- []
+# 5 <- [order:1, control:3, data:3, sync:3, data:4]
+# 6 <- [data:3, control:5, sync:5]
+# 7 <- []
+# 8 <- [order:5, control:6, data:6, sync:6, data:7]
+# 9 <- [data:3, control:8, sync:8]
+# 10 <- [data:6, control:9, sync:9]
+# 11 <- [data:9, data:10]
+# 12 <- []
+# 13 <- [order:8, control:10, sync:10, data:11, data:12]
+# 14 <- []
+# 15 <- [control:13, sync:13, data:14]
+# 16 <- []
+# 17 <- [control:15, sync:15, data:16]
+# 18 <- []
+# 19 <- [data:15, data:17]
+# 20 <- [order:13, control:17, sync:17, data:18, data:19]
+# 21 <- []
+# 22 <- [control:20, sync:20, data:21]
+# graph step
+# 0 <- []
+# 1 <- []
+# 2 <- [data:0, data:1]
+# 3 <- []
+# 4 <- [data:2, data:3]
+`.trimEnd().split('\n')
+const count = Math.max(got.length, want.length)
+for (let i = 0; i < count; i++) {
+    const g = i < got.length ? got[i] : '(the dump stops here)'
+    const w = i < want.length ? want[i] : '(nothing should be here)'
+    assert(g === w, 'predecessors differ at line ' + (i + 1) + '\n  expected ' + w + '\n  got      ' + g)
+}
+}"""
+
+[[tests]]
+name = "sync_block.predecessors"
+desc = "The sync block's predecessor set. The GATE that forwards the block's value (`# 7 <- [data:4, control:6, sync:6]`) waits for the statement the chain wrote before it, and the lambda's own graph is held to its set as well, so a predecessor added to or lost from any of the four graphs is named."
+case = "../../../cases/para/exec_pred/sync_block.cml"
+args = ["${case}", "std::tfdump"]
+verify_script = """({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const start = lines.findIndex((line) => line.startsWith('# predecessors:'))
+assert(start >= 0, `the dump has no predecessor section: ${out.slice(0, 200)}`)
+const got = lines.slice(start).filter((line) => line.startsWith('#'))
+const want = `# predecessors: what each node that runs waits for, and the edge that says so
+# graph __root__
+# 0 <- []
+# 1 <- [data:0]
+# graph main
+# 0 <- []
+# 1 <- [data:0]
+# 2 <- []
+# 3 <- []
+# 4 <- [control:1, order:1, sync:1, data:2, data:3]
+# 5 <- []
+# 6 <- [control:4, data:4, sync:4, data:5]
+# 7 <- []
+# 8 <- [control:6, sync:6, data:7]
+# graph inner
+# 0 <- []
+# 1 <- []
+# 2 <- [data:0, data:1]
+# 3 <- []
+# 4 <- [data:0, data:3]
+# 5 <- []
+# 6 <- [control:2, order:2, sync:2, data:4, data:5]
+# 7 <- [data:4, control:6, sync:6]
+# graph __g_49__
+# 0 <- []
+# 1 <- []
+# 2 <- [data:0, data:1]
+# 3 <- [data:0, control:2, order:2, sync:2]
+# 4 <- []
+# 5 <- [control:3, data:3, sync:3, data:4]
+# 6 <- []
+# 7 <- [data:3, data:6]
+# 8 <- [control:5, sync:5, data:7]
+`.trimEnd().split('\n')
+const count = Math.max(got.length, want.length)
+for (let i = 0; i < count; i++) {
+    const g = i < got.length ? got[i] : '(the dump stops here)'
+    const w = i < want.length ? want[i] : '(nothing should be here)'
+    assert(g === w, 'predecessors differ at line ' + (i + 1) + '\n  expected ' + w + '\n  got      ' + g)
+}
+}"""
+
+[[tests]]
+name = "fault.predecessors"
+desc = "The faulting computation's predecessor set. The call that may fault stays on the chain and its value reaches the next statement through a GATE (`# 15 <- [data:12, control:19]`), and the arm the fault is caught in is a graph of its own, held to its set like the others."
+case = "../../../cases/para/exec_pred/fault.cml"
+args = ["${case}", "std::tfdump"]
+verify_script = """({ input, assert }) => {
+const out = input.normalized.stdout
+const lines = out.split('\n')
+const start = lines.findIndex((line) => line.startsWith('# predecessors:'))
+assert(start >= 0, `the dump has no predecessor section: ${out.slice(0, 200)}`)
+const got = lines.slice(start).filter((line) => line.startsWith('#'))
+const want = `# predecessors: what each node that runs waits for, and the edge that says so
+# graph __root__
+# 0 <- []
+# 1 <- [data:0]
+# graph main
+# 0 <- []
+# 1 <- [data:0]
+# 2 <- []
+# 3 <- []
+# 4 <- [control:1, sync:1, data:2, data:3]
+# 5 <- []
+# 6 <- [order:1, control:4, data:4, sync:4, data:5]
+# 7 <- []
+# 8 <- []
+# 9 <- [data:7, data:8]
+# 10 <- []
+# 11 <- []
+# 12 <- [control:6, order:6, sync:6, data:9, data:10, data:11]
+# 13 <- []
+# 14 <- [control:12, data:12, sync:12]
+# 15 <- [data:12, control:19]
+# 16 <- [data:15]
+# 17 <- []
+# 18 <- [data:16, data:17, data:19]
+# 19 <- [control:14, data:14, sync:14]
+# 20 <- [data:13, control:18, data:18, sync:18]
+# 21 <- []
+# 22 <- []
+# 23 <- []
+# 24 <- [control:20, sync:20, data:22, data:23]
+# 25 <- [order:12, order:20, data:21, control:24, data:24, sync:24]
+# 26 <- []
+# 27 <- [control:25, sync:25, data:26]
+# graph divide
+# 0 <- []
+# 1 <- []
+# 2 <- [data:0, data:1]
+# graph __g_49__
+# 0 <- []
+# 1 <- []
+# 2 <- []
+# 3 <- [data:0, data:1, data:2]
+`.trimEnd().split('\n')
+const count = Math.max(got.length, want.length)
+for (let i = 0; i < count; i++) {
+    const g = i < got.length ? got[i] : '(the dump stops here)'
+    const w = i < want.length ? want[i] : '(nothing should be here)'
+    assert(g === w, 'predecessors differ at line ' + (i + 1) + '\n  expected ' + w + '\n  got      ' + g)
+}
+}"""

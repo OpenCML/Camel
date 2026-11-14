@@ -9,6 +9,8 @@
 
 #include "rewrite.h"
 
+#include <atomic>
+
 #include "../inline/engine.h"
 
 #include "camel/passes/opt/constant_bytes.h"
@@ -28,10 +30,12 @@
 #include "camel/execute/pass/warnings.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft_inline.h"
+#include "camel/runtime/draft_session.h"
 #include "camel/runtime/draft_types.h"
 #include "camel/runtime/draft_writes.h"
 #include "camel/runtime/operator_instance.h"
 
+#include <algorithm>
 #include <deque>
 #include <map>
 #include <optional>
@@ -50,6 +54,27 @@ using camel::runtime::kInvalidNodeRef;
 namespace type = camel::core::type;
 
 namespace {
+
+/// How many constant branches were left standing because dissolving one would have stranded an
+/// effect. Counted, not silent: what keeping the effects costs is read off the log.
+///
+/// The count belongs to the process, not to a run: `std::opt` is a pass like any other and the same
+/// process may run it again (a second program, a second pipeline), and the pass layer has no place
+/// to reset a counter at. The log line says so; it used to say "in this run", which was a claim
+/// nothing kept. Atomic because the pass may be run by more than one thread at a time.
+std::atomic<size_t> g_foldsKeptForEffects{0};
+
+/// Records a fold the optimizer refused to keep the effects around it running, and says why.
+void keepBranchForEffects(camel::runtime::gc_node_ref_t brch, const char *why) {
+    const size_t kept = g_foldsKeptForEffects.fetch_add(1, std::memory_order_relaxed) + 1;
+    CAMEL_LOG_INFO_S(
+        "Opt",
+        "std::opt: kept the constant branch at node {} ({}) -- {} fold(s) kept for effects in this "
+        "process so far",
+        (unsigned)brch,
+        why,
+        kept);
+}
 
 // ---------------------------------------------------------------- branch regions
 
@@ -190,15 +215,20 @@ staticValueOf(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t
 /// anchors follow it as well (`replaceFoldResult`). Leaving it pinned is what kept a conversion
 /// written in return position (the CAST a named result type adds) in the graph forever: every
 /// folding round skipped it, and every inlining of that function copied the unfolded conversion.
+
+/// A GATE that stands in a chain is a statement of it, and a statement is not the value it passes
+/// on: folding it into that value would put the value where the statement was, and the statement
+/// after it would be left with a control wait only (`holdsChainPlace`, src/passes/opt/generic/
+/// rewrite.h -- the judgement the constant merge below reads as well). A returned value that waits
+/// on anything else is not folded either: it is the tail of the graph's effect order
+/// (docs/design/effects/edges.cn.md 1.5 and 5.3).
 bool isSyncWaitingGate(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
-    const auto &draft = transaction.graph();
-    const auto *node  = draft.header(id);
-    return node != nullptr && node->kind == GCNodeKind::Gate && !draft.syncInputsOf(id).empty();
+    const auto *node = transaction.graph().header(id);
+    return node != nullptr && node->kind == GCNodeKind::Gate && holdsChainPlace(transaction, id);
 }
 
-/// A GATE with a sync predecessor carries a chain place and cannot be folded into its input.
-/// A returned value that waits on anything else is not folded either: it is the tail of the graph's
-/// effect order (docs/design/effects/edges.cn.md 1.5 and 5.3).
+/// A node that stands in a chain cannot be folded into its value, and a returned value that waits
+/// on anything is not folded either: it is the tail of the graph's effect order.
 bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
     const auto &draft = transaction.graph();
     if (isSyncWaitingGate(transaction, id)) {
@@ -642,6 +672,112 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     const std::vector<gc_node_ref_t> branchChainPreds(
         draft.syncInputsOf(brch).begin(),
         draft.syncInputsOf(brch).end());
+    const auto placeablePred = [&](gc_node_ref_t pred) {
+        return pred != brch && pred != join && pred != kInvalidNodeRef && draft.alive(pred) &&
+               !removed(pred);
+    };
+    // Where the branch stood, when the branch itself stands in no chain of its block: code the
+    // builder or the inliner spliced beside the chain, entered by a control edge (a statement of an
+    // arm is entered from its BRCH that way), leaves the branch ordered but chained to nothing. The
+    // place it then occupies is read off the chain it sits beside: the statement the branch ran
+    // after (`brchPreds`, the edges it waits on whichever kind they are) and the one statement that
+    // successor continues with. The arm's chain goes between them -- after `slot`, before `heir` --
+    // which is 5.7's "the arm's statements take the branch's place" for a place that was only ever
+    // derived from control edges.
+    //
+    // `heir` is reported only when exactly one statement follows `slot` and it is not the branch
+    // itself, not code of the arms that go away, and not the arm's own tail (a statement the arm
+    // already follows). A place with no successor is left alone: there is nothing to splice into,
+    // and a branch that cannot be placed is not dissolved below.
+    const auto spliceHeir = [&](gc_node_ref_t *slotOut) {
+        for (gc_node_ref_t pred : brchPreds) {
+            if (!placeablePred(pred)) {
+                continue;
+            }
+            const gc_node_ref_t slot = camel::runtime::chainExitOf(draft, pred);
+            if (slot == kInvalidNodeRef || !draft.alive(slot) || removed(slot) || slot == brch ||
+                slot == join) {
+                continue;
+            }
+            gc_node_ref_t heir = kInvalidNodeRef;
+            size_t count       = 0;
+            for (gc_node_ref_t user : draft.syncUsersOf(slot)) {
+                if (user == brch || user == join || removed(user) || inArm(user) ||
+                    user == armChainTail) {
+                    continue;
+                }
+                heir = user;
+                ++count;
+            }
+            if (count == 1 && heir != kInvalidNodeRef && heir != armChainHead) {
+                if (slotOut != nullptr) {
+                    *slotOut = slot;
+                }
+                return heir;
+            }
+        }
+        return kInvalidNodeRef;
+    };
+    // A branch is dissolved only where the arm's chain can take the place it held: entered from
+    // where the branch stood, and followed by the statements that waited on it (5.7). Where neither
+    // the branch's own chain predecessor nor the place derived from its control edges can be
+    // entered, the arm's statements would hang in no chain of the graph and an effect among them
+    // would stop running, silently (2, 9.7). The branch is left standing there instead: the runtime
+    // then takes it as the program wrote it, which costs the fold and keeps the effect.
+    const auto armPlaceable = [&] {
+        for (gc_node_ref_t pred : branchChainPreds) {
+            if (placeablePred(pred)) {
+                return true;
+            }
+        }
+        for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
+            if (placeablePred(pred)) {
+                return true;
+            }
+        }
+        // The place the branch held is also handed to the arm's tail: the statement written after
+        // the branch waits on the arm's code, so the arm's statements are reached from the graph's
+        // result and run (2) even where the entry side had no place to write.
+        for (gc_node_ref_t user : draft.syncUsersOf(join)) {
+            if (user != brch && user != armChainHead && draft.alive(user) && !removed(user)) {
+                return true;
+            }
+        }
+        return spliceHeir(nullptr) != kInvalidNodeRef;
+    };
+    if (armChainHead != kInvalidNodeRef) {
+        bool armCarriesOrder = false;
+        for (gc_node_ref_t n : armNodes) {
+            if (inArmRegion(n) && carriesOrdering(draft, n, true)) {
+                armCarriesOrder = true;
+                break;
+            }
+        }
+        if (armCarriesOrder && !armPlaceable()) {
+            keepBranchForEffects(brch, "its arm's chain has no place to be entered from");
+            return false;
+        }
+    }
+    // An arm that brings no chain of its own -- a constant value, or code its region does not hold
+    // -- leaves nothing for the branch's place to be handed to. `eraseNode` closes the chain over
+    // the branch and gives its predecessor the branch's successors, so a branch with no sync
+    // successor at all leaves that predecessor's chain ending with nothing: the statement written
+    // after the branch is only ordered after it, by a control edge, and the effects written before
+    // the branch stop running with it (a recursion that prints in its own body drops the prints
+    // under `std::opt`). The branch is left standing, and the fold it costs is counted.
+    if (armChainHead == kInvalidNodeRef && !branchChainPreds.empty()) {
+        bool continues = false;
+        for (gc_node_ref_t user : draft.syncUsersOf(join)) {
+            if (user != brch && draft.alive(user) && !removed(user)) {
+                continues = true;
+                break;
+            }
+        }
+        if (!continues) {
+            keepBranchForEffects(brch, "its arm brings no chain and nothing waits on its place");
+            return false;
+        }
+    }
     if (armChainTail != kInvalidNodeRef) {
         armTail = armChainTail;
     }
@@ -784,12 +920,48 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
             entered = entered || !erasedByBranch(pred);
         }
+        bool placed = entered;
         if (!entered) {
             for (gc_node_ref_t pred : branchChainPreds) {
-                if (pred != armChainHead && pred != join && draft.alive(pred) && !removed(pred)) {
-                    chainTo(armChainHead, pred);
-                    break;
+                if (pred == armChainHead || pred == join || !draft.alive(pred) || removed(pred)) {
+                    continue;
                 }
+                // The place the branch stood in is its predecessor's chain exit, and the branch is
+                // that place's successor. A block's statements are one chain (5.3), and the chain a
+                // place may continue is the one whose successor is gone: the branch is one of the
+                // nodes erased below, so its successor slot is released before the arm's head takes
+                // it. Without this the head is left unentered whenever the arm's code is the only
+                // thing that keeps an effect of the arm reachable, and the effect stops running
+                // (the exemplar `05_effect_order`).
+                const gc_node_ref_t slot = camel::runtime::chainExitOf(draft, pred);
+                if (slot == kInvalidNodeRef || !draft.alive(slot) || removed(slot)) {
+                    continue;
+                }
+                const std::vector<gc_node_ref_t> slotUsers(
+                    draft.syncUsersOf(slot).begin(),
+                    draft.syncUsersOf(slot).end());
+                for (gc_node_ref_t user : slotUsers) {
+                    if (erasedByBranch(user) && draft.alive(user)) {
+                        draft.setSyncInputs(user, {});
+                    }
+                }
+                chainTo(armChainHead, pred);
+                placed = true;
+                break;
+            }
+        }
+        // The branch stood in no chain of its own: its place is the one derived from the edges it
+        // waits on. The arm's chain takes that place, and the statement that place continued
+        // follows the arm's tail instead -- the arm's code is the block's code now, so its
+        // statements come before what is written after the branch (5.7).
+        if (!placed) {
+            gc_node_ref_t slot       = kInvalidNodeRef;
+            const gc_node_ref_t heir = spliceHeir(&slot);
+            if (heir != kInvalidNodeRef && armChainTail != kInvalidNodeRef &&
+                draft.alive(armChainTail) && draft.alive(heir)) {
+                draft.setSyncInputs(heir, {});
+                (void)draft.appendChainStatement(heir, armChainTail);
+                chainTo(armChainHead, slot);
             }
         }
     }
@@ -1278,7 +1450,7 @@ size_t cseDraft(camel::runtime::GraphTransaction &transaction) {
     std::map<std::tuple<type::Type *, slot_t, std::vector<uint64_t>>, gc_node_ref_t> constants;
     for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
         // A JOIN still closes its BRCH and carries the condition and selected arm's effects.
-        // A GATE with a sync predecessor carries a chain place. Neither is replaced by its value.
+        // A GATE that holds a place in a chain carries it. Neither is replaced by its value.
         if (const auto *h = draft.header(id);
             h && (h->kind == GCNodeKind::Join || isSyncWaitingGate(transaction, id))) {
             continue;
@@ -1631,6 +1803,33 @@ const camel::runtime::Program *simplifyGraph(
         config.growthSpentNodes = &growthSpent;
     }
     RewriteMemo memo;
+    /// The contents of every graph `p` reaches, by name (see graphContentHash). Two graphs of one
+    /// name -- a graph and a newer version of it are one name -- are one entry, sorted, so a name
+    /// that appears twice is compared as a set.
+    const auto graphContentsOf = [&](const camel::runtime::Program *p) {
+        std::map<std::string, std::vector<uint64_t>> contents;
+        camel::runtime::RuntimeGraphDraftSession session(context, p);
+        for (camel::runtime::GCGraph *graph : session.collectReachableRuntimeGraphs()) {
+            contents[graph->name()].push_back(graphContentHash(*graph));
+        }
+        for (auto &entry : contents) {
+            std::sort(entry.second.begin(), entry.second.end());
+        }
+        return contents;
+    };
+    /// The graphs whose contents differ between the two readings. A name the later reading has and
+    /// the earlier one does not is a graph the round added.
+    const auto graphsChangedBy = [](const auto &before, const auto &after) {
+        std::vector<std::string> changed;
+        for (const auto &entry : after) {
+            const auto found = before.find(entry.first);
+            if (found == before.end() || found->second != entry.second) {
+                changed.push_back(entry.first);
+            }
+        }
+        return changed;
+    };
+    std::vector<std::string> stoppedShort;
     const auto finish = [&](const camel::runtime::Program *result) {
         return rewriteReachableGraphs(
             context,
@@ -1647,6 +1846,14 @@ const camel::runtime::Program *simplifyGraph(
             config.checkScreens);
     };
     for (size_t round = 0; round < maxRounds; ++round) {
+        const bool lastRound = round + 1 == maxRounds;
+        // What the last round changes is what the message about a bound reached says, so its
+        // contents are taken before the round (a round is every stage below, and the graphs a
+        // stage adds -- a specialization of a call -- are graphs the round changed).
+        std::map<std::string, std::vector<uint64_t>> contentsBefore;
+        if (lastRound) {
+            contentsBefore = graphContentsOf(program);
+        }
         bool optChanged = false;
         program         = applyOptimizeRewritePass(context, program, os, config, &optChanged);
         std::deque<camel::core::mm::RootHandle> roots;
@@ -1700,10 +1907,44 @@ const camel::runtime::Program *simplifyGraph(
             CAMEL_LOG_INFO_S("Opt", "std::opt: fixpoint after {} round(s)", round + 1);
             return finish(program);
         }
+        if (lastRound) {
+            stoppedShort = graphsChangedBy(contentsBefore, graphContentsOf(program));
+        }
     }
-    CAMEL_LOG_WARN_S(
-        "Opt",
-        "std::opt: still changing after {} rounds (a recursion of non-static depth?)",
-        maxRounds);
+    // Every round keeps the program's meaning, so the result is right; what the user cannot see
+    // without this is that the optimization stopped in the middle of its work. The bound is not a
+    // fault of the program (a recursion whose depth is not static is a legal program), so this is
+    // a warning and the run continues with the program as it stands -- but a warning on the log
+    // channel is invisible at the default log level, which is why it is a diagnostic: the pass
+    // driver hands it to the place the compiler's other warnings go (`raisePassWarning`,
+    // src/execute/pass.cpp; the JIT's message is the shape it follows). `stoppedShort` names the
+    // graphs the last round changed, which is the question the user asks ("which function?"), and
+    // the entry wrapper is left out: `__root__` is where the run starts, not a function of the
+    // program, so naming it says nothing about what did not settle.
+    std::vector<std::string> settled;
+    for (const std::string &graph : stoppedShort) {
+        if (graph != "__root__") {
+            settled.push_back(graph);
+        }
+    }
+    std::string where;
+    for (size_t i = 0; i < settled.size(); ++i) {
+        if (i == 4) {
+            where += std::format(" and {} more graph(s)", settled.size() - i);
+            break;
+        }
+        if (i != 0) {
+            where += ", ";
+        }
+        where += "'" + settled[i] + "'";
+    }
+    if (where.empty()) {
+        where = "no graph";
+    }
+    raisePassWarning(
+        *context,
+        camel::core::error::RuntimeDiag::OptimizationStoppedShort,
+        camel::source::kInvalidOriginId,
+        std::format("all {} round(s) changed the program, the last changed {}", maxRounds, where));
     return finish(program);
 }

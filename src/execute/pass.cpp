@@ -29,6 +29,7 @@
 #include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/contexts.h"
 #include "camel/passes/test/control.h"
+#include "camel/passes/test/deadwrite.h"
 #include "camel/passes/test/derivatives.h"
 #include "camel/passes/test/draft_node_owner.h"
 #include "camel/passes/test/edges.h"
@@ -1026,6 +1027,8 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kLeakBranchArmPass, LeakBranchArmTestPass),
         TEST_PASS(kShareBranchArmPass, ShareBranchArmTestPass),
         TEST_PASS(kOrderOnlyEffectPass, OrderOnlyEffectTestPass),
+        TEST_PASS(kRecalleeArityPass, RecalleeArityTestPass),
+        TEST_PASS(kRecalleeTypePass, RecalleeTypeTestPass),
         TEST_PASS(kOperatorSemanticsTestPass, OperatorSemanticsTestPass),
         TEST_PASS(kFailsWithValueTestPass, FailsWithValueTestPass),
         TEST_PASS(kBreakJoinTestPass, BreakJoinTestPass),
@@ -1078,6 +1081,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kGraphReleaseTestPass, GraphReleaseTestPass),
         TEST_PASS(kFactNodeTestPass, FactNodeTestPass),
         TEST_PASS(kWritingsTestPass, WritingsTestPass),
+        TEST_PASS(kDeadWriteTestPass, DeadWriteTestPass),
         TEST_PASS(kTabledTestPass, TabledTestPass),
         TEST_PASS(kSaturateTestPass, SaturateTestPass),
         TEST_PASS(kRulesTestPass, RulesTestPass),
@@ -1221,6 +1225,12 @@ struct FoundPass {
     std::vector<PassParam> params;
     /// A declaration that exists but whose applicability condition does not hold.
     std::string inapplicable;
+    /// The module's declarations could not be read (its file does not parse): the sentence the
+    /// report gives, and the location of the parser's first error. This is the same answer pass
+    /// resolution gives a pass library that does not compile, and it is where the declaration
+    /// reader's failure arrives: it is a diagnostic against the module, not an exception.
+    std::string problem;
+    std::optional<DiagLabel> problemLocation;
 };
 
 /// Resolves a pass name to its declaration and implementation. Every pass is resolved the same
@@ -1249,6 +1259,16 @@ std::optional<FoundPass> findDescriptor(const context_ptr_t &ctx, const std::str
         }
         const std::string path    = module + "::" + function;
         const auto implementation = findImplementation(path);
+        // The module's declaration file is read before the pass is looked for in it. A file that
+        // does not parse is a diagnostic against that module -- the same one the module loader
+        // would give -- and this is where that answer is carried: the report below turns it into
+        // the `InvalidPassParameter` a pass library that does not compile already gets.
+        if (auto problem = camel::execute::detail::declarationProblem(module, ctx)) {
+            FoundPass found;
+            found.problem         = std::move(problem->text);
+            found.problemLocation = std::move(problem->location);
+            return found;
+        }
         const auto *declaration =
             camel::execute::detail::findPassDeclaration(module, function, ctx);
         FoundPass found;
@@ -1378,6 +1398,14 @@ ResolvedPass resolvePass(const std::string &spec, const context_ptr_t &ctx) {
         return result;
     }
     result.known = true;
+    if (!descriptor->problem.empty()) {
+        // The module's declarations could not be read: the module did not load, and the answer is
+        // the one a module that does not compile gets, with the parser's first error as the
+        // secondary location.
+        result.problem       = descriptor->problem;
+        result.errorLocation = descriptor->problemLocation;
+        return result;
+    }
     if (!descriptor->inapplicable.empty()) {
         result.problem = descriptor->inapplicable;
         return result;
@@ -2428,14 +2456,19 @@ std::vector<std::string> portDeclarationViolation(const camel::runtime::Program 
     return {};
 }
 /// Whether running the node is something the program observes: it touches state the program does
-/// not own (an ambient resource: stdout, the filesystem, the clock, the environment, the generator)
-/// or it writes state the program does own (a cell, an object, a handle -- a write nothing reads
-/// afterwards is a write the program lost). Reading a variable is not one of them, and neither is a
-/// computation whose value nobody reads: dropping one changes nothing the program can see, which is
-/// exactly what a pass is allowed to do with it. This is the line the check below draws, and it is
-/// what makes it a check about *effects* rather than about every node: without it the invariant
-/// would ask a pure operation for a credential it never needs, and the first graph a program builds
-/// would fail it.
+/// not own (an ambient resource: stdout, the filesystem, the clock, the environment, the
+/// generator), or it writes state the program does own and that state is still there. Reading a
+/// variable is not one of them, and neither is a computation whose value nobody reads: dropping one
+/// changes nothing the program can see, which is exactly what a pass is allowed to do with it.
+///
+/// A write is not judged by the set of writes the program was given but by the graph the pass
+/// returns: a write that is no root of its graph and that no port reads is a dead write
+/// (`camel::runtime::deadWrite`, which is where the judgement lives so that a pass and a test can
+/// ask it on its own), and a dead write is not an effect. Without that reading, a rewrite that
+/// drops the last closure capturing a variable cannot leave that variable's last write behind
+/// (design principles 9.7). This is the line the check below draws, and it is what makes it a check
+/// about *effects* rather than about every node: without it the invariant would ask a pure
+/// operation for a credential it never needs, and the first graph a program builds would fail it.
 bool nodeRunsForItsEffect(
     const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
     camel::runtime::gc_node_ref_t ref) {
@@ -2447,13 +2480,19 @@ bool nodeRunsForItsEffect(
     if (resources.external) {
         return true;
     }
+    bool writes = false;
     for (const camel::runtime::NodeAccess &access : resources.accesses) {
-        if (access.resource.cls == camel::core::sem::ResourceClass::Ambient ||
-            access.mode != camel::core::sem::AccessMode::Read) {
+        if (access.resource.cls == camel::core::sem::ResourceClass::Ambient) {
             return true;
         }
+        if (access.mode != camel::core::sem::AccessMode::Read) {
+            writes = true;
+        }
     }
-    return false;
+    if (!writes) {
+        return false;
+    }
+    return !camel::runtime::deadWrite(graph, ref);
 }
 
 /// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives

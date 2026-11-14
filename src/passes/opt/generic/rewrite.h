@@ -259,6 +259,22 @@ gc_node_ref_t keepThroughValue(
 void replaceNode(
     camel::runtime::GraphTransaction &transaction, gc_node_ref_t id, gc_node_ref_t replacement);
 
+/**
+ * True when `id` stands in a block's chain: one judgement of what a place in a chain is, asked by
+ * the fold and by the constant merge, and written once.
+ *
+ * A statement holds its place from either side: it is written after the one before it
+ * (`syncInputsOf`) and it is what the statement after it is written after (`syncUsersOf`). Reading
+ * one side only is what went wrong twice, in two different rewrites. A GATE at the head of a chain
+ * has no predecessor, so a rule that asked only whether the gate waits merged it into the constant
+ * it forwarded; a `:str/format` in the middle of a chain is not a gate, so a rule that asked only
+ * about gates replaced it by the constant it computed. Either way a statement stood where a value
+ * then was, and the statement after it kept a control wait only -- which orders and does not run
+ * (docs/design/effects/edges.cn.md 1.5, 4.6, 5.3, 5.7; design principles 3.1, 5.7).
+ * `test/cases/compile/surface/dropped_value_statement.cml` draws the first shape.
+ */
+bool holdsChainPlace(const camel::runtime::GraphTransaction &transaction, gc_node_ref_t id);
+
 /// Removes chain GATEs left with no value user, no sync successor, and no block result.
 size_t eraseOrphanedChainGates(camel::runtime::GraphTransaction &transaction);
 
@@ -277,6 +293,16 @@ class RewriteMemo {
   private:
     std::unordered_map<std::string, std::unordered_set<uint64_t>> contentsByPass_;
 };
+
+/**
+ * The hash a `RewriteMemo` remembers about a graph: everything a pass of this file may look at
+ * (its nodes, constants, types, ports, regions, writings and signature), and nothing about where
+ * the graph object lives. Two reads of the same content answer the same value, so a caller that
+ * takes it before and after a round of passes learns which graphs the round changed -- the
+ * question `std::opt` answers to name the function it stopped short in. 0 for a graph with nothing
+ * to hash.
+ */
+uint64_t graphContentHash(const camel::runtime::GCGraph &graph);
 
 /**
  * Whether the pass named may rewrite something in a graph, read from the frozen graph. They are

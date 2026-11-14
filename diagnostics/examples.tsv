@@ -31,6 +31,7 @@ RuntimeDiag::MacroEvaluationFailed	test/cases/compile/collections/refuse_grad.cm
 RuntimeDiag::MaxRecursionDepthExceeded	test/cases/consistency/limits/depth_direct.cml
 RuntimeDiag::MemoryExhausted	test/cases/compile/stream/interval_loop_not_materialised.cml
 RuntimeDiag::OperandTypeUnsupported	test/cases/modules/tensor/dtype/f32_only.cml
+RuntimeDiag::OptimizationStoppedShort	test/cases/opt/generic/rounds_exhausted.cml
 RuntimeDiag::PassBoundaryNodes	test/cases/effects/declared.cml
 RuntimeDiag::PassBoundaryPorts	test/cases/effects/declared.cml
 RuntimeDiag::PassBoundaryResources	test/cases/effects/declared.cml
@@ -60,6 +61,7 @@ SemanticDiag::BranchReturnTypeMismatch	test/cases/compile/semantic/branch_return
 SemanticDiag::CalledFallibleValue	test/cases/compile/unused_values/called_fallible.cml
 SemanticDiag::CallingIncompleteFunction	test/cases/compile/module_load/order_values.cml
 SemanticDiag::CaptureAfterRecursiveCall	test/cases/compile/module_load/recursive_late_var.cml
+SemanticDiag::ClosureCaptureEscapes	test/cases/compile/state_escape/err_escape_return.cml
 SemanticDiag::CollectionKeyNotAllowed	test/cases/compile/collections/err_key_float.cml
 SemanticDiag::CompOperandGenericWithoutType	test/cases/compile/stream/comp_operand_generic.cml
 SemanticDiag::CompOperandMismatch	test/cases/compile/stream/comp_operand_mismatch.cml
@@ -102,7 +104,6 @@ SemanticDiag::EnumWrittenWhereATypeIsExpected	test/cases/compile/semantic/enum_w
 SemanticDiag::ExitInUnusedBranch	test/cases/compile/diag_json/warning_with_error.cml
 SemanticDiag::ExtentNotADimension	test/cases/compile/extents/computed_negative.cml
 SemanticDiag::ExtentOfNeedsStatedShape	test/cases/compile/transforms/extent_of_needs_a_type_that_states_its_shape.cml
-SemanticDiag::ExternalResourceNeedsVar	test/cases/effects/err_external_without_var.cml
 SemanticDiag::FactArgumentNotConstant	test/cases/modules/rules/fact_arg_not_constant.cml
 SemanticDiag::FactCaseBindsNoVariable	test/cases/modules/rules/fact_case_binds_nothing.cml
 SemanticDiag::FactCaseDefaultMissing	test/cases/modules/rules/fact_no_default.cml
@@ -268,6 +269,7 @@ SemanticDiag::UnusedFallibleValue	test/cases/compile/unused_values/fallible_sync
 SemanticDiag::UnusedPureResult	test/cases/compile/native/para_unordered_pure_result.cml
 SemanticDiag::UsesPromiseViolated	test/cases/effects/err_promise_through_parameter.cml
 SemanticDiag::VarArgumentTypeMismatch	test/cases/linear/byref/var_argument_shape.cml
+SemanticDiag::VariableInUses	test/cases/effects/err_variable_in_clause.cml
 SemanticDiag::WhenConditionNotBool	test/cases/compile/when/non_bool.cml
 SemanticDiag::WhenConditionNotConstant	test/cases/compile/when/generic_decl_site.cml
 SemanticDiag::WhenConditionUnmet	test/cases/compile/type_packs/zip_not_array.cml

@@ -454,7 +454,11 @@ int runTimeitMode(std::ostream &os, bool useJsonFormat) {
             invocation->parser->parse(*invocation->input);
             CAMEL_LOG_INFO_S("Main", "run | parse | done | {}", inputPath);
 
-            invocation->mainModule->compile(CompileStage::Done);
+            // A module that does not parse is a diagnostic against that module, and this
+            // iteration compiles it outside any import site: `compileForLoad` is the one place
+            // that decides it (camel/core/module/userdef.h). The question below is then the same
+            // one a run asks.
+            camel::core::module::compileForLoad(invocation->mainModule, CompileStage::Done);
             // The same question every output path asks (module_failures.h): a program that did
             // not compile has no time to report, and a declaration module that did not load is
             // an error in a module's diagnostics like any other. The scope is the program's

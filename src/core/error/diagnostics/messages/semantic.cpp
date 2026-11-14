@@ -1117,11 +1117,11 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ExternalResourceNeedsVar,
+            SemanticDiag::VariableInUses,
             {
-                "ExternalResourceNeedsVar",
-                "The external resource '{0}' is named without 'var' in the resource clause of '{1}'.",
-                "An external resource is state the program does not own: the program and whatever else is outside it both read and write it, so a call that names one writes it, and a clause says so the way a parameter does (design principles 3.3). Write 'var {0}' before it. A resource a module declares with 'resource' and one every program has (stdout, stderr, stdin, clock, env, fs) are external; a module's own 'var' is internal, and there an entry reads it without 'var' and writes it with 'var'.",
+                "VariableInUses",
+                "The variable '{0}' is named in the resource clause '{1}'.",
+                "A clause names what a call touches outside the function's own variables: the external resources it reads or writes, and the handle parameters it is handed (design principles 3.3). A variable is declared once, where it is created: a `var` parameter in the parameter list, a module variable by the `var` in its declaration, a captured one by the `var` or `let` that binds it. Which of them a call touches is measured from the body, and the signature the compiler derives prints them. Remove the entry.",
             },
         },
         {
@@ -1818,6 +1818,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "ExtentOfNeedsStatedShape",
                 "`extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}.",
                 "Every extent of the type has to be a number written in it: `float[2, 3]` answers `[2, 3]`, and that is what `extent_of::<float[2, 3]>()` gives. `float[]` (= `float[?]`) states one dimension and no length, and `float[...]` states neither the rank nor a length, so neither tells the function what to answer. Write the extents in the type the call names (`float[2, 3]`), or take the shape from a value the program has (`shape(xs)`). A transposition reaches this rule for a parameter whose value nobody has, and the type is then the only place its shape can come from.",
+            },
+        },
+        {
+            SemanticDiag::ClosureCaptureEscapes,
+            {
+                "ClosureCaptureEscapes",
+                "'{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out.",
+                "A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.",
             },
         },
         {

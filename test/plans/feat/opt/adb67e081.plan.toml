@@ -65,34 +65,38 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_reference"
-desc = "`rc04_seed72` without any optimization pass: the reference the inlined run must reproduce. Exit 0 and no output."
-kind = "behavior"
+desc = "`rc04_seed72` as the state rule of 2026-11-14 leaves it: a compile error, `SemanticDiag::ClosureCaptureEscapes` at the closure that carries its call's `var` out. It used to be the reference the inlined run reproduced (exit 0, no output); that reading is gone with the program, and the entry now pins the refusal instead of deleting the case -- the shape stays in the corpus, and the day the seed is regenerated under the rule it is this entry that has to be rewritten, not a case that quietly vanished. What is lost is stated rather than implied: the splice cycle this pair used to exercise needs a program the front end accepts, so `rc04_seed72` no longer exercises it at all."
+kind = "negative"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
-args = ["${case}", "${run_nvm}"]
-expect_exit = 0
-expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x03000210"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === '', `unexpected output: ${out}`)
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the state rule refuses the program: ' + text)
+assert(text.includes('0x03000210'), 'and it names the code the rule landed with: ' + text)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_inline"
-desc = "`rc04_seed72` under `std::opt::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: `a1723fbb9` writes the body after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included (`bf12366ba`), and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
-kind = "behavior"
+desc = "The same refusal as its twin, because `rc04_seed72` is refused before any pass runs and `std::opt::inline` never sees it. Kept rather than deleted: the pair is what says the seed is refused once, and the entry is where the pipeline it was found with has to come back from. When it was green it read as a behavior test under `std::opt::inline`, the pipeline it was found with. Two statements, and only the first keeps it green. First, the red went away with the splice: `a1723fbb9` writes the body after the statement the call is written after, so the fork this case used to leave does not arise (`forked=0`), and deleting the guard's order input and rebuilding leaves the run at exit 0 with the same reading -- the cycle the seal used to report, `node 24 (11): lies on a cycle of inputs: 24(11) <- 27(13) <- 38(13) <- 24`, is not kept away by the guard. Second, the guard does walk all five kinds of input edge, the order ones included (`bf12366ba`), and that is true of the code and read in it; what is not true is that an order edge decides anything here: over 2745 programs of `test/cases`, the five-kind walk and a four-kind one answered the same on every fork pair -- 26 read (0,0), 26 read (1,1), none read the (1,0) that an order edge alone would produce. A red here is still the defect returning: the cycle sentence arrived as `PassInternalError`, which `expect_output_not_contains` names."
+kind = "negative"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
-args = ["${case}", "std::opt::inline", "${run_nvm}"]
-expect_exit = 0
-expect_output_not_contains = ["branch-arm invariant", "PassInternalError", "internal error", "defect of the compiler"]
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
+expect_diagnostic_code = "0x03000210"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === '', `unexpected output: ${out}`)
+const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+assert(text.includes('cannot leave the call that declares it'), 'the state rule refuses the program: ' + text)
+assert(text.includes('0x03000210'), 'and it names the code the rule landed with: ' + text)
 }
 """
 timeout_ms = 20000

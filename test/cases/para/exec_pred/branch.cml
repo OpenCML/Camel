@@ -1,0 +1,27 @@
+/**
+ * A branch: one arm runs and the other does not, and what either arm reads from outside the
+ * branch is computed before it is taken. The arms print, so a back end that entered the wrong
+ * arm, or ran a statement of the arm it did not take, would line up differently.
+ */
+func sumTo(n: int, acc: int): int {
+    return if n == 0 then acc else sumTo(n - 1, acc + n)
+}
+
+func pick(n: int): int sync {
+    println("pick enter", n)
+    let v = if n % 2 == 0 then sync {
+        println("arm even", n)
+        sumTo(n, 0)
+    } else sync {
+        println("arm odd", n)
+        sumTo(n, 0) * 10
+    }
+    println("pick leave", v)
+    return v
+}
+
+func main(): int sync {
+    println("branch 1", pick(3))
+    println("branch 2", pick(4))
+    return 0
+}

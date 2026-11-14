@@ -1,0 +1,28 @@
+/**
+ * A call through a value, where the value is a constant of the graph: `f(3, 4)` is a CALL whose
+ * callee slot names a static function. Two static functions of different arity live in the graph,
+ * so `test::recallee_arity` can point the first call at the wrong one -- a call site no source can
+ * write, because the front end type-checks a call against the value it names.
+ *
+ * Without the retarget both calls are devirtualized (`std::opt::devirtualize`): the answer is
+ * `3 + 4 = 7` and `7 + 10 = 17`, and `direct_calls` goes 0 -> 3 while `indirect_calls` goes 3 -> 0
+ * (the three counted calls are this call, `g(sum)`, and the entry's call of `main`). With the
+ * retarget the call site no longer fits its callee, and neither the commit nor the pass may
+ * pretend it does (see the plan for which of the two answers is pinned and why).
+ */
+func add2(a: int, b: int): int {
+    return a + b
+}
+
+func shift1(a: int): int {
+    return a + 10
+}
+
+func main(): int sync {
+    let f = add2
+    let g = shift1
+    let sum = f(3, 4)
+    let shifted = g(sum)
+    println(shifted)
+    return 0
+}

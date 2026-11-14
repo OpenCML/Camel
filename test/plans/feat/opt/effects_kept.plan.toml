@@ -305,3 +305,210 @@ case = "../../../cases/opt/effects/inline_reduce_in_folded_arm.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
+
+# A write of the program's own state is judged on the graph the pass returns, not on the set of
+# writes the program was given: when a rewrite leaves the variable no longer held by anything the
+# program keeps, its last write is a write nobody can read -- no root of the graph holds it and no
+# port reads it -- and a pass may leave it behind. What is checked is that a deleted write is no
+# root in the result and no port reads it, not that the set of final writes is the same before and
+# after (design principles 9.7).
+#
+#   dead_write_dropped_closure  the closure that captured the cell reaches nothing the program keeps
+#                               (`p.0` reads the tuple's first member alone), and `x * 0 => 0` folds
+#                               away the write's only reader: the write may go
+#   dead_write_rooted_closure   the same write, with the closure called in the same `sync` block: the
+#                               value is still read, so it must run, and the program prints the 41
+#                               it wrote
+#
+# The judgement itself has its own reading below (`test::deadwrite`), which prints the answer for
+# each write without a pipeline around it.
+[[tests]]
+name = "dead_write_dropped_closure.reference"
+desc = "No pass: `h` is never called, so the program prints the 1 that `p.0` gives."
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "dead_write_dropped_closure.opt"
+desc = "`std::opt` folds `w * 0` and leaves the write with no reader and no root: the graph it returns is one a pass may hand back."
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n"
+
+[[tests]]
+name = "dead_write_rooted_closure.reference"
+desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left."
+case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+
+[[tests]]
+name = "dead_write_rooted_closure.opt"
+desc = "The write is read by the call of the closure: it is no dead write, it must run, and the same 41 is printed."
+case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+
+[[tests]]
+name = "dead_write.judgement_dropped"
+desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own: after the fold, the write nothing reads and no root holds is a dead write."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+
+[[tests]]
+name = "dead_write.judgement_rooted"
+desc = "The same judgement where the place the write writes into is one the graph names: the module's cell is a root, so the write is no dead write, and the answer names the half that says so."
+kind = "behavior"
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
+args = ["${case}", "std::opt", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["oper=:op/assn_l", "rooted=1 read=0 dead=0"]
+
+[[tests]]
+name = "dead_write_held_by_program.reference"
+desc = "No pass: the write's only reader is folded nowhere, and the program prints the 41 it wrote, twice."
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+
+[[tests]]
+name = "dead_write_held_by_program.opt"
+desc = "The module's cell is a place the graph names, so the write stays: the same 41 is printed after the fold."
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "41\n41\n"
+# A constant branch whose taken arm holds a chain of its own: two effects written one after the
+# other, one effect nested behind a further constant branch, one effect in each arm, and the
+# recursion shape `exemplars/05_effect_order` has. Each one names its lines in order, so an effect
+# that stops running is a missing line -- the branch's statements take the branch's place in the
+# block's chain (design principles 5.7), and the statements written after the branch follow the
+# arm's tail, so nothing the arm prints is stepped over.
+
+[[tests]]
+name = "fold_keeps_arm_effect_chain.reference"
+desc = "No pass: the taken arm prints `1` then `2`, and the arm's value prints `3`."
+case = "../../../cases/opt/effects/fold_keeps_arm_effect_chain.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n3\n"
+
+[[tests]]
+name = "fold_keeps_arm_effect_chain.inline_fold"
+desc = "Inlining makes the condition constant; both prints of the taken arm stay, in order."
+case = "../../../cases/opt/effects/fold_keeps_arm_effect_chain.cml"
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n3\n"
+
+[[tests]]
+name = "fold_keeps_arm_effect_chain.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/fold_keeps_arm_effect_chain.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "1\n2\n3\n"
+
+[[tests]]
+name = "fold_keeps_nested_arm_effect.reference"
+desc = "No pass: the outer arm prints `11`, the inner taken arm `12`, then `13`, and 3 is printed."
+case = "../../../cases/opt/effects/fold_keeps_nested_arm_effect.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "11\n12\n13\n3\n11\n13\n0\n"
+
+[[tests]]
+name = "fold_keeps_nested_arm_effect.fold"
+desc = "Two constant branches dissolved around an effect: the inner arm's line stays between the outer arm's two."
+case = "../../../cases/opt/effects/fold_keeps_nested_arm_effect.cml"
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "11\n12\n13\n3\n11\n13\n0\n"
+
+[[tests]]
+name = "fold_keeps_nested_arm_effect.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/fold_keeps_nested_arm_effect.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "11\n12\n13\n3\n11\n13\n0\n"
+
+[[tests]]
+name = "fold_keeps_taken_arm_only.reference"
+desc = "No pass: each call prints the line of the arm its constant condition takes."
+case = "../../../cases/opt/effects/fold_keeps_taken_arm_only.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "21\n1\n22\n2\n"
+
+[[tests]]
+name = "fold_keeps_taken_arm_only.fold"
+desc = "Both branches dissolved, one to each arm: the arm that is dropped contributes no line, and the taken one still prints."
+case = "../../../cases/opt/effects/fold_keeps_taken_arm_only.cml"
+args = ["${case}", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "21\n1\n22\n2\n"
+
+[[tests]]
+name = "fold_keeps_taken_arm_only.opt"
+desc = "The same program through the whole optimizer."
+case = "../../../cases/opt/effects/fold_keeps_taken_arm_only.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "21\n1\n22\n2\n"
+
+[[tests]]
+name = "fold_keeps_recursion_arm_effect.reference"
+desc = "No pass: each visit prints twice, then the total."
+case = "../../../cases/opt/effects/fold_keeps_recursion_arm_effect.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "visit 1\ntwice 1\nvisit 2\ntwice 2\ntotal 30\n"
+
+[[tests]]
+name = "fold_keeps_recursion_arm_effect.opt"
+desc = "The whole optimizer unrolls the recursion and dissolves the branches it unrolls into; both prints of every visit stay, in order."
+case = "../../../cases/opt/effects/fold_keeps_recursion_arm_effect.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "visit 1\ntwice 1\nvisit 2\ntwice 2\ntotal 30\n"
+
+
+
+# A GATE at the head of a `sync` block's chain holds a place even though nothing waits on it from
+# the front: the statement after it is written after it. `cseDraft`'s constant merge asked a gate
+# only whether it waits on something, so a gate at the head of a chain looked like a plain value and
+# was merged into the constant it forwards -- both compute one value. That put a value where a
+# statement stood, and the print after it kept a control wait only, which orders and does not run
+# (design principles 3.1, 5.7; docs/design/effects/edges.cn.md 1.5, 4.6). The case prints the two
+# positions of the dropped statement side by side, and both runs are held to the same four lines:
+# without the fix the optimizer answers two of them.
+
+[[tests]]
+name = "dropped_value_statement.keeps_its_prints.without_the_pass"
+desc = "No pass: the two dropped-value statements and the two prints after them, all four lines."
+case = "../../../cases/compile/surface/dropped_value_statement.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "stmt_name\nstmt_bound_name\n3\ndone\n"
+
+[[tests]]
+name = "dropped_value_statement.keeps_its_prints.opt"
+desc = "The whole optimizer: the same four lines. Without the place a chain gate holds, `std::opt` answers only the last two."
+case = "../../../cases/compile/surface/dropped_value_statement.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "stmt_name\nstmt_bound_name\n3\ndone\n"

@@ -1213,7 +1213,9 @@ WhenResult Builder::evaluateWhenCondition(
 WhenResult Builder::evaluateCaseGuard(
     const camel::core::type::TypeCaseGuard &guard, const type_bindings_t &bindings) {
     return evaluateGuardNode(
-        static_cast<const GCT::Node *>(guard.condition), guard.context, bindings);
+        static_cast<const GCT::Node *>(guard.condition),
+        guard.context,
+        bindings);
 }
 
 WhenResult Builder::evaluateGuardNode(
@@ -1227,7 +1229,17 @@ WhenResult Builder::evaluateGuardNode(
     if (moduleContext != nullptr) {
         const auto *declared = static_cast<const camel::core::module::Module *>(moduleContext);
         const auto found     = units_.find(declared);
-        unit                 = found != units_.end() ? found->second.get() : nullptr;
+        if (found == units_.end()) {
+            // A guard is identified by what it says, so a type interned by an earlier compile of
+            // the same module can be met again with the tree of that compile behind it. The tree
+            // is that build's, not this one's: the predicate is undecided here rather than read
+            // through a pointer into a module this build does not hold.
+            return whenResultOf(
+                WhenOutcome::NotEvaluable,
+                {},
+                "the guard is read in a module this build does not hold");
+        }
+        unit = found->second.get();
     }
     ConditionContext context(*this, nullptr, unit);
     // A case guard has no declaration of its own, so it reads no `with` value and no signature:

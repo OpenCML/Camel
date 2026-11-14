@@ -57,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 226
+**Semantic — errors** (`SemanticDiag`) — 227
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -197,7 +197,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `ResourceGroupCycle` | The resource group '{0}' contains itself: {1}. |
 | `HandleTypeNotNominal` | '{0}' is not a nominal type declaration, so '#resource' says nothing about it. |
 | `NativeResourceMismatch` | The declaration '{0}' says '{1}', but the operator '{2}' declares '{3}'. |
-| `ExternalResourceNeedsVar` | The external resource '{0}' is named without 'var' in the resource clause of '{1}'. |
+| `VariableInUses` | The variable '{0}' is named in the resource clause '{1}'. |
 | `CmlUnsupportedConstruct` | std::cml cannot print {0}: {1}. |
 | `CmlBigConstant` | std::cml refused the constant '{0}' of type {1} in {2}: {3} bytes, over max_literal_bytes ({4}). |
 | `WhenConditionNotBool` | The 'when' condition of '{0}' is not a bool (it is '{1}'). |
@@ -285,6 +285,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
 | `ExtentOfNeedsStatedShape` | `extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}. |
+| `ClosureCaptureEscapes` | '{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 
@@ -347,11 +348,12 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DeviceNotSelected` | No device to run '{0}' on: {1}. |
 | `GpuScopeMacroNotExpanded` | `#gpu` scope '{0}': {1} is a macro operator no pass has expanded, so the derived graph does not exist when the scope is compiled; put the pass '{2}' before this one. |
 
-**Run time and passes — warnings** (`RuntimeDiag`) — 5
+**Run time and passes — warnings** (`RuntimeDiag`) — 6
 
 | `PassesNeverRun` | Pass '{0}' consumes the graph, so {1} written after it will not run. |
 | `ConstantExpressionFaults` | This constant expression faults whenever it is evaluated ({0}); it is not folded. |
 | `TranslationLinksRuntime` | std::cpp has no standalone translation of {0}: the program it writes calls the Camel runtime there and is built with libcamel. |
 | `DefunctionalizationIncomplete` | Defunctionalization left {0} as written. |
 | `JitWithoutCodeGenerator` | `std::jit` has no native code generator in this build; the program runs on the bytecode interpreter, as under `std::fvm`, and the result is the same. |
+| `OptimizationStoppedShort` | `std::opt` stopped short of a fixed point: {0}. |
 <!-- camel-for-ai end: diagnostics -->

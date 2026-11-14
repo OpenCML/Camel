@@ -68,13 +68,12 @@ std::string EnumVariant::signature() const {
 
 // ---- EnumDecl ----
 
-EnumDecl *EnumDecl::create(
-    const std::string &name, std::vector<std::string> params, std::string module) {
+EnumDecl *
+EnumDecl::create(const std::string &name, std::vector<std::string> params, std::string module) {
     return new EnumDecl(name, std::move(params), std::move(module));
 }
 
-EnumDecl::EnumDecl(
-    const std::string &name, std::vector<std::string> params, std::string module)
+EnumDecl::EnumDecl(const std::string &name, std::vector<std::string> params, std::string module)
     : name_(name), module_(std::move(module)),
       id_(enumDeclCounter.fetch_add(1, std::memory_order_relaxed)), params_(std::move(params)) {
     const Reference ref(name);
@@ -105,12 +104,17 @@ EnumType *EnumDecl::prototype() const {
 namespace {
 
 /// The intern key of an instance: its declaration and the canonical ids of its type arguments,
-/// exactly as a named struct's is (struct.cpp). The declaration decides which type it is, and an
-/// instance compares its arguments with `equals`, so the names in them are erased here.
+/// exactly as a named struct's is (struct.cpp, `declaredKey`, where the reasoning is written out).
+/// The declaration decides which type it is, and an instance compares its arguments with
+/// `equals`, so the names in them are erased here. It enters the key by its `id()` -- a number
+/// handed out once per declaration and never repeated -- and not by its address, for the reason
+/// given there: the declaration's content (its variants) is not known when the key is made, a
+/// re-declaration has to be another type, and an id says the same thing as an address without
+/// being a fact about where the object lives.
 std::vector<uintptr_t> instanceKey(const EnumDecl *decl, std::span<Type *const> args) {
     std::vector<uintptr_t> key;
     key.reserve(1 + args.size());
-    key.push_back(reinterpret_cast<uintptr_t>(decl));
+    key.push_back(static_cast<uintptr_t>(decl->id()));
     for (Type *arg : args) {
         key.push_back(typeKeyWord(TypeTable::instance().canonical(arg)));
     }
@@ -134,8 +138,8 @@ EnumType *EnumType::get(EnumDecl *decl, std::span<Type *const> args) {
     // the instance of a declaration is one type with one id, as a named struct's is.
     const std::vector<uintptr_t> key = instanceKey(decl, args);
     std::vector<Type *> typeArgs(args.begin(), args.end());
-    return static_cast<EnumType *>(TypeTable::instance().intern(
-        TypeTable::Shape::Enum, key, [&]() -> Type * {
+    return static_cast<EnumType *>(
+        TypeTable::instance().intern(TypeTable::Shape::Enum, key, [&]() -> Type * {
             return new (allocTypeStorage<EnumType>(TypeStorageKind::Enum))
                 EnumType(decl, std::span<Type *const>(typeArgs));
         }));

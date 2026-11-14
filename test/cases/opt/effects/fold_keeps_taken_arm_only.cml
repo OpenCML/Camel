@@ -1,0 +1,21 @@
+/**
+ * One effect in each arm of the same constant branch, with the condition true once and false once:
+ * whichever arm is taken is the one whose effect runs, and the arm that is dropped contributes
+ * nothing. Both calls print their own line, in the order the calls are written.
+ */
+
+func pick(c: bool): int sync {
+    return if c then sync {
+        println(21)
+        return 1
+    } else sync {
+        println(22)
+        return 2
+    }
+}
+
+func main(): int sync {
+    println(pick(true))
+    println(pick(false))
+    return 0
+}
