@@ -1,0 +1,9 @@
+# lane-holders -> develop (fe9da4033)
+
+判据读数:
+- 持有者 48 -> 41 (44 -> 38 类, 37 -> 31 文件)
+- 改 7 处: modules/transforms 的 JvpGraph/VmapGraph/SplitGraph/SplitGraph::nestedPrograms (vector<ProgramHold>) / TransposeGraph (四个结构因此 move-only); GraphVizDumpPass::program_; MacroEvaluator::program_
+- SplitGraph::nestedPrograms 的裸指针列表原被 group.adopt 在嵌套 build 返回后才读, 而嵌套 build 的根已随它消失 -> 每份 program 活到外层 build 取走它的图
+- 两条 poison rc=0; gc_stress safepoint=1,kind=minor PASS 585 ms (9 行判据); graph_space 五条全绿 (476/533/697 ms 三条硬判据); tiles 109 项 106 过 0 挂 3 skip (CUDA 不可用)
+
+未改的第 1-4 组 (rtdata::Function / RunPrograms / Pass*Result / GraphDraft / DraftRefs) 逐条给理由, 归 lane-exempt 就地声明.
