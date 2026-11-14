@@ -15,9 +15,9 @@
 
 #include "numeric.h"
 #include "half.h"
-#include "minmax.h"
 #include "camel/core/context/context.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/math/minmax.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/string.h"
 #include "camel/core/type.h"

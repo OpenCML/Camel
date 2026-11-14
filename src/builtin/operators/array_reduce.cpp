@@ -7,7 +7,7 @@
  * function beside it, which stays the semantics). A reduction sweeps every element in row-major
  * order and accumulates; a scalar binary combines two values -- they are different operations,
  * and the executor of a reduction belongs to the module that declares it (design principles
- * 10.4). The comparison and the summation are written once, in modules/math/minmax.h, which the
+ * 10.4). The comparison and the summation are written once, in camel/core/math/minmax.h, which the
  * tensor kernels read too.
  *
  * One executor per element type, and one body-less declaration per element type in
@@ -33,6 +33,7 @@
 #include "array.h"
 
 #include "camel/core/error/runtime.h"
+#include "camel/core/math/minmax.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata.h"
 #include "camel/core/rtdata/half.h"
@@ -40,7 +41,6 @@
 #include "camel/utils/type.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/tuple.h"
-#include "modules/math/minmax.h"
 
 #include <cstdint>
 
