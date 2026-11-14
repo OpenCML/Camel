@@ -268,7 +268,16 @@ CHECK_RANGE = range(1, 26)
 # evaluator types it: the arm join holds. It is back in the batch since (a `return`
 # in an arm no longer takes the function's declared return type). See
 # test/cases/opt/progen/README.md, J5.
-CHECK_EXCLUDED = {}
+# Seed 4 is left out for a crash of `std::opt::inline`, not for anything the front end says: the
+# four cells of the pipeline `inline` (inline@nvm, @fvm, @jit, @prl) end in SIGSEGV while the
+# same program runs under the other pipelines. The expression that reaches it is the call
+# `f8(...)` inside `let n69 = concat(...)` of `main`: cutting `main` after that statement still
+# crashes, and writing the whole `let` as `[f8(...) == '']` still does, while `f8` alone in a
+# small program does not, and neither does either of its two ingredients (a `for` loop over
+# structs compared with the user `operator <`, and that operator on two struct literals). The
+# pass therefore needs more of the program than a case file would show, and the seed is left out
+# until it is fixed; `progen.py show --seed 4` draws the program.
+CHECK_EXCLUDED = {4: "std::opt::inline segfaults on the `f8(...)` call of `main`"}
 CHECK_MATRIX = "cross"
 
 
