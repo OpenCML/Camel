@@ -548,9 +548,17 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
             throw BuildAbortException();
         }
     }
-    if (declaredFacts != nullptr && declaredFacts->resources) {
-        funcType = funcType->withResources(camel::core::sem::signatureOf(
-            *declaredFacts->resources, funcType->withTypesCount()));
+    // The operator's own resources, when it has any to state. A pure operator's record is the empty
+    // list (its effect is that list, design effects 2), which states nothing about the type: the
+    // declaration would then publish a signature saying "pure" where it wrote no clause at all, and
+    // every place that prints the type would say so. Only a spec with something in it is attached.
+    const camel::core::sem::ResourceSpec *declaredSpec =
+        declaredFacts != nullptr && declaredFacts->resources && !declaredFacts->resources->none()
+            ? &*declaredFacts->resources
+            : nullptr;
+    if (declaredSpec != nullptr) {
+        funcType = funcType->withResources(
+            camel::core::sem::signatureOf(*declaredSpec, funcType->withTypesCount()));
     }
     // A declaration may give its parameters defaults, exactly as a function with a body does
     // (design principles 4.4): the declaration is where they are written, and the

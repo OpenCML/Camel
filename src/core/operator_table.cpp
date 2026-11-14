@@ -37,14 +37,15 @@ OperatorTable::OperatorTable() {
 }
 
 OperatorTraits OperatorTable::traitsOf(const sem::OperatorSemantics &facts) {
-    // The one mapping from facts to trait bits. Nothing else computes a trait.
+    // The one mapping from facts to trait bits. Nothing else computes a trait: purity and the
+    // state-only answer are read off the access list, and "may fault" off the fault table
+    // (docs/design/op-semantics/README.cn.md 4.2).
     return OperatorTraits{
-        .pure = facts.effect == sem::Effect::Pure,
-        .elementwise =
-            facts.elementwise || (facts.binary && facts.binary->elementwise),
-        .stateOnly = facts.effect == sem::Effect::StateOnly,
-        // No fault list: undeclared, may fault. An empty list: it never faults.
-        .mayFault  = !facts.faults || !facts.faults->empty(),
+        .pure      = facts.effect() == sem::Effect::Pure,
+        .elementwise = facts.elementwise || (facts.binary && facts.binary->elementwise),
+        .stateOnly = facts.effect() == sem::Effect::StateOnly,
+        // A declared empty table: it never faults. No table: undeclared, may fault.
+        .mayFault  = facts.mayFault(),
         // Calling the function values it receives (declared, or by calling elements) is what
         // makes the call depend on those functions.
         .callsGraphs = facts.callsGraphs || facts.elementCalls.has_value(),
@@ -101,22 +102,37 @@ void OperatorTable::set(std::string_view uri, OperatorTraits traits) {
     const OperId id = internLocked(uri);
     Entry &entry    = entries_[id];
     const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
-    // The traits are not a second declaration: they are facts of the same record, and a
-    // record may exist before any semantics (the effects of a built-in operator are declared
-    // before its numeric semantics).
+    // The traits are not a second declaration: they are the shorthand the record's facts are
+    // written with, and a record may exist before any semantics (the effects of a built-in
+    // operator are declared before its numeric semantics).
     sem::OperatorSemantics facts =
         old ? *old : sem::OperatorSemantics{.key = sem::OperatorKey::of(uri)};
-    facts.effect = traits.stateOnly ? sem::Effect::StateOnly
-                 : traits.pure      ? sem::Effect::Pure
-                                    : sem::Effect::Effectful;
+    // The effect the traits state, in the record's own terms
+    // (design principles 3.3; docs/design/op-semantics/README.cn.md 4.2): pure is the empty access list,
+    // so it is written as one and never as a word about the operator; state-only and effectful are
+    // what a module says when it has not itemized its accesses. An access list already declared is
+    // the truth about the operator and is not taken back by a later word.
+    facts.declaredEffect = traits.stateOnly ? sem::Effect::StateOnly
+                         : traits.pure      ? sem::Effect::Pure
+                                            : sem::Effect::Effectful;
+    if (traits.pure) {
+        if (!facts.resources) {
+            facts.resources = sem::ResourceSpec{};
+        }
+    } else if (facts.resources && facts.resources->none()) {
+        // The word replaces an empty access list: the operator is state-only or effectful, and
+        // what it touches is not itemized here (a later declareResources may). Keeping the empty
+        // list would leave the record saying it touches nothing.
+        facts.resources.reset();
+    }
     facts.elementwise  = traits.elementwise;
     facts.callsGraphs  = traits.callsGraphs;
     facts.readsGraphs  = traits.readsGraphs;
     facts.macro        = traits.macro;
     facts.foldable     = traits.foldable;
     facts.withAfterNorm = traits.withAfterNorm;
-    // "Never faults" is the empty list. Saying it may fault (the default) does not take back
-    // a declared empty list; a declaration that does contradict it is refused when the
+    // "Never faults" is the empty fault table. Saying it may fault (the default) does not take
+    // back a declared empty table; a declaration that does contradict it is refused when the
     // semantics are declared (checkSemantics).
     if (!traits.mayFault) {
         facts.faults = std::vector<sem::FaultSpec>{};
@@ -149,7 +165,7 @@ std::optional<OperatorTraits> OperatorTable::find(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
     // Effect::Undeclared is the record of an operator whose semantics were declared without
     // anybody saying what it does to the world: find says nobody declared its traits.
-    if (facts == nullptr || facts->effect == sem::Effect::Undeclared) {
+    if (facts == nullptr || facts->declaredEffect == sem::Effect::Undeclared) {
         return std::nullopt;
     }
     return traitsOf(*facts);
@@ -162,7 +178,8 @@ std::optional<OperatorTraits> OperatorTable::find(std::string_view uri) const {
 
 bool OperatorTable::isPure(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
-    return facts != nullptr && facts->effect == sem::Effect::Pure;
+    return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
+           facts->effect() == sem::Effect::Pure;
 }
 
 bool OperatorTable::isPure(std::string_view uri) const {
@@ -178,7 +195,8 @@ bool OperatorTable::withAfterNorm(std::string_view uri) const {
 
 bool OperatorTable::mayBeRecomputed(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
-    return facts != nullptr && facts->effect == sem::Effect::Pure && facts->foldable;
+    return facts != nullptr && facts->declaredEffect != sem::Effect::Undeclared &&
+           facts->effect() == sem::Effect::Pure && facts->foldable;
 }
 
 bool OperatorTable::mayBeRecomputed(std::string_view uri) const {
@@ -188,8 +206,10 @@ bool OperatorTable::mayBeRecomputed(std::string_view uri) const {
 
 bool OperatorTable::hasExternalEffect(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
-    return facts == nullptr ||
-           (facts->effect != sem::Effect::Pure && facts->effect != sem::Effect::StateOnly);
+    // The access list decides it, or the declaration that says an effect exists without an
+    // itemized one; an operator nobody declared keeps the conservative answer (design
+    // principles 3.3).
+    return facts == nullptr || facts->external();
 }
 
 bool OperatorTable::hasExternalEffect(std::string_view uri) const {
@@ -235,8 +255,8 @@ void OperatorTable::setResolver(std::string_view uri, type::resolver_ptr_t resol
 }
 
 bool OperatorTable::writesOperand(OperId id, bool isWith, size_t index) const {
-    if (const sem::OperatorSemantics *declared = semantics(id); declared && declared->resources) {
-        return sem::writesOperand(*declared->resources, isWith, index);
+    if (const sem::OperatorSemantics *facts = record(id); facts && facts->resources) {
+        return sem::writesOperand(*facts->resources, isWith, index);
     }
     const auto traits = find(id);
     if (!traits) {
@@ -252,6 +272,15 @@ bool OperatorTable::touchesClass(OperId id, sem::ResourceClass cls, bool writesO
     const sem::OperatorSemantics *declared = semantics(id);
     return declared && declared->resources &&
            sem::touchesClass(*declared->resources, cls, writesOnly);
+}
+
+std::vector<sem::ResourceAccess> OperatorTable::accessList(OperId id) const {
+    if (const sem::OperatorSemantics *facts = record(id); facts != nullptr) {
+        return facts->accessList();
+    }
+    // An operator nobody registered: nothing is declared about it, so the conservative reading
+    // of design principles 3.3 -- it writes the global resource -- is the whole answer.
+    return {sem::globalAccess(sem::AccessMode::Write)};
 }
 
 type::resolver_ptr_t OperatorTable::resolver(OperId id) const {
@@ -693,7 +722,7 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
     // The traits declared so far are the old record's: the checks compare the new semantics
     // with the facts already declared, and the derivation is the same one find() uses.
     const std::optional<OperatorTraits> traits =
-        old != nullptr && old->effect != sem::Effect::Undeclared
+        old != nullptr && old->declaredEffect != sem::Effect::Undeclared
             ? std::optional<OperatorTraits>(traitsOf(*old))
             : std::nullopt;
     std::string problem = checkSemantics(uri, semantics, traits);
@@ -721,10 +750,14 @@ void OperatorTable::declareSemantics(std::string_view uri, sem::OperatorSemantic
                 problem));
     }
     // The record is one: the semantics declared here do not erase the facts declared before
-    // (an effect, an elementwise law, a fault list). They are the same record's fields.
+    // (an effect, an elementwise law, an access list, a fault table). They are the same record's
+    // fields.
     if (old != nullptr) {
-        if (semantics.effect == sem::Effect::Undeclared) {
-            semantics.effect = old->effect;
+        if (semantics.declaredEffect == sem::Effect::Undeclared) {
+            semantics.declaredEffect = old->declaredEffect;
+        }
+        if (!semantics.resources) {
+            semantics.resources = old->resources;
         }
         semantics.elementwise = semantics.elementwise || old->elementwise;
         semantics.callsGraphs = semantics.callsGraphs || old->callsGraphs;
@@ -764,6 +797,35 @@ void OperatorTable::declareResources(std::string_view uri, sem::ResourceSpec res
     record.resources = std::move(resources);
     lock.unlock();
     declareSemantics(uri, std::move(record));
+}
+
+void OperatorTable::declareFaults(std::string_view uri, std::vector<sem::FaultSpec> faults) {
+    // The table joins the operator's facts the way a trait does: one record, one step further, and
+    // no version of its own (a fault table is what the operator can raise, not a new release of
+    // it). A record nobody declared semantics for stays that way: the effect facts of an operator
+    // are declared before its semantics and are not semantics by themselves. Load time only.
+    std::unique_lock lock(mutex_);
+    const OperId id                  = internLocked(uri);
+    Entry &entry                     = entries_[id];
+    const sem::OperatorSemantics *old = entry.facts.load(std::memory_order_relaxed);
+    if (old != nullptr && !faults.empty() && old->declaredEffect != sem::Effect::Undeclared &&
+        !traitsOf(*old).mayFault) {
+        throw std::invalid_argument(
+            std::format(
+                "The faults declared for the operator '{}' are rejected: it is declared never to "
+                "fault.",
+                uri));
+    }
+    sem::OperatorSemantics facts =
+        old != nullptr ? *old : sem::OperatorSemantics{.key = sem::OperatorKey::of(uri)};
+    facts.faults = std::move(faults);
+    declarations_.push_back(std::make_unique<const sem::OperatorSemantics>(std::move(facts)));
+    const sem::OperatorSemantics *published = declarations_.back().get();
+    entry.facts.store(published, std::memory_order_release);
+    if (entry.declared.load(std::memory_order_relaxed) != nullptr) {
+        entry.declared.store(published, std::memory_order_release);
+    }
+    epoch_.fetch_add(1, std::memory_order_acq_rel);
 }
 
 void OperatorTable::declareDefinition(std::string_view uri, sem::Definition definition) {
