@@ -745,6 +745,20 @@ node_handle_t Builder::capturedCellIn(DraftGraphBuilder *graph, node_handle_t or
     return nullptr;
 }
 
+std::optional<uint8_t> Builder::capturePositionOf(DraftGraphBuilder *graph,
+                                                 node_handle_t port) const {
+    const auto table = capturedValues_.find(graph);
+    if (table == capturedValues_.end()) {
+        return std::nullopt;
+    }
+    for (size_t i = 0; i < table->second.size() && i <= 0xFF; ++i) {
+        if (table->second[i].port == port) {
+            return static_cast<uint8_t>(i);
+        }
+    }
+    return std::nullopt;
+}
+
 node_handle_t Builder::claimedWriterOf(DraftGraphBuilder *graph, node_handle_t origin) const {
     const auto byGraph = claimedWriters_.find(graph);
     if (byGraph == claimedWriters_.end()) {

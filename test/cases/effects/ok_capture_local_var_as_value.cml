@@ -1,0 +1,24 @@
+/**
+ * The same rule read from the type: `total` writes no resource, so its inferred set is empty and
+ * the value it stands for fits a parameter that asks for `pure` (design principles 3.3). The write
+ * the closure makes is to a cell of `total`'s own frame, which the caller of the value cannot read.
+ */
+
+func total(x: int): int {
+    var acc = 0
+    let add = (k: int): int => sync {
+        acc = acc + k
+        acc
+    }
+    let _ = loop i = 0 while i < x do sync {
+        add(i)
+        i + 1
+    }
+    acc
+}
+
+func main(): int sync {
+    let f: (x: int) => int pure = total
+    println(f(3))
+    return 0
+}
