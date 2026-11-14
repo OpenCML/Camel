@@ -105,12 +105,17 @@ EnumType *EnumDecl::prototype() const {
 namespace {
 
 /// The intern key of an instance: its declaration and the canonical ids of its type arguments,
-/// exactly as a named struct's is (struct.cpp). The declaration decides which type it is, and an
-/// instance compares its arguments with `equals`, so the names in them are erased here.
+/// exactly as a named struct's is (struct.cpp, `declaredKey`, where the reasoning is written out).
+/// The declaration decides which type it is, and an instance compares its arguments with
+/// `equals`, so the names in them are erased here. It enters the key by its `id()` -- a number
+/// handed out once per declaration and never repeated -- and not by its address, for the reason
+/// given there: the declaration's content (its variants) is not known when the key is made, a
+/// re-declaration has to be another type, and an id says the same thing as an address without
+/// being a fact about where the object lives.
 std::vector<uintptr_t> instanceKey(const EnumDecl *decl, std::span<Type *const> args) {
     std::vector<uintptr_t> key;
     key.reserve(1 + args.size());
-    key.push_back(reinterpret_cast<uintptr_t>(decl));
+    key.push_back(static_cast<uintptr_t>(decl->id()));
     for (Type *arg : args) {
         key.push_back(typeKeyWord(TypeTable::instance().canonical(arg)));
     }
