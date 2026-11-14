@@ -67,6 +67,7 @@ Not in this reference: the profiler (`perf`).
 | [env](#env) | `import { ... } from env` | C++ |
 | [json](#json) | `import { ... } from json` | C++ |
 | [hash](#hash) | `import { ... } from hash` | C++ |
+| [state](#state) | `import { ... } from state` | C++ |
 | [re](#re) | `import { ... } from re` | C++ |
 | [para](#para) | `import { ... } from para` | C++ |
 | [test_support](#test_support) | `import { ... } from test_support` | C++ |
@@ -104,6 +105,7 @@ Not in this reference: the profiler (`perf`).
 | [env](#env) | `import { ... } from env` |  |
 | [json](#json) | `import { ... } from json` |  |
 | [hash](#hash) | `import { ... } from hash` |  |
+| [state](#state) | `import { ... } from state` |  |
 | [re](#re) | `import { ... } from re` |  |
 | [para](#para) | `import { ... } from para` |  |
 | [test_support](#test_support) | `import { ... } from test_support` |  |
@@ -5301,6 +5303,79 @@ sha256: (text: string) => string
 The SHA-256 digest of the UTF-8 bytes of a text, as 64 lower-case hexadecimal digits.
 
 - Example: `sha256('abc')` gives `'ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad'`
+
+<a id="state"></a>
+
+## `state`: an explicit mutable reference
+
+An explicit mutable reference: one box, and the handles that point at it.
+
+`ref(v)` makes a box holding `v` and answers a handle to it; `get` reads the content, `set` and
+`update` write it. The handle is a value: a closure may capture it, keep it after the call that
+made it returned, and two handles to one box see one content. No `var` and no cell of a `var` is
+captured by any of them (design principles 3.5, rule two: the exit for state that outlives a
+call is a reference).
+
+A reference is a **handle type** (design principles 3.3): one resource per value. Two handles
+made by two `ref` calls name two boxes, so the operations on one are ordered with the operations
+on the other only where the program puts them in one `sync` block; two operations on one
+reference keep the order they are written in. The type is provided by the module
+(`modules/state`, design principles 10.4): `stdlib/state.cml` declares it and its four
+operators, and the module keeps the kernels, the resource contract of each operator and the
+storage.
+
+The content is any type that holds no `Ref`. A reference cannot hold a reference because the
+boxes are reclaimed by counting the handles that point at them: two boxes holding each other's
+handles would keep each other's count above zero for ever, and the program would hold values it
+can no longer reach. The compiler refuses such a content where the reference is made, one layer
+at a time -- the type itself, a field, an element, a variant's payload, what a function takes or
+returns, and what a closure captures.
+
+#### `ref`
+
+```camel
+ref: (v: T) => Ref<T>
+```
+
+A new box holding `v`, and a handle to it. The box is a new resource: the value written into it
+is the value `v` gives, not the cell of a `var` the program handed in.
+
+- Example: `get(ref(3))` gives `3`
+
+#### `get`
+
+```camel
+get: (r: Ref<T>) => T uses r
+```
+
+The content of the box `r` points at: a read of the reference, and nothing else.
+
+- Example: `get(ref(3))` gives `3`
+
+#### `set`
+
+```camel
+set: (r: Ref<T>, v: T) => T uses var r
+```
+
+Writes `v` into the box `r` points at, and answers `v`. A write of the box: the handle itself is
+not replaced.
+
+- Example (a fragment, not compiled): `set(r, 7)` gives `7`
+- Why it is not compiled: the box is one the surrounding program holds, so the example names it
+
+#### `update`
+
+```camel
+update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
+```
+
+Writes `f` of the content into the box `r` points at, and answers the new content. `f` is
+`pure`, so an update touches the one reference and no other resource: what it writes is a
+function of what it read.
+
+- Example (a fragment, not compiled): `update(r, (x: int) => x + 1)`
+- Why it is not compiled: the box is one the surrounding program holds, so the example names it
 
 <a id="re"></a>
 
