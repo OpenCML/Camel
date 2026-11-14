@@ -24,7 +24,7 @@ export func rendezvous(parties: int, timeout: float): int uses var rendezvous_po
 /// reports for the process, not the number of processors. A test reads it to pin how many worker
 /// threads a run creates.
 /// @example thread_count()    // 1 at -t 1
-export func thread_count(): int uses var process
+export func thread_count(): int uses process
 
 /// `base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
 /// the parameters it left out among them. A native operator with a generic declaration, for the

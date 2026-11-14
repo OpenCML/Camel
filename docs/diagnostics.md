@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-312 diagnostics: 291 errors, 21 warnings. 16 carry a machine-applicable edit, 296 say why they carry none.
+312 diagnostics: 291 errors, 21 warnings. 15 carry a machine-applicable edit, 297 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -270,7 +270,7 @@ prints one entry.
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
-| `0x0300020C` | [SemanticDiag::ExternalResourceNeedsVar](#externalresourceneedsvar) | Error | yes |
+| `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8915,41 +8915,38 @@ func main(): int sync {
 }
 ```
 
-### ExternalResourceNeedsVar
+### VariableInUses
 
-`0x0300020C` · Error · `SemanticDiag::ExternalResourceNeedsVar`
+`0x0300020D` · Error · `SemanticDiag::VariableInUses`
 
 **Fix**
 
-A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+None: choice: the repair is a decision only the writer can make
 
 **Message**
 
 ```text
-The external resource '{0}' is named without 'var' in the resource clause of '{1}'.
+The variable '{0}' is named in the resource clause '{1}'.
 ```
 
 **Help**
 
 ```text
-An external resource is state the program does not own: the program and whatever else is outside it both read and write it, so a call that names one writes it, and a clause says so the way a parameter does (design principles 3.3). Write 'var {0}' before it. A resource a module declares with 'resource' and one every program has (stdout, stderr, stdin, clock, env, fs) are external; a module's own 'var' is internal, and there an entry reads it without 'var' and writes it with 'var'.
+A clause names what a call touches outside the function's own variables: the external resources it reads or writes, and the handle parameters it is handed (design principles 3.3). A variable is declared once, where it is created: a `var` parameter in the parameter list, a module variable by the `var` in its declaration, a captured one by the `var` or `let` that binds it. Which of them a call touches is measured from the body, and the signature the compiler derives prints them. Remove the entry.
 ```
 
-**Example** (`test/cases/effects/err_external_without_var.cml`, run as `camel test/cases/effects/err_external_without_var.cml`)
+**Example** (`test/cases/effects/err_variable_in_clause.cml`, run as `camel test/cases/effects/err_variable_in_clause.cml`)
 
 ```camel
-// An external resource is state the program does not own, so a call that names one reads and writes
-// it, and the entry says so the way a parameter does: with `var` (design principles 3.3). `stdout`
-// is one every program has; `uses stdout` promises a read of it, which no call can keep, so the
-// clause is refused where it is written.
-
-func tick(): int uses stdout sync {
-    println('tick')
-    return 0
+func bump(var acc: int): int uses var acc sync {
+    acc += 1
+    return acc
 }
 
 func main(): int sync {
-    return tick()
+    var acc = 0
+    println(bump(acc))
+    return 0
 }
 ```
 
@@ -9832,10 +9829,12 @@ This invocation selected a pass boundary check requiring equal standard ambient 
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. How it touches each one is written the way a parameter is (design principles 3.3): an
-// entry without `var` reads the resource and one with `var` writes it, and an external resource is
-// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
@@ -9851,9 +9850,11 @@ func consume(s: Stream): int uses var s {
 func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses var t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {
@@ -9944,10 +9945,12 @@ A graph runs from its entry node to its exit node. A rewrite may replace either 
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. How it touches each one is written the way a parameter is (design principles 3.3): an
-// entry without `var` reads the resource and one with `var` writes it, and an external resource is
-// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
@@ -9963,9 +9966,11 @@ func consume(s: Stream): int uses var s {
 func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses var t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {
@@ -10093,10 +10098,12 @@ An operator node's ordinary ports are the arguments of the declaration it names,
 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
-// module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. How it touches each one is written the way a parameter is (design principles 3.3): an
-// entry without `var` reads the resource and one with `var` writes it, and an external resource is
-// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
+// module, a group of them, a handle type and `uses` on a handle parameter and on a group. How it
+// touches each one is written the way a parameter is (design principles 3.3): an entry without
+// `var` reads the resource and one with `var` writes it. A variable is never written in a clause --
+// a `var` parameter is declared by the `var` in the parameter list, and which calls touch the cell
+// is measured from the body -- so `bump` gets its footprint from the write in its body while the
+// other two bodies touch nothing and the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
@@ -10112,9 +10119,11 @@ func consume(s: Stream): int uses var s {
 func tick(): void uses var console {
 }
 
-/// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses var t sync {
-    return 0
+/// The body writes the cell it is handed: the parameter list declares the cell and the body is
+/// where writing it is written, so the clause names neither.
+func bump(var t: int): int sync {
+    t += 1
+    return t
 }
 
 func main(): int sync {

@@ -188,7 +188,7 @@ to_array: (content: Bytes) => int[]
 ```text
 tree_leaves: (tree: T) => L
 save_tree: <dir: string, dataset_manifest_sha256: string? = null> (tree: T) => void! uses var fs when has_ckpt_form::<T>()
-load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses var fs, var stderr when has_ckpt_form::<T>()
+load_tree: <dataset_manifest_sha256: string? = null> (dir: string) => T! uses fs, var stderr when has_ckpt_form::<T>()
 ```
 
 **`tree`** — import { ... } from tree — 4 name(s)
@@ -611,7 +611,7 @@ unordered_reduce: <f: (acc: T, item: T) => T, initial: T> (xs: T[]) => T
 
 ```text
 rendezvous: (parties: int, timeout: float) => int uses var rendezvous_point
-thread_count: () => int uses var process
+thread_count: () => int uses process
 with_probe: <base: int, step: int = 10, mode: int = 0> (x: T) => int
 with_probe: <base: int, step: int = 10, mode: int = 0> (xs: int[]) => int
 arity_probe: <tag: int, extra: int[] = []> (f: F, example: E) => int when is_function::<F>()
@@ -703,8 +703,8 @@ rule_consts: (r: Rule) => int
 upload: (value: f32[...]) => Device<f32[...]> uses var driver
 download: (value: Device<f32[...]>) => f32[...] uses var driver
 run_preferred_resident: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => Device<f32> uses var driver
-source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
-inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
+source: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
+inspect: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses driver
 benchmark: <fn: (a: f32, b: f32) => f32> (inputs: (f32, f32)) => string uses var driver
 regions: <fn: (a: f32, b: f32) => f32> () => string uses var driver
 available: () => bool uses var driver
