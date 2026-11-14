@@ -1,0 +1,23 @@
+/**
+ * A constant branch whose taken arm holds a further constant branch: the effect written in the inner
+ * arm runs between the two effects of the outer arm, in the order the three are written. Dissolving
+ * either branch must not drop the effect of the arm that stands in its place.
+ */
+
+func pick(c: bool, d: bool): int sync {
+    return if c then sync {
+        println(11)
+        let inner = if d then sync {
+            println(12)
+            return 3
+        } else 0
+        println(13)
+        return inner
+    } else 0
+}
+
+func main(): int sync {
+    println(pick(true, true))
+    println(pick(true, false))
+    return 0
+}
