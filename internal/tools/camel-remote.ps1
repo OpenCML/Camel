@@ -1094,10 +1094,12 @@ else
         gpu_skip=`${gpu_skip:-0}
         gpu_reds=`$(printf '%s\n' "`$gpu_clean" | sed -nE 's/^\[FAIL\] ([^ ]+).*/\1/p')
         gpu_nfail=`$(printf '%s\n' "`$gpu_reds" | grep -c . || true)
-        # Twelve names is what a line can carry and still be read; the count is in `fail=` and the
-        # remainder is named as a number rather than dropped silently.
-        gpu_red=`$(printf '%s\n' "`$gpu_reds" | head -n 12 | awk 'NR>1{printf ","} {printf "%s"}')
-        gpu_more=`$(( (`${gpu_nfail:-0}`) > 12 ? (`${gpu_nfail:-0}`) - 12 : 0 ))
+        # Twenty names is what a line can still be scanned at; the count is in `fail=` and the
+        # remainder is named as a number rather than dropped silently. `printf "%s", $0`, not
+        # `printf "%s"`: a missing argument prints nothing, which read as "no red names" on the
+        # first run of this observation while `fail=` said sixteen.
+        gpu_red=`$(printf '%s\n' "`$gpu_reds" | head -n 20 | awk 'NR>1{printf ","} {printf "%s", $0}')
+        gpu_more=`$(( (`${gpu_nfail:-0}`) > 20 ? (`${gpu_nfail:-0}`) - 20 : 0 ))
         if [ "`${gpu_nfail:-0}" -gt 0 ]; then
             printf '%s\n' "`$gpu_clean" | awk '/^\[FAIL\]/ {p=1} p && /^\[/ && !/^\[FAIL\]/ {p=0} p'
         fi
