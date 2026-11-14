@@ -22,7 +22,7 @@
  * composite that holds it (see typeKeyWord for the component the table does not hold).
  *
  * What is interned:
- *  - a bare type of one code (Type::create: the primitive singletons, the `typeof` hole);
+ *  - a bare type of one code (Type::create: the primitive singletons);
  *  - tuple types (TupleType::create), frame and static-area layouts among them, and the cell
  *    and the tagged forms (`var T`, `T?`, `T!`);
  *  - array types (ArrayType::make) and stream types (`T..`);
@@ -35,7 +35,7 @@
  *    signature never names its result or a parameter by the 0 that stands for a type the table
  *    does not hold -- the word every `TypeId` key would read as one and the same type;
  *  - the compile-time types: a type variable (by its name and its binding mark, see below), a
- *    type function, a `typeof` placeholder, an enum instance, a `Map`/`Set` instance.
+ *    type function, an enum instance, a `Map`/`Set` instance.
  *
  * What is not:
  *  - The open signature of a function the front end is building (OpenFunctionType, see
@@ -130,7 +130,6 @@ class TypeTable {
         Function,       // FunctionType::intern
         TypeVar,        // TypeVarType::create
         TypeFunc,       // TypeFunctionType::create
-        TypeOf,         // TypeOfType::create
         Enum,           // EnumType::get
         Collection,     // MapType::get, SetType::get and their prototypes
         Other,          // another module type, one object per kind

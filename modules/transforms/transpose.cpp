@@ -1736,16 +1736,16 @@ bool buildTransposeMember(
         // has no tangent space, has no cotangent type, and every caller refuses by name. A `float`
         // written here is the whole family's defect -- it answers "this cotangent is a `float`" for
         // values whose cotangent is anything else, and the answer is read.
-        const auto cotangentTypeOfType = [](const Type *type) -> Type * {
+        const auto cotangentSpaceOf = [](const Type *type) -> Type * {
             if (type == nullptr) {
                 return nullptr;
             }
             const camel::core::TangentSpaceAnswer space = camel::core::tangentSpaceOf(type);
             return space.hasSpace() ? space.space : nullptr;
         };
-        const auto cotangentTypeOf = [function, &cotangentTypeOfType](gc_node_ref_t ref) -> Type * {
+        const auto cotangentTypeOf = [function, &cotangentSpaceOf](gc_node_ref_t ref) -> Type * {
             const camel::runtime::GCNode *node = function->node(ref);
-            return cotangentTypeOfType(node != nullptr ? node->dataType() : nullptr);
+            return cotangentSpaceOf(node != nullptr ? node->dataType() : nullptr);
         };
         // A tuple of these values, as a node of the new graph, and the type that names it: the Fill
         // the builder writes for a state tuple (`builder_control.cpp`, `gir.loop.split`), so a loop
@@ -3499,7 +3499,7 @@ bool buildTransposeMember(
                      holderType->code() == camel::core::type::TypeCode::Struct) &&
                     member < camel::core::type::tree::arity(holderType).value()) {
                     slotSpace =
-                        cotangentTypeOfType(camel::core::type::tree::childType(holderType, member));
+                        cotangentSpaceOf(camel::core::type::tree::childType(holderType, member));
                 }
                 if (slotSpace == nullptr) {
                     refuse(TransposeRefusalCause::Component);

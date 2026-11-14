@@ -2786,6 +2786,10 @@ class Builder {
      * the value the expression would have, inferred without evaluating it (see `inferTypeOf`).
      * Any other type is bound by `boundType`. A placeholder nested inside a larger type is
      * refused: `typeof` stands for a whole type.
+     *
+     * A placeholder is a type variable the front end made, named `typeof#<n>`; the expression it
+     * stands for is the tree's, under that number (`GCT::Tree::makeTypeOfPlaceholder`), found
+     * through `at`, the node the type was written at. The type layer holds no part of it.
      */
     Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
     /**

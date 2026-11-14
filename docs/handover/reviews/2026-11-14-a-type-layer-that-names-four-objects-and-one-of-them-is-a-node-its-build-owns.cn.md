@@ -2,7 +2,7 @@
 
 **判据一句话**：`git grep -n "reinterpret_cast<uintptr_t>" -- include/camel/core/type src/core/type` 有 12 处，其中 8 处是**内部化内容**指针（`internText`/`internExtents`），4 处把对象地址写进内部化键或 `equals`：`intern.h:103`（表不持有的分量回落到地址）、`typevar.cpp:82`（`typeof` 的**表达式节点地址**）、`struct.cpp:96`、`enum.cpp:113`（**声明对象地址**）。四处里三样指的是**进程永不释放**的对象（地址因此稳定、且一个对象一个含义），第五样（守卫，本车道已修）指的是 build 自己的树；只有 `typeof` 这一处指的是**一个 build 拥有、可被释放的树里的节点**，所以性质与刚修的那处同族——而它的修法要你裁，因为类型层对它没有任何内容可说。
 
-状态：待裁。基线 `8a20f514c`（`lane-guardid`，本车道提交 `9f8d35ea9` 之后）。读数取自 `88zjwei` 的 `~/camel-work/guardid`（`camel-remote.ps1`，release，`-Jobs 8`）。
+状态：已裁、已实现（裁定 `79127aecb`，见末节「实现后的读数」）。基线 `8a20f514c`（`lane-guardid`，本车道提交 `9f8d35ea9` 之后）。读数取自 `88zjwei` 的 `~/camel-work/guardid`（`camel-remote.ps1`，release，`-Jobs 8`）。
 
 ## 同一个问题的四分之一已经修了
 
@@ -64,3 +64,12 @@
 
 按作者裁定 `79127aecb` 走：**核心类型层不再持有任何前端指针**。删 `TypeOfType`、`TypeCode::TypeOf`、`TypeTable::Shape::TypeOf`；`typeof e` 在 builder 里解析掉，核心只见一个 `TypeVarType`，名字是 `typeof#<序号>`，序号到表达式的对应表放在前端侧。
 这一条已经不需要再裁，页上留着的三处「按地址认对象」也不是它的一部分——它们指的对象永不释放、内容在造类型时还不存在，应当保留。
+
+## 实现后的读数
+
+按 `79127aecb` 做完：`TypeOfType`、`TypeCode::TypeOf`、`TypeTable::Shape::TypeOf` 已删，`typeof e` 由前端的 GCT builder 造成 `TypeVarType`（名字 `typeof#<序号>`，`binder` 为假），序号到表达式节点的对应表在 `GCT::Tree`（`makeTypeOfPlaceholder` / `typeOfOperandOf`），图 builder 在用到这个类型的地方按 `at` 所在的那棵树查回来解析（`resolveTypeNode`）。核心类型层不再有指向前端结构的字段，也不再需要任何 `typeof` 谓词：`!containsTypeVar(x) && !containsTypeOf(x)` 一律塌成 `!containsTypeVar(x)`。
+
+- `git grep -n "TypeOfType\|TypeCode::TypeOf\|Shape::TypeOf" -- include src core`：0 命中。
+- `git grep -c "reinterpret_cast<uintptr_t>" -- include/camel/core/type src/core/type`：12 → 11（10 处代码 + 1 处注释）。少掉的正是本页点名的 `typevar.cpp:82`（旧 `TypeOfType::create` 的表达式节点地址）；剩下 10 处全是内部化内容指针、类型对象地址或 `nullptr`，不再有前端节点。
+- 本页第 1 节说的三处（`intern.h` 的 `typeKeyWord` 回落、结构体 `declaredKey`、枚举 `instanceKey`）**原样保留**：它们指的对象在永久空间、永不释放，且内容在造类型时还不存在——理由与本页开头一致，没有改动。
+- 前端新增一条纪律：`GCT::collectTypeVarsWithoutPlaceholders` 是前端问「这个签名有哪些类型变量」的唯一入口（占位符不是要绑定的变量，它是待解析的表达式）。少了这条，`Tangent<Pair<P, typeof(q)>>` 这种结果类型会把 `typeof#0` 当成没被参数确定的类型变量而拒绝调用——旧核心因为占位符不是类型变量，天然不会发生。
