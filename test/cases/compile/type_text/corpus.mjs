@@ -47,15 +47,15 @@ export const SPELLINGS = [
     '<w: int> (a: int) => int', '<w: int, v: string> (a: int) => int', '<w: int> () => int',
     '<var w: int> (a: int) => int', '<w: int[]> (a: int[]) => int',
     '(a: int) => int pure', '() => int pure', '(a: int[]) => int[] pure', '((a: int) => int uses a)',
-    '((a: int, b: int) => int uses a)', '((a: int, b: int) => int uses a, b)', '((a: int) => int uses stdout)',
-    '((a: int) => int uses fs)', '((a: int) => int uses stdout, a)',
+    '((a: int, b: int) => int uses a)', '((a: int, b: int) => int uses a, b)', '((a: int) => int uses var stdout)',
+    '((a: int) => int uses var fs)', '((a: int) => int uses var stdout, a)',
     '<w: int> (a: int) => int pure', '(<w: int> (a: int) => int uses a)',
     // collections
     'Map<string, int>', 'Map<int, string[]>', 'Map<string, (int?)>', 'Map<string, Map<string, int>>',
     'Set<int>', 'Set<string>', 'Set<(int, int)>', 'Map<string, int>?', 'Set<int>!',
     'Map<string, (a: int) => int>',
     '(a: int) => ((b: int) => int) pure', '(a: int) => ((b: int) => int uses b)', '(((a: int) => int uses a), int)',
-    '{ f: ((a: int) => int uses a), g: int }', 'Box<((a: int) => int uses a)>', 'Map<string, ((a: int) => int uses stdout)>',
+    '{ f: ((a: int) => int uses a), g: int }', 'Box<((a: int) => int uses a)>', 'Map<string, ((a: int) => int uses var stdout)>',
     '(f: ((a: int) => int uses a), n: int) => int', '(((a: int) => int uses a))?', '(((a: int) => int uses a))[]',
     // typeof-free nesting stress
     '((a: int) => (int?)[])[]', '((int?)[])?', '((int?)[3])!', '(Box<int>?)[]', '(Pair<int?, int!>)[]',

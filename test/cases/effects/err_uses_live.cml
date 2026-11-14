@@ -4,7 +4,7 @@
 // refused (design effects plan, step 5).
 
 /// The clause names `fs`; the body writes `stdout`.
-func stamp(): int uses fs sync {
+func stamp(): int uses var fs sync {
     println('x')
     return 1
 }

@@ -6,7 +6,7 @@
 import test_support
 
 /// The body touches nothing; a call to it touches the meeting point `test_support` declares.
-func meet(): int uses test_support::rendezvous_point {
+func meet(): int uses var test_support::rendezvous_point {
     return 0
 }
 

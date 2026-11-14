@@ -107,7 +107,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::WhenConditionNotConstant"
 expect_diagnostic_line = 14
-expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated", "it declares effects: uses not_constant::counter"]
+expect_output_contains = ["The 'when' condition of 'bad' cannot be evaluated", "it declares effects: uses var not_constant::counter"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 

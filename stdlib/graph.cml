@@ -300,13 +300,13 @@ export func open::<F>(f: F): Txn<F> when is_function::<F>()
 /// @fails fault `InvalidArgument` when a node anchors its graph, when `new` is computed from `old`, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example replace(t, n, inputs(n)[0])
-export func replace::<F>(t: Txn<F>, old: Node, new: Node): void uses t
+export func replace::<F>(t: Txn<F>, old: Node, new: Node): void uses var t
 
 /// Removes a node whose value nobody reads.
 /// @fails fault `InvalidArgument` when the value is read, when the node anchors its graph, or when the transaction is over
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example erase(t, n)
-export func erase::<F>(t: Txn<F>, n: Node): void uses t
+export func erase::<F>(t: Txn<F>, n: Node): void uses var t
 
 /// Evaluates the pure operator of the node over its constant operands and gives the node holding
 /// the result, null when there is no value to compute (an operand is no constant of the graph, the
@@ -315,24 +315,24 @@ export func erase::<F>(t: Txn<F>, n: Node): void uses t
 /// is left as written and warned about, as the C++ fold does.
 /// @example-fragment t is an open transaction and n a node of its graph
 /// @example eval(t, n)
-export func eval::<F>(t: Txn<F>, n: Node): Node? uses t
+export func eval::<F>(t: Txn<F>, n: Node): Node? uses var t
 
 /// Adds a value the transaction creates to the graph's static values and gives the node that
 /// holds it. The value is a number, a bool or a string; a string is copied into the permanent
 /// space because a value a transaction creates may be live at a safepoint where its draft is not
 /// traced.
 /// @example add_constant(open((x: int): int => x + 1), graph_of((x: int): int => x + 1), 7)
-export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses t when is_ordered::<T>()
+export func add_constant::<F, T>(t: Txn<F>, g: Graph, value: T): Node uses var t when is_ordered::<T>()
 
 /// Checks the edits and makes the changed function: the same type as the one that was opened, with
 /// the values it captured, sharing every graph nothing changed. The transaction is over.
 /// @fails error value `GraphConflict` when a graph the transaction touched changed since it was opened; error value `GraphInvalid` when an edit broke an invariant (the message names the graph, the node and the edge); error value `TxnUsed` when the transaction was over already
 /// @example commit(open((x: int): int => x + 1))
-export func commit::<F>(t: Txn<F>): F! uses t
+export func commit::<F>(t: Txn<F>): F! uses var t
 
 /// Drops the transaction.
 /// @example abort(open((x: int): int => x + 1))
-export func abort::<F>(t: Txn<F>): void uses t
+export func abort::<F>(t: Txn<F>): void uses var t
 
 // ---- comparison ----
 // `==` of the handle types (design principles 4.3): a library defines the operators of its own

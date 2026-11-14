@@ -2,11 +2,11 @@
 // SPDX-License-Identifier: MIT
 
 #include "camel/parse/ast/builder.h"
-#include "camel/parse/ast/rule_head.h"
-#include "camel/parse/ast/type_case_words.h"
 #include "camel/core/operator_names.h"
 #include "camel/core/operator_semantics.h"
 #include "camel/core/tags.h"
+#include "camel/parse/ast/rule_head.h"
+#include "camel/parse/ast/type_case_words.h"
 
 #include <cctype>
 #include <cstdint>
@@ -379,7 +379,8 @@ void Builder::collectProgramPermissionGroups(cst::Program program) {
 }
 
 camel::core::sem::PermissionMask Builder::programPermissionOf(std::string_view name) const {
-    if (const auto it = programPermissions_.find(std::string(name)); it != programPermissions_.end()) {
+    if (const auto it = programPermissions_.find(std::string(name));
+        it != programPermissions_.end()) {
         return it->second;
     }
     // A qualified requirement written for a group of this module (`m::fast`).
@@ -763,11 +764,7 @@ Value Builder::visitFuncData(cst::FuncData context) {
                                  : nodeOrigin(typeOptNode->front()),
             -1,
             "returnType"),
-        semanticPart(
-            camel::source::SemanticRole::ValueProducer,
-            nodeOrigin(blockNode),
-            -1,
-            "body"),
+        semanticPart(camel::source::SemanticRole::ValueProducer, nodeOrigin(blockNode), -1, "body"),
     };
     // Each parameter as written, with its own position and its slot in the signature: a port of
     // the function's graph stands for one parameter, and what is said about a parameter points at
@@ -807,7 +804,7 @@ bool Builder::rejectVjpAnnotation(cst::FuncAnno context) {
     if (annotation != "vjp" && annotation != "jvp") {
         return false;
     }
-    const std::string tag    = annotation == "vjp" ? "vjp" : "jvp";
+    const std::string tag = annotation == "vjp" ? "vjp" : "jvp";
     diags_->of(SemanticDiag::InvalidAnnotation)
         .at(rangeOf(context->firstToken(), context->lastToken()))
         .commit(
@@ -832,8 +829,8 @@ Value Builder::visitFuncAnno(cst::FuncAnno context) {
     node_ptr_t annoNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
     setNodeTokenRangeByContext(annoNode, context);
     *annoNode << createNodeAs<RefDataLoad>(ref);
-    const ArgumentValues values = value_cast<ArgumentValues>(
-        visitAngledValues(context->get<cst::AngledValues>()));
+    const ArgumentValues values =
+        value_cast<ArgumentValues>(visitAngledValues(context->get<cst::AngledValues>()));
     *annoNode << values.data << values.named;
 
     LEAVE("FuncAnno");
@@ -926,17 +923,17 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     if (context->has(TK::KwExport)) {
         export_->addRef(ref);
     }
-    const auto body   = context->get<cst::RuleBody>();
-    const auto sides  = body->exprs();
+    const auto body  = context->get<cst::RuleBody>();
+    const auto sides = body->exprs();
     // The head of the rule's left side, read here, where the left side is still syntax: at the
     // stage a module's declarations are read a rule's `__lhs` has no body, so nothing later can
     // read the head from the graphs. Only a ruleset module is indexed -- its name says so -- and
     // the module is named explicitly, by the diagnostics the module is being read with.
     if (diags_ != nullptr && sides[0]) {
         std::string shape;
-        uint32_t arity     = 0;
-        std::string head   = leftHeadOf(sides[0], shape, arity);
-        const auto range   = extractTokenRangeFromContext(context);
+        uint32_t arity        = 0;
+        std::string head      = leftHeadOf(sides[0], shape, arity);
+        const auto range      = extractTokenRangeFromContext(context);
         std::string rhsCallee = sides[1] ? rightCalleeOf(sides[1]) : std::string();
         // The names the left side binds, read here for the same reason as the head: the tuple both
         // sides of the rule take is written in this expression and nowhere else.
@@ -951,7 +948,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // by the engine, so that pair is a duplicate, while two that differ in their condition are
         // a family it dispatches over.
         const auto conditionClause = context->get<cst::WhenClause>();
-        std::string condition = conditionClause ? conditionClause->text() : std::string();
+        std::string condition      = conditionClause ? conditionClause->text() : std::string();
         // The type of each parameter, in order: the other half of what a duplicate is. A key holds
         // one rule per parameter-type list (the author's ruling of 2026-11-03 11:10), so the two
         // laws of `T[...]` and `T` are filed under one key and the engine picks the one the
@@ -995,7 +992,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             typeParams.emplace_back(ident->text());
         }
     }
-    int64_t consts    = 0;
+    int64_t consts = 0;
     if (const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams()) {
         int bit = 0;
         for (const auto pair : paired->all<cst::KeyParamPair>()) {
@@ -1090,8 +1087,9 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                     needs = static_cast<camel::core::sem::PermissionMask>(needs | permission);
                     return;
                 }
-                const auto at =
-                    rangeOf(syn::TokenRef(context.tree(), first), syn::TokenRef(context.tree(), last));
+                const auto at = rangeOf(
+                    syn::TokenRef(context.tree(), first),
+                    syn::TokenRef(context.tree(), last));
                 // `#requires` names the core's permission tags; a name that is not one (a typo,
                 // or a tag of the program that grants no permission) is reported here, at the
                 // argument, with the list of the permissions that can be named.
@@ -1140,8 +1138,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
 
     // The rule's `with` parameters as the `constas` parameters of every function the declaration
     // becomes: same names, same declared types, in the order they are written, ahead of the rule's
-    // own parameters. A `constas` parameter is a compile-time value, so it is no port of a side: the
-    // ports stay the rule's own parameters, and the value an application binds is read from the
+    // own parameters. A `constas` parameter is a compile-time value, so it is no port of a side:
+    // the ports stay the rule's own parameters, and the value an application binds is read from the
     // instance's static slot (design principles 5.4, 5.5).
     const auto constasParams = [&](node_ptr_t ownParams) {
         node_ptr_t list = createNodeAs<RepeatedLoad>("NamedPair");
@@ -1153,7 +1151,11 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
                     continue;
                 }
                 node_ptr_t named = createNodeAs<NamedPairLoad>(
-                    Reference(std::string(ident->text())), false, false, false, true);
+                    Reference(std::string(ident->text())),
+                    false,
+                    false,
+                    false,
+                    true);
                 setNodeTokenRangeByContext(named, pair);
                 *named << any2node(visitType(pair->type()));
                 node_ptr_t noDefault = createNodeAs<OptionalLoad>("DataExpr");
@@ -1183,7 +1185,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     std::vector<std::string> writtenAcrossTheRule;
     {
         const syn::TokenBuffer &tokens = context.tree()->tokens();
-        const auto writesName = [&](syn::Node node, const std::string &name) {
+        const auto writesName          = [&](syn::Node node, const std::string &name) {
             if (!node) {
                 return false;
             }
@@ -1245,7 +1247,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
         // The condition of this rule is being built: `node_of(c)` is read here and nowhere else
         // and the name of the rule is what
         // a refusal names.
-        ruleWhenName_ = name;
+        ruleWhenName_     = name;
         const auto paired = params ? params->get<cst::PairedParams>() : cst::PairedParams();
         const auto constValueParam = [](cst::KeyParamPair pair) {
             return static_cast<bool>(pair->has(TK::KwConst)) && static_cast<bool>(pair->type());
@@ -1317,7 +1319,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
             *applied << head << arguments;
             return applied;
         };
-        node_ptr_t whenParams   = createNodeAs<RepeatedLoad>("NamedPair");
+        node_ptr_t whenParams = createNodeAs<RepeatedLoad>("NamedPair");
         setNodeTokenRangeByContext(whenParams, context);
         if (params) {
             for (const auto pair : paired->all<cst::KeyParamPair>()) {
@@ -1419,8 +1421,8 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     if (instantiated) {
         makerName = "__rule_generic";
         if (!genericRuleImportAdded_) {
-            genericRuleImportAdded_  = true;
-            auto rewriteImport = std::make_shared<ImportLoad>();
+            genericRuleImportAdded_ = true;
+            auto rewriteImport      = std::make_shared<ImportLoad>();
             rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
             rewriteImport->setPath("rewrite");
             rewriteImport->setRefs({Reference("__rule_generic")});
@@ -1502,8 +1504,7 @@ Value Builder::visitRuleDecl(cst::RuleDecl context) {
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
     *dataList << call;
-    node_ptr_t valueDecl =
-        createNodeAs<DataDeclLoad>(false, std::vector<Reference>{ref});
+    node_ptr_t valueDecl = createNodeAs<DataDeclLoad>(false, std::vector<Reference>{ref});
     unwrapNodeAs<DataDeclLoad>(valueDecl)->setDoc(docOf(context));
     setNodeTokenRangeByContext(valueDecl, context);
     *valueDecl << typeList << dataList;
@@ -1548,8 +1549,8 @@ A fact is compiled to plain functions and one call of `__fact`:
     func depth__case0_fact(c: int) => 1                  value, not a node)
     func depth__case1(x: int, y: int) => x + y          (a case over the construction: the
     func depth__case1_fact(x: Node, y: Node) => max(depth::<int>(x), depth::<int>(y)) + 1
-    func depth(v: Node<int>): int => __fact('depth', depth__initial, depth__join, ...)     matcher reads it,
-                                                          nothing runs it)
+    func depth(v: Node<int>): int => __fact('depth', depth__initial, depth__join, ...)     matcher
+reads it, nothing runs it)
 
 The cases are the engine's clauses: a pattern function carries the shape the matcher reads (its
 parameters are the pattern variables, typed `int`; a `const` case declares the type of its
@@ -1587,7 +1588,7 @@ part of which fact this is: two queries at two types are two instances, computed
 Value Builder::visitFactDecl(cst::FactDecl context) {
     ENTER("FactDecl");
     if (!factImportAdded_) {
-        factImportAdded_ = true;
+        factImportAdded_   = true;
         auto rewriteImport = std::make_shared<ImportLoad>();
         rewriteImport->setTokenRange(extractTokenRangeFromContext(context));
         rewriteImport->setPath("rewrite");
@@ -1675,9 +1676,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         // `join` says how the facts of two writings of one value are merged, and it is the one
         // clause that has no default: a fact without it has no value for a value the program
         // wrote two ways (rewrite design 7.5).
-        diags_->of(SemanticDiag::FactJoinRequired)
-            .at(rangeOf(context->firstToken()))
-            .commit(name);
+        diags_->of(SemanticDiag::FactJoinRequired).at(rangeOf(context->firstToken())).commit(name);
         LEAVE("FactDecl");
         return Value();
     }
@@ -1715,7 +1714,11 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             }
             const std::string paramName(pair->get<cst::IdentDef>()->text());
             node_ptr_t named = createNodeAs<NamedPairLoad>(
-                Reference(paramName), false, /*isConst=*/asConstas, false, false);
+                Reference(paramName),
+                false,
+                /*isConst=*/asConstas,
+                false,
+                false);
             setNodeTokenRangeByContext(named, context);
             if (pair->type()) {
                 *named << any2node(visitType(pair->type()));
@@ -1770,10 +1773,11 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         *block << stmts;
         return block;
     };
-    const auto makeFunc =
-        [&](const std::string &fname, const std::vector<node_ptr_t> &withParams,
-            const std::vector<std::pair<std::string, node_ptr_t>> &params, node_ptr_t retType,
-            node_ptr_t body) -> node_ptr_t {
+    const auto makeFunc = [&](const std::string &fname,
+                              const std::vector<node_ptr_t> &withParams,
+                              const std::vector<std::pair<std::string, node_ptr_t>> &params,
+                              node_ptr_t retType,
+                              node_ptr_t body) -> node_ptr_t {
         const Reference fnRef = qualifyRef(Reference(fname));
         node_ptr_t funcType   = createNodeAs<FuncTypeLoad>();
         setNodeTokenRangeByContext(funcType, context);
@@ -1805,7 +1809,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         *decl << funcData;
         return decl;
     };
-    const auto typeOf = [&](syn::Node node) { return any2node(visitType(node)); };
+    const auto typeOf  = [&](syn::Node node) { return any2node(visitType(node)); };
     const auto refType = [&](const std::string &typeName) {
         node_ptr_t node = createNodeAs<RefTypeLoad>(Reference(typeName));
         setNodeTokenRangeByContext(node, context);
@@ -1814,13 +1818,17 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
 
     std::vector<node_ptr_t> declarations;
     declarations.push_back(makeFunc(
-        name + "__initial", withPairs(false), {}, typeOf(factType),
+        name + "__initial",
+        withPairs(false),
+        {},
+        typeOf(factType),
         any2node(visitBlockExpr(initialRhs))));
     // One function per clause: it calls the function the clause names, of the fact's type, so that
     // a name with several overloads is resolved where the type is known.
     const auto mergeFunc = [&](const std::string &suffix, syn::Node clause) -> node_ptr_t {
         std::vector<std::pair<std::string, node_ptr_t>> params = {
-            {"a0", typeOf(factType)}, {"a1", typeOf(factType)}};
+            {"a0", typeOf(factType)},
+            {"a1", typeOf(factType)}};
         node_ptr_t callee = any2node(visitExpr(clause));
         node_ptr_t body   = blockOf(callOf(callee, {reference("a0"), reference("a1")}));
         return makeFunc(name + suffix, withPairs(false), params, typeOf(factType), body);
@@ -1921,7 +1929,7 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
         syn::Node constType;
         if (!constName.empty() && pattern) {
             const auto written = pattern->types();
-            constType = written.size() == 1 ? written[0] : syn::Node();
+            constType          = written.size() == 1 ? written[0] : syn::Node();
         }
         if (!constName.empty()) {
             if (!constType) {
@@ -1979,10 +1987,16 @@ Value Builder::visitFactDecl(cst::FactDecl context) {
             patternBody = any2node(visitBlockExpr(patternExpr));
         }
         declarations.push_back(makeFunc(
-            prefix, withPairs(false), patternParams,
-            constName.empty() ? refType("int") : typeOf(constType), patternBody));
+            prefix,
+            withPairs(false),
+            patternParams,
+            constName.empty() ? refType("int") : typeOf(constType),
+            patternBody));
         declarations.push_back(makeFunc(
-            prefix + "_fact", withPairs(false), factParams, typeOf(factType),
+            prefix + "_fact",
+            withPairs(false),
+            factParams,
+            typeOf(factType),
             any2node(visitBlockExpr(rhs))));
         compiled.push_back({prefix, prefix + "_fact", mask});
     }
@@ -2036,8 +2050,8 @@ builder registers the tag with them.
 Value Builder::visitTagDecl(cst::TagDecl context) {
     ENTER("TagDecl");
     // The name is written as a definition (`identDef`), not a reference: `tag name on ...`.
-    const auto name = context->get<cst::IdentDef>();
-    Reference ref   = qualifyRef(Reference(name ? name->text() : std::string{}));
+    const auto name     = context->get<cst::IdentDef>();
+    Reference ref       = qualifyRef(Reference(name ? name->text() : std::string{}));
     node_ptr_t declNode = createNodeAs<TagDeclLoad>(ref);
     setNodeTokenRangeByContext(declNode, context);
     auto decl = declNode->loadAs<TagDeclLoad>();
@@ -2212,8 +2226,7 @@ Value Builder::visitFuncDecl(cst::FuncDecl context) {
     node_ptr_t funcTypeNode = createNodeAs<FuncTypeLoad>();
     TokenRange typeRange    = {
         context->firstToken()->index(),
-        blockContext ? blockContext->firstToken()->index() + 1
-                     : context->lastToken()->index() + 1};
+        blockContext ? blockContext->firstToken()->index() + 1 : context->lastToken()->index() + 1};
     setNodeTokenRange(funcTypeNode, typeRange);
     setNodeOriginByOffsets(
         funcTypeNode,
@@ -2534,9 +2547,9 @@ resourceDecl : 'export'? 'resource' identDef ('=' bracketIdents | 'unordered')?
 */
 Value Builder::visitResourceDecl(cst::ResourceDecl context) {
     ENTER("ResourceDecl");
-    const auto name  = context->get<cst::IdentDef>();
-    node_ptr_t declNode = createNodeAs<ResourceDeclLoad>(
-        qualifyRef(Reference(name ? name->text() : std::string{})));
+    const auto name = context->get<cst::IdentDef>();
+    node_ptr_t declNode =
+        createNodeAs<ResourceDeclLoad>(qualifyRef(Reference(name ? name->text() : std::string{})));
     setNodeTokenRangeByContext(declNode, context);
     auto decl = declNode->loadAs<ResourceDeclLoad>();
     decl->setDoc(docOf(context));
@@ -2564,7 +2577,8 @@ Value Builder::visitResourceDecl(cst::ResourceDecl context) {
 }
 
 /*
-resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+resourceClause : ('uses' useEntry (',' useEntry)* | 'pure')+
+useEntry : 'var'? identRef
 */
 Value Builder::visitResourceClause(cst::ResourceClause context) {
     ENTER("ResourceClause");
@@ -2578,8 +2592,15 @@ Value Builder::visitResourceClause(cst::ResourceClause context) {
     if (context->text().starts_with("pure")) {
         clause->setPure(true);
     }
-    for (const auto use : context->all<cst::IdentRef>()) {
-        clause->addUse(value_cast<Reference>(visitIdentRef(use)));
+    for (const auto entry : context->all<cst::UsesEntry>()) {
+        // One resource, and whether it is written with `var` (design principles 3.3): the entry
+        // reads the resource without it and writes the resource with it. The entry's own token
+        // range goes with it, so a clause that breaks the rule is reported where the word belongs.
+        const auto ident = entry->get<cst::IdentRef>();
+        clause->addUse(
+            value_cast<Reference>(visitIdentRef(ident)),
+            entry->has(TK::KwVar),
+            extractTokenRangeFromContext(ident));
     }
     LEAVE("ResourceClause");
     return clauseNode;
@@ -2695,10 +2716,10 @@ parameter writes its type; one left out stays a pair with no type child, so GCT 
 */
 Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     ENTER("KeyParamPair");
-    const bool isRest =
-        static_cast<bool>(context->tok(TK::Ellipsis)) || static_cast<bool>(context->tok(TK::DotDot));
+    const bool isRest    = static_cast<bool>(context->tok(TK::Ellipsis)) ||
+                           static_cast<bool>(context->tok(TK::DotDot));
     const bool isConstas = context->has(TK::KwConstas);
-    bool isVar        = false;
+    bool isVar           = false;
     if (context->tok(TK::KwVar)) {
         isVar = true;
     }
@@ -2707,8 +2728,7 @@ Value Builder::visitKeyParamPair(cst::KeyParamPair context) {
     Reference ref(
         context->get<cst::IdentDef>() ? std::string(context->get<cst::IdentDef>()->text())
                                       : std::string("__pack"));
-    node_ptr_t namedPairNode =
-        createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
+    node_ptr_t namedPairNode = createNodeAs<NamedPairLoad>(ref, isVar, isConst, isRest, isConstas);
     setNodeTokenRangeByContext(namedPairNode, context);
     if (isRest || isConstas) {
         // `...ts` is untyped: the tuple of the arguments left over is made at the call. A type
@@ -2869,7 +2889,7 @@ Value Builder::visitArgumentList(cst::ArgumentList context) {
         setNodeTokenRangeByContext(dataList, context->get<cst::IndexValues>());
         dataList = any2node(visitIndexValues(context->get<cst::IndexValues>()));
     }
-    node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t namedDataList   = createNodeAs<RepeatedLoad>("NamedData");
     node_ptr_t strayPositional = nullptr;
     if (context->get<cst::PairedValues>()) {
         const auto &paired = context->get<cst::PairedValues>();
@@ -2958,14 +2978,14 @@ Value Builder::visitParentArgues(cst::ParentArgues context) {
     ENTER("ParentArgues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
-    node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t namedDataList   = createNodeAs<RepeatedLoad>("NamedData");
     node_ptr_t strayPositional = nullptr;
     if (context->get<cst::ArgumentList>()) {
-        ArgumentValues values = value_cast<ArgumentValues>(
-            visitArgumentList(context->get<cst::ArgumentList>()));
-        dataList          = values.data;
-        namedDataList     = values.named;
-        strayPositional   = values.positionalAfterNamed;
+        ArgumentValues values =
+            value_cast<ArgumentValues>(visitArgumentList(context->get<cst::ArgumentList>()));
+        dataList        = values.data;
+        namedDataList   = values.named;
+        strayPositional = values.positionalAfterNamed;
     }
     LEAVE("ParentArgues");
     return ArgumentValues{dataList, namedDataList, strayPositional};
@@ -2993,14 +3013,14 @@ Value Builder::visitAngledValues(cst::AngledValues context) {
     ENTER("AngledValues");
     node_ptr_t dataList = createNodeAs<RepeatedLoad>("Data");
     setNodeTokenRangeByContext(dataList, context);
-    node_ptr_t namedDataList = createNodeAs<RepeatedLoad>("NamedData");
+    node_ptr_t namedDataList   = createNodeAs<RepeatedLoad>("NamedData");
     node_ptr_t strayPositional = nullptr;
     if (context->get<cst::ArgumentList>()) {
-        ArgumentValues values = value_cast<ArgumentValues>(
-            visitArgumentList(context->get<cst::ArgumentList>()));
-        dataList          = values.data;
-        namedDataList     = values.named;
-        strayPositional   = values.positionalAfterNamed;
+        ArgumentValues values =
+            value_cast<ArgumentValues>(visitArgumentList(context->get<cst::ArgumentList>()));
+        dataList        = values.data;
+        namedDataList   = values.named;
+        strayPositional = values.positionalAfterNamed;
     }
     LEAVE("AngledValues");
     return ArgumentValues{dataList, namedDataList, strayPositional};
@@ -3194,8 +3214,8 @@ Value Builder::visitStaticForExpr(cst::StaticForExpr context) {
     node_ptr_t forNode =
         createNodeAs<StaticForLoad>(valueName, typeName, tagsName, byIndices, bindings.size());
     setNodeTokenRangeByContext(forNode, context);
-    node_ptr_t shapeNode = byIndices ? any2node(visitExpr(context->expr()))
-                                     : any2node(visitType(context->type()));
+    node_ptr_t shapeNode =
+        byIndices ? any2node(visitExpr(context->expr())) : any2node(visitType(context->type()));
     *forNode << shapeNode;
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *forNode << bodyNode;
@@ -3254,8 +3274,14 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
     const bool byIndices  = mode && mode.text() == "indices";
     const bool byFields   = mode && mode.text() == "fields";
     const bool bySequence = !byIndices && !byFields;
-    node_ptr_t loopNode = createNodeAs<StaticLoopLoad>(
-        state, valueName, typeName, tagsName, byIndices, bySequence, bindings.size());
+    node_ptr_t loopNode   = createNodeAs<StaticLoopLoad>(
+        state,
+        valueName,
+        typeName,
+        tagsName,
+        byIndices,
+        bySequence,
+        bindings.size());
     setNodeTokenRangeByContext(loopNode, context);
     *loopNode << inits;
     node_ptr_t shapeNode = byIndices || bySequence ? any2node(visitExpr(context->expr()))
@@ -3268,7 +3294,10 @@ Value Builder::visitStaticLoopExpr(cst::StaticLoopExpr context) {
         {
             semanticPart(
                 camel::source::SemanticRole::Keyword,
-                deriveAstAnchorOrigin(loopNode, context->tok(TK::KwStatic), "ast.static.loop.strong"),
+                deriveAstAnchorOrigin(
+                    loopNode,
+                    context->tok(TK::KwStatic),
+                    "ast.static.loop.strong"),
                 -1,
                 "static"),
             semanticPart(
@@ -3294,7 +3323,10 @@ TypeCaseKind Builder::typeCaseKindOf(cst::TypeCasePattern pattern) {
     // A word that names no shape is told, where it is written, instead of being read as `_`.
     diags_->of(SemanticDiag::StaticMatchPatternCannotMatch)
         .at(rangeOf(pattern->firstToken(), pattern->lastToken()))
-        .commit(text, "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, #leaf, _)");
+        .commit(
+            text,
+            "it is not a shape word (struct, tuple, array, func, nullable, fallible, map, set, "
+            "#leaf, _)");
     return TypeCaseKind::Wildcard;
 }
 
@@ -3344,11 +3376,7 @@ Value Builder::visitTypeCase(cst::TypeCase context) {
                 deriveAstAnchorOrigin(caseNode, context->tok(TK::KwCase), "ast.match.type.case"),
                 -1,
                 "case"),
-            semanticPart(
-                camel::source::SemanticRole::CaseBody,
-                nodeOrigin(bodyNode),
-                -1,
-                "body"),
+            semanticPart(camel::source::SemanticRole::CaseBody, nodeOrigin(bodyNode), -1, "body"),
         });
     LEAVE("TypeCase");
     return caseNode;
@@ -3425,8 +3453,7 @@ Value Builder::visitCtrlExpr(syn::Node context) {
     {
         ctrlNode = any2node(visitMatchTypeExpr(cst::MatchTypeExpr(context)));
     } break;
-    case NK::StaticForExpr:
-    {
+    case NK::StaticForExpr: {
         ctrlNode = any2node(visitStaticForExpr(cst::StaticForExpr(context)));
     } break;
     case NK::MatchExpr: // MATCH logicalOrExpr '{' matchCase+ '}'
@@ -3992,8 +4019,7 @@ Value Builder::visitUnaryExpr(syn::Node context) {
                 {
                     semanticPart(
                         camel::source::SemanticRole::Operator,
-                        deriveAstAnchorOrigin(
-                            res, context->tok(TK::KwAs), "ast.unary.keyword"),
+                        deriveAstAnchorOrigin(res, context->tok(TK::KwAs), "ast.unary.keyword"),
                         -1,
                         "as"),
                     semanticPart(
@@ -4076,8 +4102,8 @@ Value Builder::visitLinkExpr(cst::LinkExpr context) {
     ENTER("LinkExpr");
     node_ptr_t lhsNode = any2node(visitExpr(context->expr(0)));
     for (size_t i = 1; i < context->exprs().size(); i++) {
-        string strOp       = context->child(i * 2 - 1)->text();
-        node_ptr_t rhsNode = any2node(visitExpr(context->expr(i)));
+        string strOp        = context->child(i * 2 - 1)->text();
+        node_ptr_t rhsNode  = any2node(visitExpr(context->expr(i)));
         node_ptr_t linkNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
         setNodeTokenRangeByContext(linkNode, context);
         linkNode->loadAs<ReservedExprLoad>()->setPipe(true);
@@ -4216,8 +4242,8 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             }
         }
         const bool writtenArgument = !argument.empty();
-        const auto found = writtenArgument ? ruleWhenNodeParams_.find(argument)
-                                           : ruleWhenNodeParams_.end();
+        const auto found =
+            writtenArgument ? ruleWhenNodeParams_.find(argument) : ruleWhenNodeParams_.end();
         if (writtenArgument && found != ruleWhenNodeParams_.end()) {
             node_ptr_t nodeRef = createNodeAs<RefDataLoad>(Reference(found->second));
             setNodeTokenRangeByContext(nodeRef, context);
@@ -4271,8 +4297,8 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::ParentArgues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Call);
                 setNodeTokenRangeByContext(exprNode, cst::ParentArgues(child.node()));
-                const ArgumentValues values = value_cast<ArgumentValues>(
-                    visitParentArgues(cst::ParentArgues(child.node())));
+                const ArgumentValues values =
+                    value_cast<ArgumentValues>(visitParentArgues(cst::ParentArgues(child.node())));
                 node_ptr_t dataList      = values.data;
                 node_ptr_t namedDataList = values.named;
                 if (values.positionalAfterNamed != nullptr) {
@@ -4306,9 +4332,13 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
                 auto access = cst::MemberAccess(child.node());
                 if (access->child(1).isToken() && access->child(1).text() == "[") {
                     exprNode = makeStaticAccess(
-                        lhsNode, access->child(0), access->child(2).node(), access);
+                        lhsNode,
+                        access->child(0),
+                        access->child(2).node(),
+                        access);
                 } else {
-                    exprNode = makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
+                    exprNode =
+                        makeMemberAccess(lhsNode, access->child(0), access->child(1), access);
                 }
             } else if (child.node().is(NK::StructData)) {
                 // `Shape::Rect { w: 2 }`: a struct-shape variant is built from a struct literal,
@@ -4375,8 +4405,8 @@ Value Builder::visitAnnoExpr(cst::AnnoExpr context) {
             } else if (child.node().is(NK::AngledValues)) {
                 exprNode = createNodeAs<ReservedExprLoad>(ReservedDataOp::Bind);
                 setNodeTokenRangeByContext(exprNode, cst::AngledValues(child.node()));
-                const ArgumentValues values = value_cast<ArgumentValues>(
-                    visitAngledValues(cst::AngledValues(child.node())));
+                const ArgumentValues values =
+                    value_cast<ArgumentValues>(visitAngledValues(cst::AngledValues(child.node())));
                 node_ptr_t dataList      = values.data;
                 node_ptr_t namedDataList = values.named;
                 *exprNode << lhsNode << dataList << namedDataList;
@@ -4525,8 +4555,8 @@ Value Builder::visitAccessExpr(cst::AccessExpr context) {
     return lhsNode;
 }
 
-node_ptr_t Builder::makeStaticAccess(
-    node_ptr_t lhs, syn::Child dot, syn::Node key, syn::Node range) {
+node_ptr_t
+Builder::makeStaticAccess(node_ptr_t lhs, syn::Child dot, syn::Node key, syn::Node range) {
     node_ptr_t dataNode = createNodeAs<StaticAccessLoad>();
     setNodeTokenRangeByContext(dataNode, range);
     node_ptr_t keyNode = any2node(visitExpr(key));
@@ -4540,11 +4570,7 @@ node_ptr_t Builder::makeStaticAccess(
                 -1,
                 ".[]"),
             semanticPart(camel::source::SemanticRole::Receiver, nodeOrigin(lhs), -1, "target"),
-            semanticPart(
-                camel::source::SemanticRole::IndexExpr,
-                nodeOrigin(keyNode),
-                -1,
-                "key"),
+            semanticPart(camel::source::SemanticRole::IndexExpr, nodeOrigin(keyNode), -1, "key"),
         });
     return dataNode;
 }
@@ -4898,7 +4924,8 @@ Value Builder::visitFStringData(cst::Literal context) {
             // and the expression is incomplete: say what the fix is (item 1).
             if (part.hasSpec) {
                 const std::string_view spec = whole.substr(
-                    part.specBegin, static_cast<size_t>(part.specEnd) - part.specBegin);
+                    part.specBegin,
+                    static_cast<size_t>(part.specEnd) - part.specBegin);
                 if (spec.find("=>") != std::string_view::npos) {
                     diags_->addRelatedToErrorsFrom(
                         beforeExpression,
@@ -5123,10 +5150,9 @@ Value Builder::visitTypeExpr(cst::TypeExpr context) {
     // `T?..` is the stream of a nullable `T`, and `T..?` is the possibly absent stream. `...` is
     // the stream (design principles 5.4), `?`/`!` the nullable and fallible marks.
     for (size_t i = 1; i < context->childCount(); ++i) {
-        const std::string mark = context->child(i)->text();
-        node_ptr_t markedTypeNode =
-            mark == ".." ? createNodeAs<StreamTypeLoad>()
-                         : createNodeAs<NullableTypeLoad>(mark == "!");
+        const std::string mark    = context->child(i)->text();
+        node_ptr_t markedTypeNode = mark == ".." ? createNodeAs<StreamTypeLoad>()
+                                                 : createNodeAs<NullableTypeLoad>(mark == "!");
         setNodeTokenRangeByContext(markedTypeNode, context);
         *markedTypeNode << lhsNode;
         lhsNode = markedTypeNode;

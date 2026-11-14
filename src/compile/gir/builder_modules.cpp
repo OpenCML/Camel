@@ -7,9 +7,9 @@
  */
 
 #include "builder.h"
-#include "camel/core/type/typecall.h"
-#include "builder_support.h"
 #include "builder_helpers.h"
+#include "builder_support.h"
+#include "camel/core/type/typecall.h"
 
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/numeric_convert.h"
@@ -98,7 +98,9 @@ bool typesCanAgree(
     if (TupleType *tagged = asTagged(left)) {
         TupleType *other = asTagged(right);
         return typesCanAgree(
-            tagged->payloadType(), other != nullptr ? other->payloadType() : right, leftBindings,
+            tagged->payloadType(),
+            other != nullptr ? other->payloadType() : right,
+            leftBindings,
             rightBindings);
     }
     if (TupleType *tagged = asTagged(right)) {
@@ -114,7 +116,9 @@ bool typesCanAgree(
     case TypeCode::Array:
         return typesCanAgree(
             static_cast<ArrayType *>(left)->elemType(),
-            static_cast<ArrayType *>(right)->elemType(), leftBindings, rightBindings);
+            static_cast<ArrayType *>(right)->elemType(),
+            leftBindings,
+            rightBindings);
     case TypeCode::Tuple: {
         auto *want = static_cast<TupleType *>(left);
         auto *have = static_cast<TupleType *>(right);
@@ -123,8 +127,7 @@ bool typesCanAgree(
             return false;
         }
         for (size_t i = 0; i < want->size(); ++i) {
-            if (!typesCanAgree(
-                    want->typeAt(i), have->typeAt(i), leftBindings, rightBindings)) {
+            if (!typesCanAgree(want->typeAt(i), have->typeAt(i), leftBindings, rightBindings)) {
                 return false;
             }
         }
@@ -140,7 +143,10 @@ bool typesCanAgree(
             }
             for (size_t i = 0; i < want->typeArgCount(); ++i) {
                 if (!typesCanAgree(
-                        want->typeArgAt(i), have->typeArgAt(i), leftBindings, rightBindings)) {
+                        want->typeArgAt(i),
+                        have->typeArgAt(i),
+                        leftBindings,
+                        rightBindings)) {
                     return false;
                 }
             }
@@ -151,9 +157,11 @@ bool typesCanAgree(
         }
         for (size_t i = 0; i < want->size(); ++i) {
             const auto field = have->findField(want->fieldName(i));
-            if (!field.has_value() ||
-                !typesCanAgree(
-                    want->typeAt(i), have->typeAt(*field), leftBindings, rightBindings)) {
+            if (!field.has_value() || !typesCanAgree(
+                                          want->typeAt(i),
+                                          have->typeAt(*field),
+                                          leftBindings,
+                                          rightBindings)) {
                 return false;
             }
         }
@@ -168,19 +176,24 @@ bool typesCanAgree(
         }
         for (size_t i = 0; i < want->withTypesCount(); ++i) {
             if (!typesCanAgree(
-                    want->withTypeAt(i), have->withTypeAt(i), leftBindings, rightBindings)) {
+                    want->withTypeAt(i),
+                    have->withTypeAt(i),
+                    leftBindings,
+                    rightBindings)) {
                 return false;
             }
         }
         for (size_t i = 0; i < want->normTypesCount(); ++i) {
             if (!typesCanAgree(
-                    want->normTypeAt(i), have->normTypeAt(i), leftBindings, rightBindings)) {
+                    want->normTypeAt(i),
+                    have->normTypeAt(i),
+                    leftBindings,
+                    rightBindings)) {
                 return false;
             }
         }
         if (want->hasExitType() && have->hasExitType()) {
-            return typesCanAgree(
-                want->exitType(), have->exitType(), leftBindings, rightBindings);
+            return typesCanAgree(want->exitType(), have->exitType(), leftBindings, rightBindings);
         }
         return true;
     }
@@ -193,8 +206,7 @@ bool typesCanAgree(
 /// Whether one call could be an instance of both signatures: the same number of parameters of
 /// both kinds, and one argument list that both can take (`typesCanAgree` above).
 bool signaturesCanAgree(FunctionType *left, FunctionType *right) {
-    if (left == nullptr || right == nullptr ||
-        left->withTypesCount() != right->withTypesCount() ||
+    if (left == nullptr || right == nullptr || left->withTypesCount() != right->withTypesCount() ||
         left->normTypesCount() != right->normTypesCount()) {
         return false;
     }
@@ -202,13 +214,19 @@ bool signaturesCanAgree(FunctionType *left, FunctionType *right) {
     std::unordered_map<std::string, Type *> rightBindings;
     for (size_t i = 0; i < left->withTypesCount(); ++i) {
         if (!typesCanAgree(
-                left->withTypeAt(i), right->withTypeAt(i), leftBindings, rightBindings)) {
+                left->withTypeAt(i),
+                right->withTypeAt(i),
+                leftBindings,
+                rightBindings)) {
             return false;
         }
     }
     for (size_t i = 0; i < left->normTypesCount(); ++i) {
         if (!typesCanAgree(
-                left->normTypeAt(i), right->normTypeAt(i), leftBindings, rightBindings)) {
+                left->normTypeAt(i),
+                right->normTypeAt(i),
+                leftBindings,
+                rightBindings)) {
             return false;
         }
     }
@@ -341,8 +359,7 @@ std::optional<std::string> Builder::nativeOperatorUri(const GCT::node_ptr_t &gct
     if (tags.declaration == camel::core::attr::kNoAttrs) {
         return std::nullopt;
     }
-    const auto value =
-        camel::core::attr::valueOf(tags.declaration, camel::core::attr::key("op"));
+    const auto value = camel::core::attr::valueOf(tags.declaration, camel::core::attr::key("op"));
     if (value == camel::core::attr::kNoValue) {
         return std::nullopt;
     }
@@ -363,7 +380,8 @@ namespace {
 std::string resourceIdentity(std::string_view name, std::string_view declaring) {
     const size_t separator = name.find("::");
     if (separator != std::string_view::npos) {
-        return std::string(name.substr(0, separator)) + ":" + std::string(name.substr(separator + 2));
+        return std::string(name.substr(0, separator)) + ":" +
+               std::string(name.substr(separator + 2));
     }
     if (const size_t colon = name.find(':'); colon != std::string_view::npos) {
         return std::string(name.substr(0, colon)) + ":" + std::string(name.substr(colon + 1));
@@ -390,35 +408,35 @@ std::set<std::string> resourceIdentities(
 
 /// The text of a signature for a diagnostic: its parameter names where the type has them,
 /// `#index` otherwise.
-std::string describeResources(
-    const camel::core::sem::ResourceSignature &signature, const FunctionType *type) {
+std::string
+describeResources(const camel::core::sem::ResourceSignature &signature, const FunctionType *type) {
     if (signature.mode == camel::core::sem::ResourceSignature::Mode::Generic) {
         return "nothing about its resources";
     }
     if (signature.pure()) {
         return "pure";
     }
-    std::string out     = "uses ";
-    bool first          = true;
-    const auto add      = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    std::string out = "uses ";
+    bool first      = true;
+    const auto add  = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : signature.params) {
         if (type != nullptr && use.index < type->argNamesCount()) {
-            add(std::string(type->argNameAt(use.index)));
+            add(camel::core::sem::writes(use.mode), std::string(type->argNameAt(use.index)));
         } else {
-            add(std::format("#{}", use.index));
+            add(camel::core::sem::writes(use.mode), std::format("#{}", use.index));
         }
     }
     for (const auto &use : signature.ambient) {
-        add(camel::core::sem::resourceDisplayName(use.name));
+        add(camel::core::sem::writes(use.mode), camel::core::sem::resourceDisplayName(use.name));
     }
     for (camel::core::sem::ResourceClass cls : signature.anyOf) {
-        add(std::format("any {}", camel::core::sem::resourceClassName(cls)));
+        add(false, std::format("any {}", camel::core::sem::resourceClassName(cls)));
     }
     if (signature.external) {
-        add("external");
+        add(false, "external");
     }
     return out;
 }
@@ -528,14 +546,15 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
         std::optional<camel::core::sem::ResourceSignature> declared;
         if (declaredFacts != nullptr && declaredFacts->resources) {
             declared = camel::core::sem::signatureOf(
-                *declaredFacts->resources, funcType->withTypesCount());
+                *declaredFacts->resources,
+                funcType->withTypesCount());
         }
-        const bool same = declared.has_value() &&
-                          resourceIdentities(written, module_->name()) ==
-                              resourceIdentities(*declared, module_->name()) &&
-                          (written.pure() ==
-                           (declared->params.empty() && declared->ambient.empty() &&
-                            declared->anyOf.empty()));
+        const bool same =
+            declared.has_value() &&
+            resourceIdentities(written, module_->name()) ==
+                resourceIdentities(*declared, module_->name()) &&
+            (written.pure() ==
+             (declared->params.empty() && declared->ambient.empty() && declared->anyOf.empty()));
         if (!same) {
             diags_->of(SemanticDiag::NativeResourceMismatch)
                 .atOrigin(gct->origin())
@@ -626,11 +645,13 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
     // two may stand side by side. The conditions are asked about the types the compiler
     // registers (`separateWhenConditions`): a type that satisfies both is reported with the two
     // declarations, and a condition the compiler cannot answer leaves the pair refused as before.
-    const bool generic = resolver->fixedSignature() == nullptr;
+    const bool generic  = resolver->fixedSignature() == nullptr;
     const auto *ownWhen = GCT::Tree::of(gct)->whenOf(gct);
-    const auto ask = [this](const GCT::node_ptr_t &condition, FunctionType *signature,
-                            const ModuleUnit *unit,
-                            const camel::core::type::type_bindings_t &bindings) {
+    const auto ask      = [this](
+                              const GCT::node_ptr_t &condition,
+                              FunctionType *signature,
+                              const ModuleUnit *unit,
+                              const camel::core::type::type_bindings_t &bindings) {
         // The condition belongs to the declaration that wrote it and is answered in that
         // declaration's module, wherever the pair is being checked (evaluateWhenCondition).
         return evaluateWhenCondition(condition, signature, bindings, {}, nullptr, unit);
@@ -671,7 +692,10 @@ void Builder::declareNativeOperator(const GCT::node_ptr_t &gct) {
                     },
                     [&](const camel::core::type::type_bindings_t &bindings) {
                         return ask(
-                            otherWhen->condition, otherDeclared->funcType(), otherUnit, bindings);
+                            otherWhen->condition,
+                            otherDeclared->funcType(),
+                            otherUnit,
+                            bindings);
                     },
                     overlappingType);
                 if (separation == ConditionSeparation::Disjoint) {
@@ -768,22 +792,17 @@ void Builder::exportNativeOperators(const GCT::node_ptr_t &exportList) {
             if (existing.has_value() && !existing->isOperGroup()) {
                 // The C++ module exports something else under this name (a constant, a tag):
                 // the declaration cannot also be that name.
-                diags_->of(SemanticDiag::Redeclaration)
-                    .atOrigin(group.origin)
-                    .commit(group.name);
+                diags_->of(SemanticDiag::Redeclaration).atOrigin(group.origin).commit(group.name);
                 throw BuildAbortException();
             }
         }
         // A fixed declaration is the more specific rule: a call that both it and a generic
         // declaration accept is its own (design principles 4.3). The
         // group answers in the order of its rules, so the fixed ones come first.
-        std::stable_sort(
-            group.rules.begin(), group.rules.end(), [](const auto &a, const auto &b) {
-                return a.second->fixedSignature() != nullptr &&
-                       b.second->fixedSignature() == nullptr;
-            });
-        const oper_group_ptr_t ops =
-            OperatorGroup::create(group.name, std::move(group.rules));
+        std::stable_sort(group.rules.begin(), group.rules.end(), [](const auto &a, const auto &b) {
+            return a.second->fixedSignature() != nullptr && b.second->fixedSignature() == nullptr;
+        });
+        const oper_group_ptr_t ops = OperatorGroup::create(group.name, std::move(group.rules));
         unit_->nativeOperatorGroups[group.name] = ops;
         if (!isExported) {
             unit_->module->declarePrivateEntity(ref, ops);
@@ -813,8 +832,8 @@ std::optional<Builder::ImplKernel> Builder::implKernelOf(const graph_set_ptr_t &
     return found->second;
 }
 
-std::optional<Builder::ImplKernel> Builder::implKernelOfGraph(
-    const compile_graph_ptr_t &graph) const {
+std::optional<Builder::ImplKernel>
+Builder::implKernelOfGraph(const compile_graph_ptr_t &graph) const {
     if (graph == nullptr) {
         return std::nullopt;
     }
@@ -897,11 +916,9 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
         }
         // A rest parameter takes the arguments after the fixed ones; typed `..xs: ..A` it binds
         // `A` to the pack of their types, which the condition can ask about with `..pred::<A>()`.
-        const size_t fixedNorm =
-            declared->normTypesCount() - (declared->hasRest() ? 1 : 0);
+        const size_t fixedNorm = declared->normTypesCount() - (declared->hasRest() ? 1 : 0);
         if (declared->withTypesCount() != withTypes.size() ||
-            (declared->hasRest() ? normTypes.size() < fixedNorm
-                                 : normTypes.size() != fixedNorm)) {
+            (declared->hasRest() ? normTypes.size() < fixedNorm : normTypes.size() != fixedNorm)) {
             return RuleVerdict::NotThisRule;
         }
         for (size_t i = 0; i < declared->withTypesCount(); ++i) {
@@ -929,7 +946,12 @@ Builder::RuleVerdict Builder::ruleVerdictForCall(
     // that is neither true nor false is the declaration's defect and is reported where it is
     // written, never taken for a candidate that applies.
     const WhenResult verdict = evaluateWhenCondition(
-        found->second.clause.condition, declared, bindings, {}, nullptr, found->second.unit);
+        found->second.clause.condition,
+        declared,
+        bindings,
+        {},
+        nullptr,
+        found->second.unit);
     if (verdict.holds()) {
         return RuleVerdict::Applies;
     }
@@ -1000,10 +1022,10 @@ void Builder::adoptImplKernel(
                         stated.push_back(type);
                     }
                 }
-                takes = stated.size() == declaredRule->bindableNames().size() &&
-                        resolver
-                            ->resolveForCall(stated, funcType->exitType(), withTypes, normTypes, {})
-                            .has_value();
+                takes =
+                    stated.size() == declaredRule->bindableNames().size() &&
+                    resolver->resolveForCall(stated, funcType->exitType(), withTypes, normTypes, {})
+                        .has_value();
             }
         }
         if (takes && declaredRuleApplies(resolver, kernel.name, withTypes, normTypes, stated)) {
@@ -1030,10 +1052,9 @@ void Builder::adoptImplKernel(
     adopted.types = statedTypes;
     adopted.group = OperatorGroup::create(
         kernel.group->name(),
-        std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{
-            {uri, executor}});
+        std::vector<std::pair<std::string, camel::core::type::resolver_ptr_t>>{{uri, executor}});
     // A call of the instance resolves in this group, and what it says is the function's name.
-    implDeclaredNames_[uri] = tmpl->name;
+    implDeclaredNames_[uri]   = tmpl->name;
     implKernels_[graph.get()] = std::move(adopted);
 }
 
@@ -1062,8 +1083,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
     // The name of the kernel as a name of this module: a program may write it qualified with
     // the module it is declared in (`impl_demo::add_kernel`), which means the same name here.
     const auto localName = [&](const std::string &written) {
-        for (const std::string &prefix :
-             {unit_->module->name(), unit_->module->declaredName()}) {
+        for (const std::string &prefix : {unit_->module->name(), unit_->module->declaredName()}) {
             if (prefix.empty()) {
                 continue;
             }
@@ -1112,8 +1132,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 if (templateScope_ == nullptr) {
                     continue;
                 }
-                std::optional<generic_ref_t> declaredTemplate =
-                    templateScope_->get(functionName);
+                std::optional<generic_ref_t> declaredTemplate = templateScope_->get(functionName);
                 if (!declaredTemplate.has_value()) {
                     // The function of a namespace: its template is registered under the name
                     // the reference ends with (registerGenericTemplates).
@@ -1133,8 +1152,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 // A name of this module that has a body is not a kernel; a name an import
                 // brings is another module's kernel, which this module cannot use.
                 bool hasBody = false;
-                if (const auto graphs = graphScope_->get(kernelName, false);
-                    graphs.has_value()) {
+                if (const auto graphs = graphScope_->get(kernelName, false); graphs.has_value()) {
                     hasBody = !graphs.value()->empty();
                 }
                 if (hasBody) {
@@ -1234,17 +1252,18 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             // the misuse reported above, not a narrowing.
             camel::core::type::resolver_ptr_t executor;
             const type_vec_t withTypes(
-                funcType->withTypesSpan().begin(), funcType->withTypesSpan().end());
+                funcType->withTypesSpan().begin(),
+                funcType->withTypesSpan().end());
             const type_vec_t normTypes(
-                funcType->normTypesSpan().begin(), funcType->normTypesSpan().end());
+                funcType->normTypesSpan().begin(),
+                funcType->normTypesSpan().end());
             if (declaredRuleApplies(kernel, tag->kernel, withTypes, normTypes)) {
                 executor = kernel;
             }
             // The graph the declaration made, by the declared type object (overloads share a
             // name and differ by it; builder.cpp, enterScope).
             compile_graph_ptr_t body;
-            if (const auto graphs = graphScope_->get(functionName, false);
-                graphs.has_value()) {
+            if (const auto graphs = graphScope_->get(functionName, false); graphs.has_value()) {
                 for (const auto &graph : **graphs) {
                     if (graph != nullptr && graph->funcType() == funcType) {
                         body = graph;
@@ -1261,7 +1280,8 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
                 // call of that graph rather than of a kernel (adoptImplKernel's no-executor
                 // path, for the instance of a generic function).
                 body->edit().setFlags(
-                    static_cast<uint8_t>(body->view().flags() | camel::runtime::kGraphFlagImplBody));
+                    static_cast<uint8_t>(
+                        body->view().flags() | camel::runtime::kGraphFlagImplBody));
                 body->edit().setImplKernelUri(std::string(uri));
                 continue;
             }
@@ -1277,7 +1297,7 @@ void Builder::resolveImplDeclarations(const GCT::node_ptr_t &root) {
             // A call of the function is a call of this kernel, so a message about the call says
             // the name the function is declared under, never the kernel's own (design principles
             // 10.4: the kernel is private to the module that writes it).
-            implDeclaredNames_[uri] = functionName;
+            implDeclaredNames_[uri]  = functionName;
             implKernels_[body.get()] = std::move(record);
             // The graph stays the semantic body: expanding the function means reading this
             // graph, and a consumer that asks for it (autodiff, fusion, export, a rule) gets
@@ -1360,7 +1380,8 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
                     *module_,
                     ref,
                     camel::core::module::detail::EntityAccess::makeDecoratedOverloads(
-                        eraseCompileGraph(optDecorated.value()), eraseCompileGraphSet(overloads)));
+                        eraseCompileGraph(optDecorated.value()),
+                        eraseCompileGraphSet(overloads)));
                 continue;
             }
             exports_->exportEntity(
@@ -1446,6 +1467,3 @@ void Builder::exportDeclarations(const GCT::node_ptr_t &gct, bool decorated) {
 }
 
 } // namespace camel::compile::gir
-
-
-

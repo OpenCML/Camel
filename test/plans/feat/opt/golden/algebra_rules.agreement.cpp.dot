@@ -257,7 +257,7 @@ digraph GraphIR {
         N45 -> N47 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N48 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="77:0-89:1", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="() => int uses stdout"];
+    N48 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="77:0-89:1", srcfile="<ROOT>/test/cases/opt/algebra_rules/agreement.cml", value_type="() => int uses var stdout"];
     N49 [label="CALL", type="CALL", value_type="int"];
     N49 -> O00 [label="0", type="EXIT"];
     N48 -> N49 [label="0|0", type="WITH"];

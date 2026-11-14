@@ -230,7 +230,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses stdout", "(x: int) => int pure"]
+expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses var stdout", "(x: int) => int pure"]
 
 [[tests]]
 name = "err.pure_parameter_write"
@@ -328,7 +328,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_uses_live.cml:7:", "uses fs", "stdout"]
+expect_output_contains = ["err_uses_live.cml:7:", "uses var fs", "stdout"]
 
 [[tests]]
 name = "err.group_cycle"
@@ -361,7 +361,7 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_callee_clause_reaches.cml:15:", "uses db", "cache"]
+expect_output_contains = ["err_callee_clause_reaches.cml:15:", "uses var db", "cache"]
 
 [[tests]]
 name = "err.promise_note"
@@ -677,3 +677,51 @@ assert(out === want, `unexpected output: ${out}`)
 }
 """
 timeout_ms = 30000
+
+# ---- The read/write spelling of a clause entry (design principles 3.3) ----
+#
+# An entry without `var` reads its resource and one with `var` writes it, the way a parameter is
+# written, and an external resource is always written -- it is state the program does not own, so
+# the program and whatever is outside it both read and write it. The mode is part of the promise a
+# signature publishes and is printed with it, so the two clauses are told apart wherever a signature
+# is shown.
+
+[[tests]]
+name = "entries.read_and_write"
+desc = "One clause names a read of a variable, a write of another, a write of a variable the body only reads, and a write of the group `console`: `uses scale, var acc, var scale, var console` in four declarations. All four compile and print their promise, which is the promise each body keeps -- `var` says a write may happen and asks for no more than that."
+kind = "behavior"
+case = "../../../cases/effects/read_write_entries.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "6\n5\n3\nshout\n1\n5\n"
+
+[[tests]]
+name = "entries.external_without_var"
+desc = "`uses console` promises a read of state the program does not own, which no call to it can keep: the entry must carry `var`. One diagnostic (`SemanticDiag::ExternalResourceNeedsVar`, 0x0300020C) at the entry, naming the resource and the signature it is written in."
+kind = "negative"
+case = "../../../cases/effects/err_external_without_var.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ExternalResourceNeedsVar"
+expect_diagnostic_code = "0x0300020C"
+expect_output_contains = ["err_external_without_var.cml:6:", "The external resource '", "stdout", "Write 'var stdout'"]
+
+[[tests]]
+name = "entries.read_entry_quoted"
+desc = "A read entry promised for a resource the body writes is not covered: the promise is reported, and the signature it quotes is `() => int uses scale` -- the entry as written, without `var`."
+kind = "negative"
+case = "../../../cases/effects/err_read_entry_writes.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_output_contains = ["err_read_entry_writes.cml:5:", "(var acc: int) => int uses acc"]
+
+[[tests]]
+name = "entries.write_entry_quoted"
+desc = "The other spelling in the same report: a write entry is quoted with `var`, `() => int uses var acc`, so two clauses that differ only in how they touch a resource do not read alike."
+kind = "negative"
+case = "../../../cases/effects/err_write_entry_reaches.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
+expect_output_contains = ["err_write_entry_reaches.cml:5:", "(var acc: int) => int uses var acc"]

@@ -1,0 +1,45 @@
+/**
+ * A `uses` entry writes how the call touches its resource (design principles 3.3): without `var`
+ * it reads the resource and with `var` it writes it, the way a parameter is written. `times` reads
+ * `scale`, `add` writes `acc`, `shout` writes the group `console`, and `peek` writes `scale` in its
+ * clause while its body only reads it -- `var` promises a write and asks for nothing else, so a
+ * body inside the promise keeps it.
+ *
+ *   6 5 3 shout 1 5
+ */
+
+resource console = [stdout]
+
+var scale: int = 3
+var acc: int = 0
+
+/// A read of the variable: the entry carries no `var`.
+func times(x: int): int uses scale {
+    return x * scale
+}
+
+/// A write of the variable: the entry carries `var`.
+func add(x: int): int uses var acc {
+    acc = acc + x
+    return acc
+}
+
+/// `var` says the entry may write, not that the body must.
+func peek(): int uses var scale {
+    return scale
+}
+
+/// The group expands to `stdout`, which every call to this writes: the entry carries `var`.
+func shout(): int uses var console sync {
+    println('shout')
+    return 1
+}
+
+func main(): int sync {
+    println(times(2))
+    println(add(5))
+    println(peek())
+    println(shout())
+    println(acc)
+    return 0
+}
