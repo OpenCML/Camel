@@ -532,6 +532,7 @@ bb4f371c5fc7c439 ok stdlib/random.cml
 42b7b2c5046240f8 ok stdlib/rewrite.cml
 6f2d557f8d7349a5 ok stdlib/rules.cml
 e5785f40146107c0 ok stdlib/sim.cml
+76e021d10f7cb912 ok stdlib/state.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
 9f90e55ee60e5feb ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
@@ -2391,7 +2392,7 @@ a1f4c5a5b5efa833 ok test/cases/consistency/unused_fallible/outside_sync.cml
 c1be0bc9301a8129 ok test/cases/consistency/values/closure_var.cml
 221d0b84c26b091d ok test/cases/consistency/values/content_equality.cml
 5991ad966a8e747f ok test/cases/consistency/values/content_equality_trees.cml
-f0b25db4aca1702a ok test/cases/consistency/values/counter_closure.cml
+d56de796713cf084 ok test/cases/consistency/values/counter_closure.cml
 84641ddb4f8ced2a ok test/cases/consistency/values/deep_enum_chain.cml
 6f397ec6fcb7bb79 ok test/cases/consistency/values/deep_json_depth.cml
 dd1c3071ce1d75cd ok test/cases/consistency/values/deep_nested_enum.cml
@@ -2413,6 +2414,8 @@ d0d368edbfa030a5 ok test/cases/consistency/values/int_min_div.cml
 61abaacae8d267a5 ok test/cases/consistency/values/non_tail_deep.cml
 507f7f77f7e70193 ok test/cases/consistency/values/number_fit.cml
 ca5841f9e3e4ed82 ok test/cases/consistency/values/number_text.cml
+87ae81bf4b506b46 ok test/cases/consistency/values/ref_one_cell_two_holders.cml
+0fda5e005b714e4d ok test/cases/consistency/values/ref_takes_the_value.cml
 986ab62f1f564cf4 ok test/cases/consistency/values/slice_take_drop.cml
 a4c34d3b475d44f7 ok test/cases/consistency/values/strings.cml
 39fcda76a26cc0a9 ok test/cases/consistency/values/structs_tuples.cml

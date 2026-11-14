@@ -1,0 +1,17 @@
+/**
+ * `ref` takes the value it is given: writing the `var` afterwards is not seen through the handle,
+ * and a content written through the handle is not the `var`. A reference is not a way to carry the
+ * cell of a `var` out of the evaluation that declared it.
+ */
+
+import state
+
+func main(): int sync {
+    var n = 1
+    let r = state::ref(n)
+    n = 42
+    println(state::get(r))
+    state::set(r, 7)
+    println(n)
+    return 0
+}
