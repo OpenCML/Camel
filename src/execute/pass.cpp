@@ -645,7 +645,8 @@ void registerCoreKernels() {
         return std::make_unique<RulesetsPass>(
             ctx,
             args.isNull("query") ? std::string() : args.getString("query"),
-            args.getBool("forward"));
+            args.getBool("forward"),
+            args.getBool("sig"));
     });
     registerCoreKernel("profile", profilePass());
     registerCoreKernel("cpp", makePass<CppDumpPass>());
