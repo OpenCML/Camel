@@ -549,7 +549,7 @@
             "comment": "A plan file selects itself: editing the tests of one plan runs that plan. A non-plan file under test/plans (a golden, a fixture) selects the nearest directory that holds a plan, so editing a golden runs the plans it belongs to. The except list keeps the plans the project forbids from an ordinary change out of that: a perf, GC-stress or progen plan edit falls back to the fast layer (name the plan file to run it deliberately).",
             "paths": ["test/plans/"],
             "self": true,
-            "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml"]
+            "except": ["test/plans/perf/", "test/plans/feat/mm/gc.plan.toml", "test/plans/feat/mm/gc_collections.plan.toml", "test/plans/feat/mm/gc_elder_exhaustion.plan.toml", "test/plans/feat/mm/gc_root_window.plan.toml", "test/plans/feat/opt/progen.plan.toml", "test/plans/gpu/tiles_regions.plan.toml"]
         }
     ],
     "slowCaseOwners": {
