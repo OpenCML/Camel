@@ -1,0 +1,7 @@
+/** `typeof` stands for a whole type: a tuple with a `typeof` member is refused. */
+
+func main(): int sync {
+    let pair: (typeof(1), int) = (1, 2)
+    println(pair)
+    return 0
+}

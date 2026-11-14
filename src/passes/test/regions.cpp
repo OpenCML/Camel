@@ -10,6 +10,10 @@
  * a node whose region is gone -- and reports whether the commit refused each and named it:
  *   REGIONS orphan_owner_refused=1 region=1 gone=1 rule=1 named_region=1
  *   REGIONS orphan_member_refused=1 region=2 rule=1
+ * A value edge pulls the node that reads it into the region the value comes from, an order edge
+ * does not, and an order edge that reaches into a region with no owner stays where it is and makes
+ * the commit refuse the draft:
+ *   REGIONS order_moved=0 value_moved=1 rehome_kept=1 refused=1 rule=1
  * The regions mean nothing to the back ends yet; the program runs on as before.
  */
 
@@ -627,7 +631,54 @@ RegionsTestPass::apply(const camel::runtime::Program *program, std::ostream &os)
     again.edit(const_cast<GCGraph *>(after)).edit();
     const Program *last = again.commit();
     os << "REGIONS recommit same=" << (last->graph(largest->id()) == after ? 1 : 0) << "\n";
-    // The recommit installed `last`; a pass returns the program the pipeline is to use, and that
-    // is the current one, not the version before the second commit. `last` has the same graph.
+
+    // What a move into a region is for, and what it is not (docs/design/effects/edges.cn.md 4.6).
+    // `GraphDraft::inheritRegion` keeps a read legal: a node that reads a value an arm or a part of
+    // a loop computes has to run there, so a value edge pulls the reader in (`value_moved=1`). An
+    // order edge says when the reader runs, not what it reads, so it leaves the reader where it was
+    // written (`order_moved=0`): moving it would run it once per pass of a loop it was never
+    // written in, and it would leave the edges the reader already carried pointing out of the
+    // region it was moved into. What such an edge needs instead is the node that owns the region
+    // (`GraphDraft::rehomeOrderEdges`), and where there is no such node -- the region here has no
+    // owner -- the edge is left exactly as it was (`kept=1`) for the seal check to refuse, never
+    // dropped: an order edge that is dropped is an order that is lost (design principles 3.1). The
+    // refused commit publishes nothing, so the program the pass hands on is `last`.
+    RuntimeGraphDraftSession moved(context_, last);
+    auto &subject = moved.edit(const_cast<GCGraph *>(last->graph(largest->id()))).edit();
+    const uint32_t part = subject.addRegion(GCRegionKind::LoopBody, 0);
+    const gc_node_ref_t inside =
+        subject.addGateNode(camel::core::type::Type::Float32());
+    subject.setNodeRegion(inside, part);
+    const gc_node_ref_t ordered = subject.addGateNode(camel::core::type::Type::Float32());
+    (void)subject.appendOrderDependency(ordered, inside);
+    os << "REGIONS order_moved=" << (subject.nodeRegion(ordered) == part ? 1 : 0);
+    const gc_node_ref_t read[1] = {inside};
+    subject.setNormInputs(ordered, read);
+    os << " value_moved=" << (subject.nodeRegion(ordered) == part ? 1 : 0);
+    const uint32_t ownerless = subject.addRegion(GCRegionKind::Arm, 0);
+    const gc_node_ref_t unowned =
+        subject.addGateNode(camel::core::type::Type::Float32());
+    subject.setNodeRegion(unowned, ownerless);
+    const gc_node_ref_t waiting = subject.addGateNode(camel::core::type::Type::Float32());
+    (void)subject.appendOrderDependency(waiting, unowned);
+    (void)subject.rehomeOrderEdges();
+    bool kept = false;
+    for (gc_node_ref_t pred : subject.orderInputsOf(waiting)) {
+        kept = kept || pred == unowned;
+    }
+    os << " rehome_kept=" << (kept ? 1 : 0);
+    bool refused = false;
+    std::string refusal;
+    try {
+        (void)moved.commit();
+    } catch (const std::exception &e) {
+        refused = true;
+        refusal = e.what();
+    }
+    // The refusal that names the region without an owner, not a neighbouring rule about the same
+    // draft: the graph is refused, and the reading says which rule said so.
+    const bool ownerRule =
+        refusal.find("whose owner does not fit its kind") != std::string::npos;
+    os << " refused=" << (refused ? 1 : 0) << " rule=" << (ownerRule ? 1 : 0) << "\n";
     return last;
 }

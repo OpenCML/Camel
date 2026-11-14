@@ -1639,6 +1639,7 @@ bc07e4bc418dc0e9 ok test/cases/compile/static_expansion/type_position_empty_tupl
 ebf5e9593ac84931 ok test/cases/compile/static_expansion/typeof_declaration_type.cml
 7455c6b65422cc05 ok test/cases/compile/static_expansion/typeof_derived_type.cml
 e58f7bc57f3b0c60 ok test/cases/compile/static_expansion/typeof_inferred_not_evaluated.cml
+eaa72ffd71907daa ok test/cases/compile/static_expansion/typeof_inside_tuple.cml
 7eacc37d2e7ed2a2 ok test/cases/compile/static_expansion/typeof_inside_type.cml
 f9e2a0efbf7de4ac ok test/cases/compile/static_expansion/typeof_only_here.cml
 08a0d221862995c2 ok test/cases/compile/static_expansion/typeof_same_number.cml
@@ -3811,6 +3812,7 @@ bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
 ef56ce08a4ace568 ok test/cases/opt/e9/rc01_seed47.cml
 fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
 fc5dd9b72523c060 ok test/cases/opt/e9/rc03_seed30.cml
+7c110c4d62370a1a ok test/cases/opt/e9/rc03_seed56.cml
 2b621abdfd198a5b ok test/cases/opt/e9/rc04_seed72.cml
 4354ebdbd45852fb ok test/cases/opt/e9/rc08_seed324.cml
 2b68e1c7da848a36 ok test/cases/opt/e9/rc11_seed352.cml

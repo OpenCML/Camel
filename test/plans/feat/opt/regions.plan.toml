@@ -144,6 +144,18 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
 [[tests]]
+name = "regions.order_edge_outside_region"
+desc = "What a move into a region may be asked for, and what it may not do (docs/design/effects/edges.cn.md 4.6). `test::regions` writes an order edge from a node a part of a loop holds to a node of the body, and reads where the body's node ended up (`order_moved=0`: an order edge says when the node runs, not what it reads, so it must not carry the node into the region -- a node moved there would run once per pass of a loop it was never written in); then it gives the same pair a value edge, which is the move the region rule is for (`value_moved=1`: a node that reads a value from a region has to run in it). It then writes an order edge that reaches into a region with no owner, where there is no node to hang it on: the edge is still there after `rehomeOrderEdges` (`rehome_kept=1`) and the commit refuses the draft (`refused=1 rule=1`), naming the region whose owner does not fit its kind -- refused, never silently dropped, because an order edge dropped is an order lost (design principles 3.1)."
+kind = "behavior"
+case = "../../../cases/opt/generic/arm_tail_gate_regions.cml"
+args = ["${case}", "test::regions", "std::nvm"]
+
+expect_exit = 0
+expect_output_contains = ["REGIONS order_moved=0 value_moved=1 rehome_kept=1 refused=1 rule=1", "[8.0, 8.0]"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
 name = "regions.branch_pruned"
 desc = "A branch whose condition is statically known is replaced by the arm it takes, and the graph that is published holds no control region of that branch: the arm regions went with it (the draft dissolves them and hands what they held to the region around, GraphDraft::dissolveRegionsOf), so nothing is left pointing at a branch that is not there. Read through `test::exec_plan`, whose REGION lines are the control regions of each graph: none is left, while the program still prints what it printed before the branch was folded."
 kind = "behavior"

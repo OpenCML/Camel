@@ -1,0 +1,26 @@
+type P = { x: int, y: int }
+
+func e22(g25: (a0: int) => int, a24: P, a23: int): float sync {
+    let n30 = loop s26 = { x: 0, y: 0 }.y, c27 = 0 while false do sync {
+        let n29 = g25(0);
+        return (0, 0);
+    };
+    return 1.0;
+}
+
+func e33(var c34: bool, var c35: int, a36: string): int sync {
+    let n43 = e22((p42: int): int => sync {
+        return 0;
+    }, { x: 0, y: 0 }, 0);
+    return 0;
+}
+
+func main(): int sync {
+    let n73 = loop s67 = ((-3) -(-1)) for q68 in [0] do sync {
+        let n72 = e22((p70: int): int => sync {
+            return 0;
+        }, { x: 0, y: 0 }, 5);
+        return 0;
+    };
+    return 0;
+}

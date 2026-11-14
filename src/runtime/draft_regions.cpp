@@ -5,6 +5,7 @@
 
 #include "camel/runtime/draft.h"
 
+#include <algorithm>
 #include <stdexcept>
 
 namespace camel::runtime {
@@ -91,8 +92,17 @@ void GraphDraft::setRegionOwner(uint32_t id, gc_node_ref_t owner, uint32_t index
     regions_[id].index = index;
 }
 
-void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user) {
+void GraphDraft::inheritRegion(gc_node_ref_t input, gc_node_ref_t user, DraftEdgeSlot slot) {
     if (regions_.size() <= 1 || !inheritsRegions_) {
+        return;
+    }
+    // Only a value read pulls a node into a region. An order or a control edge says when the user
+    // runs, not what it reads: moving the user to where the producer runs would change when the
+    // user runs -- an effect would run once per pass of a loop it was never written in -- and it
+    // would leave the edges the user already carried pointing out of the region it was moved into.
+    // A pair like that is ordered on the node that owns the region (docs/design/effects/edges.cn.md
+    // 4.6), which is the writer's business, not this move's.
+    if (slot != DraftEdgeSlot::NormalPorts && slot != DraftEdgeSlot::ContextPorts) {
         return;
     }
     DraftNode *reader     = node(user);
@@ -219,6 +229,105 @@ void GraphDraft::flattenRegion(uint32_t id) {
         regions_[r].owner  = kInvalidNodeRef;
         regions_[r].result = kInvalidNodeRef;
     }
+}
+
+/// The control regions a node runs with, outermost first: the arms and the parts of a loop. A
+/// region that only records where code came from -- an inlined body, a tagged block -- is looked
+/// through, because the code inside it is the code of the block it was moved into.
+namespace {
+
+std::vector<uint32_t> controlChainOf(const GraphDraft &draft, const std::vector<GCRegion> &regions,
+                                     gc_node_ref_t id) {
+    std::vector<uint32_t> chain;
+    for (uint32_t region = draft.nodeRegion(id); region != 0 && region < regions.size();
+         region = regions[region].parent) {
+        const GCRegionKind kind = regions[region].kind;
+        if (kind == GCRegionKind::Arm || kind == GCRegionKind::LoopCond ||
+            kind == GCRegionKind::LoopBody) {
+            chain.push_back(region);
+        }
+    }
+    std::reverse(chain.begin(), chain.end());
+    return chain;
+}
+
+} // namespace
+
+size_t GraphDraft::rehomeOrderEdges() {
+    if (regions_.size() <= 1) {
+        return 0;
+    }
+    const size_t count = nodeSlotCount();
+    std::vector<std::vector<gc_node_ref_t>> wanted(count);
+    std::vector<uint8_t> touched(count, 0);
+    for (gc_node_ref_t user = 0; user < static_cast<gc_node_ref_t>(count); ++user) {
+        if (!alive(user)) {
+            continue;
+        }
+        for (gc_node_ref_t pred : orderInputsOf(user)) {
+            gc_node_ref_t from  = pred;
+            gc_node_ref_t to    = user;
+            // The deeper end of an order edge that reaches into a region is the region itself, and
+            // the node that stands for it is its owner (docs/design/effects/edges.cn.md 4.6). Its
+            // own place may still be inside another region, so the walk repeats.
+            for (;;) {
+                const std::vector<uint32_t> fromChain = controlChainOf(*this, regions_, from);
+                const std::vector<uint32_t> toChain   = controlChainOf(*this, regions_, to);
+                size_t common                         = 0;
+                while (common < fromChain.size() && common < toChain.size() &&
+                       fromChain[common] == toChain[common]) {
+                    ++common;
+                }
+                if (common == fromChain.size() && common == toChain.size()) {
+                    break; // the two ends run in the control regions that hold them both
+                }
+                bool rehomed = false;
+                if (common < fromChain.size()) {
+                    const gc_node_ref_t owner = regions_[fromChain[common]].owner;
+                    if (owner != kInvalidNodeRef && owner != from && alive(owner)) {
+                        from   = owner;
+                        rehomed = true;
+                    }
+                }
+                if (!rehomed && common < toChain.size()) {
+                    const gc_node_ref_t owner = regions_[toChain[common]].owner;
+                    if (owner != kInvalidNodeRef && owner != to && alive(owner)) {
+                        to      = owner;
+                        rehomed = true;
+                    }
+                }
+                if (!rehomed) {
+                    break; // nothing to hang the edge on: the seal check says so, not this pass
+                }
+            }
+            wanted[to].push_back(from);
+            if (from != pred || to != user) {
+                touched[user] = 1;
+                touched[to]   = 1;
+            }
+        }
+    }
+    size_t changed = 0;
+    for (gc_node_ref_t user = 0; user < static_cast<gc_node_ref_t>(count); ++user) {
+        if (!touched[user]) {
+            continue;
+        }
+        std::vector<gc_node_ref_t> inputs;
+        for (gc_node_ref_t pred : wanted[user]) {
+            // An edge whose two ends came out as one node is gone: the owner runs before the code
+            // written inside its region, so the edge says nothing it has to keep.
+            if (pred != user && std::ranges::find(inputs, pred) == inputs.end()) {
+                inputs.push_back(pred);
+            }
+        }
+        const std::span<const gc_node_ref_t> held = orderInputsOf(user);
+        if (inputs == std::vector<gc_node_ref_t>(held.begin(), held.end())) {
+            continue;
+        }
+        setOrderInputs(user, inputs);
+        ++changed;
+    }
+    return changed;
 }
 
 void GraphDraft::clearRegions() {

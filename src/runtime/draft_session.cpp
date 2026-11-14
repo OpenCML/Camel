@@ -1057,6 +1057,15 @@ RuntimeGraphDraftSession::RuntimeGraphDraftSession(
 #endif
 }
 
+// Missing-only, and that is the rule for a splice rather than an accident of the call: a graph this
+// session's program already holds keeps the version it holds, so the body a splice copies in reads
+// the caller's version of every graph both programs have. This is the only place that rule is
+// written. The two routes that copy a body into a program of its own -- `remat` and
+// `first_with_as_param` -- follow the source graph's program instead, because the value they hand
+// back names it, and the two rules agree while the copy's program is a satellite of the source's,
+// which is every case reachable today. Two live programs holding one GraphId at two versions would
+// tell them apart; when autodiff's retarget makes that shape reachable, the reading that separates
+// the two rules belongs here, beside this line.
 void RuntimeGraphDraftSession::adoptProgram(const Program &program) const {
     work_->adoptMissing(program);
 }
@@ -1616,7 +1625,13 @@ const Program *RuntimeGraphDraftSession::commit(bool detached) {
         if (draft.writings().empty() && draft.normalizeChainPlaces() > 0) {
             edited_.insert(graph);
         }
-        if (draft.dissolveUnorderedGates() > 0) {
+        const bool dissolved = draft.dissolveUnorderedGates() > 0;
+        // An order edge whose two ends a rewrite left in different control regions is written on
+        // the node that owns the region the deeper end runs in (docs/design/effects/edges.cn.md
+        // 4.6). It is the last thing a commit does to the edges: dissolving gates above splices
+        // order edges over the nodes it removes.
+        const bool rehomed = draft.rehomeOrderEdges() > 0;
+        if (dissolved || rehomed) {
             edited_.insert(graph);
         } else if (!drafted) {
             GCGraphBuildAccess::addFlags(graph, kGraphFlagGatesDissolved);
