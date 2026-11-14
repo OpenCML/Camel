@@ -28,6 +28,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace camel::transforms {
@@ -239,10 +240,23 @@ struct TransposeRefusal {
 /// The graph of `transpose(f)` and the program of the graphs built with it. `refusal` is what the
 /// build said when `graph` is null: a null graph on its own would leave the caller with the log
 /// string as its only account of why.
+///
+/// `program` is held through `ProgramHold`: the group that reserved it is gone by the time this
+/// value reaches the caller, a program a `reserve` made while a program runs is one the manager
+/// does not root (a run roots what a function value names, program.cpp), and a safepoint between
+/// the two would free the program `graph` is a graph of.
 struct TransposeGraph {
-    const camel::runtime::Program *program = nullptr;
-    camel::runtime::GCGraph *graph         = nullptr;
+    camel::runtime::ProgramHold program;
+    camel::runtime::GCGraph *graph = nullptr;
     TransposeRefusal refusal;
+
+    TransposeGraph() = default;
+    /// A build that refused: there is no program to root, and `why` says what stopped it.
+    explicit TransposeGraph(TransposeRefusal why) : refusal(std::move(why)) {}
+    TransposeGraph(
+        camel::core::context::Context &context, const camel::runtime::Program *program,
+        camel::runtime::GCGraph *graph)
+        : program(context, program), graph(graph) {}
 };
 
 /// The signature `transpose(f)` has for `function`, or nullptr when the function has no transpose:

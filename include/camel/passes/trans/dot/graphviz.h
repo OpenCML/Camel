@@ -4,6 +4,7 @@
 #pragma once
 
 #include "camel/execute/pass/runtime_trans.h"
+#include "camel/runtime/graph.h"
 
 #include <string>
 #include <unordered_map>
@@ -33,7 +34,13 @@ class GraphVizDumpPass : public RuntimeGraphTranslatePass {
 
     size_t depth_ = 0;
     std::string baseIndent_;
-    const camel::runtime::Program *program_ = nullptr;
+    /// The program the graph being drawn is a graph of. A pass outlives the draw: the pipeline
+    /// reaches a safepoint before and after every pass (docs/technical/36_gc_handle_rules.md
+    /// section 1), so the program this member names is one the pass has to root for as long as it
+    /// holds it. Through ProgramHold and nothing else: a bare `Program *` here is a program the
+    /// collector does not trace, and the static values of its graphs would be left behind by a
+    /// collection that falls between the draw and the end of the pass.
+    camel::runtime::ProgramHold program_;
     const std::string indent_ = "    ";
 
     void pushIndent();

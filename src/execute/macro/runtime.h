@@ -92,7 +92,13 @@ class MacroEvaluator {
         std::span<const camel::runtime::gc_node_ref_t> normInputs, size_t withStart = 0) const;
 
     camel::core::context::context_ptr_t context_;
-    const camel::runtime::Program *program_;
+    /// The program whose graphs are evaluated, held through ProgramHold: the evaluator runs Camel
+    /// code, and the macro evaluator reaches a safepoint before every static operator, at every
+    /// function entry and at every node (docs/technical/36_gc_handle_rules.md section 1). A bare
+    /// `Program *` here is a program the collector does not trace, and a collection that falls
+    /// while the evaluator holds it leaves the old addresses of its graphs' static values in the
+    /// slots.
+    camel::runtime::ProgramHold program_;
     camel::core::context::FramePool framePool_;
     std::unique_ptr<MacroStaticAreaStore> staticAreas_;
     size_t recursionDepth_ = 0;

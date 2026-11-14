@@ -2821,7 +2821,7 @@ SplitGraph cutLoopGraph(
         os << " recompute=1";
     }
     os << '\n';
-    built.program  = group.program();
+    built.program  = rt::ProgramHold(*context, group.program());
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
     return built;
@@ -3057,7 +3057,7 @@ SplitGraph cutBranchGraph(
         os << " recompute=1";
     }
     os << '\n';
-    built.program  = group.program();
+    built.program  = rt::ProgramHold(*context, group.program());
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
     return built;
@@ -3698,12 +3698,17 @@ SplitGraph buildSplitGraph(
     // in the order they were taken and without repeats: `Program::adoptMissing` binds what the
     // program it reads hands on and skips what is already bound, so the order says which program
     // answers for an id and the repeat would only bump a version.
-    std::vector<const rt::Program *> nestedPrograms;
-    const auto remember = [&nestedPrograms](const rt::Program *standsOn) {
-        if (standsOn != nullptr &&
-            std::find(nestedPrograms.begin(), nestedPrograms.end(), standsOn) ==
-                nestedPrograms.end()) {
-            nestedPrograms.push_back(standsOn);
+    std::vector<rt::ProgramHold> nestedPrograms;
+    const auto remember = [&nestedPrograms, &context](const SplitGraph &nested) {
+        const rt::Program *standsOn = nested.program.get();
+        if (standsOn == nullptr) {
+            return;
+        }
+        const bool known = std::any_of(
+            nestedPrograms.begin(), nestedPrograms.end(),
+            [standsOn](const rt::ProgramHold &held) { return held.get() == standsOn; });
+        if (!known) {
+            nestedPrograms.emplace_back(*context, standsOn);
         }
     };
     {
@@ -3726,7 +3731,7 @@ SplitGraph buildSplitGraph(
             // the call this forward half writes resolves at run time.
             const SplitGraph nested =
                 buildSplitGraph(context, program, const_cast<rt::GCGraph *>(callee), os);
-            if (nested.forward == nullptr || nested.program == nullptr) {
+            if (nested.forward == nullptr || !nested.program) {
                 os << "REINTERP split function=" << function->name()
                    << " skip=" << refusalCauseName(RefusalCause::Callee) << " (the cut of `"
                    << callee->name() << "`, which this body calls, "
@@ -3763,7 +3768,7 @@ SplitGraph buildSplitGraph(
             // shows it.
             calleeCuts.emplace(callee, member);
             // The callee's cut itself: what that program took travels with it.
-            remember(nested.program);
+            remember(nested);
             pending.push_back(callee);
         }
     }
@@ -3956,8 +3961,10 @@ SplitGraph buildSplitGraph(
     // program, so the calls this half wrote resolve at run time. Adopted, not rebuilt -- the ids
     // the calls name are the graphs those builds made, and no value is recomputed. The list is the
     // direct callee cuts' own programs; whatever those programs took travels with them by adoption.
-    for (const rt::Program *nested : nestedPrograms) {
-        group.adopt(*nested);
+    for (const rt::ProgramHold &nested : nestedPrograms) {
+        if (nested) {
+            group.adopt(*nested);
+        }
     }
     group.encode();
     const rt::GCGraph *forwardMade  = group.encoded(forwardId);
@@ -3976,13 +3983,13 @@ SplitGraph buildSplitGraph(
         os << " recompute=1";
     }
     os << '\n';
-    built.program  = group.program();
+    built.program  = rt::ProgramHold(*context, group.program());
     built.forward  = const_cast<rt::GCGraph *>(forwardMade);
     built.backward = const_cast<rt::GCGraph *>(backwardMade);
     // What this cut stands on, past the graphs `program` already holds: one program per direct
     // callee cut, each of which holds every graph it took. A caller one level out adopts every
     // program named here and, with it, the whole chain a call of this cut can reach.
-    built.nestedPrograms = nestedPrograms;
+    built.nestedPrograms = std::move(nestedPrograms);
     return built;
 }
 

@@ -54,9 +54,13 @@
 namespace camel::transforms {
 
 /// The graph of `reinterp<vmap>(f)` and the program of the graphs built with it.
+///
+/// `program` is held through `ProgramHold`: the group that reserved it is gone by the time this
+/// value reaches the caller, a program reserved while a program runs is one `reserve` does not
+/// root, and a safepoint between the two would free the program `graph` is a graph of.
 struct VmapGraph {
-    const camel::runtime::Program *program = nullptr;
-    camel::runtime::GCGraph *graph         = nullptr;
+    camel::runtime::ProgramHold program;
+    camel::runtime::GCGraph *graph = nullptr;
     /// Where the build stopped, when `graph` is null: the primitive (or construct) the transform
     /// could not lift, as the origin of that node in `function`.
     camel::source::origin_id_t refusedOrigin = camel::source::kInvalidOriginId;

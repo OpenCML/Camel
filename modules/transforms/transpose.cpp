@@ -5674,7 +5674,7 @@ TransposeGraph buildTransposeGraph(
     if (!buildTransposeMember(state, function, member, os)) {
         // The cause the walk recorded, not a reading of the log: a null graph and the reason it is
         // null are one answer, handed back together.
-        return TransposeGraph{nullptr, nullptr, state.refusal};
+        return TransposeGraph{state.refusal};
     }
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
@@ -5725,10 +5725,10 @@ TransposeGraph buildTransposeGraph(
                 os << " param=" << state.shapeParam << " param-type=" << state.shapeType;
             }
             os << '\n';
-            return TransposeGraph{nullptr, nullptr, refusal};
+            return TransposeGraph{refusal};
         }
     }
-    return TransposeGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+    return TransposeGraph{*context, group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
 } // namespace camel::transforms
