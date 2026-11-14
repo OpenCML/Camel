@@ -94,14 +94,17 @@
  *
  *   ratchet broken   the count moved, or a category did while the total did not. Entries were added,
  *                    removed or re-kinded, the baseline has to follow, and the per-entry list is the
- *                    evidence: it is printed, and the exit code is non-zero.
- *   out of sync      the count is exactly the baseline's and no category grew: nothing broke, the
- *                    baseline was simply taken on another revision and every one of its entries
- *                    still stands. Nothing is printed entry by entry; the report is one line saying
- *                    how many entries the baseline has not met yet -- and the exit code is zero,
- *                    because `ratchet=ok`.
+ *                    evidence: it is printed, with one line saying how many entries the two disagree
+ *                    on, and the exit code is non-zero.
+ *   in agreement     the count is exactly the baseline's and no category grew. Nothing is printed
+ *                    entry by entry, and nothing is claimed about the entries either: the report is
+ *                    the `ratchet=ok` line, and the exit code is zero.
  *
- * The list is therefore not "the report"; it is what a broken ratchet prints.
+ * The list is therefore not "the report"; it is what a broken ratchet prints. Nor can the quiet
+ * case be described entry by entry: the baseline keeps a count and per-category counts, not
+ * per-entry identities, so with the total and every category unchanged the check has nothing to say
+ * about which entries they are -- and a line that says "N entries do not match" on every green run
+ * is a claim about nothing, read as noise, and noise is where the real red hides.
  *
  * `--enforce` is the stricter mode: *any* finding fails, baseline or not. It is what the entry
  * becomes once the list reaches zero, and the two are one edit apart.
@@ -465,6 +468,24 @@ function ratchet(result, baselinePath) {
             `ratchet=${broken ? 'grown' : delta < 0 ? 'lowered' : 'ok'} ` +
             `counted(${categoryLine})`,
     )
+    if (broken) {
+        // The set of entries moved, so the baseline no longer describes the tree: say in one line
+        // how many entries the two disagree on, then the rows themselves. This line is printed
+        // *only* here. An earlier revision printed it whenever the count happened to equal the
+        // baseline's as well -- "333 existing entries do not match, ratchet unbroken" beside
+        // `delta=+0 ratchet=ok` -- which is a claim about nothing: the baseline keeps a count and
+        // per-category counts, not per-entry identities, so with the total and every category
+        // unchanged there is no evidence of a disagreement to report. A line that appears on every
+        // green run says "something is wrong" every day and is read as noise, which costs exactly
+        // what the false green costs.
+        const moved =
+            delta === 0
+                ? `${result.findings.length} entries, a category moved under an unchanged total`
+                : `${Math.abs(delta)} entr${Math.abs(delta) === 1 ? 'y' : 'ies'} ${
+                      delta > 0 ? 'the baseline does not record' : 'the tree no longer carries'
+                  } (${baseline.count} -> ${result.findings.length})`
+        console.log(`baseline not in sync with the working tree: ${moved}, ratchet broken`)
+    }
     if (grown.length > 0 && delta <= 0) {
         console.log(
             `FAIL plan-fields a category grew while the total did not (${grown.join(', ')}): ` +
@@ -484,14 +505,6 @@ function ratchet(result, baselinePath) {
         console.log(
             `plan-fields findings came down by ${-delta} (${baseline.count} -> ${result.findings.length}): ` +
                 `run \`node test/tools/check-plan-fields.mjs --update-baseline\` to accept it in ${where}`,
-        )
-    } else if (result.findings.length > 0) {
-        // The count is the baseline's and no category grew: the ratchet is unbroken and the entries
-        // are the ones it accepted. One line, with the number, and no list -- the rows are not a
-        // finding anyone has to act on, and printing them is how this line got skipped.
-        console.log(
-            `baseline not in sync with the working tree: ${result.findings.length} existing entries ` +
-                'do not match, ratchet unbroken',
         )
     }
     return 0
