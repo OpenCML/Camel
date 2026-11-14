@@ -1,0 +1,12 @@
+# lane-tieswhole -> develop (8f1df06d4)
+
+判据读数 (作者复审 9307dc243 要求的返工):
+- 反例 (两图各有端口未定的并列, 绑定者按被绑图端口号读取): 改前 DIFFERENT 379 vs 379, 首个差异在 FILL 的 context 边 slot 0/1; 改后 IDENTICAL 379
+- 八类型捕获 (lead 要求项): 改前 DIFFERENT 707 (8 个字符的 :var/new 组宽 8, 超上限, 按创建序); 改后 IDENTICAL 737; camel inspect --ties 读 "widest 8, over the limit 0"
+- 细分: smallestTable 先按 node key 切组, 只枚举 key 恰好相等的段; 八类型程序 "tie width 8 (equal keys 2, enumerated)"
+- canon_order plan: 2/2 pass, 五个读取项 order/tie/run/program/wide 全 PASS
+- 超限不再静默回落: 记录进 ties(), camel inspect --ties 打印 "tie width W (equal keys E, not enumerated)" 与 "over the limit N"
+
+合并闸门: total 8945 / pass 8901 / fail 4 / skip 8 / known 32; 红集四条; 全量重建 792.7 s.
+块数对账: blocks merge=6402 prev=6402 (相等); pass 差 = 0; 本车道只改 canon_order.plan.toml 的 desc 一行.
+未做: R4 的 jgir == 尚未接线 (只能以 canonical=true 字节相同验收); v1 std::jgir 仍打印 name/label, 同类型捕获对在 v1 标签里仍随拼写变 (v2 已无); 跨图组合枚举未做 (被绑图多解且无绑定者能分辨时报 ties, 不任选).
