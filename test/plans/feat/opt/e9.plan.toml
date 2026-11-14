@@ -4,7 +4,8 @@ tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
 desc = "The optimizer answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, and the two a rewrite made the commit refuse with a read across a region"
 
-# Four programs of the E9 differential campaign (`defects.md` A4b-A4e, pin adb67e081), reduced to
+# Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
+# author’s archive defect ledger, which is not in this repository), reduced to
 # between 240 and 679 bytes. Each one made the optimizer end the process instead of the program:
 #
 #   rc01_seed47  `std::opt::inline` up to `std::opt::fold` aborted with "Region 2 yields node
