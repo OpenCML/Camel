@@ -7790,6 +7790,9 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
             // that keeps the case prints the guard back (`MatchTypeType::toString`), and the
             // reference the compiler publishes compares that text with the source.
             guard->text      = armAst->loadAs<AST::TypeCaseLoad>()->guardText();
+            // What the type layer identifies the guard by: this module and that text
+            // (`typeCaseGuardKey`). The two handles above are the build's, not the case's.
+            guard->module    = module_ != nullptr ? module_->name() : std::string();
             arm.guard        = std::move(guard);
         }
         arms.push_back(std::move(arm));

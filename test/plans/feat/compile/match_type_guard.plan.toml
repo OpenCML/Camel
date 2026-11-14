@@ -59,3 +59,25 @@ backends_agree = ["exit_code", "diagnostics", "stdout_normalized"]
 expect_exit = 0
 expect_stdout_exact = "true true\ntrue true\ntrue true\n"
 expect_output_contains = ["6 guard question(s) about 3 distinct (function, type arguments) pair(s), 3 answered by running the predicate and 3 from the cache"]
+
+[[tests]]
+name = "match_type.guard_same_text"
+desc = "A guard is identified by what it says: three type functions write the same guard text (`is_numeric::<T>()`) over the same subjects, and every case gets the answer its own function states -- a number takes each function's guarded case, a string falls through to each function's own default, and the order the questions are asked in changes nothing. A shape word still decides before any guard is read. This is the case that says two guards with one spelling are one question and still two cases."
+tool = "node"
+case = "../../../cases/compile/match_type_guard/guard_same_text.mjs"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["GUARD same_text=yes", "GUARD backends_agree=yes"]
+expect_output_not_contains = ["GUARD same_text=no"]
+timeout_ms = 120000
+
+[[tests]]
+name = "match_type.guard_order"
+desc = "A type's reading does not depend on which module was declared first: `plain` writes a `match type` with a concrete subject and no guard, `guarded` writes a guarded one and nothing else, and the two programs differ only in the order their imports name them. What each program reports for the plain module's parameter type has to be the same text -- a process-wide flag in the type layer is exactly what would make it differ."
+tool = "node"
+case = "../../../cases/compile/match_type_guard/guard_order.mjs"
+args = ["${case}", "--camel", "${camel}"]
+expect_exit = 0
+expect_stdout_contains = ["ORDER same=yes"]
+expect_output_not_contains = ["ORDER same=no"]
+timeout_ms = 120000

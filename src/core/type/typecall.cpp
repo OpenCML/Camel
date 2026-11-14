@@ -332,14 +332,17 @@ OtherType *TypeCallType::cloneWithParams(std::span<Type *const> params) const {
 
 // ---- MatchTypeType ----
 
-namespace {
-
-/// Whether any `match type` a build made has carried a guard (see `anyTypeCaseGuardBuilt`).
-bool gTypeCaseGuardBuilt = false;
-
-} // namespace
-
-bool anyTypeCaseGuardBuilt() { return gTypeCaseGuardBuilt; }
+uintptr_t typeCaseGuardKey(const TypeCaseGuard &guard) {
+    // One identity out of the two things a predicate's meaning depends on: the module its names
+    // are looked up in, then the condition as written. The separator is a character that cannot
+    // occur in a module name and cannot be written between two spellings of one predicate, so two
+    // different guards cannot join into the same text.
+    const std::string identity = guard.module + '\x1f' + guard.text;
+    // `internText` interns by value and answers one pointer per distinct text, and that text lives
+    // in the table for the life of the process: the word is about content, and it stays the same
+    // word for the same content, which an object's address is not.
+    return reinterpret_cast<uintptr_t>(TypeTable::instance().internText(identity));
+}
 
 TypeCode MatchTypeType::typeCode() {
     static TypeCode code = registerOtherType("MatchType", TypeFlag::Auxiliary);
@@ -430,17 +433,16 @@ MatchTypeType *MatchTypeType::create(
         packCounts.push_back(static_cast<uint32_t>(arm.packPatterns.size()));
         arrayCounts.push_back(static_cast<uint32_t>(arm.arrayPatterns.size()));
         // A guard is part of what this case says, so two cases that differ in it are two
-        // different types. The compiler's tree of the predicate is the guard's identity: it is
-        // built once per case written, and held for as long as the type lives.
+        // different types -- and the word that tells them apart is what the guard says
+        // (`typeCaseGuardKey`), never the address of the object that says it: an object's address
+        // is a fact about this process's memory, not about the case, and two cases with one guard
+        // written in two places are one case.
         guards.push_back(arm.guard);
-        if (arm.guard != nullptr) {
-            gTypeCaseGuardBuilt = true;
-        }
+        key.push_back(arm.guard != nullptr ? typeCaseGuardKey(*arm.guard) : 0);
         key.push_back(arm.shapes);
         key.push_back(arm.identities.size());
         key.push_back(arm.packPatterns.size());
         key.push_back(arm.arrayPatterns.size());
-        key.push_back(reinterpret_cast<uintptr_t>(arm.guard.get()));
         for (Type *identity : arm.identities) {
             params.push_back(identity);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(identity)));

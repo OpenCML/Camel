@@ -1410,9 +1410,10 @@ class Builder {
         // this build for the predicate's answer (typevar.h `typeCaseGuardEvaluator`). A type with
         // nothing left to bind is not substituted at all, so the last step is taken here: its
         // cases are settled, and no type leaves this builder with a selected-by-a-guard case still
-        // undecided. A program that writes no guard pays one flag test (anyTypeCaseGuardBuilt).
-        if (camel::core::type::anyTypeCaseGuardBuilt() &&
-            camel::core::type::containsGuardedTypeMatch(substituted)) {
+        // undecided. Whether the type holds such a case is the type's own content, so the answer
+        // does not depend on what this process built before it -- a program that writes no guard
+        // pays the walk and not a flag test (design principles 5.5).
+        if (camel::core::type::containsGuardedTypeMatch(substituted)) {
             substituted = camel::core::type::expandTypePacks(substituted);
             substituted = camel::core::type::substituteExtentValues(substituted, extentBindings_);
         }

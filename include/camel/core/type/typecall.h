@@ -86,21 +86,33 @@ class TypeCallType final : public OtherType {
 };
 
 /// The guard of a `match type` case (`case pattern when predicate => ...`), as the type layer
-/// holds it: the compiler's own tree of the predicate, the module it is written in, and how it is
-/// written. The type system reads none of the three; it asks the evaluator the build installs
-/// (`typevar.h`, `typeCaseGuardEvaluator`), because a predicate is an ordinary Camel function and
-/// running one is the compiler's business, not the type layer's (design principles 5.5, ruling of
-/// 2026-11-14).
+/// holds it: what the predicate says, and the two handles the build that answers it reads. The
+/// type system reads the first two fields only, and answers the predicate through the evaluator
+/// the build installs (`typevar.h`, `typeCaseGuardEvaluator`), because a predicate is an ordinary
+/// Camel function and running one is the compiler's business, not the type layer's (design
+/// principles 5.5).
 struct TypeCaseGuard {
-    /// The compiler's tree of the condition. `void` and not owning, so that this header stays a
-    /// type header: it points into the tree the case was built from, which outlives the types of
-    /// the program (the build lowers bodies from that tree), and the evaluator casts it back.
-    const void *condition = nullptr;
-    /// Where the condition is written (the compiler's module), for the names it may call.
-    const void *context = nullptr;
-    /// The condition as written, for `toString` and for diagnostics.
+    /// Where the condition is written: the module whose names the predicate may call. Part of the
+    /// guard's identity, because the same words in two modules may name two different functions.
+    std::string module;
+    /// The condition as written: part of the guard's identity, and what `toString` prints.
     std::string text;
+    /// The compiler's tree of the condition, and the compiler's module it was read from. `void`
+    /// and not owning, so that this header stays a type header: they point into the build that
+    /// wrote the case, and only the evaluator casts them back. They are not identity: a build
+    /// that does not hold that tree cannot answer the guard, and says so rather than read it.
+    const void *condition = nullptr;
+    const void *context = nullptr;
 };
+
+/// What the type layer identifies a guard by: its content -- the module it is read in and the
+/// predicate as written -- interned by value (`TypeTable::internText`), so that two guards that
+/// say the same thing have one word and two that say different things never do. Not an address:
+/// where a guard happens to live in memory says nothing about what it means, while one address
+/// can be handed to a second object and one meaning cannot. This is a word in an intern key and
+/// not a type id, so `kNoTypeId` plays no part in it: an interned text is never null for a guard
+/// that writes a predicate, and a guard that writes none does not exist (`typeCaseGuardOf`).
+uintptr_t typeCaseGuardKey(const TypeCaseGuard &guard);
 
 /// One case of a `match type` in a type position.
 struct MatchTypeArm {
@@ -232,11 +244,10 @@ bool containsTypeCall(Type *type);
 /// waits for the predicate to run. The module tree builds types before the build that runs Camel
 /// predicates, so a type that waits here is settled later by whoever installs the evaluator
 /// (`typevar.h`, `typeCaseGuardEvaluator`); a caller must not report it as a type no case takes.
+/// The walk is over the type's structure and stops at the first guarded case: what it answers is
+/// the type's own content, so no two builds and no two orders of compiling can answer it
+/// differently.
 bool containsGuardedTypeMatch(Type *type);
-
-/// Whether any `match type` built so far has carried a guard: a reader that would otherwise walk
-/// every type it sees uses this to skip the walk in a program that writes no guard at all.
-bool anyTypeCaseGuardBuilt();
 
 /// What stays unevaluated in `type` although its arguments are concrete, said for a diagnostic:
 /// `what` is the application (`ElementOf<int>`, `match type int {...}`) and `why` the reason

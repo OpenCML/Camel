@@ -19,9 +19,11 @@
 #include "camel/core/type/typevar.h"
 
 #include <format>
+#include <memory>
 #include <span>
 #include <stdexcept>
 #include <string>
+#include <string_view>
 #include <vector>
 
 namespace camel::core::type {
@@ -149,6 +151,10 @@ std::vector<Type *> corpus() {
 std::string debugRunTypeIdentitySelfTest() {
     const std::vector<Type *> types = corpus();
     size_t pairs                    = 0;
+    // How many properties the guard readings below check: they are not pairs of the corpus but
+    // what a case's guard is identified by, and the count is printed so a reading that stopped
+    // asking can be seen.
+    size_t guardReadings = 0;
 
     for (Type *a : types) {
         // reflexive: a type is itself, and assignable from itself
@@ -458,7 +464,52 @@ std::string debugRunTypeIdentitySelfTest() {
             "a single-type binding expanded a pack: " + show(notAPack));
     }
 
-    return std::format("{} types, {} pairs", types.size(), pairs);
+    // What identifies a `match type` case's guard: what the guard says, and not where the object
+    // that holds it happens to live. Two guards written in one module with one text are one case,
+    // so the table hands out one type; a guard that says something else, or the same words read in
+    // another module, is another case; and the same guard on two subjects is two cases because the
+    // subject is part of what the type says.
+    {
+        Type *number = Type::Int64();
+        Type *text   = Type::String();
+        const auto guarded = [](Type *subject, std::string_view module,
+                                std::string_view written) -> Type * {
+            MatchTypeArm arm;
+            arm.shapes = typeShapeBits(subject);
+            arm.result = subject;
+            auto guard    = std::make_shared<TypeCaseGuard>();
+            guard->module = std::string(module);
+            guard->text   = std::string(written);
+            arm.guard     = std::move(guard);
+            const std::vector<MatchTypeArm> arms{arm};
+            return MatchTypeType::create(subject, arms);
+        };
+
+        Type *first  = guarded(number, "selftest", "is_numeric::<T>()");
+        Type *second = guarded(number, "selftest", "is_numeric::<T>()");
+        require(
+            first == second,
+            "two guards that say the same thing are two types: " + show(first) + " and " +
+                show(second));
+        Type *otherText = guarded(number, "selftest", "is_float::<T>()");
+        require(
+            first != otherText, "two guards that say different things are one type: " + show(first));
+        Type *otherModule = guarded(number, "another", "is_numeric::<T>()");
+        require(
+            first != otherModule,
+            "the same words read in another module are the same guard: " + show(first));
+        Type *otherSubject = guarded(text, "selftest", "is_numeric::<T>()");
+        require(
+            first != otherSubject,
+            "the same guard on another subject is one type: " + show(first) + " and " +
+                show(otherSubject));
+        require(
+            first->toString().find("when is_numeric::<T>()") != std::string::npos,
+            "a guarded case does not print its guard: " + show(first));
+        ++guardReadings;
+    }
+
+    return std::format("{} types, {} pairs, {} guard readings", types.size(), pairs, guardReadings);
 }
 
 } // namespace camel::core::type
