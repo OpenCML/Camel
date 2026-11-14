@@ -2536,6 +2536,12 @@ class Builder {
         // signature names a capture (`ResourceSignature::captures`), so that a caller can read it
         // back through the value it holds.
         std::unordered_map<draft_node_ref_t, uint8_t> capturePositions;
+        // The resources this reach names by value rather than by parameter (design effects plan
+        // 3.2): a handle access is an access of the value that names the handle, so two operations
+        // on one reference reach one resource and two operations on two references reach two. The
+        // keys are read by orderEffectsOnOneResourceIn alone; a signature names its resources by
+        // parameter, and that is what `reach` above holds.
+        std::vector<std::string> valueKeys;
         bool unplaceable = false;
     };
     // The walk of one body, in the named steps it is made of: the body's ports, the uses one node
@@ -2583,6 +2589,20 @@ class Builder {
         DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction, BodyReach &walk,
         draft_node_ref_t id) const;
     void addVarParameters(BodyReach &walk, const FunctionType &type) const;
+    // The key of the resource a handle value names (design effects plan 3.2): the value itself,
+    // read through the nodes that only name the same value again (a GATE, a COPY, and a result the
+    // operator says is the operand it was handed). Two uses with one key reach one resource; two
+    // uses with two keys do not, which is what makes two references two resources and keeps two
+    // operations on one reference in the order they are written. False when the value cannot be
+    // pinned to one handle, which the caller records as reaching any resource.
+    bool handleKeyOf(
+        BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+        draft_node_ref_t value, std::string &key) const;
+    // How a node's result relates to its operands' resources, read from the operator or the callee
+    // the node names -- the reading handleKeyOf needs to see through a value handed back.
+    std::optional<camel::core::sem::ResultAlias> resultAliasOf(
+        DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
+        draft_node_ref_t id) const;
     // The resources a body touches, from what its nodes already publish: an operator's own
     // signature, a callee's, and the signature of the function value a call goes through. Empty
     // when the body touches nothing. A call through a value that writes no clause promises
@@ -2593,7 +2613,8 @@ class Builder {
     // With `only`, one node's own reach, which is what tells apart a use the clause names from one
     // it does not.
     std::optional<camel::core::sem::ResourceSignature> footprintOf(
-        DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only = std::nullopt) const;
+        DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only = std::nullopt,
+        std::vector<std::string> *valueKeys = nullptr) const;
     // Once every body is built: measures each one and settles the measurements against each other
     // (a callee may be written after its caller, in another module, and a body may call itself).
     // The measurements start empty and grow, so a recursive function settles at the least set its
@@ -2625,6 +2646,19 @@ class Builder {
     // ClosureCaptureEscapes at the cell. Reported with the other per-module diagnostics, while the
     // bodies are still in hand (builder_state.cpp).
     void checkCellEscapes();
+    // Then holds every reference in the module to the content rule of `Ref<T>` (the author's
+    // ruling of 2026-11-14): a reference may hold any type but one that holds a reference, because
+    // the boxes are reclaimed by counting the handles that point at them. The walk goes one layer
+    // into what `T` holds -- a field, an element, a variant's payload, what a function takes or
+    // returns, and the values a closure captured -- and the report is a RefContentHoldsRef at the
+    // place the box is made (builder_refs.cpp).
+    void checkRefContents();
+    // The place a reference is reached at through the values `call` hands to a box of `content`,
+    // when `content` is a function type: a closure's captures are a fact about its graph, and its
+    // type does not spell them.
+    std::optional<std::string>
+    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
+        const;
     // The cells of `body` the state rule speaks of: the mutable cells the body itself made, and its
     // `var` parameters, which its caller made and lent to it.
     std::unordered_set<node_handle_t> cellsOfBody(DraftGraphBuilder *body) const;

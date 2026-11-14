@@ -957,6 +957,11 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 // capture out of the evaluation that declared it. Also before the bodies are let
                 // go.
                 checkCellEscapes();
+                // The content rule of `Ref<T>` (the author's ruling of 2026-11-14): a reference
+                // may hold any type but one that holds a reference, because the boxes are
+                // reclaimed by counting the handles that point at them. Also before the bodies are
+                // let go.
+                checkRefContents();
                 reportDroppedEffectsOfBodies();
                 if (unit->entry) {
                     // The top-level declarations run only as far as the call of `main`
