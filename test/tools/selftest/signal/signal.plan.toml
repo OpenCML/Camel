@@ -1,7 +1,16 @@
 # Fixture of test/tools/selftest/run.mjs: the two directions of `expect_signal`. It is not under
-# test/plans, and two of its three tests fail on purpose. `abrt` is the entry the field exists for:
+# test/plans, and three of its four tests fail on purpose. `abrt` is the entry the field exists for:
 # the process dies of the signal the entry names, and the entry is green. `wrong_signal` and
 # `exit_instead` are the discrimination -- a field that agreed with any death would be a comment.
+#
+# The positive entry is written twice, once per process model, because what a host records about a
+# death is the host's, not the plan's: a POSIX host ends the child with `signal = 'SIGABRT'` and no
+# exit code, and Windows has no signal to report -- the same abort ends the child with exit status
+# 134 (128 + the POSIX number for SIGABRT) and `signal = null`. So `abrt` reads the signal where a
+# signal is reported, `abrt_as_exit` reads that same death as the status where none is, and each
+# host runs the one it can record and says by name that it skipped the other. Neither host is green
+# by skipping the measurement: the abort is measured on both, in the shape that host has for it.
+# This is a platform difference in the reading, not in what the tests mean.
 id = "selftest.signal"
 order = 2
 tier = "fast"
@@ -16,6 +25,17 @@ args = ["${case}"]
 name = "abrt"
 desc = "expect_signal = \"ABRT\": the process must be killed by SIGABRT, written without its SIG."
 expect_signal = "ABRT"
+# Selected where the host reports a signal death at all; `host-signals.mjs` is the question, and
+# its answer is the skip reason printed here on the other host.
+skip_unless = ["node", "test/tools/selftest/signal/host-signals.mjs", "reports-signals"]
+
+[[tests]]
+name = "abrt_as_exit"
+desc = "The same abort on a host with no signals to report: the process must end with exit status 134 (128 + SIGABRT's POSIX number) and no signal."
+expect_exit = 134
+# The same measurement in the other host's vocabulary: a field named the wrong death is red here
+# exactly as it is there, and a run that ended differently is red too.
+skip_unless = ["node", "test/tools/selftest/signal/host-signals.mjs", "no-signals"]
 
 [[tests]]
 name = "wrong_signal"
@@ -26,4 +46,11 @@ expect_signal = "SEGV"
 name = "exit_instead"
 desc = "The process ends normally, so it did not die of the signal the entry named -- by name or by number."
 case = "exit_zero.mjs"
-expect_signal = 6
+# A number a plan writes is a number of *this* platform, so a fixture that must read the same way
+# everywhere can only use one every platform numbers alike: `6` is SIGABRT on POSIX and no signal at
+# all on Windows, where Node numbers SIGABRT 22, so this line used to be a plan error on Windows and
+# a test that ran on Linux -- the same fixture, two different readings. 15 is SIGTERM on both, and
+# the entry still asserts exactly what it asserted before: the process ended normally although the
+# entry named a signal. An entry that means one particular signal writes its name (`abrt`,
+# `wrong_signal`), because the platform maps the name and not the number.
+expect_signal = 15

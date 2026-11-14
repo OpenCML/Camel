@@ -552,6 +552,11 @@ export const NO_CPU_TIME_SKIP = 'skipped: this host reports no CPU time'
 // How many tests this run left unjudged that way, for the line it prints at the end.
 let marginSkippedTests = 0
 
+// How many `cpu_budget_ms` bounds this run never judged, for the same reason and by the same rule:
+// a host that reports no CPU figure is not a test that crossed its budget. Counted and printed
+// apart from `pass`, so "not read" is never read as "held".
+let budgetSkippedTests = 0
+
 /**
  * The timeout-margin rule's verdict for one test that passed everything else. `canReadCpu` is
  * whether this host reports a process tree's CPU time at all (CAN_READ_CHILD_CPU).
@@ -899,32 +904,56 @@ function parseArgs(argv) {
 }
 
 /**
+ * The install this run measures, and whether it is there: `--camel <path>` names it, else
+ * `out/<build>`, and `CAMEL_TEST_BUILD` or the Release default names the build -- one rule, read
+ * once. It is returned rather than printed and exited on so that a caller can ask the question
+ * before it walks into the refusal: the runner's own self-test asks it once, because reporting the
+ * same missing binary once per check turned one absent install into a page of reds that said
+ * nothing about the code (test/tools/selftest/run.mjs).
+ *
+ * `present` is the whole answer; `buildCommand` is the helper that would build this install, so a
+ * refusal and the self-test's one line cannot disagree about how to fix it.
+ */
+export function measuredInstall(options = {}) {
+    const envBuild = process.env.CAMEL_TEST_BUILD
+    const build = options.build
+        || (envBuild !== undefined && Object.hasOwn(BUILDS, envBuild) ? envBuild : 'release')
+    const exe = camelBinary({ ...options, build })
+    return {
+        build,
+        label: BUILDS[build].label,
+        exe,
+        present: fs.existsSync(exe),
+        buildCommand:
+            `pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ` +
+            `${REPO_ROOT} -Config ${BUILDS[build].label}`,
+    }
+}
+
+/**
  * Refuse to run when the install this run measures is not built. `--camel <path>` names it; with
  * none it is `out/<build>`, written by `collect-out.js <build>`. The debug layer additionally
  * refuses anything but a Debug binary: a binary left there by another configuration is caught by
  * its own --version line, which names the build.
  */
 function preflightBuild(options) {
-    const build = options.build
-    const exe = camelBinary(options)
-    if (!fs.existsSync(exe)) {
+    const install = measuredInstall(options)
+    if (!install.present) {
         console.error(
-            `${COLORS.red}[FAIL]${COLORS.reset} no ${BUILDS[build].label} binary at ${exe}`
+            `${COLORS.red}[FAIL]${COLORS.reset} no ${install.label} binary at ${install.exe}`
         )
         if (options.camel) {
             console.error('    --camel names the install this run measures; it must be a built install\'s bin/camel.')
         } else {
-            console.error(
-                `    Build it with the shared helper: pwsh -NoProfile -File ${path.join(path.dirname(REPO_ROOT), 'camel-build.ps1')} -Path ${REPO_ROOT} -Config ${BUILDS[build].label}`
-            )
-            console.error(`    The ${BUILDS[build].label} tier never falls back to out/latest.`)
+            console.error(`    Build it with the shared helper: ${install.buildCommand}`)
+            console.error(`    The ${install.label} tier never falls back to out/latest.`)
         }
         process.exit(2)
     }
-    if (build !== 'debug') return
+    if (options.build !== 'debug') return
     const home = camelInstall(options)
     const pathKey = IS_WINDOWS ? Object.keys(process.env).find((key) => key.toUpperCase() === 'PATH') || 'PATH' : 'PATH'
-    const probe = spawnSync(exe, ['--version'], {
+    const probe = spawnSync(install.exe, ['--version'], {
         cwd: REPO_ROOT,
         encoding: 'utf8',
         timeout: 30000,
@@ -936,7 +965,7 @@ function preflightBuild(options) {
     })
     const text = `${probe.stdout || ''}${probe.stderr || ''}`
     if (probe.error || !/\(Debug\b/.test(text)) {
-        console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${exe} is not a Debug build: ${text.trim() || probe.error || 'no version'}`)
+        console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${install.exe} is not a Debug build: ${text.trim() || probe.error || 'no version'}`)
         console.error('    Rebuild it with: npm run debug (through the shared helper, -Config Debug).')
         process.exit(2)
     }
@@ -1134,7 +1163,9 @@ function signalNumberOf(name) {
 
 /**
  * The signal a plan expects, as the number this platform numbers it by: `expect_signal = "ABRT"`,
- * `"SIGABRT"` and `6` are one expectation written three ways.
+ * `"SIGABRT"` and `6` are one expectation written three ways on POSIX. A number is this platform's
+ * number and no other's -- Windows numbers SIGABRT 22, so `6` is refused there -- which is why the
+ * name is the spelling a plan uses when it means one particular signal.
  *
  * There is no default and no boolean form. `expect_exit = 0` is the ordinary end of a process, so an
  * entry that says nothing is asserting it; a process that dies of a signal is not ordinary, and an
@@ -1153,8 +1184,9 @@ function expectedSignalNumber(value, prefix = '') {
     }
     if (typeof value !== 'string' || value.trim().length === 0) {
         throw new PlanSchemaError(
-            `${prefix}expect_signal must name a signal ("ABRT", "SIGABRT") or give its number (6), ` +
-                `got ${JSON.stringify(value)}: a plan that expects a crash has to say which signal killed it`
+            `${prefix}expect_signal must name a signal ("ABRT", "SIGABRT") or give the number this ` +
+                `platform numbers it by, got ${JSON.stringify(value)}: a plan that expects a crash has ` +
+                `to say which signal killed it`
         )
     }
     const written = value.trim().toUpperCase()
@@ -2362,7 +2394,17 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
                 `that stopped working, and the CPU budget is what catches one that works harder`
         )
     } else if (!logContext.options.compileOnly && cpuBudgetMs !== null) {
-        if (result.cpuMs === null) {
+        if (result.cpuMs === null && !CAN_READ_CHILD_CPU) {
+            // The host reports no CPU figure at all, so this is a fact about the host and not a
+            // reading of the test: the same split `timeoutMarginVerdict` makes a few lines below,
+            // for the same reason. Before this, a `cpu_budget_ms` entry on such a host was `fail`
+            // with no way to become green -- "the runner cannot read a bound" printed as "the test
+            // crossed one", which is the two readings a gate must not merge. The test keeps its
+            // other verdicts (what it printed, its exit code, its diagnostics); what it loses is
+            // the cost judgement, and the run says at the end how many it never judged.
+            result.budgetSkipped = NO_CPU_TIME_SKIP
+            budgetSkippedTests++
+        } else if (result.cpuMs === null) {
             failures.push(
                 `cpu_budget_ms ${cpuBudgetMs.toFixed(0)} ms has no CPU reading: ${result.cpuReason} ` +
                     `(a budget the runner cannot read is not a bound; test/tools/child-cpu.mjs reads ` +
@@ -4037,6 +4079,15 @@ async function main() {
         console.log(
             `${COLORS.cyan}[INFO]${COLORS.reset} timeout margin ${NO_CPU_TIME_SKIP} on ` +
                 `${marginSkippedTests} test(s): this host's wall clock is not a reading of a test's work`
+        )
+    }
+    if (budgetSkippedTests > 0) {
+        // The other half of the same reading: a `cpu_budget_ms` entry whose budget this host cannot
+        // read at all. Printed apart from the pass count, because a bound nobody read is not a bound
+        // that held.
+        console.log(
+            `${COLORS.cyan}[INFO]${COLORS.reset} cpu_budget_ms ${NO_CPU_TIME_SKIP} on ` +
+                `${budgetSkippedTests} test(s): a cost bound this host cannot read is not a bound it crossed`
         )
     }
     // One line for the flow, with the whole accounting behind it in summary.json: the ratio the

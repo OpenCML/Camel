@@ -1196,6 +1196,12 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
 /// that needs the set asks it here rather than walking the graph again.
 std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 
+/// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its payload.
+/// The members themselves are the frame slots the payload names, not the aggregate's inputs, so this
+/// number and the input count are two different things -- which is why the verdict below refuses.
+uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
+
+AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref);
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
 /// inlined call gates its arguments after what the call waited for -- and changes nothing else
 /// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about

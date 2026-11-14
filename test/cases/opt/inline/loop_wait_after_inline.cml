@@ -1,0 +1,51 @@
+// The loop of an inlined body carries the call's wait: `addSpliceOrderEdges`
+// (src/runtime/draft_inline.cpp) writes the wait of the statement the call was written after on
+// the nodes of the body that own a region -- a BRCH or a LOOP "takes the incoming wait itself" --
+// and that wait runs before the loop's first round.
+//
+// `w22` is recursive, so `std::opt::inline` leaves its call in `main` and splices `f8` in the
+// statement before it. `f8` never reads `a10`, so the wait is the only reason the read of `v60`
+// that the argument makes is ordered at all, and the two loops are the two shapes the comparison
+// of `P` is made of: give the callee an argument of constants, or replace either loop by a
+// literal, and nothing is left to order and the program runs.
+//
+// Laid out by the rule for what only orders -- which puts such a predecessor after the loop's
+// piece -- that wait came between the body's range and the LOOP, and the plan requires the range
+// of a loop to end at the LOOP. A debug build aborted the plan with "The nodes of a loop are not
+// one range in the execution order"; a release build, which compiles that check out, ran the loop
+// table it would have stopped and died in the scheduler.
+//
+// The program is a reduced one from the E9 slow differential: `progen_4`, drawn by
+// test/tools/progen with seed 4, cut down by hand until each of the two shapes above stands alone.
+
+type P = { x: int, y: int }
+
+func operator <(a: P, b: P): bool {
+    return a.x < b.x;
+}
+
+func f8(a9: float, a10: (int, string)[]): string {
+    return if (loop s11 = { x: 1, y: 4 } for q12 in [5, 0, 31] do { x: 1, y: q12 }) < (loop s13 = { x: 2, y: -2 }, c14 = 0 while (c14 < 0) do (s13, c14+ 1)).0 then '' else string(-2);
+}
+
+func w22(a23: int, var c24: int): int sync {
+    return if a23 <= 0 then sync {
+        c24 /= 2;
+        println('L1 {} {}'->format<a23, a23>);
+        return 12;
+    } else sync {
+        c24 %= 10;
+        let n25 = w22(a23 -1, c24);
+        c24 -= int(2.5);
+        return n25+ 1;
+    };
+}
+
+func main(): int sync {
+    var v60 = 0;
+    let n69 = f8(0.25, [(v60, 'k9')]);
+    let n70 = w22(0, v60);
+    println('L9 [{}]'->format<n69>);
+    println('L10 [{}]'->format<n70>);
+    return 0;
+}

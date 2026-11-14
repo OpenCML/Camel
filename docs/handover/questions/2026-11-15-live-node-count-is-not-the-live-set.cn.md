@@ -50,3 +50,9 @@ gc_cnt_t GCGraph::liveNodeCount() const {
 「sync 边携带 used」），所以**`sync` 链上的写本来就在活集合里**，接上判据之后也不会被删——这正是作者
 第 2 条要的读数。真正缺的是**区域内部**的根（一条臂或一个循环体里没人读的效应），那要区域端口与臂的
 入口一起当根；它属于 3.4 那一步，不是本页的范围。
+## 后续（已落地）
+
+作者裁定「保持它、但改名」：`GCGraph::liveNodeCount()` 现在叫 **`storedNodeCount()`**
+（`include/camel/runtime/graph.h:895`），`GraphRead` 接口上的同名方法一并改名（`graph_read.h:88`），
+注释里写明「它回答要装几个节点，不是程序能看到哪些节点」。活集合只由 `camel::runtime::liveNodesOf` 回答，
+冻结图侧的那份与本页建议一致，已经补上（`2e5504b8e`，与草稿同一份走法、两个视图）。

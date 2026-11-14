@@ -268,20 +268,20 @@ CHECK_RANGE = range(1, 26)
 # evaluator types it: the arm join holds. It is back in the batch since (a `return`
 # in an arm no longer takes the function's declared return type). See
 # test/cases/opt/progen/README.md, J5.
-# Seed 4 is left out for a crash of `std::opt::inline`, not for anything the front end says: the
-# four cells of the pipeline `inline` (inline@nvm, @fvm, @jit, @prl) end in SIGSEGV while the
-# same program runs under the other pipelines. The expression that reaches it is the call
-# `f8(...)` inside `let n69 = concat(...)` of `main`: cutting `main` after that statement still
-# crashes, and writing the whole `let` as `[f8(...) == '']` still does, while `f8` alone in a
-# small program does not, and neither does either of its two ingredients (a `for` loop over
-# structs compared with the user `operator <`, and that operator on two struct literals). The
-# pass therefore needs more of the program than a case file would show, and the seed is left out
-# until it is fixed. It is not a silence: `progen.py check --seeds 4 --with-excluded` runs it on
-# its own and prints the four cells, the test plan runs that command as `progen_known_crash` (a
-# known failure, so every run prints it and none is gated by it), and `progen.py show --seed 4`
-# draws the program.
-CHECK_EXCLUDED = {4: "std::opt::inline segfaults on the `f8(...)` call of `main`, which is a "
-                     "crash of that pass and not a refusal of the front end"}
+# Empty since `edeaa9c41`, and the seed it held is worth recording because it left: seed 4 of
+# `generate.VERSION` 8 crashed in all four cells of the pipeline `inline` (inline@nvm, @fvm, @jit,
+# @prl) -- SIGSEGV, not a refusal of the front end -- on the call `f8(...)` inside
+# `let n69 = concat(...)` of `main`, whose spliced body owns a loop that carries the wait of the
+# statement the call was written after. `edeaa9c41` took `progen_4` of the E9 differential from
+# crash 1 to crash 0 by laying that wait before the loop's first round, and
+# test/cases/opt/inline/loop_wait_after_inline.cml is the 25-line reduction of the shape, so the
+# seed runs in `progen_check` again and the test plan reads it in fast layer as `progen_seed_4`.
+#
+# A seed recorded here names the generator version it was generated at, in the entry and in this
+# comment. `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing seeds are other programs") re-pointed
+# every seed at another program, so a record that says only "seed 4" or "seed 26" names a program
+# the next version will not generate -- the record survives, the finding it named does not.
+CHECK_EXCLUDED = {}
 CHECK_MATRIX = "cross"
 
 
@@ -296,6 +296,11 @@ def cmd_check(args):
         seeds = list(CHECK_RANGE)
     if not args.with_excluded:
         seeds = [s for s in seeds if s not in CHECK_EXCLUDED]
+    elif not CHECK_EXCLUDED:
+        # A flag that silently changes nothing is the same shape as a reading that cannot fail:
+        # it looks like it did something. Say so, so a run that passes it is not mistaken for one
+        # that widened the batch.
+        print("CHECK_EXCLUDED is empty: --with-excluded changed nothing")
     records = run_batch(seeds, features, cells, None, args.jobs)
     bad = [(r["seed"], cid, info["outcome"], info.get("detail", "")) for r in records for cid, info in r["bad"].items()]
     for seed, cid, outcome, detail in bad:
@@ -417,7 +422,8 @@ def main(argv=None):
     p.add_argument("--jobs", type=int, default=4)
     p.add_argument("--seeds", help="a seed or an interval (4, 1-25) to check instead of CHECK_RANGE")
     p.add_argument("--with-excluded", action="store_true",
-                   help="run the seeds CHECK_EXCLUDED leaves out, to see what they show")
+                   help="run the seeds CHECK_EXCLUDED leaves out, to see what they show (CHECK_EXCLUDED "
+                        "is empty today, and passing the flag then prints that it changed nothing)")
     p.set_defaults(fn=cmd_check)
     p = sub.add_parser("findings")
     p.add_argument("--dir")

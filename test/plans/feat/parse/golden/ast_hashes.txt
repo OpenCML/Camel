@@ -1486,11 +1486,9 @@ df2285a6921cfa9b ok test/cases/compile/prelude_signatures/imported_name.cml
 61a3771632cfbbfe ok test/cases/compile/prelude_signatures/with_pack_with_body.cml
 d5bfbf7a13058125 ok test/cases/compile/ref/err_holds_ref.cml
 c7bf8d2161fb4912 ok test/cases/compile/ref/err_holds_ref_closure.cml
-a702fed06a37af39 ok test/cases/compile/ref/ref_boxes_are_counted.cml
-2d3a0a276a1b86f7 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
-c0f73b1a157378b4 ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
-c7e458134aa49c47 ok test/cases/compile/ref/ref_boxes_made_per_call_ten.cml
-4014335c6517ee66 ok test/cases/compile/ref/ref_boxes_made_per_call_thousand.cml
+a603f90011a7fd12 ok test/cases/compile/ref/ref_boxes_are_counted.cml
+c87e262c61f310e1 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
+d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 6e031bde2d13dbbf ok test/cases/compile/ref/ref_closure.cml
 9c5ed6009d7896e0 ok test/cases/compile/ref/ref_closure_capture.cml
 2dc36a2971e3b790 ok test/cases/compile/ref/ref_content_survives.cml
@@ -3402,6 +3400,8 @@ f109e2ac953d849b ok test/cases/modules/std/json/encode.cml
 b4c948dee6fe28f4 ok test/cases/modules/std/json/err_decode_as_shape.cml
 dfde453c4be9360a ok test/cases/modules/std/json/err_encode_no_form.cml
 6c3c31bf450ee097 ok test/cases/modules/std/json/json_accessor_error.cml
+254fc038030fbe29 ok test/cases/modules/std/json/json_decode_as_no_document.cml
+040d7424aac6ca1d ok test/cases/modules/std/json/json_encode_no_document.cml
 210ad97acdee85c3 ok test/cases/modules/std/json/json_gc.cml
 b237b3050c1f4b18 ok test/cases/modules/std/json/json_gc_macro.cml
 e8405f93b22c8c9c ok test/cases/modules/std/json/json_kind_failed.cml
@@ -3797,6 +3797,7 @@ cb91620861178c37 ok test/cases/modules/types/user_type_functions.cml
 7c5dc5bad471b781 ok test/cases/opt/adb67e081/rc00_seed27.cml
 fc5dd9b72523c060 ok test/cases/opt/adb67e081/rc03_seed30.cml
 2b621abdfd198a5b ok test/cases/opt/adb67e081/rc04_seed72.cml
+19053ef7a8c95bbd ok test/cases/opt/adb67e081/rc04_seed72_within_call.cml
 2711932a9621a154 ok test/cases/opt/adb67e081/rc05_seed104.cml
 bdd870b6f7a7c27e ok test/cases/opt/algebra_rules/agreement.cml
 c1a092942caf4b56 ok test/cases/opt/algebra_rules/divergence.cml
@@ -3821,6 +3822,7 @@ bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
 a697e5029bcc5876 ok test/cases/opt/devirtualize/recallee_arity.cml
 3ccda385a066a3b9 ok test/cases/opt/devirtualize/recallee_type.cml
 7c5dc5bad471b781 ok test/cases/opt/e9/rc00_seed27.cml
+9d7c0af3bc14738d ok test/cases/opt/e9/rc00_seed30.cml
 bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
 ef56ce08a4ace568 ok test/cases/opt/e9/rc01_seed47.cml
 fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
@@ -3832,6 +3834,7 @@ fc5dd9b72523c060 ok test/cases/opt/e9/rc03_seed30.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
+1ab961c9714024c3 ok test/cases/opt/effects/dead_write_aggregate_two_members.cml
 1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
 3f5c8d5f2d756ced ok test/cases/opt/effects/dead_write_held_by_program.cml
 2ae419419bf80bc4 ok test/cases/opt/effects/dead_write_rooted_closure.cml
@@ -3915,6 +3918,7 @@ eee54de81b0f3a00 ok test/cases/opt/inline/consecutive_sync_calls.cml
 17b22dc3333654fa ok test/cases/opt/inline/empty_entry_targets_fallback.cml
 a404d5bc0112c480 ok test/cases/opt/inline/entry_multi_target_with_sync.cml
 8903a8c5167ea4e3 ok test/cases/opt/inline/entry_single_target_no_sync.cml
+cfbe4c0d1ef632cd ok test/cases/opt/inline/loop_wait_after_inline.cml
 bf1e6f5fb7739a18 ok test/cases/opt/inline/no_param_reverse_root.cml
 ec1fe0f8d69d474e ok test/cases/opt/inline/registry_sweep_unique_arm.cml
 e7b1c7a68383c292 ok test/cases/opt/inline/scc_entry_guard_recursion.cml
@@ -3923,6 +3927,7 @@ bf16d062630f489c ok test/cases/opt/inline/specialized_arg_keeps_order.cml
 ab4c6a929c879d8f ok test/cases/opt/inline/strategy_small_non_arm.cml
 6d44505d3ae85ccd ok test/cases/opt/inline/value_ctrl_gate_anchor.cml
 84fbbd82e01d23e9 ok test/cases/opt/inline_cycle/seed23_fold_inline.cml
+c6564e811813f9b0 ok test/cases/opt/inline_cycle/seed23_fold_inline_within_call.cml
 e307907dfde19d93 ok test/cases/opt/never_exit/exit_last.cml
 55fd64dcfafce9f0 ok test/cases/opt/never_exit/fail_last.cml
 52c544cbda8f4ffd ok test/cases/opt/pass_params/plain.cml

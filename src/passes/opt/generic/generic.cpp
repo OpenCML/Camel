@@ -238,6 +238,23 @@ bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref
     return valueAnchor && !isWrittenInPlace(draft, id) && readsNoWrittenSlot(transaction, id);
 }
 
+/// The place a folded node held, given to the statement that takes its place.
+///
+/// A statement of a chain holds its place from both sides (see `holdsChainPlace`, rewrite.h): the
+/// statement written after it waits on it (`syncUsersOf`) and it waits on the one before
+/// (`syncInputsOf`). Folding it into a constant takes the node out of the chain, and the wait its
+/// successor had on it may not simply go: a wait does not disappear because what it waited on
+/// became a constant, it only changes what it waits on. `closeChainOver` (src/runtime/draft.cpp,
+/// what `eraseNode` calls) does the splice -- `P --SYNC--> F --SYNC--> S` becomes `P --SYNC--> S`,
+/// and a successor of a chain head heads the chain itself -- but it only does it when it can name a
+/// predecessor that still stands, and *silently keeps nothing* when it cannot. That is how
+/// `test/cases/opt/e9/rc00_seed30.cml` lost the place of its first `:io/println` while the fold
+/// that removed the block between the two prints was considered done: the successor was left with
+/// the source-order edge alone, which carries no place (`docs/design/effects/edges.cn.md` 1.5 and
+/// 5.3), and `std::opt::dce` then reported an effect node with neither a read of its value nor a
+/// place in its chain.
+///
+/// So after a fold, a statement that had a place and lost it gets one back: the statement written
 /// Replaces `id` by `replacement` (see replaceNode) and makes the replacement the graph's exit,
 /// output and returned value wherever `id` was one of them. `replaceNode` re-points the value
 /// anchors it knows (output, return), but erasing the node clears the exit anchor, so all three
@@ -250,6 +267,10 @@ void replaceFoldResult(
     const bool wasReturn = draft.returnNode() == id;
     const auto kind      = draft.returnKind();
     replaceNode(transaction, id, replacement);
+    // The place `id` held in the chain is not the replacement's (`placeLostStatements`, what
+    // `foldDraft` runs once the round's folds are done: a statement that lost its place is given the
+    // one the statement written after it holds, which is the same walk this wrapper would have to
+    // repeat node by node).
     if (replacement == kInvalidNodeRef) {
         return;
     }
@@ -1280,6 +1301,92 @@ bool foldStaticCast(
     return true;
 }
 
+/// A statement that lost its place in a chain, given one back.
+///
+/// A statement of a chain holds its place from both sides (`holdsChainPlace`, rewrite.h): the
+/// statement written after it waits on it (`syncUsersOf`), and it waits on the one written before
+/// (`syncInputsOf`). Folding takes nodes out of the chain by two routes -- `replaceNode` through
+/// `replaceFoldResult`, and `eraseNode` for the arms of a pruned branch -- while the splice that
+/// keeps the order (`closeChainOver`, src/runtime/draft.cpp) only fires when it can name a
+/// predecessor that still stands, and silently keeps nothing when it cannot. The fold then reports
+/// that it changed the graph, and the statement it took the place from is left with the source-order
+/// edge alone, which carries no place (docs/design/effects/edges.cn.md 1.5 and 5.3). That is how
+/// `test/cases/opt/e9/rc00_seed30.cml` ends with an `:io/println` that neither reads its value nor
+/// stands in a chain, which `std::opt::dce` reports as a defect of the compiler.
+///
+/// So a statement that carries the program's order (`carriesOrdering`) and has no place gets one:
+/// the statement written after it -- the `ORDER` user, which is the source order the graph kept --
+/// waits on it through the sync edge, with the control edge naming the same pair while the control
+/// kind still exists. That is the place a chain head holds, which is what a statement whose
+/// predecessor was folded is. A statement that kept a place is left alone, and so is one nothing is
+/// written after: it is then the end of the chain, which is the end of the graph.
+size_t placeLostStatements(camel::runtime::GraphTransaction &transaction) {
+    // The question is asked of the read-only view first. Asking for the edit handle marks the
+    // transaction as written, and a graph written by a pass is a graph the engine commits -- and
+    // checks (`Runtime graph ... breaks its edge invariants`). A graph this function has nothing to
+    // do in must be left as untouched as it was found (`resident_cpu_block.cml`).
+    const auto &view = transaction.graph();
+    std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> plan;
+    for (gc_node_ref_t id = 0; id < view.nodeSlotCount(); ++id) {
+        if (!view.alive(id) || view.header(id) == nullptr) {
+            continue;
+        }
+        if (!view.syncInputsOf(id).empty() || !view.syncUsersOf(id).empty()) {
+            continue; // it holds its place
+        }
+        if (!camel::runtime::carriesOrdering(view, id, true)) {
+            continue; // a value, not a statement: it needs no place
+        }
+        const auto *idHeader = view.header(id);
+        if (idHeader->kind == GCNodeKind::Brch || idHeader->kind == GCNodeKind::Loop) {
+            continue; // what waits on a branch is inside one of its arms, not written after it
+        }
+        for (gc_node_ref_t next : view.orderUsersOf(id)) {
+            if (next == id || !view.alive(next) || !view.syncInputsOf(next).empty()) {
+                continue; // it already follows something in the chain
+            }
+            const auto *nextHeader = view.header(next);
+            // Only a statement waits. A branch, a loop and a plain GATE are not statements of the
+            // chain: a sync edge that ended on one of them is what the edge invariants refuse
+            // (`sync edge ... ends on a node that is not a statement, a chain GATE, or the block's
+            // value`), and one that ended on what waits inside an arm is what the branch-arm
+            // invariant refuses.
+            if (nextHeader->kind == GCNodeKind::Brch || nextHeader->kind == GCNodeKind::Loop ||
+                nextHeader->kind == GCNodeKind::Gate ||
+                !camel::runtime::carriesOrdering(view, next, true)) {
+                continue;
+            }
+            // ... and both ends are statements whose running is the reason the place exists: a pure
+            // computation needs no place, and giving one to it is what turned a `:var/get` into a
+            // node that waits on its branch (`used_arm_exit.cml`).
+            if (isPureOper(transaction, id) || isPureOper(transaction, next)) {
+                continue;
+            }
+            // A chain joins two statements of one block (`sameSyncBlock`, src/runtime/draft.cpp):
+            // an edge that crosses a block boundary is what the edge invariants refuse (`sync edge
+            // ... joins two blocks`), and a statement in another block takes its place in that
+            // block's chain, not here (docs/design/effects/edges.cn.md 4.6).
+            if (!camel::runtime::sameSyncBlock(view, id, next)) {
+                continue;
+            }
+            plan.emplace_back(id, next);
+            break;
+        }
+    }
+    if (plan.empty()) {
+        return 0;
+    }
+    auto &draft = transaction.edit();
+    for (const auto &[id, next] : plan) {
+        if (!draft.alive(id) || !draft.alive(next)) {
+            continue;
+        }
+        const gc_node_ref_t only[1] = {id};
+        draft.setSyncInputs(next, only);
+        camel::runtime::appendControlDependency(transaction, id, next);
+    }
+    return plan.size();
+}
 size_t foldDraft(
     camel::runtime::GraphTransaction &transaction, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
@@ -1417,6 +1524,17 @@ size_t foldDraft(
     }
     const size_t removed = eraseOrphanedChainGates(transaction);
     camel::runtime::resolvePlaceForks(transaction.edit());
+    // The place repair only runs for a graph this round folded something in. A graph the pass's
+    // screen skipped is a graph the pass promises not to write (`check_screens`), and a statement
+    // with no place is a state folding makes here -- not a state the pass goes looking for in a
+    // graph it did not fold.
+    if (folded > 0 || removed > 0) {
+        // Not counted as a fold: it gives a statement back the place a fold took from it, and a
+        // count of its own would run another round of folding for a graph that has nothing left to
+        // fold (that extra round reaches a place-check of its own, and a sync edge across two blocks
+        // is what it finds -- `resident_cpu_block.cml`).
+        (void)placeLostStatements(transaction);
+    }
     return folded + removed;
 }
 

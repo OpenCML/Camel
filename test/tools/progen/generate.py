@@ -603,7 +603,21 @@ class Gen:
                 return N("map", [self.expr(ARR(src), d - 1), self.fn_expr(FN([src], e), d - 1)], t=t)
             o.append((2.5, map_))
             o.append((1.8, lambda: N("filter", [self.expr(t, d - 1), self.fn_expr(FN([e], BOOL), d - 1)], t=t)))
-            if self.on("comprehension"):
+            # A comprehension's element lambda is an anonymous generic function, and the front
+            # end refuses one whose type variable the position cannot fix. Where the element is a
+            # record, the program spells that type by the name it declared (`type P = { x: int,
+            # y: int }`, model.type_src), and that is the refused shape:
+            #   error[SemanticDiag::GenericFunctionAsValue]: The generic function '' cannot be
+            #   given its types here: with $element0 = { x: int, y: int } it returns
+            #   '{ x: int, y: int }', and the function expected here is
+            #   '(item: { x: int, y: int }) => P'.
+            # Measured: the same element as a structural record (`{ x: int, y: int }[]`) compiles,
+            # and a scalar element compiles; only the named-record element is refused. The rule is
+            # therefore drawn as narrowly as the evidence: no comprehension whose element type is
+            # a record. The general sentence behind it -- a generic function may not stand where
+            # the position fixes none of its type variables -- is wider than one generator
+            # constraint can carry, and is only enforced where it is seen.
+            if self.on("comprehension") and e[0] != "rec":
                 def comp_():
                     src = self.scalar() if self.chance(0.7) else e
                     source = self.expr(ARR(src), d - 1)

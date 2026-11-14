@@ -48,13 +48,17 @@ import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
-import { negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
+import { measuredInstall, negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
 import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
 const here = path.dirname(fileURLToPath(import.meta.url))
 const repoRoot = path.resolve(here, '..', '..', '..')
 const runner = path.join(path.dirname(here), 'run-tests.mjs')
+// What this host records about a death is the host's, and two checks below read a fixture that
+// states one death in each of the two vocabularies: a POSIX host reports the signal and no exit
+// status, Windows reports the exit status and no signal (signal.plan.toml, `abrt`/`abrt_as_exit`).
+const IS_WINDOWS = process.platform === 'win32'
 const stripAnsi = (text) => text.replace(/\x1b\[[0-9;]*m/g, '')
 // The width every child run of this self-test is taken at. A runner that is not told takes
 // `availableParallelism` -- 32 on the gate host -- and then its readings move with its neighbours:
@@ -153,6 +157,40 @@ function readIntervals(file) {
         intervals.set(match[1], entry)
     }
     return intervals
+}
+
+// --- is there an install to measure? -----------------------------------------------------------
+// Every check below reads the output of a child run, and a child run does not start without an
+// install: `preflightBuild` prints `[FAIL] no Release binary at <out/latest/bin/camel.exe>` and
+// exits 2. Asked once per check, that single state came back as a page of reds in the shape
+// "expected PASS, got undefined" and "unexpected summary (none)" -- none of them about the code,
+// all of them about a binary that is not there, and two of them were tracked for a day as a defect
+// that did not exist. So the question is asked once, here, before any check starts, and it is
+// answered with ONE red that says what was not measured, why, and what to do about it.
+//
+// It is a red (`[FAIL]`, exit 1) and not a `[SKIP]`: `[SKIP]` is this project's word for a host
+// state that makes a measurement a plan DID run impossible (no CUDA card, no driver), and it leaves
+// the run green. Here nothing ran, because this tree was not built -- a skip would report "green,
+// nothing to see", and a red does not have to mean "the code is wrong" as long as it says which of
+// the two it is. The line below says "not measured", not "failed", for exactly that reason.
+//
+// This is also not a deletion of the checks: with an install present every one of them runs, and a
+// run in which the install disappears halfway still reddens the check that lost its summary.
+const install = measuredInstall()
+if (!install.present) {
+    console.error(
+        `[FAIL] self-test: not measured -- no testable install: no ${install.label} binary at ` +
+            `${install.exe}, and preflightBuild (test/tools/run-tests.mjs) refuses to start a run ` +
+            `without one, so no child ran and none of this file's checks was evaluated.`
+    )
+    console.error(
+        '    Not measured: the back-end matrix, the plan-schema refusals, the known_fail gate, ' +
+            'expect_signal, the per-test scratch directory, parallel and serial execution, the tier ' +
+            'filter, the sweep sample, --changed, a failing benchmark, the gate split, CUDA ' +
+            'visibility, and the GPU card a test is given.'
+    )
+    console.error(`    Build it first: ${install.buildCommand}`)
+    process.exit(1)
 }
 
 // --- the back-end matrix ---------------------------------------------------------------------
@@ -328,21 +366,51 @@ fs.rmSync(path.join(scratchRoot, `run-${knownfail.pid}`), { recursive: true, for
 // killed process does not have, and `known_fail` says the run is wrong today -- it turns the entry
 // red the day the process stops dying, which is the opposite of what such an entry means. The
 // fixture dies three ways, and only the first is green: of the signal the entry names, of a signal
-// it does not name, and not at all. The last two are the discrimination, and the fourth plan writes
+// it does not name, and not at all. The last two are the discrimination, and the fifth entry writes
 // no signal at all, which must be refused where the plan is read.
+//
+// The green entry is stated twice by the fixture, because what a host records about a death is the
+// host's: POSIX ends the child with `signal = 'SIGABRT'` and no exit code, and Windows has no signal
+// to report at all -- the same abort ends it with exit status 134. Each host reads the entry it can
+// record and skips the other one BY NAME, with the host's answer printed as the reason, so the two
+// hosts read the same five entries and the same summary; and the abort itself is measured on both,
+// in the shape that host has for it. Skipping is not how this fixture turns green: an entry that
+// vanished would be a lost measurement, and this check fails if either the pass or the skip is missing.
 const signalDir = path.join(here, 'signal')
 const signal = runRunner([signalDir])
 if (signal.status !== 1) problems.push(`expect_signal: runner exit ${signal.status}, expected 1`)
-if (!signal.output.includes('[SUMMARY] total: 4, pass: 1, fail: 3')) {
+if (!signal.output.includes('[SUMMARY] total: 5, pass: 1, fail: 3, skip: 1')) {
     problems.push(`expect_signal: unexpected summary (${summaryLine(signal.output)})`)
 }
-if (!signal.output.includes('[PASS] abrt')) {
-    problems.push(`expect_signal: the expected signal did not pass:\n${signal.output}`)
+// The abort in this host's vocabulary, and the skip that says which vocabulary this run could not
+// read. Both are asserted: a run in which neither entry passed is not the reading this fixture
+// describes, and a run in which neither entry was reported as skipped has lost one silently.
+const abrtRead = IS_WINDOWS ? 'abrt_as_exit' : 'abrt'
+const abrtSkipped = IS_WINDOWS ? 'abrt' : 'abrt_as_exit'
+if (!new RegExp(`^\\[PASS\\] ${abrtRead}\\b`, 'm').test(signal.output)) {
+    problems.push(
+        `expect_signal: the abort was not read as ${abrtRead} on this host:\n${signal.output}`
+    )
 }
-if (!signal.output.includes('expected signal SEGV, got signal SIGABRT')) {
+if (!new RegExp(`^\\[SKIP\\] ${abrtSkipped}\\b`, 'm').test(signal.output)) {
+    problems.push(
+        `expect_signal: ${abrtSkipped} was neither run nor skipped by name on this host:\n${signal.output}`
+    )
+}
+if (!signal.output.includes(IS_WINDOWS ? 'no signal deaths to report' : 'reports deaths by signal')) {
+    problems.push(
+        `expect_signal: the skip reason did not name this host's reading:\n${signal.output}`
+    )
+}
+// The other direction, in the same words: a death by a signal the entry did not name is reported as
+// the death that happened, and each host names that death its own way.
+const wrongDeath = IS_WINDOWS
+    ? 'expected signal SEGV, got exit 134'
+    : 'expected signal SEGV, got signal SIGABRT'
+if (!signal.output.includes(wrongDeath)) {
     problems.push(`expect_signal: a death by another signal was not reported that way:\n${signal.output}`)
 }
-if (!signal.output.includes('expected signal 6, got exit 0')) {
+if (!signal.output.includes('expected signal 15, got exit 0')) {
     problems.push(`expect_signal: a run that ended normally was not reported as not having died:\n${signal.output}`)
 }
 if (!signal.output.includes('expect_signal must name a signal')) {

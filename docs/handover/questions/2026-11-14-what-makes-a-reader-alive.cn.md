@@ -141,3 +141,79 @@ screen 认为没有可删节点 → 清扫一次都不跑。**摘元组成员要
 后面成员的索引都要前移，所有读它的 `Accs`（`GCAccsBody::value`）都要改写；而在 `sync`/顺序边存在的图上，
 「没人读」的定义又要回到本页开头那个「活着的读者」。所以这件要先定「摘成员时索引重编号」的规则，
 再谈判据——它是 `writings_extract.cpp` 的事，不是清扫的事。
+
+## 前置任务：摘掉一个没人读的元组成员
+
+### 今天的读数：提着它的是元组，不是闭包
+
+`let p = (1, h)` 在图上是一个 **`Fill` 节点**（`GCNodeKind::Fill`，载荷 `GCFillBody`：
+`slotCount` 加一个变长的 `slots()`，`include/camel/runtime/graph.h:500`），**成员就是它的普通输入，按顺序**。
+`p.0` 读它是 **`Accs` 节点**（`GCAccsKind::TupleIndex`，`value` 是成员号，`graph.h:484`）。
+**注意（2026-11-15 更正）**：`GCFillBody::slots()` 是 `gc_slot_idx_t`——**帧槽号，不是节点引用**，
+所以「成员就是它的普通输入」这个读法是**错的**，实测 `arity=2` 的聚合 `inputs=1`。见
+`2026-11-15-member-liveness-needs-slot-producers.cn.md`。
+
+所以：`Fill` 的第二个输入就是 `h` ⇒ **闭包有一个用户** ⇒ `screen.cpp#mayRemoveDead` 认为这里没有可删节点 ⇒
+**清扫一次都不跑**（读数 `SWEEP func=0 call=0 gate=0 oper=0`）。**格子续命靠的是元组，不是闭包。**
+而今天**没有任何规则**说「元组里没人读的成员可以摘掉」——`Fill` 的输入是它的一部分，没人问过其中哪个没人读。
+
+### 判据该落在哪一层
+
+三层，各管一件事，**不要把三件事塞进一处**：
+
+1. **判据**（「这个成员有没有**活**读者」「这个元组有没有整体逃逸」）落在 `runtime`，就在 `liveNodesOf`
+   旁边：`tupleMemberIsUnread(draft, fill, index)`。理由和 `deadWrite` 一样——它问的是活集合，而活集合在
+   `runtime`。
+2. **改图**落在 `generic` 的那一次重写里（常量折叠 `p.0` 已经在 `src/passes/opt/generic/generic.cpp:1120-1170`）：
+   摘输入、重建 `GCFillBody` 的载荷（变长，`slotCount` 少一）、把 `Fill` 的类型换成少一位的元组类型、重推类型。
+3. **多份写**（同一个值有几个 `WritingUnion`）是 `writings_extract.cpp#select` 的事：**先抽取，再重写**。
+   **不要把「摘成员」塞进抽取**——抽取决定「取哪一份写」，摘成员改的是「这一份写里有几个成员」，
+   两者混在一起会让 `select` 同时背两个语义（这也是作者对 `select` 的判断：它不是死写问题）。
+
+### 编号前移要改几处
+
+12 处提到 `GCAccsKind::TupleIndex`，其中**把 `body->value` 当成员号读的有 8 处**：
+`nodevm.cpp:545`、`taskflow.cpp:2022`、`taskflow.cpp:2382`、`fastvm/compile.cpp:362`、`macro/eval.cpp:871`、
+`generic.cpp:1135`（常量折叠）、`draft_types.cpp:133`（成员类型）、`graph_edges.cpp:759`（类型检查）；
+另有 3 处**写**它：`draft_construct.cpp:192/196`、`draft_inline.cpp:1217`。
+
+但**这 8 处一行都不用改**：成员号住在 `Accs` 节点的载荷里，编号前移是**改图**（逐个 `Accs` 改写 `value`），
+不是改这 8 处代码。它们在这里的价值是**证明「成员号只有载荷一个来源」**——所以重编号必须走一次对整个图的
+改写，而不是偷偷在某个读者里做偏移。
+
+### 有没有「不需重编号」的部分情形：有，而且手上这条就是
+
+`h` 是 `(1, h)` 的**最后一个**成员。**摘最后一个成员不需要任何重编号**：没有更高位的成员要前移，所有 `Accs`
+的成员号都还指向原来那个成员。所以第一步不是「重编号规则」，而是：
+
+> 判据：`Fill` 是元组、最后一个输入没有被活节点读、其它用户全是 `TupleIndex < 原 slotCount - 1` 的 `Accs`、
+> 且这个 `Fill` 不是任何根 ⇒ 摘掉最后一个成员。
+
+这条能拿到**第一份真读数**（摘完 `h` 变成没人读 ⇒ `isUnreadClosure` 收走 ⇒ 格子没有活读者 ⇒ `dead=1`
+的写成真死写 ⇒ 才轮到边界检查那次「拒不拒」的实测）。**重编号留给作者裁**，不在这一步里混。
+
+### 这一笔为什么停在「设计」而没有落地（本轮预算的真实边界）
+
+摘最后一个成员**不是**一次简单的「删一条输入」，它是**换一个节点**：`GCFillBody::slotCount` 必须跟着减一，
+而草稿的载荷是**只读**的——`payloadOf` 只有 const 重载（`include/camel/runtime/draft.h:493`），没有写回载荷的接口。
+所以正确的做法是：
+
+1. 用 `addFillNode(缩短后的元组类型, 新 GCFillBody, dataIndex)` 造一个新 `Fill`
+   （`include/camel/runtime/draft.h:628`，实现在 `src/runtime/draft_construct.cpp:161`）；
+2. 把**留下来的**成员按原顺序接到它上面（新槽位表 = 原槽位表去掉最后一项）；
+3. `replaceAllValueUses(旧, 新)` 把读者接过去（`draft.h:795` 一带），再擦掉旧的；
+4. 缩短后的元组类型由 `TupleTypeFactory(std::vector<Type*>)` + `TupleType::fromFactory`
+   （`include/camel/core/type/composite/tuple.h:42/86`）interning 得到，成员类型取留下来的输入各自的 `dataType`；
+5. 之后 `h` 失去用户 ⇒ 清扫的 `isUnreadClosure` 收走它。
+
+四条守卫**不需要活集合**，用更强的形式就够（保守是正确的方向）：最后输入的 `normUsersOf` **只有这个 `Fill`**、
+`withUsersOf` 为空、不被任何根点名；`Fill` 的其它用户全是 `TupleIndex < slotCount-1` 的 `Accs`；`Fill` 自己不是根。
+判不了「逃没逃逸」的形状（例如 `Fill` 被 `Call` 当参数、进 `Brch` 的一条臂、进 `Loop` 的端口）一律**不摘**。
+
+还有一处必须同时改：`screen.cpp#mayRemoveDead` 现在先看 `valueUsers`，元组还读着闭包 ⇒ 图被判「无可删」⇒
+**清扫一次都不跑**（读数 `SWEEP func=0 call=0 gate=0 oper=0`）。所以要让它也认「某个 `Fill` 的最后一个成员
+没人读」这一种可删的理由，否则换节点的代码永远跑不到。
+
+**结论**：这一步要一次完整的实现 + 一次构建 + 四种拒绝用例的读数，是单独一轮的活。半做会让「摘了但没接对」
+和「没摘」混在一起，读数就读不出是谁的问题——所以本轮停在这里，把上面五步和两条改点交出去。
+

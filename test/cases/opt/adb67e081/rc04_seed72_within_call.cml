@@ -1,0 +1,31 @@
+/**
+ * The legal half of `rc04_seed72`: `k14` declares `var v16`, a closure captures it by reference,
+ * and the closure is called inside `k14`, so the cell stays in the call that declares it (design
+ * principles 3.5, rule two). The rest of the reduced program of result `adb67e081` is unchanged.
+ *
+ * What this entry guards, and what it does not (measured 2026-11-15 on 6c64f2042):
+ *
+ *   - it guards that `std::opt::inline` still inlines: `direct_calls` reads 2 with no pass and 0
+ *     under the pass (`std::stats`), so a pass that stops inlining turns this entry red;
+ *   - it does NOT guard the place decision `a1723fbb9` added. With that decision switched off,
+ *     this program runs at exit 0 with no cycle and no `PassInternalError`, exactly as with it
+ *     on: the ring is unobservable in this shape today, not gone. The byte-for-byte drawing
+ *     comparison is on the sibling shape, test/cases/opt/inline_cycle/seed23_fold_inline_within_call.cml.
+ */func r1(a2: int, a3: int): int {
+    return 0;
+}
+
+func k14(a15: int): int sync {
+    var v16 = r1(3, 0);
+    let f17 = (p17: int): int => sync {
+        v16 /= -2;
+        return v16 + p17;
+    };
+    return f17(a15);
+}
+
+func main(): int sync {
+    let n62 = (if false then null else true) ?? (if false then false else null) ?? false;
+    let n75 = k14(len([1.0]));
+    return 0;
+}

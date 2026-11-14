@@ -1,14 +1,11 @@
 /**
  * The same place makes a box again and again: one body, run once per element of a small range.
  *
- * Each element's box is dead when the element is done, and the reading says so: each block is
- * released or live and counted once, and at most the boxes of the last elements are still counted.
- * `--gc-check foreign` reads it at the return of the run and again at exit, and
- * `ref_boxes_loop_thousand.cml` is the same program over a range a hundred times longer: none of the
- * four back ends answers the ten with ten or the thousand with a thousand. Read at the return, fvm,
- * jit and prl have nothing left and nvm has three -- the last elements' boxes, whose handle died
- * with a frame no collection has looked at since. That is the open item: see
- * `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`.
+ * Each element's box is dead when the element is done, so a mechanism that frees a box when its
+ * last handle goes answers as many liveness readings as the element count -- not as many as the
+ * range's length. `--gc-check foreign` reads it at exit, and `ref_boxes_loop_thousand.cml` is the
+ * same program over a range a hundred times longer: `live` beside that one's is what says whether
+ * anything was reclaimed while the program ran.
  */
 
 import state

@@ -4,11 +4,6 @@
  *
  * Read with `--gc-check foreign`, the counters of the two runs are the judgement: `live` here must
  * be the same size as `live` there, or the boxes of the elements that are over are still counted.
- * Both read the same way -- each block released or live and counted once, at most the boxes of the
- * last elements left. Read at the return of the run, fvm, jit and prl have nothing left and nvm has
- * two, which is what it has on the ten; the three on the ten are the same last elements. That is the
- * open item: see
- * `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`.
  */
 
 import state
