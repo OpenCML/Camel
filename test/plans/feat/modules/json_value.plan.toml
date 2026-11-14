@@ -392,3 +392,31 @@ assert(input.normalized.stdout.trim() === 'error', `the run printed: ${input.nor
 }
 """
 timeout_ms = 20000
+
+[[tests]]
+name = "json.decode_as.no_document"
+desc = "The wrong argument seen from the pass, at the second read of the same slot: `opt::fold` evaluates the arm the tag does not select, and `decode_as` of a Json that holds no document is a fault of the call, reported at the call with the document it was given and the one it takes. It used to read that document through a null pointer, so the pass took the process down with SIGSEGV on all four back ends before anything was printed."
+kind = "negative"
+case = "../../../cases/modules/std/json/json_decode_as_no_document.cml"
+args = ["${case}", "opt::fold", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_starts_with = "error\n"
+expect_output_not_contains = ["Segmentation fault", "core dumped", "terminate called", "Aborted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+verify_script = """
+({ input, assert }) => {
+const stderr = input.stderr
+const want = "[Warn]: This constant expression faults whenever it is evaluated (OperandTypeUnsupported: 'json::decode_as' does not support a value of type 'Json holding no document (the slot of a `Json!` that failed)'; it takes a Json that holds a document, or a text.); it is not folded."
+assert(stderr.includes(want), `the warning does not name the document and the document it takes: ${stderr}`)
+const at = /json_decode_as_no_document[.]cml:([0-9]+):([0-9]+): .Warn/.exec(stderr)
+assert(at, `the warning has no position: ${stderr}`)
+assert(at[1] + ':' + at[2] === '12:75', `warned at ${at[1]}:${at[2]}, not where decode_as(v) stands`)
+assert(stderr.includes('name=RuntimeDiag::ConstantExpressionFaults, code=0x04100015'), `the warning is not the constant-expression one: ${stderr}`)
+assert(stderr.includes('OperandTypeUnsupported:'), `the fault is not the operand-type one: ${stderr}`)
+assert(input.normalized.stdout.trim() === 'error', `the run printed: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 20000
+
