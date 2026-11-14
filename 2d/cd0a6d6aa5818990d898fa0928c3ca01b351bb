@@ -1,0 +1,13 @@
+# lane-progroot -> develop (dfada4e83)
+
+判据读数:
+- ProgramHold (include/camel/runtime/graph.h): pin 构造 / unpin 析构 / 可移动不可复制 / 可空; GCGraphManager::pin 改为计数式, 两个持有者不互抢根
+- GraphDraftGroup 与 RuntimeGraphDraftSession 只经它持有; git grep pinRuntimeProgram src/runtime/draft_session.cpp 为空
+- scripts/check-program-holders.mjs: 默认只报告 exit 0, --enforce 才 exit 1; 故意样本报 2 holder, 干净样本 0
+- 首次清单 51 holder / 46 类 / 37 文件 -> 本改动后 48 / 44 / 37
+- 尺子: --gc-stress safepoint=1,kind=minor [PASS] 580.38 ms (9 行输出)
+- 两条 poison: gru_lite_large_bytecode [PASS] 640.69 ms (9 行), residual_mlp_large_bytecode [PASS] 1.84 s (1 行); 改前 rc=134/139、0 行
+
+合并闸门: total 8945 / pass 8901 / fail 4 / skip 8 / known 32; killed 0; 红集四条; 全量重建 351 个编译步 1109 s.
+读数行: C++ +104 / tests +30 / docs +13 / scripts +291; 中心文件 2 (draft_session.cpp, program.cpp); >2500 行 0; 反向引用 33.
+未做: 检查脚本尚未挂进闸门 $checkers (清单清空后才转硬门槛); 其余 48 个持有者交 lane-holders.
