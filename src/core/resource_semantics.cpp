@@ -88,6 +88,12 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode) {
     return ResourceSpec{.accesses = {ambientAccess(std::move(name), mode)}, .externalEffect = true};
 }
 
+ResourceSpec externalUnorderedAmbient(std::string name, AccessMode mode) {
+    ResourceAccess access = ambientAccess(std::move(name), mode);
+    access.unordered      = true;
+    return ResourceSpec{.accesses = {std::move(access)}, .externalEffect = true};
+}
+
 ResourceAccess globalAccess(AccessMode mode) {
     // The class is Unknown on purpose: this is the reading of an operator that declares nothing,
     // not something a module may write (design principles 3.3, the "global" resource).
@@ -359,10 +365,12 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
             if (found == sig.ambient.end()) {
                 sig.ambient.push_back(
                     ResourceSignature::AmbientUse{
-                        .name = access.resource.name,
-                        .mode = access.mode});
+                        .name      = access.resource.name,
+                        .mode      = access.mode,
+                        .unordered = access.unordered});
             } else {
-                found->mode = uniteAccess(found->mode, access.mode);
+                found->mode      = uniteAccess(found->mode, access.mode);
+                found->unordered = found->unordered || access.unordered;
             }
             break;
         }

@@ -133,6 +133,11 @@ struct ResourceAccess {
     ResourceBinding binding;
     ResourceRegion region;
     AccessMode mode = AccessMode::ReadModifyWrite;
+    /// The resource is declared `unordered` (design principles 3.3: `resource net unordered`), so
+    /// how two effects on it are written keeps no order: the builder writes no order edge between
+    /// them and they may run at the same time. The declaring library promises that the order does
+    /// not matter; where it does, the calls go in a `sync` block or through a handle.
+    bool unordered = false;
 
     bool operator==(const ResourceAccess &) const = default;
 };
@@ -193,7 +198,7 @@ struct ResourceSignature {
     struct ParamUse {
         /// The parameter, with parameters first and ordinary ones after them (0..withCount-1,
         /// then withCount..).
-        uint8_t index = 0;
+        uint8_t index     = 0;
         ResourceClass cls = ResourceClass::Unknown;
         /// The name a Handle or Foreign resource carries (the declaration's qualified name).
         std::string name;
@@ -205,6 +210,9 @@ struct ResourceSignature {
     struct AmbientUse {
         std::string name;
         AccessMode mode = AccessMode::ReadModifyWrite;
+        /// The ambient resource is declared `unordered` (ResourceAccess::unordered): effects on
+        /// it keep no written order, so no order edge joins two of them.
+        bool unordered = false;
 
         bool operator==(const AmbientUse &) const = default;
     };
@@ -292,6 +300,12 @@ ResourceAccess ambientAccess(std::string name, AccessMode mode);
 /// The spec of an operator whose one touch is the ambient resource `name`, with an effect
 /// visible outside the program: a file system call, the console, the clock, a generator.
 ResourceSpec externalAmbient(std::string name, AccessMode mode);
+/// The same for an ambient resource the module declares `unordered` (design principles 3.3): the
+/// effects on it keep no written order, so the builder writes no order edge between two of them
+/// and a scheduler may run them at the same time. The declaration is the module's promise that
+/// the order does not matter; it is the language's own word for it in `stdlib/<module>.cml`
+/// (`resource net unordered`), and the two have to agree (builder_modules.cpp#resourceIdentities).
+ResourceSpec externalUnorderedAmbient(std::string name, AccessMode mode);
 
 /// The conservative reading of an operator that declares no access list (design principles 3.3:
 /// an operator that declares nothing is taken to use the "global" resource, which keeps it in
