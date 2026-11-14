@@ -184,7 +184,7 @@ args = ["${case}", "test::keepshape", "std::jgir"]
 # One backend: the graph is the same one on each, and the test reads the drawing, not a run.
 backends = ["nvm"]
 expect_exit = 0
-expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\"", "\"exit\": \"g2n5\""]
+expect_stdout_contains = ["KEEPSHAPE keep=1 uri=:op/keep", "\"label\": \":op/keep\"", "\"exit\": \"g2n3\""]
 # Two shapes of the same operator, side by side, because one alone would say the wrong thing about
 # where it lives. `keep_shapes.real_pipeline` is the operator as `std::opt` writes it over an
 # existing case -- two nodes, and the output `5` unchanged. `keep_shapes.no_order_edge` is the
@@ -238,7 +238,7 @@ timeout_ms = 300000
 # is missing` (src/passes/trans/dot/graphviz.cpp#dumpGraph). Now the node that stands for the
 # removed value takes the graph's name, and the three dumps read the same graph:
 #   * gir/rgir draw the exchange: the `:op/keep` node feeds the graph's EXIT;
-#   * jgir names that same node (`g2n5`).
+#   * jgir names that same node (`g2n3`).
 [[tests]]
 name = "keep_shape.dot"
 desc = "The graph drawn by `std::gir` after the rewrite: the `:op/keep` node is there and it is what the graph's EXIT edge leaves from."

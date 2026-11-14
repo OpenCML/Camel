@@ -65,72 +65,55 @@
       "edges": [
         {
           "kind": "normal",
-          "source": "g1n0",
+          "source": "g1n2",
           "sourceIndex": 0,
-          "target": "g1n1",
+          "target": "g1n3",
           "targetIndex": 0
         },
         {
           "kind": "normal",
-          "source": "g1n1",
+          "source": "g1n3",
           "sourceIndex": 0,
-          "target": "g1n2",
+          "target": "g1n4",
           "targetIndex": 0
         },
         {
           "kind": "control",
-          "source": "g1n1",
+          "source": "g1n3",
           "sourceIndex": 0,
-          "target": "g1n2",
+          "target": "g1n4",
           "targetIndex": 0
         },
         {
           "kind": "sync",
-          "source": "g1n1",
-          "target": "g1n2"
+          "source": "g1n3",
+          "target": "g1n4"
         },
         {
           "kind": "normal",
+          "source": "g1n1",
+          "sourceIndex": 0,
+          "target": "g1n5",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
           "source": "g1n4",
           "sourceIndex": 0,
-          "target": "g1n3",
-          "targetIndex": 0
-        },
-        {
-          "kind": "control",
-          "source": "g1n2",
-          "sourceIndex": 0,
-          "target": "g1n3",
+          "target": "g1n5",
           "targetIndex": 0
         },
         {
           "kind": "sync",
-          "source": "g1n2",
-          "target": "g1n3"
+          "source": "g1n4",
+          "target": "g1n5"
         },
         {
           "kind": "normal",
-          "source": "g1n3",
+          "source": "g1n5",
           "sourceIndex": 0,
-          "target": "g1n5",
+          "target": "g1n6",
           "targetIndex": 0
-        },
-        {
-          "kind": "control",
-          "source": "g1n3",
-          "sourceIndex": 0,
-          "target": "g1n5",
-          "targetIndex": 0
-        },
-        {
-          "kind": "order",
-          "source": "g1n2",
-          "target": "g1n5"
-        },
-        {
-          "kind": "sync",
-          "source": "g1n3",
-          "target": "g1n5"
         },
         {
           "kind": "control",
@@ -141,7 +124,7 @@
         },
         {
           "kind": "order",
-          "source": "g1n5",
+          "source": "g1n4",
           "target": "g1n6"
         },
         {
@@ -150,18 +133,16 @@
           "target": "g1n6"
         },
         {
-          "kind": "normal",
+          "kind": "control",
           "source": "g1n6",
           "sourceIndex": 0,
           "target": "g1n7",
           "targetIndex": 0
         },
         {
-          "kind": "control",
+          "kind": "order",
           "source": "g1n6",
-          "sourceIndex": 0,
-          "target": "g1n7",
-          "targetIndex": 0
+          "target": "g1n7"
         },
         {
           "kind": "sync",
@@ -170,21 +151,40 @@
         },
         {
           "kind": "normal",
-          "source": "g1n8",
+          "source": "g1n7",
           "sourceIndex": 0,
-          "target": "g1n9",
+          "target": "g1n8",
           "targetIndex": 0
         },
         {
           "kind": "control",
           "source": "g1n7",
           "sourceIndex": 0,
-          "target": "g1n9",
+          "target": "g1n8",
           "targetIndex": 0
         },
         {
           "kind": "sync",
           "source": "g1n7",
+          "target": "g1n8"
+        },
+        {
+          "kind": "normal",
+          "source": "g1n0",
+          "sourceIndex": 0,
+          "target": "g1n9",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
+          "source": "g1n8",
+          "sourceIndex": 0,
+          "target": "g1n9",
+          "targetIndex": 0
+        },
+        {
+          "kind": "sync",
+          "source": "g1n8",
           "target": "g1n9"
         }
       ],
@@ -194,6 +194,44 @@
       "nodes": [
         {
           "id": "g1n0",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 12,
+              "line": 37
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 11,
+              "line": 37
+            }
+          }
+        },
+        {
+          "id": "g1n1",
+          "kind": "DATA",
+          "label": "9",
+          "origin": "<ORIGIN>",
+          "outputType": "i32",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 26,
+              "line": 35
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 25,
+              "line": 35
+            }
+          }
+        },
+        {
+          "id": "g1n2",
           "kind": "DATA",
           "label": "7",
           "origin": "<ORIGIN>",
@@ -213,7 +251,7 @@
         },
         {
           "callee": "g2",
-          "id": "g1n1",
+          "id": "g1n3",
           "kind": "FUNC",
           "label": "anchor_add",
           "origin": "<ORIGIN>",
@@ -232,7 +270,7 @@
           }
         },
         {
-          "id": "g1n2",
+          "id": "g1n4",
           "kind": "OPER",
           "label": ":io/println",
           "origin": "<ORIGIN>",
@@ -254,7 +292,7 @@
         },
         {
           "callee": "g3",
-          "id": "g1n3",
+          "id": "g1n5",
           "kind": "FUNC",
           "label": "anchor_mul32",
           "origin": "<ORIGIN>",
@@ -273,26 +311,7 @@
           }
         },
         {
-          "id": "g1n4",
-          "kind": "DATA",
-          "label": "9",
-          "origin": "<ORIGIN>",
-          "outputType": "i32",
-          "roles": [],
-          "source": {
-            "end": {
-              "character": 26,
-              "line": 35
-            },
-            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
-            "start": {
-              "character": 25,
-              "line": 35
-            }
-          }
-        },
-        {
-          "id": "g1n5",
+          "id": "g1n6",
           "kind": "OPER",
           "label": ":io/println",
           "origin": "<ORIGIN>",
@@ -314,7 +333,7 @@
         },
         {
           "callee": "g4",
-          "id": "g1n6",
+          "id": "g1n7",
           "kind": "FUNC",
           "label": "effect_mul_zero",
           "origin": "<ORIGIN>",
@@ -333,7 +352,7 @@
           }
         },
         {
-          "id": "g1n7",
+          "id": "g1n8",
           "kind": "OPER",
           "label": ":io/println",
           "origin": "<ORIGIN>",
@@ -350,25 +369,6 @@
             "start": {
               "character": 4,
               "line": 36
-            }
-          }
-        },
-        {
-          "id": "g1n8",
-          "kind": "DATA",
-          "label": "0",
-          "origin": "<ORIGIN>",
-          "outputType": "int",
-          "roles": [],
-          "source": {
-            "end": {
-              "character": 12,
-              "line": 37
-            },
-            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
-            "start": {
-              "character": 11,
-              "line": 37
             }
           }
         },
@@ -574,61 +574,61 @@
       "edges": [
         {
           "kind": "normal",
-          "source": "g4n0",
-          "sourceIndex": 0,
-          "target": "g4n1",
-          "targetIndex": 0
-        },
-        {
-          "kind": "normal",
           "source": "g4n1",
           "sourceIndex": 0,
-          "target": "g4n3",
+          "target": "g4n2",
           "targetIndex": 0
         },
         {
           "kind": "normal",
           "source": "g4n2",
           "sourceIndex": 0,
-          "target": "g4n3",
-          "targetIndex": 1
+          "target": "g4n4",
+          "targetIndex": 0
         },
         {
           "kind": "normal",
           "source": "g4n3",
           "sourceIndex": 0,
           "target": "g4n4",
+          "targetIndex": 1
+        },
+        {
+          "kind": "normal",
+          "source": "g4n4",
+          "sourceIndex": 0,
+          "target": "g4n5",
           "targetIndex": 0
         },
         {
           "kind": "control",
-          "source": "g4n1",
+          "source": "g4n2",
           "sourceIndex": 0,
-          "target": "g4n4",
+          "target": "g4n5",
           "targetIndex": 0
         },
         {
           "kind": "sync",
-          "source": "g4n1",
-          "target": "g4n4"
+          "source": "g4n2",
+          "target": "g4n5"
         },
         {
           "kind": "normal",
+          "source": "g4n0",
+          "sourceIndex": 0,
+          "target": "g4n6",
+          "targetIndex": 0
+        },
+        {
+          "kind": "control",
           "source": "g4n5",
           "sourceIndex": 0,
           "target": "g4n6",
           "targetIndex": 0
         },
         {
-          "kind": "control",
-          "source": "g4n4",
-          "sourceIndex": 0,
-          "target": "g4n6",
-          "targetIndex": 0
-        },
-        {
           "kind": "sync",
-          "source": "g4n4",
+          "source": "g4n5",
           "target": "g4n6"
         }
       ],
@@ -638,6 +638,25 @@
       "nodes": [
         {
           "id": "g4n0",
+          "kind": "DATA",
+          "label": "0",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 12,
+              "line": 30
+            },
+            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
+            "start": {
+              "character": 11,
+              "line": 30
+            }
+          }
+        },
+        {
+          "id": "g4n1",
           "kind": "DATA",
           "label": "5",
           "origin": "<ORIGIN>",
@@ -656,7 +675,7 @@
           }
         },
         {
-          "id": "g4n1",
+          "id": "g4n2",
           "kind": "OPER",
           "label": ":io/println",
           "origin": "<ORIGIN>",
@@ -677,7 +696,7 @@
           }
         },
         {
-          "id": "g4n2",
+          "id": "g4n3",
           "kind": "DATA",
           "label": "0",
           "origin": "<ORIGIN>",
@@ -696,7 +715,7 @@
           }
         },
         {
-          "id": "g4n3",
+          "id": "g4n4",
           "kind": "OPER",
           "label": ":op/mul_l",
           "name": "a",
@@ -716,7 +735,7 @@
           }
         },
         {
-          "id": "g4n4",
+          "id": "g4n5",
           "kind": "OPER",
           "label": ":io/println",
           "origin": "<ORIGIN>",
@@ -733,25 +752,6 @@
             "start": {
               "character": 4,
               "line": 29
-            }
-          }
-        },
-        {
-          "id": "g4n5",
-          "kind": "DATA",
-          "label": "0",
-          "origin": "<ORIGIN>",
-          "outputType": "int",
-          "roles": [],
-          "source": {
-            "end": {
-              "character": 12,
-              "line": 30
-            },
-            "file": "<ROOT>/test/cases/opt/algebra_rules/divergence.cml",
-            "start": {
-              "character": 11,
-              "line": 30
             }
           }
         },

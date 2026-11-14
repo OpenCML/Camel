@@ -72,44 +72,44 @@
         },
         {
           "kind": "normal",
-          "source": "g1n8",
+          "source": "g1n3",
           "sourceIndex": 0,
-          "target": "g1n6",
+          "target": "g1n4",
           "targetIndex": 0
         },
         {
           "kind": "control",
           "source": "g1n2",
           "sourceIndex": 0,
-          "target": "g1n6",
+          "target": "g1n4",
           "targetIndex": 0
         },
         {
           "kind": "sync",
           "source": "g1n2",
-          "target": "g1n6"
+          "target": "g1n4"
         },
         {
           "kind": "normal",
           "source": "g1n2",
           "sourceIndex": 0,
-          "target": "g1n7",
+          "target": "g1n5",
           "targetIndex": 0
         },
         {
           "kind": "control",
-          "source": "g1n6",
+          "source": "g1n4",
           "sourceIndex": 0,
-          "target": "g1n7",
+          "target": "g1n5",
           "targetIndex": 0
         },
         {
           "kind": "sync",
-          "source": "g1n6",
-          "target": "g1n7"
+          "source": "g1n4",
+          "target": "g1n5"
         }
       ],
-      "exit": "g1n7",
+      "exit": "g1n5",
       "id": "g1",
       "name": "main",
       "nodes": [
@@ -174,45 +174,24 @@
         {
           "id": "g1n3",
           "kind": "DATA",
-          "label": "2",
-          "name": "x",
+          "label": "6",
           "origin": "<ORIGIN>",
           "outputType": "int",
           "roles": [],
           "source": {
             "end": {
-              "character": 13,
-              "line": 8
+              "character": 15,
+              "line": 10
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
-              "character": 12,
-              "line": 8
+              "character": 14,
+              "line": 10
             }
           }
         },
         {
           "id": "g1n4",
-          "kind": "DATA",
-          "label": "3",
-          "name": "y",
-          "origin": "<ORIGIN>",
-          "outputType": "int",
-          "roles": [],
-          "source": {
-            "end": {
-              "character": 13,
-              "line": 9
-            },
-            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
-            "start": {
-              "character": 12,
-              "line": 9
-            }
-          }
-        },
-        {
-          "id": "g1n6",
           "kind": "OPER",
           "label": ":io/println",
           "origin": "<ORIGIN>",
@@ -233,28 +212,49 @@
           }
         },
         {
-          "id": "g1n7",
+          "id": "g1n5",
           "kind": "GATE",
           "label": "GATE",
           "outputType": "int",
           "roles": []
         },
         {
-          "id": "g1n8",
+          "id": "g1n6",
           "kind": "DATA",
-          "label": "6",
+          "label": "2",
+          "name": "x",
           "origin": "<ORIGIN>",
           "outputType": "int",
           "roles": [],
           "source": {
             "end": {
-              "character": 15,
-              "line": 10
+              "character": 13,
+              "line": 8
             },
             "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
             "start": {
-              "character": 14,
-              "line": 10
+              "character": 12,
+              "line": 8
+            }
+          }
+        },
+        {
+          "id": "g1n7",
+          "kind": "DATA",
+          "label": "3",
+          "name": "y",
+          "origin": "<ORIGIN>",
+          "outputType": "int",
+          "roles": [],
+          "source": {
+            "end": {
+              "character": 13,
+              "line": 9
+            },
+            "file": "<ROOT>/test/cases/opt/camel_passes/fold_fault.cml",
+            "start": {
+              "character": 12,
+              "line": 9
             }
           }
         }
