@@ -50,9 +50,12 @@ kind = "behavior"
 case = "../../../cases/consistency/match/complete_matches.cml"
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-# "no diagnostic" is not a field: `expect_diagnostic_name` is read only when it is truthy, so an
-# empty value named nothing and checked nothing (test/tools/check-plan-fields.mjs). The claim this
-# entry makes is kept by the script below, which asserts that stderr is empty.
+# This empty name is not an assertion: `validateTest` reads the diagnostic block only when
+# `expect_diagnostic_name` (or the code, or a line) is truthy, so "" is how an entry cancels the
+# name `[defaults]` inherits. It stays because deleting it makes the entry demand
+# `SemanticDiag::MatchWithoutDefault` from a complete match (it did, and the plan was red). What
+# this entry actually claims -- "no diagnostic" -- is asserted by the script below.
+expect_diagnostic_name = ""
 verify_script = """
 const out = input.normalized.stdout.trim()
 const want = ['1 0', 'yes no any any', '0 5', 'ok 12 ParseError'].join('\n')
@@ -69,4 +72,8 @@ args = ["${case}", "std::rgir"]
 backends = ["nvm"]
 backends_agree = []
 expect_exit = 0
+# Cancels the name `[defaults]` inherits for the same reason as `match.complete` above; it asserts
+# nothing itself. This entry checks the graph, not the silence: an empty diagnostic name is not
+# "expect no diagnostic", and the runner has no field that says that.
+expect_diagnostic_name = ""
 expect_output_not_contains = ["match_fail"]

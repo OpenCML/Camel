@@ -288,7 +288,19 @@ function scanTree(rootDir) {
                         }`,
                     )
                 } else if (EMPTY_STRING_IS_NOOP.has(field) && typeof value === 'string' && value.trim() === '') {
-                    add('empty-value', field, "an empty string the runner reads as 'not written'")
+                    // An empty string here is not always decoration: the entry's own value replaces
+                    // the one `[defaults]` gave it, and the runner then skips the block altogether.
+                    // That is how an entry cancels an inherited expectation, and it is the one shape
+                    // of this finding a reader must not "fix" by deleting the line.
+                    const replaced = defaults[field]
+                    add(
+                        'empty-value',
+                        field,
+                        replaced === undefined
+                            ? "an empty string the runner reads as 'not written'"
+                            : `an empty string the runner reads as 'not written': it cancels \`[defaults]\`'s ` +
+                                  `${JSON.stringify(replaced)} and asserts nothing itself`,
+                    )
                 }
             }
             if (kind === 'differential') {

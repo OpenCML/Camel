@@ -1507,6 +1507,15 @@ empty, so `compare_fields = []` on a `differential` entry compares nothing at al
 `differential` entry with no `compare_to` is the one shape that fails loudly (`compare_to target not
 found: undefined`).
 
+That empty string has a second meaning, and it is the live one: because `[defaults]` is merged into
+every entry, `expect_diagnostic_name = ""` on an entry **cancels** the name the block inherited, and
+the diagnostic block is skipped. The entry then holds no diagnostic expectation -- which is what an
+entry that wants "no diagnostic" needs, since the runner has no field for that claim -- but nothing
+verifies the absence either. Deleting the line is not a cleanup: the inherited name comes back and
+the entry starts demanding a diagnostic it never wanted (`match.complete` in
+`consistency/match.plan.toml` is red that way). Read it as "this entry inherits nothing here", keep
+it, and put the actual absence check in `verify_script` when the entry needs one.
+
 `test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
 that writes a field its kind does not evaluate, naming the plan, the line and the entry:
 
