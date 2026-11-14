@@ -291,6 +291,11 @@ struct FrozenGraphView {
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         return graph.normInputsOf(ref);
     }
+    /// Any reader counts here: a frozen graph has no live set yet (`GCGraph::liveNodeCount` counts
+    /// the nodes that are not Dead, which is a payload size, not what the program can still see --
+    /// see docs/handover/questions/2026-11-15-live-node-count-is-not-the-live-set.cn.md). Until that
+    /// set exists this face answers the conservative way: a write some reader reads is not called
+    /// dead, so nothing is deleted on the strength of a set that was never computed.
     bool isRead(gc_node_ref_t ref) const {
         return !graph.normUsersOf(ref).empty() || !graph.withUsersOf(ref).empty();
     }
@@ -307,6 +312,8 @@ struct FrozenGraphView {
 /// way this side spells them (`header` and `payloadOf` where the frozen graph says `node` and
 /// `nodeBodyAs`).
 struct DraftGraphView {
+    explicit DraftGraphView(const GraphDraft &graph) : draft(graph) {}
+
     const GraphDraft &draft;
 
     bool isNamed(gc_node_ref_t ref) const {
@@ -335,13 +342,44 @@ struct DraftGraphView {
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         return draft.normInputsOf(ref);
     }
+    /// Whether a value the write leaves is read by a reader the program can still see. A reader
+    /// inside a node the live set does not reach -- a closure definition nothing calls -- reads a
+    /// value nobody will ever look at, and counting it keeps a dead write alive (design principles
+    /// 9.7: the check is that the write is no root and its value unread). The set is asked here, not
+    /// handed in: one draft, one set, cached on the view.
     bool isRead(gc_node_ref_t ref) const {
-        return !draft.normUsersOf(ref).empty() || !draft.withUsersOf(ref).empty();
+        const auto normUsers = draft.normUsersOf(ref);
+        const auto withUsers = draft.withUsersOf(ref);
+        if (normUsers.empty() && withUsers.empty()) {
+            return false;
+        }
+        if (!live_.has_value()) {
+            live_ = camel::runtime::liveNodesOf(draft);
+        }
+        auto isLive = [this](gc_node_ref_t user) {
+            return std::binary_search(live_->begin(), live_->end(), user);
+        };
+        for (gc_node_ref_t user : normUsers) {
+            if (isLive(user)) {
+                return true;
+            }
+        }
+        for (gc_node_ref_t user : withUsers) {
+            if (isLive(user)) {
+                return true;
+            }
+        }
+        return false;
     }
     bool isGate(gc_node_ref_t ref) const {
         const DraftNodeHeader *header = draft.header(ref);
         return header != nullptr && header->kind == GCNodeKind::Gate;
     }
+
+  private:
+    /// The live set of this draft, asked once. The walk is `camel::runtime::liveNodesOf`, so this
+    /// view and every other reader of the set answer from the same code.
+    mutable std::optional<std::vector<gc_node_ref_t>> live_;
 };
 
 /// Whether a root holds the cell `ref` is. A GATE has no cell of its own -- it forwards the cell of
