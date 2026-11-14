@@ -429,6 +429,18 @@ scratch tree, with `CAMEL_TEST_RESULTS_ROOT` and `CAMEL_TEST_RUN_DIRS_KEEP=1`, a
 
 ## Selecting Plans From A Change
 
+**A green `--changed` run says that the plans the selection named passed. It does not say the tree
+is good, and it cannot: the selection is the thing under test as much as the change is.** When the
+selection is incomplete, the run is green over a smaller question than the one it looks like it
+asked, and nothing in the report is worded differently. That is not a hypothetical: on 2026-11-15 a
+collection added after the entry graph returned in `src/passes/sched/nodevm/nodevm.cpp` selected
+`feat/linear`, `feat/para`, `feat/trans` and `smoke`, passed them at 1356/1352, and left nine
+`defun` tests red on a pushed `develop` -- eight of them killed by a signal -- because no rule tied a
+scheduler file to a plan that runs a program whose function values stay alive. So when a change
+touches a class of file that decides *when an object dies* (a scheduler, a collector, anything that
+names a root), the plans that depend on that timing belong in the rule, and the rule is written from
+the class and not from the last incident.
+
 `node scripts/test.js --changed` takes the files that differ from the base branch (committed,
 staged or not) and runs the plans they touch, so a small change does not start the whole fast
 layer. The base is `origin/develop`; `CAMEL_TEST_BASE` overrides it for a release branch or a
