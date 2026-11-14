@@ -187,7 +187,7 @@ export func matmul_stated::<T>(a: T[...], b: T[...], sa: int[], sb: int[]): T[..
 // a declaration could write is `T[...]`. That type is what put a `float[...]` on a node whose value is
 // the element itself (design principles 5.4): `numel(ct)` in
 // `stdlib/rulesets/transpose.cml#mean_axis_cotangent` read a number as a pointer
-// (docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its signature
+// (docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md). Its signature
 // is computed (`modules/tensor/ops/reduction_ops.cpp#meanAxisStatedInfer`) and recorded in
 // `stdlib/signatures/tensor.cml`.
 //

@@ -1335,12 +1335,19 @@ any Formatter::visitMatchTypeExpr(cst::MatchTypeExpr context) {
 
 /*
 typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
     ;
 */
 any Formatter::visitTypeCase(cst::TypeCase context) {
-    return "case " + formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") +
-           " => " + any_cast<string>(visitBlockExpr(context->lastChild().node()));
+    // `case p when c => body`: a type's case carries a guard the same way a value's does, and
+    // leaving it out changes the AST the text parses to -- the case would then take every type
+    // its pattern matches. Written where it stood, with the same `when` clause printer.
+    string result =
+        "case " + formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |");
+    if (const auto guard = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(guard));
+    }
+    return result + " => " + any_cast<string>(visitBlockExpr(context->lastChild().node()));
 }
 
 /*
@@ -1361,12 +1368,16 @@ any Formatter::visitMatchTypeType(cst::MatchTypeType context) {
 
 /*
 typeArm
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+    : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
     ;
 */
 any Formatter::visitTypeArm(cst::TypeArm context) {
-    return "case " + formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |") +
-           " => " + any_cast<string>(visit(context->type()));
+    string result =
+        "case " + formatList(vec(context->all<cst::TypeCasePattern>()), context, " | ", " |");
+    if (const auto guard = context->get<cst::WhenClause>()) {
+        result += " " + any_cast<string>(visitWhenClause(guard));
+    }
+    return result + " => " + any_cast<string>(visit(context->type()));
 }
 
 /*

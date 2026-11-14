@@ -332,6 +332,15 @@ OtherType *TypeCallType::cloneWithParams(std::span<Type *const> params) const {
 
 // ---- MatchTypeType ----
 
+namespace {
+
+/// Whether any `match type` a build made has carried a guard (see `anyTypeCaseGuardBuilt`).
+bool gTypeCaseGuardBuilt = false;
+
+} // namespace
+
+bool anyTypeCaseGuardBuilt() { return gTypeCaseGuardBuilt; }
+
 TypeCode MatchTypeType::typeCode() {
     static TypeCode code = registerOtherType("MatchType", TypeFlag::Auxiliary);
     return code;
@@ -403,22 +412,35 @@ uint16_t typeShapeBits(const Type *type) {
     return structured ? bits : static_cast<uint16_t>(bits | bit(2));
 }
 
-MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm> arms) {
+MatchTypeType *MatchTypeType::create(
+    Type *subject,
+    std::span<const MatchTypeArm> arms,
+    std::span<const std::pair<std::string, Type *>> pendingGuardBindings) {
     std::vector<Type *> params{subject};
     std::vector<uint16_t> shapes;
     std::vector<uint32_t> identityCounts;
     std::vector<uint32_t> packCounts;
     std::vector<uint32_t> arrayCounts;
+    std::vector<std::shared_ptr<const TypeCaseGuard>> guards;
+    guards.reserve(arms.size());
     std::vector<uintptr_t> key{typeKeyWord(TypeTable::instance().canonical(subject))};
     for (const MatchTypeArm &arm : arms) {
         shapes.push_back(arm.shapes);
         identityCounts.push_back(static_cast<uint32_t>(arm.identities.size()));
         packCounts.push_back(static_cast<uint32_t>(arm.packPatterns.size()));
         arrayCounts.push_back(static_cast<uint32_t>(arm.arrayPatterns.size()));
+        // A guard is part of what this case says, so two cases that differ in it are two
+        // different types. The compiler's tree of the predicate is the guard's identity: it is
+        // built once per case written, and held for as long as the type lives.
+        guards.push_back(arm.guard);
+        if (arm.guard != nullptr) {
+            gTypeCaseGuardBuilt = true;
+        }
         key.push_back(arm.shapes);
         key.push_back(arm.identities.size());
         key.push_back(arm.packPatterns.size());
         key.push_back(arm.arrayPatterns.size());
+        key.push_back(reinterpret_cast<uintptr_t>(arm.guard.get()));
         for (Type *identity : arm.identities) {
             params.push_back(identity);
             key.push_back(typeKeyWord(TypeTable::instance().canonical(identity)));
@@ -442,8 +464,17 @@ MatchTypeType *MatchTypeType::create(Type *subject, std::span<const MatchTypeArm
             Type **copy = OtherType::copyParams(params);
             void *mem   = mm::permSpace().alloc(sizeof(MatchTypeType), alignof(MatchTypeType));
             GUARD(mem != nullptr, "Failed to allocate MatchTypeType from permSpace");
-            return new (mem)
-                MatchTypeType(shapes, identityCounts, packCounts, arrayCounts, params.size(), copy);
+            return new (mem) MatchTypeType(
+                shapes,
+                identityCounts,
+                packCounts,
+                arrayCounts,
+                params.size(),
+                copy,
+                std::move(guards),
+                std::vector<std::pair<std::string, Type *>>(
+                    pendingGuardBindings.begin(),
+                    pendingGuardBindings.end()));
         }));
 }
 
@@ -515,6 +546,10 @@ std::string MatchTypeType::toString() const {
         for (Type *pattern : arrays) {
             text += (written++ == 0 ? "" : " | ") + pattern->toString();
         }
+        if (const auto &guard = armGuard(i)) {
+            // The guard is written before the type the case gives: `case _ when c => T`.
+            text += " when " + (guard->text.empty() ? std::string("...") : guard->text);
+        }
         text += " => " + armResult(i)->toString() + ";";
     }
     return text + " }";
@@ -545,6 +580,38 @@ bool MatchTypeType::assignableFrom(Type *sourceType) const { return sourceType =
 CastSafety MatchTypeType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
 
 OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
+    std::vector<MatchTypeArm> arms = armsFrom(params);
+    // The guards are this case's own and are not among the params: a substitution of the
+    // parameters keeps them, and keeps what they wait for, or a match that still waits for its
+    // subject would lose the predicate it has to run once the subject is known.
+    return create(
+        params[0],
+        arms,
+        std::span<const std::pair<std::string, Type *>>(
+            pendingGuardBindings_.data(),
+            pendingGuardBindings_.size()));
+}
+
+MatchTypeType *MatchTypeType::withPendingGuardBindings(
+    std::span<Type *const> params,
+    std::span<const std::pair<std::string, Type *>> pending) const {
+    std::vector<std::pair<std::string, Type *>> merged = pendingGuardBindings_;
+    for (const auto &entry : pending) {
+        if (std::none_of(merged.begin(), merged.end(), [&](const auto &held) {
+                return held.first == entry.first;
+            })) {
+            merged.push_back(entry);
+        }
+    }
+    if (merged.size() == pendingGuardBindings_.size()) {
+        // Nothing new was bound: the match is what it was, with its params as substituted.
+        return static_cast<MatchTypeType *>(cloneWithParams(params));
+    }
+    std::vector<MatchTypeArm> arms = armsFrom(params);
+    return create(params[0], arms, merged);
+}
+
+std::vector<MatchTypeArm> MatchTypeType::armsFrom(std::span<Type *const> params) const {
     std::vector<MatchTypeArm> arms;
     size_t at = 1;
     for (size_t i = 0; i < armCount(); ++i) {
@@ -560,9 +627,10 @@ OtherType *MatchTypeType::cloneWithParams(std::span<Type *const> params) const {
             arm.arrayPatterns.push_back(params[at++]);
         }
         arm.result = params[at++];
+        arm.guard = armGuard(i);
         arms.push_back(std::move(arm));
     }
-    return create(params[0], arms);
+    return arms;
 }
 
 bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why) {
@@ -616,6 +684,15 @@ bool describeUnevaluatedTypeCall(Type *type, std::string &what, std::string &why
         if (concrete(match->subject())) {
             what = "match type " + match->subject()->toString();
             why  = "no case selects " + match->subject()->toString();
+            bool guarded = false;
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                guarded = guarded || match->armGuard(arm) != nullptr;
+            }
+            if (guarded && typeCaseGuardEvaluator()) {
+                // Some cases were tried and their predicates did not hold: say so, rather than
+                // leave a reader looking for the case that should have taken the type.
+                why += ", and the guard of every case that matched it did not hold";
+            }
             return true;
         }
         return false;
@@ -709,6 +786,54 @@ bool containsTypeCall(Type *type) {
     if (type->isOtherType()) {
         const auto params = static_cast<OtherType *>(type)->paramsSpan();
         return std::any_of(params.begin(), params.end(), containsTypeCall);
+    }
+    return false;
+}
+
+bool containsGuardedTypeMatch(Type *type) {
+    if (type == nullptr) {
+        return false;
+    }
+    switch (type->code()) {
+    case TypeCode::Array:
+        return containsGuardedTypeMatch(static_cast<ArrayType *>(type)->elemType());
+    case TypeCode::Stream:
+        return containsGuardedTypeMatch(static_cast<StreamType *>(type)->elemType());
+    case TypeCode::Tuple: {
+        const auto types = static_cast<TupleType *>(type)->types();
+        return std::any_of(types.begin(), types.end(), containsGuardedTypeMatch);
+    }
+    case TypeCode::Struct: {
+        auto *record     = static_cast<StructType *>(type);
+        const auto types = record->named() ? record->typeArgs() : record->types();
+        return std::any_of(types.begin(), types.end(), containsGuardedTypeMatch);
+    }
+    case TypeCode::Function: {
+        auto *func       = static_cast<FunctionType *>(type);
+        const auto withs = func->withTypesSpan();
+        const auto norms = func->normTypesSpan();
+        return std::any_of(withs.begin(), withs.end(), containsGuardedTypeMatch) ||
+               std::any_of(norms.begin(), norms.end(), containsGuardedTypeMatch) ||
+               (func->hasExitType() && containsGuardedTypeMatch(func->exitType()));
+    }
+    default:
+        break;
+    }
+    if (type->code() == MatchTypeType::typeCode()) {
+        const auto *match = static_cast<const MatchTypeType *>(type);
+        for (size_t arm = 0; arm < match->armCount(); ++arm) {
+            if (match->armGuard(arm) != nullptr) {
+                return true;
+            }
+        }
+        return false;
+    }
+    if (type->isOtherType()) {
+        for (Type *param : static_cast<OtherType *>(type)->paramsSpan()) {
+            if (containsGuardedTypeMatch(param)) {
+                return true;
+            }
+        }
     }
     return false;
 }

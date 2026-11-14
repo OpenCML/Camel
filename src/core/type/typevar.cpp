@@ -837,12 +837,49 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         }
         if (!containsTypeVar(subject) && !containsTypeOf(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
-            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+            // A case may carry a guard (`case p when pred => ...`, design principles 5.5, ruling
+            // of 2026-11-14). A case is taken when its pattern selects the subject *and* the
+            // predicate holds; a predicate that does not hold sends the subject on to the case
+            // written after it. A predicate nobody has answered yet is neither of those: it takes
+            // no case at all and the match waits, because an answer this build does not have is
+            // not an answer of false -- the unguarded case after a guarded one would otherwise
+            // take a subject the guard was written to decide (`FamilyOf<int>` answered `int[5]`,
+            // the default, while `is_numeric::<int>` was never asked).
+            bool undecided = false;
+            const auto guardHolds = [&](size_t arm, const type_bindings_t &binds) {
+                const std::shared_ptr<const TypeCaseGuard> &guard = match->armGuard(arm);
+                if (guard == nullptr) {
+                    return true;
+                }
+                const TypeCaseGuardEvaluator &evaluate = typeCaseGuardEvaluator();
+                if (!evaluate) {
+                    undecided = true;
+                    return false;
+                }
+                // The guard is written in the type function's body, so the types it reads are that
+                // function's parameters, and this substitution is the one that binds them -- the
+                // bindings the match carries are the ones an earlier substitution recorded while
+                // it could not run the predicate (a match with nothing left to bind is not
+                // substituted again).
+                type_bindings_t effective = binds;
+                for (const auto &entry : match->pendingGuardBindings()) {
+                    if (findTypeBinding(effective, entry.first) == nullptr) {
+                        effective.push_back(entry);
+                    }
+                }
+                const std::optional<bool> answer = evaluate(guard, subject, effective);
+                if (!answer.has_value()) {
+                    undecided = true;
+                    return false;
+                }
+                return *answer;
+            };
+            for (size_t arm = 0; arm < match->armCount() && !undecided; ++arm) {
                 // A case that takes the pack apart selects it by the pattern it writes, and its
                 // names stand for the members the pattern reached (design principles 5.6).
                 for (Type *pattern : match->armPackPatterns(arm)) {
                     type_bindings_t taken = bindings;
-                    if (takePackApart(pattern, subject, taken)) {
+                    if (takePackApart(pattern, subject, taken) && guardHolds(arm, taken)) {
                         return substituteTypeVars(match->armResult(arm), taken);
                     }
                 }
@@ -853,7 +890,8 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                     type_bindings_t taken = bindings;
                     ExtentValues values;
                     ExtentPacks packs;
-                    if (takeArrayApart(pattern, subject, taken, values, packs)) {
+                    if (takeArrayApart(pattern, subject, taken, values, packs) &&
+                        guardHolds(arm, taken)) {
                         return substituteExtentValues(
                             substituteTypeVars(match->armResult(arm), taken),
                             values,
@@ -865,7 +903,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                     Type *pattern = substituteTypeVars(identity, bindings);
                     selected |= !containsTypeVar(pattern) && typeEquals(subject, pattern);
                 }
-                if (selected) {
+                if (selected && guardHolds(arm, bindings)) {
                     return substituteTypeVars(match->armResult(arm), bindings);
                 }
             }
@@ -876,6 +914,20 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
             params.reserve(match->paramCount());
             for (Type *param : match->paramsSpan()) {
                 params.push_back(substituteTypeVars(param, bindings));
+            }
+            // A case a guard decided may be the one this substitution could not take, because the
+            // predicate is not a type: it needs a build that runs Camel, and this one may have
+            // none. The bindings are kept with the match -- they are the last thing that knows
+            // what `T` is once the type function is applied -- and the build that runs the
+            // predicate reads them (typevar.h, `typeCaseGuardEvaluator`).
+            bool guarded = false;
+            for (size_t arm = 0; arm < match->armCount(); ++arm) {
+                guarded |= match->armGuard(arm) != nullptr;
+            }
+            if (guarded) {
+                return match->withPendingGuardBindings(
+                    std::span<Type *const>(params.data(), params.size()),
+                    bindings);
             }
             return match->cloneWithParams(params);
         }

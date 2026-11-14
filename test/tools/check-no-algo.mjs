@@ -7,7 +7,8 @@
  * kernels was deleted. This guard is what keeps
  * it gone:
  *
- *   * no `stdlib/algo.cml` and no `modules/algo/` may reappear;
+ *   * no `algo` module may reappear: neither `algo.cml` under `stdlib/` nor a
+ *     `modules/algo/` directory;
  *   * no source, test, example or benchmark may name an `algo:` operator, an `algo::` function
  *     or import `algo`.
  *

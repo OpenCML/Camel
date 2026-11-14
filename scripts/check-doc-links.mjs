@@ -947,7 +947,7 @@ function checkQuestionsHaveDefaults() {
 // The match is deliberately narrow: a path that starts at one of the source roots and ends in a
 // position. A `.cml` name with a position is excluded: it is a tool's output or an example program's
 // line, and rewriting one would falsify the transcript it is quoted in. Two transcripts made this
-// narrow -- a debugger session stepping through `docs/tutorial/examples/folded.cml` and printing its
+// narrow -- a debugger session stepping through `test/cases/tools/debugger/fixtures/folded.cml` and printing its
 // own positions, and a timing line from docs/cli.md that names a case file of
 // `test/cases/perf` with a position after it. (Written this way because the citation check reads
 // comments too: a comment that spells either out with a line number is itself an unpaid citation.)

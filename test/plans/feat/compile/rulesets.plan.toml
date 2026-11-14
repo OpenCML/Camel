@@ -606,3 +606,37 @@ expect_exit = 0
 expect_output_contains = ["in_recompute=0 out_recompute=1", "remat capture value=4.0", "[4.0, 5.0, 6.0]", "asked=1 found=1 missing=0 rules=vmap_rule_add elements=float"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+# A rule's right side is a function value (`x + w => (dx, dw) => dx`), so the result type of the
+# rule's `__rhs` signature is a closure type -- and a function type built on that path interned
+# itself and left its result out of the type table, so the result's `typeId()` was 0. `0` is
+# `kNoTypeId`, which every `TypeId` key in the runtime and the optimiser reads as one and the same
+# type, so this is not a cosmetic hole. The reading is per component and not a count: `std::rulesets
+# sig=true` prints one line per component of every `<rule>__rhs` signature, and every line has to
+# say `interned=yes` -- no `no` (a type the table does not hold) and no `absent` (a signature that
+# declares no such component), because `jvp`'s rules all state a result and all their parameters.
+[[tests]]
+name = "ruleset_rhs_signature_components_are_interned"
+desc = "Every component of every rule's right-side signature is a type the type table holds, read one component at a time. The right side of a rule is a function value, so the signature's result is a closure type, and the closure type a rule instance's signature held was interned itself but not its result: `() => 0.0`'s signature had a result whose `typeId()` was 0, and `0` is the word `kNoTypeId`, which the runtime's `TypeId` keys cannot tell apart from another such type. `std::rulesets sig=true` prints `SIG <graph> <exit|with i|norm i> interned=yes|no|absent type=<text>` for every component of every `<rule>__rhs` graph, and the entry asserts every one of those lines: none is `no`, none is `absent`, and each of the rule's own lines is named."
+kind = "behavior"
+case = "../../../cases/compile/rulesets/rulesets_signature_interned.cml"
+args = ["${case}", "std::rulesets", "sig=true"]
+expect_exit = 0
+expect_output_contains = ["SIG rulesets.jvp::jvp_float_from_int__rhs exit interned=yes", "SIG rulesets.jvp::jvp_pow_d__rhs exit interned=yes"]
+expect_stdout_not_contains = ["interned=no", "interned=absent"]
+verify_script = """
+({ input, assert }) => {
+const sigs = input.normalized.stdout.split('\n').filter(line => line.startsWith('SIG '))
+assert(sigs.length > 0, `no SIG lines: ${input.normalized.stdout.slice(0, 400)}`)
+const missing = sigs.filter(line => line.includes('interned=no'))
+assert(missing.length === 0, `${missing.length} component(s) the type table does not hold: ${missing.slice(0, 4).join(' | ')}`)
+const absent = sigs.filter(line => line.includes('interned=absent'))
+assert(absent.length === 0, `${absent.length} component(s) the signature does not declare: ${absent.slice(0, 4).join(' | ')}`)
+// A floor, not the assertion: the reading has to cover the whole right sides the program holds,
+// and two of them (the closure-valued rules) are named above.
+const read = sigs.filter(line => line.includes('interned=yes'))
+assert(read.length >= 20, `only ${read.length} component(s) read`)
+}
+"""
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

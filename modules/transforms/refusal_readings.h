@@ -18,8 +18,8 @@
  * * `RefusalCause` -- the causes a `REINTERP` line may refuse by, declared once;
  * * `refusalCauseName` -- the one place a cause is spelled, and therefore the only spelling the
  *   printed line has (`skip=` + this word);
- * * `RefusalReading` -- the cause *and the place it names* (the operator's URI, the rule, the callee,
- *   the construct) as a value, written by `noteRefusal` as one machine-readable line
+ * * `RefusalReading` -- the cause *and the place it names* (the operator's URI, the rule, the
+ * callee, the construct) as a value, written by `noteRefusal` as one machine-readable line
  *   (`READING_REFUSAL {json}`, the shape `src/passes/trans/stats/stats.cpp` established with
  *   `GRAPH_STATS`).
  *
@@ -31,7 +31,7 @@
  *
  * A record is written by the site that writes the line, from the same values. Nothing parses the
  * log back: the defect the transpose change removed was exactly that second reading
- * (`docs/handover/questions/questions-2026-10-29.md`, A3).
+ * (`docs/handover/reviews/questions-2026-10-29.md`, A3).
  */
 
 #pragma once
@@ -111,10 +111,10 @@ inline const char *refusalCauseName(RefusalCause cause) {
 }
 
 /// A refusal as a value: the cause, and the place of the program it names it at. The place fields
-/// are the ones a `REINTERP` line states about a refusal -- the operator's URI, the rule's name, the
-/// callee's name, the construct the plumbing could not copy -- and a site fills the ones its line
-/// states. A reading that names a node or a parameter one day adds that field then: a field nothing
-/// records is a promise nothing keeps.
+/// are the ones a `REINTERP` line states about a refusal -- the operator's URI, the rule's name,
+/// the callee's name, the construct the plumbing could not copy -- and a site fills the ones its
+/// line states. A reading that names a node or a parameter one day adds that field then: a field
+/// nothing records is a promise nothing keeps.
 struct RefusalReading {
     std::string_view transform; // "jvp" | "split" | "vmap"
     std::string_view function;
@@ -193,15 +193,15 @@ inline void appendJsonMember(std::string &out, const char *name, std::string_vie
 } // namespace detail
 
 /// The machine-readable half of a refusal, on the diagnostic side and beside the line that says it
-/// in words. One line per refusal, `READING_REFUSAL {json}`: a plan reads the cause and the place it
-/// names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the `expect_refusal`
-/// assertions in the plans).
+/// in words. One line per refusal, `READING_REFUSAL {json}`: a plan reads the cause and the place
+/// it names out of this and never the sentence (`test/tools/reading-refusal.mjs`, the
+/// `expect_refusal` assertions in the plans).
 ///
 /// It always writes to `readings()` and not to the stream the caller handed the transform. A
 /// transform's readings are the diagnostic channel even when a caller collects the line elsewhere
-/// (`modules/transforms/module.cpp`'s `reinterp` pass hands `apply`'s stream down), so the record has
-/// to be readable in one place; a plan reads stderr, and a record that followed the line to whatever
-/// stream that caller had would be a record no plan can find.
+/// (`modules/transforms/module.cpp`'s `reinterp` pass hands `apply`'s stream down), so the record
+/// has to be readable in one place; a plan reads stderr, and a record that followed the line to
+/// whatever stream that caller had would be a record no plan can find.
 inline void noteRefusal(const RefusalReading &reading) {
     std::string json = "{";
     json += "\"transform\":";
@@ -210,7 +210,9 @@ inline void noteRefusal(const RefusalReading &reading) {
     detail::appendJsonString(json, reading.function);
     json += ",\"cause\":";
     const char *word = refusalCauseName(reading.cause);
-    detail::appendJsonString(json, word != nullptr ? std::string_view(word) : std::string_view("none"));
+    detail::appendJsonString(
+        json,
+        word != nullptr ? std::string_view(word) : std::string_view("none"));
     if (!reading.uri.empty()) {
         detail::appendJsonMember(json, "uri", reading.uri);
     }

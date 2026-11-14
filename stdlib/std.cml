@@ -106,7 +106,12 @@ with <
     query: string = "",
     /// Also print what the forward rules of the scalar operators resolve to in the index
     /// (`FORWARD <uri> <family> <head>/<arity> -> <rule>`), which is what a transform reads.
-    forward: bool = false
+    forward: bool = false,
+    /// Also print every component of every rule's `<rule>__rhs` signature with whether the type
+    /// table holds it (`SIG <family> <rule> <exit|with i|norm i> interned=yes|no|absent
+    /// type=<text>`), one line per component: the reading of whether a frozen graph's signature
+    /// is made of interned types, component by component.
+    sig: bool = false
 >
 export func rulesets::<F>(f: F): F! when is_function::<F>()
 

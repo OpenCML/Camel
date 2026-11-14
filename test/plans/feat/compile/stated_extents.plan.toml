@@ -58,7 +58,7 @@ timeout_ms = 20000
 # The law with the mean's answer an element instead of an array: `keepdims = false` on a rank-one
 # operand, which the entry above cannot be. It was eight SIGSEGVs in `numelKernel` while
 # `mean_axis_stated_t` stated its cotangent as `float[...]`
-# (docs/handover/questions/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
+# (docs/handover/reviews/2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md): a port that
 # looks like it already has a rank is a slot nothing converts, so `numel(ct)` read the number's bits
 # as a pointer. That reading is what the port's `T` was for; the ruling of 2026-11-04 04:20 has the
 # port say `T[...]` again and the conversion happen in the compiler, once, where a value's type goes

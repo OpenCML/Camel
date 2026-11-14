@@ -224,7 +224,8 @@ struct TypeCasePattern {
     node_ptr_t type; // Identity only
 };
 
-/// One case of `match type`; the body is child [0]. The patterns are kept in the load because
+/// One case of `match type`; the body is child [0], and a guard written `when c` is child [1].
+/// The patterns are kept in the load because
 /// they are shapes and types, not expressions: the shapes select a kind, and an identity
 /// pattern keeps the type it names so the graph builder can resolve it (and report an unknown
 /// name) where the declaration is read.
@@ -234,12 +235,27 @@ class TypeCaseLoad : public DataLoad {
         : DataLoad(DataType::TypeCase), patterns_(std::move(patterns)) {}
 
     const std::vector<TypeCasePattern> &patterns() const { return patterns_; }
+    /// The condition of a `case p when c` as the program wrote it, or empty when the case writes
+    /// none. The source text and not the generated code: a type built from this case prints the
+    /// guard back (`MatchTypeType::toString`), and what it prints has to be what the declaration
+    /// says, down to the type arguments the predicate is given.
+    const std::string &guardText() const { return guardText_; }
+    void setGuardText(std::string text) { guardText_ = std::move(text); }
     const std::string toString() const override;
     const std::string geneCode() const override;
 
   private:
     std::vector<TypeCasePattern> patterns_;
+    std::string guardText_;
 };
+
+/// The guard a `match type` case writes (`case p when c`), or null when it writes none: child [1]
+/// of the case, after the body (or the type) it answers, which stays child [0]. A case is taken
+/// when its pattern matches *and* the condition holds; one whose guard does not hold sends the
+/// subject on to the case written after it (design principles 5.5, ruling of 2026-11-14).
+inline node_ptr_t typeCaseGuardOf(const node_ptr_t &caseNode) {
+    return caseNode != nullptr && caseNode->size() > 1 ? caseNode->at(1) : nullptr;
+}
 
 /// `static for n, F in fields T => body` or `static for j in indices ts => body`:
 /// children [0] the walked shape (a type for `fields`, a value for `indices`), [1] the body (a
