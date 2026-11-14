@@ -253,10 +253,6 @@ bool isFoldable(const camel::runtime::GraphTransaction &transaction, gc_node_ref
 /// place in its chain.
 ///
 /// So after a fold, a statement that had a place and lost it gets one back: the statement written
-/// after it waits on it. That is the same splice `closeChainOver` performs, done from the place the
-/// node it could not name was in -- the successor heads the chain and the next statement follows it.
-/// A statement that kept a place is left alone, and one that is gone is the fold's own business.
-
 /// Replaces `id` by `replacement` (see replaceNode) and makes the replacement the graph's exit,
 /// output and returned value wherever `id` was one of them. `replaceNode` re-points the value
 /// anchors it knows (output, return), but erasing the node clears the exit anchor, so all three
@@ -268,49 +264,11 @@ void replaceFoldResult(
     const bool wasOutput = draft.outputNode() == id;
     const bool wasReturn = draft.returnNode() == id;
     const auto kind      = draft.returnKind();
-    // The statements that walked after `id` in the chain, and what `id` walked after: the two ends
-    // of the splice the fold has to leave behind (see the comment above `replaceFoldResult`). Read before the node goes.
-    std::vector<gc_node_ref_t> following(draft.syncUsersOf(id).begin(), draft.syncUsersOf(id).end());
-    std::vector<gc_node_ref_t> waited(draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
     replaceNode(transaction, id, replacement);
-    // ... and given to the statement that takes its place.
-    for (gc_node_ref_t successor : following) {
-        if (successor == id || !draft.alive(successor)) {
-            continue; // the fold took it too, and its own replacement carries the place
-        }
-        if (!draft.syncInputsOf(successor).empty() || !draft.syncUsersOf(successor).empty()) {
-            continue; // it kept a place: nothing was lost
-        }
-        // It lost the place it held. Hand it the one the folded node had, or -- when the folded
-        // node stood at the head of the chain -- let it head the chain and give it the statement
-        // written after it as its successor, which is the place a head holds (`holdsChainPlace`).
-        bool spliced = false;
-        for (gc_node_ref_t pred : waited) {
-            if (pred == id || !draft.alive(pred) || pred == successor) {
-                continue;
-            }
-            const gc_node_ref_t only[1] = {pred};
-            draft.setSyncInputs(successor, only);
-            const auto ctrl = draft.ctrlInputsOf(successor);
-            if (std::ranges::find(ctrl, pred) == ctrl.end()) {
-                camel::runtime::appendControlDependency(transaction, pred, successor);
-            }
-            spliced = true;
-            break;
-        }
-        if (spliced) {
-            continue;
-        }
-        for (gc_node_ref_t next : draft.orderUsersOf(successor)) {
-            if (next == id || !draft.alive(next) || next == successor) {
-                continue;
-            }
-            const gc_node_ref_t only[1] = {successor};
-            draft.setSyncInputs(next, only);
-            camel::runtime::appendControlDependency(transaction, successor, next);
-            break;
-        }
-    }
+    // The place `id` held in the chain is not the replacement's (`placeLostStatements`, what
+    // `foldDraft` runs once the round's folds are done: a statement that lost its place is given the
+    // one the statement written after it holds, which is the same walk this wrapper would have to
+    // repeat node by node).
     if (replacement == kInvalidNodeRef) {
         return;
     }
@@ -1361,32 +1319,72 @@ bool foldStaticCast(
 /// predecessor was folded is. A statement that kept a place is left alone, and so is one nothing is
 /// written after: it is then the end of the chain, which is the end of the graph.
 size_t placeLostStatements(camel::runtime::GraphTransaction &transaction) {
-    auto &draft   = transaction.edit();
-    size_t placed = 0;
-    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id) || draft.header(id) == nullptr) {
+    // The question is asked of the read-only view first. Asking for the edit handle marks the
+    // transaction as written, and a graph written by a pass is a graph the engine commits -- and
+    // checks (`Runtime graph ... breaks its edge invariants`). A graph this function has nothing to
+    // do in must be left as untouched as it was found (`resident_cpu_block.cml`).
+    const auto &view = transaction.graph();
+    std::vector<std::pair<gc_node_ref_t, gc_node_ref_t>> plan;
+    for (gc_node_ref_t id = 0; id < view.nodeSlotCount(); ++id) {
+        if (!view.alive(id) || view.header(id) == nullptr) {
             continue;
         }
-        if (!draft.syncInputsOf(id).empty() || !draft.syncUsersOf(id).empty()) {
+        if (!view.syncInputsOf(id).empty() || !view.syncUsersOf(id).empty()) {
             continue; // it holds its place
         }
-        if (!camel::runtime::carriesOrdering(draft, id, true)) {
+        if (!camel::runtime::carriesOrdering(view, id, true)) {
             continue; // a value, not a statement: it needs no place
         }
-        for (gc_node_ref_t next : draft.orderUsersOf(id)) {
-            if (next == id || !draft.alive(next) || !draft.syncInputsOf(next).empty()) {
+        const auto *idHeader = view.header(id);
+        if (idHeader->kind == GCNodeKind::Brch || idHeader->kind == GCNodeKind::Loop) {
+            continue; // what waits on a branch is inside one of its arms, not written after it
+        }
+        for (gc_node_ref_t next : view.orderUsersOf(id)) {
+            if (next == id || !view.alive(next) || !view.syncInputsOf(next).empty()) {
                 continue; // it already follows something in the chain
             }
-            const gc_node_ref_t only[1] = {id};
-            draft.setSyncInputs(next, only);
-            camel::runtime::appendControlDependency(transaction, id, next);
-            ++placed;
+            const auto *nextHeader = view.header(next);
+            // Only a statement waits. A branch, a loop and a plain GATE are not statements of the
+            // chain: a sync edge that ended on one of them is what the edge invariants refuse
+            // (`sync edge ... ends on a node that is not a statement, a chain GATE, or the block's
+            // value`), and one that ended on what waits inside an arm is what the branch-arm
+            // invariant refuses.
+            if (nextHeader->kind == GCNodeKind::Brch || nextHeader->kind == GCNodeKind::Loop ||
+                nextHeader->kind == GCNodeKind::Gate ||
+                !camel::runtime::carriesOrdering(view, next, true)) {
+                continue;
+            }
+            // ... and both ends are statements whose running is the reason the place exists: a pure
+            // computation needs no place, and giving one to it is what turned a `:var/get` into a
+            // node that waits on its branch (`used_arm_exit.cml`).
+            if (isPureOper(transaction, id) || isPureOper(transaction, next)) {
+                continue;
+            }
+            // A chain joins two statements of one block (`sameSyncBlock`, src/runtime/draft.cpp):
+            // an edge that crosses a block boundary is what the edge invariants refuse (`sync edge
+            // ... joins two blocks`), and a statement in another block takes its place in that
+            // block's chain, not here (docs/design/effects/edges.cn.md 4.6).
+            if (!camel::runtime::sameSyncBlock(view, id, next)) {
+                continue;
+            }
+            plan.emplace_back(id, next);
             break;
         }
     }
-    return placed;
+    if (plan.empty()) {
+        return 0;
+    }
+    auto &draft = transaction.edit();
+    for (const auto &[id, next] : plan) {
+        if (!draft.alive(id) || !draft.alive(next)) {
+            continue;
+        }
+        const gc_node_ref_t only[1] = {id};
+        draft.setSyncInputs(next, only);
+        camel::runtime::appendControlDependency(transaction, id, next);
+    }
+    return plan.size();
 }
-
 size_t foldDraft(
     camel::runtime::GraphTransaction &transaction, camel::core::context::Context &ctx,
     std::deque<camel::core::mm::RootHandle> &roots, size_t constantBudget) {
@@ -1528,8 +1526,14 @@ size_t foldDraft(
     // screen skipped is a graph the pass promises not to write (`check_screens`), and a statement
     // with no place is a state folding makes here -- not a state the pass goes looking for in a
     // graph it did not fold.
-    const size_t placed = folded > 0 || removed > 0 ? placeLostStatements(transaction) : 0;
-    return folded + removed + placed;
+    if (folded > 0 || removed > 0) {
+        // Not counted as a fold: it gives a statement back the place a fold took from it, and a
+        // count of its own would run another round of folding for a graph that has nothing left to
+        // fold (that extra round reaches a place-check of its own, and a sync edge across two blocks
+        // is what it finds -- `resident_cpu_block.cml`).
+        (void)placeLostStatements(transaction);
+    }
+    return folded + removed;
 }
 
 // ---------------------------------------------------------------- cse
