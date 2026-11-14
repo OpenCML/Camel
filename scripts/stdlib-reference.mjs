@@ -1851,7 +1851,14 @@ function compareAccesses(entry, op, declared, declaredPure) {
             continue
         }
         covered.add(access)
-        if (item.write && access.mode === 'read') {
+        // An external resource is state the program does not own, so a call that names one reads and
+        // writes it, and the clause says so with `var` -- the rule the compiler enforces as
+        // `SemanticDiag::ExternalResourceNeedsVar` (design principles 3.3). The write flag of an
+        // ambient entry is therefore not compared with the operator's own mode: a read of an external
+        // resource is still written `uses var fs`, and requiring the operator's read to agree would
+        // make that declaration unspellable. The comparison stays for a parameter, whose effect the
+        // operator owns.
+        if (item.write && access.mode === 'read' && access.binding !== 'ambient') {
             problems.push(`${where} declares a write of \`${item.name}\` and the operator only reads it`)
         }
     }

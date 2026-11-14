@@ -207,12 +207,12 @@ export func sample::<T>(xs: T[]): T[] {
 /// Starts the global stream: the same seed gives the same sequence of keys.
 /// @example seed(42)
 #op('rand:seed')
-export func seed(value: int): void uses rng
+export func seed(value: int): void uses var rng
 
 /// The next key of the global stream, and the stream moves on: two calls give two keys.
 /// @example next_key()
 #op('rand:next_key')
-export func next_key(): Key uses rng
+export func next_key(): Key uses var rng
 
 /// A number drawn uniformly from 0 (included) to 1 (excluded) from the global stream.
 /// @example rand()

@@ -5,7 +5,7 @@
 import { rendezvous_point } from test_support
 
 /// The body touches nothing; a call to it touches the resource the import bound.
-func meet(): int uses rendezvous_point {
+func meet(): int uses var rendezvous_point {
     return 0
 }
 

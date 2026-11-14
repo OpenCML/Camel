@@ -165,8 +165,8 @@ class ParserImpl {
     void error(SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at);
     /// The same, with the second token the kind refers to (`aux`): `x as int..5` reports at the
     /// `...` and names the `as` that put a type there.
-    void
-    error(SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at, uint32_t aux);
+    void error(
+        SyntaxError::Kind kind, std::initializer_list<uint8_t> expected, uint32_t at, uint32_t aux);
     void unexpected(std::initializer_list<uint8_t> expected) {
         error(SyntaxError::Kind::Unexpected, expected, pos_);
     }
@@ -198,8 +198,8 @@ class ParserImpl {
     void parseFuncDecl();
     void parseFuncDeclRest(size_t m);
     /// The type parameters a generic declaration declares at its head, `::<T, ...A>` after its name
-    /// (design principles 5.5, 5.6): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ... }`.
-    /// A parameter written with `...` is a pack (kPackName).
+    /// (design principles 5.5, 5.6): `func first::<T>(xs: T[]): T`, `rule sub_self::<T>(x: T) { ...
+    /// }`. A parameter written with `...` is a pack (kPackName).
     void parseTypeParams();
     void parseAnnotatedStmt();
     /// The `@` decorators and `#` tag uses before a declaration or a block, in either order.
@@ -250,10 +250,14 @@ class ParserImpl {
     /// At `resource` naming a resource declaration (offset `n`).
     bool atResourceDecl(uint32_t n) const;
     void parseResourceDecl();
-    /// resourceClause : 'uses' identRef (',' identRef)* | 'pure'
+    /// resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
     /// The clause after a function's result type (design effects plan 3.1): the resources a call
     /// touches. `uses` and `pure` are contextual keywords.
     void parseResourceClause();
+    /// usesEntry : 'var'? identRef
+    /// One resource of the clause, and whether the entry writes it (design principles 3.3): an
+    /// entry without `var` reads the resource, one with `var` writes it.
+    void parseUsesEntry();
     /// whenClause : 'when' ('...' dataExpr | logicalOrExpr)
     /// A declaration's applicability condition, after its signature (design principles 4.4). A
     /// condition written with `...` holds for every member of the pack its body names (5.6).
@@ -384,8 +388,7 @@ class ParserImpl {
     void parseTypeArguments();
     bool literalSignAhead() const {
         if ((cur_ != TK::Minus && cur_ != TK::Plus) ||
-            (peek(1) != TK::Integer && peek(1) != TK::Real &&
-             peek(1) != TK::Imaginary)) {
+            (peek(1) != TK::Integer && peek(1) != TK::Real && peek(1) != TK::Imaginary)) {
             return false;
         }
         return true;

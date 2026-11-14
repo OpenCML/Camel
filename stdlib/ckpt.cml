@@ -51,7 +51,7 @@ func every_member_ckpt::<T>(): bool {
 /// @example { w: 1.0, step: 10 }->save_tree<dir: 'out/ckpt'>
 #op('ckpt:save_tree')
 with <dir: string, dataset_manifest_sha256: string? = null>
-export func save_tree::<T>(tree: T): void! uses fs when has_ckpt_form::<T>()
+export func save_tree::<T>(tree: T): void! uses var fs when has_ckpt_form::<T>()
 
 /// Reads a tree of the type T back from a directory `save_tree` wrote, checking the structure, the
 /// types, the sizes and the SHA-256 sums first: nothing is partly loaded. A
@@ -63,4 +63,4 @@ export func save_tree::<T>(tree: T): void! uses fs when has_ckpt_form::<T>()
 /// @example 'out/ckpt'->load_tree::<{ w: float, step: int }> !! { w: 0.0, step: 0 }
 #op('ckpt:load_tree')
 with <dataset_manifest_sha256: string? = null>
-export func load_tree::<T>(dir: string): T! uses fs, stderr when has_ckpt_form::<T>()
+export func load_tree::<T>(dir: string): T! uses var fs, var stderr when has_ckpt_form::<T>()

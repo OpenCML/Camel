@@ -234,7 +234,8 @@ tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
 funcType           : angledParams? parentParams '=>' typeExpr resourceClause?
-resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
+resourceClause     : ('uses' usesEntry (',' usesEntry)* | 'pure')+
+usesEntry          : 'var'? identRef
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?
