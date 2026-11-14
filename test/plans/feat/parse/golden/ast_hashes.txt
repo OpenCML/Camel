@@ -433,7 +433,7 @@ d4a0932fc585aa7d ok examples/cli/temperature.cml
 01802cf5589b4268 ok examples/data/validate_input.cml
 ae1e40685963a781 ok examples/files/json_config.cml
 d47f0df97ea5aaa1 ok examples/files/read_write.cml
-b78d31a1064a4055 ok examples/functions/closures.cml
+8c4d545d49e55dd1 ok examples/functions/closures.cml
 255a27d19e19879f ok examples/functions/generic_helpers.cml
 1b0e390b0d2f6551 ok examples/ml/export_onnx.cml
 8a64ec52dcf1385b ok examples/ml/train_linear.cml

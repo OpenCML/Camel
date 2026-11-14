@@ -106,7 +106,7 @@ golden = "golden/examples/files_read_write.txt"
 
 [[tests]]
 name = "examples.functions.closures"
-desc = "Closures, composition, with parameters and a counter with its own state."
+desc = "Closures, composition, with parameters, and the state a closure would keep threaded through as values -- the shape the state rule refuses is quoted in the comment, with the diagnostic it now gets, and the golden is unchanged, which is the point: same reading, no cell carried out."
 case = "../../../examples/functions/closures.cml"
 golden = "golden/examples/functions_closures.txt"
 
