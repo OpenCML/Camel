@@ -648,6 +648,74 @@ golden = "golden/graph_pass_unparsable_diagnostic.txt"
 normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
 timeout_ms = 10000
 
+# The same file, reached the other way. A pass module is also read by the pipeline's declaration
+# reader, which opens the module's own `.cml` to learn the passes it declares. The entry file's
+# directory is not a module root (design principles 10.2), so a module found through `-I` is the
+# one this reader sees -- and it used to throw the parser's first error as a
+# `std::runtime_error`, out of the pipeline and past every frame that catches a diagnostic: the
+# process ended with `terminate called after throwing an instance of 'std::runtime_error'` and
+# SIGABRT, while the very same file as the entry program gave its syntax diagnostic. The answer
+# is the one a pass library that does not compile already gets, with the parser's first error as
+# its secondary location, and the same one the module loader would give.
+
+[[tests]]
+name = "stage_module_that_does_not_parse_through_a_module_root"
+desc = "bad::report, whose module is found through -I and does not parse: InvalidPassParameter naming the module, the parse error as a secondary location at the module's own line and column, exit 1, and nothing about the process ending abnormally."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/step.cml"
+args = ["-I", "mods", "${case}", "bad::report", "std::nvm"]
+expect_exit = 1
+expect_output_contains = ["RuntimeDiag::InvalidPassParameter", "its library 'bad' does not compile. [SyntaxDiag::UnexpectedToken: Unexpected 'for'; expected '}'.", "at <ROOT>/test/cases/modules/stage_module_root/mods/bad.cml:3:5]"]
+expect_output_not_contains = ["42", "terminate called", "std::runtime_error", "Uncaught diagnostic"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# The control: the same file, compiled as the program. Its own syntax diagnostic, at its own
+# position, and the count of errors -- the answer every other command's report is compared with.
+
+[[tests]]
+name = "entry_file_that_does_not_parse"
+desc = "The module that does not parse, compiled as the entry program: its syntax diagnostic at its own line and column and one error."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/mods/bad.cml"
+args = ["--error-format", "text", "${case}"]
+expect_exit = 1
+expect_output_contains = ["error[SyntaxDiag::UnexpectedToken]: Unexpected 'for'; expected '}'.", "--> <ROOT>/test/cases/modules/stage_module_root/mods/bad.cml:3:5", "camel: 1 error"]
+expect_output_not_contains = ["terminate called", "InvalidPassParameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# A second loader: an import that names the module through the same root. The import site is
+# where the failure is located (`ModuleParseFailed`), and the module's own parse error follows it
+# as the error it is: two errors, no exception.
+
+[[tests]]
+name = "import_of_a_module_that_does_not_parse_through_a_module_root"
+desc = "A program importing the module that does not parse through -I: ModuleParseFailed at the import, the module's syntax error as its own error, exit 1."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/imports_bad.cml"
+args = ["--error-format", "text", "-I", "mods", "${case}"]
+expect_exit = 1
+expect_output_contains = ["error[SemanticDiag::ModuleParseFailed]: Failed to parse module file: <ROOT>/test/cases/modules/stage_module_root/mods/bad.cml.", "--> <ROOT>/test/cases/modules/stage_module_root/imports_bad.cml:3:1", "SyntaxDiag::UnexpectedToken", "camel: 2 errors"]
+expect_output_not_contains = ["terminate called", "InvalidPassParameter"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
+# A third loader: `--timeit` resolves the same pass and reports the failed iteration through the
+# same diagnostic exit as a run.
+
+[[tests]]
+name = "timeit_stage_module_that_does_not_parse_through_a_module_root"
+desc = "--timeit of bad::report with the module found through -I: the iteration fails with InvalidPassParameter naming the module, not an exception out of the process."
+kind = "negative"
+case = "../../../cases/modules/stage_module_root/step.cml"
+args = ["--error-format", "text", "-I", "mods", "--timeit", "bad::report/1", "${case}"]
+expect_exit = 1
+expect_output_contains = ["[timeit] 1/1 pass=bad::report failed", "InvalidPassParameter", "its library 'bad' does not compile."]
+expect_output_not_contains = ["terminate called", "std::runtime_error"]
+normalizers = ["strip_ansi", "normalize_newlines", "normalize_paths", "trim_trailing_space"]
+timeout_ms = 10000
+
 # The scope's other direction: an import is a dependency of the program, so a module that does
 # not compile makes the program fail at the compile step with that module's diagnostic, before any
 # pass runs. A pass library is not a dependency and is handled by pass resolution instead.
