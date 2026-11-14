@@ -533,7 +533,7 @@ bb4f371c5fc7c439 ok stdlib/random.cml
 6f2d557f8d7349a5 ok stdlib/rules.cml
 c4461fdf2d8323ee ok stdlib/sim.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
-4eda5b43a497eb23 ok stdlib/std.cml
+9f90e55ee60e5feb ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
 cd98045d0d3ef21b ok stdlib/stream.cml
 02367708842c6582 ok stdlib/tensor.cml
@@ -1531,6 +1531,7 @@ a16d1cf037fd4cad ok test/cases/compile/rulesets/rulesets.probe_call_arity.cml
 0601547e27035d3f ok test/cases/compile/rulesets/rulesets.probe_rule_heads.cml
 f13b46ba5b0dbef7 ok test/cases/compile/rulesets/rulesets_lookup.cml
 7fda3c6d7f3c9fec ok test/cases/compile/rulesets/rulesets_missing.cml
+65b96ae7db065b70 ok test/cases/compile/rulesets/rulesets_signature_interned.cml
 78aee4ebaa73982a ok test/cases/compile/rulesets/vmap_array_product.cml
 f9f8cff08712c1df ok test/cases/compile/rulesets/vmap_row_element.cml
 3aea89a1e28c78f0 ok test/cases/compile/rulesets/vmap_ruleset.cml

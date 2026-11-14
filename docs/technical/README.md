@@ -54,6 +54,7 @@
 | [56_cpu_baselines_and_cuda_visible_devices.md](56_cpu_baselines_and_cuda_visible_devices.md) | CPU 基线里的 CUDA 上下文：`torch.optim.Adam(...).step()` 的健康检查会为从不用 GPU 的对照程序建上下文，卡被别的租户占着时以 `CUDA_ERROR_UNKNOWN` 死在第一个数字之前，而 `SGD.step()` 不会；最小复现、与 `--data` 路径无关的 2×2、以及为什么基线要钉 `CUDA_VISIBLE_DEVICES=""` |
 | [57_python_bindings.md](57_python_bindings.md) | Python 绑定：从 Python 调用 Camel 模块的导出函数，数组经 DLPack 零拷贝进出（地址、时间、内存三处实测），诊断与故障按位置映射成 Python 异常，以及 `pip install` 装出来的 wheel 与一个示例 |
 | [58_install_cxx_runtime.md](58_install_cxx_runtime.md) | 安装自带 C++ 运行时：`$ORIGIN` rpath 的两条入口与 `libs/libstdc++.so.6` 的复制规则（链接解析在发行版目录里就不复制）、为什么"运行时太旧"只能由 `bin/camel` 启动器在加载前说出（GLIBCXX 版本要求在 `main` 之前解析，实测七行加载器报错、程序一个字都没跑）、用户看到的两句话与退出码 1、`libs/` 增加 23.9 MB，以及哪些工具没有被包住 |
+| [59_typeid_keys_and_the_type_the_table_does_not_hold.md](59_typeid_keys_and_the_type_the_table_does_not_hold.md) | `TypeId` 作键时 `kNoTypeId`（0）成为通配符：`sameCanonicalType` 的相反一格、0 的两个来源（`typeIdOf` 的 debug 断言与 `canonicalId` 不检查 `holds`）、实测 30 处下游站点（8 个符号）的清单，以及"规则右值是闭包"那一批类型的源头修法（函数类型连退出分量一起入表） |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
