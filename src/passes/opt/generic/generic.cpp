@@ -642,6 +642,91 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
     const std::vector<gc_node_ref_t> branchChainPreds(
         draft.syncInputsOf(brch).begin(),
         draft.syncInputsOf(brch).end());
+    const auto placeablePred = [&](gc_node_ref_t pred) {
+        return pred != brch && pred != join && pred != kInvalidNodeRef && draft.alive(pred) &&
+               !removed(pred);
+    };
+    // Where the branch stood, when the branch itself stands in no chain of its block: code the
+    // builder or the inliner spliced beside the chain, entered by a control edge (a statement of an
+    // arm is entered from its BRCH that way), leaves the branch ordered but chained to nothing. The
+    // place it then occupies is read off the chain it sits beside: the statement the branch ran
+    // after (`brchPreds`, the edges it waits on whichever kind they are) and the one statement that
+    // successor continues with. The arm's chain goes between them -- after `slot`, before `heir` --
+    // which is 5.7's "the arm's statements take the branch's place" for a place that was only ever
+    // derived from control edges.
+    //
+    // `heir` is reported only when exactly one statement follows `slot` and it is not the branch
+    // itself, not code of the arms that go away, and not the arm's own tail (a statement the arm
+    // already follows). A place with no successor is left alone: there is nothing to splice into,
+    // and a branch that cannot be placed is not dissolved below.
+    const auto spliceHeir = [&](gc_node_ref_t *slotOut) {
+        for (gc_node_ref_t pred : brchPreds) {
+            if (!placeablePred(pred)) {
+                continue;
+            }
+            const gc_node_ref_t slot = camel::runtime::chainExitOf(draft, pred);
+            if (slot == kInvalidNodeRef || !draft.alive(slot) || removed(slot) || slot == brch ||
+                slot == join) {
+                continue;
+            }
+            gc_node_ref_t heir = kInvalidNodeRef;
+            size_t count       = 0;
+            for (gc_node_ref_t user : draft.syncUsersOf(slot)) {
+                if (user == brch || user == join || removed(user) || inArm(user) ||
+                    user == armChainTail) {
+                    continue;
+                }
+                heir = user;
+                ++count;
+            }
+            if (count == 1 && heir != kInvalidNodeRef && heir != armChainHead) {
+                if (slotOut != nullptr) {
+                    *slotOut = slot;
+                }
+                return heir;
+            }
+        }
+        return kInvalidNodeRef;
+    };
+    // A branch is dissolved only where the arm's chain can take the place it held: entered from
+    // where the branch stood, and followed by the statements that waited on it (5.7). Where neither
+    // the branch's own chain predecessor nor the place derived from its control edges can be
+    // entered, the arm's statements would hang in no chain of the graph and an effect among them
+    // would stop running, silently (2, 9.7). The branch is left standing there instead: the runtime
+    // then takes it as the program wrote it, which costs the fold and keeps the effect.
+    const auto armPlaceable = [&] {
+        for (gc_node_ref_t pred : branchChainPreds) {
+            if (placeablePred(pred)) {
+                return true;
+            }
+        }
+        for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
+            if (placeablePred(pred)) {
+                return true;
+            }
+        }
+        // The place the branch held is also handed to the arm's tail: the statement written after
+        // the branch waits on the arm's code, so the arm's statements are reached from the graph's
+        // result and run (2) even where the entry side had no place to write.
+        for (gc_node_ref_t user : draft.syncUsersOf(join)) {
+            if (user != brch && user != armChainHead && draft.alive(user) && !removed(user)) {
+                return true;
+            }
+        }
+        return spliceHeir(nullptr) != kInvalidNodeRef;
+    };
+    if (armChainHead != kInvalidNodeRef) {
+        bool armCarriesOrder = false;
+        for (gc_node_ref_t n : armNodes) {
+            if (inArmRegion(n) && carriesOrdering(draft, n, true)) {
+                armCarriesOrder = true;
+                break;
+            }
+        }
+        if (armCarriesOrder && !armPlaceable()) {
+            return false;
+        }
+    }
     if (armChainTail != kInvalidNodeRef) {
         armTail = armChainTail;
     }
@@ -784,12 +869,48 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         for (gc_node_ref_t pred : draft.syncInputsOf(armChainHead)) {
             entered = entered || !erasedByBranch(pred);
         }
+        bool placed = entered;
         if (!entered) {
             for (gc_node_ref_t pred : branchChainPreds) {
-                if (pred != armChainHead && pred != join && draft.alive(pred) && !removed(pred)) {
-                    chainTo(armChainHead, pred);
-                    break;
+                if (pred == armChainHead || pred == join || !draft.alive(pred) || removed(pred)) {
+                    continue;
                 }
+                // The place the branch stood in is its predecessor's chain exit, and the branch is
+                // that place's successor. A block's statements are one chain (5.3), and the chain a
+                // place may continue is the one whose successor is gone: the branch is one of the
+                // nodes erased below, so its successor slot is released before the arm's head takes
+                // it. Without this the head is left unentered whenever the arm's code is the only
+                // thing that keeps an effect of the arm reachable, and the effect stops running
+                // (the exemplar `05_effect_order`).
+                const gc_node_ref_t slot = camel::runtime::chainExitOf(draft, pred);
+                if (slot == kInvalidNodeRef || !draft.alive(slot) || removed(slot)) {
+                    continue;
+                }
+                const std::vector<gc_node_ref_t> slotUsers(
+                    draft.syncUsersOf(slot).begin(),
+                    draft.syncUsersOf(slot).end());
+                for (gc_node_ref_t user : slotUsers) {
+                    if (erasedByBranch(user) && draft.alive(user)) {
+                        draft.setSyncInputs(user, {});
+                    }
+                }
+                chainTo(armChainHead, pred);
+                placed = true;
+                break;
+            }
+        }
+        // The branch stood in no chain of its own: its place is the one derived from the edges it
+        // waits on. The arm's chain takes that place, and the statement that place continued
+        // follows the arm's tail instead -- the arm's code is the block's code now, so its
+        // statements come before what is written after the branch (5.7).
+        if (!placed) {
+            gc_node_ref_t slot       = kInvalidNodeRef;
+            const gc_node_ref_t heir = spliceHeir(&slot);
+            if (heir != kInvalidNodeRef && armChainTail != kInvalidNodeRef &&
+                draft.alive(armChainTail) && draft.alive(heir)) {
+                draft.setSyncInputs(heir, {});
+                (void)draft.appendChainStatement(heir, armChainTail);
+                chainTo(armChainHead, slot);
             }
         }
     }
