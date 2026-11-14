@@ -72,8 +72,9 @@ args = ["${case}", "std::rgir"]
 backends = ["nvm"]
 backends_agree = []
 expect_exit = 0
-# Cancels the name `[defaults]` inherits for the same reason as `match.complete` above; it asserts
-# nothing itself. This entry checks the graph, not the silence: an empty diagnostic name is not
-# "expect no diagnostic", and the runner has no field that says that.
-expect_diagnostic_name = ""
+# The absence of a diagnostic, said properly: `[defaults]` gives this entry a diagnostic name, and
+# `expect_no_diagnostics` stands in place of that expectation and asserts that nothing was recorded.
+# The empty `expect_diagnostic_name` this replaces only cancelled the inherited name and asserted
+# nothing (docs/handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+expect_no_diagnostics = true
 expect_output_not_contains = ["match_fail"]

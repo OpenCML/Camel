@@ -919,6 +919,7 @@ Behavior-style tests may combine:
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
 - `expect_diagnostic_column`
+- `expect_no_diagnostics`
 - `expect_refusal`
 - `verify_script`
 - `verify_script_path`
@@ -1494,6 +1495,7 @@ about failing. Which fields each kind evaluates:
 | `expect_refusal`, `expect_diagnostic_*` | yes | yes | yes | yes | yes | yes |
 | `verify_script`, `verify_js`, `verify_script_path` | yes | yes | yes | yes | yes | yes |
 | `normalizers` | yes | yes | yes | yes | yes | yes |
+| `expect_no_diagnostics` | yes | yes | yes | yes | yes | yes |
 | `golden`, `snapshot_stream`, `snapshot_compare` | no | no | no | yes | no | no |
 | `compare_to`, `compare_fields` | no | no | no | no | yes | no |
 | `perf_budget_mean_ms`, `perf_budget_tolerance_pct` | no | no | no | no | no | yes |
@@ -1507,14 +1509,19 @@ empty, so `compare_fields = []` on a `differential` entry compares nothing at al
 `differential` entry with no `compare_to` is the one shape that fails loudly (`compare_to target not
 found: undefined`).
 
-That empty string has a second meaning, and it is the live one: because `[defaults]` is merged into
-every entry, `expect_diagnostic_name = ""` on an entry **cancels** the name the block inherited, and
-the diagnostic block is skipped. The entry then holds no diagnostic expectation -- which is what an
-entry that wants "no diagnostic" needs, since the runner has no field for that claim -- but nothing
-verifies the absence either. Deleting the line is not a cleanup: the inherited name comes back and
-the entry starts demanding a diagnostic it never wanted (`match.complete` in
-`consistency/match.plan.toml` is red that way). Read it as "this entry inherits nothing here", keep
-it, and put the actual absence check in `verify_script` when the entry needs one.
+**"No diagnostic at all"** is `expect_no_diagnostics = true`: the entry fails when the run recorded
+any diagnostic. It stands in place of `expect_diagnostic_*` rather than joining them, because an
+entry cannot both require a diagnostic and require none; an entry that does not name the field keeps
+exactly the meaning it had. Before this field existed the claim could not be made, and
+`expect_diagnostic_name = ""` was the nearest thing -- which is not the same thing at all: because
+`[defaults]` is merged into every entry, that empty value **cancels** the name the block inherited
+and then the whole diagnostic block is skipped. The entry holds no expectation, and nothing verifies
+the absence. Deleting such a line is not a cleanup either: the inherited name comes back and the
+entry starts demanding a diagnostic it never wanted (`match.complete` in
+`consistency/match.plan.toml` was red that way when the line was deleted). Read it as "this entry
+inherits nothing here", and write the absence as `expect_no_diagnostics = true` -- the reasoning and
+the readings are in
+[`docs/handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
 
 `test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
 that writes a field its kind does not evaluate, naming the plan, the line and the entry:

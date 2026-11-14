@@ -1,11 +1,11 @@
 {
     "comment": "The number test/tools/check-plan-fields.mjs reported when it was last accepted: findings may not grow past `count`, and no category may grow past its own entry. Moving it down is the point; moving it up needs the entry to be right and the reading to be wrong. Rewrite this file with `node test/tools/check-plan-fields.mjs --update-baseline`, never by hand.",
-    "count": 332,
+    "count": 331,
     "counted": {
         "kind-unread": 5,
         "unread-field": 231,
-        "empty-value": 96
+        "empty-value": 95
     },
     "takenAt": "2026-11-14",
-    "revision": "097a7929c"
+    "revision": "49fabfdd6"
 }

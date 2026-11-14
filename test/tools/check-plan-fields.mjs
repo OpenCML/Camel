@@ -37,6 +37,9 @@
  *   expect_refusal                             yes       yes      yes       yes        yes          yes
  *   expect_diagnostic_name / _code             yes       yes      yes       yes        yes          yes
  *   expect_diagnostic_line / _column           yes       yes      yes       yes        yes          yes
+ *   expect_no_diagnostics                      yes       yes      yes       yes        yes          yes
+ *                                              (the absence of a diagnostic; when it is set the
+ *                                              four rows above are not evaluated for that entry)
  *   verify_script / verify_js / _path          yes       yes      yes       yes        yes          yes
  *   normalizers                                yes       yes      yes       yes        yes          yes
  *   golden                                     no        no       no        yes        no           no
@@ -122,6 +125,10 @@ const ALWAYS_EVALUATED = [
     'expect_diagnostic_code',
     'expect_diagnostic_line',
     'expect_diagnostic_column',
+    // The absence of a diagnostic, which a plan could not say before this field existed
+    // (`expect_diagnostic_name = ""` only cancels an inherited name). It stands in place of the four
+    // rows above when it is set, so an entry naming it is not also expected to name a diagnostic.
+    'expect_no_diagnostics',
     'verify_script',
     'verify_js',
     'verify_script_path',
@@ -593,6 +600,28 @@ function verifyRunner(runnerPath) {
     for (const kind of Object.keys(GATED)) {
         if (!gatedKinds.includes(kind)) {
             failures.push(`the table has a ${kind} block and validateTest has none any more`)
+        }
+    }
+    // The other half of the table: a field listed as evaluated for every kind has to be read by the
+    // runner at all. A row added for a field nobody reads is the same defect one level up -- the
+    // table would then certify an entry the runner ignores -- so the name is looked for in the
+    // source, not only counted here. Two fields cannot be found that way and say why.
+    const readIndirectly = new Map([
+        [
+            'expect_stdout_exact',
+            'read as `test[field]` by the loop over [expect_stdout_exact, expect_stdout] in validateTest',
+        ],
+        ['expect_stdout', 'the legacy name of the same loop'],
+    ])
+    for (const field of ALWAYS_EVALUATED) {
+        if (readIndirectly.has(field)) {
+            continue
+        }
+        if (!new RegExp(`\\btest\\.${field}\\b`).test(source)) {
+            failures.push(
+                `the table says '${field}' is evaluated for every kind and run-tests.mjs never reads ` +
+                    `test.${field}: either the table is wrong or the runner dropped the field`,
+            )
         }
     }
     for (const failure of failures) {
