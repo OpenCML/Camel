@@ -143,7 +143,7 @@ class RuntimeGraphDraftSession {
         GCGraph *runtimeRoot, std::source_location location = std::source_location::current());
 
     /// The program the session rewrites; after a commit, the program it produced.
-    const Program *program() const { return program_; }
+    const Program *program() const { return program_.get(); }
     /// The program the drafts of the session read the graphs they refer to in: `program()`
     /// and what the session added to it (the graphs of function values of other programs it
     /// met, the specializations it made). Not a published program.
@@ -276,14 +276,21 @@ class RuntimeGraphDraftSession {
     ProgramSpecializationKey programKeyOf(const RuntimeSpecializationKey &key) const;
 
     camel::core::context::context_ptr_t context_;
-    const Program *program_ = nullptr;
+    /// The program the session rewrites, and after a commit the one it produced. Held in C++
+    /// through ProgramHold: a commit's program is a program of the context's until something
+    /// adopts or installs it, and the session is what holds it in the meantime.
+    ProgramHold program_;
     /// Whether a commit may replace the context's program: true when the session was opened over
     /// that program (it may have been overtaken since: the commit merges), or when the program it
     /// works on is the context's now (someone installed it). A session over a function value's
     /// program (a detached program: the ONNX export, a tile region, a gradient) hands its commit
     /// back to its owner and never publishes it, whatever the context's program is.
     bool mayPublish_ = false;
-    mutable std::unique_ptr<Program> work_;
+    /// The working copy of the program: the table the drafts are built and read in. A program of
+    /// the context's (reserved, so that what it binds is freed like any other graph) and held
+    /// through ProgramHold, because a commit encodes into it while the drafts' conditions may run
+    /// Camel code -- a safepoint.
+    mutable ProgramHold work_;
     GCGraph *runtimeRoot_ = nullptr;
     GraphState graphState_ = GraphState::Executable;
     std::unordered_map<GCGraph *, std::unique_ptr<DraftEntry>> drafts_;
@@ -335,9 +342,9 @@ class RuntimeGraphDraftSession {
 /// transform synthesizes. Each member is reserved first: the returned GraphId is the graph's,
 /// wherever a graph is named in the drafts (FUNC callees, static Function values), and encode()
 /// builds the graphs. The members form a program with the graphs of the one the group is made
-/// over (program()). That program is held here, in C++, so the group pins it for as long as the
-/// group lives (GCGraphManager::pin): a reserved program nothing reaches is a program whose
-/// static values the collector does not keep fresh, and a group is made inside a running call.
+/// over (program()). That program is held here, in C++ -- through ProgramHold, which roots it for
+/// as long as the group lives: a reserved program nothing reaches is a program whose static values
+/// the collector does not keep fresh, and a group is made inside a running call.
 class GraphDraftGroup {
   public:
     GraphDraftGroup(const camel::core::context::context_ptr_t &context, const Program *base);
@@ -365,7 +372,7 @@ class GraphDraftGroup {
     /// The program of the group: the graphs of the program it is made over, and the members
     /// once encoded, the first one reserved as its root. A function value made for a member
     /// before encode() can name it in this program; it resolves once the group is encoded.
-    const Program *program() const { return program_; }
+    const Program *program() const { return program_.get(); }
 
   private:
     struct Member {
@@ -381,8 +388,9 @@ class GraphDraftGroup {
     camel::core::context::context_ptr_t context_;
     std::unordered_map<GraphId, std::unique_ptr<Member>> members_;
     std::vector<GraphId> order_;
-    Program *program_ = nullptr;
-    bool encoded_     = false;
+    /// The group's program, and the root that holding it in C++ takes (ProgramHold).
+    ProgramHold program_;
+    bool encoded_ = false;
 };
 
 // A session hands out the graph it edits by reference, and a pass binds what it is given for as

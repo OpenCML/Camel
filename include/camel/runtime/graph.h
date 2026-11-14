@@ -64,6 +64,10 @@ namespace camel::core::type {
 class FunctionType;
 }
 
+namespace camel::core::context {
+class Context;
+}
+
 namespace camel::runtime {
 
 class Program;
@@ -1348,10 +1352,15 @@ class GCGraphManager {
     /// rewrites a graph has the program it was given.
     const Program *programOf(const GCGraph *graph) const;
     /// Keeps a program whose holder keeps it outside the heap alive: the definition graphs of
-    /// operators, for as long as the context (camel/runtime/definitions.h), and a draft group's
-    /// program, for as long as the group (draft_session.h#GraphDraftGroup). A holder that is not
-    /// in the heap is a holder the collector cannot see, so the holder says so here; unpin() is
-    /// what says it is done, and the next sweep frees the program if nothing else reaches it.
+    /// operators, for as long as the context (camel/runtime/definitions.h), and every program a
+    /// C++ holder keeps across a safepoint, through the handle that says so
+    /// (camel/runtime/graph.h#ProgramHold). A holder that is not in the heap is a holder the
+    /// collector cannot see, so the holder says so here; unpin() is what says it is done, and the
+    /// next sweep frees the program if nothing else reaches it.
+    ///
+    /// A pin is counted: `pinned_` may name one program more than once, and unpin() drops one
+    /// name, so two holders of one program (a session's committed program and the context's own
+    /// root) do not take each other's root away.
     ///
     /// This is not a nicety: a program the collector does not reach is a program whose graphs it
     /// does not trace, and a collection that falls in that window moves the values their static
@@ -1397,6 +1406,8 @@ class GCGraphManager {
     std::unordered_set<GCGraph *> unbound_;
     const Program *current_ = nullptr;
     std::vector<const Program *> detached_;
+    /// One name per live pin (GCGraphManager::pin): a program held by two ProgramHold handles is
+    /// named twice, and unpin() drops one name.
     std::vector<const Program *> pinned_;
     std::vector<const Program *> provisional_;
     std::vector<const Program *> runRoots_;
@@ -1409,6 +1420,57 @@ class GCGraphManager {
     void noteGrowth();
     void collectIfGrown();
     void noteSwept();
+};
+
+/// A Program a holder in C++ keeps, and the root that keeping it takes.
+///
+/// The collector reaches a Program through the heap or through a root. A holder in C++ -- a draft
+/// group's program, a session's committed program and its working copy, a pass's state -- is
+/// neither, so it roots the program through this handle: the constructor pins (GCGraphManager::pin)
+/// and the destructor unpins. A program the collector does not reach is a program whose graphs it
+/// does not trace, and a collection that falls in that window moves the values their static areas
+/// hold and leaves the old addresses in the slots: measured under --gc-check poison on the two
+/// `modules.nn` large-bytecode cases, a program held only by a C++ member is rc=134, and a
+/// `--gc-stress safepoint=1,kind=minor` run without poison segfaults for the same reason.
+///
+/// This is the only way a class member may name a Program: `scripts/check-program-holders.mjs`
+/// reports every other one (a bare `Program *`, a `shared_ptr<Program>`), and `ProgramHold` itself
+/// and `GCGraphManager` are the two names it exempts.
+///
+/// Move-only: the root has one owner, and moving the handle moves the root. Pins are counted, so
+/// two handles on one program unroot it only when both are gone.
+class ProgramHold {
+  public:
+    ProgramHold() = default;
+    /// Roots `program` in `context` until this handle is destroyed or reset. A null program is
+    /// allowed -- a holder that has not been given its program yet -- and roots nothing.
+    ProgramHold(camel::core::context::Context &context, const Program *program);
+    ~ProgramHold();
+
+    ProgramHold(const ProgramHold &)            = delete;
+    ProgramHold &operator=(const ProgramHold &) = delete;
+    ProgramHold(ProgramHold &&other) noexcept;
+    ProgramHold &operator=(ProgramHold &&other) noexcept;
+
+    /// The program, for the holder to use it. pin/unpin name a program by a const pointer and no
+    /// Program is const in fact -- the const form is a read-only view of an object the manager
+    /// rewrites -- so the handle keeps the object itself, and a holder that reserved the program
+    /// builds it through here.
+    Program *get() const { return program_; }
+    Program &operator*() const { return *program_; }
+    Program *operator->() const { return program_; }
+    explicit operator bool() const { return program_ != nullptr; }
+    /// The program, as a name an argument or a comparison can take. It is the object the handle
+    /// roots, so it is alive as long as the handle is -- and no longer: it is not a way to keep
+    /// one, which is what the handle is for.
+    operator const Program *() const { return program_; }
+
+    /// Unroots the program now; the sweep that follows frees it when nothing else reaches it.
+    void reset();
+
+  private:
+    camel::core::context::Context *context_ = nullptr;
+    Program *program_                       = nullptr;
 };
 
 } // namespace camel::runtime
