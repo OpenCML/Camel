@@ -31,7 +31,7 @@
  *                       `for`; tag: camel::core::LoopKind
  *     TMTCH             children: the subject type, then the TCASEs
  *     TCASE             tag: the shape mask; payload: the identity pattern types (if any);
- *                       child 0: the body
+ *                       child 0: the body; Tree::caseGuardOf: the guard, when it writes one
  *     SFOR              payload: the name of the walked entry, then the name of its type
  *                       (empty for `indices`); flag A: the generator is `indices`
  *     SLOOP             payload: the names of the state, then the name of the walked entry and

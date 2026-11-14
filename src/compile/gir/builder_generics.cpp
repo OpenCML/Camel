@@ -2842,6 +2842,14 @@ Type *Builder::resolveTypeNode(Type *type, const GCT::node_ptr_t &at) {
     }
     Type *bound = boundType(type);
     if (containsTypeCall(bound) && !containsTypeVar(bound)) {
+        // A guard the type layer could not read is the reason the match is still there, when there
+        // is one: pointing at the type would send the reader to the wrong place, since the case's
+        // pattern may well reach it.
+        if (pendingCaseGuardProblem_.has_value() && containsGuardedTypeMatch(bound)) {
+            const WhenResult pending = *pendingCaseGuardProblem_;
+            pendingCaseGuardProblem_.reset();
+            reportWhenProblem(pending, bound->toString(), at);
+        }
         // The variables are bound and the type function does not accept what they were bound to.
         std::string what = bound->toString();
         std::string why  = "it is not defined for its argument";

@@ -1405,7 +1405,18 @@ class Builder {
     // instance replaced.
     Type *boundType(Type *type) const {
         Type *substituted = camel::core::type::substituteTypeVars(type, typeBindings_);
-        return camel::core::type::substituteExtentValues(substituted, extentBindings_);
+        substituted = camel::core::type::substituteExtentValues(substituted, extentBindings_);
+        // A `match type` case a guard decides is selected inside `substituteTypeVars`, which asks
+        // this build for the predicate's answer (typevar.h `typeCaseGuardEvaluator`). A type with
+        // nothing left to bind is not substituted at all, so the last step is taken here: its
+        // cases are settled, and no type leaves this builder with a selected-by-a-guard case still
+        // undecided. A program that writes no guard pays one flag test (anyTypeCaseGuardBuilt).
+        if (camel::core::type::anyTypeCaseGuardBuilt() &&
+            camel::core::type::containsGuardedTypeMatch(substituted)) {
+            substituted = camel::core::type::expandTypePacks(substituted);
+            substituted = camel::core::type::substituteExtentValues(substituted, extentBindings_);
+        }
+        return substituted;
     }
     // Whether a declared function type is still generic under the current bindings.
     bool isGenericHere(Type *type) const {
@@ -1898,6 +1909,69 @@ class Builder {
         const camel::core::type::type_bindings_t &bindings,
         const std::unordered_map<std::string, data_ptr_t> &withValues,
         const generic_template_ptr_t &declaring = nullptr, const ModuleUnit *contextUnit = nullptr);
+    /// The guard of a `match type` case (`case p when c => ...`), read in the module that writes
+    /// it. A guard has no signature of its own -- it is not a declaration, it is an expression of
+    /// a case -- so it is read with nothing but the type arguments of the instance and the names
+    /// the case's pattern bound. This is also what `typeCaseGuardEvaluator` calls: the type layer
+    /// asks for the answer while it selects a case, and this reads the Camel predicate that
+    /// answers it (design principles 5.5, ruling of 2026-11-14).
+    WhenResult evaluateCaseGuard(
+        const camel::core::type::TypeCaseGuard &guard, const camel::core::type::type_bindings_t &bindings);
+    /// The guard a case writes, read where it is written: `moduleContext` is the module's own
+    /// pointer (the compiler's, held opaquely in the guard) or null for a case of a value-level
+    /// `match type`, whose guard is read where the match is. What the predicate may ask about is
+    /// `bindings`: the type arguments of the instance and the names the case's pattern bound.
+    WhenResult evaluateGuardNode(
+        const GCT::Node *condition, const void *moduleContext,
+        const camel::core::type::type_bindings_t &bindings);
+    /// The answer of a case's guard for the type layer: true, false, or nothing when the predicate
+    /// could not be settled. Installed for as long as this build compiles (GuardScope).
+    std::optional<bool> caseGuardAnswer(
+        const std::shared_ptr<const camel::core::type::TypeCaseGuard> &guard,
+        camel::core::type::Type *subject, const camel::core::type::type_bindings_t &bindings) const;
+    /// Makes this builder the one the type layer asks for case guards, and puts the previous one
+    /// back when it goes out of scope. Nested builds (a predicate's instance inside the selection
+    /// that asks for it) each answer for themselves.
+    class GuardScope {
+      public:
+        explicit GuardScope(Builder &self)
+            : previous_(camel::core::type::typeCaseGuardEvaluator()) {
+            // The type layer selects a `match type` case deep inside `substituteTypeVars`, with no
+            // builder in hand; this makes `self` the one it asks, and the case's own guard says
+            // which module reads it (evaluateCaseGuard).
+            camel::core::type::typeCaseGuardEvaluator() =
+                [&self](
+                    const std::shared_ptr<const camel::core::type::TypeCaseGuard> &guard,
+                    camel::core::type::Type *subject,
+                    const camel::core::type::type_bindings_t &bindings) {
+                    return self.caseGuardAnswer(guard, subject, bindings);
+                };
+        }
+        ~GuardScope() { camel::core::type::typeCaseGuardEvaluator() = previous_; }
+        GuardScope(const GuardScope &)            = delete;
+        GuardScope &operator=(const GuardScope &) = delete;
+
+      private:
+        camel::core::type::TypeCaseGuardEvaluator previous_;
+    };
+    /// How many Camel predicates this build ran, how many of those came from the cache, and how
+    /// many distinct (function, type arguments) pairs were asked. Cached by that pair, because a
+    /// predicate is a pure function of the types it is given: `ShapeOf<string>` asks
+    /// `is_numeric::<string>` once, however many cases and however many types reach that question.
+    size_t predicateRuns() const { return predicateRuns_; }
+    size_t predicateCacheHits() const { return predicateCacheHits_; }
+    size_t predicatePairs() const { return predicateCache_.size(); }
+    /// The same three, for the questions a `match type` case guard asked: the case whose pattern
+    /// selected a subject and whose predicate had to be read. A guard's question is the one a
+    /// reading of this step is about, and it is answered once per (function, type arguments) pair.
+    size_t guardQuestions() const { return guardAsks_; }
+    size_t guardRuns() const { return guardRuns_; }
+    size_t guardCacheHits() const { return guardHits_; }
+    size_t guardPairs() const { return guardPairs_.size(); }
+    /// The one line a reading of the counts reads: how many predicates ran for a guard, how many
+    /// guard questions were answered from the cache, and how many distinct (function, type
+    /// arguments) pairs those questions were about.
+    void logPredicateCounts();
     /// Switches the builder to the module a condition is written in for as long as it lives:
     /// the search for a predicate is the declaration's, wherever the selection happens.
     class ConditionContext;
@@ -1951,6 +2025,28 @@ class Builder {
     /// Never returns: every outcome except Holds is a diagnostic.
     [[noreturn]] void reportWhenProblem(
         const WhenResult &result, const std::string &name, const GCT::node_ptr_t &origin);
+    /// The predicate a case guard is waiting for, when one could not be settled: reported in
+    /// place of "no case selects the type", which would be a wrong reason (the type may well be
+    /// one the case's pattern reaches).
+    mutable std::optional<WhenResult> pendingCaseGuardProblem_;
+    /// The predicates already answered, by the function and the type arguments it was given, and
+    /// the two counts the reading takes (predicateRuns, predicateCacheHits).
+    mutable std::unordered_map<std::string, bool> predicateCache_;
+    mutable size_t predicateRuns_      = 0;
+    mutable size_t predicateCacheHits_ = 0;
+    /// The same counts for the questions a `match type` case guard asks, and only those: the whole
+    /// library's declarations are checked while a program is built, so the totals are a reading of
+    /// the build rather than of the guards. A question is answered once however many cases ask it,
+    /// and the reading says so in its own terms (`logPredicateCounts`).
+    mutable size_t guardAsks_  = 0;
+    mutable size_t guardRuns_  = 0;
+    mutable size_t guardHits_  = 0;
+    mutable std::unordered_map<std::string, bool> guardPairs_;
+    /// How deep the condition of a `when`, or the predicate of a case, is being read: the
+    /// outermost call is the one the guard asked, and the conditions a predicate's own body
+    /// reaches on the way are the build's, not the guard's.
+    mutable int predicateCallDepth_ = 0;
+    mutable int guardAskDepth_      = 0;
     /// The graphs whose declaration has a `when` condition, with its source text.
     std::unordered_map<const DraftGraphBuilder *, GCT::Tree::WhenClause> whenClauses_;
 

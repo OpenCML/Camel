@@ -254,7 +254,11 @@ void ParserImpl::parseMatchTypeType() {
     close(m, NK::MatchTypeType);
 }
 
-/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
+/// A case of a type function's `match type` takes the guard a value-level `match` case takes
+/// (design principles 5.5, ruling of 2026-11-14): `case _ when is_numeric::<T>() => int[0]` is
+/// taken only where the predicate holds, and a case whose guard does not hold falls through to
+/// the one written after it.
 void ParserImpl::parseTypeArm() {
     const size_t m = mark();
     bump(); // case
@@ -262,6 +266,9 @@ void ParserImpl::parseTypeArm() {
     while (cur_ == TK::Pipe && !panic_) {
         bump();
         parseTypeCasePattern();
+    }
+    if (!panic_ && atWord(0, "when")) {
+        parseWhenClause();
     }
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();

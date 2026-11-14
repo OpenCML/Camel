@@ -3326,8 +3326,11 @@ Builder::typeCasePatternsOf(const std::vector<cst::TypeCasePattern> &written) {
 
 /*
 typeCase
-    : CASE typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+    : CASE typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
     ;
+A case may carry the guard a value-level `match` case carries (design principles 5.5, ruling of
+2026-11-14): `case p when c => body`, kept as child [1] after the body so the body stays child
+[0] for the reader that builds it.
 */
 Value Builder::visitTypeCase(cst::TypeCase context) {
     ENTER("TypeCase");
@@ -3336,6 +3339,11 @@ Value Builder::visitTypeCase(cst::TypeCase context) {
     setNodeTokenRangeByContext(caseNode, context);
     node_ptr_t bodyNode = any2node(visitBlockExpr(context->lastChild().node()));
     *caseNode << bodyNode;
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        *caseNode << any2node(visitExpr(whenClause->expr()));
+        unwrapNodeAs<TypeCaseLoad>(caseNode)->setGuardText(
+            std::string(whenClause->expr().sourceText()));
+    }
     registerAstSemanticBundle(
         caseNode,
         {
@@ -5278,7 +5286,7 @@ Value Builder::visitRefType(cst::RefType context) {
 
 /*
 matchTypeType : 'match' 'type' typeExpr '{' typeArm* '}'
-typeArm       : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+typeArm       : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
 The cases are the cases of `match type` over values, and each holds the type it gives.
 */
 Value Builder::visitMatchTypeType(cst::MatchTypeType context) {
@@ -5299,6 +5307,12 @@ Value Builder::visitTypeArm(cst::TypeArm context) {
         typeCasePatternsOf(patternsOf(context->all<cst::TypeCasePattern>())));
     setNodeTokenRangeByContext(arm, context);
     *arm << any2node(visitType(context->type()));
+    // The guard of a type function's case, after the type it gives for the same reason the value
+    // case keeps it after its body: child [0] stays what the case answers.
+    if (const auto whenClause = context->get<cst::WhenClause>()) {
+        *arm << any2node(visitExpr(whenClause->expr()));
+        unwrapNodeAs<TypeCaseLoad>(arm)->setGuardText(std::string(whenClause->expr().sourceText()));
+    }
     return arm;
 }
 

@@ -3626,6 +3626,9 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
         std::vector<Type *> identities;
         bool catchAll        = false;
         bool unreachableSeen = false;
+        // A guarded `_` or `#leaf` selects the types its predicate holds for, so a case after it
+        // is reachable (design principles 5.5, ruling of 2026-11-14).
+        const bool guarded = AST::typeCaseGuardOf(caseAst) != nullptr;
         for (const AST::TypeCasePattern &pattern : caseLoad->patterns()) {
             const GCT::TypeCaseKind kind = static_cast<GCT::TypeCaseKind>(pattern.kind);
             if (kind == GCT::TypeCaseKind::Identity) {
@@ -3667,7 +3670,8 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
                 continue;
             }
             patterns |= typeCaseBit(kind);
-            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+            if (!guarded &&
+                (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard)) {
                 catchAll = true;
             }
         }
@@ -3680,6 +3684,13 @@ node_ptr_t Builder::visitMatchType(const AST::node_ptr_t &ast) {
             "gct.match.type.case");
         node_ptr_t bodyNode = visitStmtBlock(caseAst->atAs<AST::StmtBlockLoad>(0));
         *caseNode << bodyNode;
+        // The guard of the case is the case's own, kept by the tree beside it rather than made a
+        // child: the body stays child 0, exactly as a value `match` case keeps its guard
+        // (Tree::setCaseGuard). The graph builder reads it once the pattern has selected the
+        // subject, with the type arguments of the instance bound.
+        if (const AST::node_ptr_t guardAst = AST::typeCaseGuardOf(caseAst)) {
+            tree_->setCaseGuard(caseNode, visitData(guardAst));
+        }
         *matchNode << caseNode;
     }
     LEAVE("MatchType");
@@ -7656,6 +7667,9 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
         // a type here already answers is that type, as a dimension name written once too often is a
         // reference and not a new name (5.4).
         const auto &patterns = caseLoad->patterns();
+        // A guarded `_` or `#leaf` selects the types its predicate holds for, not every type, so a
+        // case written after it can still be selected and is not reported as unreachable.
+        const bool guarded = AST::typeCaseGuardOf(armAst) != nullptr;
         std::vector<std::string> written;
         std::vector<bool> takesArrayApart(patterns.size(), false);
         for (size_t i = 0; i < patterns.size(); ++i) {
@@ -7724,11 +7738,26 @@ Type *Builder::visitMatchTypeType(const AST::node_ptr_t &ast) {
                 continue;
             }
             arm.shapes |= typeCaseBit(kind);
-            if (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard) {
+            if (!guarded &&
+                (kind == GCT::TypeCaseKind::Leaf || kind == GCT::TypeCaseKind::Wildcard)) {
                 catchAll = true;
             }
         }
         arm.result = visitType(armAst->atAs<AST::TypeLoad>(0));
+        if (const AST::node_ptr_t guardAst = AST::typeCaseGuardOf(armAst)) {
+            // The guard stays in Camel: it is built as the data expression it is, with the type
+            // arguments of the enclosing declaration in scope, and nothing of it is decided here.
+            // The build that can run a function asks it for an answer (typevar.h
+            // `typeCaseGuardEvaluator`), once per function and set of type arguments.
+            auto guard       = std::make_shared<camel::core::type::TypeCaseGuard>();
+            guard->condition = visitData(guardAst);
+            guard->context   = module_.get();
+            // The condition as the declaration wrote it, not the code a node generates: a type
+            // that keeps the case prints the guard back (`MatchTypeType::toString`), and the
+            // reference the compiler publishes compares that text with the source.
+            guard->text      = armAst->loadAs<AST::TypeCaseLoad>()->guardText();
+            arm.guard        = std::move(guard);
+        }
         arms.push_back(std::move(arm));
     }
     LEAVE("MatchTypeType");
@@ -7837,7 +7866,12 @@ Type *Builder::visitSpecType(const AST::node_ptr_t &ast) {
         });
         // A pack is what `ParamsOf<F>` computes, and the `..` around it is read by the type that
         // holds it: it is reported where it is used bare, not here.
-        if (concrete && containsTypeCall(applied) && !TypeCallType::isPack(applied)) {
+        // A `match type` whose case a guard decides is not a refusal either: the predicate is a
+        // Camel function, and this phase runs none (it has no build behind it), so the match waits
+        // and the graph builder settles it once the instance's type arguments are bound
+        // (typevar.h `typeCaseGuardEvaluator`).
+        if (concrete && containsTypeCall(applied) && !TypeCallType::isPack(applied) &&
+            !containsGuardedTypeMatch(applied)) {
             // The arguments are concrete and the type function does not accept them.
             std::string what = applied->toString();
             std::string why  = "it is not defined for the type it is given";
