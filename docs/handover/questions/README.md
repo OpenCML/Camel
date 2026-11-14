@@ -32,7 +32,7 @@
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 |
 | [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ |
-| [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，而用例还在等那条拒绝 |
+| [`2026-11-14-an-untagged-gradient-program-is-no-longer-refused`](2026-11-14-an-untagged-gradient-program-is-no-longer-refused.cn.md) | 一条不带 `#gpu` 的梯度程序不再被拒绝，这条入口现在读的是「有没有这条遍都一样」 |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 |
 
 ## 生成器不会删的行：54 行（页已不在 `questions/` 里）
