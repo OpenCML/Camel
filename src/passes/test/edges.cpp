@@ -15,6 +15,7 @@
 #include "camel/runtime/cycle.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/graph.h"
 #include "runtime/graph_build.h"
 
 #include <algorithm>
@@ -722,6 +723,156 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
     } catch (const std::exception &error) {
         os << "EDGES refused: " << error.what() << "\n";
         return program;
+    }
+}
+
+// An edit whose only difference is one sync edge, and a session that changes nothing. The commit
+// keeps the graph a session edited only while the copy it encoded differs from that graph, and
+// `sameContent` decides; the order and sync edges are the graph's own arrays beside the node
+// columns, not ports and not entries of a node. A comparison that reads everything but those two
+// arrays answers "the same graph" for an edit that wrote an edge: the commit releases the copy and
+// hands back the graph the edit never reached. The edit here is written between two statements the
+// graph already has, so no node is added, removed or changed and the edge is the whole difference;
+// `reused` is the object identity of the graph, so a commit that threw the copy away shows as
+// `reused=1` with the edge missing, and one that kept it as `reused=0` with the edge there.
+const camel::runtime::Program *
+EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    // A graph that is not the program's root, edited the way a pass over a function value edits it
+    // (`graph.open` in modules/graph/txn.cpp roots the session at the function's graph and commits
+    // detached): the shape the comparison sits on.
+    GCGraph *target = program->root();
+    for (const GraphId ref : program->root()->refs()) {
+        GCGraph *called = const_cast<Program *>(program)->graph(ref);
+        if (called != nullptr && called != program->root()) {
+            target = called;
+            break;
+        }
+    }
+    const GraphId targetId = target->id();
+    // Two statements the graph already has: a user that waits on nothing yet, and a predecessor
+    // nothing waits on. Neither is added or changed, so the edge is the whole difference.
+    std::vector<gc_node_ref_t> statements;
+    std::vector<gc_node_ref_t> operators;
+    std::vector<gc_node_ref_t> sameRegion;
+    gc_node_ref_t maxRef = 0;
+    for (auto it = target->nodes().begin(); it != target->nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const GCNode *node      = target->node(ref);
+        maxRef                  = std::max(maxRef, ref);
+        // One region only: an edge that crosses an arm of a branch is a graph the seal refuses,
+        // and the body is the one region every statement of it is in. The user must be a statement
+        // a sync edge may end on: one that can fault or has an effect, not a pure operator; the
+        // predecessor may be any node a chain may start with.
+        if (node == nullptr || target->nodeRegion(ref) != 0) {
+            continue;
+        }
+        sameRegion.push_back(ref);
+        if (node->kind != GCNodeKind::Oper) {
+            continue;
+        }
+        operators.push_back(ref);
+        if (camel::runtime::graph::is_chain_statement(*target, ref)) {
+            statements.push_back(ref);
+        }
+    }
+    gc_node_ref_t user = kInvalidNodeRef;
+    gc_node_ref_t pred = kInvalidNodeRef;
+    // The statement of the body that waits on nothing yet: a chain is a run, so the edge goes into
+    // a place that is free, and the graph has one sync edge more after the edit than before.
+    for (const gc_node_ref_t ref : statements) {
+        if (target->syncPredsOf(ref).empty()) {
+            user = ref;
+            break;
+        }
+    }
+    if (user != kInvalidNodeRef) {
+        // Nothing the user already reaches can become its predecessor: the edge would close a loop
+        // (the seal refuses it), so the reach is walked first over every kind of user an edge has.
+        std::vector<gc_node_ref_t> reach;
+        std::vector<char> seen(static_cast<size_t>(maxRef) + 1, 0);
+        reach.push_back(user);
+        seen[user] = 1;
+        for (size_t at = 0; at < reach.size(); ++at) {
+            const gc_node_ref_t from = reach[at];
+            for (auto users : {target->normUsersOf(from), target->withUsersOf(from),
+                               target->ctrlUsersOf(from), target->syncUsersOf(from),
+                               target->orderUsersOf(from)}) {
+                for (const gc_node_ref_t next : users) {
+                    if (next < seen.size() && !seen[next]) {
+                        seen[next] = 1;
+                        reach.push_back(next);
+                    }
+                }
+            }
+        }
+        // A node the user does not reach, that waits on nothing and nothing waits on: it can start a
+        // chain. A statement first, since a chain is a run of statements; a node that only computes
+        // a value the user reads is upstream of it and closes no loop either.
+        for (const gc_node_ref_t ref : statements) {
+            if (pred == kInvalidNodeRef && ref != user && !seen[ref] &&
+                target->syncUsersOf(ref).empty() && target->syncPredsOf(ref).empty()) {
+                pred = ref;
+            }
+        }
+        for (const gc_node_ref_t ref : sameRegion) {
+            if (pred != kInvalidNodeRef || ref == user || seen[ref] ||
+                !target->syncUsersOf(ref).empty()) {
+                continue;
+            }
+            const GCNode *node = target->node(ref);
+            if (node != nullptr && node->kind != GCNodeKind::Join &&
+                node->kind != GCNodeKind::Func) {
+                pred = ref;
+            }
+        }
+    }
+    os << "EDITONLY oper=" << operators.size() << " statements=" << statements.size() << "\n";
+    if (user == kInvalidNodeRef || pred == kInvalidNodeRef) {
+        os << "EDITONLY no_pair\n";
+        return program;
+    }
+    os << "EDITONLY pair user=" << user << " pred=" << pred << "\n";
+
+    const GCGraph *base = target;
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction   = session.edit(target);
+        auto &draft         = transaction.edit();
+        const bool wrote    = draft.setSyncPredecessor(user, pred);
+        const size_t before = base->syncEdges().size();
+        try {
+            const Program *next  = session.commit(true);
+            const GCGraph *after = next->graph(targetId);
+            const auto preds     = after->syncPredsOf(user);
+            os << "EDITONLY sync wrote=" << (wrote ? 1 : 0) << " before=" << before
+               << " after=" << after->syncEdges().size()
+               << " sync_in=" << preds.size()
+               << " mine=" << ((preds.size() == 1 && preds[0].pred == pred) ? 1 : 0)
+               << " reused=" << (after == base ? 1 : 0) << "\n";
+            program = next;
+            target  = next->graph(targetId);
+        } catch (const std::exception &error) {
+            os << "EDITONLY refused: " << error.what() << "\n";
+            return program;
+        }
+    }
+    // Nothing at all: the graph must stay the one it was and the copy the commit encoded must be
+    // released. This is the optimization the case above must not take away.
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        (void)session.edit(target);
+        try {
+            const Program *next = session.commit(true);
+            os << "EDITONLY untouched reused=" << (next->graph(targetId) == target ? 1 : 0) << "\n";
+            return next;
+        } catch (const std::exception &error) {
+            os << "EDITONLY refused: " << error.what() << "\n";
+            return program;
+        }
     }
 }
 
