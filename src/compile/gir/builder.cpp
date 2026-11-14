@@ -1412,7 +1412,7 @@ FunctionType *Builder::completeLambdaSignature(
             }
             if (containsTypeVar(wanted)) {
                 std::vector<std::string> names;
-                collectTypeVars(wanted, names);
+                GCT::collectTypeVarsWithoutPlaceholders(wanted, names);
                 report(
                     param,
                     std::format(

@@ -1639,8 +1639,12 @@ bc07e4bc418dc0e9 ok test/cases/compile/static_expansion/type_position_empty_tupl
 ebf5e9593ac84931 ok test/cases/compile/static_expansion/typeof_declaration_type.cml
 7455c6b65422cc05 ok test/cases/compile/static_expansion/typeof_derived_type.cml
 e58f7bc57f3b0c60 ok test/cases/compile/static_expansion/typeof_inferred_not_evaluated.cml
+eaa72ffd71907daa ok test/cases/compile/static_expansion/typeof_inside_tuple.cml
 7eacc37d2e7ed2a2 ok test/cases/compile/static_expansion/typeof_inside_type.cml
 f9e2a0efbf7de4ac ok test/cases/compile/static_expansion/typeof_only_here.cml
+08a0d221862995c2 ok test/cases/compile/static_expansion/typeof_same_number.cml
+1e09239215cfa1f6 ok test/cases/compile/static_expansion/typeof_same_number_first.cml
+e87522f2fe298d5a ok test/cases/compile/static_expansion/typeof_same_number_second.cml
 ef27fffe285b81cb ok test/cases/compile/static_expansion/typeof_type.cml
 0e1ff92d1689587d ok test/cases/compile/static_expansion/typeof_void.cml
 5e65864d14e1054c ok test/cases/compile/stream/arm_error_keeps_its_diagnosis.cml
@@ -2994,6 +2998,7 @@ e6704f3f915eaf57 no test/cases/modules/graph_pass/unparsable_pass_lib.cml
 4b0af59f4afb72e6 ok test/cases/modules/graph_pass/valuereader.cml
 6c573532502ad360 ok test/cases/modules/graph_pass/values.cml
 d3cab3999bf66cb2 ok test/cases/modules/graph_values/attempt_holders.cml
+7fa0be0978b55b3c ok test/cases/modules/graph_values/clone_program.cml
 f0a02d775249a045 ok test/cases/modules/graph_values/discard_pass.cml
 72c62c56fb1915b6 ok test/cases/modules/graph_values/discard_target.cml
 7fab9dbd99156f9e ok test/cases/modules/graph_values/function_txn.cml
@@ -3001,6 +3006,7 @@ f0a02d775249a045 ok test/cases/modules/graph_values/discard_pass.cml
 0402f4d99511cde2 ok test/cases/modules/graph_values/p10c4_rule_callee_value_vs_graph.cml
 0066b869fca34ac9 ok test/cases/modules/graph_values/pipeline_inline.cml
 44ce147a6fbe8bf3 ok test/cases/modules/graph_values/program_txn.cml
+2bfe87c36e34baee ok test/cases/modules/graph_values/reinterpret_copies_its_body.cml
 8a58fbdf87d8ff49 ok test/cases/modules/graph_values/rewrite_callee.cml
 7a3dd843b4a3d525 ok test/cases/modules/graph_values/rewrite_rule.cml
 1b0900485a0ccd73 ok test/cases/modules/import_audit/unused_let/main.cml
@@ -3806,6 +3812,7 @@ bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
 ef56ce08a4ace568 ok test/cases/opt/e9/rc01_seed47.cml
 fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
 fc5dd9b72523c060 ok test/cases/opt/e9/rc03_seed30.cml
+7c110c4d62370a1a ok test/cases/opt/e9/rc03_seed56.cml
 2b621abdfd198a5b ok test/cases/opt/e9/rc04_seed72.cml
 4354ebdbd45852fb ok test/cases/opt/e9/rc08_seed324.cml
 2b68e1c7da848a36 ok test/cases/opt/e9/rc11_seed352.cml

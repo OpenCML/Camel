@@ -8,16 +8,16 @@
  *
  *   - `TypeCallType` is a type function application whose evaluation is deferred: a primitive
  *     such as `PayloadOf<T>`, `KeyOf<T>` or `ValueOf<T>` (the library declares those without a
- *     body), or a source type function with a `typeof` argument. The latter keeps its declaration
- *     as the first, internal parameter until the argument's type is known.
+ *     body), or a source type function applied to an argument that is still a type variable. The
+ *     latter keeps its declaration as the first, internal parameter until the argument's type is
+ *     known.
  *   - `MatchTypeType` is a `match type` in a type position: the subject, and for each case the
  *     shapes and identities it selects and the type it gives.
  *
- * While an argument or the subject is still a type variable or an unresolved `typeof`, the
- * application stays a type of its own, and the type-variable algebra descends through it like any
- * other type application. When everything is concrete, which is when the variables of a generic
- * instance are bound and the graph builder has inferred each `typeof`, `substituteTypeVars` or the
- * graph builder replaces it by the type it computes. One that stays unevaluated with
+ * While an argument or the subject is still a type variable, the application stays a type of its
+ * own, and the type-variable algebra descends through it like any other type application. When
+ * everything is concrete, which is when the variables of a generic instance are bound, the front
+ * end replaces it by the type it computes. One that stays unevaluated with
  * concrete arguments (`ElementOf<int>`, a `match type` no case selects) is reported where the
  * type is used.
  */
@@ -42,7 +42,7 @@ class TypeCallType final : public OtherType {
   public:
     static TypeCode typeCode();
     static TypeCallType *create(std::string_view name, std::span<Type *const> arguments);
-    /// A source type function kept with its arguments until a `typeof` among them is resolved.
+    /// A source type function kept with its arguments until they are concrete.
     static TypeCallType *
     makeTypeFunctionCall(TypeFunctionType *function, std::span<Type *const> arguments);
 

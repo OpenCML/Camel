@@ -988,12 +988,27 @@ timeout_ms = 8000
 
 [[tests]]
 name = "typeof_inside_type_is_refused"
-desc = "`typeof` stands for a whole type: `typeof(1)[]` is refused where the array type is expanded."
+desc = "`typeof` stands for a whole type: `typeof(1)[]` is refused where the array type is expanded. The reading names the expression that was written -- `typeof(1)`, not the internal `typeof#0` -- and the brackets that stay are the array's own."
 kind = "negative"
 case = "../../../cases/compile/static_expansion/typeof_inside_type.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::TypeOfNotWholeType"
+expect_output_contains = ["typeof is written inside the larger type typeof(1)[]."]
+expect_output_not_contains = ["typeof#"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "typeof_inside_tuple_is_refused"
+desc = "The same name, where the enclosing type is not an array and no bracket appears at all: a tuple's member is a type a literal is converted against before the placeholder is resolved, and the refusal names the type `(typeof(1), int)` -- the expression restored, no internal number, no bracket of the placeholder's own."
+kind = "negative"
+case = "../../../cases/compile/static_expansion/typeof_inside_tuple.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
+expect_output_contains = ["cannot be represented as type '(typeof(1), int)'"]
+expect_output_not_contains = ["typeof#", "[]"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 8000
 
@@ -1285,3 +1300,16 @@ expect_exit = 0
 expect_stdout_exact = "3\n4\n6\ntrue\ntrue\n12.0\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 10000
+
+[[tests]]
+name = "typeof.same_number_in_two_modules"
+desc = "The number a placeholder is named by is the position of its expression inside the tree that wrote it, so two modules' first `typeof` are both `typeof#0`. The type layer compares a type variable by its name, so those two are one object there; what keeps them apart is that the front end asks the writing tree. Here the two instances are built by this program and resolved one after the other through that one shared object, and each answers the type of its own module's expression -- a `string` and a `float[]` -- while this program's own `typeof#0` answers an `int`."
+kind = "behavior"
+case = "../../../cases/compile/static_expansion/typeof_same_number.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "first\n2.5\ntrue\ntrue\nfalse\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

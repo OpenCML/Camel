@@ -814,6 +814,15 @@ class GraphDraft {
     /// head or tail of a branch arm is kept; when it waits on nothing it is made to wait on its
     /// BRCH. Returns the number removed.
     size_t dissolveUnorderedGates();
+    /// Writes every order edge that reaches into a control region on the node that owns that
+    /// region (docs/design/effects/edges.cn.md 4.6): an arm or a part of a loop runs as a whole
+    /// with its BRCH or LOOP, so the order it has with the code around it is an order on that
+    /// node. A rewrite that moves a node -- into an arm, into a part of a loop, out of one --
+    /// moves the nodes its order edges name with it, and the two ends can end up in regions the
+    /// other does not share; the edge keeps saying what it said, on the owner. An edge whose two
+    /// ends come out as one node is dropped: the owner runs before the code inside it. Returns
+    /// the number of nodes whose order edges it rewrote.
+    size_t rehomeOrderEdges();
     bool chainReachesBlockValue(gc_node_ref_t id) const;
     /// Removes chain GATEs left with no value user, no sync successor, and no block result.
     size_t eraseOrphanedChainGates();
@@ -1008,8 +1017,10 @@ class GraphDraft {
     void appendUserRef(gc_node_ref_t id, gc_node_ref_t userId, DraftEdgeSlot slot);
     /// A node that reads a node of a control region (an arm, a loop part) is in that region, or in
     /// one inside it: it cannot run before what it reads. A JOIN reads the results of its arms and
-    /// a LOOP those of its parts; they stay where the branch or the loop is.
-    void inheritRegion(gc_node_ref_t input, gc_node_ref_t user);
+    /// a LOOP those of its parts; they stay where the branch or the loop is. Only a value read
+    /// moves a node (docs/design/effects/edges.cn.md 4.6): an order or a control edge says when
+    /// the user runs, not what it reads, so it leaves the user where it was written.
+    void inheritRegion(gc_node_ref_t input, gc_node_ref_t user, DraftEdgeSlot slot);
     std::span<const gc_node_ref_t> usersOf(gc_node_ref_t id, DraftEdgeSlot slot) const;
     std::vector<gc_node_ref_t> &userListOf(gc_node_ref_t id, DraftEdgeSlot slot);
     std::span<gc_node_ref_t> mutableInputs(DraftNode *node, DraftEdgeSlot slot);
@@ -1169,6 +1180,21 @@ bool carriesOrdering(const GraphDraft &draft, gc_node_ref_t node, bool byShape =
 /// may fault (design principles 3.1: a node runs iff the run uses it); a node on a chain is a
 /// statement and stays.
 bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node);
+
+/// Whether the node is a closure definition nothing can call: a FUNC node the graph does not export
+/// (`closureNodes`), with no control, order or sync edge on either side. A FUNC node is a value,
+/// not a statement (design principles 3.1): what runs is the CALL of it, so an unread definition
+/// runs nothing, drops no effect and faults nothing. What it captured is read only by its body,
+/// which is why letting it go is what leaves a write nothing else reads a dead write (9.7).
+bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
+
+/// The live set of a graph: the nodes backward reachable from its roots -- entry, exit, output,
+/// return, the norm and `with` ports, the closure nodes it exports -- over the norm, `with`,
+/// control and sync inputs, with a loop's region ports and a branch's join. A node outside it can
+/// never be run or read by the program, so a value it reads is read by nobody. Sorted by ref.
+/// One implementation: `camel::compile::gir::liveDraftNodes` is this function, and every caller
+/// that needs the set asks it here rather than walking the graph again.
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
 /// inlined call gates its arguments after what the call waited for -- and changes nothing else

@@ -94,3 +94,50 @@
 
 **接到既有的活节点集合（`liveDraftNodes`），先只改 `writeIsRooted` 那一处，其余三处不动。** 理由是它单独
 可测、单独可回退，而且它正是上一轮 21 条红的直接原因。
+
+## 2a 的读数：清扫扩到 `Func` 之后，它一个都没收走
+
+`isUnreadClosure`（`runtime/draft.h:1157` 旁，实现 `src/runtime/graph.cpp:1638` 上方）与 `screen.cpp` 的
+`case GCNodeKind::Func` 都写好了，`feat.opt.effects_kept` 184 条里 180 绿、4 红全部是我加的探针（已删）。
+但把清扫的删除按种类数出来（`test::deadwrite` 现在多打一行 `SWEEP func=… call=… gate=… oper=…`）：
+
+```
+SWEEP func=0 call=0 gate=0 oper=0
+```
+
+**一个都没收走，连 `gate`/`oper` 都是 0。** 原因不是判据写错，而是**这个图根本没被清扫**：
+`screen.cpp#mayRemoveDead` 的循环先看 `valueUsers[ref]`，`p = (1, h)` 里元组读着 `h`，所以 `h` 不是
+「没人读」，screen 直接 `continue`，图被判成「这里没有可删的东西」。也就是说：
+
+> **让格子续命的那个读者不是闭包自己，是那个还提着它的元组。** `p.0` 用了元组，元组用了 `(1, h)` 的
+> 第二个成员，而没有任何一步把没人读的元组成员摘掉——所以闭包在、格子被读、写永远是「活着的」。
+
+要收走闭包，得先让 **`p.1`（元组里没人读的那个成员）** 被摘掉；那是 `:op/tuple` 成员的抽取问题，
+不是清扫的种类问题。**所以 2a 按作者的说法做完了，但它的验收（边界那条痕迹消失）不可能靠 2a 达成**：
+痕迹的根源在元组，不在清扫。下一步该先补「元组里没人读的成员可以走」，再谈 `Func` 的清扫。
+
+## `Call` 的可移除性：签名不在手里（停手，问）
+
+作者的判据是「签名上已有的 `pure` 与故障表」。查过一遍，**`Call` 节点手里没有这个签名**：
+
+- `Call` 的载荷是 `GCCallBody`（`include/camel/runtime/graph.h:466`）——只有 `callKind` 和三个保留字段，
+  没有 `pure`、没有故障位；`DraftNodeHeader::runtimeFlags`（`draft.h:136`）也没有这两个含义。
+- `FunctionType`（`include/camel/core/type/composite/func.h`）只有参数与结果，**不带纯度或故障声明**。
+- 草稿能给的只有 `calleeIdOf(id)` / `calleeGraphOf(id)`（`draft.h:646`），即被调图本身；而「这个图有没有
+  写、会不会出故障」是 `effectSummaryOf(const Program &, const GCGraph *)`（`runtime/effects.h:44`），
+  **需要一个 `Program`**，清扫手里只有 `GraphTransaction`（`graph_txn.h:33`，里面只有草稿）。
+
+所以按作者的话做不到「不碰签名」；**加参数就是加第二份真相**，而这正是上一轮被否掉的做法。停在这里问：
+
+> **`Call` 的可移除性判据该由谁供给？** 三个方向：(a) 让 `Call` 节点在构建时带上足迹位（`runtimeFlags`
+> 的空位正好够），由构建者填、判据只读；(b) 让 `GraphTransaction` 能看见它所属的 `Program`（一个惰性指针，
+> 不改任何判据签名）；(c) 等 R3 的 `NodeEffect` 落地，`Call` 的可移除性从那里取。默认建议 (b)：
+> 一份真相在 `Program` 里，交易只是多一只眼睛，判据仍然只在一处。
+
+## 下一件（未做）：「一个没人读的元组成员应当可以被摘掉」
+
+独立缺陷，不叫「让闭包能被收走」。现在的证据链：`p = (1, h)` 的元组读着 `h` → 元组被 `p.0` 用 →
+screen 认为没有可删节点 → 清扫一次都不跑。**摘元组成员要面对的难点不是判据，是编号**：删掉第 1 个成员，
+后面成员的索引都要前移，所有读它的 `Accs`（`GCAccsBody::value`）都要改写；而在 `sync`/顺序边存在的图上，
+「没人读」的定义又要回到本页开头那个「活着的读者」。所以这件要先定「摘成员时索引重编号」的规则，
+再谈判据——它是 `writings_extract.cpp` 的事，不是清扫的事。

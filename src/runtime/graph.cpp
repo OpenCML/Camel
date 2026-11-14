@@ -262,6 +262,30 @@ bool is_chain_exit(const GCGraph &graph, gc_node_ref_t ref) {
 
 } // namespace graph
 
+bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref) {
+    if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+        return false;
+    }
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Func) {
+        return false;
+    }
+    const auto exported = graph.closureNodes();
+    if (std::find(exported.begin(), exported.end(), ref) != exported.end()) {
+        return false;
+    }
+    // The two edges that are not ports are read by their own names on a frozen graph (an order edge
+    // is a predicate, a sync edge a predecessor), which is the same six-way question either side.
+    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
+    return !anyOf(
+        graph.ctrlInputsOf(ref),
+        graph.orderPredsOf(ref),
+        graph.syncPredsOf(ref),
+        graph.ctrlUsersOf(ref),
+        graph.orderUsersOf(ref),
+        graph.syncUsersOf(ref));
+}
+
 bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     const GCNode *node = graph.node(ref);
     if (node == nullptr) {
@@ -1648,6 +1672,99 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
             return false;
         }
     } else if (header->kind != GCNodeKind::Cast) {
+        return false;
+    }
+    const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };
+    return !anyOf(
+        draft.ctrlInputsOf(node),
+        draft.orderInputsOf(node),
+        draft.syncInputsOf(node),
+        draft.ctrlUsersOf(node),
+        draft.orderUsersOf(node),
+        draft.syncUsersOf(node));
+}
+
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft) {
+    std::unordered_set<gc_node_ref_t> visited;
+    std::vector<gc_node_ref_t> worklist;
+    auto pushRoot = [&](gc_node_ref_t ref) {
+        if (ref != kInvalidNodeRef && draft.header(ref) != nullptr && draft.alive(ref) &&
+            visited.insert(ref).second) {
+            worklist.push_back(ref);
+        }
+    };
+
+    pushRoot(draft.entryNode());
+    pushRoot(draft.exitNode());
+    pushRoot(draft.outputNode());
+    pushRoot(draft.returnNode());
+    for (gc_node_ref_t ref : draft.normPorts()) {
+        pushRoot(ref);
+    }
+    for (gc_node_ref_t ref : draft.withPorts()) {
+        pushRoot(ref);
+    }
+    for (gc_node_ref_t ref : draft.closureNodes()) {
+        pushRoot(ref);
+    }
+
+    while (!worklist.empty()) {
+        const gc_node_ref_t current = worklist.back();
+        worklist.pop_back();
+        for (gc_node_ref_t input : draft.normInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (gc_node_ref_t input : draft.withInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (gc_node_ref_t input : draft.ctrlInputsOf(current)) {
+            pushRoot(input);
+        }
+        // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement written
+        // before this one in the same `sync` block is live exactly as a data input is.
+        for (gc_node_ref_t input : draft.syncInputsOf(current)) {
+            pushRoot(input);
+        }
+        const DraftNodeHeader *header = draft.header(current);
+        if (header == nullptr) {
+            continue;
+        }
+        if (header->kind == GCNodeKind::Loop) {
+            // The ports of its regions are part of it, whether the code reads them or not.
+            for (auto part : {GCRegionKind::LoopCond, GCRegionKind::LoopBody}) {
+                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
+                    for (gc_node_ref_t port : draft.regionPortsOf(region)) {
+                        pushRoot(port);
+                    }
+                }
+            }
+        }
+        if (header->kind == GCNodeKind::Brch) {
+            const auto *payload =
+                reinterpret_cast<const DraftBrchPayload *>(draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->join);
+            }
+        } else if (header->kind == GCNodeKind::Join) {
+            const auto *payload =
+                reinterpret_cast<const GCJoinBody *>(draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->brch);
+            }
+        }
+    }
+
+    std::vector<gc_node_ref_t> live(visited.begin(), visited.end());
+    std::sort(live.begin(), live.end());
+    return live;
+}
+bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
+    const DraftNodeHeader *header = draft.header(node);
+    if (header == nullptr || !draft.alive(node) || header->kind != GCNodeKind::Func) {
+        return false;
+    }
+    const std::span<const gc_node_ref_t> exported = draft.closureNodes();
+    if (std::find(exported.begin(), exported.end(), node) != exported.end()) {
         return false;
     }
     const auto anyOf = [&](auto... groups) { return (!groups.empty() || ...); };

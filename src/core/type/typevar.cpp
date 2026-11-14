@@ -70,38 +70,6 @@ CastSafety TypeVarType::castSafetyFrom(Type *sourceType) const {
     return equals(sourceType) ? CastSafety::Safe : CastSafety::Forbidden;
 }
 
-// ---- TypeOfType ----
-
-TypeOfType::TypeOfType(const void *expression) : Type(TypeCode::TypeOf), expression_(expression) {}
-
-TypeOfType *TypeOfType::create(const void *expression) {
-    // One placeholder per expression (see intern.h): `typeof e` twice in one position is one
-    // type. Two of them are equal when they are the same object (see below), so the placeholder
-    // is its own canonical form and carries no name-erased twin: nothing compares it by
-    // structure, and the graph builder resolves it before any type check.
-    const uintptr_t words[1] = {reinterpret_cast<uintptr_t>(expression)};
-    return static_cast<TypeOfType *>(TypeTable::instance().intern(
-        TypeTable::Shape::TypeOf,
-        std::span<const uintptr_t>(words, 1),
-        [&]() -> Type * {
-            void *mem = allocTypeStorage<TypeOfType>(TypeStorageKind::TypeVar);
-            return new (mem) TypeOfType(expression);
-        }));
-}
-
-std::string TypeOfType::toString() const { return "typeof"; }
-
-std::string TypeOfType::mangle() const { return "O"; }
-
-Type *TypeOfType::clone(bool) const { return create(expression_); }
-
-// Two `typeof` placeholders are equal only when they are the same object: the expression they
-// stand for is not compared here, and the graph builder resolves them before any type check.
-bool TypeOfType::equals(Type *type) const { return this == type; }
-
-// A placeholder is not the type of any value: it is replaced where the type is used.
-CastSafety TypeOfType::castSafetyFrom(Type *) const { return CastSafety::Forbidden; }
-
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name) {
     for (const auto &[bound, type] : bindings) {
         if (bound == name) {
@@ -645,46 +613,6 @@ bool containsTypeVar(Type *type) {
     return false;
 }
 
-bool containsTypeOf(Type *type) {
-    if (type == nullptr) {
-        return false;
-    }
-    switch (type->code()) {
-    case TypeCode::TypeOf:
-        return true;
-    case TypeCode::TypeFunc:
-        return false;
-    case TypeCode::Array:
-        return containsTypeOf(static_cast<ArrayType *>(type)->elemType());
-    case TypeCode::Stream:
-        return containsTypeOf(static_cast<StreamType *>(type)->elemType());
-    case TypeCode::Tuple: {
-        const auto types = static_cast<TupleType *>(type)->types();
-        return std::any_of(types.begin(), types.end(), containsTypeOf);
-    }
-    case TypeCode::Struct: {
-        auto *record     = static_cast<StructType *>(type);
-        const auto types = record->named() ? record->typeArgs() : record->types();
-        return std::any_of(types.begin(), types.end(), containsTypeOf);
-    }
-    case TypeCode::Function: {
-        const auto *func = static_cast<FunctionType *>(type);
-        const auto with  = func->withTypesSpan();
-        const auto norm  = func->normTypesSpan();
-        return std::any_of(with.begin(), with.end(), containsTypeOf) ||
-               std::any_of(norm.begin(), norm.end(), containsTypeOf) ||
-               (func->hasExitType() && containsTypeOf(func->exitType()));
-    }
-    default:
-        break;
-    }
-    if (type->isOtherType()) {
-        const auto params = static_cast<OtherType *>(type)->paramsSpan();
-        return std::any_of(params.begin(), params.end(), containsTypeOf);
-    }
-    return false;
-}
-
 Type *expandTypePacks(Type *type) {
     // Nothing is bound; the placeholder only keeps the substitution from returning at once.
     static const type_bindings_t kNothingBound{{"$unbound", nullptr}};
@@ -811,7 +739,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
     if (type->code() == MatchTypeType::typeCode()) {
         // A `match type` in a type position: with a concrete subject it is the result of the
         // first case that selects the subject, by shape or by identity, and nothing else of it is
-        // looked at; with a type variable or an unresolved `typeof` still in the subject it waits.
+        // looked at; with a type variable still in the subject it waits.
         auto *match   = static_cast<MatchTypeType *>(type);
         Type *subject = substituteTypeVars(match->subject(), bindings);
         if (TypeCallType::isPack(subject)) {
@@ -835,7 +763,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
                 return TypeCallType::makePack(mapped);
             }
         }
-        if (!containsTypeVar(subject) && !containsTypeOf(subject)) {
+        if (!containsTypeVar(subject)) {
             const uint16_t shapes = typeShapeBits(subject);
             // A case may carry a guard (`case p when pred => ...`, design principles 5.5, ruling
             // of 2026-11-14). A case is taken when its pattern selects the subject *and* the
@@ -945,11 +873,11 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
         }
         const std::span<Type *const> arguments(params.data(), params.size());
         if (type->code() == TypeCallType::typeCode() &&
-            std::none_of(params.begin(), params.end(), containsTypeVar) &&
-            std::none_of(params.begin(), params.end(), containsTypeOf)) {
+            std::none_of(params.begin(), params.end(), containsTypeVar)) {
             // A type function whose arguments are all concrete is the type it computes (one it
-            // does not accept stays a call, and is reported where the type is used). An unresolved
-            // `typeof` is not a concrete leaf: the graph builder resolves it before this call.
+            // does not accept stays a call, and is reported where the type is used). The
+            // placeholder of a `typeof e` is a type variable to this layer, so an unresolved one
+            // counts as not concrete: the front end resolves it before this call.
             std::string error;
             if (Type *computed = TypeCallType::evaluate(
                     static_cast<TypeCallType *>(type)->name(),

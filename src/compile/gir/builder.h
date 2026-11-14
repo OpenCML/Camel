@@ -1037,6 +1037,14 @@ class Builder {
     // The source text of the expression `expr` when it is short and on one line; empty
     // otherwise. For diagnostics that suggest source text.
     std::string sourceTextOf(const GCT::node_ptr_t &expr) const;
+    // `type` as a diagnostic should name it, when it can still hold a `typeof` placeholder. The
+    // type layer knows the placeholder as the type variable `typeof#<n>` -- an internal number,
+    // which says nothing to whoever wrote the program and, followed by the brackets of an
+    // enclosing array, reads as an array of nothing. `written` is the tree the type was written
+    // in, so each placeholder is printed as `typeof(<the expression written there>)`; where the
+    // tree or the expression cannot be reached the number stays, as `typeof(#<n>)`, and the
+    // brackets that remain are an enclosing array's own.
+    std::string describeTypeOfPlaceholders(const Type *type, const GCT::Tree *written) const;
     // The position of the whole expression `expr`: its own span and those of everything below
     // it. A folded expression's own origin covers only its last operand, so a value it computes
     // to that does not fit its type is reported at the whole expression (design principles
@@ -2820,6 +2828,10 @@ class Builder {
      * the value the expression would have, inferred without evaluating it (see `inferTypeOf`).
      * Any other type is bound by `boundType`. A placeholder nested inside a larger type is
      * refused: `typeof` stands for a whole type.
+     *
+     * A placeholder is a type variable the front end made, named `typeof#<n>`; the expression it
+     * stands for is the tree's, under that number (`GCT::Tree::makeTypeOfPlaceholder`), found
+     * through `at`, the node the type was written at. The type layer holds no part of it.
      */
     Type *resolveTypeNode(Type *type, const GCT::node_ptr_t &at);
     /**

@@ -1366,7 +1366,7 @@ node_handle_t Builder::visitCastNode(const GCT::node_ptr_t &gct) {
     // before anything is built with it, so that the expected type a literal takes is the inferred
     // one, and so that `e` is not evaluated by being written there (design principles 5.4).
     Type *written       = gct->targetType();
-    const bool inferred = written != nullptr && written->code() == TypeCode::TypeOf;
+    const bool inferred = GCT::isTypeOfPlaceholder(written);
     if (inferred) {
         written = resolveTypeNode(written, gct);
     }

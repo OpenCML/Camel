@@ -525,7 +525,6 @@ case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
 expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
-
 [[tests]]
 name = "dead_write.opt.same_output"
 desc = "And the program still prints the 1 that never depended on the write."
