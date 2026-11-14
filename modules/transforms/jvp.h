@@ -46,9 +46,17 @@
 namespace camel::transforms {
 
 /// The graph of `reinterp<jvp>(f)` and the program of the graphs built with it.
+///
+/// `program` is held through `ProgramHold`, not named by a bare pointer: the build reserves a
+/// program of its own (`GraphDraftGroup`), and the group that rooted it is gone by the time this
+/// value reaches the caller, which reads `graph` to make a function value out of it. A program
+/// reserved while a program runs is one `GCGraphManager::reserve` does not root (program.cpp), so
+/// between the group's end and that function value this member is the only root the program has --
+/// and a safepoint that fell there would free it, leaving `graph` an address in a freed program.
+/// Move-only, like the root it carries.
 struct JvpGraph {
-    const camel::runtime::Program *program = nullptr;
-    camel::runtime::GCGraph *graph         = nullptr;
+    camel::runtime::ProgramHold program;
+    camel::runtime::GCGraph *graph = nullptr;
     /// Where the build stopped, when `graph` is null: the primitive the ruleset has no rule for, as
     /// the origin of that node in `function` (its source position), what the primitive is and why it
     /// was refused. A refusal that only prints is a reading, not a diagnosis: the kernel raises a

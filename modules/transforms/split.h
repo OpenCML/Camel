@@ -174,10 +174,16 @@ camel::runtime::gc_node_ref_t buildLinearClosure(
     std::span<const camel::runtime::gc_node_ref_t> residuals);
 
 /// The two graphs of `split(f)` and the program of them.
+///
+/// Both programs here are held through `ProgramHold`, and the value is move-only because the roots
+/// it carries are. `program` is the group's: the group is gone by the time the caller reads this,
+/// and a program a `reserve` made while a program runs is one the manager does not root (a run
+/// roots what a function value names, program.cpp), so this member is the only root between the
+/// group's end and the function value made from `forward`/`backward`.
 struct SplitGraph {
-    const camel::runtime::Program *program = nullptr;
-    camel::runtime::GCGraph *forward       = nullptr;
-    camel::runtime::GCGraph *backward      = nullptr;
+    camel::runtime::ProgramHold program;
+    camel::runtime::GCGraph *forward  = nullptr;
+    camel::runtime::GCGraph *backward = nullptr;
     /// The programs of the cuts this one's value half calls: **one per direct callee cut**, in the
     /// order the callee table took them and without repeats. A cut whose value half calls a
     /// pair-answering callee answers the call with that callee's forward half, which is a graph the
@@ -186,7 +192,11 @@ struct SplitGraph {
     /// `Program::adoptMissing` carries `added ∪ taken` (`Program::bindTaken`), so the nested program
     /// already hands on the graphs of *its* callees, however far down the chain goes. Empty for a cut
     /// none of whose callees had to be cut.
-    std::vector<const camel::runtime::Program *> nestedPrograms;
+    ///
+    /// Held, not named: the adopt that reads these (`buildSplitGraph`, "Adopted, not rebuilt") runs
+    /// after the nested build returned, and the nested build's own root died with it -- a bare
+    /// pointer here is a program the outer build dereferences with nothing keeping it alive.
+    std::vector<camel::runtime::ProgramHold> nestedPrograms;
     /// Where the build stopped, when the graphs are null: the construct it could not copy, as the
     /// origin of that node in `function`.
     camel::source::origin_id_t refusedOrigin = camel::source::kInvalidOriginId;
