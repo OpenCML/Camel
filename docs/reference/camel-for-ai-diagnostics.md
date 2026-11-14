@@ -57,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 226
+**Semantic — errors** (`SemanticDiag`) — 227
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -285,6 +285,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
 | `ExtentOfNeedsStatedShape` | `extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}. |
+| `ClosureCaptureEscapes` | '{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out. |
 
 **Semantic — warnings** (`SemanticDiag`) — 15
 

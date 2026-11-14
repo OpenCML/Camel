@@ -1,0 +1,21 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The wall: the same unread write, into a cell the graph names. `counter` belongs to the module, so
+// the write in `bump` writes a place the program keeps whoever reads it; folding `w * 0` takes its
+// only reader and leaves it a write no port reads -- and it must stay all the same (design
+// principles 9.7). `main` reads the variable after the call: 41 when the write ran, 0 when a
+// rewrite erased it.
+
+var counter = 0
+
+func bump(k: int): int sync {
+    let w = (counter = k) * 0
+    return w + 1
+}
+
+func main(): int sync {
+    println(bump(41))
+    println(counter)
+    return 0
+}

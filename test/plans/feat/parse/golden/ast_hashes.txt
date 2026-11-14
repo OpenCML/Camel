@@ -3344,6 +3344,8 @@ e04815f4dc392d59 ok test/cases/modules/rules/with_generic_target.cml
 232877d0700bd9f2 ok test/cases/modules/selected_protection/capture.cml
 666de6322e468533 ok test/cases/modules/selected_protection/cli-last.cml
 2470761d763213f8 ok test/cases/modules/selected_protection/cli-retained.cml
+a73bb0eb7a077828 ok test/cases/modules/selected_protection/dead_write.cml
+e453d5ae2e167ff4 ok test/cases/modules/selected_protection/dead_write_held.cml
 b184c6e048e0e743 ok test/cases/modules/selected_protection/effect.cml
 182cf29f8d58e7f0 ok test/cases/modules/selected_protection/fault.cml
 5883b7c397b2bb15 ok test/cases/modules/selected_protection/io.cml
@@ -3788,6 +3790,9 @@ e5f1dda926825893 ok test/cases/opt/defun/family_shape.cml
 bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
+1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
+3f5c8d5f2d756ced ok test/cases/opt/effects/dead_write_held_by_program.cml
+2ae419419bf80bc4 ok test/cases/opt/effects/dead_write_rooted_closure.cml
 a4d7f13da29104db ok test/cases/opt/effects/fold_keeps_arm_effect.cml
 2f78e2337519b9c3 ok test/cases/opt/effects/fold_keeps_arm_effect_chain.cml
 35692af85ef94ddb ok test/cases/opt/effects/fold_keeps_inner_fault.cml
