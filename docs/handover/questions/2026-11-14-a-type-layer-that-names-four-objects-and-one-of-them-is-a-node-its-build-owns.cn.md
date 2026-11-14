@@ -1,0 +1,49 @@
+# 类型层还按「对象地址」认四样东西：三样该留，一样是 `typeof` 的表达式节点
+
+**判据一句话**：`git grep -n "reinterpret_cast<uintptr_t>" -- include/camel/core/type src/core/type` 有 12 处，其中 8 处是**内部化内容**指针（`internText`/`internExtents`），4 处把对象地址写进内部化键或 `equals`：`intern.h:103`（表不持有的分量回落到地址）、`typevar.cpp:82`（`typeof` 的**表达式节点地址**）、`struct.cpp:96`、`enum.cpp:113`（**声明对象地址**）。四处里三样指的是**进程永不释放**的对象（地址因此稳定、且一个对象一个含义），第五样（守卫，本车道已修）指的是 build 自己的树；只有 `typeof` 这一处指的是**一个 build 拥有、可被释放的树里的节点**，所以性质与刚修的那处同族——而它的修法要你裁，因为类型层对它没有任何内容可说。
+
+状态：待裁。基线 `8a20f514c`（`lane-guardid`，本车道提交 `9f8d35ea9` 之后）。读数取自 `88zjwei` 的 `~/camel-work/guardid`（`camel-remote.ps1`，release，`-Jobs 8`）。
+
+## 同一个问题的四分之一已经修了
+
+守卫（`case p when pred => ...`）的键原来是 `reinterpret_cast<uintptr_t>(arm.guard.get())`，现在是 `(模块名, 谓词原文)` 经 `internText` 的内部化词。那一处能改成内容身份，因为守卫**有**内容可读：它是什么写的、写在哪。
+
+## 三处不该按内容改：它们指的对象永不释放，且内容在造类型时还不存在
+
+1. **`intern.h:103`（`typeKeyWord` 的回落）**。它只在「表不持有这个分量」时用地址，而这个分量是 `allocTypeStorage` 放在永久空间里的类型对象，永不释放——地址是稳定的，且**只会多分不会错并**（同一个类型两个词，多于两个含义一个词）。改成内容身份没有可用的内容：表不持有它就是「内容不可得」的定义。**判定：不改。** 真正的补法在调用方（先把分量 `canonical` 一次，现在四处调用里三处已经如此）；这一条留作有意的、写在文件头「完整性」一节里的不完整。
+
+2. **`struct.cpp:96`（`declaredKey` 的声明词）**。内容身份**在造类型时建不出来**：`declareStructType` 先造类型（`StructType::declare`），再 `define` 字段——类型必须先生成，因为字段可以引用它自己。所以能当身份的只有声明对象本身，这也是设计：`StructDecl`/`EnumDecl` 各自带一个单调 `id_`（`text.cpp:216/486` 的 mangle 就是 `S{id}`/`E{id}`），一个声明对象就是一个类型，重新声明（编辑后的第二次编译、`test/passes/test/retype.cpp` 的 `PullbackValue`）**必须**是另一个类型，否则旧字段会被复用。声明的生命周期也支持这一点：`git grep "delete decl\|delete declaration\|~StructDecl\|~EnumDecl\|unique_ptr<StructDecl>\|unique_ptr<EnumDecl>"` 为 0 命中，`new` 出来永不释放，所以地址稳定、唯一。**判定：不改。**
+
+3. **`enum.cpp:113`（`instanceKey` 的声明词）**。同 2，逐字同形。**判定：不改。**
+
+## 第四处要你裁：`typeof e` 的占位符
+
+`TypeOfType` 存的是一棵 **GCT 树里的表达式节点**（`builder.cpp:6929`：`node_ptr_t expression = visitData(ast->at(0)); TypeOfType::create(expression)`），`equals` 是 `this == type`，键是节点地址（`typevar.cpp:82`）。
+
+- **它为什么不能按内容认**：类型层能读到的「内容」只有表达式**写成的样子**，而两次写同一行 `typeof x` 在不同作用域里可以是两个意思（`x` 被遮蔽）。按文本合并**会错**。
+- **它为什么不能按「位置」认得轻松**：按源位置（模块＋偏移）是能区分意义的，但同一个 `typeof` 在泛型实例化时是**每个实例各访问一次**（`visitData` 每次造一个新节点、节点不挂在父节点下、靠类型持有），按位置合并会把两个实例的占位符并成一个对象，而解析（`builder_gir.cpp: resolveTypeNode`）是**每次访问就地解析**的——并了以后，第二个实例解析完，第一个实例手里那个类型指向的节点就被换成了第二个实例的，是否仍正确取决于「解析只发生一次」这条不成文前提。
+- **它为什么今天不出错**：一个 `camel` 进程编译一个程序，`Tree` 析构即进程结束；`clone()` 对同一节点必须回到同一个对象（`create(expression_)`），任何「按位置合并」的改法都得先保住这条，而「每次给一个序号」的改法**直接违背**它（clone 会造新类型）。
+- **它为什么是同族危险**：类型活在永久空间，节点活在 `Tree` 里（`tree.h:75` 有析构）。进程里只要出现**第二次编译**（编辑器/调试器回灌、进程内重跑），第二个 build 的节点可以落在第一个 build 用过的地址上，键命中 → 拿到的是旧对象，而它的 `expression_` 指向已经析构的树；`resolveTypeNode` 会把那个指针当 `GCT::Node*` 读（`origin()`、`inferTypeOf`）——这正是 `kNoTypeId` 那族坑的形状：**一个词不携带含义，两个含义可以落在同一个词上**。
+
+### 要你裁的是什么
+
+**`typeof` 占位符的身份取哪一条？**
+
+- **(A) 保留节点地址**（默认建议）：类型层对「这一次访问」没有别的东西可指。代价：跨 build 的地址复用是未定义行为的门，今天不可达只是因为「一个进程编译一个程序」；一旦进程内二次编译，需要一条与守卫同形的护栏（守卫那次加的是 `evaluateGuardNode` 遇到本 build 不持有的模块判 `NotEvaluable`），而这里要先有「这批节点属于哪个 build」的登记——那正是刚删掉的那类进程级状态。
+- **(B) 按源位置（模块＋偏移）**：语义上最贴「这一次访问」的内容，键不再依赖内存；代价是上面那条「解析只发生一次」的前提要变成明文不变量并逐处验证，且 `clone()` 的幂等要改成按位置查。
+- **(C) 每次访问一个新对象、给它一个 id 但不进内部化键**：最干净地消灭「键里有地址」，但类型表之外的 id 只有 `kNoTypeId == 0` 这一个值可用，占位符会拿到通配符那一位——**必须**另给一类真 id，否则就是这个坑本身。
+
+选 (A) 时我建议同时把 `typevar.cpp:82` 的注释改成与守卫同口径的一句话（「这是 build 自己的节点，不是这个类型的含义；本 build 不持有的树不得解析它」），并把这个前提写进 `intern.h` 的完整性一节。选 (B)/(C) 我按裁定实现，读数照本车道这次的格式给（改动前/改动后/反证）。
+
+## 已量到的读数（本车道，release，`-Jobs 8`）
+
+`std.identitytype` 的自检（`src/core/type/type_identity_selftest.cpp`）现在把上面三处「指对象」的身份钉成读数，任何人把它们改成内容身份都会红：
+
+- 命名结构体：一个声明问两次 = 一个类型；两个声明拼同一个名字 = 两个类型。
+- 枚举：同上，另有 `decl->prototype()` 幂等。
+- `typeof`：一个节点问两次 = 一个占位符；`clone` 回同一个对象；两个节点 = 两个占位符。
+
+## 相关
+
+- `docs/technical/59_typeid_keys_and_the_type_the_table_does_not_hold.md`（`kNoTypeId` 是通配符、表不持有什么）。
+- 本车道提交 `9f8d35ea9`（守卫的身份改成内容）。

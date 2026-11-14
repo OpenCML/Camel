@@ -11,6 +11,7 @@
 #include "camel/core/type/composite/stream.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/enum.h"
 #include "camel/core/type/extent.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/pure.h"
@@ -155,6 +156,8 @@ std::string debugRunTypeIdentitySelfTest() {
     // what a case's guard is identified by, and the count is printed so a reading that stopped
     // asking can be seen.
     size_t guardReadings = 0;
+    // The same count for the three places that name an object instead of a spelling.
+    size_t addressReadings = 0;
 
     for (Type *a : types) {
         // reflexive: a type is itself, and assignable from itself
@@ -509,7 +512,66 @@ std::string debugRunTypeIdentitySelfTest() {
         ++guardReadings;
     }
 
-    return std::format("{} types, {} pairs, {} guard readings", types.size(), pairs, guardReadings);
+    // The three other places the type layer tells two things apart by an object it was handed
+    // rather than by what they say (`git grep -n "reinterpret_cast<uintptr_t>" -- include/camel/
+    // core/type src/core/type`; the guard above was the fourth). Two of the three name an object
+    // the process never frees, and the type layer has nothing else to say about it: a named
+    // struct's fields are not known when its type is made, so the declaration is the only thing
+    // that can be the identity. The third names a node a build owns, and a question page asks
+    // whether that is the right thing to name (docs/handover/questions,
+    // "a type that names a node its build owns"). These readings pin today's answer so that a
+    // change to it is a red rather than a silence.
+    {
+        // A named struct: one declaration asked twice is one type, and two declarations that spell
+        // one name are two (struct.cpp, `declaredKey`).
+        Type *integer            = Type::Int64();
+        StructDecl *declaration  = StructDecl::create("IdentitySelftestNamed", {}, "selftest");
+        StructType *named        = StructType::declare(declaration, {}, {"a"});
+        declaration->define({{"a", integer}});
+        named->completeFields({{"a", integer}});
+        require(
+            StructType::get(declaration, {}) == named,
+            "one declaration asked twice is two struct types: " + show(named));
+        StructDecl *repeated     = StructDecl::create("IdentitySelftestNamed", {}, "selftest");
+        StructType *repeatedType = StructType::declare(repeated, {}, {"a"});
+        require(
+            repeatedType != named,
+            "two declarations that spell one name are one struct type: " + show(named));
+
+        // An enum: the same reading, and a declaration's own prototype is one type.
+        EnumDecl *enumDeclaration = EnumDecl::create("IdentitySelftestEnum", {}, "selftest");
+        EnumType *enumType        = enumDeclaration->prototype();
+        require(
+            enumDeclaration->prototype() == enumType,
+            "one enum declaration asked twice is two enum types: " + show(enumType));
+        EnumDecl *enumRepeated     = EnumDecl::create("IdentitySelftestEnum", {}, "selftest");
+        EnumType *enumRepeatedType = enumRepeated->prototype();
+        require(
+            enumRepeatedType != enumType,
+            "two enum declarations that spell one name are one enum type: " + show(enumType));
+
+        // `typeof e`: the placeholder names the expression node it was made with, and a clone of
+        // it is the same type -- which is what makes the node, and not the text of the expression,
+        // the thing that is named (typevar.cpp, `TypeOfType`).
+        static const int firstNode  = 0;
+        static const int secondNode = 1;
+        TypeOfType *nothing         = TypeOfType::create(&firstNode);
+        require(
+            TypeOfType::create(&firstNode) == nothing,
+            "one expression node asked twice is two `typeof` placeholders");
+        require(nothing->clone(true) == nothing, "a clone of a `typeof` placeholder is another type");
+        require(
+            TypeOfType::create(&secondNode) != nothing,
+            "two expression nodes are one `typeof` placeholder");
+        ++addressReadings;
+    }
+
+    return std::format(
+        "{} types, {} pairs, {} guard readings, {} address readings",
+        types.size(),
+        pairs,
+        guardReadings,
+        addressReadings);
 }
 
 } // namespace camel::core::type
