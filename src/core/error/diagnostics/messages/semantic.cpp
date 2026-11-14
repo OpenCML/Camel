@@ -1117,6 +1117,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::ExternalResourceNeedsVar,
+            {
+                "ExternalResourceNeedsVar",
+                "The external resource '{0}' is named without 'var' in the resource clause of '{1}'.",
+                "An external resource is state the program does not own: the program and whatever else is outside it both read and write it, so a call that names one writes it, and a clause says so the way a parameter does (design principles 3.3). Write 'var {0}' before it. A resource a module declares with 'resource' and one every program has (stdout, stderr, stdin, clock, env, fs) are external; a module's own 'var' is internal, and there an entry reads it without 'var' and writes it with 'var'.",
+            },
+        },
+        {
             SemanticDiag::CmlUnsupportedConstruct,
             {
                 "CmlUnsupportedConstruct",

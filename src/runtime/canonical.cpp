@@ -2,14 +2,18 @@
 // SPDX-License-Identifier: MIT
 
 // The canonical order and numbering of a frozen graph (camel/runtime/canonical.h): a walk of the
-// graph by its own structure, with the ties arranged so that the numbering table is smallest.
+// graph by its own structure, with the ties arranged so that the numbering table is smallest, and
+// that minimum taken over the whole program rather than fixed per graph.
 
 #include "camel/runtime/canonical.h"
 
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/base.h"
+#include "camel/core/rtdata/func.h"
+#include "camel/runtime/reachable.h"
 
 #include <algorithm>
+#include <functional>
 #include <sstream>
 #include <string>
 #include <unordered_set>
@@ -22,17 +26,45 @@ namespace {
 /// their position, never by the name the source gave them.
 enum class CanonicalPortRole : uint8_t { None, Normal, Context, Capture };
 
+/// The type of the value a node makes, which is what tells two nodes apart when the operator says
+/// nothing: two captures of different types are two different things, and the numbering may read
+/// that without reading a name. `nodeStaticSlotType`'s rule, on the runtime side.
+const camel::core::type::Type *staticTypeOf(const GCGraph &graph, const GCNode &node) {
+    if (node.dataIndex >= 0) {
+        return node.dataType();
+    }
+    const auto types   = graph.staticDataType();
+    const size_t index = static_cast<size_t>(-node.dataIndex);
+    if (types != nullptr && index < types->size()) {
+        return types->typeAt(index);
+    }
+    return node.dataType();
+}
+
+/// How many arrangements of one equal-key tie part are compared at most: what one walk may spend on
+/// a tie before it settles for the structural order its keys and fragments already give.
+constexpr size_t kMaxTieCandidates = 4096;
+
 } // namespace
 
 /// The canonical walk over one graph. It owns the numbering it produces and the temporary state a
 /// tie's arrangements are compared on, so that comparing two arrangements costs a copy of a
 /// vector of numbers and the walk they lead to.
+///
+/// `bound` is what the program has already numbered for the graphs this one binds: a binder -- the
+/// FILL that makes a function value, the FUNC that calls a graph -- reads the graph it binds through
+/// that graph's ports, by their numbers, and the numbering of a tie that pairs a captured value with
+/// a capture port is compared on those numbers (canonical.h).
 class CanonicalWalk {
   public:
-    CanonicalWalk([[maybe_unused]] const Program &program, const GCGraph &graph)
-        : graph_(graph), places_(graph.nodeCount(), kNoCanonicalNumber),
-          live_(graph.nodeCount(), false), read_(graph.nodeCount(), false),
-          role_(graph.nodeCount(), CanonicalPortRole::None), active_(graph.nodeCount(), false) {
+    CanonicalWalk(
+        const Program &program, const GCGraph &graph,
+        const std::unordered_map<const GCGraph *, std::vector<uint32_t>> *bound,
+        std::vector<CanonicalTie> *ties)
+        : program_(program), graph_(graph), bound_(bound), ties_(ties),
+          places_(graph.nodeCount(), kNoCanonicalNumber), live_(graph.nodeCount(), false),
+          read_(graph.nodeCount(), false), role_(graph.nodeCount(), CanonicalPortRole::None),
+          active_(graph.nodeCount(), false) {
         for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
             const gc_node_ref_t ref = it.ref();
             if (ref >= places_.size()) {
@@ -102,9 +134,7 @@ class CanonicalWalk {
         return ref != kInvalidNodeRef && ref < live_.size() && live_[ref];
     }
 
-    uint32_t regionOf(gc_node_ref_t ref) const {
-        return graph_.nodeRegion(ref);
-    }
+    uint32_t regionOf(gc_node_ref_t ref) const { return graph_.nodeRegion(ref); }
 
     /// The regions of the graph, the body first, in id order. A graph with no region but the body
     /// has an empty table, and the body is still region 0.
@@ -349,37 +379,115 @@ class CanonicalWalk {
 
     /// The arrangement of `tied` whose numbering table is smallest.
     ///
-    /// Every arrangement is numbered, and the arrangements are compared by the list of the nodes
-    /// they emit, in numbering order, each node described by what it is and by the numbers its
-    /// ports already carry (nodeKey). At most kMaxTieWidth nodes are enumerated; a wider tie is
-    /// arranged by the same key taken one node at a time, which is the same answer wherever the
-    /// key tells the nodes apart.
+    /// The group is first cut by the node key: two nodes whose keys differ are already ordered by
+    /// the key, because the key is the first thing their tables say and the smallest table puts the
+    /// smallest key first. What the key leaves equal -- the nodes that are the same thing down to
+    /// the numbers their ports carry and the type of the value they make -- is the only part whose
+    /// order the table has to decide, and that part is enumerated when it is no wider than
+    /// kMaxTieWidth. A wider part is not enumerated; it is cut by what each node writes on its own
+    /// (its own fragment, and the numbers of the nodes that read it), and a part that is still
+    /// equal there is reported through `ties` instead of being arranged in the order it came in.
     std::vector<gc_node_ref_t> smallestTable(const std::vector<gc_node_ref_t> &tied) {
         if (tied.size() <= 1) {
             return tied;
         }
-        // A tie inside a tie is arranged by the key alone: comparing the outer arrangements must
-        // not enumerate the inner ones again, which would multiply the two widths' factorials.
-        if (tied.size() > kMaxTieWidth || enumerating_) {
-            std::vector<gc_node_ref_t> ordered = tied;
-            std::stable_sort(
-                ordered.begin(),
-                ordered.end(),
-                [&](gc_node_ref_t a, gc_node_ref_t b) { return nodeKey(a) < nodeKey(b); });
-            return ordered;
+        CanonicalTie tie;
+        tie.graph = &graph_;
+        tie.width = tied.size();
+
+        std::vector<gc_node_ref_t> ordered = tied;
+        std::vector<std::string> keys;
+        keys.reserve(ordered.size());
+        for (gc_node_ref_t ref : ordered) {
+            keys.push_back(nodeKey(ref));
         }
-        std::vector<gc_node_ref_t> candidate = tied;
+        std::vector<size_t> order(ordered.size());
+        for (size_t i = 0; i < order.size(); ++i) {
+            order[i] = i;
+        }
+        std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+            return keys[a] < keys[b];
+        });
+        std::vector<gc_node_ref_t> sorted;
+        sorted.reserve(ordered.size());
+        for (size_t i : order) {
+            sorted.push_back(ordered[i]);
+        }
+
+        std::vector<gc_node_ref_t> result;
+        result.reserve(sorted.size());
+        size_t begin = 0;
+        bool enumeratedAll = true;
+        while (begin < sorted.size()) {
+            size_t end = begin + 1;
+            const std::string &key = keys[order[begin]];
+            while (end < sorted.size() && keys[order[end]] == key) {
+                ++end;
+            }
+            std::vector<gc_node_ref_t> run(
+                sorted.begin() + static_cast<std::ptrdiff_t>(begin),
+                sorted.begin() + static_cast<std::ptrdiff_t>(end));
+            tie.equalKeyWidth = std::max(tie.equalKeyWidth, run.size());
+            const bool enumerated = arrangeEqualKeyRun(run);
+            enumeratedAll        = enumeratedAll && enumerated;
+            result.insert(result.end(), run.begin(), run.end());
+            begin = end;
+        }
+        tie.enumerated = enumeratedAll;
+        if (ties_ != nullptr) {
+            ties_->push_back(tie);
+        }
+        return result;
+    }
+
+    /// Order one run of nodes whose keys are equal: by every arrangement when the run is narrow
+    /// enough, by the nodes' own fragments when it is not. Returns whether every arrangement was
+    /// compared.
+    bool arrangeEqualKeyRun(std::vector<gc_node_ref_t> &run) {
+        if (run.size() <= 1) {
+            return true;
+        }
+        // A tie inside a tie is arranged by the structural order alone: comparing the outer
+        // arrangements must not enumerate the inner ones again, which would multiply the two
+        // widths' factorials.
+        if (enumerating_ || run.size() > kMaxTieWidth) {
+            std::vector<std::string> fragments;
+            fragments.reserve(run.size());
+            for (gc_node_ref_t ref : run) {
+                fragments.push_back(fragmentKey(ref));
+            }
+            std::vector<size_t> order(run.size());
+            for (size_t i = 0; i < order.size(); ++i) {
+                order[i] = i;
+            }
+            std::stable_sort(order.begin(), order.end(), [&](size_t a, size_t b) {
+                return fragments[a] < fragments[b];
+            });
+            std::vector<gc_node_ref_t> sorted;
+            sorted.reserve(run.size());
+            for (size_t i : order) {
+                sorted.push_back(run[i]);
+            }
+            run = std::move(sorted);
+            return false;
+        }
+        std::vector<gc_node_ref_t> candidate = run;
         std::sort(candidate.begin(), candidate.end());
         std::vector<gc_node_ref_t> best = candidate;
         std::string bestKey             = tableOf(candidate);
+        size_t compared                 = 1;
         while (std::next_permutation(candidate.begin(), candidate.end())) {
+            if (++compared > kMaxTieCandidates) {
+                break;
+            }
             const std::string key = tableOf(candidate);
             if (key < bestKey) {
                 bestKey = key;
                 best    = candidate;
             }
         }
-        return best;
+        run = std::move(best);
+        return true;
     }
 
     /// The table one arrangement of a tie writes: the nodes it emits, in numbering order, each
@@ -398,17 +506,55 @@ class CanonicalWalk {
             table += nodeKey(sequence_[offset]);
             table += '\n';
         }
-        places_    = savedPlaces;
-        sequence_  = savedOrder;
+        places_      = savedPlaces;
+        sequence_    = savedOrder;
         enumerating_ = savedEnumerating;
         active_.assign(active_.size(), false);
         return table;
     }
 
+    /// What one node writes when it is numbered on its own: the fragment a tie part is cut by when
+    /// it is too wide to enumerate. It is the node's key and everything its own walk emits, which
+    /// is the part of the table that node is responsible for.
+    std::string fragmentKey(gc_node_ref_t ref) {
+        std::string text = tableOf({ref});
+        // What reads it is not in the node's own fragment, and it is the rest of what two equal
+        // fragments can differ in: the numbers of the nodes already numbered that take this one.
+        text += "<-";
+        std::vector<uint32_t> readers;
+        const auto collect = [&](gc_node_ref_t user) {
+            if (isLive(user) && places_[user] != kNoCanonicalNumber) {
+                readers.push_back(places_[user]);
+            }
+        };
+        for (gc_node_ref_t user : graph_.normUsersOf(ref)) {
+            collect(user);
+        }
+        for (gc_node_ref_t user : graph_.withUsersOf(ref)) {
+            collect(user);
+        }
+        for (gc_node_ref_t user : graph_.ctrlUsersOf(ref)) {
+            collect(user);
+        }
+        for (gc_node_ref_t user : graph_.syncUsersOf(ref)) {
+            collect(user);
+        }
+        for (gc_node_ref_t user : graph_.orderUsersOf(ref)) {
+            collect(user);
+        }
+        std::sort(readers.begin(), readers.end());
+        for (uint32_t number : readers) {
+            text += std::to_string(number);
+            text += ',';
+        }
+        return text;
+    }
+
     /// What a node is, for comparing two arrangements' tables: its kind, the identity of what it
     /// carries (an operator's URI, the value a constant holds, the role of a port, a loop's form),
-    /// and the numbers its ports carry. Nothing the source spelled: not a name, not a position,
-    /// not a NodeId.
+    /// the type of the value it makes, the numbers its ports carry, and -- for a binder -- the
+    /// numbers of the ports of the graph it binds, paired with the values it passes to them.
+    /// Nothing the source spelled: not a name, not a position, not a NodeId.
     std::string nodeKey(gc_node_ref_t ref) const {
         const GCNode *node = graph_.node(ref);
         std::string key;
@@ -435,6 +581,8 @@ class CanonicalWalk {
         default:
             break;
         }
+        key += '=';
+        key += typeText(ref);
         const auto append = [&](gc_node_ref_t input) {
             key += ',';
             key += input < places_.size() && places_[input] != kNoCanonicalNumber
@@ -448,7 +596,107 @@ class CanonicalWalk {
             key += '|';
             append(input);
         }
+        const GCGraph *callee = boundGraphOf(ref);
+        if (callee != nullptr) {
+            const std::vector<uint32_t> *numbers = numbersOf(*callee);
+            const std::span<const gc_node_ref_t> withs = graph_.withInputsOf(ref);
+            const std::span<const gc_node_ref_t> ports =
+                node->kind == GCNodeKind::Func ? callee->withPorts() : callee->closureNodes();
+            // The pairs are written by the value's number, not by the capture table's order: the
+            // order the source captured the values in is spelling, and a key that kept it would
+            // decide a tie by it. The pair itself is the binding: this value, that port.
+            std::vector<std::pair<uint32_t, uint32_t>> pairs;
+            pairs.reserve(withs.size());
+            for (size_t i = 0; i < withs.size(); ++i) {
+                const uint32_t value = withs[i] < places_.size() &&
+                                               places_[withs[i]] != kNoCanonicalNumber
+                                           ? places_[withs[i]]
+                                           : kNoCanonicalNumber;
+                const uint32_t port = numbers != nullptr && i < ports.size() &&
+                                              i < numbers->size() &&
+                                              (*numbers)[ports[i]] != kNoCanonicalNumber
+                                          ? (*numbers)[ports[i]]
+                                          : kNoCanonicalNumber;
+                pairs.emplace_back(value, port);
+            }
+            std::sort(pairs.begin(), pairs.end());
+            for (const auto &pair : pairs) {
+                key += '>';
+                key += pair.first == kNoCanonicalNumber ? std::string("-")
+                                                        : std::to_string(pair.first);
+                key += "->";
+                key += pair.second == kNoCanonicalNumber ? std::string("-")
+                                                         : std::to_string(pair.second);
+            }
+        }
         return key;
+    }
+
+    /// The graph a node binds: the graph a FUNC calls, and the graph the function value of a
+    /// closure FILL is. nullptr for every other node.
+    const GCGraph *boundGraphOf(gc_node_ref_t ref) const {
+        const GCNode *node = graph_.node(ref);
+        if (node == nullptr) {
+            return nullptr;
+        }
+        if (node->kind == GCNodeKind::Func) {
+            return program_.calleeOf(graph_, ref);
+        }
+        if (!isClosureValue(ref)) {
+            return nullptr;
+        }
+        const std::span<const gc_node_ref_t> inputs = graph_.normInputsOf(ref);
+        if (inputs.empty()) {
+            return nullptr;
+        }
+        const gc_node_ref_t value = inputs.front();
+        const GCNode *source     = graph_.node(value);
+        if (source == nullptr) {
+            return nullptr;
+        }
+        if (source->kind == GCNodeKind::Func) {
+            return program_.calleeOf(graph_, value);
+        }
+        if (source->kind != GCNodeKind::Data || source->dataIndex >= 0) {
+            return nullptr;
+        }
+        const auto slots   = graph_.staticSlots();
+        const size_t index = static_cast<size_t>(-source->dataIndex);
+        if (index >= slots.size()) {
+            return nullptr;
+        }
+        const camel::core::type::Type *type = staticTypeOf(graph_, *source);
+        if (type == nullptr || type->code() != camel::core::type::TypeCode::Function) {
+            return nullptr;
+        }
+        const auto *function = camel::core::rtdata::fromSlot<::Function *>(slots[index]);
+        return function != nullptr ? function->graph() : nullptr;
+    }
+
+    /// The numbers of a graph this one binds, when the program has numbered it already.
+    const std::vector<uint32_t> *numbersOf(const GCGraph &graph) const {
+        if (bound_ == nullptr) {
+            return nullptr;
+        }
+        const auto at = bound_->find(&graph);
+        return at == bound_->end() ? nullptr : &at->second;
+    }
+
+    /// The type of the value a node makes, as text: cached, because a word of the key per node per
+    /// arrangement would otherwise be built again and again.
+    const std::string &typeText(gc_node_ref_t ref) const {
+        if (ref >= typeText_.size()) {
+            typeText_.resize(places_.size());
+            typeTextDone_.resize(places_.size(), false);
+        }
+        if (!typeTextDone_[ref]) {
+            const GCNode *node = graph_.node(ref);
+            const camel::core::type::Type *type =
+                node == nullptr ? nullptr : staticTypeOf(graph_, *node);
+            typeText_[ref]   = type == nullptr ? std::string() : type->toString();
+            typeTextDone_[ref] = true;
+        }
+        return typeText_[ref];
     }
 
     /// The text of the value a constant node holds (a data node's static slot), empty when it
@@ -473,7 +721,10 @@ class CanonicalWalk {
         return os.str();
     }
 
+    const Program &program_;
     const GCGraph &graph_;
+    const std::unordered_map<const GCGraph *, std::vector<uint32_t>> *bound_ = nullptr;
+    std::vector<CanonicalTie> *ties_ = nullptr;
     std::vector<gc_node_ref_t> refs_;
     std::vector<uint32_t> places_; // NodeId -> position in `sequence_`
     std::vector<bool> live_;
@@ -483,19 +734,129 @@ class CanonicalWalk {
     bool enumerating_ = false; // true while an outer tie's arrangements are being compared
     std::vector<gc_node_ref_t> sequence_;
     std::vector<uint32_t> regions_;
+    mutable std::vector<std::string> typeText_;
+    mutable std::vector<bool> typeTextDone_;
 };
 
+// ---- the program -------------------------------------------------------------------------------
+
+CanonicalProgram::CanonicalProgram(const Program &program, const GCGraph &root) {
+    if (!root.hasNodePayload()) {
+        return;
+    }
+    // Every graph the root reaches, binders after the graphs they bind: a binder reads the graph it
+    // binds through that graph's ports, so the numbers of the bound graph are what the binder's own
+    // numbering is compared on. A cycle (a recursive graph binds itself) is closed by the round
+    // below: the second round reads the numbers the first one left.
+    std::vector<GCGraph *> order;
+    std::unordered_set<const GCGraph *> seen;
+    const std::function<void(GCGraph *)> visit = [&](GCGraph *graph) {
+        if (graph == nullptr || !seen.insert(graph).second) {
+            return;
+        }
+        program.traceGraphs(*graph, [&](GCGraph *next) { visit(next); });
+        order.push_back(graph);
+    };
+    visit(const_cast<GCGraph *>(&root));
+    for (GCGraph *graph : collectReachableGraphs(program, const_cast<GCGraph *>(&root))) {
+        visit(graph);
+    }
+
+    std::unordered_map<const GCGraph *, std::vector<uint32_t>> numbers;
+    std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> sequences;
+    std::vector<CanonicalTie> ties;
+    for (size_t round = 0; round < 2; ++round) {
+        ties.clear();
+        for (GCGraph *graph : order) {
+            CanonicalWalk walk(program, *graph, &numbers, &ties);
+            std::vector<gc_node_ref_t> sequence = walk.run();
+            std::vector<uint32_t> places(graph->nodeCount(), kNoCanonicalNumber);
+            for (size_t offset = 0; offset < sequence.size(); ++offset) {
+                if (sequence[offset] < places.size()) {
+                    places[sequence[offset]] = static_cast<uint32_t>(offset);
+                }
+            }
+            numbers[graph]   = std::move(places);
+            sequences[graph] = std::move(sequence);
+        }
+    }
+    for (GCGraph *graph : order) {
+        GraphNumbers entry;
+        entry.order   = std::move(sequences[graph]);
+        entry.numbers = std::move(numbers[graph]);
+        graphs_[graph] = std::move(entry);
+    }
+    ties_ = std::move(ties);
+    std::stable_sort(ties_.begin(), ties_.end(), [](const CanonicalTie &a, const CanonicalTie &b) {
+        return a.width > b.width;
+    });
+}
+
+namespace {
+
+const std::vector<gc_node_ref_t> &emptyOrder() {
+    static const std::vector<gc_node_ref_t> empty;
+    return empty;
+}
+
+const std::vector<uint32_t> &emptyNumbers() {
+    static const std::vector<uint32_t> empty;
+    return empty;
+}
+
+} // namespace
+
+const std::vector<gc_node_ref_t> &CanonicalProgram::order(const GCGraph &graph) const {
+    const auto at = graphs_.find(&graph);
+    return at == graphs_.end() ? emptyOrder() : at->second.order;
+}
+
+const std::vector<uint32_t> &CanonicalProgram::numbers(const GCGraph &graph) const {
+    const auto at = graphs_.find(&graph);
+    return at == graphs_.end() ? emptyNumbers() : at->second.numbers;
+}
+
+std::string CanonicalProgram::tiesText() const {
+    size_t wide    = 0; // groups wider than one node
+    size_t widest  = 0;
+    size_t pending = 0; // groups an equal-key part of which was too wide to enumerate
+    std::ostringstream os;
+    for (const CanonicalTie &tie : ties_) {
+        if (tie.width <= 1) {
+            continue;
+        }
+        ++wide;
+        widest = std::max(widest, tie.width);
+        if (!tie.enumerated) {
+            ++pending;
+        }
+        os << "tie width " << tie.width << " (equal keys " << tie.equalKeyWidth << ", "
+           << (tie.enumerated ? "enumerated" : "not enumerated") << ") in graph "
+           << (tie.graph != nullptr ? std::string(tie.graph->name()) : std::string("<none>"))
+           << '\n';
+    }
+    std::ostringstream summary;
+    summary << "canonical ties: " << wide << " group(s) wider than one node, widest " << widest
+            << ", over the limit " << pending << " (kMaxTieWidth " << kMaxTieWidth << ")\n";
+    if (pending != 0) {
+        summary << "  an equal-key part wider than the limit is cut by each node's own fragment and "
+                   "by the numbers of the nodes that read it, and what stays equal is a known "
+                   "limitation: it is not enumerated, so the numbers of those nodes are their "
+                   "settled structural order and not a compared minimum\n";
+    }
+    return summary.str() + os.str();
+}
+
 std::vector<gc_node_ref_t> canonicalNodeOrder(const Program &program, const GCGraph &graph) {
-    return CanonicalWalk(program, graph).run();
+    const CanonicalProgram numbered(program, graph);
+    const std::vector<gc_node_ref_t> &order = numbered.order(graph);
+    return std::vector<gc_node_ref_t>(order.begin(), order.end());
 }
 
 std::vector<uint32_t> canonicalNodeNumbers(const Program &program, const GCGraph &graph) {
-    std::vector<uint32_t> numbers(graph.nodeCount(), kNoCanonicalNumber);
-    const std::vector<gc_node_ref_t> order = canonicalNodeOrder(program, graph);
-    for (size_t offset = 0; offset < order.size(); ++offset) {
-        numbers[order[offset]] = static_cast<uint32_t>(offset);
-    }
-    return numbers;
+    const CanonicalProgram numbered(program, graph);
+    const std::vector<uint32_t> &numbers = numbered.numbers(graph);
+    return std::vector<uint32_t>(numbers.begin(), numbers.end());
 }
 
 } // namespace camel::runtime

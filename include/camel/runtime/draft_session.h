@@ -300,6 +300,8 @@ class RuntimeGraphDraftSession {
     struct DraftRefs {
         uint64_t revision = 0;
         bool valid        = false;
+        // program-holder-exempt: long-lived-cache -- a memo of (graph, program) pairs the
+        // session re-derives; a pin per entry would keep every program a draft ever named.
         std::vector<std::pair<GraphId, const Program *>>
             graphs; // with the program of a function value
     };

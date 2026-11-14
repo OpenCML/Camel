@@ -856,6 +856,8 @@ class EncodeSession {
     }
 
     graph_ptr_t rootGraph_;
+    // program-holder-exempt: borrow-or-foreign-type -- a reference to the program the encoder
+    // was handed; its caller owns it for the encode.
     camel::runtime::Program &program_;
     camel::runtime::GraphIdAllocator *freshIds_;
     std::vector<PreparedGraph> prepared_;

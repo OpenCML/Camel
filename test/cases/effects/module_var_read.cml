@@ -1,0 +1,17 @@
+/**
+ * Reading a module-level `var` is the other side of effect masking: the cell is the module's, not
+ * the body's, so a caller reads the same cell and the read is a resource of the function that
+ * makes it (design principles 3.3). `peek` reads `counter` and must be measured as touching it --
+ * the masking rule drops a cell the body made itself and nothing else.
+ */
+
+var counter = 3
+
+func peek(): int sync {
+    return counter
+}
+
+func main(): int sync {
+    println(peek())
+    return 0
+}

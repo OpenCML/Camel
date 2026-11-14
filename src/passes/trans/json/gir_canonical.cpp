@@ -54,6 +54,7 @@
 #include "camel/core/type/enum.h"
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/passes/trans/json/gir.h"
+#include "camel/runtime/canonical.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/draft.h"
 #include "camel/runtime/graph_txn.h"
@@ -128,7 +129,8 @@ std::string fillKindName(GCFillKind kind) {
 class CanonicalDocument {
   public:
     CanonicalDocument(const Program &program, GCGraph *root)
-        : program_(program), root_(root), graphs_(collectReachableGraphs(program, root)) {
+        : program_(program), root_(root), graphs_(collectReachableGraphs(program, root)),
+          numbering_(program, *root) {
         for (size_t i = 0; i < graphs_.size(); ++i) {
             const std::string id                       = std::format("g{}", i);
             graphIds_[graphs_[i]]                      = id;
@@ -167,9 +169,16 @@ class CanonicalDocument {
     }
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- the document reads the program the pass
+    // was given and is written inside that call.
     const Program &program_;
     GCGraph *root_;
     std::vector<GCGraph *> graphs_;
+    /// The numbering of every graph of the program, taken together: the ids the document prints are
+    /// the canonical numbers, not the order the nodes were created in.
+    CanonicalProgram numbering_;
+    std::unordered_map<const GCGraph *, std::vector<gc_node_ref_t>> nodeOrder_;
+    std::unordered_map<const GCGraph *, std::unordered_map<gc_node_ref_t, size_t>> captureRanks_;
     std::unordered_map<const GCGraph *, std::string> graphIds_;
     std::unordered_map<uint32_t, std::string> graphIdByValue_;
 
@@ -193,11 +202,57 @@ class CanonicalDocument {
 
     void indexNodes() {
         for (GCGraph *graph : graphs_) {
-            auto &ids   = nodeIds_[graph];
-            size_t next = 0;
-            for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it)
-                ids[it.ref()] = std::format("n{}", next++);
+            auto &ids                               = nodeIds_[graph];
+            std::vector<gc_node_ref_t> &order       = nodeOrder_[graph];
+            size_t next                             = 0;
+            const std::vector<gc_node_ref_t> &canonical = numbering_.order(*graph);
+            if (!canonical.empty()) {
+                // The numbers are the canonical ones (camel/runtime/canonical.h): the graph's own
+                // walk, with the ties arranged for the smallest table over the whole program. The
+                // order the nodes were created in is spelling, and so is the order the source
+                // captured two values in; both are gone from the document, and every node the walk
+                // reaches has its number here.
+                order.assign(canonical.begin(), canonical.end());
+            } else {
+                for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it)
+                    order.push_back(it.ref());
+            }
+            for (gc_node_ref_t ref : order)
+                ids[ref] = std::format("n{}", next++);
         }
+    }
+
+    /// The canonical number of a node of `graph`, or kNoCanonicalNumber when the graph has none for
+    /// it (a graph the solve does not hold).
+    uint32_t numberOf(GCGraph *graph, gc_node_ref_t ref) const {
+        const std::vector<uint32_t> &numbers = numbering_.numbers(*graph);
+        return ref < numbers.size() ? numbers[ref] : kNoCanonicalNumber;
+    }
+
+    /// The rank of each capture port among the graph's capture ports, by canonical number: the
+    /// capture table's own index is the order the source captured the values in, which is spelling
+    /// and not a thing the document may print.
+    const std::unordered_map<gc_node_ref_t, size_t> &captureRanks(GCGraph *graph) {
+        if (const auto at = captureRanks_.find(graph); at != captureRanks_.end())
+            return at->second;
+        auto &ranks = captureRanks_[graph];
+        std::vector<gc_node_ref_t> captures(graph->closureNodes().begin(), graph->closureNodes().end());
+        std::stable_sort(captures.begin(), captures.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+            return numberOf(graph, a) < numberOf(graph, b);
+        });
+        for (size_t i = 0; i < captures.size(); ++i)
+            ranks[captures[i]] = i;
+        return ranks;
+    }
+
+    /// Whether `ref` is the FILL that makes a function value: the node whose with inputs are the
+    /// values the function captured, in the order of the capture table.
+    static bool isClosureFill(GCGraph *graph, gc_node_ref_t ref) {
+        const GCNode *node = graph->node(ref);
+        if (node == nullptr || node->kind != GCNodeKind::Fill)
+            return false;
+        const auto *body = graph->nodeBodyAs<GCFillBody>(ref);
+        return body != nullptr && body->fillKind == GCFillKind::FunctionClosure;
     }
 
     const std::string *nodeIdOf(const GCGraph *graph, gc_node_ref_t ref) const {
@@ -858,7 +913,31 @@ class CanonicalDocument {
             }
         };
         add("normal", graph->normInputsOf(ref));
-        add("context", graph->withInputsOf(ref));
+        // The values a closure captured sit in the with inputs in the order of the capture table,
+        // which is the order the source captured them in: spelling. The slot the document prints is
+        // the value's rank in the canonical order -- the same rank the bound graph's capture port
+        // has -- so two programs that captured the same values in the other order write one
+        // document (design principles 9, "the graph interface does not see the spelling").
+        if (isClosureFill(graph, ref)) {
+            std::vector<std::pair<uint32_t, gc_node_ref_t>> slots;
+            const auto withs = graph->withInputsOf(ref);
+            slots.reserve(withs.size());
+            for (gc_node_ref_t input : withs)
+                slots.emplace_back(numberOf(graph, input), input);
+            std::stable_sort(slots.begin(), slots.end(), [](const auto &a, const auto &b) {
+                return a.first < b.first;
+            });
+            for (size_t i = 0; i < slots.size(); ++i) {
+                const std::string *source = nodeIdOf(graph, slots[i].second);
+                inputs.push_back(
+                    json{
+                        {"kind", "context"},
+                        {"slot", i},
+                        {"source", source == nullptr ? json(nullptr) : json(*source)}});
+            }
+        } else {
+            add("context", graph->withInputsOf(ref));
+        }
         add("control", graph->ctrlInputsOf(ref));
         // The two ordering edges are not ports and have no role (edges.cn.md 1.5), so what they
         // carry is the kind and, as the slot, their place in the graph's own list. They are the
@@ -960,7 +1039,14 @@ class CanonicalDocument {
         switch (node.kind) {
         case GCNodeKind::Port: {
             const auto info = camel::passes::gir::portInfo(graph, ref);
-            value["param"]  = json{{"kind", info.kind}, {"index", info.index}};
+            // A capture port's own index is where it sits in the capture table, which is the order
+            // the source captured the values in: the document prints its rank in the canonical
+            // order instead, which is the rank the binder's slot has of it.
+            const auto &ranks = captureRanks(graph);
+            const auto at     = ranks.find(ref);
+            value["param"] =
+                json{{"kind", info.kind},
+                     {"index", at == ranks.end() ? info.index : static_cast<size_t>(at->second)}};
             break;
         }
         case GCNodeKind::Func: {
@@ -1113,9 +1199,8 @@ class CanonicalDocument {
             {"capturePorts", json::array()}};
         if (graph == root_)
             value["root"] = true;
-        for (auto it = graph->nodes().begin(); it != graph->nodes().end(); ++it) {
-            const auto ref   = it.ref();
-            const auto *node = *it;
+        for (gc_node_ref_t ref : nodeOrder_.at(graph)) {
+            const auto *node = graph->node(ref);
             if (node == nullptr)
                 continue;
             value["nodes"].push_back(nodeJson(graph, ref, *node));
@@ -1135,7 +1220,15 @@ class CanonicalDocument {
         };
         pushPorts("normalPorts", graph->normPorts());
         pushPorts("contextPorts", graph->withPorts());
-        pushPorts("capturePorts", graph->closureNodes());
+        // The capture table's order is the order the source captured the values in: the ports are
+        // written in the canonical order instead.
+        {
+            std::vector<gc_node_ref_t> captures(graph->closureNodes().begin(), graph->closureNodes().end());
+            std::stable_sort(captures.begin(), captures.end(), [&](gc_node_ref_t a, gc_node_ref_t b) {
+                return numberOf(graph, a) < numberOf(graph, b);
+            });
+            pushPorts("capturePorts", captures);
+        }
         const gc_node_ref_t exit = graph->exitNodeRef();
         if (const std::string *node = nodeIdOf(graph, exit))
             value["exit"] = *node;

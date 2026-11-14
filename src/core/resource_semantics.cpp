@@ -88,6 +88,17 @@ ResourceSpec externalAmbient(std::string name, AccessMode mode) {
     return ResourceSpec{.accesses = {ambientAccess(std::move(name), mode)}, .externalEffect = true};
 }
 
+ResourceAccess globalAccess(AccessMode mode) {
+    // The class is Unknown on purpose: this is the reading of an operator that declares nothing,
+    // not something a module may write (design principles 3.3, the "global" resource).
+    return ResourceAccess{
+        .resource = Resource{.cls = ResourceClass::Unknown, .name = "global"},
+        .binding  = ResourceBinding{.kind = ResourceBinding::Kind::Ambient},
+        .region   = ResourceRegion{.kind = ResourceRegion::Kind::Unknown},
+        .mode     = mode,
+    };
+}
+
 ResourceSpec
 conservativeResources(size_t normCount, size_t withCount, bool pure, bool externalEffect) {
     ResourceSpec spec;
@@ -303,8 +314,8 @@ std::string toString(const ResourceSpec &spec) {
 
 ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
     ResourceSignature sig;
-    sig.mode    = ResourceSignature::Mode::Concrete;
-    sig.result  = spec.result;
+    sig.mode      = ResourceSignature::Mode::Concrete;
+    sig.result    = spec.result;
     sig.allocates = spec.allocates;
     sig.external  = spec.externalEffect;
     for (const ResourceAccess &access : spec.accesses) {
@@ -348,7 +359,8 @@ ResourceSignature signatureOf(const ResourceSpec &spec, size_t withCount) {
             if (found == sig.ambient.end()) {
                 sig.ambient.push_back(
                     ResourceSignature::AmbientUse{
-                        .name = access.resource.name, .mode = access.mode});
+                        .name = access.resource.name,
+                        .mode = access.mode});
             } else {
                 found->mode = uniteAccess(found->mode, access.mode);
             }
@@ -385,8 +397,8 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
         return targetMode == AccessMode::ReadModifyWrite || targetMode == sourceMode;
     };
     for (const auto &use : source.params) {
-        const bool covered = std::any_of(
-            target.params.begin(), target.params.end(), [&](const auto &t) {
+        const bool covered =
+            std::any_of(target.params.begin(), target.params.end(), [&](const auto &t) {
                 return t.index == use.index && t.cls == use.cls && t.name == use.name &&
                        coversMode(t.mode, use.mode);
             });
@@ -398,8 +410,8 @@ bool covers(const ResourceSignature &target, const ResourceSignature &source) {
         }
     }
     for (const auto &use : source.ambient) {
-        const bool covered = std::any_of(
-            target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
+        const bool covered =
+            std::any_of(target.ambient.begin(), target.ambient.end(), [&](const auto &t) {
                 return t.name == use.name && coversMode(t.mode, use.mode);
             });
         if (!covered) {
@@ -441,8 +453,8 @@ std::span<const std::string_view> standardResourceNames() {
     // Design principles 3.3: the state the language gives every program, with the names a
     // declaration uses for it. `rng`, `tensor:generator` and the other module resources are
     // declared by their modules, not here.
-    static constexpr std::array<std::string_view, 6> names{
-        "stdout", "stderr", "stdin", "clock", "env", "fs"};
+    static constexpr std::array<std::string_view, 6>
+        names{"stdout", "stderr", "stdin", "clock", "env", "fs"};
     return names;
 }
 
@@ -499,21 +511,24 @@ std::string toString(const ResourceSignature &signature) {
     }
     std::string out = "uses ";
     bool first      = true;
-    const auto add  = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    // An entry is named the way it is written (design principles 3.3): a resource the call writes
+    // carries `var`, and one it only reads does not, so a reader of the signature can tell the
+    // two promises apart.
+    const auto add = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : signature.params) {
-        add(std::format("#{}", use.index));
+        add(writes(use.mode), std::format("#{}", use.index));
     }
     for (const auto &use : signature.ambient) {
-        add(resourceDisplayName(use.name));
+        add(writes(use.mode), resourceDisplayName(use.name));
     }
     for (ResourceClass cls : signature.anyOf) {
-        add(std::format("any {}", resourceClassName(cls)));
+        add(false, std::format("any {}", resourceClassName(cls)));
     }
     for (uint8_t capture : signature.captures) {
-        add(std::format("capture {}", capture));
+        add(false, std::format("capture {}", capture));
     }
     return out;
 }

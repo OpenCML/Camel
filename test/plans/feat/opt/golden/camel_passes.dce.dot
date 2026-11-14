@@ -75,7 +75,7 @@ digraph GraphIR {
         N09 -> N14 [label="SYNC", type="SYNC"];
     }
     O00 [label="EXIT", type="EXIT"];
-    N15 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="22:0-26:1", srcfile="<ROOT>/test/cases/opt/camel_passes/dce_subject.cml", value_type="() => int uses stdout"];
+    N15 [label="Function(graph=main, tupleSlots=0)", type="DATA", origin=<ORIGIN>, span="22:0-26:1", srcfile="<ROOT>/test/cases/opt/camel_passes/dce_subject.cml", value_type="() => int uses var stdout"];
     N16 [label="CALL", type="CALL", value_type="int"];
     N16 -> O00 [label="0", type="EXIT"];
     N15 -> N16 [label="0|0", type="WITH"];

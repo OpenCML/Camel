@@ -8,11 +8,11 @@
 resource db
 resource cache
 
-func fill(): int uses cache {
+func fill(): int uses var cache {
     return 1
 }
 
-func stamp(): int uses db {
+func stamp(): int uses var db {
     return fill()
 }
 

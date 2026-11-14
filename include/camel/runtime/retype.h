@@ -181,6 +181,8 @@ struct ProgramRetypeReport {
     size_t retypedNodes  = 0;
     size_t retypedStatic = 0;
     size_t leftStatic    = 0; // static values that kept their type: see leaveStaticObjects
+    // program-holder-exempt: kept-by-another-root -- the session's commit made it and the
+    // session's ProgramHold keeps it; the report only names it.
     const Program *program = nullptr; // the program the commit made
 };
 

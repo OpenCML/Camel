@@ -205,6 +205,76 @@ std::string_view numericClassName(NumericClass cls) {
     return "opaque";
 }
 
+// ---- The effect, derived from the access list ----------------------------------------------
+
+namespace {
+
+/// Whether an access of this class reaches state outside the program (design principles 3.3,
+/// 10.5): the console, the file system, a module's own state, a resource nobody itemized. A
+/// variable or an object is the program's own; a handle is a value the program owns.
+bool reachesOutside(const ResourceClass cls) {
+    switch (cls) {
+    case ResourceClass::Variable:
+    case ResourceClass::Object:
+    case ResourceClass::Handle:
+        return false;
+    case ResourceClass::Ambient:
+    case ResourceClass::Foreign:
+    case ResourceClass::Unknown:
+        break;
+    }
+    return true;
+}
+
+} // namespace
+
+bool OperatorSemantics::external() const {
+    // Nobody declared its effect: the conservative reading, which is an effect outside the
+    // program (design principles 3.3).
+    if (declaredEffect == Effect::Undeclared) {
+        return true;
+    }
+    if (declaredEffect == Effect::Effectful) {
+        return true;
+    }
+    if (!resources) {
+        return false;
+    }
+    if (resources->externalEffect) {
+        return true;
+    }
+    for (const ResourceAccess &access : resources->accesses) {
+        if (reachesOutside(access.resource.cls)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+Effect OperatorSemantics::effect() const {
+    // The access list decides, where it is declared: an empty one is a pure operator, and one
+    // that reaches outside the program is effectful (docs/design/op-semantics/README.cn.md 4.2).
+    // `Effectful` stated without an itemized access list stays effectful: the declaration says
+    // the effect exists and the list is what has not been written yet.
+    if (resources) {
+        if (!external() && resources->none()) {
+            return Effect::Pure;
+        }
+        return external() ? Effect::Effectful : Effect::StateOnly;
+    }
+    return declaredEffect;
+}
+
+std::vector<ResourceAccess> OperatorSemantics::accessList() const {
+    if (resources) {
+        return resources->accesses;
+    }
+    // No list: the operator writes the global resource, which every effect conflicts with
+    // (design principles 3.3). It is a reading, not a declaration: `checkResources` refuses an
+    // unknown class, so a module cannot write this one itself.
+    return {globalAccess(AccessMode::Write)};
+}
+
 std::string_view faultKindName(FaultKind kind) {
     switch (kind) {
     case FaultKind::DivisionByZero:

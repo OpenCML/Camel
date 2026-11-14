@@ -293,6 +293,12 @@ ResourceAccess ambientAccess(std::string name, AccessMode mode);
 /// visible outside the program: a file system call, the console, the clock, a generator.
 ResourceSpec externalAmbient(std::string name, AccessMode mode);
 
+/// The conservative reading of an operator that declares no access list (design principles 3.3:
+/// an operator that declares nothing is taken to use the "global" resource, which keeps it in
+/// order with every other effect). It is a reading, not a declaration: the class is Unknown,
+/// which `checkResources` refuses, and the name is written so that a report can show it.
+ResourceAccess globalAccess(AccessMode mode = AccessMode::Write);
+
 /**
  * The conservative reading of an operator without a declaration (design 4.2, 8.1): nothing for
  * a pure one; otherwise a read-modify-write of every operand, whole and of unknown class, a

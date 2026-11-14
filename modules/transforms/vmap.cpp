@@ -754,8 +754,8 @@ VmapGraph buildVmapGraph(
        << " " << askedFoundMissing(refused)
        << " rules=" << (rules.empty() ? "-" : rules)
        << " elements=" << (elements.empty() ? "-" : elements) << '\n';
-    VmapGraph built = refused;
-    built.program   = group.program();
+    VmapGraph built = std::move(refused);
+    built.program   = camel::runtime::ProgramHold(*context, group.program());
     built.graph     = const_cast<rt::GCGraph *>(made);
     built.rules     = std::move(usedRules);
     return built;

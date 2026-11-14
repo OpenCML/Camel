@@ -1739,6 +1739,137 @@ function uriMatches(pattern, uri) {
     return new RegExp(`^${source}$`).test(uri)
 }
 
+// The index of the top-level occurrence of the word `word` in `text`, or -1. A clause written
+// after a result type is at depth 0; the same word inside a parameter's function type is not.
+function topLevelIndex(text, word) {
+    const pattern = new RegExp(`^${word}\\b`)
+    let depth = 0
+    for (let i = 0; i < text.length; i++) {
+        const c = text[i]
+        if (c === '=' && text[i + 1] === '>') {
+            i++
+            continue
+        }
+        if ('([{<'.includes(c)) depth++
+        else if (')]}>'.includes(c)) depth--
+        else if (depth === 0 && (i === 0 || /\s/.test(text[i - 1])) && pattern.test(text.slice(i, i + word.length + 1))) {
+            return i
+        }
+    }
+    return -1
+}
+
+// The access list a declaration writes in its `uses` clause (design principles 3.3;
+// docs/design/effects/plan.cn.md 2.1, 4.3): one item per resource it touches, `uses fs` for an
+// access that reads and writes `fs` and `uses var n` for one that only writes the cell `n`. Null
+// when the declaration writes no clause at all, which states nothing about what the operator
+// touches -- an operator nobody itemized is read as writing the global resource, and a reading
+// cannot contradict a declaration that says nothing.
+function declaredAccesses(text) {
+    const at = topLevelIndex(text || '', 'uses')
+    if (at < 0) return null
+    let rest = text.slice(at + 'uses'.length)
+    const when = topLevelIndex(rest, 'when')
+    if (when >= 0) rest = rest.slice(0, when)
+    const items = []
+    for (const part of splitTopLevel(rest) || []) {
+        const trimmed = part.trim()
+        if (trimmed === '') continue
+        const write = /^var\s+/.test(trimmed)
+        const name = trimmed.replace(/^var\s+/, '').trim()
+        if (name !== '') items.push({ name, write })
+    }
+    return items
+}
+
+// The access list of an operator, for a diagnostic: what it touches and how.
+function describeAccesses(accesses) {
+    return accesses
+        .map((access) => {
+            const what = access.binding === 'ambient' ? access.name || access.class : `its ${access.binding} operand`
+            return `${what} (${access.mode})`
+        })
+        .join(', ')
+}
+
+// The two access lists side by side, item by item: what a declaration writes in its `uses` clause
+// and what the operator registers (`camel inspect --ops` prints it, `accesses`). An item names
+// either a parameter of the declaration -- the operand the C++ side binds the access to, printed
+// as "with 0" or "norm 1" -- or a resource outside the program, which the operator names with its
+// module (`uses driver` in module `tiles` is `tiles:driver`). Both directions are compared: an item
+// the operator does not touch, and a resource it touches that the clause does not name. Purity is
+// the empty list, so `@pure` is compared the same way.
+function compareAccesses(entry, op, declared, declaredPure) {
+    const problems = []
+    const where = `${entry.file}:${entry.line}: '${entry.name}' (${op.uri})`
+    const accesses = op.accesses || []
+    const paramName = (access) => {
+        const found = /^(with|norm) (\d+)$/.exec(access.binding || '')
+        if (!found) return null
+        const list = found[1] === 'with' ? entry.with : entry.norm
+        const spelling = list[Number(found[2])]
+        return spelling === undefined ? null : parameterName(spelling)
+    }
+    if (declaredPure && accesses.length !== 0) {
+        problems.push(`${where} is @pure but touches ${describeAccesses(accesses)}`)
+    }
+    if (declaredPure || declared === null) return problems
+    const byName = new Map()
+    const ambient = []
+    for (const access of accesses) {
+        const name = paramName(access)
+        if (name !== null) {
+            byName.set(name, access)
+            continue
+        }
+        if (access.binding === 'ambient') {
+            ambient.push(access)
+            // The C++ side names an ambient resource the way the module that declares it writes
+            // it (`tiles:driver`, `process:process`), while a clause writes a resource of its own
+            // module bare (`uses driver`), one of another through that module (`uses io::fs`) or
+            // the name the module was given (`uses fs`). All of those spellings name one resource.
+            const qualified = access.name
+            const bare = qualified.slice(qualified.lastIndexOf(':') + 1)
+            for (const spelling of [
+                qualified,
+                qualified.replace('::', ':'),
+                bare,
+                `${entry.module}:${bare}`,
+                `${entry.module}::${bare}`,
+            ]) {
+                byName.set(spelling, access)
+            }
+        }
+    }
+    const covered = new Set()
+    for (const item of declared) {
+        const access = byName.get(item.name)
+        if (access === undefined) {
+            problems.push(
+                `${where} declares \`uses ${item.write ? 'var ' : ''}${item.name}\` but the operator touches no such resource`,
+            )
+            continue
+        }
+        covered.add(access)
+        // An external resource is state the program does not own, so a call that names one reads and
+        // writes it, and the clause says so with `var` -- the rule the compiler enforces as
+        // `SemanticDiag::ExternalResourceNeedsVar` (design principles 3.3). The write flag of an
+        // ambient entry is therefore not compared with the operator's own mode: a read of an external
+        // resource is still written `uses var fs`, and requiring the operator's read to agree would
+        // make that declaration unspellable. The comparison stays for a parameter, whose effect the
+        // operator owns.
+        if (item.write && access.mode === 'read' && access.binding !== 'ambient') {
+            problems.push(`${where} declares a write of \`${item.name}\` and the operator only reads it`)
+        }
+    }
+    for (const access of ambient) {
+        if (!covered.has(access)) {
+            problems.push(`${where} touches \`${access.name}\` (${access.mode}) and its declaration does not name it`)
+        }
+    }
+    return problems
+}
+
 function countsAgree(declared, registered) {
     // -1: any number, -2: the resolver does not tell.
     return declared === registered || declared < 0 || registered < 0
@@ -3333,13 +3464,18 @@ function verifyOps() {
                 // operator's purity is registered in C++ and a declaration need not repeat it
                 // (design principles 6.4, 10.4), so there is nothing to compare. A tag that *is*
                 // written is a claim about the operator, and it has to agree with it.
-                if (entry.purity === null) {
-                    continue
-                }
-                if (declaredPure !== (op.purity === 'pure')) {
+                if (entry.purity !== null && declaredPure !== (op.purity === 'pure')) {
                     problems.push(
                         `${entry.file}:${entry.line}: '${entry.name}' is ${declaredPure ? '@pure' : '@effect'} but ${op.uri} is registered ${op.purity}`,
                     )
+                }
+                // The access list, item by item: the `uses` clause a declaration writes against
+                // the accesses the operator registers. An operator that itemizes none is read as
+                // writing the global resource (design principles 3.3), and that reading says
+                // nothing a declaration could agree or disagree with, so only a declaration of an
+                // operator that itemizes its accesses is compared. `@pure` is the empty list.
+                if (op.accesses_declared === true) {
+                    problems.push(...compareAccesses(entry, op, declaredAccesses(entry.result), declaredPure))
                 }
             }
         }

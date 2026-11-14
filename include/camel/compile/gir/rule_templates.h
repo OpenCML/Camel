@@ -67,6 +67,8 @@ struct GenericRuleInstance {
     /// The instance itself, when it was made: its two sides and its condition, in one program of
     /// the context that is never released. The graphs are the instance's own, so two instances of
     /// one rule never share a writing.
+    // program-holder-exempt: long-lived-cache -- the instance table lives for the context's
+    // lifetime, and the context pins the instance's program (rule_templates.cpp).
     const camel::runtime::Program *program = nullptr;
     const camel::runtime::GCGraph *lhs   = nullptr;
     const camel::runtime::GCGraph *rhs   = nullptr;

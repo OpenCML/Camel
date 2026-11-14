@@ -1063,6 +1063,8 @@ zeroOfSpaceOf(camel::runtime::GraphDraft &draft, Type *space, gc_node_ref_t shap
 /// two calls of one function call one graph.
 struct TransposeState {
     camel::runtime::GraphDraftGroup &group;
+    // program-holder-exempt: borrow-or-foreign-type -- the state borrows the program its pass
+    // was given; the pass keeps it for the build.
     const camel::runtime::Program *program;
     std::unordered_map<uint32_t, GraphId> callees;
     /// The context whose rule table the transpose reads. `TransposeState` is where it belongs: it
@@ -5674,7 +5676,7 @@ TransposeGraph buildTransposeGraph(
     if (!buildTransposeMember(state, function, member, os)) {
         // The cause the walk recorded, not a reading of the log: a null graph and the reason it is
         // null are one answer, handed back together.
-        return TransposeGraph{nullptr, nullptr, state.refusal};
+        return TransposeGraph{state.refusal};
     }
     group.encode();
     const camel::runtime::GCGraph *made = group.encoded(member);
@@ -5725,10 +5727,10 @@ TransposeGraph buildTransposeGraph(
                 os << " param=" << state.shapeParam << " param-type=" << state.shapeType;
             }
             os << '\n';
-            return TransposeGraph{nullptr, nullptr, refusal};
+            return TransposeGraph{refusal};
         }
     }
-    return TransposeGraph{group.program(), const_cast<camel::runtime::GCGraph *>(made)};
+    return TransposeGraph{*context, group.program(), const_cast<camel::runtime::GCGraph *>(made)};
 }
 
 } // namespace camel::transforms

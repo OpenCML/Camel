@@ -104,6 +104,8 @@ class StaticProgramFunction : public camel::core::rtdata::Object {
         const camel::core::type::FunctionType *type)
         : program_(program), graph_(graph), type_(type) {}
 
+    // program-holder-exempt: kept-by-another-root -- the program is the context's, which keeps
+    // it; updateRefs relocates neither it nor the graph (static_function.cpp).
     const camel::runtime::Program *program_             = nullptr;
     camel::runtime::GraphId graph_                      = camel::runtime::kInvalidGraphId;
     const camel::core::type::FunctionType *type_        = nullptr;
