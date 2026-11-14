@@ -1114,8 +1114,32 @@ if (!/\[SUMMARY\].*total: 0, pass: 0, fail: 0/.test(emptyRun.output)) {
 const matchedChangedList = path.join(changedScratch, 'matched.txt')
 fs.writeFileSync(matchedChangedList, 'test/cases/compile/enum/shapes.cml\n')
 const matchedSelection = runTestCli(['--changed', '--changed-files', matchedChangedList, '--list'])
-if (!/select 1 plan\(s\)/.test(matchedSelection.output)) {
-    problems.push(`--changed on a rule-matching file did not select its plan: ${matchedSelection.output.trim()}`)
+// Two plans, and one of them follows `--tier`. The quantity is not incidental: a rule-matching
+// file selects the plan that mirrors its directory AND the plans the rule adds beside it, and since
+// 2026-11-14 the `test/cases/` rule carries `{ "plan": "feat/parse/frontend.plan.toml", "layer":
+// true }` (test/plan-selection.json; the reason is in that rule's own comment: the frontend plan
+// hashes every `.cml` of the repository, so a case that lands without its record is a file that
+// changed with nothing reading it). `select 1 plan(s)` was written on 2026-11-05, when the rule had
+// one plan; it was the count of that day, and it is now the count of a tree without `also`. A count
+// alone is a thin reading, so both plan files are asserted by name beside it and so is the layer
+// mark: a rule that dropped `also` reads 1 and goes red here, and an `also` written without
+// `layer` reads `select 2 plan(s)` with no tier note and goes red as well -- which is the case
+// worth pinning, because an unlayered frontend plan would run its slow fuzz test on every case
+// edit. The paths are compared after `\` is read as `/`: the runner prints the resolved targets as
+// `path.resolve` writes them, so on Windows they arrive with backslashes.
+const matchedText = matchedSelection.output.replace(/\\/g, '/')
+if (!/select 2 plan\(s\), 1 follow --tier/.test(matchedText)) {
+    problems.push(
+        `--changed on a rule-matching file did not select the plan it mirrors and the plan the rule `
+        + `adds beside it: ${matchedSelection.output.trim()}`
+    )
+}
+for (const plan of ['test/plans/feat/compile/enum.plan.toml', 'test/plans/feat/parse/frontend.plan.toml']) {
+    if (!matchedText.includes(plan)) {
+        problems.push(
+            `--changed on a rule-matching file did not name ${plan}: ${matchedSelection.output.trim()}`
+        )
+    }
 }
 if (/^\[INFO\] changed: 0 target\(s\)/m.test(matchedSelection.output)) {
     problems.push(
