@@ -275,7 +275,7 @@ CHECK_RANGE = range(1, 26)
 # statement the call was written after. `edeaa9c41` took `progen_4` of the E9 differential from
 # crash 1 to crash 0 by laying that wait before the loop's first round, and
 # test/cases/opt/inline/loop_wait_after_inline.cml is the 25-line reduction of the shape, so the
-# seed runs in `progen_check` again and the test plan reads it in fast layer as `progen_seed4`.
+# seed runs in `progen_check` again and the test plan reads it in fast layer as `progen_seed_4`.
 #
 # A seed recorded here names the generator version it was generated at, in the entry and in this
 # comment. `generate.VERSION` 7 -> 8 (`0ddbb92af`, "existing seeds are other programs") re-pointed

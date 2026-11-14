@@ -281,7 +281,7 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
 - **A seed is left out when a pass crashes on it.** The check batch holds seeds whose every
   cell passes, so a seed that stops being green is listed in `progen.py`'s `CHECK_EXCLUDED`
   with what it shows, and left out is not absent: the test plan runs that seed on its own in a
-  fast-layer entry (`progen_seed4` today), so the reading appears on every merge instead of
+  fast-layer entry (`progen_seed_4` today), so the reading appears on every merge instead of
   passing over it. `CHECK_EXCLUDED` is empty today. Its last entry was seed 4 of
   `generate.VERSION` 8, which made all four cells of `std::opt::inline` end in SIGSEGV -- not
   something the front end says about the program and not something the generator can avoid

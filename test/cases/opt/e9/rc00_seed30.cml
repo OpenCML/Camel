@@ -1,0 +1,11 @@
+func main(): int sync {
+    let n42 = (if false then {
+        return false;
+    } else true) || false;
+    println('');
+    if false then sync {
+        null;
+    };
+    println('L4 {} {} {}'->format<0, n42, 'k9'+ 'm'>);
+    return 0;
+}

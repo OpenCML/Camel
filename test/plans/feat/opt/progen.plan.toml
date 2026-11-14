@@ -49,7 +49,7 @@ timeout_ms = 300000
 # seeds are other programs") re-pointed every seed at another program. Any entry that records a seed
 # records the generator version with it, or it names a program the next version will not generate.
 [[tests]]
-name = "progen_seed4"
+name = "progen_seed_4"
 desc = "Seed 4 of `generate.VERSION` 8 through the cross matrix, alone: 41 cells (25 rewrite sequences on the node VM, and no rewrite, std::opt::inline, std::opt, std::opt and std::macro std::opt on the three other schedulers) all print the reference output. The four `inline` cells used to end in SIGSEGV; `edeaa9c41` fixed it, and `test/cases/opt/inline/loop_wait_after_inline.cml` is the 25-line reduction of the shape (`f8(...)` inside `let n69 = concat(...)` of `main`, whose spliced body owns a loop carrying the wait of the statement the call was written after). A red here is that crash returning: the entry reads `0 wrong` and `PASS`, and the program is `progen.py show --seed 4`."
 kind = "behavior"
 # A reading on every run, not only when someone runs the milestone layer: measured at 5.4 s on
