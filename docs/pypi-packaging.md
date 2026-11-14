@@ -65,7 +65,7 @@
 rollup 扫描 `modules/python/sdks/`，仅当同时满足：
 
 - 子目录名匹配 **`python3\d+`**（如 `python310`、`python312`）；
-- 存在 **`include/Python.h`**；
+- 存在 **`include` 目录下的 `Python.h`**；
 - 存在 **`libs/`**（Windows 下为 `.lib` 等）；
 
 才视为一个有效 SDK。

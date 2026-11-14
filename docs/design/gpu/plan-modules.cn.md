@@ -55,7 +55,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   并在诊断里说清是"运行期标量"而不是"形状"。
 - **文件**：`modules/tiles/src/graph_regions.cpp`（`eligibility` 的算子表），`modules/tiles/src/kernel_ir.cpp` /
   `index_expr.cpp`（标量一侧的索引与广播），`modules/tiles/src/compiler.cpp`（f64 标量输入的构造）。
-- **证据**：新 `test/cases/gpu/nofallback/scalar_operand.cml`：静态形状的 `#gpu` 函数里 `x * 2.0`、`y + 1.0`、
+- **证据**：新 `test/cases/gpu/nofallback/` 下的 `scalar_operand.cml`（计划中，尚未存在）：静态形状的 `#gpu` 函数里 `x * 2.0`、`y + 1.0`、
   `1.0 - y`；`tiles::compile` 退出 0，`--devices cpu` 下数值与去掉 `#gpu` 的同一程序逐位相同，且段表里该算子成段；
   设备可见时 `std::profile` 的 `operator_rows[].device` 是 `cuda`（主机恢复后补测）。守卫**先红**：今天的现象见 §1.1。
 - **依赖**：张量算子位置的字面量按设计原则 5.1 取另一操作数的元素类型（`x * 2.0` 的 `2.0` 是 f32），图上因此没有 f64 操作数，`scalar_tensor_operand` 的拒绝自然消失；已取型的 `float`（f64）标量与张量相乘是类型错误，提示写 `f32(a)`，与标量 `f32 * f64` 同一条规则。
@@ -82,9 +82,9 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   规范形式）+ 已有结构键，并让 `?` 走有界队列；同一签名第二次命中，不再建程序。复核的第一条硬要求
   落在这里。
 - **文件**：`modules/tiles/src/codegen_cache.cpp`（键与命中计数），`modules/tiles/include/tiles/internal/codegen_cache.h`，
-  `modules/tiles/src/compiled_region.cpp` / `compiler.cpp`（按实参特化的入口），`modules/tiles/src/module.cpp`
+  `modules/tiles/src/compiled_scope.cpp`（原 `compiled_region.cpp`） / `compiler.cpp`（按实参特化的入口），`modules/tiles/src/module.cpp`
   （运行期重试的调用点）。
-- **证据**：新 `test/cases/gpu/nofallback/shape_signature.cml`：同一函数用同一形状调两次、用另一个形状调一次；
+- **证据**：新 `test/cases/gpu/nofallback/` 下的 `shape_signature.cml`（计划中，尚未存在）：同一函数用同一形状调两次、用另一个形状调一次；
   `std::profile json=` 的编译/程序计数断言"同签名 1 次、两签名 2 次"，并对三次结果各取校验和与主机路径对照。
   **不用墙钟**（主机是共享的 8×3090，见 §4）。守卫先红：今天没有这个计数，且第二次调用仍会建程序。
 - **依赖**：M1（段是形状特化的单位）。
@@ -94,7 +94,7 @@ runner 自测（`not_contains_fails`，`test/tools/**` 属他人），与本项�
   `autodiff::expand`：对**作用域内**、函数操作数静态可知（命名函数或静态闭包常量）的调用点，在编译期调用
   `buildGradientGraph` 建出派生图，把调用点换成持有该图的函数常量；派生图继承 primal 的放置。复核第 1 条的
  两条硬要求：该遍**幂等**；**无 `#gpu` 的图上逐字节不变**（`std::jgir` 比，不是比结果）。
-- **文件**：新 `modules/autodiff/src/expand.cpp`、`modules/autodiff/CMakeLists.txt`、
+- **文件**：新 `modules/autodiff/src/` 下的 `expand.cpp`（计划中，尚未存在）、`modules/autodiff/CMakeLists.txt`、
   `modules/autodiff/module.cpp`（登记遍）、`modules/tiles/src/region_pass.cpp`（作用域图先展开）。
   放置事实由 `attr::key("tiles.placement")` + `rt::ControlRegions` 读，规则与 `placement.cpp` 的
   `placementOf` **同一份 4 步顺序**（见 §5 决定 1）。

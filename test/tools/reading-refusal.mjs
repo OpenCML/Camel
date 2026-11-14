@@ -10,7 +10,7 @@
  * whole line made the wording the criterion: `skip=component` renamed to `skip=part` was a green
  * case turning red with nothing about the transform changed. The cause cannot be recovered from
  * the sentence either -- that second reading is the defect the `transpose` refusals had removed
- * (`docs/handover/questions/questions-2026-10-29.md`, A3).
+ * (`docs/handover/reviews/questions-2026-10-29.md`, A3).
  *
  * So the site that says the line also says the fact, once, as one record:
  *

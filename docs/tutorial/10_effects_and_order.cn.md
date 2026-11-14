@@ -277,7 +277,7 @@ camel docs/tutorial/examples/10_same_resource.cml
 
 ## 效应与资源：函数签名上的 `uses`
 
-一个调用会碰到哪些资源，是它**类型的一部分**：`func save(p: Params): unit uses fs`。Camel 里可以手写，也可以
+一个调用会碰到哪些资源，是它**类型的一部分**：`func save(p: Params): unit uses var fs`。Camel 里可以手写，也可以
 不写——编译器按函数体调用了谁推出来（递归时求不动点），并把结果记在函数类型的显示里。下面这个程序把几种写法
 都放了一处（[`examples/10_resources.cml`](examples/10_resources.cml)）：
 
@@ -295,10 +295,10 @@ func read_id(s: Stream): int uses s {
     return s.id
 }
 
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
-func bump(var cell: int): int uses cell sync {
+func bump(var cell: int): int uses var cell sync {
     cell += 1
     return cell
 }
@@ -328,8 +328,12 @@ camel docs/tutorial/examples/10_resources.cml
 - **模块声明的资源**：`resource db`。一个模块可以声明它自己的资源，也可以把几个资源凑成一组：
   `resource console = [db, stdout]`。
 - **每个程序都有的资源**：`stdout`、`stderr`、`stdin`、`clock`、`env`、`fs`。
-- **一个形参**：`uses s`、`uses cell`。这是"这个调用会读写我传进去的那个值"——和 `var` 形参一样，是句柄式
+- **一个形参**：`uses s`、`uses cell`。这是"这个调用会碰我传进去的那个值"——和 `var` 形参一样，是句柄式
   的写法：同一个句柄的操作按书写顺序，不同句柄之间互不约束。
+- **读写方式写在名字前面**：不带 `var` 是读，带 `var` 是写，与 `var` 形参同一个意思（设计原则 3.3）：
+  `uses s` 读句柄、`uses var cell` 写格子。外部资源前漏写 `var` 是编译错误
+  （`SemanticDiag::ExternalResourceNeedsVar`）：那几个资源是程序不拥有的状态，程序和其他东西都在读写它们，
+  所以命名它的进动就是写。推断出的类型、`tooltip` 和诊断都这样打印，`uses s` 与 `uses var s` 一眼分得开。
 - **`#resource type` 声明的句柄类型**：`#resource type Stream = { id: int }`，它的**每个值**都是一个独立的
   资源，所以 `read_id` 声明的是"我会碰你给我的那个 `Stream`"，而不是"我会碰所有 Stream"。
 
@@ -337,8 +341,8 @@ camel docs/tutorial/examples/10_resources.cml
 
 ```text
             tooltip="(s: Stream) => int uses s";
-            tooltip="() => void uses db, stdout";
-            tooltip="(var cell: int) => int uses cell";
+            tooltip="() => void uses var db, var stdout";
+            tooltip="(var cell: int) => int uses var cell";
 ```
 
 三行都在说"这个调用会碰到什么"：`read_id` 碰它收到的那个句柄，`tick` 碰 `console` 这一组（展开成 `db` 与
@@ -367,7 +371,7 @@ camel docs/tutorial/examples/10_resources.cml
 
 resource db
 
-func stamp(): int uses db sync {
+func stamp(): int uses var db sync {
     println('x')
     return 1
 }
@@ -383,11 +387,11 @@ camel docs/tutorial/examples/10_uses_beyond.cml
 ```
 
 ```text
-error[SemanticDiag::UsesPromiseViolated]: '() => int uses db' does not keep its resource promise: stdout.
+error[SemanticDiag::UsesPromiseViolated]: '() => int uses var db' does not keep its resource promise: stdout.
    --> docs/tutorial/examples/10_uses_beyond.cml:8:1
     |
-  8 | func stamp(): int uses db sync {
-    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  8 | func stamp(): int uses var db sync {
+    | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
   9 |     println('x')
     |     ^^^^^^^^^^^^
  10 |     return 1
@@ -404,7 +408,7 @@ help: A signature is a promise the compiler checks against the resources the fun
 camel: 1 error
 ```
 
-诊断说清三件事：**哪一个承诺**（`'() => int uses db'`）、**函数体多碰了什么**（`stdout`）、**是哪一次使用越过去的**
+诊断说清三件事：**哪一个承诺**（`'() => int uses var db'`）、**函数体多碰了什么**（`stdout`）、**是哪一次使用越过去的**
 （`note` 指向第一个子句没写到的使用点）。改法两种：让函数体不再碰它，或者把子句改到写得下它。
 
 ## `pure`：一个资源都不碰

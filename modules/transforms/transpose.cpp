@@ -27,6 +27,7 @@
 #include <cstring>
 #include <functional>
 #include <limits>
+#include <queue>
 #include <span>
 #include <string>
 #include <string_view>
@@ -1063,6 +1064,8 @@ zeroOfSpaceOf(camel::runtime::GraphDraft &draft, Type *space, gc_node_ref_t shap
 /// two calls of one function call one graph.
 struct TransposeState {
     camel::runtime::GraphDraftGroup &group;
+    // program-holder-exempt: borrow-or-foreign-type -- the state borrows the program its pass
+    // was given; the pass keeps it for the build.
     const camel::runtime::Program *program;
     std::unordered_map<uint32_t, GraphId> callees;
     /// The context whose rule table the transpose reads. `TransposeState` is where it belongs: it
@@ -1112,6 +1115,76 @@ struct PairCall {
     /// This call's cotangent of the answer's tangent component.
     gc_node_ref_t cotangent = rt::kInvalidNodeRef;
 };
+
+/// The order the backward walk visits a graph's nodes in: a node after every node that reads it, so
+/// that the cotangent it answers has been handed over before the node is asked.
+///
+/// It used to be the node ids, descending, on the promise the walk's comment stated -- ids are
+/// creation order, so a node only reads ids below its own. That promise holds for the graph the
+/// front end built and does *not* survive a rewrite: `GraphDraft::addNode` numbers by position and a
+/// frozen graph keeps the ids of the version it came from (`GCNodeKind::Dead` is the record a
+/// removed node leaves), so a pass that replaces a node with a rule's right side appends the nodes it
+/// makes *after* the ones already reading them. Swept by descending id, such a graph visits the new
+/// node before the node that feeds it, the cotangent is not there yet, and the walk drops it without
+/// a word: `(x * 2.0 + x * 3.0) * 4.0` folded to `(x * 5.0) * 4.0` by `std::opt::algebra` made
+/// `transpose` of it answer 0.0 where the unoptimized program answers 20.0
+/// (`test/cases/compile/transforms/transpose_after_algebra.cml`).
+///
+/// The order here is the graph's own: a node is ready once every node that consumes its value has
+/// been visited -- Kahn's algorithm over the two lists a value is carried by (`normInputsOf`,
+/// `withInputsOf`), which is where every cotangent this file delivers travels. Ties go to the higher
+/// id, so a graph the front end built (where every consumer has the higher id) is visited in exactly
+/// the order the id sweep visited it in.
+std::vector<gc_node_ref_t> cotangentWalkOrder(const camel::runtime::GCGraph *function) {
+    const size_t nodeCount = function->nodeCount();
+    std::vector<gc_node_ref_t> order;
+    order.reserve(nodeCount);
+    // How many nodes still have to hand this one a cotangent: one per place its value is read.
+    std::vector<size_t> waiting(nodeCount, 0);
+    const auto readInputs = [&](gc_node_ref_t ref, const auto &visit) {
+        for (const std::span<const gc_node_ref_t> inputs :
+             {function->normInputsOf(ref), function->withInputsOf(ref)}) {
+            for (const gc_node_ref_t input : inputs) {
+                if (input < nodeCount) {
+                    visit(input);
+                }
+            }
+        }
+    };
+    for (gc_node_ref_t ref = 0; ref < nodeCount; ++ref) {
+        readInputs(ref, [&](gc_node_ref_t input) { ++waiting[input]; });
+    }
+    std::priority_queue<gc_node_ref_t> ready;
+    for (gc_node_ref_t ref = 0; ref < nodeCount; ++ref) {
+        if (waiting[ref] == 0) {
+            ready.push(ref);
+        }
+    }
+    std::vector<bool> visited(nodeCount, false);
+    while (!ready.empty()) {
+        const gc_node_ref_t ref = ready.top();
+        ready.pop();
+        if (visited[ref]) {
+            continue;
+        }
+        visited[ref] = true;
+        order.push_back(ref);
+        readInputs(ref, [&](gc_node_ref_t input) {
+            if (--waiting[input] == 0) {
+                ready.push(input);
+            }
+        });
+    }
+    // Along the value edges a graph is a DAG (`docs/technical/17_graph_rewrite_api_contracts.md`
+    // 4.2), so nothing is left over. If a graph this walk is handed one day is not, the nodes it
+    // could not order are visited in the order the sweep used, rather than dropped.
+    for (gc_node_ref_t ref = static_cast<gc_node_ref_t>(nodeCount); ref-- > 0;) {
+        if (!visited[ref]) {
+            order.push_back(ref);
+        }
+    }
+    return order;
+}
 
 /// Transposes a call of a callee that answers the pair (value, tangent) **by the content of that
 /// callee**, at whichever path the call stands on -- the straight-line body and an arm both call
@@ -2490,6 +2563,9 @@ bool buildTransposeMember(
         // carried, not parameters a caller differentiates, so this is a second-order quantity.
         // Printing it is what keeps the accounting visible instead of silent.
         std::unordered_map<uint32_t, gc_node_ref_t> residualBack;
+        // The order both sweeps below walk the graph in -- the graph's, not the ids'
+        // (`cotangentWalkOrder`) -- computed once for this member and shared with every arm.
+        const std::vector<gc_node_ref_t> walkOrder = cotangentWalkOrder(function);
         struct ArmSeed {
             gc_node_ref_t at        = rt::kInvalidNodeRef;
             gc_node_ref_t cotangent = rt::kInvalidNodeRef;
@@ -2584,7 +2660,7 @@ bool buildTransposeMember(
                     addLocal(seed.at, seed.cotangent);
                 }
             }
-            for (gc_node_ref_t ref = static_cast<gc_node_ref_t>(nodeCount); ref-- > 0;) {
+            for (const gc_node_ref_t ref : walkOrder) {
                 if (function->nodeRegion(ref) != oldRegion || !hasLocal[ref]) {
                     continue;
                 }
@@ -3211,10 +3287,11 @@ bool buildTransposeMember(
             return back.empty() ? rt::kInvalidNodeRef : back.front();
         };
 
-        // The walk runs the graph backwards: node ids are creation order, so a node only reads ids
-        // below its own, and the body's nodes are walked in reverse. A branch's arms are regions,
-        // not ids, so they are walked by `runArm` when the branch is reached.
-        for (gc_node_ref_t ref = static_cast<gc_node_ref_t>(nodeCount); ref-- > 0;) {
+        // The walk runs the graph backwards in the graph's own order: every node after the nodes
+        // that read it (`cotangentWalkOrder`), which is the order the ids give for a graph the front
+        // end built and is not what the ids give for a graph a rewrite has changed. A branch's arms
+        // are regions, not ids, so they are walked by `runArm` when the branch is reached.
+        for (const gc_node_ref_t ref : walkOrder) {
             const camel::runtime::GCNode *node = function->node(ref);
             if (node == nullptr || !hasCotangent[ref]) {
                 continue;

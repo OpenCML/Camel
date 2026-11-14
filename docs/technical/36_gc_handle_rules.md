@@ -30,9 +30,10 @@ traced only while the `Program` itself is reachable, so a `Program` that a C++ h
 across a safepoint is a root the holder has to take, the way rule 7 takes one for an auto-space
 object: **a C++ holder of a `Program` holds it only through `camel::runtime::ProgramHold`**
 (`include/camel/runtime/graph.h`), which pins it in its constructor and unpins it in its
-destructor. A bare `Program *` member is what `scripts/check-program-holders.mjs` reports; the
-page that decided it is
-`docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
+destructor. A bare `Program *` member is a defect unless it declares at the declaration one of the
+four reasons rule 7 lists, which `scripts/check-program-holders.mjs` reads and checks; the page
+that decided it is
+`docs/handover/questions/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`.
 
 **Reference.** The address of an object: an `Object *` (or `Array *`, `String *`, ...), a
 `slot_t` whose static type is GC-traced, and also every pointer *into* an object: `data()` of an
@@ -129,6 +130,48 @@ one step of a pass.
    `ProgramHold` is the handle of the graph space: an object that does not move but is freed when
    nothing reaches it, kept by a C++ holder across safepoints through this handle and no other
    (section 1, "Program").
+
+   A class member that names a `Program` and does not hold it through `ProgramHold` is a defect
+   unless it declares, in the comment directly above it, one of the four reasons why it cannot or
+   must not pin. `scripts/check-program-holders.mjs` reads that comment: it prints
+   `holders=<N> exempt=<M> unexplained=<K>`, reports only the members it cannot explain, and
+   `--enforce` fails only when something is unexplained.
+
+   ```cpp
+   // program-holder-exempt: kept-by-another-root -- rootForRun pins it for the whole run
+   const Program *program_;
+   ```
+
+   The label comes from a closed set of four, and the sentence after `--` is what makes it a
+   decision rather than a silence. Each label says *who else* keeps the program, or that this is
+   not the runtime's `Program` at all:
+
+   - **`heap-self-tracking`** -- the holder is itself a heap object and moves the slot in its own
+     `updateRefs` (`rtdata::Function`, `graph::Handle`, `ProofObject`, the `Txn` state through its
+     descriptor's trace). The collector already reaches the program through that trace, and a heap
+     object has no destructor a pin could be released from: pinning would take a second root that
+     is never dropped, and so keep the program for the life of the context.
+   - **`kept-by-another-root`** -- a shorter-lived name for a program another root owns: the run
+     root (`rootForRun`), the provisional set until `settle`, the operator-definition store
+     (`Context::pinRuntimeProgram`), the session's `ProgramHold work_`, or the detached programs a
+     commit tracks. The pin would be redundant while that root lives. For the programs a run meets
+     through function values (`RunPrograms::others_`) it would be worse than redundant: the frames
+     hold them only while they are used, and pinning would keep every gradient a long loop builds
+     alive (`test/plans/feat/mm/graph_space`).
+   - **`long-lived-cache`** -- a cache, memo, rule table or instance table that outlives the
+     programs it names (`RuleSource`, `GenericRuleInstance`, `DraftRefs`, `Anchor`,
+     `GradientGraph`, `FunctionData`). Pinning per entry roots every program the cache ever saw, so
+     the graph space would grow with the history of the cache rather than with what is running --
+     the quantity `test/plans/feat/mm/graph_space` measures. What such a holder may name is a
+     program a root or the heap already keeps.
+   - **`borrow-or-foreign-type`** -- a view or a reference used only inside the call whose program
+     its caller holds (`LoopView`, a pass's state, `EncodeSession`, `CmlPrinter`, `ProgramParts`),
+     or a `Program` of another namespace (`camel::tiles::Program`) and not the runtime's. A pin at
+     a view takes a lock per view and unpins a program its caller still holds; a foreign `Program`
+     is not a graph-space object and cannot be pinned at all.
+
+   A member with no such comment, a label outside the four, or no sentence after `--` is
+   *unexplained*, and unexplained is what the gate reports.
 
 8. **Foreign memory is owned by a wrapper, not held by address.** Memory and handles that come
    from outside (a `PyObject *`, a file, a buffer of another library) are owned by a

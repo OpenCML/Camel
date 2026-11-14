@@ -18,13 +18,13 @@ export resource rendezvous_point
 /// showing that calls really run at the same time.
 /// @fails fault `InvalidArgument` when parties is below 1 or timeout is negative
 /// @example rendezvous(2, 1.0)    // 2 when another call arrived in time
-export func rendezvous(parties: int, timeout: float): int uses rendezvous_point
+export func rendezvous(parties: int, timeout: float): int uses var rendezvous_point
 
 /// The number of threads this process has, the caller included: the count the operating system
 /// reports for the process, not the number of processors. A test reads it to pin how many worker
 /// threads a run creates.
 /// @example thread_count()    // 1 at -t 1
-export func thread_count(): int uses process
+export func thread_count(): int uses var process
 
 /// `base * 10000 + step * 100 + mode`: the three `with` values the call ended with, the defaults of
 /// the parameters it left out among them. A native operator with a generic declaration, for the

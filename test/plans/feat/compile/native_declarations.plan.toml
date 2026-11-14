@@ -248,7 +248,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_arity.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:9:5", "(int, int)", "<rand:seed>: (value: int) => void uses rng"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_arity.cml:9:5", "(int, int)", "<rand:seed>: (value: int) => void uses var rng"]
 
 [[tests]]
 name = "native.random_wrong_type"
@@ -257,7 +257,7 @@ kind = "negative"
 case = "../../../cases/compile/native/random_type.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:10:5", "argument types: <> (string)", "<rand:seed>: (value: int) => void uses rng"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F", "random_type.cml:10:5", "argument types: <> (string)", "<rand:seed>: (value: int) => void uses var rng"]
 
 [[tests]]
 name = "native.array_declaration_import"
@@ -1162,7 +1162,7 @@ kind = "negative"
 case = "../../../cases/compile/native/rewrite_arity.cml"
 args = ["check", "${case}"]
 expect_exit = 1
-expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool, protect_effects: bool, protect_faults: bool, ordered: bool> (f: F) => F!"]
+expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","rewrite_arity.cml:14:13","argument types: <> (() => int pure)","<rewrite:rewrite>: <rules: Rule[], strict: bool, protect_order: bool, protect_faults: bool, ordered: bool> (f: F) => F!"]
 
 [[tests]]
 name = "native.rewrite_wrong_type"
@@ -1293,7 +1293,7 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction", "code=0x0300000F",
 #
 # `constant` and `add_constant` take the type of their sample, which a declaration cannot compute
 # from an argument; they are written out per sample type instead (six each). The four operators of
-# a function value stay computed in C++ (`stdlib/signatures/graph.cml`).
+# a function value stay computed in C++ (the `stdlib/signatures/` file for them, `graph.cml`, has been deleted).
 
 [[tests]]
 name = "native.graph_constant_import"
@@ -1333,12 +1333,12 @@ expect_output_contains = ["SemanticDiag::NoMatchingFunction","code=0x0300000F","
 
 [[tests]]
 name = "native.graph_declaration_import"
-desc = "The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` come from the module's declaration file, the two comparisons are the operators of the handle types, and each call reaches the operator the C++ module runs. It locks the answers: an entry equals itself and differs from the other one, a graph's name is `__root__`, a graph has nodes, `id` is stable on a node, and `type_of` of a node of no type answers null so the type name printed is the function's signature `() => int uses stdout`."
+desc = "The declarations of `graph` are what an importer sees: `Program`, `Graph` and `Node` come from the module's declaration file, the two comparisons are the operators of the handle types, and each call reaches the operator the C++ module runs. It locks the answers: an entry equals itself and differs from the other one, a graph's name is `__root__`, a graph has nodes, `id` is stable on a node, and `type_of` of a node of no type answers null so the type name printed is the function's signature `() => int uses var stdout`."
 kind = "behavior"
 case = "../../../cases/compile/native/graph_declaration_import.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_exact = "main\ntrue\ntrue\n() => int uses stdout\n"
+expect_stdout_exact = "main\ntrue\ntrue\n() => int uses var stdout\n"
 
 [[tests]]
 name = "native.graph_wrong_arity"

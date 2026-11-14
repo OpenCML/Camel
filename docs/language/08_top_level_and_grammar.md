@@ -199,7 +199,7 @@ structData         : '{' (pairedValues ','?)? '}' | '{' staticForExpr '}'
 tupleData          : '(' dataList? ','? ')' | '(' staticForExpr ')'
 funcData           : angledParams? parentParams (':' typeExpr)? '=>' blockExpr
 matchTypeExpr      : 'match' 'type' typeExpr '{' typeCase* '}'
-typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+typeCase           : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
 staticForExpr      : 'static' staticForHeader '=>' blockExpr
 staticForHeader    : 'for' (identDef | '_') (',' (identDef | '_'))* 'in'
                      ('fields' typeExpr | 'indices' dataExpr)
@@ -226,7 +226,7 @@ arrayDimItem       : '?' | '...' identDef? | dataExpr
 specType           : primaryType ('<' typeOrData (',' typeOrData)* '>')?
 typeOrData         : typeExpr | arrayDim | 'const' dataExpr
 matchTypeType      : 'match' 'type' typeExpr '{' typeArm* '}'
-typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+typeArm            : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
 primaryType        : structType | enumType | identRef | '(' typeExpr ')' | tupleType | funcType
                      | matchTypeType
                      | 'typeof' dataExpr
@@ -234,7 +234,8 @@ tupleType          : '(' typeList? ','? ')'
 structType         : '{' (keyTypePair (',' keyTypePair)*)? ','? '}'
 keyTypePair        : tagUse* identDef ':' typeExpr
 funcType           : angledParams? parentParams '=>' typeExpr resourceClause?
-resourceClause     : ('uses' identRef (',' identRef)* | 'pure')+
+resourceClause     : ('uses' usesEntry (',' usesEntry)* | 'pure')+
+usesEntry          : 'var'? identRef
 typeList           : typeExpr (',' typeExpr)*
 enumType           : 'enum' '{' (enumVariant (',' enumVariant)*)? ','? '}'
 enumVariant        : identDef ('(' typeList? ','? ')' | '{' (enumField (',' enumField)*)? ','? '}')?

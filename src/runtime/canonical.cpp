@@ -721,6 +721,11 @@ class CanonicalWalk {
         return os.str();
     }
 
+    // program-holder-exempt: borrow-or-foreign-type -- the walk reads the program its caller
+    // holds, to ask which graph a FUNC calls and which one a closure value's function value is
+    // (`calleeOf`, `boundGraphOf`); a walk is built on the stack inside CanonicalProgram's
+    // constructor and dies there, so it lives only while the caller's program does and never keeps
+    // one.
     const Program &program_;
     const GCGraph &graph_;
     const std::unordered_map<const GCGraph *, std::vector<uint32_t>> *bound_ = nullptr;

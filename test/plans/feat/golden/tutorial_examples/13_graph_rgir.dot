@@ -4,7 +4,7 @@ digraph GraphIR {
     edge [minlen=2];
     subgraph cluster_F01 {
         label="main";
-        tooltip="() => int uses stdout";
+        tooltip="() => int uses var stdout";
         subgraph cluster_F02 {
             label="add";
             tooltip="(a: int, b: int) => int pure";
@@ -37,7 +37,7 @@ digraph GraphIR {
         N06 -> N08 [label="SYNC", type="SYNC", style=solid, arrowhead=diamond];
     }
     O00 [label="EXIT", type="EXIT", style=dashed, shape=circle];
-    N09 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses stdout", origin=<ORIGIN>, span="7:0-11:1", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
+    N09 [label="Functio\nn(gr...", type="DATA", shape=circle, style=solid, value_type="() => int uses var stdout", origin=<ORIGIN>, span="7:0-11:1", srcfile="<ROOT>/docs/tutorial/examples/13_graph.cml", tooltip="Function(graph=main, tupleSlots=0)\n__root__::node#-1"];
     N0A [label="CALL", type="CALL", shape=diamond, style=solid, value_type="int", tooltip="CALL\n__root__::node#1"];
     N0A -> O00 [label="0", type="EXIT", style=solid];
     N09 -> N0A [label="0|0", type="WITH", style=dashed];

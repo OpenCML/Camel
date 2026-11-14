@@ -30,7 +30,10 @@
  *    named one by its declaration and the canonical ids of its type arguments;
  *  - function types (FunctionType::intern, FunctionTypeFactory::build), parameter names
  *    included: the type an operator's type rule gives a call, a function type a program
- *    writes, the signature of a branch arm, and every signature a rewrite re-infers;
+ *    writes, the signature of a branch arm, and every signature a rewrite re-infers. Each of
+ *    its component types is interned before the signature itself (func.cpp: frozenParts), so a
+ *    signature never names its result or a parameter by the 0 that stands for a type the table
+ *    does not hold -- the word every `TypeId` key would read as one and the same type;
  *  - the compile-time types: a type variable (by its name and its binding mark, see below), a
  *    type function, a `typeof` placeholder, an enum instance, a `Map`/`Set` instance.
  *

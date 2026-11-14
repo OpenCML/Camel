@@ -19,7 +19,7 @@
 // no context input -- it is built from `x` alone, and `split` carries it as a residue.
 //
 // The question this opens is
-// `docs/handover/questions/docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`;
+// `docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`;
 // this case is its measurement, kept as a case so the day it is answered the refusal goes red and says
 // what replaced it. The engine's answer for the same function is the neighbouring
 // `softmax_gradient_through_the_engine.cml` -- that is the number the library will have to reproduce,

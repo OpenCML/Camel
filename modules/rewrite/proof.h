@@ -53,6 +53,8 @@ struct RewriteRecord {
     /// id (draft.cpp, GraphDraft::decode), so a node handle into this program names a step of the
     /// record by its own id; a node of the program the run produced is found through the map
     /// above instead. Kept as a traced reference by `Proof`.
+    // program-holder-exempt: heap-self-tracking -- the record is owned by ProofObject, whose
+    // updateRefs relocates this program as its own `input_` slot.
     const camel::runtime::Program *input = nullptr;
 };
 
@@ -140,6 +142,8 @@ class ProofObject final : public rtdata::Object {
     camel::runtime::RewriteStats stats_;
     /// Traced: the proof keeps the program the run started from alive as long as a chain may name
     /// one of its nodes. Relocated in updateRefs like any other reference into the graph space.
+    // program-holder-exempt: heap-self-tracking -- ProofObject is a heap object, and
+    // updateRefsImpl relocates input_ (proof.cpp).
     const camel::runtime::Program *input_ = nullptr;
     std::optional<Chain> chain_;
 };

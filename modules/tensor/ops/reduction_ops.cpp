@@ -327,7 +327,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// name had, every call read `float[..]`, and the cotangent the reverse law was handed had no rank
 /// while its type said array (`numel(ct)` in `stdlib/rulesets/transpose.cml#mean_axis_cotangent`
 /// read a number's bits as a pointer,
-/// docs/handover/questions/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md).
+/// docs/handover/reviews/2026-11-04-who-gives-a-shapeless-cotangent-its-rank.cn.md).
 ///
 /// A call whose parameters are **values of the run** has stated nothing, and this inference says
 /// exactly that: the operand's element type at a rank nobody fixed (`T[..]`). It does not refuse,
@@ -343,7 +343,7 @@ slot_t meanAxisStatedKernel(ArgsView &, ArgsView &norm, context::Context &) {
 /// (`stdlib/rulesets/transpose.cml#mean_axis_stated_t`), so the language's own `T` -> `T[..]`
 /// conversion at its next call argument boxes the value and `numel(ct)` answers 1. The rank-0
 /// program answers `[0.25, 0.25, 0.25, 0.25]` instead of dying
-/// (docs/handover/questions/2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md).
+/// (docs/handover/reviews/2026-11-04-who-states-the-extents-of-a-stated-reduction.cn.md).
 std::optional<Type *> meanAxisStatedInfer(const InferContext &ctx) {
     const TensorFacts in = ctx.facts(0);
     const TypeCode dtype = reductionDtype(k::ReduceOp::Mean, in.dtype);

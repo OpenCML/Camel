@@ -6,14 +6,14 @@
 import { rewrite, saturate, extract } from rewrite
 import { nodes } from rules
 rule discard(x: int) { x * 0 => 0 }
-with <effects: bool = true, faults: bool = true>
-export func direct::<F>(p: F): F! { return p->rewrite<[discard], protect_effects: effects, protect_faults: faults> }
-with <effects: bool = true, faults: bool = true>
-export func forwarded::<F>(p: F): F! { return p->direct<effects, faults> }
-with <effects: bool = true, faults: bool = true>
+with <order: bool = true, faults: bool = true>
+export func direct::<F>(p: F): F! { return p->rewrite<[discard], protect_order: order, protect_faults: faults> }
+with <order: bool = true, faults: bool = true>
+export func forwarded::<F>(p: F): F! { return p->direct<order, faults> }
+with <order: bool = true, faults: bool = true>
 export func omitted::<F>(p: F): F! { return p->direct }
-with <effects: bool = true, faults: bool = true>
-export func saturated::<F>(p: F): F! { return match p->saturate<[discard], protect_effects: effects, protect_faults: faults> { case error e => e case s => s->extract<nodes> } }
+with <order: bool = true, faults: bool = true>
+export func saturated::<F>(p: F): F! { return match p->saturate<[discard], protect_order: order, protect_faults: faults> { case error e => e case s => s->extract<nodes> } }
 
 import { check_pass_boundary } from graph
 export func checked::<F>(p: F): F! {

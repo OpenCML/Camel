@@ -781,7 +781,8 @@ program measures 2518-4299 ms here, and torch compiled measures 5999 ms at one
 thread and 14448 ms at sixteen in the window after these cells -- so that 3.1x
 gap is not explained by the cap, and it cannot be re-measured until the host is
 quiet. `examples/models/naive-in-expert-out/results/2026-10-23-gemm-thread-budget-linux.json`
-holds the curve, every cell with the load it was measured at, and this reading.
+holds the curve, every cell with the load it was measured at, and this reading -- the run's file,
+which stays on the machine that took it (that directory is not in the repository).
 d=256 is unaffected either way: every product in that cell is below the 2^30
 shape threshold, so the library never runs there.
 

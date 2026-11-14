@@ -1304,7 +1304,11 @@ void ParserImpl::parseMatchType() {
     close(m, NK::MatchTypeExpr);
 }
 
-/// typeCase : 'case' typeCasePattern ('|' typeCasePattern)* '=>' blockExpr
+/// typeCase : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' blockExpr
+/// The optional `when` is the guard of the case, the same clause a value-level `match` case
+/// carries (design principles 5.5, ruling of 2026-11-14): the case is taken when its pattern
+/// matches *and* the condition holds, so a type function can divide by structure and then by
+/// property.
 void ParserImpl::parseTypeCase() {
     const size_t m = mark();
     bump(); // case
@@ -1312,6 +1316,9 @@ void ParserImpl::parseTypeCase() {
     while (cur_ == TK::Pipe && !panic_) {
         bump();
         parseTypeCasePattern();
+    }
+    if (!panic_ && atWord(0, "when")) {
+        parseWhenClause();
     }
     if (!panic_ && expect(TK::FatArrow)) {
         parseBlockExpr();

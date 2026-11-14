@@ -76,6 +76,8 @@ struct TxnState {
 
     /// The Program the transaction was opened on. The transaction keeps it alive (the foreign
     /// resource traces it) until the transaction is released.
+    // program-holder-exempt: heap-self-tracking -- the transaction's descriptor trace relocates
+    // base as the Txn slot "program", so the collector follows it.
     const Program *base;
     RuntimeGraphDraftSession session;
     bool detached = false;

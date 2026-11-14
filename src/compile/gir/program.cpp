@@ -244,6 +244,10 @@ void Builder::claimRootNodes(size_t firstNode) {
 // ---- Step one: declare ----
 
 void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnostics_ptr_t diags) {
+    // A signature is read here, before any body is built, and a type in it may be a `match type`
+    // whose guard decides it (`func f(x: ShapeOf<string>)`): the predicate has to be answerable
+    // here too, or the type would look like one no case selects.
+    GuardScope guardScope(*this);
     ensureRootGraph();
     recorder_  = context_ ? context_->semanticRecorder() : nullptr;
     auto &slot = units_[module.get()];
@@ -577,7 +581,11 @@ bool Builder::buildProgram() {
     if (entryIt == units_.end()) {
         return false;
     }
-    return buildFrom(*entryIt->second, true);
+    const bool built = buildFrom(*entryIt->second, true);
+    // The reading of what the guards of a `match type` cost: how many predicates ran, how many
+    // were answered from the cache by (function, type arguments), and how many pairs that is.
+    logPredicateCounts();
+    return built;
 }
 
 bool Builder::buildLibrary(const module_ptr_t &module) {
@@ -586,7 +594,9 @@ bool Builder::buildLibrary(const module_ptr_t &module) {
     if (it == units_.end()) {
         return false;
     }
-    return buildFrom(*it->second, false);
+    const bool built = buildFrom(*it->second, false);
+    logPredicateCounts();
+    return built;
 }
 
 bool Builder::buildLibraryEntry(
@@ -771,6 +781,10 @@ void Builder::scanProgramWriters() {
 }
 
 bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
+    // From here on this builder answers the `match type` cases whose guards decide them: the type
+    // layer asks for a predicate's answer while it selects a case, and only a build can read one
+    // (typevar.h `typeCaseGuardEvaluator`, design principles 5.5).
+    GuardScope guardScope(*this);
 
     // The conservative writer set, made before any body is built (design principles 3.1, 3.5):
     // which variables the program writes is in the construction trees, and a function whose module

@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-311 diagnostics: 290 errors, 21 warnings. 15 carry a machine-applicable edit, 296 say why they carry none.
+312 diagnostics: 291 errors, 21 warnings. 16 carry a machine-applicable edit, 296 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -270,6 +270,7 @@ prints one entry.
 | `0x03000209` | [SemanticDiag::CalledFallibleValue](#calledfalliblevalue) | Error | no |
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
+| `0x0300020C` | [SemanticDiag::ExternalResourceNeedsVar](#externalresourceneedsvar) | Error | yes |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -6586,7 +6587,7 @@ Only a pure call is evaluated: a function with no effects and no reads of mutabl
 **Example** (`test/cases/compile/fold_calls/effect.cml`, run as `camel test/cases/compile/fold_calls/effect.cml`)
 
 ```camel
-func reveal(s: string): string uses stdout {
+func reveal(s: string): string uses var stdout {
     println(s)
     return s
 }
@@ -8914,6 +8915,44 @@ func main(): int sync {
 }
 ```
 
+### ExternalResourceNeedsVar
+
+`0x0300020C` · Error · `SemanticDiag::ExternalResourceNeedsVar`
+
+**Fix**
+
+A machine-applicable edit is attached where the report knows the text to write: `data.fixes` of `--error-format json` carries the range and the replacement.
+
+**Message**
+
+```text
+The external resource '{0}' is named without 'var' in the resource clause of '{1}'.
+```
+
+**Help**
+
+```text
+An external resource is state the program does not own: the program and whatever else is outside it both read and write it, so a call that names one writes it, and a clause says so the way a parameter does (design principles 3.3). Write 'var {0}' before it. A resource a module declares with 'resource' and one every program has (stdout, stderr, stdin, clock, env, fs) are external; a module's own 'var' is internal, and there an entry reads it without 'var' and writes it with 'var'.
+```
+
+**Example** (`test/cases/effects/err_external_without_var.cml`, run as `camel test/cases/effects/err_external_without_var.cml`)
+
+```camel
+// An external resource is state the program does not own, so a call that names one reads and writes
+// it, and the entry says so the way a parameter does: with `var` (design principles 3.3). `stdout`
+// is one every program has; `uses stdout` promises a read of it, which no call can keep, so the
+// clause is refused where it is written.
+
+func tick(): int uses stdout sync {
+    println('tick')
+    return 0
+}
+
+func main(): int sync {
+    return tick()
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -9794,24 +9833,26 @@ This invocation selected a pass boundary check requiring equal standard ambient 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
 // module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+// group. How it touches each one is written the way a parameter is (design principles 3.3): an
+// entry without `var` reads the resource and one with `var` writes it, and an external resource is
+// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-/// The body touches nothing; the clause says a call reads and writes the handle it is given.
-func consume(s: Stream): int uses s {
+/// The body touches nothing; the clause says a call writes the handle it is given.
+func consume(s: Stream): int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
 /// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses t sync {
+func bump(var t: int): int uses var t sync {
     return 0
 }
 
@@ -9904,24 +9945,26 @@ A graph runs from its entry node to its exit node. A rewrite may replace either 
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
 // module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+// group. How it touches each one is written the way a parameter is (design principles 3.3): an
+// entry without `var` reads the resource and one with `var` writes it, and an external resource is
+// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-/// The body touches nothing; the clause says a call reads and writes the handle it is given.
-func consume(s: Stream): int uses s {
+/// The body touches nothing; the clause says a call writes the handle it is given.
+func consume(s: Stream): int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
 /// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses t sync {
+func bump(var t: int): int uses var t sync {
     return 0
 }
 
@@ -10051,24 +10094,26 @@ An operator node's ordinary ports are the arguments of the declaration it names,
 ```camel
 // What a call touches, written on the declaration (design effects plan 3.1): a resource of the
 // module, a group of them, a handle type and `uses` on a parameter (a cell or a handle) and on a
-// group. The bodies touch nothing: the clause is the whole truth a call site reads.
+// group. How it touches each one is written the way a parameter is (design principles 3.3): an
+// entry without `var` reads the resource and one with `var` writes it, and an external resource is
+// always written. The bodies touch nothing: the clause is the whole truth a call site reads.
 
 resource db
 resource console = [db, stdout]
 
 #resource type Stream = { id: int }
 
-/// The body touches nothing; the clause says a call reads and writes the handle it is given.
-func consume(s: Stream): int uses s {
+/// The body touches nothing; the clause says a call writes the handle it is given.
+func consume(s: Stream): int uses var s {
     return 0
 }
 
 /// The body is empty; every call touches what the group names.
-func tick(): void uses console {
+func tick(): void uses var console {
 }
 
 /// The body touches nothing; the clause says a call writes the cell it is given.
-func bump(var t: int): int uses t sync {
+func bump(var t: int): int uses var t sync {
     return 0
 }
 

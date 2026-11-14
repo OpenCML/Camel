@@ -456,7 +456,7 @@ case = "../../../cases/linear/toplevel_var/err_pure_parameter.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
-expect_output_contains = ["uses err_pure_parameter::cnt"]
+expect_output_contains = ["uses var err_pure_parameter::cnt"]
 
 [[tests]]
 name = "grad_refused"

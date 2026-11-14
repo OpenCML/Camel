@@ -146,7 +146,7 @@
 
 7. 每个 `FUNC` 的普通实参数与 `with` 实参数等于被调图的端口数。
 
-旧的 `src/compile/gir/validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
+旧的 `src/compile/gir/` 下的 `validate.cpp`（`assertGraphSealingPreconditions` 等，以 `ASSERT` 实现、没有任何调用点）
 已于 2026-10-13 删除（图数据模型迁移第 1 步）；上面的检查取代了它。
 
 测试用的故障注入遍（`src/passes/test/fault.cpp`）是只供测试的遍：在流水线里写出名字即可用，没有任何环境变量门控，
@@ -230,9 +230,11 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
 
 ## Caller-selected deletion and boundary checks
 
-`rewrite`, `run` and `saturate` accept `protect_effects` and `protect_faults`, both
+`rewrite`, `run` and `saturate` accept `protect_order` and `protect_faults`, both
 true by default. These local deletion guards are independent of numeric `strict`.
-`protect_effects` does not decide whether an external access or a final write to a variable that
+`protect_order` keeps a computation whose place in the order is the program's -- one that
+carries an ordering edge, one something waits on, one whose value is written in place -- and
+does not decide whether an external access or a final write to a variable that
 outlives the call may be dropped: the region or the exit keeps them, only the graph interface's
 dedicated effect-deleting operation removes one, and no `replace` or `graft` does
 (design principles 9.7). `protect_faults` is the guard that still selects a deletion, and a

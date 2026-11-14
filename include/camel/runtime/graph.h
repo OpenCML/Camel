@@ -1433,9 +1433,11 @@ class GCGraphManager {
 /// `modules.nn` large-bytecode cases, a program held only by a C++ member is rc=134, and a
 /// `--gc-stress safepoint=1,kind=minor` run without poison segfaults for the same reason.
 ///
-/// This is the only way a class member may name a Program: `scripts/check-program-holders.mjs`
-/// reports every other one (a bare `Program *`, a `shared_ptr<Program>`), and `ProgramHold` itself
-/// and `GCGraphManager` are the two names it exempts.
+/// This is the way a class member names a Program: `scripts/check-program-holders.mjs` reports
+/// every other one (a bare `Program *`, a `shared_ptr<Program>`) unless the member declares at its
+/// declaration which of four reasons it cannot or must not pin
+/// (docs/technical/36_gc_handle_rules.md, rule 7). `ProgramHold` itself and `GCGraphManager` are
+/// the two names it exempts outright.
 ///
 /// Move-only: the root has one owner, and moving the handle moves the root. Pins are counted, so
 /// two handles on one program unroot it only when both are gone.

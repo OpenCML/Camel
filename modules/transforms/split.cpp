@@ -418,6 +418,8 @@ struct Half {
     const rt::GCGraph *source;
     /// The program the graphs belong to, so a call node's callee can be read: a lifted graph's
     /// record of the graph it was lifted from is the only way to reach the primal from the call.
+    // program-holder-exempt: borrow-or-foreign-type -- the half reads the program its pass was
+    // given; the pass keeps it for the build.
     const rt::Program *program;
     std::vector<gc_node_ref_t> portOf;
     std::unordered_map<gc_node_ref_t, size_t> portIndex;
@@ -3643,7 +3645,7 @@ SplitGraph buildSplitGraph(
         // So this is a wall to name, not a state to defend: the three routes through it -- write
         // the pair into a `Fill` in the lowering, teach this switch the call's-pair shape, or work
         // around it in the library -- are weighed in
-        // `docs/handover/questions/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`,
+        // `docs/handover/reviews/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`,
         // which takes the first: an exit's shape is the lowering's product, while this switch is
         // the semantic invariant, and a criterion naming more shapes is harder to state than a
         // product that writes the one shape.
@@ -3705,7 +3707,8 @@ SplitGraph buildSplitGraph(
             return;
         }
         const bool known = std::any_of(
-            nestedPrograms.begin(), nestedPrograms.end(),
+            nestedPrograms.begin(),
+            nestedPrograms.end(),
             [standsOn](const rt::ProgramHold &held) { return held.get() == standsOn; });
         if (!known) {
             nestedPrograms.emplace_back(*context, standsOn);

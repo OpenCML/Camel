@@ -123,7 +123,7 @@ timeout_ms = 20000
 # the graph had to land, and none of them is a patch at this program:
 #  - the reverse walk. `transpose`'s loop case iterates `range(n - 1, -1, -1)` and reads each round's
 #    element with `:op/idx_arr` instead of copying the sequence (author, 2026-11-03 18:50; path B of
-#    `docs/handover/questions/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
+#    `docs/handover/reviews/2026-11-02-does-reversing-a-backward-need-a-new-operator.cn.md`), so no
 #    operator is added.
 #  - the residual taken *after* the loop. The tangent side of the exit states the length it reads
 #    (`pick_at(dxs, 0, len(xs))`), and that length is computed from the loop's
@@ -147,7 +147,7 @@ timeout_ms = 20000
 # answers now (7 and 14, on the route its own pins name -- see that case); `two_values_of_two_kinds`
 # is marked known_fail, because the number it asks for is a function of a value the transposed
 # signature does not carry
-# (`docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`).
+# (`docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`).
 [[tests]]
 name = "vjp_loop.rounds_are_undone_in_reverse"
 desc = "The pullback of a two-round loop reads `(1.0, 1.0)` and not `(1.0, 10.0)`: for `loop x = s for k in [1.0, 10.0] do [x[1], x[0] + x[1] * k]` the per-round map is `M_k = [[0,1],[1,k]]`, so `M = M_10 * M_1 = [[1,1],[10,11]]`, and a pullback must apply `M_1^T` after `M_10^T` -- the rounds are undone in the other direction (design 4.2/4.3). Reading the loop's first component, the correct walk gives the gradient `(1.0, 1.0)` and a copied range gives `(1.0, 10.0)`; the two numbers separate the walks and nothing else in the program has to change. `vjp` takes a function whose result is a `float` (the cotangent of the result is the seed), so the pullback's subject is `g(s) = (loop ...)[0]` -- the same loop, the same two numbers."
@@ -565,7 +565,7 @@ timeout_ms = 20000
 #
 # Pinned as a reading, not as an exit code: the exit is 1 because the program asks for something the
 # shapes do not allow, which is the point. The day the answer gets a width (a value port or a split
-# residual -- `docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
+# residual -- `docs/handover/reviews/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md`,
 # road 丙) this entry is red on `dx= []` and says so, and the control next door
 # (`vjp_const_function_answers_zero`, `float[3]`) is what the new reading has to match.
 [[tests]]
@@ -789,6 +789,46 @@ backends_agree = ["exit_code", "diagnostics"]
 expect_exit = 0
 expect_output_contains = ["TRANSPOSE function=sum_of_scaled graph=", "type=(float) => (float,) nodes=6 arms=0 rhs=add_t,mul_t", "TRANSPOSE function=scaled_chain graph=", "rhs=mul_t,add_t", "TRANSPOSE op signature=(f: (params..) => result) => (Tangent<result>) => (cotangents..)", "transposed=(float) => (float,)", "same=yes", "5.0", "20.0"]
 expect_stdout_not_contains = ["TRANSPOSE function=", "REINTERP "]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+# The transpose of a graph `std::opt::algebra` has rewritten, read against the same program with no
+# optimization at all. This is a differential pair and not two entries with the same expected strings
+# for a reason: the assertion being made is *the two paths answer the same numbers*, and a shared
+# expectation would have to be edited twice the day the program changes -- while a pair can only go
+# red where the two actually disagree.
+#
+# The shape is the one `float_combine` fires on: `2*x + 3*x` becomes `x * 5`, and
+# `(x*2 + x*3) * 4` becomes `(x*5) * 4`. Both rewritten graphs are legal -- a frozen graph keeps the
+# ids of the version it came from, and a node a rule adds is appended *after* the nodes that already
+# read it -- and the backward walk used to take descending ids for the graph's order, so it visited
+# the new node before the node that feeds it, found no cotangent on it yet, and dropped it without a
+# word: `transpose(chain)(1.0)` answered `0.0` where the unoptimized program answers `20.0`. The
+# 0.0 was printed as an ordinary result, which is why this pair pins the numbers of the *whole*
+# case on both paths rather than the one line that was wrong: 5/10 for the plain values, and the
+# pullbacks are each map's slope (5, 20, 40) times the cotangent handed in, read at two different
+# cotangents so a constant cannot pass for a slope. `deep` puts one more multiply above the node
+# the rewrite adds, so the added node is not the last one on the chain.
+[[tests]]
+name = "transpose_after_algebra.without_optimization"
+desc = "The reference reading of the pair below: the program unoptimized. `linear(x) = 2*x + 3*x` reads 5 and 10, and its pullback is the slope 5 applied to the cotangent handed in -- `(5.0)` at 1.0 and `(15.0)` at 3.0. `chain(x) = (x*2 + x*3) * 4` reads 20 and 40 with the pullback `(20.0)` and `(40.0)`, and `deep(x) = ((x*2 + x*3) * 4) * 2` answers `(40.0)` and `(80.0)`. Every number is the slope of the map times its cotangent; nothing here is computed by the optimizer."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_after_algebra.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["algebra linear f(1)=5.0 f(2)=10.0", "algebra linear back(1.0)=(5.0) back(3.0)=(15.0)", "algebra chain f(1)=20.0 f(2)=40.0", "algebra chain back(1.0)=(20.0) back(2.0)=(40.0)", "algebra deep back(1.0)=(40.0) back(2.0)=(80.0)"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "transpose_after_algebra.with_algebra"
+desc = "The same program with `std::opt::algebra` in front of it, and the same numbers: the pass folds `2*x + 3*x` to `x * 5` and `(x*2 + x*3) * 4` to `(x*5) * 4`, and the transpose of the rewritten graph has to answer what the transpose of the original did. It answered `0.0` for `chain` -- the cotangent the walk dropped when it visited the rule's new node before the node reading it -- so this entry is the defect: a wrong number printed as an ordinary result. The comparison is against `transpose_after_algebra.without_optimization`, field by field, so a future rewrite that changes one path and not the other fails here without either entry having to name the number that moved."
+kind = "differential"
+case = "../../../cases/compile/transforms/transpose_after_algebra.cml"
+args = ["${case}", "std::opt::algebra", "std::nvm"]
+expect_exit = 0
+compare_to = "transpose_after_algebra.without_optimization"
+compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
@@ -1020,7 +1060,7 @@ timeout_ms = 20000
 # carried=2 node=12 origin=0 captures=2 answer=per-target` and both `ESCAPE` lines, `kindOfTarget` 1 and
 # 11 -- so the channel the case was written for is there and the last number is not. The mark goes away
 # in the commit that answers
-# `docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`,
+# `docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`,
 # and the four pins above stay as the answer's, not as the refusal's.
 [[tests]]
 name = "transpose_loop_escape.two_values_of_two_kinds"
@@ -1065,9 +1105,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 known_fail = ["nvm"]
 known_fail_owner = "lane-valports"
-known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/questions/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
+known_fail_reason = "the transposed member has no value port for the parameter `x` (`modules/transforms/transpose.cpp#buildTransposeMember`), which is the port list `lane-valports` reports as the wall after the ordering problem: `docs/handover/reviews/2026-11-04-how-is-a-two-port-transposed-value-called.cn.md`. Entrance: the scalar product's law (`uri=:op/mul_d`), not the walk's parameter check (`modules/transforms/transpose_operator.cpp#explainRejection`) -- the two print the same sentence, so only this field separates them."
 known_fail_msg = "skip=law-reads-a-value uri=:op/mul_d position=0"
-known_fail_note = "Waits on docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=law-reads-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
+known_fail_note = "Waits on docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md (does a transposed member get a port for the value of a parameter a rule reads?). Measured 2026-11-04 on this tree: the two readings the case exists for are printed (`carried=2 ... answer=per-target`, both `ESCAPE` lines with `kindOfTarget` 1 and 11), and the walk then stops at `TRANSPOSE function=read_outer skip=law-reads-a-value uri=:op/mul_d position=0 reason=the rule's right side reads a value the caller does not carry` -- `k = x*x`'s law needs `x`'s value, `x` is a parameter a cotangent is answered for, and the member takes no port for it. 29 is `15 + 7*2x`, a function of `x`, so the number itself says the value has to travel; the case's paper passes two arguments and its `main` passes one, which is the same defect seen from the test's side. The mark goes away with the ruling, in the commit that answers the page and fixes that call."
 
 [[tests]]
 name = "transpose_tuple_component.reads_the_first_slot"
@@ -1610,7 +1650,7 @@ timeout_ms = 15000
 # (`TRANSPOSE function=rulesets.jvp::index_into<float> graph=388 type=(int, float[], float) =>
 # (float[],)`), so the extent in the type is not what answers it -- the split's residual is. The
 # measurement of both sources, and why neither reaches a law, is
-# `docs/handover/questions/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`.
+# `docs/handover/reviews/2026-11-04-does-a-shape-in-the-type-reach-the-law.cn.md`.
 [[tests]]
 name = "grad_array_fixed_shape"
 desc = "A `float[3]` parameter read at two positions: `xs[1] * xs[0]` over `[3.0, 2.0, 5.0]` answers `6.0`, and the cotangent is `2.0`, `3.0`, `0.0` position by position -- the third one the zero the body never reads. This is `grad_array_no_int` with the extent stated in the type, which is the shape the ruling asks a caller to write."
@@ -2213,7 +2253,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "softmax_gradient_stops_at_split"
-desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
+desc = "The same function through the library's `vjp`: the forward half is built with its rule named (`rules=jvp_softmax,jvp_mul_tensor,jvp_sum`) and the cut then refuses -- `skip=backward construct=a node whose input was not copied uri=- why=an operand of the node is not reachable from the half's exit`, and no `TRANSPOSE` line exists at all. So `softmax` is not one rule away: the tangent `jvp_softmax` writes needs `y = softmax<1>(x)` in the backward half, that call carries its axis as a context input (`softmax<1>`, `sum<1, true>`), and the forward half's exit does not reach it. A `softmax_t` rule cannot help a walk that never starts; the question is `docs/handover/questions/docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`. Pinned as the readings, not as an exit code, so the day the cut is answered this entry goes red and names what replaced it."
 kind = "negative"
 case = "../../../cases/compile/transforms/softmax_gradient_stops_at_split.cml"
 args = ["${case}", "${backend}"]
@@ -2247,7 +2287,7 @@ expect_output_not_contains = ["skip=arity uri=tensor:mean_axis", "skip=call-no-t
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 # `exp` on the D1 difference set: the cheapest member, and the discriminator for the cut question
-# (`docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`).
+# (`docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`).
 [[tests]]
 name = "exp_gradient_through_the_engine"
 desc = "The gradient of `sum(exp(x))` through the engine's own rule (`expVjp`, `modules/tensor/ops/__elementwise_ops.cpp`, registered by `setVjp(defs, `"exp`", ...)`), both components written out: `[2.718281828459045, 7.38905609893065]` on `[1.0, 2.0]`. Both components are the criterion: a `exp_t` written as `ct` answers `[1.0, 1.0]` and one written as `ct * x` answers `[1.0, 2.0]`, so the pair separates the three laws without a tolerance, while a single component or an aggregate would not. This is the number the library's rules reproduce in the neighbouring case."

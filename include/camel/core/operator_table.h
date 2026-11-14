@@ -96,62 +96,40 @@ inline constexpr OperId kNoOper = 0;
 /// `__iter__`, whose overloads are chosen by the operand types) has no one id and is referred
 /// to by the name of its group.
 namespace oper {
-inline constexpr OperId VarNew          = 1; // ":var/new"  `var v = e`
-inline constexpr OperId VarGet          = 2; // ":var/get"  reading a variable
-inline constexpr OperId VarPeek         = 3; // ":var/peek" a read whose value cannot be kept
-inline constexpr OperId VarTake         = 4; // ":var/take" the value, moved out of the variable
-inline constexpr OperId AssnOwned       = 5; // ":op/assn_owned"
-inline constexpr OperId SetField        = 6; // ":op/set_field"
-inline constexpr OperId SetIndex        = 7; // ":op/set_index"
-inline constexpr OperId TagIsNull       = 8; // ":op/tag_is_null"
-inline constexpr OperId TagNullValue    = 9; // ":op/tag_null_value"
-inline constexpr OperId TagIsError      = 10; // ":op/tag_is_error"
-inline constexpr OperId TagErrorValue   = 11; // ":op/tag_error_value"
-inline constexpr OperId TagErrorInfo    = 12; // ":op/tag_error_info"
-inline constexpr OperId TagThrow        = 13; // ":op/tag_throw"
-inline constexpr OperId EnumMake        = 14; // ":enum/make"
-inline constexpr OperId EnumTag         = 15; // ":enum/tag"
-inline constexpr OperId EnumField       = 16; // ":enum/field"
-inline constexpr OperId CopyArray       = 17; // ":struct/copy_arr"
-inline constexpr OperId AppendOwned     = 18; // ":struct/append_arr_owned"
-inline constexpr OperId MacroCmp        = 19; // ":macro/cmp"
+inline constexpr OperId VarNew        = 1;  // ":var/new"  `var v = e`
+inline constexpr OperId VarGet        = 2;  // ":var/get"  reading a variable
+inline constexpr OperId VarPeek       = 3;  // ":var/peek" a read whose value cannot be kept
+inline constexpr OperId VarTake       = 4;  // ":var/take" the value, moved out of the variable
+inline constexpr OperId AssnOwned     = 5;  // ":op/assn_owned"
+inline constexpr OperId SetField      = 6;  // ":op/set_field"
+inline constexpr OperId SetIndex      = 7;  // ":op/set_index"
+inline constexpr OperId TagIsNull     = 8;  // ":op/tag_is_null"
+inline constexpr OperId TagNullValue  = 9;  // ":op/tag_null_value"
+inline constexpr OperId TagIsError    = 10; // ":op/tag_is_error"
+inline constexpr OperId TagErrorValue = 11; // ":op/tag_error_value"
+inline constexpr OperId TagErrorInfo  = 12; // ":op/tag_error_info"
+inline constexpr OperId TagThrow      = 13; // ":op/tag_throw"
+inline constexpr OperId EnumMake      = 14; // ":enum/make"
+inline constexpr OperId EnumTag       = 15; // ":enum/tag"
+inline constexpr OperId EnumField     = 16; // ":enum/field"
+inline constexpr OperId CopyArray     = 17; // ":struct/copy_arr"
+inline constexpr OperId AppendOwned   = 18; // ":struct/append_arr_owned"
+inline constexpr OperId MacroCmp      = 19; // ":macro/cmp"
 /// A cell with no value in it yet, of the type its single `with` argument names. What a local of a
 /// generator body becomes: its value is written where the statement stands, and not in the body
 /// that creates the stream (design principles 5.4).
-inline constexpr OperId VarNewEmpty     = 20; // ":var/new/empty"
+inline constexpr OperId VarNewEmpty = 20; // ":var/new/empty"
 /// The cell a call wrote, taken after the call: what a read of a variable written by a call through
 /// a function value takes as its version when the call's value carries no version of its own (it
 /// may be `void`). The result is the cell itself; the call is an input so that taking the value
 /// makes the call run (design principles 3.1).
-inline constexpr OperId VarAfter        = 21; // ":var/after"
-/// `:op/keep(x, v)`: the value `v`, with `x` as an input whose value no result takes. A pass that
-/// removes the last use of a node whose running is observed (an effect, or a computation that may
-/// fault) routes that node through this operator instead of dropping it, so the node stays in the
-/// data-use set the liveness function reads while `v` stands where the node's value did (design
-/// principles 3.3). Its traits are the conservative ones an undeclared operator gets -- it has an
-/// effect and may fault -- because an operator a pass could drop, merge, move or compute early
-/// would undo the reason it was inserted.
-///
-/// When it is written: `keepThroughValue` (src/passes/opt/generic/rewrite.cpp), called by
-/// `replaceNode` for a node that has no sync user -- one that holds no place in a `sync` block's
-/// chain. That shape is not hypothetical, so the operator is not unreachable today: `std::opt` over
-/// test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml already draws two of these nodes.
-/// What 3.3 still leans on for the graphs the builder writes is the chain: an effect written inside
-/// a `sync` block has a place in it, and a pass that removes the statement hands that place on
-/// instead of reaching for this operator (rewrite.h, replaceNode). This operator is for the read
-/// that has no such place -- and a graph that keeps neither is refused at the commit ("effect node
-/// ... with neither a read of its value nor a place in its chain"), which is what
-/// `test::keepshape` measures.
-///
-/// The insertion is also exercised by construction, in src/passes/test/keepnode.cpp and
-/// test/plans/feat/opt/keep_node.plan.toml: measured there, `KEEPNODE keep=1 reads_the_divisor=1`,
-/// and the same pass with the insertion switched off reads `keep=0`. An earlier version of this
-/// comment said no program reached the insertion. The counts that refuted it are 3 of the 5
-/// programs under test/cases/opt/effects/ (each holding two nodes) and 7 in the whole
-/// test/cases/opt tree; both counts, their per-file node counts and their names are pinned by
-/// `keep_shape.reachability`, so a rule that starts or stops writing this node is a red run.
-inline constexpr OperId Keep            = 22; // ":op/keep"
-inline constexpr OperId kWellKnownCount = 23; // kNoOper included
+inline constexpr OperId VarAfter = 21; // ":var/after"
+/// Id 22 is free and stays free: it held the keeper operator a pass wrote when a removal took
+/// the last use of a node whose running is observed. The keeper is a `GATE` now -- one data port
+/// reading the value that was there, one sync predecessor naming that node, the value passed
+/// through (design principles 3.3, docs/design/effects/edges.cn.md 5.3) -- so the operator is
+/// gone, and no other operator takes its id: reusing it would make the deletion a rename.
+inline constexpr OperId kWellKnownCount = 22; // kNoOper included
 
 /// Reading a variable: `:var/get`, or `:var/peek`, the same read for a value that only goes to
 /// operations that cannot keep it (it leaves the variable's sole-reference mark set; see
@@ -184,7 +162,6 @@ inline constexpr std::string_view kWellKnownOperatorUris[oper::kWellKnownCount] 
     ":macro/cmp",
     ":var/new/empty",
     ":var/after",
-    ":op/keep",
 };
 
 /**
@@ -222,8 +199,8 @@ struct OperatorTraits {
     /// otherwise. Passes read it: `src/runtime/graph.cpp#nodeMayFault` answers with it (beside
     /// `elementwise`, for shapes the type states in full), and `nodeIsFreelySchedulable` hands
     /// that answer to whoever may drop, move or recompute a node -- a node the program observes
-    /// is kept alive with `:op/keep` when a removal takes its last read
-    /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`).
+    /// is kept alive by a `GATE` when a removal takes its last read
+    /// (`src/passes/opt/generic/rewrite.cpp#isObservedRun`, `#keepThroughValue`).
     bool mayFault = true;
     /// While it runs, the operator calls function values it received as arguments (the
     /// higher-order operators and `attempt`), so what it does depends on those functions.
@@ -368,8 +345,8 @@ class OperatorTable {
     /// makers and its `fact` this way: what they make holds the functions of the rule's sides,
     /// which the collector does not trace, and installing the facts of a declaration is the
     /// declaration itself.
-    void declareUnfoldable(
-        std::string_view protocol, std::initializer_list<std::string_view> operators);
+    void
+    declareUnfoldable(std::string_view protocol, std::initializer_list<std::string_view> operators);
 
     // ---- Queries --------------------------------------------------------------------------
 
@@ -555,8 +532,8 @@ class OperatorTable {
         /// derived from a Camel declaration is the *callee's* name: the declaration may be a kernel
         /// the module never exports (`array:sum_kernel` is `#impl(sum_kernel)`), and whether a
         /// program can write that name is a fact about the module's exports that a graph does not
-        /// carry, so the printer uses a derived shape only for an operator of the core (`:` prefix),
-        /// whose names every program has in scope.
+        /// carry, so the printer uses a derived shape only for an operator of the core (`:`
+        /// prefix), whose names every program has in scope.
         bool declaredByModule = false;
         /// Whether the declaration this shape was read off is body-less: a kernel the module
         /// declares for its C++ side (`#impl(sum_kernel)` and the `#op('array:sum_l')` that names
@@ -670,8 +647,8 @@ class OperatorTable {
         std::initializer_list<std::pair<std::string_view, sem::ResourceSpec>> operators);
 
     /// Declares the faults of the operator `uri` — the one place "it may fault" is stated
-    /// (design principles 3.3, docs/design/op-semantics/README.cn.md 4.2). An empty list declares the
-    /// operator has no fault path at all, which is what a pure one needs to be freely
+    /// (design principles 3.3, docs/design/op-semantics/README.cn.md 4.2). An empty list declares
+    /// the operator has no fault path at all, which is what a pure one needs to be freely
     /// schedulable (design principles 3.4); an operator that declares none may fault. The
     /// record gets the table the way it gets a trait -- the same facts one step further, with no
     /// version of its own, because a fault table says what the operator can raise and not what a
@@ -798,7 +775,6 @@ class OperatorTable {
     std::vector<std::pair<std::string, CallForm>> callForms_;
     std::atomic<uint64_t> epoch_{0};
 };
-
 
 /**
  * The one place the kernel's argument order is decided. An operator registered with

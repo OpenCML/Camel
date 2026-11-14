@@ -463,8 +463,8 @@ class EncodeSession {
                 ruleGraphPtrs,
                 // A graph compiled from the IR is not lifted from another: the lift is a runtime
                 // operator's own build (draft.cpp passes the list), and the compile-time one lifts
-                // into a program of its own (modules/transforms/jvp_instantiate.cpp), so nothing
-                // to reserve here.
+                // into a program of its own (the `jvp_instantiate.cpp` that was under
+                // `modules/transforms/`, since deleted), so nothing to reserve here.
                 {},
                 prepared.payloadShape,
                 prepared.staticSlots,
@@ -856,6 +856,8 @@ class EncodeSession {
     }
 
     graph_ptr_t rootGraph_;
+    // program-holder-exempt: borrow-or-foreign-type -- a reference to the program the encoder
+    // was handed; its caller owns it for the encode.
     camel::runtime::Program &program_;
     camel::runtime::GraphIdAllocator *freshIds_;
     std::vector<PreparedGraph> prepared_;

@@ -16,8 +16,8 @@
 #include "camel/core/type/collection.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/func.h"
-#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/stream.h"
+#include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/intern.h"
@@ -35,8 +35,8 @@ namespace {
 /// How two resource clauses are compared inside the structural walk: `equals` compares them as
 /// they stand, and the relation a written type asks of a value lets a clause nobody wrote take
 /// the resources of the other side (text.h, sameTypeWithUnwrittenResources).
-using ResourceMatch = bool (*)(
-    const sem::ResourceSignature &target, const sem::ResourceSignature &source);
+using ResourceMatch =
+    bool (*)(const sem::ResourceSignature &target, const sem::ResourceSignature &source);
 
 bool sameResources(const sem::ResourceSignature &left, const sem::ResourceSignature &right) {
     return left == right;
@@ -75,7 +75,7 @@ bool isStructured(const Type *type) {
 
 /// One item of a text walk: write a literal, or write a type (which may expand to more items).
 struct TextItem {
-    bool isType = false;
+    bool isType      = false;
     const Type *type = nullptr;
     std::string text;
 };
@@ -89,7 +89,7 @@ TextItem literal(std::string text) {
 TextItem typeItem(const Type *type) {
     TextItem item;
     item.isType = true;
-    item.type  = type;
+    item.type   = type;
     return item;
 }
 
@@ -261,7 +261,7 @@ std::vector<TextItem> structParts(const StructType *record, bool mangle) {
     return parts;
 }
 
-/// The resource clause of a function type, as written: "pure" or "uses s, fs". `mangle` writes
+/// The resource clause of a function type, as written: "pure" or "uses s, var fs". `mangle` writes
 /// the stable encoding that takes part in the mangled name instead.
 std::string resourceClause(const FunctionType *fn, bool mangle) {
     const sem::ResourceSignature &sig = fn->resources();
@@ -272,9 +272,8 @@ std::string resourceClause(const FunctionType *fn, bool mangle) {
     if (mangle) {
         out = "K";
         out += std::to_string(static_cast<int>(sig.mode));
-        out += "P" + std::to_string(sig.params.size()) + "C" +
-               std::to_string(sig.captures.size()) + "A" + std::to_string(sig.ambient.size()) +
-               "Y" + std::to_string(sig.anyOf.size());
+        out += "P" + std::to_string(sig.params.size()) + "C" + std::to_string(sig.captures.size()) +
+               "A" + std::to_string(sig.ambient.size()) + "Y" + std::to_string(sig.anyOf.size());
         for (const auto &use : sig.params) {
             out += std::format(
                 "p{}{}{}{}{}",
@@ -296,38 +295,39 @@ std::string resourceClause(const FunctionType *fn, bool mangle) {
         }
         out += "r" + std::to_string(static_cast<int>(sig.result.kind)) +
                std::to_string(sig.result.operand);
-        out += sig.allocates
-                   ? "o" + std::to_string(static_cast<int>(sig.allocates->cls)) +
-                         std::to_string(sig.allocates->name.size()) + sig.allocates->name
-                   : "o-";
+        out += sig.allocates ? "o" + std::to_string(static_cast<int>(sig.allocates->cls)) +
+                                   std::to_string(sig.allocates->name.size()) + sig.allocates->name
+                             : "o-";
         out += sig.external ? "e" : "-";
         return out;
     }
     if (sig.pure()) {
         return "pure";
     }
-    out = "uses ";
+    out        = "uses ";
     bool first = true;
-    const auto add = [&](const std::string &name) {
-        out += (first ? "" : ", ") + name;
+    // An entry prints the way it is written (design principles 3.3): a resource the call writes
+    // carries `var`, and one it only reads does not. Without the word a reader of the type could
+    // not tell the two clauses apart, and the two are different promises.
+    const auto add = [&](bool writes, const std::string &name) {
+        out += (first ? "" : ", ") + std::string(writes ? "var " : "") + name;
         first = false;
     };
     for (const auto &use : sig.params) {
-        if (fn->hasArgNames() &&
-            use.index < fn->withTypesCount() + fn->normTypesCount()) {
-            add(std::string(fn->argNameAt(use.index)));
+        if (fn->hasArgNames() && use.index < fn->withTypesCount() + fn->normTypesCount()) {
+            add(sem::writes(use.mode), std::string(fn->argNameAt(use.index)));
         } else {
-            add(std::format("#{}", use.index));
+            add(sem::writes(use.mode), std::format("#{}", use.index));
         }
     }
     for (const auto &use : sig.ambient) {
-        add(sem::resourceDisplayName(use.name));
+        add(sem::writes(use.mode), sem::resourceDisplayName(use.name));
     }
     for (sem::ResourceClass cls : sig.anyOf) {
-        add(std::format("any {}", sem::resourceClassName(cls)));
+        add(false, std::format("any {}", sem::resourceClassName(cls)));
     }
     for (uint8_t capture : sig.captures) {
-        add(std::format("capture {}", capture));
+        add(false, std::format("capture {}", capture));
     }
     return out;
 }
@@ -339,8 +339,8 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
     if (mangle) {
         parts.push_back(literal("F"));
         if (withCount > 0) {
-            parts.push_back(literal((fn->hasWithRest() ? "X" : "") + std::string("W") +
-                                    std::to_string(withCount)));
+            parts.push_back(literal(
+                (fn->hasWithRest() ? "X" : "") + std::string("W") + std::to_string(withCount)));
             for (size_t i = 0; i < withCount; ++i) {
                 if (fn->withIsVarAt(i)) {
                     parts.push_back(literal("V"));
@@ -349,8 +349,8 @@ std::vector<TextItem> functionParts(const FunctionType *fn, bool mangle) {
             }
         }
         if (normCount > 0) {
-            parts.push_back(literal((fn->hasRest() ? "X" : "") + std::string("N") +
-                                    std::to_string(normCount)));
+            parts.push_back(
+                literal((fn->hasRest() ? "X" : "") + std::string("N") + std::to_string(normCount)));
             if (fn->hasConstas()) {
                 parts.push_back(literal("C" + std::to_string(fn->constasCount())));
                 for (uint16_t index : fn->constasIndices()) {
@@ -529,8 +529,7 @@ std::vector<TextItem> typeParts(const Type *type, bool mangle) {
             return {literal("[]")};
         }
         if (needsParensAsElement(array->elemType())) {
-            return {
-                literal("("), typeItem(array->elemType()), literal(")" + array->shapeText())};
+            return {literal("("), typeItem(array->elemType()), literal(")" + array->shapeText())};
         }
         return {typeItem(array->elemType()), literal(array->shapeText())};
     }
@@ -682,8 +681,7 @@ bool sameTypeWith(const Type *a, const Type *b, ResourceMatch resources) {
                 return false;
             }
             if (lhs->named()) {
-                if (lhs->decl() != rhs->decl() ||
-                    lhs->typeArgCount() != rhs->typeArgCount()) {
+                if (lhs->decl() != rhs->decl() || lhs->typeArgCount() != rhs->typeArgCount()) {
                     return false;
                 }
                 for (size_t i = 0; i < lhs->typeArgCount(); ++i) {

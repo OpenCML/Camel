@@ -254,7 +254,11 @@ void ParserImpl::parseMatchTypeType() {
     close(m, NK::MatchTypeType);
 }
 
-/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* '=>' typeExpr
+/// typeArm : 'case' typeCasePattern ('|' typeCasePattern)* whenClause? '=>' typeExpr
+/// A case of a type function's `match type` takes the guard a value-level `match` case takes
+/// (design principles 5.5, ruling of 2026-11-14): `case _ when is_numeric::<T>() => int[0]` is
+/// taken only where the predicate holds, and a case whose guard does not hold falls through to
+/// the one written after it.
 void ParserImpl::parseTypeArm() {
     const size_t m = mark();
     bump(); // case
@@ -262,6 +266,9 @@ void ParserImpl::parseTypeArm() {
     while (cur_ == TK::Pipe && !panic_) {
         bump();
         parseTypeCasePattern();
+    }
+    if (!panic_ && atWord(0, "when")) {
+        parseWhenClause();
     }
     if (!panic_ && expect(TK::FatArrow)) {
         parseType();
@@ -311,16 +318,15 @@ void ParserImpl::parsePrimaryType() {
     }
     case TK::LParen: {
         const TK t1 = peek(1);
-        if (!typeHead &&
-            (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
-             (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
-             (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
-              peek(4) == TK::FatArrow) ||
-             (t1 == TK::Ellipsis && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
-              peek(4) == TK::FatArrow) ||
-             (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
-             (t1 == TK::Ellipsis && parenClosesBeforeArrow()) ||
-             (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
+        if (!typeHead && (t1 == TK::KwVar || (t1 == TK::Identifier && peek(2) == TK::Colon) ||
+                          (t1 == TK::RParen && peek(2) == TK::FatArrow) ||
+                          (t1 == TK::DotDot && peek(2) == TK::Identifier && peek(3) == TK::RParen &&
+                           peek(4) == TK::FatArrow) ||
+                          (t1 == TK::Ellipsis && peek(2) == TK::Identifier &&
+                           peek(3) == TK::RParen && peek(4) == TK::FatArrow) ||
+                          (t1 == TK::DotDot && parenClosesBeforeArrow()) ||
+                          (t1 == TK::Ellipsis && parenClosesBeforeArrow()) ||
+                          (t1 == TK::Comma && peek(2) == TK::RParen && peek(3) == TK::FatArrow))) {
             return parseFuncType();
         }
         const size_t m = mark();
@@ -411,7 +417,7 @@ void ParserImpl::parseFuncType() {
     close(m, NK::FuncType);
 }
 
-/// resourceClause : ('uses' identRef (',' identRef)* | 'pure')+
+/// resourceClause : ('uses' usesEntry (',' usesEntry)* | 'pure')+
 ///
 /// What a function type says about the resources a call touches (design effects plan 3.1):
 /// `pure` says none; `uses` names parameters (the values a call touches) and resources
@@ -426,13 +432,29 @@ void ParserImpl::parseResourceClause() {
             continue;
         }
         bump(); // `uses`
-        parseIdentRef(NK::IdentRef);
-        while (cur_ == TK::Comma && peek(1) == TK::Identifier && !panic_) {
+        parseUsesEntry();
+        while (cur_ == TK::Comma && (peek(1) == TK::Identifier || peek(1) == TK::KwVar) &&
+               !panic_) {
             bump();
-            parseIdentRef(NK::IdentRef);
+            parseUsesEntry();
         }
     }
     close(m, NK::ResourceClause);
+}
+
+/// usesEntry : 'var'? identRef
+///
+/// One resource of the clause, written the way a parameter is (design principles 3.3): without
+/// `var` the call reads it, with `var` it writes it. `var` is a reserved word, so an entry that
+/// starts with it can only be the written one; a resource whose name is `var` cannot be named in
+/// a clause, as it cannot be named anywhere.
+void ParserImpl::parseUsesEntry() {
+    const size_t m = mark();
+    if (cur_ == TK::KwVar) {
+        bump();
+    }
+    parseIdentRef(NK::IdentRef);
+    close(m, NK::UsesEntry);
 }
 
 /// typeList : typeExpr (',' typeExpr)*

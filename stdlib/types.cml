@@ -59,17 +59,18 @@ export type ValueOf<T>
 /// value layer). So `shape` answers a value whose length is known, and a value of `T[...]` answers
 /// the open list.
 ///
-/// The last arm is a default, and it is one because a `match type` case has no guard position: the
-/// type layer cannot ask whether a leaf type is a number, so `ShapeOf<string>` answers the empty
-/// shape as a scalar does (docs/handover/reviews/questions-2026-10-30-match-type-guard.md: a guard
-/// on a `case` is a language shape the author decides, not a line to add here).
+/// The last arm is guarded: it answers the empty shape for a number (a scalar is a tensor of rank
+/// zero) and for nothing else, so `ShapeOf<string>` is a type function applied to a type it is not
+/// defined for and is reported as one, instead of quietly answering `int[0]`. The property the arm
+/// asks about is a Camel predicate (`is_numeric`), so it is written here and not in the compiler,
+/// and its answer is remembered by the predicate and the type it was asked about.
 /// @example is_same::<ShapeOf<float[2, 3]>, int[2]>()    // true
 /// @example is_same::<ShapeOf<float[...]>, int[]>()    // true
 /// @example is_same::<ShapeOf<int>, int[0]>()    // true
 export type ShapeOf<T> = match type T {
     case E[...Dims] => int[Dims]
     case E[...] => int[]
-    case _ => int[0]
+    case _ when is_numeric::<T>() => int[0]
 }
 
 /// The element type of an array or a set type; any other type is refused.

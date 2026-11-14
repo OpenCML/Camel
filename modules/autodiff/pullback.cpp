@@ -973,7 +973,7 @@ class ForwardRewrite {
     /// of them: it is a function of `stdlib/vjp.cml`, built out of `jvp`, `split` and `transpose`,
     /// so a call of it inside a differentiated graph has no OPER of this module to resolve and the
     /// pullback it hands out is a value the graph cannot name (see
-    /// `docs/handover/questions/2026-11-04-what-does-the-second-derivative-need.cn.md`).
+    /// `docs/handover/reviews/2026-11-04-what-does-the-second-derivative-need.cn.md`).
     ::Function *macroCallee(gc_node_ref_t callee);
     /// Makes `node` return `plan`'s (value, pullback) and splits the pair for its users. A call
     /// that writes captured variables hands on their new versions after its value

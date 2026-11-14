@@ -436,9 +436,9 @@ local comparison.
 
 - **Directory rules** (`directoryRules`): a change under `modules/`, `tools/` or `test/cases/`
   selects the plan mirroring its directory. The deepest existing match wins, so
-  `modules/tensor/ops/matmul.cpp` selects `test/plans/feat/modules/tensor/`,
+  `modules/tensor/ops/linalg_ops.cpp` selects `test/plans/feat/modules/tensor/`,
   `test/cases/compile/enum/shapes.cml` selects `test/plans/feat/compile/enum.plan.toml`, and
-  `test/cases/modules/tensor/bounds.cml` selects `test/plans/feat/modules/tensor/`. This names
+  `test/cases/modules/tensor/comparison.cml` selects `test/plans/feat/modules/tensor/`. This names
   the plan that mirrors the path; it cannot name a plan that lives outside that tree.
 - **File rules** (`rules`): the first matching prefix adds the plans the directory rule cannot
   reach but the same change can break. This is how `modules/tiles/**` selects the GPU plans under
@@ -783,7 +783,7 @@ everywhere is written once:
   - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
   - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
   - the page that decides the question:
-    `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
+    `docs/handover/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
 
   It is refused at load with the same refusal the owner gets, and three more shapes are refused with
   it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
@@ -1236,7 +1236,7 @@ those 215 plans and the milestone layer grows by one entry that day: no command 
 the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
 split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
 than to the runner, and it is asked in
-`docs/handover/questions/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+`docs/handover/reviews/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
 
 ### The one sweep, and what it expands to
 

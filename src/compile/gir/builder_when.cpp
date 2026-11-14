@@ -1210,6 +1210,61 @@ WhenResult Builder::evaluateWhenCondition(
     return whenOf(frame, whenSoleValue(condition));
 }
 
+WhenResult Builder::evaluateCaseGuard(
+    const camel::core::type::TypeCaseGuard &guard, const type_bindings_t &bindings) {
+    return evaluateGuardNode(
+        static_cast<const GCT::Node *>(guard.condition), guard.context, bindings);
+}
+
+WhenResult Builder::evaluateGuardNode(
+    const GCT::Node *condition, const void *moduleContext, const type_bindings_t &bindings) {
+    if (condition == nullptr) {
+        return whenResultOf(WhenOutcome::NotEvaluable, {}, "the case has no guard");
+    }
+    // A guard is read where its `match type` is written: the predicate it names is looked up in
+    // that module, not in the one whose instance selects the case.
+    const ModuleUnit *unit = nullptr;
+    if (moduleContext != nullptr) {
+        const auto *declared = static_cast<const camel::core::module::Module *>(moduleContext);
+        const auto found     = units_.find(declared);
+        unit                 = found != units_.end() ? found->second.get() : nullptr;
+    }
+    ConditionContext context(*this, nullptr, unit);
+    // A case guard has no declaration of its own, so it reads no `with` value and no signature:
+    // everything it may ask about is in the type arguments of the instance and in the names the
+    // case's pattern bound, and those are `bindings`.
+    static const std::unordered_map<std::string, data_ptr_t> kNoValues;
+    const WhenFrame frame{nullptr, bindings, kNoValues};
+    // The tree the case was built in owns the node; reading it never writes through it.
+    return whenOf(frame, const_cast<GCT::Node *>(condition));
+}
+
+std::optional<bool> Builder::caseGuardAnswer(
+    const std::shared_ptr<const camel::core::type::TypeCaseGuard> &guard, Type *subject,
+    const type_bindings_t &bindings) const {
+    (void)subject;
+    if (guard == nullptr) {
+        return std::nullopt;
+    }
+    // Reading a predicate runs Camel, which this builder does with its own state; the type layer
+    // asks from inside type substitution, where the answer is the only thing it wants back. The
+    // depth says the questions below this one are the build's, not the guard's (a predicate's own
+    // instance may check a declaration condition of its own).
+    Builder &self = const_cast<Builder &>(*this);
+    ++self.guardAskDepth_;
+    const WhenResult result = self.evaluateCaseGuard(*guard, bindings);
+    --self.guardAskDepth_;
+    if (result.holds() || result.fails()) {
+        self.pendingCaseGuardProblem_.reset();
+        return result.holds();
+    }
+    // A predicate that could not be settled is a defect of the case, and it is reported where the
+    // type is used: remembering it keeps the later "no case selects the type" from becoming the
+    // reason, which would point at the type instead of at the predicate.
+    self.pendingCaseGuardProblem_ = result;
+    return std::nullopt;
+}
+
 WhenResult Builder::whenOf(const WhenFrame &frame, const GCT::node_ptr_t &node) {
     if (node == nullptr) {
         return whenResultOf(WhenOutcome::NotEvaluable, {}, "the condition has no value here");
@@ -1413,6 +1468,13 @@ generic_template_ptr_t Builder::pickPredicateOverload(
 
 WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_ptr_t &node) {
     const GCT::node_ptr_t &callee = node->at(0);
+    // The depth tells the outermost call from the conditions a predicate's own instance reaches
+    // while it is built: only the outermost one is the question a guard asked.
+    struct CallDepth {
+        int &depth;
+        explicit CallDepth(int &value) : depth(value) { ++depth; }
+        ~CallDepth() { --depth; }
+    } callDepth(predicateCallDepth_);
     if (callee->size() < 2 || callee->at(0)->type() != GCT::NodeKind::DREF) {
         return whenResultOf(
             WhenOutcome::NotEvaluable,
@@ -1502,7 +1564,62 @@ WhenResult Builder::whenOfPredicateCall(const WhenFrame &frame, const GCT::node_
     for (size_t i = 0; i < parameters.size(); ++i) {
         callBindings.emplace_back(parameters[i], typeArguments[i]);
     }
-    return whenOfPredicateInstance(tmpl, callBindings, valueArguments, callee, written);
+    // A predicate is a pure function of the types it is given, so its answer is remembered by that
+    // pair: the guard of a `match type` case and the `when` of a declaration ask the same question
+    // about the same type, and the second one is answered from here (design principles 5.5, ruling
+    // of 2026-11-14). A call that passes values is not remembered -- its answer depends on them --
+    // and an answer that could not be settled is not remembered either, since a later instance may
+    // be the one that can settle it.
+    std::string cacheKey;
+    if (valueArguments.empty()) {
+        cacheKey = std::to_string(reinterpret_cast<uintptr_t>(tmpl.get())) + ":";
+        for (Type *argument : typeArguments) {
+            cacheKey += argument->toString();
+            cacheKey += ",";
+        }
+        // The question a guard asks is the outermost one: a condition the predicate's own body
+        // reaches while its instance is built is the build's question, not the guard's.
+        if (guardAskDepth_ == 1 && predicateCallDepth_ == 1) {
+            ++guardAsks_;
+            guardPairs_.emplace(cacheKey, true);
+        }
+        const auto found = predicateCache_.find(cacheKey);
+        if (found != predicateCache_.end()) {
+            ++predicateCacheHits_;
+            if (guardAskDepth_ == 1 && predicateCallDepth_ == 1) {
+                ++guardHits_;
+            }
+            return whenFromBool(found->second);
+        }
+    }
+    ++predicateRuns_;
+    if (guardAskDepth_ == 1 && predicateCallDepth_ == 1) {
+        ++guardRuns_;
+    }
+    WhenResult answer =
+        whenOfPredicateInstance(tmpl, callBindings, valueArguments, callee, written);
+    if (!cacheKey.empty() && (answer.holds() || answer.fails())) {
+        predicateCache_[cacheKey] = answer.holds();
+    }
+    return answer;
+}
+
+void Builder::logPredicateCounts() {
+    if (guardAsks_ == 0) {
+        return; // a program whose types ask no predicate says nothing
+    }
+    // A guard asks about (function, type arguments), and the answer is the same however many
+    // cases ask it: `is_numeric::<int>` is read once, and the second function of the library that
+    // guards on it is answered from the cache. The numbers say exactly that -- questions asked,
+    // answers that needed a run, answers reused, and how many distinct pairs those were.
+    CAMEL_LOG_INFO_S(
+        "MatchTypeGuard",
+        "[match type] {} guard question(s) about {} distinct (function, type arguments) pair(s), "
+        "{} answered by running the predicate and {} from the cache",
+        guardAsks_,
+        guardPairs_.size(),
+        guardRuns_,
+        guardHits_);
 }
 
 WhenResult Builder::whenOfPredicateInstance(

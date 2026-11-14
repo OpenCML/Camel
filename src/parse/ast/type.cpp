@@ -83,7 +83,8 @@ const std::string ResourceClauseLoad::toString() const {
     }
     std::string result = "ResourceClause: ";
     for (size_t i = 0; i < uses_.size(); ++i) {
-        result += (i > 0 ? ", " : "") + uses_[i].toString();
+        result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
+                  uses_[i].resource.toString();
     }
     return result;
 }
@@ -94,7 +95,8 @@ const std::string ResourceClauseLoad::geneCode() const {
     }
     std::string result = "uses ";
     for (size_t i = 0; i < uses_.size(); ++i) {
-        result += (i > 0 ? ", " : "") + uses_[i].toString();
+        result += (i > 0 ? ", " : "") + std::string(uses_[i].write ? "var " : "") +
+                  uses_[i].resource.toString();
     }
     return result;
 }

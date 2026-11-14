@@ -328,8 +328,15 @@ class FunctionType : public CompositeType {
     Parts parts() const;
     /// A new object of class T (FunctionType or OpenFunctionType) holding `parts`.
     template <typename T> static T *allocate(const Parts &parts);
-    /// The interned object holding `parts`.
+    /// The interned object holding `parts`, each of its component types interned first.
     static FunctionType *intern(const Parts &parts);
+    /// `parts` with its result type and its parameter types put in the type table (intern.h): a
+    /// key holds components by TypeId, so a signature must not record a type the table does not
+    /// hold. A component that has no interned form yet (an open signature whose body has not
+    /// decided its result) is left as it is and keeps id 0 -- see `internComponent`.
+    static Parts frozenParts(const Parts &parts);
+    /// The interned form of one component type, or `type` itself when there is none.
+    static Type *internComponent(Type *type);
 
     // Written by the constructor, and for an open signature by OpenFunctionType::setExitType.
     Type *exitType_ = nullptr;
@@ -376,14 +383,19 @@ class FunctionType : public CompositeType {
 
 /// A signature whose result type is decided after it was created: the type of a function the
 /// front end is building (see the file comment). Never interned and never shared by two
-/// functions. It adds no data to FunctionType, only the one mutator.
+/// functions. It adds no data to FunctionType, only the mutators.
 class OpenFunctionType final : public FunctionType {
     friend class FunctionType;
     friend class FunctionTypeFactory;
 
   public:
-    /// Sets the result type, once the body that decides it is built.
-    void setExitType(Type *type) { exitType_ = type; }
+    /// Sets the result type, once the body that decides it is built. The type is interned first
+    /// (FunctionType::internComponent): a signature the graph keeps is read as
+    /// `funcType()->exitType()`, so its result must be a type the table holds and not the 0 that
+    /// stands for "no type" -- the result of a rule whose right side is a function value is the
+    /// closure's signature, which the builder made open, and freezing it here is what gives it an
+    /// id. A result that has no interned form yet is kept as it is (internComponent).
+    void setExitType(Type *type);
     /// Sets the resources once the body (or the declaration) decides them.
     void setResources(const sem::ResourceSignature &resources) { resources_ = resources; }
 

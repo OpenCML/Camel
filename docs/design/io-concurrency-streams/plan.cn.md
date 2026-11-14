@@ -53,7 +53,7 @@ pwsh -NoProfile -File internal/tools/camel-remote.ps1 `
 
 已经有用例与计划条目固定了它的现状：
 
-- 用例 `test/cases/compile/not_supported/optional_comp.cml`（第 11 行 `let g = inc?..dbl`）；
+- 用例 `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删；第 11 行 `let g = inc?..dbl`）；
 - 计划条目 `test/plans/feat/compile/not_supported.plan.toml` 的 `not_supported.optional_comp`，`expect_diagnostic_name = "SemanticDiag::ConstructNotSupported"`、`expect_diagnostic_code = "0x0300001F"`、第 11 行第 16 列，`desc` 原文「`?..` is rejected at the operator; it used to be a warning and compiled as `...`.」；
 - 诊断目录 `docs/diagnostics.md` 里 `0x0300001F` 的一行。
 
@@ -179,7 +179,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 
 #### 片 A：`f..g` 组合与 `?..` 的删除
 
-- **A1（`?..` 删除）**：`token_kinds.def` 的词法记号、`ParserImpl::parseComp` 的分支、`Builder::visitCompExpr` 的 `?..` 分支、用例 `test/cases/compile/not_supported/optional_comp.cml`、计划条目 `not_supported.optional_comp`、`tools/format/fmt.cpp#Formatter` 的对应处理。`ConstructNotSupported` **保留**（还有 7 条用例用它）。
+- **A1（`?..` 删除）**：`token_kinds.def` 的词法记号、`ParserImpl::parseComp` 的分支、`Builder::visitCompExpr` 的 `?..` 分支、用例 `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删）、计划条目 `not_supported.optional_comp`、`tools/format/fmt.cpp#Formatter` 的对应处理。`ConstructNotSupported` **保留**（还有 7 条用例用它）。
   - 红前用例（附录 A 的 t10，**反例**：今天编译失败，这正是本片要改掉的现状）
     <!-- camel-snippet: counter-example: 反例：今天的 `?..` 报 ConstructNotSupported，逐字诊断见附录 A 的 t10 -->
     ```camel
@@ -288,7 +288,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
   - 落地上只用 `BRCH`、`LOOP`、结构体与既有节点：机器是「一个 `LOOP`（条件是 `pc` 还没结束）里一串按 `pc` 的 `BRCH`」，每段末尾把新状态交给下一段；语言没有 `break`（3.10），所以结束是**条件**而不是跳转。写状态要注意：`return` 写在 `if`/`match` 的臂里只结束那个臂（`ExitInUnusedBranch`），所以每段的出口是**表达式的值**，`return` 只在步进函数的最外层。
   - 局部变量按"活过 `yield`"进 `S`：每段入口从状态里取出来（`let`/`var`），出口把新值写回状态。**没写先读的字段要有值**：这个语言没有"任意类型的默认值"，所以这一步用底类型 `never` 与核心内建 `fail<'Kind'>(message): never` 写（`m[k] ?? fail(...)`），两者落地之前不要把半个机器合入。
   - `for` 位置把生产者融进消费者的 `loop` 是**优化**：生产者与消费者同时可见（同一个函数里，或内联之后）时省掉闭包；看不见时走步进函数值。两条路的结果必须相同，差分用例两种都覆盖。
-  - 步进函数体就是函数体：生成器头上写的 `sync` 就是步进函数体的 `sync`，按每次拉取生效；步进函数的资源集就是这个流的资源集。落地时删掉 `FeatureNotSupported("generators")` 与 `stream.yield_lowering_refused`，`test/cases/compile/stream/yield_lowering.cml` 转成正例（`count(3)` 产出 0、1、2）。除 `count(3)` 与 `pairs(n)`（双层循环）外，验收还要覆盖一轮多次 `yield`、`match` 臂里的 `yield`、`sync` 体里的打印顺序、拉到一半就停时后面的效应不发生、空流、可错元素的 `yield error(...)` 加 `return`；每个用例配一份"直接把元素写成数组"的等价程序，收集成数组后逐元素比较，四个后端都跑。
+  - 步进函数体就是函数体：生成器头上写的 `sync` 就是步进函数体的 `sync`，按每次拉取生效；步进函数的资源集就是这个流的资源集。落地时删掉 `FeatureNotSupported("generators")` 与 `stream.yield_lowering_refused`，`test/cases/compile/stream/` 下的 `yield_lowering.cml`（已删）转成正例（`count(3)` 产出 0、1、2）。除 `count(3)` 与 `pairs(n)`（双层循环）外，验收还要覆盖一轮多次 `yield`、`match` 臂里的 `yield`、`sync` 体里的打印顺序、拉到一半就停时后面的效应不发生、空流、可错元素的 `yield error(...)` 加 `return`；每个用例配一份"直接把元素写成数组"的等价程序，收集成数组后逐元素比较，四个后端都跑。
 - **预取条件**（3.5）：生成器内部，元素之间只经状态相连；不依赖上一个元素的那部分可以提前算后面的元素，条件是「**纯且不会出故障**，并放在**有界缓冲**里」；**来源上的读取不预取**。
 - 红前用例（附录 A 的 t3、t9）：
   ```camel
@@ -548,7 +548,7 @@ G5/G7/G8 + GPU/JAX ── G11 ── G12
 1
 ```
 
-**t10** —— 既有用例 `test/cases/compile/not_supported/optional_comp.cml`：
+**t10** —— 既有用例 `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删）：
 
 ```
 (optional_comp)/.../optional_comp.cml:11:16: [Error]: '?..' is not supported: the operator is not implemented. The grammar accepts this construct, but the compiler does not implement it. Remove it; nothing in the language replaces it yet. (name=SemanticDiag::ConstructNotSupported, code=0x0300001F)
@@ -615,7 +615,7 @@ N09 -> N0A [label="0|0", type="NORM"];
 | 驻留报告的接口 | `modules/tiles/include/tiles/internal/residency.h#residencyReport` | 23–25 |
 | 「只读不插节点」 | `modules/tiles/src/region_pass.cpp#RegionPass` | 43–49 |
 | 驻留的设计依据 | `docs/design/gpu/plan.cn.md` | `### 3.2 驻留推断`（297） |
-| `?..` 的既有用例 | `test/cases/compile/not_supported/optional_comp.cml` | 11 |
+| `?..` 的既有用例 | `test/cases/compile/not_supported/` 下的 `optional_comp.cml`（已删） | 11 |
 | `?..` 的既有计划条目 | `test/plans/feat/compile/not_supported.plan.toml` | `not_supported.optional_comp`（67–80） |
 | 诊断目录里的两个码 | `docs/diagnostics.md` | `0x0300001F`（70、1654）、`0x03000120`（114、3019） |
 | `fs` 今天有什么 | `stdlib/fs.cml#read_text` | 24、36、41（无 `read_lines`） |

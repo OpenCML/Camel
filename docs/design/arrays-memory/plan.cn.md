@@ -131,7 +131,7 @@ Array（GC 对象，可移动）                    mm::Block（非 GC 对象，
 2. **外部块永不原地写**：`canWriteInPlace()` 在外部块上为 false（即使计数为 1）；对一个外部数组调用一个原地形式的算子（例如 `sort`），断言返回的是新块、外部缓冲区字节不变。设计原则 11.3：另一个框架不能看到我们的修改。
 3. **大数组循环的峰值有界**：在用例里循环 `reps` 次创建 `f32[1 << 20]`（4 MB，必然走块），每次丢弃；断言 `blocks().live - 基线` 有上界（例如 ≤ 2）且 `frees > 0`，即 GC 确实被块字节触发过。这是批复第 2 条的验收，也覆盖紧凑存储的元素视图不泄漏。
 
-新增用例放 `test/cases/feat/mm/external_block.cml`（或直接扩 `blocks.cml`）与 `test/cases/feat/mm/block_pressure.cml`；计划 `test/plans/feat/mm/blocks.plan.toml` 加一行 `BLOCK_SELFTEST ok` 与两组计数断言。`gc_poison_sweep` 用例加入一个 rank-2 视图与一个外部块视图，确保毒化清除后没有悬挂读。
+新增用例放 `test/cases/feat/mm/` 下的 `external_block.cml`（或直接扩 `blocks.cml`）与 `block_pressure.cml`（计划中，尚未存在）；计划 `test/plans/feat/mm/blocks.plan.toml` 加一行 `BLOCK_SELFTEST ok` 与两组计数断言。`gc_poison_sweep` 用例加入一个 rank-2 视图与一个外部块视图，确保毒化清除后没有悬挂读。
 
 ### 2.3 P1 的文件与门禁
 
@@ -235,7 +235,7 @@ virtual const Type *applyArguments(std::span<const TypeArgument> args,
 
 ### 3.7 P2 的文件与门禁
 
-改：`include/camel/core/type/composite/array.h`、`src/core/type/composite/array.cpp`、`include/camel/core/type/base.h`、`src/core/type/base.cpp`、`include/camel/core/type/extent.h`、`src/core/type/text.cpp`、`src/core/type/intern.{h,cpp}`、`src/core/type/other.h`、`src/compile/{gct,gir}/builder*.cpp`、`src/core/type/composite/array.cpp` 的 `resolve/clone`。
+改：`include/camel/core/type/composite/array.h`、`src/core/type/composite/array.cpp`、`include/camel/core/type/base.h`、`src/core/type/base.cpp`、`include/camel/core/type/extent.h`、`src/core/type/text.cpp`、`src/core/type/intern.{h,cpp}`、`include/camel/core/type/other.h`、`src/compile/{gct,gir}/builder*.cpp`、`src/core/type/composite/array.cpp` 的 `resolve/clone`。
 
 新增自检：`src/core/type/array_type_selftest.cpp`（或并入 `test/plans/feat/compile/type_*.cml` 的用例）：`T[]` 驻留唯一、`T[3]` ≠ `T[?]`、名字不进 equals、mangle 稳定、`unify`/`widened` 表驱动、`withExtentValues` 的空包回退。门禁：`smoke`、`feat/compile`、`feat/mm`、`feat/modules/tensor`。P2 合并时行为不变，可以先落地。
 
@@ -322,7 +322,7 @@ Tensor<f32>               // f32[...]
 - 12 个用例含 `constas`：形状位置改写为首次出现的名字，其余引用；例如 `f<T>(x: T[constas n, 4])` → `f<T>(x: T[n, 4])`。
 - `test/cases/modules/tensor/static_types.cml`：`var w = zeros([2, 1]); w = grow(w) (Tensor any)` 依赖"任意秩加宽"；按 Q5 的结论（同秩加宽）改写成两次 `var` 或显式 `as`。另有一处与加宽无关：`grow(t: Tensor): Tensor` 的裸 `Tensor` 签名返回过渡类型，进不了元素类型已定的格子（`f32[?, ?]`）；改写签名为具体类型（`grow(t: f32[?, ?]): f32[?, ?]`）。
 - `test/cases/tools/grammar/keywords.cml` 的 `Tensor<f32, const [constas n, 4]>` 改写为 `Tensor<f32, [n, 4]>`，并重新生成 `test/plans/feat/tools/golden/grammar/keywords.scopes` 金标。
-- 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`...s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape.plan.toml`。
+- 新增 `test/cases/compile/array_shape/*`：语法、绑定、`?`、`...s`、线性、常量名、诊断、`T[]` 不变、`T[][]` 嵌套、`as` 检查；`test/plans/feat/compile/array_shape/array_shape.plan.toml`。
 - AST/格式化/金样：新增语法进入 `feat/format` 的往返语料；`feat/compile` 的 AST 快照只对 smoke 语料，不改既有快照。
 
 ### 4.7 P3 的文件与门禁
@@ -382,7 +382,7 @@ P4 的终点：
 | `modules/tensor/type.cpp#tensorFactsOf` 的 `isNumericUnknown()` 分支 | 读过渡类型的事实（无元素类型） | 该分支随标记一起删；事实只剩"数值数组"一种 |
 | `modules/tensor/ops/support.cpp#tensorOf(facts)` 的 `!facts.dtype` 两支 | 造过渡类型（`numericUnknown` / `numericUnknownFromForms`） | 元素类型必有时删掉，改成断言 |
 | `modules/tensor/ops/vjp.cpp#vjpTensorType()` | VJP 结果类型是过渡类型（`ArrayType::numericUnknown()`） | 改为由被微分值的切线类型给出具体元素类型 |
-| `src/core/derivative.h/.cpp#setTangentType`/`statedTangentType` | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
+| `include/camel/core/derivative.h` 与 `src/core/derivative.cpp` 的 `setTangentType`/`statedTangentType` 钩子 | 过渡类型的元素是 `Void`，结构上取不到切线，所以新加一个注册钩子 | 随过渡类型删除；`computeTangentType` 的 `Array` 分支恢复只走元素类型 |
 | `modules/autodiff/pullback.cpp#carriesGradient` 的 `Array` 分支 | 同上（`tangentTypeOf` 判据） | 可恢复为 `carriesGradient(elemType)` |
 | `modules/tensor/module.cpp` 的 `.npy` 加载器/保存器 | 检查值对着 `ArrayType::numericUnknown()` 做形状/元素检查 | 改为对着声明的具体数组类型检查 |
 | `modules/tensor/ops/gradient_ops.cpp#registerTensorTangentSpace` | 判断过渡类型有没有切线 | 随钩子删除：切线类型由元素类型给出 |
@@ -526,7 +526,7 @@ Array *rowCopy(mm::IAllocator &allocator, uint64_t row) const;
 
 `stdlib/prelude.cml` 的 `map/filter/foreach/reduce` 文本在 P3 已改 `T[...]`；P5 补注释与用例。`stdlib/array.cml` 保持 rank 1（`sort_by`/`flat_map`/`zip`/`flatten` 不改）；`stdlib/array.cml` 的 `sort`/`argsort` 已改 `T[...]`。
 
-测试：`test/cases/compile/hof_multidim/*`（map 按行：rank 1 不变、rank 2 得 `U[d0]`、filter 行、foreach 行、reduce 行、sort 字典序、argsort、len、`int[m,n]` 与 `string[m,n]`、空维、1 行、1 列）、`test/plans/feat/compile/hof_multidim.plan.toml`；`feat/mm/hof_block_alloc` 加 rank 2 的分配计数。
+测试：`test/cases/compile/hof_multidim/*`（map 按行：rank 1 不变、rank 2 得 `U[d0]`、filter 行、foreach 行、reduce 行、sort 字典序、argsort、len、`int[m,n]` 与 `string[m,n]`、空维、1 行、1 列）、`test/plans/feat/compile/` 下的 `hof_multidim.plan.toml`（计划中，尚未存在）；`feat/mm/hof_block_alloc` 加 rank 2 的分配计数。
 
 ### 6.6 P5 的文件与门禁
 
@@ -600,11 +600,11 @@ println(after - before);             // 期望 0
 
 覆盖：`append`、`extend`、`concat`、`filter`、`unique`、`sort`（各一次）、`set_index`、张量逐元素一元与二元各一次（f32 与 f64 各一组）、`tail`（视图，0 次）。对照用例（**必须分配**）：`let ys = xs; xs = xs->sort()`（1 次——`take` 复制，再原地排序）、`map(xs, f)`（1 次输出）、`argsort`（1 次）。
 
-文件：`test/cases/feat/mm/dyn_in_place/*.cml`、`test/plans/feat/mm/dyn_in_place.plan.toml`。断言用打印的计数差，不用时间。
+文件：`test/cases/feat/mm/dyn_in_place/*.cml`、`test/plans/feat/mm/` 下的 `dyn_in_place.plan.toml`（计划中，尚未存在）。断言用打印的计数差，不用时间。
 
 ### 7.6 结构性测试
 
-一个自检（`src/core/operator_table_selftest.cpp` 或 `test/plans/feat/mm/op_in_place.plan.toml` 的遍历）：对算子表里每个返回数组的算子，断言它要么有原地形式（`setInPlaceForm`）且 `reusesOperand` 一致，要么在例外清单里（清单与 7.3 的"否"行一一对应，写在 `src/builtin/executors/builtin.cpp` 附近）。这样以后新增一个返回数组的算子而忘了分类，测试会失败。
+一个自检（`src/core/` 下的 `operator_table_selftest.cpp` 或 `test/plans/feat/mm/` 下的 `op_in_place.plan.toml` 的遍历，两者都计划中、尚未存在）：对算子表里每个返回数组的算子，断言它要么有原地形式（`setInPlaceForm`）且 `reusesOperand` 一致，要么在例外清单里（清单与 7.3 的"否"行一一对应，写在 `src/builtin/executors/builtin.cpp` 附近）。这样以后新增一个返回数组的算子而忘了分类，测试会失败。
 
 ### 7.7 P6 的文件与门禁
 
@@ -807,11 +807,11 @@ P4 是一个提交。如果评审或实施中发现它无法在合理时间内�
 | 文件 | 内容 |
 |---|---|
 | `docs/design/arrays-memory/plan.cn.md` | 本文件 |
-| `test/plans/feat/compile/array_shape.plan.toml` | 语法/绑定/诊断 |
+| `test/plans/feat/compile/array_shape/array_shape.plan.toml` | 语法/绑定/诊断 |
 | `test/plans/feat/compile/array_alias.plan.toml` | `Tensor` 别名 |
-| `test/plans/feat/compile/hof_multidim.plan.toml` | 第一维 |
-| `test/plans/feat/mm/dyn_in_place.plan.toml` | 分配计数 |
-| `test/plans/feat/mm/external_block.plan.toml`（或并入 `blocks`） | P1 自检 |
+| `test/plans/feat/compile/` 下的 `hof_multidim.plan.toml`（计划中） | 第一维 |
+| `test/plans/feat/mm/` 下的 `dyn_in_place.plan.toml`（计划中） | 分配计数 |
+| `test/plans/feat/mm/` 下的 `external_block.plan.toml`（计划中；或并入 `blocks`） | P1 自检 |
 | `test/cases/compile/array_shape/*.cml`、`array_alias/*.cml`、`hof_multidim/*.cml` | 用例 |
 | `test/cases/feat/mm/dyn_in_place/*.cml`、`external_block.cml`、`block_pressure.cml` | 用例 |
 | `test/cases/perf/tensor/{elementwise,matmul,reduce,alloc,hof}.cml` | P7 程序 |

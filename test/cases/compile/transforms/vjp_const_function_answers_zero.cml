@@ -13,7 +13,7 @@
 //     and nothing else (author's ruling of 2026-11-02 11:30), so no value of this member carries the
 //     length. The zero the type states has no elements: `[]`. The line is here so that the day a
 //     member is handed the value, the answer reads `[0.0, 0.0, 0.0]` and this line says so
-//     (docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md).
+//     (docs/handover/reviews/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md).
 //   * `float` -- `0.0`.
 //
 // Each answer is read twice where it is a number, at a cotangent of 1 and of 2: the answer is
