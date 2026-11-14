@@ -94,6 +94,8 @@ enum class PassApplyStatus {
 };
 
 struct PassApplyResult {
+    // program-holder-exempt: kept-by-another-root -- the pipeline's provisional set roots it
+    // until the pass settles (GCGraphManager::settle).
     const camel::runtime::Program *program = nullptr;
     PassApplyStatus status{PassApplyStatus::Transformed};
     /// The error value the pass ended with, when the status is `Errored` and NullSlot otherwise.
@@ -203,6 +205,8 @@ PassApplyResult applyPassesDetailed(
 /// stage). `program` is what the pass produced (unchanged when a rewrite pass produced nothing);
 /// `changed` says whether the produced program holds graphs of different content.
 struct PassRunResult {
+    // program-holder-exempt: kept-by-another-root -- the program a pass produced is in the
+    // provisional set until the caller settles.
     const camel::runtime::Program *program = nullptr;
     bool changed                           = false;
 };

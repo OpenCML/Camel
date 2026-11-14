@@ -821,6 +821,8 @@ class EdgeChecker {
         }
     }
 
+    // program-holder-exempt: borrow-or-foreign-type -- the check reads the program its caller
+    // holds for the check.
     const Program &program_;
     const GCGraph &graph_;
     const GraphState state_;

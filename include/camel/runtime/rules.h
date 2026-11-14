@@ -33,6 +33,8 @@ struct RuleSource {
     camel::core::sem::PermissionMask needs = camel::core::sem::kNoPermissions;
     /// `<=>`: the rule holds both ways.
     bool bidirectional = false;
+    // program-holder-exempt: long-lived-cache -- the rule table outlives the compile, and the
+    // library's programs are the context's, pinned there (rule_templates.cpp).
     const Program *program = nullptr;
     GraphId lhs            = kInvalidGraphId;
     GraphId rhs            = kInvalidGraphId;

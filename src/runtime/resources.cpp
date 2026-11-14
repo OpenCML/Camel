@@ -177,6 +177,8 @@ class FootprintWalk {
     }
 
   private:
+    // program-holder-exempt: borrow-or-foreign-type -- the walk reads the program its caller
+    // holds for the footprint.
     const Program &program_;
     uint64_t epoch_;
     std::unordered_map<const GCGraph *, GraphFootprint> memo_;
@@ -227,6 +229,8 @@ class Resolver {
         const sem::ResourceSignature &signature, size_t withCount, const GCGraph &graph,
         gc_node_ref_t ref) const;
 
+    // program-holder-exempt: borrow-or-foreign-type -- the resolver reads the program its
+    // caller holds for the query.
     const Program &program_;
     FootprintFn footprint_;
 };

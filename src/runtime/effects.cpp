@@ -19,6 +19,8 @@ namespace camel::runtime {
 namespace {
 
 struct EffectWalk {
+    // program-holder-exempt: borrow-or-foreign-type -- a walk over the program of the call that
+    // made it; effects() holds it for the walk.
     const Program &program;
     std::unordered_map<const GCGraph *, EffectSummary> done;
     std::unordered_set<const GCGraph *> active;

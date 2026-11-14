@@ -169,6 +169,8 @@ namespace {
 /// Where the values of a fact live: the draft being rewritten, or a frozen graph.
 struct Source {
     const camel::runtime::GraphTransaction *transaction = nullptr;
+    // program-holder-exempt: borrow-or-foreign-type -- one query's source names the program its
+    // caller holds for the length of the call.
     const Program *program  = nullptr;
     const GCGraph *graph    = nullptr;
     camel::runtime::GraphId graphId = camel::runtime::GraphId::Invalid;
