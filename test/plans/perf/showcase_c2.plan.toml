@@ -184,6 +184,15 @@ timeout_ms = 300000
 #
 # Both halves run: the with_grad pipeline and the library's own gradient are two implementations of
 # the same training program, and the tolerance above is what says they agree.
+#
+# Read it on the gate host, not on a workstation. Measured 2026-11-15: on `88zjwei` this entry takes
+# 2.07 s and fails with the pinned sentence (`std::vjp` is still not a registered pass), while on a
+# Windows host the same program does not reach that sentence at all -- it hits `timeout_ms` and the
+# runner reports `expected exit 0, got timeout after 600000 ms`, so a reader there sees the mark
+# described by a failure that is not the one it pins. The unmarked `phases` entry beside it is the
+# same story with a smaller budget: 1.87 s on the gate host, 300 s of timeout on that Windows host.
+# 150x is not a slow host, it is a hang in the Python side of these two entries on that platform;
+# neither the mark nor the pin is wrong, and neither should be changed to satisfy that host.
 [[tests]]
 name = "implementations"
 desc = "C2 standard profile, twice: the with_grad pipeline and the library-grad pipeline print the same three-block table, and their last logged losses agree within the hand-written 1e-4 relative tolerance."
