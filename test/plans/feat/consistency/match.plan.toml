@@ -50,6 +50,11 @@ kind = "behavior"
 case = "../../../cases/consistency/match/complete_matches.cml"
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
+# This empty name is not an assertion: `validateTest` reads the diagnostic block only when
+# `expect_diagnostic_name` (or the code, or a line) is truthy, so "" is how an entry cancels the
+# name `[defaults]` inherits. It stays because deleting it makes the entry demand
+# `SemanticDiag::MatchWithoutDefault` from a complete match (it did, and the plan was red). What
+# this entry actually claims -- "no diagnostic" -- is asserted by the script below.
 expect_diagnostic_name = ""
 verify_script = """
 const out = input.normalized.stdout.trim()
@@ -67,5 +72,9 @@ args = ["${case}", "std::rgir"]
 backends = ["nvm"]
 backends_agree = []
 expect_exit = 0
-expect_diagnostic_name = ""
+# The absence of a diagnostic, said properly: `[defaults]` gives this entry a diagnostic name, and
+# `expect_no_diagnostics` stands in place of that expectation and asserts that nothing was recorded.
+# The empty `expect_diagnostic_name` this replaces only cancelled the inherited name and asserted
+# nothing (docs/handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+expect_no_diagnostics = true
 expect_output_not_contains = ["match_fail"]

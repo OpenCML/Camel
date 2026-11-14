@@ -919,6 +919,7 @@ Behavior-style tests may combine:
 - `expect_diagnostic_code`
 - `expect_diagnostic_line`
 - `expect_diagnostic_column`
+- `expect_no_diagnostics`
 - `expect_refusal`
 - `verify_script`
 - `verify_script_path`
@@ -1470,6 +1471,80 @@ Benchmark tests may use:
   into the test's `meta.json`, and does not change the budget comparison with it.
 
 The case must emit the expected JSON benchmark payload format used by the runner.
+
+## Fields a Kind Does Not Read
+
+The schema is closed, but it is not kind-aware: a field spelled correctly is accepted under every
+kind, and only the kind's own block in `validateTest` (`test/tools/run-tests.mjs`) evaluates it.
+`compare_to` on a `negative` entry, `golden` on a `behavior` entry, `perf_budget_mean_ms` on a
+`benchmark` entry that never emits a payload -- each is accepted, silent, and never read, so the
+entry reads as a comparison it does not make. That is the failure this section is written against:
+a plan field the runner never reads is not a test.
+
+`negative` and `positive` are labels for `behavior` (see "Common Test Fields"): the runner has no
+block for either, so a `negative` entry with no `expect_exit` (or `expect_signal`) says nothing
+about failing. Which fields each kind evaluates:
+
+| field | behavior | negative | positive | snapshot | differential | benchmark |
+| --- | --- | --- | --- | --- | --- | --- |
+| `expect_exit`, `expect_signal` | yes | yes | yes | yes | yes | yes |
+| `expect_stdout_contains`, `_matches`, `_exact`, `_starts_with`, `_not_contains` | yes | yes | yes | yes | yes | yes |
+| `expect_stdout` (legacy name of `_exact`) | yes | yes | yes | yes | yes | yes |
+| `expect_stderr_contains` | yes | yes | yes | yes | yes | yes |
+| `expect_output_contains`, `_not_contains` | yes | yes | yes | yes | yes | yes |
+| `expect_refusal`, `expect_diagnostic_*` | yes | yes | yes | yes | yes | yes |
+| `verify_script`, `verify_js`, `verify_script_path` | yes | yes | yes | yes | yes | yes |
+| `normalizers` | yes | yes | yes | yes | yes | yes |
+| `expect_no_diagnostics` | yes | yes | yes | yes | yes | yes |
+| `golden`, `snapshot_stream`, `snapshot_compare` | no | no | no | yes | no | no |
+| `compare_to`, `compare_fields` | no | no | no | no | yes | no |
+| `perf_budget_mean_ms`, `perf_budget_tolerance_pct` | no | no | no | no | no | yes |
+| `backends_agree` | only for an entry whose `backends` is a list | | | | | |
+| `perf_budget_platform` | never an assertion: provenance for `meta.json` | | | | | |
+
+Two rows are conditional on the value rather than on the kind, and both are silent:
+`expect_diagnostic_name` and `expect_diagnostic_code` are read only when they are truthy, so
+`expect_diagnostic_name = ""` names nothing; and every list field is a loop over nothing when it is
+empty, so `compare_fields = []` on a `differential` entry compares nothing at all. A
+`differential` entry with no `compare_to` is the one shape that fails loudly (`compare_to target not
+found: undefined`).
+
+**"No diagnostic at all"** is `expect_no_diagnostics = true`: the entry fails when the run recorded
+any diagnostic. It stands in place of `expect_diagnostic_*` rather than joining them, because an
+entry cannot both require a diagnostic and require none; an entry that does not name the field keeps
+exactly the meaning it had. Before this field existed the claim could not be made, and
+`expect_diagnostic_name = ""` was the nearest thing -- which is not the same thing at all: because
+`[defaults]` is merged into every entry, that empty value **cancels** the name the block inherited
+and then the whole diagnostic block is skipped. The entry holds no expectation, and nothing verifies
+the absence. Deleting such a line is not a cleanup either: the inherited name comes back and the
+entry starts demanding a diagnostic it never wanted (`match.complete` in
+`consistency/match.plan.toml` was red that way when the line was deleted). Read it as "this entry
+inherits nothing here", and write the absence as `expect_no_diagnostics = true` -- the reasoning and
+the readings are in
+[`docs/handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+
+`test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
+that writes a field its kind does not evaluate, naming the plan, the line and the entry:
+
+```bash
+node test/tools/check-plan-fields.mjs                  # report, ratcheted against the baseline
+node test/tools/check-plan-fields.mjs --enforce         # every finding fails the run
+node test/tools/check-plan-fields.mjs --verify-runner    # the table against run-tests.mjs
+node test/tools/check-plan-fields.mjs --update-baseline  # accept the count it just measured
+```
+
+It is a **wall** on the gate (`-Check all` in `internal/tools/camel-remote.ps1`): the check is pure
+static analysis over `test/plans/**`, deterministic and a few seconds, so its exit code decides the
+run. What makes that fair on the day it was turned on is the ratchet: the last accepted count lives in
+`test/tools/plan-fields-baseline.json`, findings that grow past it exit non-zero by name and by
+category, and findings that come down exit zero with the line that says to accept the new number
+(`--update-baseline` is the only writer; a missing baseline is a red, never a pass over nothing). A
+check that can only ever print is a number nobody has to answer for; the ratchet is what makes "may
+not grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count
+reaches zero, `--report-only` is the numbers without the exit code, and all three are one edit apart.
+The table above is copied into that script, so `--verify-runner` fails by name when `validateTest`'s
+gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
+catch, one level up.
 
 ## Performance Measurement
 

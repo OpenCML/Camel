@@ -506,7 +506,7 @@ b9f41a62c39c0eb6 ok showcase/c3-char-transformer/probes/18_take_dtype.cml
 64bd172d73275346 ok showcase/i2-diffusion-step/step.cml
 cb61054139066eda ok showcase/i2-diffusion-step/step_gpu.cml
 8e81248d84b0e5a4 ok showcase/s1-stream-fib/fib.cml
-18e42c91c97e6c73 ok stdlib/array.cml
+6fd58de989977cfe ok stdlib/array.cml
 aa87dbb3e6e7550f ok stdlib/autodiff.cml
 1fa94581869e8887 ok stdlib/bytes.cml
 52823380271ab381 ok stdlib/ckpt.cml
@@ -3391,7 +3391,7 @@ d4c35be1eb7a1380 ok test/cases/modules/stdlib/array_basic.cml
 2638125d842c102f ok test/cases/modules/stdlib/array_merge_kernels.cml
 6548b950758fb1df ok test/cases/modules/stdlib/array_reduction_arms.cml
 fbb10b2f0f0a3050 ok test/cases/modules/stdlib/array_reduction_complex_reduce.cml
-bbf1b2b7ebf86513 ok test/cases/modules/stdlib/array_reduction_kernels.cml
+ba7d911da4f88890 ok test/cases/modules/stdlib/array_reduction_kernels.cml
 3cad605211e7645b ok test/cases/modules/stdlib/array_sort_kernels.cml
 8fb1769156793a8a ok test/cases/modules/stdlib/array_sort_no_declaration.cml
 3c570d4292905893 ok test/cases/modules/stdlib/array_sum_rounding.cml
@@ -3428,7 +3428,7 @@ ad8e58b39b8b2c37 ok test/cases/modules/stdlib/not_reduced.cml
 4aa5e42540513495 ok test/cases/modules/stdlib/reduced_arithmetic_refused.cml
 8cf5456191ba663c ok test/cases/modules/stdlib/reduced_arithmetic_refused_f16.cml
 fe1ac4c2c36ec43d ok test/cases/modules/stdlib/reduced_compound_assign.cml
-ac42877d18c33f3b ok test/cases/modules/stdlib/reduced_minmax.cml
+4ebc5ebe8b8042d6 ok test/cases/modules/stdlib/reduced_minmax.cml
 52d27f30c09fc7e8 ok test/cases/modules/stdlib/reduced_narrowing_as_refused.cml
 d9267385bdc23a1f ok test/cases/modules/stdlib/reduced_negate.cml
 8eb8a730077e9752 ok test/cases/modules/stdlib/reduced_pow.cml

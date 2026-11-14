@@ -24,7 +24,7 @@
  *     32768 (`float16FromFloat`), so it is not an oracle. The bf16 pair is the same statement at a
  *     bf16 unit of 32, where both vectors give 32768.
  *   - `min` and `max` over f32: NaN on either side gives NaN (IEEE 754-2019 minimum and maximum,
- *     stated once in modules/math/minmax.h), and -0 is below +0, which the bytes of the result
+ *     stated once in camel/core/math/minmax.h), and -0 is below +0, which the bytes of the result
  *     show.
  *   - `min` and `max` over a `string[]` and a `bool[]`: each of the two element types has an
  *     executor of its own (the values are checked against `sort` and against each other, `false`
