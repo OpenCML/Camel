@@ -1684,6 +1684,80 @@ bool isUnanchoredPure(const GraphDraft &draft, gc_node_ref_t node) {
         draft.syncUsersOf(node));
 }
 
+std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft) {
+    std::unordered_set<gc_node_ref_t> visited;
+    std::vector<gc_node_ref_t> worklist;
+    auto pushRoot = [&](gc_node_ref_t ref) {
+        if (ref != kInvalidNodeRef && draft.header(ref) != nullptr && draft.alive(ref) &&
+            visited.insert(ref).second) {
+            worklist.push_back(ref);
+        }
+    };
+
+    pushRoot(draft.entryNode());
+    pushRoot(draft.exitNode());
+    pushRoot(draft.outputNode());
+    pushRoot(draft.returnNode());
+    for (gc_node_ref_t ref : draft.normPorts()) {
+        pushRoot(ref);
+    }
+    for (gc_node_ref_t ref : draft.withPorts()) {
+        pushRoot(ref);
+    }
+    for (gc_node_ref_t ref : draft.closureNodes()) {
+        pushRoot(ref);
+    }
+
+    while (!worklist.empty()) {
+        const gc_node_ref_t current = worklist.back();
+        worklist.pop_back();
+        for (gc_node_ref_t input : draft.normInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (gc_node_ref_t input : draft.withInputsOf(current)) {
+            pushRoot(input);
+        }
+        for (gc_node_ref_t input : draft.ctrlInputsOf(current)) {
+            pushRoot(input);
+        }
+        // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement written
+        // before this one in the same `sync` block is live exactly as a data input is.
+        for (gc_node_ref_t input : draft.syncInputsOf(current)) {
+            pushRoot(input);
+        }
+        const DraftNodeHeader *header = draft.header(current);
+        if (header == nullptr) {
+            continue;
+        }
+        if (header->kind == GCNodeKind::Loop) {
+            // The ports of its regions are part of it, whether the code reads them or not.
+            for (auto part : {GCRegionKind::LoopCond, GCRegionKind::LoopBody}) {
+                if (const uint32_t region = draft.loopRegionOf(current, part); region != 0) {
+                    for (gc_node_ref_t port : draft.regionPortsOf(region)) {
+                        pushRoot(port);
+                    }
+                }
+            }
+        }
+        if (header->kind == GCNodeKind::Brch) {
+            const auto *payload = reinterpret_cast<const DraftBrchPayload *>(
+                draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->join);
+            }
+        } else if (header->kind == GCNodeKind::Join) {
+            const auto *payload =
+                reinterpret_cast<const GCJoinBody *>(draft.payloadOf(current).data());
+            if (payload != nullptr) {
+                pushRoot(payload->brch);
+            }
+        }
+    }
+
+    std::vector<gc_node_ref_t> live(visited.begin(), visited.end());
+    std::sort(live.begin(), live.end());
+    return live;
+}
 bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
     const DraftNodeHeader *header = draft.header(node);
     if (header == nullptr || !draft.alive(node) || header->kind != GCNodeKind::Func) {
