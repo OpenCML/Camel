@@ -24,7 +24,11 @@
 #include "camel/core/type/composite/func.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/extent.h"
+#include "camel/core/type/typecall.h"
 
+#include <functional>
+#include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -59,6 +63,29 @@ using type_bindings_t = std::vector<std::pair<std::string, Type *>>;
 
 /// The type bound to `name`, or nullptr.
 Type *findTypeBinding(const type_bindings_t &bindings, const std::string &name);
+
+/**
+ * What runs the guard of a `match type` case (`case p when c => ...`, design principles 5.5,
+ * ruling of 2026-11-14). Selecting the case happens inside `substituteTypeVars`, which has no
+ * builder, and the guard is an ordinary Camel predicate that only the compiler can run; the build
+ * installs this evaluator for as long as it is compiling, exactly as `extentCallEvaluator`
+ * (`extent.h`) lets a type ask the compiler for the value of a call written in an extent.
+ *
+ * `bindings` are the type arguments of the instance and the names the pattern bound (`W`, `Rest`,
+ * `E`, `Dims`), so a guard may ask about either. The answer is true (the case is taken), false
+ * (the case is not taken and the match goes on with the case written after it), or nothing when
+ * the predicate could not be settled -- which leaves the `match type` waiting for a later
+ * substitution rather than taking a case the program did not ask for.
+ */
+using TypeCaseGuardEvaluator = std::function<std::optional<bool>(
+    const std::shared_ptr<const TypeCaseGuard> &guard, Type *subject,
+    const type_bindings_t &bindings)>;
+
+/// The evaluator in force on this thread; empty outside a build.
+inline TypeCaseGuardEvaluator &typeCaseGuardEvaluator() {
+    static thread_local TypeCaseGuardEvaluator evaluator;
+    return evaluator;
+}
 
 class TypeFunctionType : public Type {
   public:

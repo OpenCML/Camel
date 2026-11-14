@@ -27,9 +27,11 @@
 #include "camel/core/type/other.h"
 
 #include <cstdint>
+#include <memory>
 #include <span>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <vector>
 
 namespace camel::core::type {
@@ -83,6 +85,23 @@ class TypeCallType final : public OtherType {
     const std::string *name_;
 };
 
+/// The guard of a `match type` case (`case pattern when predicate => ...`), as the type layer
+/// holds it: the compiler's own tree of the predicate, the module it is written in, and how it is
+/// written. The type system reads none of the three; it asks the evaluator the build installs
+/// (`typevar.h`, `typeCaseGuardEvaluator`), because a predicate is an ordinary Camel function and
+/// running one is the compiler's business, not the type layer's (design principles 5.5, ruling of
+/// 2026-11-14).
+struct TypeCaseGuard {
+    /// The compiler's tree of the condition. `void` and not owning, so that this header stays a
+    /// type header: it points into the tree the case was built from, which outlives the types of
+    /// the program (the build lowers bodies from that tree), and the evaluator casts it back.
+    const void *condition = nullptr;
+    /// Where the condition is written (the compiler's module), for the names it may call.
+    const void *context = nullptr;
+    /// The condition as written, for `toString` and for diagnostics.
+    std::string text;
+};
+
 /// One case of a `match type` in a type position.
 struct MatchTypeArm {
     /// The shapes the case names, as bits numbered like `TypeCaseKind` (Struct 0, Tuple 1, Leaf 2,
@@ -110,6 +129,9 @@ struct MatchTypeArm {
     /// is nothing to bind and nothing to count. Design principles 5.4: `T[...]` is the type of
     /// every rank, and a dimension pack is the dimensions a type does not name.
     std::vector<Type *> arrayPatterns;
+    /// The guard the case writes, or null. A case is selected when its pattern matches *and* its
+    /// guard holds; one whose guard does not hold selects nothing and the case after it is tried.
+    std::shared_ptr<const TypeCaseGuard> guard;
     /// The type the case gives.
     Type *result = nullptr;
 };
@@ -121,7 +143,10 @@ uint16_t typeShapeBits(const Type *type);
 class MatchTypeType final : public OtherType {
   public:
     static TypeCode typeCode();
-    static MatchTypeType *create(Type *subject, std::span<const MatchTypeArm> arms);
+    static MatchTypeType *create(
+        Type *subject,
+        std::span<const MatchTypeArm> arms,
+        std::span<const std::pair<std::string, Type *>> pendingGuardBindings = {});
 
     Type *subject() const { return params_[0]; }
     size_t armCount() const { return shapes_.size(); }
@@ -132,11 +157,34 @@ class MatchTypeType final : public OtherType {
     /// The patterns the case writes to take an array type apart; empty when it writes none.
     std::span<Type *const> armArrayPatterns(size_t arm) const;
     Type *armResult(size_t arm) const;
+    /// The guard the case writes, or null when it writes none.
+    const std::shared_ptr<const TypeCaseGuard> &armGuard(size_t arm) const {
+        static const std::shared_ptr<const TypeCaseGuard> kNone;
+        return arm < guards_.size() ? guards_[arm] : kNone;
+    }
     /// The names one case binds: what its patterns write for the subject's members -- the element
     /// type and the dimensions of an array pattern, the members and the rest of a pack pattern.
     /// They stand for what the case reached and are not type variables of the type the `match
     /// type` is part of (typevar.cpp `collectTypeVars`).
     void armBoundNames(size_t arm, std::vector<std::string> &names) const;
+
+    /// The type arguments a case's guard was waiting for. A guard is written in the type function's
+    /// own body, so the type it reads is a parameter of that function (`case _ when is_numeric::<T>`
+    /// in `ShapeOf<T>`); the substitution that binds the parameter is the one that would run the
+    /// predicate, and while no evaluator is installed it cannot. Those bindings are kept with the
+    /// match instead of being dropped, and the build that runs the predicate asks the guard about
+    /// them (typevar.cpp, `typeCaseGuardEvaluator`).
+    std::span<const std::pair<std::string, Type *>> pendingGuardBindings() const {
+        return std::span<const std::pair<std::string, Type *>>(
+            pendingGuardBindings_.data(),
+            pendingGuardBindings_.size());
+    }
+    /// This match with its params substituted and those bindings merged into the ones it waits for
+    /// already: a name it has keeps its type, because a guard's answer is an answer about the
+    /// subject, and two matches with one subject mean one thing by one name.
+    MatchTypeType *withPendingGuardBindings(
+        std::span<Type *const> params,
+        std::span<const std::pair<std::string, Type *>> pending) const;
 
     bool typeArguments() const override { return true; }
     std::string toString() const override;
@@ -151,22 +199,44 @@ class MatchTypeType final : public OtherType {
     MatchTypeType(
         std::vector<uint16_t> shapes, std::vector<uint32_t> identityCounts,
         std::vector<uint32_t> packCounts, std::vector<uint32_t> arrayCounts, size_t paramCount,
-        Type **params)
+        Type **params, std::vector<std::shared_ptr<const TypeCaseGuard>> guards = {},
+        std::vector<std::pair<std::string, Type *>> pendingGuardBindings = {})
         : OtherType(typeCode(), paramCount, params), shapes_(std::move(shapes)),
           identityCounts_(std::move(identityCounts)), packCounts_(std::move(packCounts)),
-          arrayCounts_(std::move(arrayCounts)) {}
+          arrayCounts_(std::move(arrayCounts)), guards_(std::move(guards)),
+          pendingGuardBindings_(std::move(pendingGuardBindings)) {}
 
     size_t firstParamOf(size_t arm) const;
+    /// The arms, rebuilt from the params at their positions: the params a `cloneWithParams` was
+    /// given, or this type's own.
+    std::vector<MatchTypeArm> armsFrom(std::span<Type *const> params) const;
 
     std::vector<uint16_t> shapes_;
     std::vector<uint32_t> identityCounts_;
     std::vector<uint32_t> packCounts_;
     std::vector<uint32_t> arrayCounts_;
+    /// One entry per case: the guard it writes, or null. Kept beside the params because a guard is
+    /// not a type: it is the compiler's tree of a predicate (`TypeCaseGuard`).
+    std::vector<std::shared_ptr<const TypeCaseGuard>> guards_;
+    /// What a guard waits for when the match could not be settled where its parameters were bound.
+    /// Not part of the match's identity: the subject says which application this is, and the
+    /// bindings a guard reads come from that application (`create`).
+    std::vector<std::pair<std::string, Type *>> pendingGuardBindings_;
 };
 
 /// Whether a type computed from types (a primitive application or a `match type`) occurs
 /// anywhere in `type`.
 bool containsTypeCall(Type *type);
+
+/// Whether `type` holds a `match type` whose case a guard decides, so that selecting that case
+/// waits for the predicate to run. The module tree builds types before the build that runs Camel
+/// predicates, so a type that waits here is settled later by whoever installs the evaluator
+/// (`typevar.h`, `typeCaseGuardEvaluator`); a caller must not report it as a type no case takes.
+bool containsGuardedTypeMatch(Type *type);
+
+/// Whether any `match type` built so far has carried a guard: a reader that would otherwise walk
+/// every type it sees uses this to skip the walk in a program that writes no guard at all.
+bool anyTypeCaseGuardBuilt();
 
 /// What stays unevaluated in `type` although its arguments are concrete, said for a diagnostic:
 /// `what` is the application (`ElementOf<int>`, `match type int {...}`) and `why` the reason

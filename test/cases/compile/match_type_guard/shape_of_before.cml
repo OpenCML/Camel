@@ -1,0 +1,27 @@
+/// The reading `ShapeOf<string>` gave before a `match type` case could carry a guard, written out
+/// beside the reading it gives now so the two can be compared in one binary (design principles 5.5,
+/// ruling of 2026-11-14: "`ShapeOf<string>` becomes a compile error instead of `int[0]`").
+///
+/// `UnguardedShapeOf` is the standard library's `ShapeOf` with the guard of its last case taken
+/// off -- the very three lines `stdlib/types.cml` held at `2dcd0a6`, where the default arm was a
+/// bare `case _` and the comment above it said the type layer could not tell a number from another
+/// leaf type. A string is not a tensor of any shape, and that arm answered the empty shape for it
+/// anyway: `true` below is the old reading. `err_shape_of_string.cml` is the same question asked of
+/// the library as it is written now, where the answer is a diagnostic.
+import { is_same } from types
+
+type UnguardedShapeOf<T> = match type T {
+    case E[...Dims] => int[Dims]
+    case E[...] => int[]
+    case _ => int[0]
+}
+
+func main(): int sync {
+    // ① a string has no dimension to state, and the bare default answers what it answers for a
+    //    scalar: `int[0]`, silently.
+    println(is_same::<UnguardedShapeOf<string>, int[0]>())
+    // ② the same default answers a nullable type and a function type the same way -- it answers
+    //    every type it reaches, which is what makes it a default and not a case about a property.
+    println(is_same::<UnguardedShapeOf<string?>, int[0]>())
+    return 0
+}

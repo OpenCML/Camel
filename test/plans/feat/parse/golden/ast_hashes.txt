@@ -544,7 +544,7 @@ a84aff3cabb8a8ab ok stdlib/test_support.cml
 0ff92f7d01468e66 ok stdlib/time.cml
 896adc31c532b0a0 ok stdlib/transforms.cml
 b2579aff6f390432 ok stdlib/tree.cml
-6f7a01f9123f1ea8 ok stdlib/types.cml
+acdacf434a2d55f3 ok stdlib/types.cml
 05e6cb03f73d0b50 ok stdlib/vjp.cml
 7f20eff628fe4ef0 ok stdlib/rulesets/jvp.cml
 763a49f10d72fd4e ok stdlib/rulesets/probe_batch.cml
@@ -1048,9 +1048,13 @@ ea5f46da518b8d7e ok test/cases/compile/match_guard/first_match_wins.cml
 d3e96c4df857bc04 ok test/cases/compile/match_guard/matched_value_evaluated_once.cml
 87807d1d372d09f7 ok test/cases/compile/match_guard/not_exhaustive.cml
 147ee4e39e631c24 ok test/cases/compile/match_guard/tagged_missing_null.cml
-9b828722cb5f4120 ok test/cases/compile/match_type/array_dims.cml
+6e053f574d519e22 ok test/cases/compile/match_type/array_dims.cml
 6dae78b4d29f02af ok test/cases/compile/match_type/array_shape.cml
 571a4ba1e2001f30 ok test/cases/compile/match_type/err_unreachable_array.cml
+20992a18b8e234cf ok test/cases/compile/match_type_guard/err_shape_of_string.cml
+521558e4d2d2862b ok test/cases/compile/match_type_guard/guard_cache.cml
+8027c70aeb41bfd8 ok test/cases/compile/match_type_guard/guard_dispatch.cml
+18dc686508a26a24 ok test/cases/compile/match_type_guard/shape_of_before.cml
 c932c4fee5814de1 ok test/cases/compile/module_imports/conf_b.cml
 1bd679ca7b204680 ok test/cases/compile/module_imports/conf_c.cml
 290ea91ca479902a ok test/cases/compile/module_imports/conf_s.cml
