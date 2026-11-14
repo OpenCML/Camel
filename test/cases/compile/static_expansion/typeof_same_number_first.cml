@@ -1,0 +1,19 @@
+/**
+ * One of the two modules whose only `typeof` is the first type expression its own tree builds, so
+ * both placeholders are named `typeof#0`. This one means `string`.
+ *
+ * The result type is written here and the instance is built by the module that calls the generic,
+ * so the expression has to be looked up in this tree. Asked in the caller's tree instead,
+ * `typeof#0` would answer what the caller's own first `typeof` stands for -- an `int` -- and
+ * `return own()` below would be a `string` where an `int` is declared.
+ */
+
+/// The expression this file's `typeof#0` stands for: a call that answers a `string`.
+func own(): string {
+    return "first"
+}
+
+/// `typeof#0` of this tree, in the result type of an exported generic.
+export func first_label::<P>(p: P): typeof(own()) {
+    return own()
+}

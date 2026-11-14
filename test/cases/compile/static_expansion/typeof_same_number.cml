@@ -1,0 +1,32 @@
+/**
+ * Two modules and this program each write one `typeof`, and in each of the three trees that is the
+ * first type expression built, so all three placeholders are named `typeof#0`: one name, three
+ * meanings -- a `string`, a `float[]`, and an `int`.
+ *
+ * The type layer compares a type variable by its name, so the three are one object there. What
+ * keeps them apart is the front end: the graph builder asks the tree the type was written in for
+ * the expression, and the number only has to be unique inside one tree. Asked in the calling tree
+ * instead, both instances below would answer `int`; answered once and remembered on the shared
+ * placeholder, the second would answer the first's `string`.
+ *
+ * The last two lines are the collision read directly: the same name, `typeof#0`, asked about in one
+ * program, is a `string` in the first module and not a `string` in the second.
+ */
+
+import { is_same } from types
+import { first_label } from typeof_same_number_first
+import { second_value } from typeof_same_number_second
+
+func main(): int sync {
+    // `typeof#0` of the first module: a `string`, printed as it is.
+    println(first_label(1))
+    // `typeof#0` of the second module: a `float[]`, indexed as one.
+    println(second_value(2)[1])
+    // `typeof#0` of this module: an `int`.
+    println(is_same::<typeof(1 + 2), int>())
+    // One name, two meanings: the first module's answer is a `string` ...
+    println(is_same::<typeof(first_label(1)), string>())
+    // ... and the second module's, written the same way, is not.
+    println(is_same::<typeof(second_value(2)), string>())
+    return 0
+}
