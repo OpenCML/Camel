@@ -6147,14 +6147,16 @@ no callable Camel name, so they are not declared here.
 #### `rewrite`
 
 ```camel
-rewrite: <rules: Rule[], strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+rewrite: <rules: Rule[], strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies `rules` until no rule changes the function, and gives the rewritten function.
 `ordered: true` preserves operand positions throughout the pattern, including after guard
 rejection. The default also searches declared commutative and exact associative alternatives.
 `protect_faults` selects the conservative local deletion guard for a computation that may
-fault. `protect_effects` does not decide whether an external access or a final write to a
+fault. `protect_order` selects the guard for a computation whose place in the order is not the
+program's to drop -- one that carries an ordering edge, one something waits on, one whose value
+is written in place. Neither decides whether an external access or a final write to a
 variable that outlives the call may be dropped: the graph that holds them keeps them
 (design principles 9.7), so no choice here removes one, while remaining users and
 synchronization can still demand the input.
@@ -6167,13 +6169,13 @@ These choices do not disable structural validation or prove whole-program equiva
 #### `saturate`
 
 ```camel
-saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
+saturate: <rules: Rule[], rounds: int = 6, strict: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => F! when is_function::<F>()
 ```
 
 Applies the rearranging rules too, for at most `rounds` rounds, and leaves the function with
 every writing the saturation found; `extract` chooses among them. `protect_faults` selects
 candidate admission, and a candidate that would drop an external access or a final write to a
-variable that outlives the call is never admitted, whatever `protect_effects` says (design
+variable that outlives the call is never admitted, whatever `protect_order` says (design
 principles 9.7). Extraction cannot restore protection disabled during saturation.
 The resulting alternatives are derivations under the rules, not full observational equalities.
 `ordered` selects positional pattern binding as in `rewrite`; existing class alternatives
@@ -6198,7 +6200,7 @@ a writing is `cost(o, inputs)`: the operator and the costs of the writings of it
 #### `run`
 
 ```camel
-run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_effects: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
+run: <rules: Rule[], rounds: int = 16, strict: bool = false, explain: bool = false, protect_order: bool = true, protect_faults: bool = true, ordered: bool = false> (f: F) => Run<F>! when is_function::<F>()
 ```
 
 Applies `rules` one way, for at most `rounds` rounds, and gives the function it produced and

@@ -40,7 +40,10 @@
       "src/runtime/graph_build.h",
       "src/runtime/loop.cpp",
       "src/runtime/operator_instance.cpp",
-      "src/runtime/writings.cpp"
+      "src/runtime/writings.cpp",
+      "src/runtime/writings_driver.cpp",
+      "src/runtime/writings_extract.cpp",
+      "src/runtime/writings_match.cpp"
     ],
     "constructions": [
       "src/runtime/draft.cpp#decode"

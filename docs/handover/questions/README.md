@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：78 行（页已不在 `questions/` 里）
+## 生成器不会删的行：79 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -91,6 +91,7 @@
 | [`2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop`](../reviews/2026-11-05-the-six-rewrites-the-ruling-bars-are-already-in-develop.cn.md) | 这六笔改写裁定说不进 develop，但它们已经在里面了 | 在 `reviews/` |
 | [`2026-11-05-who-carries-the-value-that-mul-tensor-t-reads`](../reviews/2026-11-05-who-carries-the-value-that-mul-tensor-t-reads.cn.md) | `mul_tensor_t` 一族律要读的操作数值，由谁交过来 | 在 `reviews/` |
 | [`2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs`](../reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md) | 一个 pass 在运行期造出、只被 C++ 持有的 Program，谁给它 root？ | 在 `reviews/` |
+| [`2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge`](../reviews/2026-11-14-a-gate-with-no-reader-cannot-end-a-sync-edge.cn.md) | 一个既没有值读者、也没有同步后继的 `GATE`，怎么结束一条同步边？ | 在 `reviews/` |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |

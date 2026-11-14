@@ -230,9 +230,11 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
 
 ## Caller-selected deletion and boundary checks
 
-`rewrite`, `run` and `saturate` accept `protect_effects` and `protect_faults`, both
+`rewrite`, `run` and `saturate` accept `protect_order` and `protect_faults`, both
 true by default. These local deletion guards are independent of numeric `strict`.
-`protect_effects` does not decide whether an external access or a final write to a variable that
+`protect_order` keeps a computation whose place in the order is the program's -- one that
+carries an ordering edge, one something waits on, one whose value is written in place -- and
+does not decide whether an external access or a final write to a variable that
 outlives the call may be dropped: the region or the exit keeps them, only the graph interface's
 dedicated effect-deleting operation removes one, and no `replace` or `graft` does
 (design principles 9.7). `protect_faults` is the guard that still selects a deletion, and a

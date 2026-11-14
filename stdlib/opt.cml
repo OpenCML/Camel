@@ -163,18 +163,28 @@ func value_only(n: Node): bool {
         || (k == NodeKind::Data && is_constant(n))
 }
 
+// Whether the node reads a computation that may fault, and is the only node that reads it. Removing
+// such a node takes that computation's last use away, which is the one thing design principles 3.3
+// forbids: a removal that takes the last use of a node whose running is observed hands that use to a
+// `GATE` (data port reading the value that was there, sync predecessor that node). The C++ sweep
+// does exactly that (`keepThroughValue`, src/passes/opt/generic/rewrite.cpp); a transaction can write
+// no node of the graph's own, so this sweep does not stand a keeper in the statement's place -- it
+// keeps the reader instead, and the computation keeps the read that says it runs.
+func last_read_of_a_fault(n: Node): bool {
+    return inputs(n)->any<(m: Node): bool => may_fault(m) && len(value_users(m)) <= 1>
+        || with_inputs(n)->any<(m: Node): bool => may_fault(m) && len(value_users(m)) <= 1>
+}
+
 // Whether the node computes a value no node reads. A node that anchors its graph is not one: a
 // transaction refuses to erase it, and the graph would lose its exit.
 //
-// The C++ sweep answers one case here that this sweep cannot ask: when the node it drops is the
-// last reader of an effect, it writes `:op/keep` in the statement's place (`keepThroughValue`,
-// operator_table.h), so the effect keeps running. A transaction can write no operator node, and
-// nothing in `graph` reads "would this read be the last one of an effect", so this sweep does not
-// guess: the graph the commit gets is checked, and an effect left with neither a read of its value
-// nor a place in its chain is refused there as `GraphInvalid`
-// (docs/technical/45_graph_module.md, the gap table). Loud, not silent.
+// A node that is the last reader of a computation that may fault is not one either
+// (`last_read_of_a_fault`). Dropping it would leave that computation with no read of its value and,
+// where the program gives it no place in a chain, the commit refuses the graph as `GraphInvalid`
+// (docs/technical/45_graph_module.md, the gap table) -- the same rule not kept, loudly instead of
+// silently. Keeping the reader keeps the fault in the program, which is what 3.3 asks.
 func dead_value(n: Node): bool {
-    return value_only(n) && len(value_users(n)) == 0 && !is_anchor(n)
+    return value_only(n) && len(value_users(n)) == 0 && !is_anchor(n) && !last_read_of_a_fault(n)
 }
 
 func erase_hits::<F>(f: F, hits: Node[]): F! sync {
