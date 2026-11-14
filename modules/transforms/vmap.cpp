@@ -3,6 +3,7 @@
 
 #include "vmap.h"
 
+#include "node_order.h"
 #include "refusal_readings.h"
 #include "rule_expand.h"
 #include "rule_types.h"
@@ -470,7 +471,17 @@ VmapGraph buildVmapGraph(
         liftOf.assign(function->nodeCount(), rt::kInvalidNodeRef);
         std::string why;
         bool complete = true;
-        for (gc_node_ref_t ref = 0; ref < function->nodeCount() && complete; ++ref) {
+        // The body is read in the order its own edges impose, not in the order of its places: a
+        // rewrite appends what it writes after the readers it repoints and leaves the places of the
+        // nodes it removed `Dead` (node_order.h). Reading `0 .. nodeCount()` here refused two
+        // bodies `std::opt` had rewritten -- `asked=1 found=1` on `x*2.0 + x/2.0 - 1.0`, where the
+        // walk met a `Dead` place, and `asked=0 found=0` on `width(r) = dim<1>(r)`, whose whole body
+        // the pass folds to a constant and whose operators are then `Dead` places.
+        const std::vector<gc_node_ref_t> order = dependencyOrderOf(*function);
+        for (gc_node_ref_t ref : order) {
+            if (!complete) {
+                break;
+            }
             const rt::GCNode *node = function->node(ref);
             if (node == nullptr) {
                 continue;
@@ -667,6 +678,11 @@ VmapGraph buildVmapGraph(
                 refused.refusedConstruct = "a loop";
                 refused.refusedWhy       = "the elementwise tier batches straight-line bodies";
                 complete                 = false;
+                break;
+            case rt::GCNodeKind::Dead:
+                // A place a rewrite removed is not a node: it holds no value and reads none. The
+                // walk's order does not name it (node_order.h), and a walk that met one anyway is
+                // looking at the places of the graph, not at the graph.
                 break;
             default:
                 refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
