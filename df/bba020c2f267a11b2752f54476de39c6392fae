@@ -1,0 +1,9 @@
+# lane-gates -> develop (dfbba020c)
+
+判据读数:
+- 闸门脚本内建只报告检查: 每条打印 check=<名> findings=<数字> mode=report, 不并入 checkfail, 闸门仍 exit 0
+- 证明只报告: 临时给一条加 --enforce, 该条 exit 1 (report only: does not decide the run), 整跑仍 exit 0
+- 改动范围: internal/tools/camel-remote.ps1 +45 行, C++ 0 / tests 0 / docs 0
+- 从此闸门用树里的版本 (脚本改了就要按合并树跑)
+
+背景: 这是作者裁定 (bc1b63c54) 里"清单清空后才转硬门槛"的那条路的起点; 现在 holders 仍是只报告.
