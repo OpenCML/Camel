@@ -19,9 +19,15 @@ desc = "The optimizer answers what it cannot do with a diagnostic, not with a cr
 # None of them prints anything, so what the entries hold is that the program still runs and still
 # says nothing -- the same as with no pass at all -- on every back end. That is the whole claim a
 # reduced program of this campaign makes, and a pass that aborts or crashes on one of them fails it.
-# The fifth program of the set (`rc00_seed27`) is not here: `std::opt` still takes a SIGSEGV on it,
-# inside `DefunctionalizeRewritePass::apply` -> `staticFunctionOf` -> `Function::graph()`, and a
-# case that is red on the day it lands is not a case (see the defect page for the trace).
+#
+# `rc00_seed27` is the fifth (A4a) and it is here too, with the control that names its trigger. It
+# took a SIGSEGV in `DefunctionalizeRewritePass::apply` -> `staticFunctionOf` ->
+# `Function::graph()`: that function read a static slot as a boxed function because the node it was
+# asked about was the *argument* `3` of `main`'s call, and `0x3` is not a graph table. It now asks
+# the node's type first and answers nullptr, which the pass already refuses by name. The control,
+# `x2_no_lambda_seed27`, is the same program with the anonymous closure inside `r10` gone -- the
+# only difference between the two -- and it never crashed: the trigger is that one graph, not the
+# amount of unused code around it.
 
 [defaults]
 kind = "behavior"
@@ -87,6 +93,37 @@ expect_stdout_exact = ""
 name = "rc04_seed72.opt"
 desc = "The whole optimizer, on the program whose inline used to put a node on a cycle of inputs."
 case = "../../../cases/opt/e9/rc04_seed72.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+[[tests]]
+name = "rc00_seed27.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0."
+case = "../../../cases/opt/e9/rc00_seed27.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc00_seed27.opt"
+desc = "The whole optimizer, on the program whose defunctionalize read a static slot as a function value."
+case = "../../../cases/opt/e9/rc00_seed27.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "x2_no_lambda_seed27.without_the_pass"
+desc = "The control with no pass at all: the same program without the anonymous closure, which never crashed."
+case = "../../../cases/opt/e9/x2_no_lambda_seed27.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "x2_no_lambda_seed27.opt"
+desc = "The whole optimizer on the control: with the anonymous closure gone there is nothing to read as a function value."
+case = "../../../cases/opt/e9/x2_no_lambda_seed27.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""

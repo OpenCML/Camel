@@ -159,8 +159,22 @@ struct Wrapper {
     size_t tag         = 0;
 };
 
+/// The function a static slot of `graph` holds, or nullptr when the node is not a value of a
+/// function type or the slot holds no function.
+///
+/// Only a value of a function type can be a boxed function: a static area holds whatever the node
+/// that names it put there, in the order the graph declared it. `main` in
+/// `test/cases/opt/e9/rc00_seed27.cml` holds the argument `3` of the call beside the closure, and
+/// read as a function pointer that slot is `0x3`: `Function::graph()` then reads the graph table
+/// of address 11, which is the SIGSEGV `std::opt` took on that program (measured: the trace of this
+/// function printed `graph='main' kind=Data typecode=Int64 slot=0x3`). The callers already have the
+/// answer for a value that is not a function of the program -- they refuse that family by name and
+/// say why -- so the question this function asks is the node's type, and the answer is nullptr.
 ::Function *staticFunctionOf(const GCGraph &graph, const GCNode &node) {
     if (node.dataIndex >= 0 || !graph.staticArea()) {
+        return nullptr;
+    }
+    if (node.dataType() == nullptr || node.dataType()->code() != TypeCode::Function) {
         return nullptr;
     }
     const size_t index = size_t(-node.dataIndex);
