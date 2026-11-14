@@ -64,7 +64,9 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
                << " inputs=" << graph->normInputsOf(ref).size()
                << " members=";
             for (gc_node_ref_t member : graph->normInputsOf(ref)) {
-                os << member << ",";
+                const GCNode *memberNode = graph->node(member);
+                os << member << ":"
+                   << (memberNode == nullptr ? -1 : static_cast<int>(memberNode->kind)) << ",";
             }
             os << " verdict="
                << camel::runtime::aggregateTailVerdictName(
