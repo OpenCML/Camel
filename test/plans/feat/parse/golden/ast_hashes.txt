@@ -3822,6 +3822,7 @@ bc0425bd191317f4 ok test/cases/opt/defun/widened_own_values.cml
 a697e5029bcc5876 ok test/cases/opt/devirtualize/recallee_arity.cml
 3ccda385a066a3b9 ok test/cases/opt/devirtualize/recallee_type.cml
 7c5dc5bad471b781 ok test/cases/opt/e9/rc00_seed27.cml
+9d7c0af3bc14738d ok test/cases/opt/e9/rc00_seed30.cml
 bd383b98c5b2a8a4 ok test/cases/opt/e9/rc00_seed74.cml
 ef56ce08a4ace568 ok test/cases/opt/e9/rc01_seed47.cml
 fede2fcc0976c041 ok test/cases/opt/e9/rc02_seed6.cml
