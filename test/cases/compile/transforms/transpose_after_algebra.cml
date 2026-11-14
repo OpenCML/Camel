@@ -1,0 +1,42 @@
+// The transpose of a graph `std::opt::algebra` has already rewritten: the two paths answer the same
+// numbers.
+//
+// `linear(x) = 2*x + 3*x` is the shape the combining law fires on. `float_combine` replaces the sum
+// of the two scaled uses with `x * 5`, and `chain(x) = (x*2 + x*3) * 4` becomes `(x*5) * 4`; the
+// rewritten graph is a legal one, because a graph keeps the ids of the version it came from and a
+// node a rule adds is appended *after* the nodes that already read it. A backward walk that took
+// descending ids for the graph's order visited the new node before the node that feeds it, found no
+// cotangent on it yet and dropped it without a word, so `transpose` of the optimized program
+// answered `0.0` where the same program unoptimized answers `20.0`.
+//
+// Every line below is printed by both paths, and the plan pins the two runs to the same numbers:
+// 5/10 for the plain values, and the pullbacks are the slope of each map (20 for `chain`, 40 for
+// `deep`) times the cotangent handed in, read at two different cotangents -- a reading that only
+// asked for one number could not tell a slope from a constant. `deep` is `chain` with one more
+// multiply on top, so the node a rewrite adds is not the last one on the chain.
+import { transpose } from transforms
+import rulesets.transpose
+
+func linear(x: float): float {
+    return 2.0 * x + 3.0 * x
+}
+
+func chain(x: float): float {
+    return (x * 2.0 + x * 3.0) * 4.0
+}
+
+func deep(x: float): float {
+    return ((x * 2.0 + x * 3.0) * 4.0) * 2.0
+}
+
+func main(): int sync {
+    let back_linear = transpose(linear)
+    let back_chain = transpose(chain)
+    let back_deep = transpose(deep)
+    println('algebra linear f(1)={} f(2)={}'->format<linear(1.0), linear(2.0)>)
+    println('algebra linear back(1.0)={} back(3.0)={}'->format<back_linear(1.0), back_linear(3.0)>)
+    println('algebra chain f(1)={} f(2)={}'->format<chain(1.0), chain(2.0)>)
+    println('algebra chain back(1.0)={} back(2.0)={}'->format<back_chain(1.0), back_chain(2.0)>)
+    println('algebra deep back(1.0)={} back(2.0)={}'->format<back_deep(1.0), back_deep(2.0)>)
+    return 0
+}
