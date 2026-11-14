@@ -24,8 +24,8 @@ import tempfile
 from pathlib import Path
 from typing import Callable, List, Optional
 
-from model import (BOOL, FLOAT, INT, N, STR, Reject, effect_violations, emit, emit_modules, evaluate,
-                   static_faults, walk)
+from model import (BOOL, FLOAT, INT, N, STR, Reject, effect_violations, emit, emit_modules, escape_violations,
+                   evaluate, static_faults, walk)
 from runner import BACKENDS, run_program, signature
 
 STATEMENTS = {"let", "var", "expr", "ifs", "func", "case", "prog", "blk"}
@@ -84,7 +84,7 @@ class Reducer:
     def fails(self, prog: N, passes: Optional[List[str]] = None) -> bool:
         if self.tests >= self.max_tests:
             return False
-        if effect_violations(prog) or static_faults(prog):
+        if effect_violations(prog) or escape_violations(prog) or static_faults(prog):
             return False
         try:
             expected = evaluate(prog)

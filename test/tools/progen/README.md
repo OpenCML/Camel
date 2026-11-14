@@ -25,7 +25,7 @@ execute the programs they name and compare what they print -- while nothing comp
 text with a fresh draw: a header whose seed no longer reproduces its file is a stale claim no check
 reports, so re-draw and diff by hand when the generator changes.
 The versions recorded there stop at 1, 2 and 3 (15 files record none, 2 predate versioning) while
-`generate.VERSION` is 6 today, and the version is part of the random stream, so those seeds draw
+`generate.VERSION` is 8 today, and the version is part of the random stream, so those seeds draw
 another program now -- a 3293 draw differs from `perm_query_types.cml`'s program body in 229 lines.
 A byte comparison here is therefore not only missing but meaningless.
 
@@ -81,7 +81,7 @@ with `--features all,modules`.
 | `tuple`, `struct` | literals, `.N` and field access, as parameters, results, array elements and variables |
 | `var` | `var` of int, float, string, bool, `int[]`, tuple; `=`, `+=`, `-=`, `*=`, `/=`, `%=` (and `+=` on a string) in sync blocks; reads before and after writes |
 | `varparam` | a function with one or two `var` parameters, writes through them, a variable passed on to another function |
-| `capture` | lambdas and nested functions that read captured values and variables (seeing later writes) or write them; a function returning a lambda that owns a variable (a counter) |
+| `capture` | lambdas and nested functions that read captured values and variables (seeing later writes) or write them; a function whose body owns a `var`, closes over it and calls the closure twice or three times there, printing the readings (the counter stays in the call that declares the cell); a chain `let t = (f(x), f(f(x)), ...)` where the state goes in as a value and the next value comes back |
 | `if`, `match` | as expressions with expression or block arms; as statements with `sync` arms that print and write; `match` on an int, string or bool name with literal cases and `_` |
 | `func`, `rec` | functions over all the types; recursion bounded by a depth argument (0 to 9): tail, non-tail, tree (two self calls), mutual, and a recursion that writes a `var` parameter before and after the call and prints |
 | `closure`, `hof` | lambdas, named functions as values, functions that return lambdas, user functions with function parameters (pure, and effectful ones called from sync bodies) |
@@ -143,6 +143,21 @@ checks it on every generated and every reduced program:
    checked is only "a standard pass must not make a determined program print something else".
    A pipeline may decline: a located diagnostic of a pass before anything ran is the outcome
    `REFUSED` and is not a finding.
+8. **A closure does not carry a `var` out of the call that declares it** (3.5, rule two; the
+   front end's `SemanticDiag::ClosureCaptureEscapes`). `model.escape_violations` checks it on
+   every generated and reduced program, over the two ways such a closure can leave: as the result
+   of the call whose cell it holds, and handed to a callee whose result can carry a function. The
+   state it used to carry out is written two other ways: the counter is declared and called
+   inside the call that owns the cell, so the readings leave as values, and a chain of calls
+   passes the state in as a value and takes the next value back.
+
+   One dimension is missing here, and the gap is the language's rather than this tool's: **a
+   closure that keeps a writable cell across calls, after leaving the call that declared it** (a
+   counter a caller can hold and call later) has no legal spelling in this tree. There is no
+   `Ref<T>`, and no `stdlib/state.cml` on `develop` -- that file is on the `reftype` branch only --
+   so the front end refuses the closure instead of lending it the cell. Until `Ref<T>` exists the
+   dimension is written as the two shapes above, or it is a permanent blank; what it may not be is
+   a dimension dropped from the plan without a word, which is why it is written down here.
 
 What the hand probes established and the reference therefore models: a read of a `var` is a
 snapshot of its value (`let k = c` does not follow later writes) while a lambda that reads a
@@ -241,6 +256,9 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
   `generate.VERSION` 5 adds `append` and `opover` (design principles 11.3).
   `generate.VERSION` 6 adds `loop` (design principles 3.10). Seeds 1-100 under `--matrix full`:
   10100 cells, all agree with the reference (2026-10-15, `lane/loop`).
+  `generate.VERSION` 8 writes the state a closure may not carry out of its call as a counter
+  called inside that call and as a chain of values, instead of a factory that returns the
+  closure (the front end refuses the factory since design principles 3.5, rule two).
 - Integers near the 64-bit range (programs are discarded when a value leaves +-2^62), bit
   operators, `^`, `i32` / `f32`, `as` / `is`, slices with a step.
 
@@ -260,3 +278,16 @@ the rewrite sequence it was found with and under `std::opt::inline`, `std::opt`,
 - **One statement, one effect** means interleavings inside an expression are not explored.
 - The seed stream depends on `generate.VERSION` and on the feature set; findings are archived
   as reduced programs with their expected output, not as seeds.
+- **A seed is left out when a pass crashes on it.** The check batch holds seeds whose every
+  cell passes, so a seed that stops being green is listed in `progen.py`'s `CHECK_EXCLUDED`
+  with what it shows: seed 4 of `generate.VERSION` 8 makes `std::opt::inline` end in SIGSEGV,
+  which is not something the front end says about the program and not something the generator
+  can avoid without dropping a shape the language accepts. Left out is not absent: the test plan
+  runs that seed on its own in `progen_known_crash`, a known failure, so every run of the plan
+  prints `seed 4 [inline@nvm]: CRASH` instead of passing over it, and the entry turns red if the
+  crash goes away or starts failing differently.
+- **One program in fifty is still refused by the front end.** `SemanticDiag::GenericFunctionAsValue`
+  is a generic function given a position that does not fix its type variables; seed 32 under
+  `generate.VERSION` 8 shows it, seed 49 under version 7, so about one program in fifty and none
+  of seeds 1-25. A refusal is a bad cell like any other, and the feature that draws it is left in
+  rather than guessed at.
