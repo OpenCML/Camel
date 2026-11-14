@@ -9,23 +9,29 @@
     python3 test/tools/parsecheck/check.py fuzz     [ITERATIONS [SEED]] [--only GLOB ...]
                                                     [--allow-empty REASON]
 
-snapshot  Every .cml case of the parse corpus (test/cases/parse) and every probe (probes.py) is
-          parsed; a hash of the normalized AST of each (or of its diagnostics' code and place,
-          when it is rejected) is compared with test/plans/feat/parse/golden/ast_hashes.txt. The
+snapshot  Every .cml case of the parse corpus (test/cases/parse), every probe (probes.py) and
+          every other .cml file of the repository -- benchmarks, exemplars, examples, showcase,
+          the standard library, the tutorial and the cases of the other plans -- is parsed; a
+          hash of the normalized AST of each (or of its diagnostics' code and place, when it is
+          rejected) is compared with test/plans/feat/parse/golden/ast_hashes.txt. The
           diagnostics are recorded by code and position and never by their wording, so rewording
-          a message, a help text or a note leaves this file alone. The golden list
-          was recorded when the hand-written parser was last compared, tree for tree, with the
-          ANTLR parser it replaced; a line that changes means the parser reads that file
-          differently. The snapshot is a snapshot of the parser's own tests, not of the
-          repository: a .cml file outside test/cases/parse is checked by the plan that
-          owns it, and editing one does not move this file.
+          a message, a help text or a note leaves this file alone. The golden list was recorded
+          when the hand-written parser was last compared, tree for tree, with the ANTLR parser it
+          replaced; a line that changes means the front end reads that file differently.
+          The record covers the repository and not only the parser's own tests, because a graph
+          can change without a test noticing it: the standard library (the migration's own
+          subject), the exemplars, the examples and the benchmarks are where a reading that moved
+          hides, and a plan that owns the file only catches what it happens to assert. A .cml
+          file under docs/handover is not in the corpus (corpus.HANDOVER): that directory holds
+          the language author's drafts, not the repository's surface.
           --update merges into the recorded list: the selected lines are re-hashed and replaced,
           a file the list does not hold yet is hashed and added, every other line whose file
-          still exists is kept, and a line whose file is gone is dropped. The merged list must
-          cover every case corpus.parse_cases() selects and every probe, or the update refuses
-          and names the gaps. It merges rather than refusing a partial update because recording
-          one changed case should not depend on re-reading the other 273; the filter can then
-          never shrink the record.
+          still exists is kept, and a line whose file is gone -- or that the corpus no longer
+          holds -- is dropped. The merged list must cover every case corpus.parse_cases() selects,
+          every other file of the repository and every probe, or the update refuses and names the
+          gaps. It merges rather than refusing a partial update because recording one changed case
+          should not depend on re-reading the other 3000; the filter can then never shrink the
+          record.
           --only GLOB restricts what is re-hashed, not what the record must cover; without it
           the whole corpus is refreshed.
 format    Formatting every accepted file of the repository gives a text with the same AST, keeps
@@ -88,9 +94,24 @@ def repository_files():
 
 
 def parse_cases():
-    """The parse corpus: the cases under test/cases/parse. This is what the snapshot hashes."""
+    """The parser's own cases: the .cml files under test/cases/parse. They lead the snapshot."""
     os.chdir(ROOT)
     return [str(p).replace("\\", "/") for p in corpus.parse_cases()]
+
+
+def snapshot_corpus():
+    """What the snapshot records, in the order the record holds it: the parser's own cases first,
+    then every other .cml file of the repository.
+
+    The order is part of the record. The cases and the probes keep the lines they were recorded
+    on, and a file new to the record is appended, so a diff of the golden shows what moved and
+    what was added instead of a reordering of three thousand lines. The rest of the repository is
+    corpus.repository_sources(), which leaves the handover directory out: those are the drafts a
+    module is integrated from, and the module enters the corpus as stdlib/<module>.cml.
+    """
+    cases = parse_cases()
+    seen = set(cases)
+    return cases, [path for path in repository_files() if path not in seen]
 
 
 def filter_files(files, patterns):
@@ -189,10 +210,11 @@ def run_hashes(folder, files):
 
 def snapshot(update, patterns):
     was = read_golden()
-    cases = parse_cases()
-    chosen = filter_files(cases, patterns)
+    cases, others = snapshot_corpus()
+    recorded = cases + others
+    chosen = filter_files(recorded, patterns)
     if patterns and not chosen:
-        print(f"snapshot: --only selected none of the tree's {len(cases)} parse case(s); "
+        print(f"snapshot: --only selected none of the tree's {len(recorded)} .cml file(s); "
               f"refusing to update/compare nothing")
         return 1
     with tempfile.TemporaryDirectory() as tmp:
@@ -200,49 +222,46 @@ def snapshot(update, patterns):
         if update:
             # A file the record does not hold yet is hashed even when --only does not select it:
             # the record must cover the tree, and a targeted update may not leave a gap.
-            unrecorded = [path for path in cases if path not in was and path not in chosen]
+            unrecorded = [path for path in recorded if path not in was and path not in chosen]
             to_hash = list(dict.fromkeys(chosen + unrecorded)) + probe_files
         else:
             to_hash = chosen + probe_files
         if not to_hash:
-            print(f"snapshot: the selection is empty; the tree's parse corpus has {len(cases)} "
-                  f"case(s); refusing to compare nothing")
+            print(f"snapshot: the selection is empty; the tree has {len(recorded)} .cml file(s) "
+                  f"besides the probes; refusing to compare nothing")
             return 1
         now, code = run_hashes(tmp, to_hash)
         if now is None:
             return code
 
-        canonical = cases + probe_names
+        canonical = cases + probe_names + others
         if update:
             merged = {}
-            for path in cases:
+            for path in cases + others:
                 line = now.get(path, was.get(path))
-                if line is not None and (path in now or (ROOT / path).is_file()):
+                if line is not None:
                     merged[path] = line
             for name in probe_names:
                 line = now.get(name, was.get(name))
                 if line is not None:
                     merged[name] = line
-            # A recorded line outside the corpus is kept while its file still exists;
-            # removed the old repository-wide lines, and a stale one is not kept.
-            for path, line in was.items():
-                if path in merged or path in canonical:
-                    continue
-                if not path.startswith("probes/") and (ROOT / path).is_file():
-                    merged[path] = line
+            # A recorded line outside the corpus is dropped rather than kept: the corpus is the
+            # repository, so a line it does not hold is either a probe probes.py no longer makes
+            # or a file of the handover directory, and neither is a reading of the tree.
             missing = [path for path in canonical if path not in merged]
             if missing:
                 print(f"snapshot: the tree records {len(canonical)} entries but the merged list "
                       f"would cover {len(merged)}; refusing a record that covers less: "
                       f"{', '.join(missing[:5])}{' ...' if len(missing) > 5 else ''}")
                 return 1
-            order = cases + probe_names + [path for path in merged if path not in canonical]
+            order = canonical
             text = "\n".join(merged[path] for path in order) + "\n"
             GOLDEN.write_text(text, encoding="utf-8", newline="\n")
             kept = len(merged) - len(now)
-            print(f"wrote {GOLDEN.relative_to(ROOT)} ({len(merged)} files: {len(cases)} cases + "
-                  f"{len(probe_names)} probes; re-hashed {len(now)} line(s), kept {kept} recorded "
-                  f"line(s) of the {len(was)})")
+            print(f"wrote {GOLDEN.relative_to(ROOT)} ({len(merged)} files: {len(cases)} parse cases "
+                  f"+ {len(probe_names)} probes + {len(others)} other .cml files of the "
+                  f"repository; re-hashed {len(now)} line(s), kept {kept} recorded line(s) of the "
+                  f"{len(was)})")
             return 0
 
         compared = 0
@@ -257,10 +276,12 @@ def snapshot(update, patterns):
             else:
                 compared += 1
         # A recorded line whose file the tree no longer has is a record that claims more than the
-        # tree holds; it used to be ignored because only the current list was walked.
+        # tree holds; a recorded line the corpus does not hold is a reading nothing checks. Both
+        # used to be read as a pass because only the current list was walked.
         recorded_probes = set(probe_names)
+        corpus_set = set(canonical)
         for path in was:
-            if path in now:
+            if path in now or path in corpus_set:
                 continue
             if path.startswith("probes/"):
                 if path not in recorded_probes:
@@ -268,6 +289,9 @@ def snapshot(update, patterns):
                     bad += 1
             elif not (ROOT / path).is_file():
                 print(f"recorded file no longer exists: {path}")
+                bad += 1
+            else:
+                print(f"recorded file outside the snapshot's corpus: {path}")
                 bad += 1
         unrecorded = [path for path in canonical if path not in was and path not in now]
         if unrecorded:
@@ -277,9 +301,10 @@ def snapshot(update, patterns):
             print(f"{bad} difference(s). If the change is intended: "
                   f"python3 test/tools/parsecheck/check.py snapshot --update")
             return 1
-        print(f"ast snapshot: {compared} files read as recorded, {added} not in the snapshot yet")
+        print(f"ast snapshot: {compared} files read as recorded, {added} not in the snapshot yet, "
+              f"of {len(canonical)} in the corpus")
         if patterns:
-            print(f"  (--only re-hashed {len(chosen)} of the {len(cases)} case(s); "
+            print(f"  (--only re-hashed {len(chosen)} of the {len(recorded)} .cml file(s); "
                   f"{len(was)} recorded line(s) left untouched)")
         return 0
 

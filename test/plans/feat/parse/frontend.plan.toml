@@ -18,7 +18,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "frontend.ast_snapshot"
-desc = "Every case of the parse corpus (test/cases/parse) and every probe of the grammar's decisions (test/tools/parsecheck/probes.py) gives the AST, node for node with token ranges and origins, that was recorded when the parser was compared with the ANTLR parser it replaced. The snapshot is of the parser's tests, not of the repository: a .cml file under examples/, stdlib/, benchmarks/ or another plan's cases is checked by the plan that owns it."
+desc = "Every case of the parse corpus (test/cases/parse), every probe of the grammar's decisions (test/tools/parsecheck/probes.py) and every other .cml file of the repository (benchmarks, exemplars, examples, showcase, the standard library, the tutorial and the other plans' cases, the handover directory aside) gives the AST, node for node with token ranges and origins, that was recorded for it. The record covers the repository and not only the parser's tests: a graph that moves in stdlib, an example or a benchmark without an assertion of its own is exactly the change this file exists to catch, and a plan that owns the file only catches what it happens to check."
 kind = "behavior"
 tool = "python"
 case = "../../../tools/parsecheck/check.py"
