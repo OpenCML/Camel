@@ -1018,3 +1018,25 @@ assert(out === 'start | saved | arm_call_then_effect r=50000', `unexpected outpu
 }
 """
 timeout_ms = 10000
+# ---- 5.7: the wait a splice writes on the loop of the body runs before its first round ----
+
+[[tests]]
+name = "loop_wait_after_inline.reference"
+desc = "The program without a pass: w22 prints 0 0 and answers 12, f8 answers the empty string, and main prints both. This is the reading the inlined runs must reproduce."
+kind = "behavior"
+case = "../../../cases/opt/inline/loop_wait_after_inline.cml"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_exact = "L1 0 0\nL9 []\nL10 [12]\n"
+timeout_ms = 10000
+
+[[tests]]
+name = "loop_wait_after_inline.inline.runs"
+desc = "The splice writes the call's wait on the loop of the body it spliced (a LOOP takes the incoming wait itself). A loop is laid out as one piece and its range must end at the LOOP, so a wait laid out with what only orders -- after that piece -- aborted the plan in a debug build and ran the loop table the check would have stopped in a release one. Every back end must print what the program prints without the pass."
+kind = "behavior"
+case = "../../../cases/opt/inline/loop_wait_after_inline.cml"
+args = ["${case}", "std::opt::inline", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_stdout_exact = "L1 0 0\nL9 []\nL10 [12]\n"
+timeout_ms = 10000
