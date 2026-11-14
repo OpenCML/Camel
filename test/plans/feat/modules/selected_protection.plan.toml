@@ -2,7 +2,7 @@ id = "modules.selected_protection"
 order = 932
 tier = "fast"
 tags = ["feat", "modules", "rewrite", "effects"]
-desc = "Caller-selected deletion guards, extraction and explicit pass-boundary checking. An external access and a final write to a variable that outlives the call are kept by the graph, not by a guard: `protect_effects=false` drops neither, and only `protect_faults` still selects a deletion (design principles 9.7)."
+desc = "Caller-selected deletion guards, extraction and explicit pass-boundary checking. An external access and a final write to a variable that outlives the call are kept by the graph, not by a guard: `protect_order=false` drops neither, and only `protect_faults` still selects a deletion (design principles 9.7)."
 
 [defaults]
 kind = "behavior"
@@ -12,280 +12,280 @@ timeout_ms = 30000
 [[tests]]
 name = "pure.direct.11"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.direct.10"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.direct.01"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.direct.00"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.saturated.11"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.saturated.10"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.saturated.01"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "pure.saturated.00"
 case = "../../../cases/modules/selected_protection/pure.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "io.direct.11"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.direct.10"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.direct.01"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.direct.00"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.saturated.11"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.saturated.10"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.saturated.01"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "io.saturated.00"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "fault.direct.11"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "fault.direct.10"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "fault.direct.01"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "fault.direct.00"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "fault.saturated.11"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "fault.saturated.10"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "fault.saturated.01"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "fault.saturated.00"
 case = "../../../cases/modules/selected_protection/fault.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n"
 
 [[tests]]
 name = "both.direct.11"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.direct.10"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=false", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.direct.01"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.direct.00"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.saturated.11"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.saturated.10"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=false", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.saturated.01"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=true", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "both.saturated.00"
 case = "../../../cases/modules/selected_protection/both.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=false", "std::nvm"]
 expect_exit = 1
 expect_output_contains = ["RuntimeDiag::DivisionByZero"]
 
 [[tests]]
 name = "shared.direct.11"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=true", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.direct.10"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::direct", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=true", "faults=false", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.direct.01"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.direct.00"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.11"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=true", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.10"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::saturated", "effects=true", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=true", "faults=false", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.01"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=true", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "shared.saturated.00"
 case = "../../../cases/modules/selected_protection/shared.cml"
-args = ["${case}", "policy::saturated", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::saturated", "order=false", "faults=false", "std::nvm"]
 expect_exit = 41
 expect_stdout_exact = "41\n41\n"
 
@@ -334,55 +334,55 @@ expect_stdout_exact = "41\n0\n"
 [[tests]]
 name = "wrapper.forwarded"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::forwarded", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::forwarded", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "wrapper.omitted"
 case = "../../../cases/modules/selected_protection/io.cml"
-args = ["${case}", "policy::omitted", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::omitted", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n0\n"
 
 [[tests]]
 name = "effect.direct.00"
 case = "../../../cases/modules/selected_protection/effect.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n"
 
 [[tests]]
 name = "effect.direct.01"
 case = "../../../cases/modules/selected_protection/effect.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "41\n"
 
 [[tests]]
 name = "effect.graph.00"
 case = "../../../cases/modules/selected_protection/effect.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::jgir"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir"]
 expect_exit = 0
 expect_output_contains = [":io/println"]
 
 [[tests]]
 name = "capture.direct.00"
 case = "../../../cases/modules/selected_protection/capture.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n41\n"
 
 [[tests]]
 name = "capture.direct.01"
 case = "../../../cases/modules/selected_protection/capture.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=true", "std::nvm"]
+args = ["${case}", "policy::direct", "order=false", "faults=true", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "0\n41\n"
 
 [[tests]]
 name = "capture.graph.00"
 case = "../../../cases/modules/selected_protection/capture.cml"
-args = ["${case}", "policy::direct", "effects=false", "faults=false", "std::jgir"]
+args = ["${case}", "policy::direct", "order=false", "faults=false", "std::jgir"]
 expect_exit = 0
 expect_output_contains = [":op/assn_l"]
