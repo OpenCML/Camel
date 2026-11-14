@@ -588,6 +588,15 @@ sha256: (data: Bytes) => string
 sha256: (text: string) => string
 ```
 
+**`state`** — import { ... } from state — 4 name(s)
+
+```text
+ref: (v: T) => Ref<T>
+get: (r: Ref<T>) => T uses r
+set: (r: Ref<T>, v: T) => T uses var r
+update: (r: Ref<T>, f: (x: T) => T pure) => T uses var r
+```
+
 **`re`** — import { ... } from re — 7 name(s)
 
 ```text

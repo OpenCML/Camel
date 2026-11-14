@@ -532,7 +532,7 @@ bb4f371c5fc7c439 ok stdlib/random.cml
 42b7b2c5046240f8 ok stdlib/rewrite.cml
 6f2d557f8d7349a5 ok stdlib/rules.cml
 e5785f40146107c0 ok stdlib/sim.cml
-74c1eac0be8e617a ok stdlib/state.cml
+5bf0e17861c0ec55 ok stdlib/state.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
 9f90e55ee60e5feb ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
@@ -3476,7 +3476,7 @@ cbbc8bbe43eeb0f8 ok test/cases/modules/stdlib/reduced_scalar.cml
 c7de73180e1b7eda ok test/cases/modules/stdlib/reduced_subtraction.cml
 5820dc2ca64ea9ee ok test/cases/modules/stdlib/reduced_sum_refused.cml
 47d6bb338cc729ea ok test/cases/modules/stdlib/reduced_widen.cml
-595617f1c4b72ff2 ok test/cases/modules/stdlib/registry_all.cml
+b537b9f8b19e5df8 ok test/cases/modules/stdlib/registry_all.cml
 0423981438fd9eee ok test/cases/modules/stdlib/registry_tensor.cml
 1102c664c00e132d ok test/cases/modules/stdlib/stats_quantiles.cml
 c6095743fa7baeec ok test/cases/modules/stdlib/str_chars.cml
