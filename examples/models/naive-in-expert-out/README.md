@@ -41,8 +41,12 @@ python examples/models/naive-in-expert-out/accuracy.py \
 ```
 
 `measure.py` needs a built Camel install and a Python with torch; it finds both from the checkout
-and `sys.executable`.  A single cell writes `results.json` next to the script (ignored by git) and
-prints the table; `--output` names a committed file instead.  The Camel program reads no
+and `sys.executable`.  A single cell writes `results.json` next to the script and prints the table,
+and `--output` names a file; both land in `results/`.  **`results/` is not in the repository**
+(this directory's `.gitignore`): the JSON files there are one run's raw record, and they change with
+the host, its load and its thread count, so a clone would carry readings taken once somewhere else.
+They stay on the machine that produced them, under the names the sections below cite; the numbers
+are in the tables, and re-running a command reproduces its file.  The Camel program reads no
 environment variable: `bench`, `init_dir` and `final_dir` are `main` parameters, and the first
 run above passes all three explicitly.  `measure.py` passes them itself (`--arg bench=true --arg
 init_dir=... --arg final_dir=...`).

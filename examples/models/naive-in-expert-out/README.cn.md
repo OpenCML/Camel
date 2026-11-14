@@ -37,8 +37,11 @@ python examples/models/naive-in-expert-out/accuracy.py \
 ```
 
 `measure.py` 需要一个已构建的 Camel 安装和带 torch 的 Python；它从检出目录与 `sys.executable`
-找到两者。单个格子把 `results.json` 写在脚本旁边（被 git 忽略）并打印表格；`--output` 改为写一个
-要提交的文件。Camel 程序不读任何环境变量：`bench`、`init_dir`、`final_dir` 都是 `main` 的参数，
+找到两者。单个格子把 `results.json` 写在脚本旁边并打印表格；`--output` 写一个命名的文件，两者
+都落在 `results/` 这一层。**`results/` 不进仓库**（本目录的 `.gitignore`）：里面的 JSON 是一次运行
+的原始记录，随主机、当时的负载与线程数而变，提交它们只会让每个克隆都背着在别处量过一次的读数。
+它们留在跑出它们的那台机器上，文件名就是下面各节引用的那个；数字在正文的表格里，要一份新读数
+就重跑对应的命令。Camel 程序不读任何环境变量：`bench`、`init_dir`、`final_dir` 都是 `main` 的参数，
 上面第一条命令把三个都显式传入；`measure.py` 自己也这样传（`--arg bench=true --arg
 init_dir=... --arg final_dir=...`）。
 
