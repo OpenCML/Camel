@@ -130,3 +130,18 @@ case = "../../../cases/opt/e9/x2_no_lambda_seed27.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
+[[tests]]
+name = "rc00_seed30.without_the_pass"
+desc = "The program with no pass at all: two writes, a blank line and one formatted line."
+case = "../../../cases/opt/e9/rc00_seed30.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 true k9m\n"
+
+[[tests]]
+name = "rc00_seed30.opt"
+desc = "The whole optimizer on the program whose first write lost its place in the chain: folding the block between the two writes gave the second one the source-order edge alone, and `std::opt::dce` reported an effect node with neither a read of its value nor a place in its chain. The place is the successor's again (`fold` splices; see `placeLostStatements`)."
+case = "../../../cases/opt/e9/rc00_seed30.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\nL4 0 true k9m\n"
