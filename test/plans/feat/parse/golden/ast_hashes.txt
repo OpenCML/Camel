@@ -2998,6 +2998,7 @@ f0a02d775249a045 ok test/cases/modules/graph_values/discard_pass.cml
 72c62c56fb1915b6 ok test/cases/modules/graph_values/discard_target.cml
 7fab9dbd99156f9e ok test/cases/modules/graph_values/function_txn.cml
 6e01cb1f7f75a982 ok test/cases/modules/graph_values/grad_holders.cml
+0402f4d99511cde2 ok test/cases/modules/graph_values/p10c4_rule_callee_value_vs_graph.cml
 0066b869fca34ac9 ok test/cases/modules/graph_values/pipeline_inline.cml
 44ce147a6fbe8bf3 ok test/cases/modules/graph_values/program_txn.cml
 8a58fbdf87d8ff49 ok test/cases/modules/graph_values/rewrite_callee.cml
