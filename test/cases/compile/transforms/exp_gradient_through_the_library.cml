@@ -4,7 +4,7 @@
 // `skip=rule uri=tensor:exp reason=the operator has no forward rule bound at all`; after them it is
 // the smallest program whose backward half needs a **recomputed forward value** -- `exp(x)` appears
 // only inside both rules, not in the program text. So this case answers the question
-// `docs/handover/questions/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
+// `docs/handover/reviews/2026-11-03-when-the-tangent-recomputes-a-value-what-does-split-carry.cn.md`
 // asks, and the answer is recorded there in both directions: `relu`'s mask (a recomputation of `x`
 // alone) is carried, `softmax` (a recomputation carrying its axis in `<>`) is refused, and `exp` is the
 // case that says which of the two the wall follows.

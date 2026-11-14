@@ -88,7 +88,7 @@ building (passing `-Config Release` by default) — judging the configuration th
 correct install. Timestamps, absolute paths and the user name are out; ccache is out (a cache returns
 the bytes it was given); the clang **version** is out, because probing it would make `-NoBuild` depend
 on `PATH` and invalidate every install after a toolchain update (whether it should be, see
-`docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`).
+`docs/handover/reviews/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`).
 
 ## See also
 

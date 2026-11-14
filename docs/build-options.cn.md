@@ -83,7 +83,7 @@ CMake 会缓存布尔选项。若曾经关闭过 `CAMEL_ENABLE_PYTHON`，再次�
 -NoBuild` 又是"只验不建"（默认 `-Config Release`）——在那里按配置判会拒绝一个正确的安装。时间戳、绝对
 路径、用户名不进；ccache 不进（缓存交回的字节与它收到的一样）；clang 的**版本**也
 不进——探版本会让 `-NoBuild` 依赖 `PATH`，换一次工具链就废掉每个安装（这条是否该改，见
-`docs/handover/questions/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`）。
+`docs/handover/reviews/2026-11-04-should-the-compiler-version-invalidate-an-install.cn.md`）。
 
 ## 相关文档
 

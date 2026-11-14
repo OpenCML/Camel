@@ -9,7 +9,7 @@
 // (author's ruling of 2026-11-02 11:30), `split` hands out `residuals=0`, and the parameter's value is
 // not a port of the member, so nothing in that graph carries `[1.0, 2.0, 3.0]`'s length. The full
 // argument, the three roads and the default are in
-// docs/handover/questions/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md.
+// docs/handover/reviews/2026-11-04-what-shape-a-zero-with-no-stated-extent-has.cn.md.
 //
 // The three readings, in the order the program prints them:
 //   * `shape(dx)= [0]` -- 1 dimension, 0 elements. Not a rank-zero array, which would be *the element

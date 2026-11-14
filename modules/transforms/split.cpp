@@ -3643,7 +3643,7 @@ SplitGraph buildSplitGraph(
         // So this is a wall to name, not a state to defend: the three routes through it -- write
         // the pair into a `Fill` in the lowering, teach this switch the call's-pair shape, or work
         // around it in the library -- are weighed in
-        // `docs/handover/questions/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`,
+        // `docs/handover/reviews/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-split-cut.cn.md`,
         // which takes the first: an exit's shape is the lowering's product, while this switch is
         // the semantic invariant, and a criterion naming more shapes is harder to state than a
         // product that writes the one shape.

@@ -297,7 +297,7 @@ std::string refusalSentence(const TransposeRefusal &refusal) {
                 // parameter: that would need the forward family's index, and a program that only
                 // imports `rulesets.transpose` does not carry it -- so the claim is out of reach
                 // here, and a wrong explanation is worse than none, because a reader acts on it
-                // (docs/handover/questions/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md).
+                // (docs/handover/reviews/2026-11-04-must-a-transpose-refusal-claim-the-operator-is-not-linear.cn.md).
                 found = refusal.uri.empty()
                             ? "the family holds no rule for that operator; `transpose` is for linear "
                               "functions, so take the gradient with `vjp`"

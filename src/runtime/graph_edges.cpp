@@ -1033,7 +1033,7 @@ std::vector<std::string> checkGraphCrossReferences(const GCGraph &graph) {
     // The author's rule (2026-11-03) is "a region reads its ancestors' ports and commit checks
     // that", and the one shape it leaves out -- a LOOP node reading the value its own body region
     // ends in -- is the owner's read, added on the same day with the two programs that ask for it
-    // (see docs/handover/questions/2026-11-03-may-a-region-owner-read-its-own-exit.cn.md). An
+    // (see docs/handover/reviews/2026-11-03-may-a-region-owner-read-its-own-exit.cn.md). An
     // earlier version allowed the whole reverse direction instead, on the reading of those 155
     // `Arm` -> `LoopBody` reads as an arm holding a loop; they are the opposite shape (the arm sits
     // in the body), so the widening was measuring its own misreading.

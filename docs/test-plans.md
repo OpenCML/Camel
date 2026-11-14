@@ -783,7 +783,7 @@ everywhere is written once:
   - the refusal or the law in backticks: `` `skip=rule uri=tensor:sum reason=unbound` ``;
   - the file and the symbol that refuses: `modules/transforms/vmap.cpp#liftConstant`;
   - the page that decides the question:
-    `docs/handover/questions/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
+    `docs/handover/reviews/2026-11-04-does-a-closure-members-cotangent-have-a-slot.cn.md`.
 
   It is refused at load with the same refusal the owner gets, and three more shapes are refused with
   it: an empty value, a stock phrase (`待修`, `todo`, `known issue`, …) and a sentence that names no
@@ -1236,7 +1236,7 @@ those 215 plans and the milestone layer grows by one entry that day: no command 
 the `[tier]` line prints the total of whatever run somebody started, and `--tier-report` is how the
 split is asked for. Whether that multiplier should be unbounded belongs to the layer's owner rather
 than to the runner, and it is asked in
-`docs/handover/questions/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
+`docs/handover/reviews/2026-11-05-does-a-sweep-grow-with-every-test-that-is-added.cn.md`.
 
 ### The one sweep, and what it expands to
 

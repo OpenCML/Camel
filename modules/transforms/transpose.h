@@ -108,7 +108,7 @@ enum class TransposeRefusalCause {
     /// It is **not** `ParameterShape`, and the two must not be merged: there the repair is an edit to
     /// a declaration, and here there is no edit to make -- the value has to reach the member some
     /// other way, which is the question
-    /// `docs/handover/questions/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`
+    /// `docs/handover/reviews/2026-11-04-does-a-transposed-member-get-a-port-for-a-parameter-value.cn.md`
     /// asks. A reader who is told to write extents in a declaration that already states them all has
     /// been told to do something that changes nothing.
     LawReadsAValue,

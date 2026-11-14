@@ -31,7 +31,7 @@
  *
  * A record is written by the site that writes the line, from the same values. Nothing parses the
  * log back: the defect the transpose change removed was exactly that second reading
- * (`docs/handover/questions/questions-2026-10-29.md`, A3).
+ * (`docs/handover/reviews/questions-2026-10-29.md`, A3).
  */
 
 #pragma once
