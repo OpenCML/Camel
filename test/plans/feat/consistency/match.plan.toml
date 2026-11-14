@@ -50,7 +50,9 @@ kind = "behavior"
 case = "../../../cases/consistency/match/complete_matches.cml"
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_diagnostic_name = ""
+# "no diagnostic" is not a field: `expect_diagnostic_name` is read only when it is truthy, so an
+# empty value named nothing and checked nothing (test/tools/check-plan-fields.mjs). The claim this
+# entry makes is kept by the script below, which asserts that stderr is empty.
 verify_script = """
 const out = input.normalized.stdout.trim()
 const want = ['1 0', 'yes no any any', '0 5', 'ok 12 ParseError'].join('\n')
@@ -67,5 +69,4 @@ args = ["${case}", "std::rgir"]
 backends = ["nvm"]
 backends_agree = []
 expect_exit = 0
-expect_diagnostic_name = ""
 expect_output_not_contains = ["match_fail"]
