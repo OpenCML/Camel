@@ -1,0 +1,10 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The program's only external access, and the rewrite that would drop it: `discard` replaces
+// `x * 0` by 0, which leaves the print without a data use. The print is kept by its graph and not
+// by a selected guard (design principles 9.7), so it is still in the graph (`std::jgir` prints it)
+// and still runs (stdout) with `protect_effects=false`: that parameter does not reach it.
+
+func probe(a: int): int { return println(a) * 0 }
+func main(): int { return probe(41) }

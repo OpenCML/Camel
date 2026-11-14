@@ -1,0 +1,23 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// A write of a variable that outlives the call: `counter` belongs to the module, so the write in
+// `bump` outlives it. Reading the written value through `w` is a pure computation a rule can drop,
+// while dropping *all* of the write's data uses is not the guards' to allow (design principles
+// 9.7): `protect_effects` does not reach it, so `effects=false` changes nothing here. `main` reads
+// the variable after the call, so the reading is the program's: 41 when the write ran, 0 when a
+// rewrite erased it. The write is outside a `sync` block and runs on the read after it (3.1), which
+// is the credential the case is built on -- the compiler says so with IgnoredSideEffect.
+
+var counter = 0
+
+func bump(k: int): int {
+    let w = (counter = k) + 1
+    return w * 0
+}
+
+func main(): int sync {
+    println(bump(41))
+    println(counter)
+    return 0
+}

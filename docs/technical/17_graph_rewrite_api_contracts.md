@@ -232,7 +232,12 @@ the BRCH and no arm's result depends on it (see docs/technical/17_graph_rewrite_
 
 `rewrite`, `run` and `saturate` accept `protect_effects` and `protect_faults`, both
 true by default. These local deletion guards are independent of numeric `strict`.
-A wrapper forwards them explicitly. Unknown calls and control-region summaries
+`protect_effects` does not decide whether an external access or a final write to a variable that
+outlives the call may be dropped: the region or the exit keeps them, only the graph interface's
+dedicated effect-deleting operation removes one, and no `replace` or `graft` does
+(design principles 9.7). `protect_faults` is the guard that still selects a deletion, and a
+wrapper forwards it explicitly. A disabled fault guard does not disable structural validation or
+the effect invariant either. Unknown calls and control-region summaries
 are conservative; sharing can make a local refusal unnecessary for actual execution.
 The guards do not certify equivalence, movement, duplication, reordering or termination.
 
