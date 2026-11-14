@@ -1599,6 +1599,40 @@ void Builder::rejectUnappliedBinding(node_handle_t node, const GCT::node_ptr_t &
     throw BuildAbortException();
 }
 
+std::string Builder::describeTypeOfPlaceholders(const Type *type, const GCT::Tree *written) const {
+    if (type == nullptr) {
+        return {};
+    }
+    const std::string text = type->toString();
+    const std::string mark = "typeof#";
+    std::string described;
+    described.reserve(text.size());
+    for (size_t i = 0; i < text.size();) {
+        if (text.compare(i, mark.size(), mark) != 0) {
+            described += text[i++];
+            continue;
+        }
+        size_t end = i + mark.size();
+        while (end < text.size() && std::isdigit(static_cast<unsigned char>(text[end])) != 0) {
+            ++end;
+        }
+        if (end == i + mark.size()) {
+            described += text[i++];
+            continue;
+        }
+        const std::string digits = text.substr(i + mark.size(), end - (i + mark.size()));
+        const GCT::node_ptr_t expression =
+            written != nullptr ? written->typeOfOperandOf(mark + digits) : nullptr;
+        if (expression == nullptr) {
+            described += "typeof(#" + digits + ")";
+        } else {
+            described += "typeof(" + sourceTextOf(expression) + ")";
+        }
+        i = end;
+    }
+    return described;
+}
+
 std::string Builder::sourceTextOf(const GCT::node_ptr_t &expr) const {
     const auto *sourceContext = context_ ? context_->sourceContext().get() : nullptr;
     if (sourceContext == nullptr || expr == nullptr) {
@@ -1834,7 +1868,7 @@ void Builder::rejectLiteralData(
     }
     diags_->of(SemanticDiag::LiteralNotRepresentable)
         .atOrigin(where)
-        .commit(text, type->toString(), reason);
+        .commit(text, describeTypeOfPlaceholders(type, tree_), reason);
     throw BuildAbortException();
 }
 
