@@ -1580,6 +1580,17 @@ category, and findings that come down exit zero with the line that says to accep
 check that can only ever print is a number nobody has to answer for; the ratchet is what makes "may
 not grow" a rule and "came down" a reward. `--enforce` is the stricter mode it becomes once the count
 reaches zero, `--report-only` is the numbers without the exit code, and all three are one edit apart.
+
+The report keeps the two ways a tree can disagree with the baseline apart, because they call for
+opposite actions and used to print the same three hundred lines. **A broken ratchet** -- the count
+moved, or a category did while the total did not -- prints the entries one by one and exits non-zero:
+the set changed, the baseline has to follow, and the list is the evidence. **A baseline out of sync**
+-- the count is exactly the baseline's and no category grew -- prints one line,
+`baseline not in sync with the working tree: N existing entries do not match, ratchet unbroken`, and
+exits zero: nothing grew, the baseline was merely taken on another revision, and the hundreds of rows
+it would otherwise repeat are the entries it already accepted. A list that appears on every gate is a
+list that gets skipped, which is the same price as a false green.
+
 The table above is copied into that script, so `--verify-runner` fails by name when `validateTest`'s
 gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
 catch, one level up.
