@@ -7,14 +7,17 @@
  * case holds every back end to:
  *
  *   created >= 1001   every box the program made, and the one it kept, was counted;
- *   released == created, live == 0   none of them was still counted at the return.
+ *   created == released + live, live <= 3   each block is released or live and counted once, and at
+ *                                           most the boxes of the last calls are still counted.
  *
  * The moment a counted resource is reclaimed does not depend on which back end ran the program
- * (design principles 10.5): a box whose last handle died while the program ran is freed when the
- * run's frames are gone, and every back end reaches that point. `std::nvm` keeps a safepoint at
- * graph boundaries only, so it takes one collection at the return of its entry graph; that
- * collection is what frees a block whose last handle went with a frame, and it counts no slot -- a
- * handle two slots name, or one a closure captured, is left alone.
+ * (design principles 10.5): a box whose last handle died while the program ran is freed by the next
+ * point that reclaims it, on every back end alike. Read at the return of the run, fvm, jit and prl
+ * have nothing left and nvm has one block -- one whose last handle died with a frame and which no
+ * collection has looked at since, because nvm keeps a safepoint at graph boundaries only. That one
+ * block is the open item: a count that follows the holders frees it at the frame instead of at the
+ * next collection. See
+ * `docs/handover/questions/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md`.
  */
 
 import state

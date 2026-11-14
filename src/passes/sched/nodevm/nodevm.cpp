@@ -861,14 +861,6 @@ NodeVMSchedPass::apply(const camel::runtime::Program *program, std::ostream &os)
     Frame *rootFrame = framePool_.acquire(graph);
     slot_t result    = call(graph, rootFrame);
     context_->captureProcessExitCode(graph, result);
-    // The entry graph has returned and the frame it ran in is gone. One collection at this boundary
-    // is what frees a counted resource whose last handle the return took with it: the collector
-    // finds the wrapper dead and gives its count back. Nothing here counts a slot, so a handle two
-    // slots name -- or one a closure captured -- is untouched; and `std::fvm` and `std::jit` reach
-    // the same point at their call boundaries, so the moment a counted resource is reclaimed stops
-    // depending on the back end (design principles 10.5).
-    mm::autoSpace().requestMajorCollection("nodevm: the entry graph has returned");
-    mm::safepoint("nodevm: the entry graph has returned");
     return nullptr;
 }
 
