@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：39 页
+## 现在在等作者：40 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -46,6 +46,7 @@
 | [`2026-11-14-where-the-uses-boundary-sits`](2026-11-14-where-the-uses-boundary-sits.cn.md) | `uses` 的边界落在哪一格：变量、句柄、还是不透明的值 |
 | [`2026-11-14-who-holds-the-place-when-a-holding-node-is-folded`](2026-11-14-who-holds-the-place-when-a-holding-node-is-folded.cn.md) | 折掉一个持位节点之后，它的位置归谁？ |
 | [`2026-11-14-who-migrates-the-module-level-var`](2026-11-14-who-migrates-the-module-level-var.cn.md) | 模块顶层的 `var` 与顶层外部写：谁来做那 35 个用例的迁移？ |
+| [`2026-11-15-how-does-a-camel-pass-warn`](2026-11-15-how-does-a-camel-pass-warn.cn.md) | 一个用 Camel 写的 pass，怎么报告一条不致命的诊断？ |
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 |
 
