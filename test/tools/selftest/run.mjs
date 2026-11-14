@@ -48,7 +48,7 @@ import path from 'path'
 import { execFileSync, spawnSync } from 'child_process'
 import { fileURLToPath } from 'url'
 import { changedBase, plansForChanges, resolvedSelection } from '../../runner.mjs'
-import { negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
+import { measuredInstall, negativeSweepAccounting, negativeSweepLine } from '../run-tests.mjs'
 import { overSelectionProblems } from './over-selection.mjs'
 import { cudaVisibilityAudit } from '../check-cuda-visibility.mjs'
 
@@ -157,6 +157,40 @@ function readIntervals(file) {
         intervals.set(match[1], entry)
     }
     return intervals
+}
+
+// --- is there an install to measure? -----------------------------------------------------------
+// Every check below reads the output of a child run, and a child run does not start without an
+// install: `preflightBuild` prints `[FAIL] no Release binary at <out/latest/bin/camel.exe>` and
+// exits 2. Asked once per check, that single state came back as a page of reds in the shape
+// "expected PASS, got undefined" and "unexpected summary (none)" -- none of them about the code,
+// all of them about a binary that is not there, and two of them were tracked for a day as a defect
+// that did not exist. So the question is asked once, here, before any check starts, and it is
+// answered with ONE red that says what was not measured, why, and what to do about it.
+//
+// It is a red (`[FAIL]`, exit 1) and not a `[SKIP]`: `[SKIP]` is this project's word for a host
+// state that makes a measurement a plan DID run impossible (no CUDA card, no driver), and it leaves
+// the run green. Here nothing ran, because this tree was not built -- a skip would report "green,
+// nothing to see", and a red does not have to mean "the code is wrong" as long as it says which of
+// the two it is. The line below says "not measured", not "failed", for exactly that reason.
+//
+// This is also not a deletion of the checks: with an install present every one of them runs, and a
+// run in which the install disappears halfway still reddens the check that lost its summary.
+const install = measuredInstall()
+if (!install.present) {
+    console.error(
+        `[FAIL] self-test: not measured -- no testable install: no ${install.label} binary at ` +
+            `${install.exe}, and preflightBuild (test/tools/run-tests.mjs) refuses to start a run ` +
+            `without one, so no child ran and none of this file's checks was evaluated.`
+    )
+    console.error(
+        '    Not measured: the back-end matrix, the plan-schema refusals, the known_fail gate, ' +
+            'expect_signal, the per-test scratch directory, parallel and serial execution, the tier ' +
+            'filter, the sweep sample, --changed, a failing benchmark, the gate split, CUDA ' +
+            'visibility, and the GPU card a test is given.'
+    )
+    console.error(`    Build it first: ${install.buildCommand}`)
+    process.exit(1)
 }
 
 // --- the back-end matrix ---------------------------------------------------------------------
