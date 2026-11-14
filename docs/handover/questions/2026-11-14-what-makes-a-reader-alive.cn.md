@@ -149,6 +149,9 @@ screen 认为没有可删节点 → 清扫一次都不跑。**摘元组成员要
 `let p = (1, h)` 在图上是一个 **`Fill` 节点**（`GCNodeKind::Fill`，载荷 `GCFillBody`：
 `slotCount` 加一个变长的 `slots()`，`include/camel/runtime/graph.h:500`），**成员就是它的普通输入，按顺序**。
 `p.0` 读它是 **`Accs` 节点**（`GCAccsKind::TupleIndex`，`value` 是成员号，`graph.h:484`）。
+**注意（2026-11-15 更正）**：`GCFillBody::slots()` 是 `gc_slot_idx_t`——**帧槽号，不是节点引用**，
+所以「成员就是它的普通输入」这个读法是**错的**，实测 `arity=2` 的聚合 `inputs=1`。见
+`2026-11-15-member-liveness-needs-slot-producers.cn.md`。
 
 所以：`Fill` 的第二个输入就是 `h` ⇒ **闭包有一个用户** ⇒ `screen.cpp#mayRemoveDead` 认为这里没有可删节点 ⇒
 **清扫一次都不跑**（读数 `SWEEP func=0 call=0 gate=0 oper=0`）。**格子续命靠的是元组，不是闭包。**
@@ -213,3 +216,4 @@ screen 认为没有可删节点 → 清扫一次都不跑。**摘元组成员要
 
 **结论**：这一步要一次完整的实现 + 一次构建 + 四种拒绝用例的读数，是单独一轮的活。半做会让「摘了但没接对」
 和「没摘」混在一起，读数就读不出是谁的问题——所以本轮停在这里，把上面五步和两条改点交出去。
+

@@ -526,6 +526,15 @@ args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
 expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
 [[tests]]
+name = "dead_write.aggregate_two_members_reading"
+desc = "The shape that reaches the judgement: arity 2 with one input, which says the members are not the aggregate's inputs but the frame slots it names -- the reading this rule was built on is wrong."
+kind = "inspect"
+case = "../../../cases/opt/effects/dead_write_aggregate_two_members.cml"
+args = ["${case}", "test::deadwrite"]
+expect_exit = 0
+expect_stdout_contains = ["AGGREGATE graph=probe"]
+
+[[tests]]
 name = "dead_write.aggregate_reading"
 desc = "The aggregate reading: the arity, the member nodes and the verdict for every aggregate left after opt, so a refusal names its guard."
 kind = "inspect"
