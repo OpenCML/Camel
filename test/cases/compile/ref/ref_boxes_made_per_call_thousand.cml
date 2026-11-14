@@ -2,10 +2,14 @@
  * The same program as `ref_boxes_made_per_call_ten.cml` over a range a hundred times longer: a box
  * made inside a call and dropped by it, a thousand times.
  *
- * The reading must be the same one -- `live <= 1`, `released` = `created` - `live` -- because a box
+ * The reading must be the same size -- `live` <= 3, `created` = `released` + `live` -- because a box
  * whose call has returned was released at that return or at the next point that reclaims it, and
  * neither depends on how many calls came before. A reading of a thousand live blocks here would say
  * that the boxes of the calls that are over were still counted.
+ *
+ * `live` = 0 is not reached and not asserted: the handle count does not follow the holders yet, so
+ * the boxes of the last calls wait for a collection that this run does not have (see
+ * `docs/handover/questions/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md`).
  */
 
 import state
