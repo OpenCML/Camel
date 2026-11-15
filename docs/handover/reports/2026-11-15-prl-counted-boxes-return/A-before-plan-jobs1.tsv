@@ -1,0 +1,21 @@
+﻿run	start	secs	pass	fail	ten_red	count_lines
+1	15:11:32	7.8	47	0		
+2	15:11:40	7.8	47	0		
+3	15:11:47	7.4	47	0		
+4	15:11:55	6.6	47	0		
+5	15:12:01	6.7	47	0		
+6	15:12:08	6.9	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=6 live=5 disposed=5 finalized=6
+7	15:12:15	6.5	47	0		
+8	15:12:22	5.7	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=7 live=4 disposed=4 finalized=7
+9	15:12:27	5.8	47	0		
+10	15:12:33	4.3	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
+11	15:12:37	4.3	47	0		
+12	15:12:42	5.2	47	0		
+13	15:12:47	5.5	47	0		
+14	15:12:52	5.5	47	0		
+15	15:12:58	5.3	47	0		
+16	15:13:03	5.1	47	0		
+17	15:13:08	4.7	47	0		
+18	15:13:13	6.8	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=7 live=4 disposed=4 finalized=7
+19	15:13:20	5.9	47	0		
+20	15:13:26	6.2	47	0		
