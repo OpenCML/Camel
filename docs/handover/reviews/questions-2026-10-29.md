@@ -3764,3 +3764,12 @@ let h2 = (var y: int): int => sync { let t = x; y = 2; return t; };
 5. **计数做准提前到优先级一**（第 4 路）：执行计划上的"最后使用"分析与复制提示（`camel inspect --copies`），是 `var` 形参与路径赋值原地进行的前提。
 6. **迁移**：test/ 里用 `var` 形参的 75 个文件、声明 `var` 的 281 个文件按新语义复核；闭包写外层 `var` 的改成 fold、循环状态或 `Ref`；`stdlib/stream.cml` 的 `tee` 改用 `Ref`，`stdlib/perf.cml` 的 `timeit` 改用返回值。机械改写交子代理，期望输出变了的逐条列出。
 7. **给负责人看的示例**（第 7 路，第 1–5 项落地后）：挑一个真实训练示例按新方案改写，附 `camel inspect --copies` 的复制报告，确认权重更新原地进行。
+
+**补充（2026-11-15）：第 7 项示例同时供 ECOOP 第 6 节使用**（需求见 `Camel-Archive/ECOOP2027/handoff/case-study-request.md`，决策者已读并转述如下）。一个二三十行的训练示例，产出六样东西，按能做的先后：
+1. **调度自由**：同一程序 `std::nvm` 与 `std::prl` 下输出与日志逐字节相同，`inspect` 指出两对节点，一对无先后、一对有。现在就能做。
+2. **提交检查带原因拒绝**：一条坏改写被提交拒绝，诊断写明是哪条规则（`docs/technical/17_graph_rewrite_api_contracts.md` 第 4 节）。现在就能做。
+3. **变换被接受**：`grad` 作用于示例（规则集 `rulesets/jvp.cml`、`transpose.cml` 加三个变换算子），再加一条局部改写规则被接受。现在就能做。
+4. **写法自由**：改名、交换不相干语句、`var` 赋值改写成 `let` 链，三种写法的 `std::jgir canonical=true` 输出逐字节相同。等新排第 1 项（`var` 化成 SSA）。
+5. **两者并存**：两种写法分别求导，导函数的规范输出相同。等第 1 项。
+6. **复制报告**：`camel inspect --copies` 表明权重更新原地进行。等第 5 项（计数做准）。
+先交 1–3 的第一版（本周内），4–5 随第 1 项，6 随第 5 项；全部要在 12 月中旬前给出，ECOOP 第 6 节 1 月上旬定稿。产物放 `examples/case-study/`，每一项一个可重放的命令。
