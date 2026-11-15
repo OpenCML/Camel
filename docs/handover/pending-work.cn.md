@@ -171,3 +171,23 @@ test/tools/writing-freedom.mjs
 
 ### 教训（写下来是为了下次更早问）
 **我看到「两条规则」时，应该先问「后一条还活着吗」，而不是问「该谁先报」。** 一个已被取代的检查与一条新规则相撞，看起来完全像优先级问题——**因为它仍然在报错，所以看起来仍然有效。**
+
+---
+
+## 工具事实：`-Plan` 与 `-Changed` 同时给时，`-Plan` 被忽略
+
+```
+camel-remote.ps1 -Changed -ChangedBase <sha> -Plan @('a','b')      # 选中的是 --changed 自己的集合，a、b 不进
+camel-remote.ps1 -Plan @('a','b')                                  # 要点名计划，就不要带 -Changed
+```
+
+**这条已经让两个人各误读一次读数**：一次把 `--changed` 自己选出的 6806 条当成「`--changed` 加上我点名的七个
+计划」，一次把 `--changed` 选出的 148 条当成「四个族的最小闸门」。两次都不报错，只是**静默少跑**——
+这正是「一条检查从不运行，和没有这条检查，读数上一模一样」的同一类错。
+
+**判据**：报告的 `[SUMMARY] total` 与自己预期的数量级不符时，先看跑起来的 `[PLAN]` 名单，不要先解释读数。
+
+## 新发现、未定责：`debugger.dap_*`
+
+`slow` 层轮转抽到 `feat/tools/debugger`：`debugger.dap_session`、`debugger.dap_stepping` 两条红，
+**与今晚的语义改动无关**（它们起于 DAP 会话与单步）。**先记不修，下一轮轮转再看**，不插进正在合的这一批。
