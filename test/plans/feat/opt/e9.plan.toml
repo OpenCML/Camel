@@ -328,3 +328,224 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 # range is one range now, node 8 stands before the Test, and all four back ends -- nvm included --
 # really do run this loop. The defect is fixed; nothing about this entry's reading is what changed.
 
+# The A16 group of the same campaign (A16a-A16e, pages
+# `docs/handover/reviews/questions-2026-10-29.md`): five reduced programs that came back from the
+# optimizer with the *wrong program*, not with a refusal. Every one of them exits 0, and the fault
+# is the value it prints -- which is why each entry here pins the exact stdout rather than "no
+# error", and why the same program with no pass at all is in the plan beside it: that run is the
+# model the optimized one is held to, and on all four back ends it is the same reading.
+#
+#   rc02_seed9   A16a  `std::opt::specialize std::opt::inline std::opt::fold` printed `q36 10`
+#                      then `q36 0`; the program prints `q36 0` then `q36 10`.
+#   rc04_seed251 A16b  `std::opt::inline` printed one blank line twice (a two-element `loop` inside
+#                      an inlined body ran the statement before it once per round).
+#   rc05_seed256 A16c  `std::opt` printed nothing where the program prints one blank line.
+#   rc07_seed140 A16d  `std::opt::inline std::opt::dce` printed one blank line where the program
+#                      prints two.
+#   rc09_seed15  A16e  `std::opt::inline std::opt::fold` printed the blank line then `L4 0 `; the
+#                      program prints `L4 0 ` then the blank line.
+#
+# A16b, A16c and A16d are green on the develop this lane started from (they were red on the build
+# of 2026-11-12 the campaign reduced them with); their entries stay, because a reduction of this
+# campaign that is not in the plan is a defect that can come back unseen.
+#
+# A16a and A16e are one defect and one case: `std::opt::fold`'s `pruneBranch` dissolves the branch
+# and takes the place of the block with it. The `JOIN` was the only node that carried the block's
+# source order -- what was written before the branch, the arm it took, what was written after -- so
+# when it goes, two effects of one block are left with no edge between them and the scheduler is
+# free to run them in either order, which it does. In `rc09_seed15` the taken arm is itself the
+# effect (`then println('L4 0 ')`), in `rc02_seed9` the arm that was dropped used an effect produced
+# before the branch and kept alive by a `GATE`. Both shapes are one rule: the place goes to what
+# stands in it, so `pruneBranch` now orders the statements the `JOIN` ordered after that node and
+# after every effect the dropped arm kept alive (src/passes/opt/generic/generic.cpp). The two
+# programs are kept, one entry for each, as the two shapes of that one case.
+
+[[tests]]
+name = "rc02_seed9.without_the_pass"
+desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc02_seed9.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "q36 0\nq36 10\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'q36 0', `first line is ${JSON.stringify(lines[0])}, not "q36 0"`)
+assert(lines[1] === 'q36 10', `second line is ${JSON.stringify(lines[1])}, not "q36 10"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc02_seed9.specialize_inline_fold"
+desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc02_seed9.cml"
+args = ["${case}", "--gc", "generational", "std::opt::specialize", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "q36 0\nq36 10\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'q36 0', `first line is ${JSON.stringify(lines[0])}, not "q36 0"`)
+assert(lines[1] === 'q36 10', `second line is ${JSON.stringify(lines[1])}, not "q36 10"`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc04_seed251.without_the_pass"
+desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc04_seed251.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc04_seed251.inline"
+desc = "`rc04_seed251` (A16b) under `std::opt::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc04_seed251.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc05_seed256.without_the_pass"
+desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc05_seed256.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc05_seed256.opt"
+desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc05_seed256.cml"
+args = ["${case}", "--gc", "generational", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 2, `expected one blank line, got ${JSON.stringify(lines)}`)
+assert(lines[0] === '' && lines[1] === '', `expected one blank line, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc07_seed140.without_the_pass"
+desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc07_seed140.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3, `expected two blank lines, got ${JSON.stringify(lines)}`)
+assert(lines.every(line => line === ''), `expected two blank lines, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc07_seed140.inline_dce"
+desc = "`rc07_seed140` (A16d) under `std::opt::inline std::opt::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc07_seed140.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::dce", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "\n\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3, `expected two blank lines, got ${JSON.stringify(lines)}`)
+assert(lines.every(line => line === ''), `expected two blank lines, got ${JSON.stringify(lines)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc09_seed15.without_the_pass"
+desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc09_seed15.cml"
+args = ["${case}", "--gc", "generational", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L4 0 \n\n"
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'L4 0 ', `first line is ${JSON.stringify(lines[0])}, not "L4 0 "`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "rc09_seed15.inline_fold"
+desc = "`rc09_seed15` (A16e) under `std::opt::inline std::opt::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix."
+kind = "behavior"
+case = "../../../cases/opt/e9/rc09_seed15.cml"
+args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::fold", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = "L4 0 \n\n"
+expect_output_not_contains = ["PassInternalError", "internal error", "cannot be encoded"]
+normalizers = ["strip_ansi", "normalize_newlines"]
+verify_script = """
+({ input, assert }) => {
+const lines = input.normalized.stdout.split('\n')
+assert(lines.length === 3 && lines[2] === '', `expected two lines, got ${JSON.stringify(lines)}`)
+assert(lines[0] === 'L4 0 ', `first line is ${JSON.stringify(lines[0])}, not "L4 0 "`)
+assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank line`)
+}
+"""
+timeout_ms = 20000
+
