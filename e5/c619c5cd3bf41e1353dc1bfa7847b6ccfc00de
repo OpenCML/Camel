@@ -1,0 +1,40 @@
+`lane-casestudy` 两笔合并的闸门读数（正文引用了这条 note）。
+
+**第一笔**：`99eb3947fd3ddbb5fa486af952c053f3683407cd`，`--no-ff` 合入 `lane-casestudy`（`799c82a3e`，
+含 `4e34768fc`）。**无冲突**。
+
+**第二笔（补合 README，未 amend 已推合并）**：`e5c619c5cd3bf41e1353dc1bfa7847b6ccfc00de`，
+`--no-ff` 合入 `a77d73de2`（含 `7e9ede3fc`）。`git merge-base --is-ancestor a77d73de2 HEAD` = exit 0。
+推：`af7fd0c49..e5c619c5c`，`ls-remote` = e5c619c5cd3bf41e1353dc1bfa7847b6ccfc00de。
+
+## 闸门（树 `e5c619c5c`，干净，`-Jobs 8`，主机 88）
+计划表 `smoke,feat/parse,feat/tools,feat/examples,feat/compile`：
+    [provenance] tip e5c619c5cd244… | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+    [SUMMARY] total: 2799, pass: 2781, fail: 1, skip: 1, known failures: 16        RUN_EXIT=1
+    唯一红：[FAIL] var.assignment_and_let_chain_are_one_graph  260.06 ms   ← 授权的 var 红
+`--changed`（`$env:CAMEL_TEST_BASE='99eb3947'`，即补合前的树）：
+    [SUMMARY] total: 124, pass: 123, fail: 0, skip: 1        RUN_EXIT=0
+    `check-doc-links --citations` → exit 0
+无 `killed by a signal`、无 `timed out`。
+
+**这说明「补合只动 README」是实测的，不是推断**：同样的代码+计划，在 `99eb3947` 上是
+`2799/2781/1`，在 `e5c619c5c` 上仍是 `2799/2781/1`（同一条红、同一个 `skip`）。
+
+## 逐条判据（不是只信车道的数）
+1. 唯一 fail = `var.assignment_and_let_chain_are_one_graph`；`ce610cacb` 正文含
+   `first_difference_byte=4083 first_difference_offset=4084 line=201 column=18
+   var_bytes=10930 let_bytes=9179` 与 `[grad] let failed side=var exit=1:
+   error[RuntimeDiag::MacroEvaluationFailed]`。
+2. `train.cml` 与 develop 上的作者底稿**逐字节相同**：各 33 行、各 **1200 字节**、`Compare-Object` 空；
+   `git show --stat 711f9cb4a` 记作 rename（0 行变更）。
+3. `docs/handover/reports/case-study-draft/` 已不存在；理由写进 `questions-2026-10-29.md`（+2 行，
+   原话「底稿已搬进 `examples/case-study/`…`train.cml` 逐字节未改；`edits.cml` 按实测重写」）。
+4. `stdlib/graph.cml` 命中 **0**（`git diff --name-only origin/develop...lane-casestudy`）。
+5. `ast_hashes.txt` **+7 / -0**，7 条全是新增 `.cml`（`edits`/`train`/`writings`×3/`step_let`/`step_var`）；
+   `writing-freedom.mjs` 登记为第 3 个诊断读者（`[DIAG-FORMAT] ok: 3 reader(s)`，理由写明读 rich form）；
+   `plan-selection.json` 只加一条规则。
+
+## 一次意外状态（已由协调者处置）
+`git status` 曾出现 0 字节未跟踪文件 `test/plans/feat/compile/region_roots.plan.toml`（`lane-regionroot`
+用相对路径写文件、被 .NET 按进程 CWD 解析落在主检出）。**我没删、没提交、没在它存在时跑闸门**——
+空 TOML 会被目录目标选中并产生假红。协调者删除后（`porc=0`）我才重跑，上面所有读数都取自那之后。
