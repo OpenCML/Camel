@@ -1,0 +1,27 @@
+`lane-snippets` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`d810ac270e0ec738b83bf054a3491afde44d60e9`，`--no-ff` 合入 `lane-snippets`（`e9c4a2b02`
++ 同步合并 `3eddba451`）。**一处冲突：`docs/handover/questions/README.md`（生成文件）**——按规矩
+取一侧（`--theirs`）→ `node scripts/check-doc-links.mjs --questions-index --write` →
+    `wrote the pending table: 3 page(s) in the directory, 106 kept row(s), one row each`
+→ `node scripts/check-doc-links.mjs --default-roots`
+    `no broken links in 62 document(s)`（exit 0）
+生成文件相对 develop 是**纯增**：`## 现在在等作者：2 页` → `3 页`，新增一行
+`q-2026-11-15-what-path-a-diagnostic-prints`；"生成器不会删的行 106 行"一字未动。
+
+无 `src/`（5 文件）：`scripts/check-doc-snippets.mjs` 的路径归一 + 中英 `04_execution_model.md`
+各一句 + 新问题页 + `README.md` 重生成。
+
+闸门（合后 `develop`，`--jobs 4`）：
+    `test/plans/feat/docs_links.plan.toml` → `[SUMMARY] total: 21, pass: 21, fail: 0`
+        `[PASS] docs.snippets_compile    3.52 s`（就是它修的那格）
+    `--changed`（`$env:CAMEL_TEST_BASE='d1e0f1f63'`）→ `[SUMMARY] total: 42, pass: 42, fail: 0`
+    `check-doc-links --citations` → exit 0
+无 `killed by a signal`、无 `timed out`。
+
+它没有改编译器的路径打印：`src/` 差异 0；`docs.snippets_compile` 绿的原因是编译器原样回显命令行写法
+（语言参考 4.6），检查侧把整条含盘符的路径归成 `<file>`。两处易错的读法已写进合并正文：
+承载该检查的 plan 是 `test/plans/feat/docs_links.plan.toml`（没有 `docs_compile.plan.toml`），
+`check-doc-links.mjs` 没有 `--check` 开关（闸门用 `--citations`）。
+
+推：`9031c009c..d810ac270`，`ls-remote` = d810ac270e0ec738b83bf054a3491afde44d60e9。
