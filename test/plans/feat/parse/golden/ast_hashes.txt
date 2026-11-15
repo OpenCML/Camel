@@ -2111,6 +2111,7 @@ faf7a471321f79c8 ok test/cases/compile/var/closure_read.cml
 dbc6384762126cc9 ok test/cases/compile/var/loop_write_outside_read_let.cml
 e4d108190a15a18f ok test/cases/compile/var/step_let.cml
 6fe22c1e60003a30 ok test/cases/compile/var/step_var.cml
+751b3a4d87c66fdd ok test/cases/compile/var/unused_assigned_value.cml
 adae243535451365 ok test/cases/compile/var/var_parameter_write_at_exit.cml
 6ee4975163840c41 ok test/cases/compile/var/write_in_branch.cml
 29f664fcceaaa7c6 ok test/cases/compile/var/write_in_loop.cml
