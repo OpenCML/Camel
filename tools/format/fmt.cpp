@@ -1656,8 +1656,40 @@ any Formatter::visitLinkExpr(cst::LinkExpr context) { return formatBiOpsList(con
 rangeExpr
     : additiveExpr ('..' additiveExpr)*
     ;
+`..` is written without the spaces the arithmetic operators get, but never directly after a
+conversion: the type after `as` takes a `..` that stands on its line as a mark -- the stream type
+`int..` -- whatever white space is written before it, and it stops at a line break. So
+`x as int..5` is not the interval from `x as int` to `5`: it is a `..` written where a type
+stands, which SyntaxDiag::AsRightSideIsType reports (test/cases/parse/rulings/
+stream_type_as_interval.cml says why, and names the spelling `(a..b)`). An input that writes
+`let r = n as int` and `..5` on the next line is a range, and this function used to write it back
+as `let r = n as int..5`, which the parser refuses -- the formatter had turned an accepted
+program into text that does not parse. `camel-parsecheck fuzz` met it at iteration 929, on a
+mutation of that ruling case, and the input is written down as
+test/cases/parse/rulings/dotdot_after_cast.cml. A conversion that a `..` follows is written in
+parentheses, the spelling the diagnostic names, which reads back as the same tree.
 */
-any Formatter::visitRangeExpr(cst::RangeExpr context) { return formatBiOpsList(context, false); }
+any Formatter::visitRangeExpr(cst::RangeExpr context) {
+    std::string result;
+    const size_t n = context.childCount();
+    for (size_t i = 0; i < n; i++) {
+        const syn::Child child = context.child(i);
+        if (!child.isNode()) {
+            result += child.text();
+            continue;
+        }
+        std::string operand = std::any_cast<std::string>(visit(child.node()));
+        // Only the operand a `..` follows: a conversion at the end of the range can be written
+        // as it stands, nothing follows it that a type would take.
+        const bool followedByRange = i + 1 < n && !context.child(i + 1).isNode() &&
+                                     context.child(i + 1).text() == "..";
+        if (followedByRange && child.node().is(NK::CastExpr)) {
+            operand = "(" + operand + ")";
+        }
+        result += operand;
+    }
+    return result;
+}
 
 /*
 annoExpr
