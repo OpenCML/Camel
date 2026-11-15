@@ -57,4 +57,29 @@ camel cases/linear.cml std::cml       # 打印，再编译，比较两份 jgir
 
 前一行的条目数若与源程序一致，甲成立；少一个，乙自动生效。
 
+## 撤回（2026-11-15 深夜，同页内更正，不删原文）
+
+**上面「丢了一个端口」这个前提是错的，本页因此没有需要裁定的问题。** 三个计数（`linear.cml`，`std::jgir canonical=true`，同一份构建）：
+
+| 读数 | 条目数 |
+| --- | --- |
+| 原程序里 `kind:"PORT"` 且 `param.kind=="normal"` | **3**（`g2/n0`、`g2/n3`、`g3/n2`） |
+| 打印文本里那个端口的声明 | **在**（`func describe(score: int): string sync {`） |
+| 打印结果重编译后同一计数 | **3**（`g2/n0`、`g2/n3`、`g3/n1`，索引与类型全同） |
+
+**一条端口都没丢，`std::jgir` 也不丢。**
+
+那句 `structural class ... 1 on the left and 0 on the right: PORT` 是**判据的并列裁决产物**：`class_difference` 在两个类同分时按 color 哈希取第一个，PORT 类与真正的差类同分，于是报告**指控了一个没有差别的类**。真正的差是全程序 63 vs 64 个顶点，四张图的 port/signature/节点多重集逐项相同，**只有 `g3` 多一个 `DATA 1`**——`var bonus=1` 的那次读被 `faccf38b9` 折进「cell 建立时的值」，图上 `DATA 1 → COPY → {var/new, add_l}` 共用一个 COPY，打印器把这次读写成值本身，于是文本多一个字面量、共享的 COPY 消失。
+
+### 这一页真正的产出（比原来的问句值钱）
+
+> **一条红在报它说不清的类，比一条红什么都不报更危险。** 它看起来是结论，于是三条车道（含协调位）追着一个不存在的端口跑了几个小时，还各自写下了一段错的归因。
+
+所以处置改成两件，都不需要裁定：
+
+1. **修判据**：同分时把所有同分类连同分数报出，或优先报「确实有差别」的类。验收是「`linear.cml` 仍可以红，但消息必须点名 `DATA` 那一处，不许再出现 `PORT … 0 on the right`」。
+2. **修打印器**：最小复现 `func f(score:int):int sync { var bonus:int=1; bonus=bonus+score; println(bonus); return bonus }` 由 `1 + score`（DIFFERENT）改为 `bonus + score`（EQUAL，20 vertices / 48 edges）。正文必须写明它修的是**「被折叠的读被打印成字面量」**，不是「丢端口」。
+
+仍留在账上的一件事：`print_and_recompile` 在干净基线上有**两条**红（`linear.cml`、`write_value.cml`）。后者与端口无关——左图 `main` 里两个调用的 control/sync 边，源程序只因为 callee 的 sync 体里有过写才存在，而 callee 的图已塌成 `DATA 2`；补 `sync`、拆成两个 `let` 都仍 DIFFERENT。**要动 builder 的排序边，另一条线。**
+
 ## 决策者答复（待）
