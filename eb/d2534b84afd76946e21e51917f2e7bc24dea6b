@@ -1,0 +1,29 @@
+`lane-optloop` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`ebd2534b84afd76946e21e51917f2e7bc24dea6b`，`tree == lane-optloop^{tree}` = True
+（lane 树 `78d4a3635`，同步合并 `ca69dc693`）。推：`b35936243..ebd2534b8`，`unpushed=0`。
+
+合后主检出 HEAD 被另一笔推到 `b55283c43`（`+166` 行纯文档的报告，`ebd2534b8` 是它的祖先），
+所以下面三组读数分两处量，都点名了提交：
+
+1. `test/plans/feat/opt`（`b55283c43`，`--jobs 4`）：
+   `[SUMMARY] total: 1412, pass: 1412, fail: 0` —— **`known failures` 后缀整个消失**
+   （合前同一计划是 `1412 / 1409 / 0 / known failures: 3`）。
+2. `rc03_seed56.opt` 四个后端（`test/plans/feat/opt/e9.plan.toml`，同一棵树）：
+   `[PASS] nvm 159.44 ms`、`[PASS] fvm 172.36 ms`、`[PASS] jit 173.31 ms`、`[PASS] prl 183.36 ms`
+   —— 原来 `known_fail = ["fvm","jit","prl"]` 盖着的三个后端现在各自绿。
+   lane 树上的同计划读数：`[SUMMARY] total: 113, pass: 113, fail: 0`。
+3. 全量（整棵 `test/plans`，`--tier fast`，`--jobs 4`，`b55283c43`）：
+   `[SUMMARY] total: 9367, pass: 9322, fail: 0, skip: 13, known failures: 32`
+   `killed by a signal` 不出现，`timed out` 不出现；`RUN_EXIT=0`，`FULL_EXIT=0`。
+   合前（`b35936243`）同层是 `9367 / 9320 / 1 / skip 11 / known 35`。
+
+一条差点没有量到的：`--changed --changed-base b35936243` 第一次调用时 `b55283c43` 的文档文件正落在
+主检出里，闸门的 `-NoBuild` 守卫退 4（`1 dirty file(s)`，守卫是对的）；那次提交把 HEAD 移走后读数作废。
+在 `b55283c43` 上补跑同一条（`-NoBuild`，base 相同）：
+   `[SUMMARY] total: 4106, pass: 4090, fail: 0, known failures: 16`，`RUN_EXIT=0`，无 `killed`/`timed out`。
+
+另记：`ref.boxes_made_per_call_ten.prl` 在 `b35936243` 的全量里红过一次
+（`created=11 released=5 live=6`，`live <= 3` 不成立），同提交重跑 47/47 全绿。
+**这是采样，不是状态**：一个依赖调度与负载的 `live` 读数本身就是缺陷（设计原则 10.5
+「计数必须等于持有者数」），已另派测量，不按「重跑绿了」结案。
