@@ -1,0 +1,74 @@
+`lane-effectscc` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`da1c11c984161c7459f8feb77f1921dc9b391677`，`--no-ff` 合入 `lane-effectscc`（`09c222bc1`）。
+**有一处冲突**：`src/compile/gir/builder.h` —— 两笔都改了 `refInsideACapturedValue` 的声明排版
+（`refref` 把它拆成两行并加了 `refInsideClosureCaptures`，`effectscc` 只是重新折行）。取 `refref` 的
+版本（含新声明），丢掉 `effectscc` 的排版改动；语义零差异。`ast_hashes.txt` 自动合并干净
+（`regionroot` 的 19 行 + 本笔 3 行，0 删除）。
+推：`025d645db..da1c11c98`，`ls-remote` = da1c11c984161c7459f8feb77f1921dc9b391677。
+
+闸门（合后 `develop`，重建，`-Jobs 8`）：
+    `--changed`（base `025d645db`，本笔自己的面）→ `[SUMMARY] total: 5252, pass: 5178, fail: 53, skip: 3, known failures: 18`
+    `test/plans/feat/compile/inferred_resources.plan.toml` 单跑 → `total: 3, pass: 1, fail: 2`
+    [provenance] tip da1c11c98 | tier fast | jobs 8
+**注意**：两次 `--changed`（`regionroot` 那次 base `0692517fc` 选了 345 计划、9391 条；这次 base
+`025d645db` 选的面小得多、5252 条）**选中的计划集不同**，所以「79 → 53」不能读成「少了 26 条」。
+归属只看同一批计划上的集合差。
+
+## 一、`effectscc` 自己带进 2 条红（+1 条 poison），且是甲/乙类要先分类的那种
+```
+只在本笔之后红（3 条）：
+  inference.unreachable_declaration.with
+  inference.unreachable_declaration.without
+  poison:compile.inferred_resources:inference.unreachable_declaration.with
+```
+成因是一个词的差：这个用例记录的 footprint 是
+```
+RESOURCES footprint apply read variable with 0 whole
+```
+合后树上实际读到的是
+```
+RESOURCES footprint apply read variable with 0 whole; result fresh
+```
+**多出 `result fresh`。** 车道是在 `ssa2` 之前那棵树上写死这段文字的；合后 `apply` 的结果别名从
+`Unknown` 变成了 `Fresh`（`ssa2` 的折叠能把这条函数体认到「结果只属于本次调用」，`regionroot` 的
+根集也可能参与）。**这是「值」层面的漂移，不是排版漂移**，按纪律不许直接把字面量改成新读数了事——
+先分类「这次折叠的预期后果」还是「回归」。作者裁定里那条「删掉不可达声明不改变别人的资源」本身仍然
+成立：两份读数（with/without）仍逐行相同，差的只是 `apply` 那一行的后缀。
+
+## 二、用例 (a) 的 after 诊断在合后树上重现
+`[PASS] inference.invariant_position_is_a_type_error 68.75 ms` —— `SemanticDiag::ResourceInferenceConflict`
+（`0x03000212`）确实触发，锚在 `21:1` 的 `f`、related 指 `29:1` 的 `wide`，help 说「给不写资源的被调
+写资源子句」。before 读数（`exit 0`、stdout `2`、容器 join 把 `wide` 的 `uses var stdout` 给了 `f`/`g`）
+记在提交正文里。
+
+## 三、这一笔的诚实处，写清楚以免后人误读
+`unreachable_pair/{with,without}` **不是「修复使其变绿」**：作者裁定里「删掉一个不可达的声明不会改变
+别人的资源」这条**在本树上本来就成立**，车道没改代码，只用两个文件把它钉住（保守写集
+`programWriters_` 只经「目标未知的调用」进 footprint，而那条调用已用 `anyOf` 掩掉）。但第 1 条说明
+**它今天在合后树上不绿了**——它钉住的属性还在，钉它的字面量过期了。
+
+## 四、`develop` 现在的账（作者问过，这里留一个能解释的数）
+`regionroot` 合并时 `--changed`（345 计划 / 9391 条）= **79 红**：
+- **78 条是基线或 `ssa2` 的账**（`new_values` 23、`showcase_d4` 的 `search.*` 17、`var_reference` 9、
+  `var_read_before_write` 6、`camel_passes` 6、其余 17 个单条）；
+- **1 条是已知的排期计数红**（`ref.boxes_made_per_call_ten.prl`）；
+- **`regionroot` 自身：0 条**（19 计划上 `94 → 79`，集合差为 +1 排期红 / −16 poison）。
+- **本笔之后再加 2 条**（第 1 条），仍是同一个计划里的字面量。
+
+**`var` 化成 SSA 这一项没有做完**：今天绿的 `var.assignment_and_let_chain_are_one_graph` 是「该程序的
+`var` 链被折叠并剪枝」撞出来的，`var` 仍被造成单元（`warnings_visible.cml` 的 dump 仍含
+`N09 [:var/new]`），作者第 1 项要求的三处（删单元节点与按引用捕获口、分支赋值成分支结果、循环赋值成
+循环状态）一处未做。
+
+## 五、补 `regionroot` note 的两件事
+- **`resident_cpu_block`：基线红未修，失败方式被 `resident_cpu_block.cml:17:20` 的新警告替换**
+  （合前是 placement JSON 不含 `"downloads":2,…,"uploads":1`）。
+- 那 16 条 `poison:*` 在合后转绿，逐条标注：
+  `poison:linear.var_read_before_write:*`（5）**moved**（底层红仍在，报告从 8 条变 11 条）；
+  `poison:linear.var_reference:*`（9）**moved**（底层诊断由 `ImmutablePassedToVarParam` 换成更粗的
+  「target of an assignment must be a variable」）；
+  `poison:para.exec_pred:linear.predecessors`（1）**unknown**；
+  `poison:transforms:cml_var_holding_a_lambda`（1）**unknown**。
+  `moved` 的意思是这个缺陷还在、只是换了形态；`unknown` 的意思是我没有查到它的新形态是什么——**写出来，
+  不让一条绿把它盖住**。
