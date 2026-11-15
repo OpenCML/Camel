@@ -835,20 +835,58 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 }
 
 /// A node that only carries a value on: a JOIN hands on the value of the arm that ran, a GATE
-/// passes its input through, and a port hands on what it was given (an exit port, its input's
-/// value). It produces nothing of its own, so a reference to what it "holds" is a reference to the
-/// value behind it.
-bool forwardsItsValue(const GCNode *node) {
-    return node != nullptr && (node->kind == GCNodeKind::Join || node->kind == GCNodeKind::Gate ||
-                               node->kind == GCNodeKind::Port);
+/// passes its input through, a port hands on what it was given (an exit port, its input's value),
+/// and `:enum/field` hands on the field it read out of the variant. It produces nothing of its own,
+/// so a reference to what it "holds" is a reference to the value behind it.
+///
+/// `:enum/field` is on this list because of what the operator does with the field: `__enum_field__`
+/// returns the slot the variant holds (src/builtin/operators/enum.cpp) and takes no reference for
+/// it. Read as a producer, its result looked like a value born with a reference of its own, so the
+/// plan released the value where it was read and again where the enum died -- one release too many
+/// for a handle read out of a variant and used afterwards (a `Ref` a defunctionalized closure
+/// carried, read after the call through the value).
+bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
+    const GCNode *node = graph.node(at);
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->kind == GCNodeKind::Join || node->kind == GCNodeKind::Gate ||
+        node->kind == GCNodeKind::Port) {
+        return true;
+    }
+    if (node->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(at);
+    return body != nullptr && body->uri() == ":enum/field";
 }
 
 /// A node that packs the values it is given into the value it makes: a FILL builds a closure tuple
-/// (GCFillKind::FunctionClosure) or an aggregate (Tuple, Array, Struct) out of its inputs. The
-/// values it is given do not stop being held when the FILL has run -- the value it made holds them
-/// -- so their reference comes back where that value dies, not here.
-bool packsItsInputs(const GCNode *node) {
-    return node != nullptr && node->kind == GCNodeKind::Fill;
+/// (GCFillKind::FunctionClosure) or an aggregate (Tuple, Array, Struct) out of its inputs, and
+/// `:enum/make` builds the variant it is given the tag and the fields of. The values they are given
+/// do not stop being held when the node has run -- the value it made holds them -- so their
+/// reference comes back where that value dies, not here.
+///
+/// `:enum/make` belongs on this list for the same reason a FILL does, and it was left off it: the
+/// operator stores the fields it is given in the variant (`__enum_make__`,
+/// src/builtin/operators/enum.cpp), so a counted handle among them is held by the enum. Read as an
+/// ordinary use, its reference came back at the node that made the enum, and a handle no other node
+/// read was released while the enum still held it -- the next operator to reach it through the
+/// variant read "the value is not a reference" (a `Ref` captured by a function the defunctionalizer
+/// lowered, read after the closure was made).
+bool packsItsInputs(const GCGraph &graph, gc_node_ref_t at) {
+    const GCNode *node = graph.node(at);
+    if (node == nullptr) {
+        return false;
+    }
+    if (node->kind == GCNodeKind::Fill) {
+        return true;
+    }
+    if (node->kind != GCNodeKind::Oper) {
+        return false;
+    }
+    const auto *body = graph.nodeBodyAs<GCOperBody>(at);
+    return body != nullptr && body->uri() == ":enum/make";
 }
 
 /// The uses of every value, and route 4's "position of the last use" column.
@@ -888,7 +926,7 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
         if (node == nullptr || node->kind == GCNodeKind::Data) {
             continue; // a constant is the program's: the graph neither takes nor gives it
         }
-        if (!forwardsItsValue(node)) {
+        if (!forwardsItsValue(graph, at)) {
             carried[at].push_back(at);
             continue;
         }
@@ -929,7 +967,7 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
         if (at >= nodeCount) {
             continue;
         }
-        const bool packs = packsItsInputs(graph.node(at));
+        const bool packs = packsItsInputs(graph, at);
         for (const camel::execute::ExecutionPredecessor &predecessor :
              camel::execute::executionPredecessorsOf(graph, at)) {
             if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
@@ -1012,7 +1050,7 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         plan.refCopiesAt[idx]   = kept ? uses : (uses == 0 ? 0 : uses - 1);
         for (const uint32_t usePosition : usesAt[value]) {
             const gc_node_ref_t user = plan.topo[usePosition];
-            if (packsItsInputs(graph.node(user))) {
+            if (packsItsInputs(graph, user)) {
                 // The value is packed into the value `user` makes: the reference comes back where
                 // that value's own last use is -- the column, not a second answer computed here --
                 // and where nothing reads the packing value, where it is made.

@@ -534,6 +534,30 @@ assert(out === want, `unexpected output: ${out}`)
 """
 timeout_ms = 30000
 
+# A capture that is a handle, not a cell: `std::defunctionalize` (which `std::opt` runs) makes the
+# captures of a function a value into its trailing parameters, and the type the call site reads has
+# to move the `uses capture N` it wrote onto the parameter that capture became. It stayed at
+# `capture 0`, which describes a capture the lowered body no longer has, while the body reached
+# `write state::Ref` through the parameter -- so the effect-containment check (analysis 4.1)
+# refused a program that was right, and this entry is the reading that finds it: no case captured a
+# handle through the optimizer before, so the shape was green because it never ran.
+[[tests]]
+name = "callback.captured_handle_through_the_optimizer"
+desc = "A closure that captures a handle (a `Ref`) is handed to a parameter of function type and run through `std::opt`: the write the call makes stays a write of the value the caller holds, so the read after the call takes it, and the defunctionalizer's own containment check accepts the program it lowered -- the type names the parameter the capture became. Same output as the unoptimized back ends."
+kind = "behavior"
+case = "../../../cases/effects/callback_captured_handle_opt.cml"
+args = ["${case}", "std::opt", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1 5', `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
+
 # ---- Two references write one mutable object ----
 #
 # `counter` is written by the body, and written again by a function value handed to a parameter of
