@@ -1,0 +1,25 @@
+`origin/fsh-dev` 第四次合并的闸门读数（正文引用了这条 note）。
+
+合并：`6c8e7787850ecbc0b1516e5b4f6c59c0e8fecf8f`，`--no-ff` 合入 `origin/fsh-dev`（`7715dc38b`，
+四笔）。**无冲突**；`origin/fsh-dev` 已含全部 develop（`behind=0`），故 `HEAD^{tree} ==
+origin/fsh-dev^{tree}` = **True**。推：`9247da004..6c8e77878`，`pushExit=0`，
+`ls-remote` = `6c8e7787850ecbc0b1516e5b4f6c59c0e8fecf8f`，`unpushed=0`。
+
+净改动三份文件 `+100/-5`：
+- `docs/handover/reports/case-study-draft/train.cml` **+33** —— 作者手稿，原样进树；
+- `docs/handover/reports/case-study-draft/edits.cml` **+44** —— 同上；
+- `docs/handover/reviews/questions-2026-10-29.md` **+28/-5** —— 排期改写：**日期全部删掉**
+  （不设期限、正常排期、不为赶时间放松质量，11-17 那个日期作废不是顺延），顺序改为
+  **案例 → `var`→SSA → 新加「图接口默认看不见写法」（原则 9.5，`stdlib/graph.cml`）→ 第 2/3 项与计数做准**。
+
+**手稿行数实测（你点名要核的）**：`train.cml` 存在 = True、**33 行**；`edits.cml` 存在 = True、**44 行**
+—— 与作者给出的行数一致，一行没少。
+
+**假删除仍是同一页**：`docs/handover/reports/2026-11-15-var-annotation-is-an-upper-bound.cn.md` 在
+两提交 diff 里显示 `-36`，因为它不在 fsh-dev 的树里（它在 `10f959a76` 才提，晚于 fsh-dev 上次合
+develop 的点）。三点合并按「ours 有、theirs 未动」保留：合后实测 **36 行**。
+
+闸门（合后 `develop`，`--jobs 4`，`$env:CAMEL_TEST_BASE='9247da004'`）：
+    [SUMMARY] total: 33, pass: 33, fail: 0        RUN_EXIT=0
+    `node scripts/check-doc-links.mjs --citations` → exit 0
+无 `killed by a signal`、无 `timed out`。
