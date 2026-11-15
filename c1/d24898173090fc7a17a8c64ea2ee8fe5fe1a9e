@@ -1,0 +1,35 @@
+`lane-refcont` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`c1d24898173090fc7a17a8c64ea2ee8fe5fe1a9e`，`--no-ff` 合入 `lane-refcont`（`a869d5151`，
+其父 `5fb42e372`）。7 文件 `+489/−83`。推：`f4bb08f24..c1d24898`，
+`ls-remote` = c1d24898173090fc7a17a8c64ea2ee8fe5fe1a9e。
+
+## 冲突与解（一处，且有一步是删死代码）
+`src/compile/gir/builder.h` 有一处内容冲突：`refInsideACapturedValue` 的签名。`refref` 那版带
+`int depth = 0`，本笔把 depth 去掉了（改成工作栈）。**取本笔的签名与注释。**
+
+解冲突时连带删掉一段 `HEAD` 侧的**死声明**：`refInsideClosureCaptures(value, through, depth)` —— 它的
+定义在本笔的 `builder_refs.cpp` 里已经不存在（被工作栈取代），留着就是一条永远没有定义的私有声明。
+删了它之后 `git grep kRefCaptureDepth` 在**全树 0 命中**：`refref` 带来的那个「未取证的 8」连同它的
+名字一起消失了，深度由图的有限性与访问集给出，不再由魔数给出。
+
+## 闸门（合后 `develop`，重建，`-Jobs 8`）
+    `ref.plan.toml` + `feat/compile` + `feat/consistency` + `feat/parse`
+    → `[SUMMARY] total: 3925, pass: 3877, fail: 32, known failures: 16`
+    [provenance] tip c1d24898 | tier fast | jobs 8
+无 `killed`、无 `timed out`。
+
+十条 ref 验收全绿，**对照四后端都答 `42`**：
+    [PASS] ref.holds_ref_closure / _deep / _unreadable
+    [PASS] ref.closure_in_container_control.nvm/fvm/jit/prl
+    [PASS] ref.holds_ref_closure_in_struct / _in_collection / _in_struct_unreadable
+
+## 32 条红逐条归账，无一是本笔带来的
+- `new_values.*` **23 条** + `declared_type.same_type.*` **4 条**：`ssa2`（`faccf38b9`）的账，
+  在合前树上同名同数地红；
+- `inference.unreachable_declaration.with/.without` **2 条**：`effectscc` 的字面量少 `; result fresh`，
+  已退回 `ssa2` 判（谁改的 `Unknown → Fresh` 就谁判）；
+- `frontend.ast_snapshot` **1 条**：基线红（`701388712` 上就红），且未记录文件数从 5 涨到 **9**
+  （本笔 4 个新用例 + `effectscc` 的 3 个 + 之前的 5 —— 计数的差值来源是这几笔一起加的用例）；
+- `runner.backend_matrix` **1 条**：负载余量红（本计划自己 CPU 的 1/4 阈值，主机 1m 负载 20+）；
+- `cml_var_holding_a_lambda` **1 条**：基线红，本树上仍在账。
