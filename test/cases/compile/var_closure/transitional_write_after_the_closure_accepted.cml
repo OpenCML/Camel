@@ -1,0 +1,17 @@
+/**
+ * `x`, a `var` a closure mentions, is assigned after the closure is made and before the last use
+ * of the closure: a compile error (design principles 3.5, the author's ruling of 2026-11-15). The
+ * closure holds the value `x` had when it was made, so the write would not reach it -- a program
+ * that reads `g()` would print 1 and not 2 -- and the rule does not leave that to the writer to
+ * notice: `let g = () => x; x = 1; g()` is refused.
+ *
+ * The report names the closure's capture and the assignment that invalidates it.
+ */
+
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    x = 2
+    println(g())
+    return 0
+}

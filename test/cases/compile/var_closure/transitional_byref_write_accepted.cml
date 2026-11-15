@@ -1,0 +1,28 @@
+/**
+ * A closure assigns a name from outside it: a compile error (design principles 3.5, the author's
+ * ruling of 2026-11-15). The closure holds a value, not a place, so there is nothing for the
+ * assignment to write, and the report names the three ways out: bind the value as a `let`
+ * parameter of the closure, give the new value back as the closure's result, or hold the shared
+ * state in a `Ref`.
+ *
+ * `total` is the shape the standard library used to write: a `var` accumulator the closure adds
+ * into.
+ */
+
+func total(x: int): int {
+    var acc = 0
+    let add = (k: int): int => sync {
+        acc = acc + k
+        acc
+    }
+    let _ = loop i = 0 while i < x do sync {
+        add(i)
+        i + 1
+    }
+    acc
+}
+
+func main(): int sync {
+    println(total(3))
+    return 0
+}

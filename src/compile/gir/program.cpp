@@ -622,9 +622,27 @@ bool Builder::buildLibraryEntry(
     return buildFrom(*it->second, true);
 }
 
+size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
+    auto sourceContext = context_ != nullptr ? context_->sourceContext() : nullptr;
+    if (sourceContext == nullptr || origin == camel::source::kInvalidOriginId) {
+        return kNoSourceOffset;
+    }
+    const camel::source::OriginRecord *record = sourceContext->origin(origin);
+    if (record == nullptr) {
+        return kNoSourceOffset;
+    }
+    const camel::source::SourceSpan *span = sourceContext->span(record->primarySpan);
+    if (span == nullptr) {
+        return kNoSourceOffset;
+    }
+    return span->startOffset;
+}
+
 void Builder::scanProgramWriters() {
     programWriters_.clear();
     programValueNames_.clear();
+    lastWriteOffset_.clear();
+    handedOver_.clear();
     // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
     // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
     // principles 4.3). The variable it writes is the base of its target: the variable itself
@@ -752,6 +770,16 @@ void Builder::scanProgramWriters() {
                     const std::set<std::string> &parameters = parametersIn(function);
                     if (parameters.find(variable->name()) == parameters.end()) {
                         programWriters_[variable->name()].insert(function);
+                        // Where the write is written, so that a capture can tell a variable no
+                        // write is written past from one a write is. The span of the assignment
+                        // is what says it: the write starts at the name it writes.
+                        const size_t at = sourceOffsetOf(node->origin());
+                        if (at != kNoSourceOffset) {
+                            size_t &last = lastWriteOffset_[variable->name()];
+                            if (last < at) {
+                                last = at;
+                            }
+                        }
                     }
                 }
             }
@@ -764,11 +792,31 @@ void Builder::scanProgramWriters() {
         const bool calleeFirst = node->type() == GCT::NodeKind::LINK ||
                                  node->type() == GCT::NodeKind::WITH ||
                                  node->type() == GCT::NodeKind::TAPP;
+        // An assignment's first operand is the name it writes, not an argument it hands to
+        // anybody: `__assn__(x, e)` writes `x`, and the write is counted by `programWriters_`.
+        bool targetAtOne = false;
+        if (calleeFirst && node->size() >= 2) {
+            const std::string *callee = groupOf(node->at(0));
+            targetAtOne               = callee != nullptr && isAssignment(*callee);
+        }
         for (size_t i = 0; i < node->size(); ++i) {
             const GCT::node_ptr_t child = node->at(i);
             if (child != nullptr && !(calleeFirst && i == 0) &&
                 (child->type() == GCT::NodeKind::DREF || child->type() == GCT::NodeKind::NREF)) {
                 programValueNames_.insert(child->name());
+                // A name handed to a call is a name a call may write: an ordinary parameter is a
+                // copy, but a `var` one is the caller's cell, and this scan cannot tell which is
+                // which without resolving the callee. A `with` argument is the same question with
+                // the same answer (`add<t>` binds `add`'s `var` `with` parameter to `t`). So every
+                // name passed to a call counts as one a call may write, which is the direction
+                // that keeps a cell (captureByValue): resolving the positions that are `var`
+                // would only add captures, never take one away. Only a call's arguments count --
+                // a `FUNC` node's children are its type and its body, a name the body reads is
+                // not being handed to anybody, and an assignment's target is the name it writes,
+                // which `programWriters_` already counts.
+                if (calleeFirst && !(targetAtOne && i == 1)) {
+                    handedOver_.insert(child->name());
+                }
             }
             pending.push_back({child, function});
         }

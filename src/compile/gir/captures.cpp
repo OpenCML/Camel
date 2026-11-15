@@ -138,20 +138,37 @@ node_handle_t Builder::captureInto(
         // a read of it reads a value (`variables_` is what makes `:var/get` of a name), and the
         // cell keeps no share in it, so no unit is kept for a body that only reads.
         captures_[graph.get()].variables.push_back(origin);
+        // Where the cell is, so that the graph that declares it drops the unit nobody reads any
+        // more (dropCarriedVariableUnits).
+        valueCapturedCells_.insert(origin);
     }
     return port;
 }
 
-bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) const {
+bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) {
     if (!isVariable(origin)) {
         return false;
     }
-    // The body is built for a function the program makes a value of, and only for one: the value
-    // holds the values its captures had when it was made, while a direct call is handed the cells
-    // (its capture ports become with-ports, which is the by-reference capture of item 2 of the
-    // `var`-to-SSA work). A graph made to forward a call of such a function holds the same values,
-    // so its captures are values too.
-    if (!programMakesValueOf(graph->name()) && !valuePortGraphs_.contains(graph.get())) {
+    // One answer per cell: every capture of it has to agree (see `captureByValueOf_`). The first
+    // capture is the earliest one written, so a write written past it is a write written past all
+    // of them, which is the direction that keeps the cell.
+    if (const auto decided = captureByValueOf_.find(origin); decided != captureByValueOf_.end()) {
+        return decided->second;
+    }
+    const bool byValue        = decideCaptureByValue(graph, origin);
+    captureByValueOf_[origin] = byValue;
+    return byValue;
+}
+
+bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) const {
+    // A closure written where it stands captures a cell of the body it stands in by value (design
+    // principles 3.5, 197): a lambda and a function declared inside a body alike. A value of the
+    // top level of a module keeps the earlier step's rule -- it is a value where the function is
+    // used as a value -- because `uses var` and `pure` are judged on the resources a body reaches,
+    // and a module `var` a body reads is one of them until the module `var` work lands.
+    const bool localCell = topLevelValues_.find(origin) == topLevelValues_.end();
+    if (!localCell && !valuePortGraphs_.contains(graph.get()) &&
+        !programMakesValueOf(graph->name())) {
         return false;
     }
     // A `var` parameter is a cell a caller handed in: it is the caller's, and the callee's writes
@@ -159,15 +176,11 @@ bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t ori
     if (nodeKindOf(origin) != camel::runtime::GCNodeKind::Oper) {
         return false;
     }
-    // A value of the top level of a module: the one binding whose cell no body of the program
-    // declares, and the capture this first step of the `var`-to-SSA work is about. A cell a body
-    // declares is a cell that body writes and hands on (a `var` argument, a `var` parameter, a
-    // closure that assigns it, a loop that carries it), and none of those paths is a value yet.
-    const auto topLevel = topLevelValues_.find(origin);
-    if (topLevel == topLevelValues_.end()) {
-        return false;
-    }
-    const std::string &name = topLevel->second.name;
+    // The name the graph knows the value by. A capture with no name (`originNames_` holds what
+    // `captureInto` was handed) cannot be looked up in the writer sets, so it keeps its cell.
+    const auto known = originNames_.find(origin);
+    const std::string name =
+        known != originNames_.end() ? known->second : captureNameOf(origin, std::string{});
     if (name.empty()) {
         return false;
     }
@@ -175,7 +188,34 @@ bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t ori
     // body through the cell, and a value port cannot carry it. This is the conservative set, so a
     // write of another binding that happens to share the name costs the capture its value port --
     // the safe direction, because it only keeps a cell that could have been a value.
-    return !programWrites(name);
+    if (programWrites(name)) {
+        return false;
+    }
+    // A name the program hands to a call may be written by that call: a `var` parameter and a
+    // `var` `with` parameter are the caller's cell, so the write reaches this cell from a body the
+    // closure's capture does not stand for. Until the scan can tell the `var` positions from the
+    // ordinary ones, every name passed as an argument keeps its cell (program.cpp, `handedOver_`).
+    if (programMayWriteThroughCall(name)) {
+        return false;
+    }
+    // Design principles 3.5 (197) makes a name a closure mentions unassignable from the closure's
+    // creation to its last use, and the two writes that shape allows are exactly the two cases
+    // above and below: a write from a closure (counted by `programWrites`) and a write from the
+    // body the closure is written in, past it. That second rule is not reported yet, so a name a
+    // write is written past keeps its cell: a value port would silently hand the closure the value
+    // the name had where it was captured, and the program would answer something else than it does
+    // today. Where the capture itself stands is not known, the cell is kept for the same reason.
+    const size_t captureAt = sourceOffsetOf(refOrigin_);
+    if (captureAt == kNoSourceOffset) {
+        return false;
+    }
+    const size_t writtenAt = lastWriteOffsetOf(name);
+    if (writtenAt != kNoSourceOffset && writtenAt > captureAt) {
+        return false;
+    }
+    // Where neither write exists, the cell's value cannot change after the capture, and the capture
+    // is the value the name holds there (design principles 3.5).
+    return true;
 }
 
 void Builder::noteMachinePortOrigin(node_handle_t port, node_handle_t origin) {
