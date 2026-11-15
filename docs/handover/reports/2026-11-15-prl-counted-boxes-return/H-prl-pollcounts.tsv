@@ -1,0 +1,16 @@
+run	live	polls	collections	capped	line
+1	6	12	6	9	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
+2	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+3	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+4	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+5	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+6	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+7	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+8	3	12	6	9	FOREIGN_RESOURCES created=11 released=8 live=3 disposed=3 finalized=8
+9	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+10	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+11	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+12	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+13	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+14	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11
+15	0	12	6	9	FOREIGN_RESOURCES created=11 released=11 live=0 disposed=0 finalized=11

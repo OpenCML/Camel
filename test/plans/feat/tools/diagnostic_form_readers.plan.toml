@@ -19,12 +19,12 @@ desc = "Every tool that reads a diagnostic back out of `camel`'s output asks its
 
 [[tests]]
 name = "tools.diagnostic_form_readers.asked_for"
-desc = "The two readers in this tree are named with the form each parses, the one that does not ask for its form is recorded with its cost and its repair, and nothing else is in the list: `[DIAG-FORMAT] ok: 2 reader(s)`."
+desc = "The three readers in this tree are named with the form each parses, the one that does not ask for its form is recorded with its cost and its repair, and nothing else is in the list: `[DIAG-FORMAT] ok: 3 reader(s)`. The third is `test/tools/writing-freedom.mjs`, which quotes the first line of a run that failed: it starts `camel` with the caller's environment, so it reads the rich form, and asking for the one-line form would take it away."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/check-diagnostic-form-readers.mjs"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout_contains = ["[DIAG-FORMAT] scripts/autodiff-migration-ledger.mjs: reads the one-line form and does NOT ask for it", "[DIAG-FORMAT] scripts/stdlib-reference.mjs: reads the rich form, which is the default", "[DIAG-FORMAT] exception scripts/autodiff-migration-ledger.mjs:", "[DIAG-FORMAT] repair scripts/autodiff-migration-ledger.mjs:", "[DIAG-FORMAT] ok: 2 reader(s), 0 ask for the one-line form, 0 read both, 1 recorded exception(s)"]
+expect_stdout_contains = ["[DIAG-FORMAT] scripts/autodiff-migration-ledger.mjs: reads the one-line form and does NOT ask for it", "[DIAG-FORMAT] scripts/stdlib-reference.mjs: reads the rich form, which is the default", "[DIAG-FORMAT] test/tools/writing-freedom.mjs: reads the rich form, which is the default", "[DIAG-FORMAT] exception scripts/autodiff-migration-ledger.mjs:", "[DIAG-FORMAT] repair scripts/autodiff-migration-ledger.mjs:", "[DIAG-FORMAT] ok: 3 reader(s), 0 ask for the one-line form, 0 read both, 1 recorded exception(s)"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 60000

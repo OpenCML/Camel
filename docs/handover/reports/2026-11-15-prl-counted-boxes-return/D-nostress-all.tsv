@@ -1,0 +1,13 @@
+backend	run	line
+std::nvm	1	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::nvm	2	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::nvm	3	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::fvm	1	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::fvm	2	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::fvm	3	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::jit	1	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::jit	2	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::jit	3	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::prl	1	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::prl	2	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0
+std::prl	3	FOREIGN_RESOURCES created=11 released=0 live=11 disposed=11 finalized=0

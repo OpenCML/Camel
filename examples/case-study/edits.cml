@@ -1,0 +1,97 @@
+// Two rewrites of the training program, written in Camel against the graph module.
+//
+// Neither rewrite reads how the program is written. A pass is handed the program's entry function
+// value and edits the graphs that value reaches; a node is chosen by what it is -- the operator it
+// runs, the type it carries, whether it is a constant -- and by a count that has to be one. No choice
+// takes the first of a list: `nodes` returns node-id order, which is the order the writer created the
+// nodes in, so renaming a value or swapping two independent declarations would silently change which
+// node a rewrite edits.
+import { flatten } from array
+import { Graph, Node, commit, erase, graphs_of, is_constant, nodes, op, op_name, open, replace, type_name, type_of } from graph
+import { is_function } from types
+
+// What a node runs and what type it carries, or `-` where it has none. `op(n)` is the module's own
+// answer to "is this an operator node", so no rendered text is compared to decide it.
+func looks(n: Node): string {
+    let operator = match op(n) {
+        case null => '-'
+        case o => op_name(o)
+    }
+    let carried = match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+    return operator + ' : ' + carried
+}
+
+// Whether the node is a constant carrying the type named.
+func constant_of(n: Node, wanted: string): bool {
+    let carried = match type_of(n) {
+        case null => '-'
+        case t => type_name(t)
+    }
+    return is_constant(n) && carried == wanted
+}
+
+// Whether the node runs the printing operator.
+func is_print(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':io/println'
+    }
+}
+
+// Every node of every graph the entry function value reaches. A program is a root graph whose one
+// call goes to the entry function, so its graphs are reached by following calls, never by comparing
+// a graph name.
+func all_nodes::<F>(p: F): Node[] when is_function::<F>() {
+    return flatten(graphs_of(p)->map<nodes>)
+}
+
+// The one node satisfying `keep`, or nothing when there is none or more than one: a rewrite picks by
+// what a node is, and refuses an answer that is not unique.
+func only::<F, K>(p: F, keep: K): Node? when is_function::<K>() {
+    let found = all_nodes(p)->filter<keep>
+    return if len(found) == 1 then found[0] else null
+}
+
+// Erases the nodes given and commits: the changed function is the answer.
+func erased::<F>(p: F, hits: Node[]): F! sync {
+    let t = open(p)
+    hits->foreach<(n: Node): void => erase(t, n)>
+    return commit(t)
+}
+
+// Puts `new` in the place of `old` and commits.
+func swapped::<F>(p: F, old: Node, new: Node): F! sync {
+    let t = open(p)
+    replace(t, old, new)
+    return commit(t)
+}
+
+/// Lists every node the program is made of: the operator each one runs, and the type it carries.
+export func list::<F>(p: F): F! sync {
+    all_nodes(p)->foreach<(n: Node) => println(looks(n))>
+    return p
+}
+
+/// Drops every printing call of the program: a rewrite that loses an effect.
+export func drop_print::<F>(p: F): F! sync {
+    let prints = all_nodes(p)->filter<(n: Node): bool => is_print(n)>
+    return if len(prints) == 0 then p else erased(p, prints)
+}
+
+/// Passes the starting model where the learning rate goes: a rewrite that breaks a type. The program
+/// holds one constant of type float (the rate) and one of type Linear (the model), and the rewrite
+/// refuses when either is not unique.
+export func break_rate::<F>(p: F): F! sync {
+    let rate = only(p, (n: Node): bool => constant_of(n, 'float'))
+    let wrong = only(p, (n: Node): bool => constant_of(n, 'Linear'))
+    return match rate {
+        case null => p
+        case r => match wrong {
+            case null => p
+            case w => swapped(p, r, w)
+        }
+    }
+}
