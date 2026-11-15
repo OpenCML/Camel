@@ -1,25 +1,29 @@
-`origin/fsh-dev` 第二次合并的闸门读数（正文引用了这条 note）。
+`origin/fsh-dev` 第三次合并的闸门读数（正文引用了这条 note）。
 
-合并：`4d475aaafa36aa96fe68fed58f6ec008e283852e`，`--no-ff` 合入 `origin/fsh-dev`（`c379f9dc3`，
-6 笔领先 / 1 笔落后）。**无冲突**：`git merge-tree --write-tree origin/develop origin/fsh-dev`
-返回单棵树、零冲突。推：`96a27e435..4d475aaaf`，`unpushed=0`。
+合并：`9247da004adb2ea132b43a51b60e7c5f3b5a05a3`，`--no-ff` 合入 `origin/fsh-dev`（`d66b4411a`）。
+**无冲突**：`git merge-tree --write-tree origin/develop origin/fsh-dev` 返回单棵树、零冲突；
+实际合并净改动 1 文件 8 行（`docs/handover/reviews/questions-2026-10-29.md` +8）。
+推：`10f959a76..9247da004  develop -> develop`，**pushExit=0**，本地 `origin/develop` = `9247da004`，
+`git rev-list --count origin/develop..HEAD` = **0**。
 
-内容：纯文档五件 —— `docs/design-principles.cn.md` / `.en.md`（各 ±64）、
-`docs/handover/reviews/questions-2026-10-29.md`（+26）、`docs/design/effects/analysis.cn.md`（+2）、
-`docs/design/state/README.cn.md`（+2）。合计 `+92/-66`，无 `src/`、无 `test/`、无 plan。
-
-`--changed`（`$env:CAMEL_TEST_BASE='96a27e435'`，`--jobs 4`）：
+闸门（合后的 `develop`，`--jobs 4`，`$env:CAMEL_TEST_BASE='10f959a76'`）：
     [SUMMARY] total: 33, pass: 33, fail: 0        RUN_EXIT=0
     选到 `smoke.core` / `feat.tools.portability` / `feat.docs_links`
-静态检查：`node scripts/check-doc-links.mjs --citations` → `exit 0`
+    `node scripts/check-doc-links.mjs --citations` → exit 0
 无 `killed by a signal`、无 `timed out`。
 
-两处易误读，都已核实并写进合并正文：
-1. `git diff origin/develop..origin/fsh-dev -- agents/branching.md` 看似删掉了那条
-   「Run git in a registered worktree…」，**实际不是删除**：fsh-dev 分叉在 `2027d8092`，从未碰过这个文件
-   （净 diff 里没有 `agents/`）。合并后实测：`Run git in a registered worktree` 命中 **1**，
-   「worktree belongs to the lane」命中 **1** —— 两条都在。
-2. 裁定引用的 `Camel-Archive/ECOOP2027/handoff/case-study-request.md` **本机不存在**
-   （`D:\Projects` 下无 `Camel-Archive`）；路径按作者原文保留，内容以裁定正文为准，未改写成别的路径。
+假删除这次是反方向，已核：`git diff origin/develop..origin/fsh-dev` 把
+`docs/handover/reports/2026-11-15-var-annotation-is-an-upper-bound.cn.md` 显示成 **-36 行、整页删除**。
+实测 `git cat-file -e origin/fsh-dev:<该路径>` → exit 128（该页不在 fsh-dev 的树里，因为 fsh-dev 最后合
+develop 停在 `96a27e435`，这页是之后 `10f959a76` 才提的）。三点合并按「ours 有、theirs 未动」保留：
+合后在树上 `Test-Path` = True、**36 行**，与两提交 diff 声称删掉的 36 行正好对上。
 
-`git ls-remote origin refs/heads/develop` = 4d475aaafa36aa96fe68fed58f6ec008e283852e。
+网络读数（照规矩记下来，不当成「无变化」）：
+- `git fetch origin` 两次失败：`Connection closed by UNKNOWN port 65535`，exit 128；
+- `git push` 成功（exit 0，输出 `10f959a76..9247da004`）；
+- 紧随其后的 `git ls-remote origin refs/heads/develop` 连试 3 次全部 exit 128（同一错误），
+  所以**这一次我拿不到独立的 ls-remote 回读**；能说的是：push exit 0 + 本地 `origin/develop` 被更新到
+  `9247da004` + `unpushed=0`。
+
+`git ls-remote origin refs/heads/develop`（最后一次成功值，供对照）：上一笔推送后为
+`4d475aaafa36aa96fe68fed58f6ec008e283852e`。
