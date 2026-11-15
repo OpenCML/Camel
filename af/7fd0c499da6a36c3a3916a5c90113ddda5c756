@@ -1,0 +1,26 @@
+`origin/fsh-dev`（`4716dd04c`，三份答复）合并的闸门读数（正文引用了这条 note）。
+
+合并：`af7fd0c499da6a36c3a3916a5c90113ddda5c756`，`--no-ff` 合入 `origin/fsh-dev`（`4716dd04c`）。
+**无冲突**（`merge-tree` 返回单棵树）。推：`df057ee8a..af7fd0c49`，`unpushed=0`，
+`ls-remote` = af7fd0c499da6a36c3a3916a5c90113ddda5c756。
+
+四个路径是**搬家**不是改行：`git diff --name-status` = `R092` / `R090` / `R092`
+（`docs/handover/questions/*` → `docs/handover/reviews/*`），另加 `questions/README.md` 由作者重生成
+（`3 页 → 0 页`、`109` 行保留行）。合后实测：`git ls-files docs/handover/questions/cc-* q-*` 为空，
+`docs/handover/reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md` 存在。
+索引复验：`node scripts/check-doc-links.mjs --default-roots` → **`no broken links in 62 document(s)`**（exit 0）。
+
+闸门（合后 `develop`，**`-Jobs 8`**）：
+    [provenance] tip af7fd0c49 | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+    [SUMMARY] total: 33, pass: 33, fail: 0        RUN_EXIT=0
+    `check-doc-links --citations` → exit 0
+无 `killed by a signal`、无 `timed out`。（build 289 s 是因为主机在建新树，不是测试时间。）
+
+**③ 那条裁定的核对结果**：我们 `d810ac270` 合进去的那句是「**打印哪种写法**」（甲），不含归一规则。
+`docs/language/04_execution_model.md:247`：位置行里的路径就是命令行上的写法，`camel fault.cml` 打印
+`fault.cml:4:15`、`.\fault.cml` 打印 `.\fault.cml:4:15`、绝对路径打印绝对路径，编译器不改写；
+英文页 `en/04_execution_model.md:291` 同义。两处都**没有**出现盘符、归一或 `<file>` 字样——所以按裁定
+**保留**，归一规则只留在 `scripts/check-doc-snippets.mjs` 的注释里。
+
+三份答复的落地内容见合并正文（抽签红维持并写明由「计数做准」消掉、届时四后端应读 `11/11/0`；
+配速不动；诊断路径原样回显）。
