@@ -31,7 +31,9 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
+// unobservable also reports "never executed", which is not one of the eight.
+const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
 }
@@ -51,7 +53,9 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
+// unobservable also reports "never executed", which is not one of the eight.
+const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
 }
@@ -71,7 +75,9 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
+// unobservable also reports "never executed", which is not one of the eight.
+const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
 }
@@ -91,7 +97,9 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
+// unobservable also reports "never executed", which is not one of the eight.
+const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
 }
@@ -111,7 +119,9 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
+// unobservable also reports "never executed", which is not one of the eight.
+const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
 }
@@ -131,7 +141,9 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-const names = input.normalized.stderr.split('name=SemanticDiag::').slice(1).map(s => s.split(',').at(0))
+// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
+// unobservable also reports "never executed", which is not one of the eight.
+const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
 }
