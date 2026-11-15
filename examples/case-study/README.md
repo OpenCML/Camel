@@ -128,6 +128,12 @@ printing a formatted string, one printing the weight, `f32[...]`), and the progr
 constant of type `float` (the learning rate, `0.1`) and exactly one constant of type `Linear` (the
 starting model).
 
+One interface gap this reading ran into, written down because the 9.5 work needs it as input:
+`graph_of(p)` hands a pass the program's root (`__root__`), not the entry function, and `callee`
+answers null for the root's indirect call, so the entry's body has no spelling-free accessor at all
+-- a pass must walk `graphs_of(p)` and tell the graphs apart by their content. `stdlib/graph.cml` is
+not changed here; filling that gap belongs to the spelling-invisible interface, not to this example.
+
 ## Reading 2: a rewrite that loses an effect — accepted
 
 `edits::drop_print` erases every `:io/println` node of the program and commits.
@@ -146,6 +152,15 @@ ports, adjacency, branches, gates, callees, arity (clauses 1-7, and the branch-a
 it was declared to do. "The effects of the program are contained in what it declares" is R3
 (`docs/design/effects/analysis.cn.md` 4.1), which is queued and not landed; until it is, a rewrite
 that drops an effect is accepted, silently, and this reading is the evidence.
+
+Stated plainly, because the paper needs the sentence: **today a pass may delete an external write
+and the commit check accepts the graph.** That is not the pass's mistake -- 9.7 requires exactly the
+opposite: "an external access, and the final write to a variable that outlives the current function,
+can be deleted only explicitly, with an operation of the graph interface for deleting effects,
+separate from `erase`, which deletes pure nodes". Neither that operation nor its refusal exists yet,
+so `erase` deletes a `:io/println` like a pure node and the commit has nothing to say. This is the
+honest state the paper has to report: the *refusal* half of the two examples is not available yet,
+and the accepted half is what a rewrite can do today.
 
 ## Reading 3: a rewrite that breaks a type — refused
 
@@ -176,11 +191,15 @@ help: A value of type T! that has failed must be opened before the program ends:
 Exit code 1; nothing runs. The refusal is **clause 2 of section 4.2**, "the types on an edge are
 compatible" -- "调用的实参、结果与被调图的形参、结果相容": the commit's check of the edges
 (`src/runtime/graph_edges.cpp`) finds a `Linear` in an argument slot `train` declares as `float`.
-Section 4 says a failure inside a pass is turned into `RuntimeDiag::PassInternalError` by the pass
-driver; a pass written in Camel gets the same violation back as an **error value** from `commit`
-and passes it on, so the program stops at its exit with `UnhandledError` wrapping `GraphInvalid`.
-Both shapes are in the repository: `test::drop_call_argument` (clause 7) is the C++ one,
-`examples.case_study.break_rate` is the Camel one.
+
+**One refusal, two error shapes, and a reader needs to know which one this is.** Section 4 says a
+failure inside a pass is turned into `RuntimeDiag::PassInternalError` by the pass driver; that is
+what a pass written in C++ gets, because the violation arrives as a thrown value. A pass written in
+Camel gets the same violation back as an **error value** from `commit`, passes it on, and the
+program stops at its exit with `UnhandledError` wrapping `GraphInvalid`. Both shapes are in the
+repository: `test::drop_call_argument` (clause 7) is the C++ one,
+`examples.case_study.break_rate` is the Camel one. The clause is the same; only the way the failure
+travels differs.
 
 ## Writing freedom: three writings of the program that change no meaning
 
@@ -231,6 +250,8 @@ Three readings, and only the first is what the paper says today:
    that the canonical order "does not depend on the order nodes were created in". Today it does:
    the numbering follows the order the writer wrote the two `let`s in. That is a defect in the
    canonical numbering of `std::jgir canonical=true`, not in the writer, and not in the graph.
+   -> It is a red of the canonical-numbering acceptance of principle 9.5 (the graph interface does
+   not see spelling by default), queued there and not a defect of this example.
 3. **Moved: one more edge, so not the same graph.** 63 nodes on both sides but **94 edges** against
    93, and the extra one is an ordering input on the `train` call, coming from `:io/println`. A sync
    block is a chain: "in a sync block the later statements depend on the earlier ones through sync
@@ -239,6 +260,9 @@ Three readings, and only the first is what the paper says today:
    waits on it. So the two computations are *not* independent in the graph today, and no
    canonicalization can make these two documents equal -- the paper's sentence about them needs the
    edge named, or a change that lets a call which cannot fault leave the block's chain.
+   -> It is a red of rework item 4 (a pure call placed on a `sync` block's chain, principle 3.4:
+   `train` is recursive, and 3.4 counts a recursive call as possibly faulting), and not a defect of
+   this example.
 
 ## The `var`-to-SSA acceptance (red, and red for one reason)
 
