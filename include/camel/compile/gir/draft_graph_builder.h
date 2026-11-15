@@ -65,10 +65,12 @@ class DraftGraphBuilder {
     auto edit() -> decltype(draft()) { return draft(); }
     /// The transaction the graph belongs to: the only handle to the graph being built.
     runtime::GraphTransaction &transaction() const { return *transaction_; }
-    /// The builder that owns the draft `node` names, or null: a handle whose draft was destroyed
-    /// and whose address another draft now holds names no builder, because the epoch it carries is
-    /// not the one that draft was made with. The address alone would name the wrong builder there,
-    /// and the caller would write into a live graph that is not its own.
+    /// The builder that owns the draft `node` names, or null: no registration at the address, because
+    /// the draft was released with its builder, or a registration made by a draft of another epoch,
+    /// because the allocator put a later draft at the address. Both are answered from the
+    /// registration alone, which carries the epoch its draft was made with: the draft the handle
+    /// names is never read. A handle outlives that draft, so nothing at its address is this call's to
+    /// read -- not even the epoch that decides whether the address still names the handle's draft.
     static DraftGraphBuilder *fromRef(const runtime::DraftNodeRef &node);
     graph_arena_ptr_t arena() const { return arena_; }
     const std::string &name() const { return name_; }

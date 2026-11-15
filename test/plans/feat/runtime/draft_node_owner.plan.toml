@@ -25,7 +25,7 @@ expect_exit = 0
 # it": `same_address=1` is what makes the rest a reading rather than a vacuous miss -- the handle's
 # address is the live draft's, and the epoch is the only thing that answers no. The attempt count is
 # not pinned: the allocator's reuse is the case, not the number of tries it takes to get it.
-expect_stdout_matches = ['\[DRAFT_NODE_OWNER\] live_owner=yes', '^\[DRAFT_NODE_OWNER\] reused=1 attempt=\d+ same_address=1$', '\[DRAFT_NODE_OWNER\] kind_when_made=3 kind_at_the_address_now=13', '\[DRAFT_NODE_OWNER\] stale_is_named=0 stale_owner=none', '^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$', '\[DRAFT_NODE_OWNER\] ok']
+expect_stdout_matches = ['\[DRAFT_NODE_OWNER\] released_owner=none', '\[DRAFT_NODE_OWNER\] live_owner=yes', '^\[DRAFT_NODE_OWNER\] reused=1 attempt=\d+ same_address=1$', '\[DRAFT_NODE_OWNER\] kind_when_made=3 kind_at_the_address_now=13', '\[DRAFT_NODE_OWNER\] stale_is_named=0 stale_owner=none', '^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$', '\[DRAFT_NODE_OWNER\] ok']
 # The pass says MISSING when it could not set its case up or when the stale handle did resolve. The
 # second is the defect coming back and the first is a witness with nothing to show; both are red.
 expect_stdout_not_contains = ["[DRAFT_NODE_OWNER] MISSING"]

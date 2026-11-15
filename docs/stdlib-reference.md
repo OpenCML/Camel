@@ -5902,7 +5902,12 @@ The type as a program writes it.
 callee: (n: Node) => Graph?
 ```
 
-The graph a call or function node names, null for any other node.
+The graph a call or function node names, null for any other node, and null for a call whose
+function value names no graph -- a parameter of function type, a closure being assembled: which
+graph runs is decided when the call runs. A call written by name answers through the function
+node it reads, and a call through a value through the function value the graph holds. So the
+call a program's graph makes answers the graph of the program's entry function, which is how a
+pass reaches the body it is there to rewrite without naming a graph (design principles 9.5).
 
 - Example (a fragment, not compiled): `callee(n)`
 - Why it is not compiled: n is a node of the surrounding pass
