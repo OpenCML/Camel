@@ -1,0 +1,47 @@
+# `lane-varcarry`（`2beb01c0a`）：一项转绿、三项仍红，以及两处偏差
+
+正文在合并提交 `2beb01c0a`。这页补两件**在正文写完之后才到**的事，它们必须和这一笔放在一起读。
+
+## 1. 成果口径：不是 3/4，是 1/3（偏差在协调位，不在这一笔）
+
+作者裁定写的验收是「三个度量转绿后报 3/4」；**实测是 1/4**：
+
+```
+(d1) 删无读者节点之后        1/4   ← var.an_arm_assignment_is_the_branch_result 红 → 绿
+(c)  分支/循环自动携带之后    3/4
+(d2) 按引用捕获口之后         4/4
+```
+
+原因：协调位那页问题页把**必要条件写成了充分条件**——「必须先删」不等于「删了就绿」。
+
+**「删不动」与「没删」是两件事**：`a_loop_assignment_is_the_loops_state` 与
+`loop_write_outside_read_is_the_let_writing` 仍红，是因为**循环体里那次读还在读 cell**
+（`total = total + 1`），判据本身不成立——**它们要的是循环搬运，不是删单元**；
+`closure_read_is_the_let_writing` 要按值捕获口，这一笔一行没碰。
+
+## 2. 这一笔的删除是 SSA 路上的一份，与作者裁定不符（已排队）
+
+作者新落的裁定原文：
+
+> 只删确认没有读者的节点，**删除走编辑接口**，**不在 SSA 这一路另写一份删除**。
+
+而 `8d2fa8b8f` 里的 `dropCarriedVariableUnits` 正是 SSA 路上新写的一份删除。
+
+**这不是违规，是待改**——裁定在它提交之后才到。**偏差写在这一笔自己的记录里**，
+而不是留给下一个读代码的人发现。
+
+顺带一处：作者同意把顺序调成 `(d1)` 删无读者节点 → `(c)` 分支/循环自动携带 →
+`(d2)` 按引用捕获口，理由与上面 1/4 → 3/4 → 4/4 的对应关系一致。
+
+## 3. 读数（合并结果上，基线 `5784606b7`）
+
+```
+3965 / 3939 / 10   known 16   killed 0
+gpu: total=146 pass=130 fail=15 skip=1 red_more=0
+```
+`var.an_arm_assignment_is_the_branch_result` **已不在红单上**，与车道读数一致。
+10 条红：4 → 3 条标尺、`print_and_recompile`、`runner.backend_matrix`、
+`new_values.macro_append.{nvm,fvm,macro}`、`docs.links.citations`、`frontend.ast_snapshot`
+（`arm_var.cml` 被这一笔自己改过，哈希已按检查给出的差值清单重录，`1 added and 1 removed`，`8/8/0`）。
+
+**`smoke` 也在这一跑里**：这是 builder 层删节点改动唯一没跑过的层，随 `--changed` 一并覆盖。
