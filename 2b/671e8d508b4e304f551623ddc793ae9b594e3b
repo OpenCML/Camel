@@ -1,0 +1,33 @@
+`lane-graphif` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`2b671e8d508b4e304f551623ddc793ae9b594e3b`，`--no-ff` 合入 `lane-graphif`（`e04883ff1`
++ 同步合并 `e0ba5a401`）。**无冲突**；净改动 7 文件 `+139/−4`。推：`6b3a56353..2b671e8d5`，
+`ls-remote` = 2b671e8d508b4e304f551623ddc793ae9b594e3b。
+
+闸门（合后 `develop`，**重新构建**，`-Jobs 8`，`feat/parse` + `feat/compile` + `feat/modules`）：
+    [SUMMARY] total: 4667, pass: 4637, fail: 1, skip: 7, known failures: 22        RUN_EXIT=1
+    唯一红：[FAIL] var.assignment_and_let_chain_are_one_graph  224.82 ms
+    两条新用例：[PASS] the_programs_call_names_the_entry_functions_graph  72.41 ms
+                [PASS] the_root_graph_is_still_what_a_pass_is_handed     76.89 ms
+    `check-doc-links --citations` → exit 0
+    [provenance] tip 2b671e8d5 | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+无 `killed by a signal`、无 `timed out`。**没有第二条红。**
+
+车道自己报的 `2608/2591/1`（`feat.parse 115/0`、`feat.compile 2474/1`）是在 `e04883ff1` 上量的；我在
+合入 `6b3a56353` 之后的树上重跑，得到上面这一份（多带了 `feat/modules`，因为新计划在
+`test/plans/feat/modules/graph_entry_graph.plan.toml`）。两份不互相顶替，各记各的树。
+
+## 判据
+- **golden 只动 3 行**：`ast_hashes.txt` 的 `4 +-` = `stdlib/graph.cml` 哈希**改一行**（`4c7705c1a7ca83cb`
+  → `847f657163e219c5`）+ **新增两行**（`entry_body.cml`、`entry_target.cml`）。别的 golden 一行未动
+  （`git diff --stat` 里没有第二个 golden 文件）。
+- **`graph_of` 行为未变**：它的实现是 `modules/graph/txn.cpp` 的 `graphOfKernel`，本分支未碰；
+  `git diff --stat -- modules/` 只有 `read.cpp | 31 +, 1 -`。所以 `graph_of(p)` 仍给 `__root__`，
+  反向用例 `the_root_graph_is_still_what_a_pass_is_handed` 断言的正是这一点，且 `[PASS]`。
+- 归因（代码读法）：`calleeKernel` 原先对 CALL 也走 `calleeIdOf`，而 `calleeIdOf` 只答 FUNC；
+  CALL 的 callee 是 `With[0]` 的函数值。改为 FUNC → `calleeIdOf(target)`、DATA 静态函数 →
+  `staticFunctionGraphOf(target).graph`，其余（函数类型参数、正在装配的闭包）仍 `null`。
+- `stdlib/graph.cml` 只改了 `callee` 的文档注释（7 行 `+/-`），**签名未动**。
+
+## 清理由谁做
+`worktree remove` 与 `branch -d` 在推送后执行，结果见下一条消息（若失败我会照规矩停下报）。
