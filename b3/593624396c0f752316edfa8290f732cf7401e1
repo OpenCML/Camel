@@ -1,0 +1,38 @@
+`revert a72dea555` 的闸门读数（正文带了撤回理由与前基线；这里补合后量与两处偏差）。
+
+提交：`b3593624396c0f752316edfa8290f732cf7401e1`（`git revert -m 1 a72dea555`）。
+
+## 一、该走的都走了，且只走了这些
+`git diff --stat HEAD~1..HEAD` 是 13 个文件（与 `a72dea555` 带进来的完全同一组）：
+五个 `test/cases/opt/effects/aggregate_tail_*.cml` 删除；`effects_kept.plan.toml` 的条目归零
+（`aggregate_tail` 计数 0）；`ast_hashes.txt` 的 5 行消失（`aggregate_tail_` 计数 0，而 `reftime`
+的 `ref_boxes_made_per_call_*` 两行仍在）；`graph.cpp` 的 `aggregateTailVerdictWith` 计数 0、
+`generic.cpp` 的 `stopFillingUnreadTailMember` 计数 0、`screen.cpp` 的允许项随 hunk 一起走。
+`verifyDraftDelivery` 计数仍为 2 —— 它来自 `d33cbe361`/`122837c7c`，不属于这笔，没有被带走。
+
+## 二、偏差一：`85 insertions / 775 deletions`，纯逆应是 `61 / 752`
+原因**不是残留**，是仓库自己的 pre-commit 钩子在提交时重排了被恢复回来的文件
+（提交输出：`Formatted: include/camel/runtime/draft.h`、`graph.h`、`src/passes/opt/generic/generic.cpp`）。
+核对办法与结果：`git diff -w e61f66617 b35936243 -- <那 8 个受影响的路径>`，剩下的差异只有
+注释折行与一句 `os <<` 的接行（同一串 token，语义等同）；`ast_hashes` 的 +2 行为 `reftime` 的两条
+`ref_boxes_made_per_call_*`，与本笔无关。**语义上就是精确逆**，多出来的 23/24 行是格式化。
+
+## 三、偏差二：全量里有一条红，且它是可复现性上的红，不是判据的红
+全量（`--tier fast`，整棵 `test/plans`，`--jobs 4`，树 `b35936243`）：
+    [SUMMARY] total: 9367, pass: 9320, fail: 1, skip: 11, known failures: 35
+    killed by a signal: 不出现        timed out: 不出现
+    RUN_EXIT=1
+那一条是 `ref.boxes_made_per_call_ten.prl`（作者本轮的判据），报
+`FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5`，即 `live <= 3` 不成立；
+同一棵树、同一个提交、`-NoBuild` 立刻重跑 `test/plans/feat/compile/ref.plan.toml` 得
+`[SUMMARY] total: 47, pass: 47, fail: 0`，八个用例（含 `_ten.prl`）全绿。
+同期 `_ten` 的 nvm/fvm/jit 与 `_thousand` 的四个后端都绿，且当次主机 1m load = 12.32。
+**判断：并行后端在负载下的退出计数不稳，不是这条判据不成立**；没有改期望值，也没有加重跑次数去凑绿。
+
+## 四、其余读数
+`test/plans/feat/opt`：`[SUMMARY] total: 1412, pass: 1409, fail: 0, known failures: 3`
+（3 条即 `rc03_seed56.opt.fvm/.jit/.prl`，下一步 `lane-optloop` 的修复落掉它们）。
+`--changed --changed-base 229cdc584`：`[SUMMARY] total: 8559, pass: 8522, fail: 0, skip: 10,
+known failures: 27`。两处都无 `killed by a signal`、无 `timed out`。
+
+`git ls-remote origin refs/heads/develop` = b3593624396c0f752316edfa8290f732cf7401e1。
