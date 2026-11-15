@@ -338,3 +338,49 @@ feat/modules  feat/tools  feat/consistency  feat/trans  feat/effects  docs_links
 - **`新红 vs 基线` 必须写成三张表**：基线内仍红（逐条）／基线内已转绿（逐条）／**不在基线里（逐条，并注明「基线从没量过这一族」或已做 A/B 定责）**。**给不出就写「未对账」，不许写「0」。**
 
 **理由**：一个子集跑出来的 `fail` 数，和一张覆盖全部计划的基线表，**不是同一种东西**。今晚已经有人（包括我）两次差点拿子集数去减基线数。
+
+## 16. 基线 174 → 54，且 12 目标里「新红 = 0」（2026-11-16，`0f32ded47`）
+
+### 兑现账（谁付的）
+```
+compile 27   closurerule（删一条已撤回的规则 + 22 条 + 4 条同因 + 5 条 state_escape）
+linear  98   byref（按引用捕获改按值；33 条收成 1 条）
+opt     32   optred（24 D1 + 8 D2，全部换载体，断言一字未改）
+opt      4   within_call（1948bf82b，换载体让内联读数回来）
+opt      2   screens
+mm       2   poison:linear.captured_writes / poison:linear.var_reference
+modules  1   nn 的 lr
+```
+
+### 仍红（54，全部已被 A/B 或双侧证明为老账）
+```
+consistency 36（new_values 28 + partial_application.var_parameter_effect 4）
+trans 6（cml 3 + cpp 2 + print_determinism 1）
+mm 2（capacity.perm_query_types + poison:compile.nullable_assign）
+compile 3（transitional.*，乙类，第 4 步删）
+docs 1（plan.cn.md:51，`resources.cpp#FunctionType`）
+opt 6（camel_passes.cse ×6，已用 `0b336ce51` 双侧证明是老账）
+```
+
+### 两条**不稳定**用例（新类别，必须单独记）
+```
+cli.plan_arg_domain_refused
+load_class.shared_place
+```
+- 在 `320895383` 上**绿**；
+- 在 `portbind` 那一轮闸门里**红**；
+- 现在**又绿**。
+
+**判定：不稳定，不是新红。** 而这个判定有三层后果：
+1. **它会让「新红 = 0」这句话偶尔变假**——下次看到它红，不要先去归因给最近的改动；
+2. **不稳定的红一旦进了基线，基线就不可复算了**（同一棵树两次跑出不同数）；
+3. **它本身是一个缺陷**：要么用例对时序/并行/环境有依赖，要么被测行为真的不确定。**待派人查，目前只知道「不属于任何一笔改动」。**
+
+**注意报告里的措辞**：不能写成「这两条红是 portbind 造成的」，也不能写成「这两条是绿的」——**只能写成「它在两次测量里给了不同答案」**。
+
+### 慢层轮转第 3 批（记下来，因为「跑了哪几个」和「没跑哪几个」一样重要）
+```
+跑了：mm/gc_pacing、mm/gc_soak、modules/random      50/50/0
+未跑：var_reference、tools/lsp、autodiff、frontend、trans/cml_sweep、tools/debugger
+      （前两批已跑过）
+```
