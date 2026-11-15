@@ -1,0 +1,23 @@
+/**
+ * The half that has to refuse instead of pass, inside a container: the record holds a closure that
+ * captured a function value whose graph this program does not hold (`f` is a parameter). Reaching
+ * the closure is not enough -- the walk has to be able to read what it captured, and here it cannot,
+ * so the box cannot be shown to hold no reference and is refused.
+ */
+
+import state
+
+type Holder = { cb: () => int }
+
+func make(f: () => int): int sync {
+    let h = (): int => f()
+    let holder: Holder = { cb: h }
+    let box = state::ref(holder)
+    let call = state::get(box)
+    return call.cb()
+}
+
+func main(): int sync {
+    let k = 42
+    return make((): int => k)
+}
