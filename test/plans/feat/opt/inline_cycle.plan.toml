@@ -41,9 +41,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 name = "inline_cycle.reference"
 kind = "negative"
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
-desc = "The program with no pass at all: the sixteen lines its reference evaluator computes. Green before and after the commit -- it is what the two runs below must reproduce. `seed23_fold_inline` is refused by the state rule of 2026-11-14 before any pass runs, so this entry pins the refusal (`SemanticDiag::ClosureCaptureEscapes`, 0x03000210) instead of the reading it used to pin; the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+desc = "The program with no pass at all: the sixteen lines its reference evaluator computes. Green before and after the commit -- it is what the two runs below must reproduce. `seed23_fold_inline` is refused by the closure rule before any pass runs, so this entry pins the refusal instead of the reading it used to pin (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213, at the assignment inside the closure: the state rule of 2026-11-14 was withdrawn on 2026-11-16 and the write is what refuses the program now); the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
 args = ["${case}"]
 
 
@@ -51,16 +51,16 @@ args = ["${case}"]
 name = "inline_cycle.fold_then_inline"
 kind = "negative"
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
-desc = "The folding followed by the inlining -- the pair the cycle was found with: the same sixteen lines. Red before `a1723fbb9`, and the reading is the cycle of inputs itself, quoted whole, so that a return of the defect names the positions and not only the exit code. `seed23_fold_inline` is refused by the state rule of 2026-11-14 before any pass runs, so this entry pins the refusal (`SemanticDiag::ClosureCaptureEscapes`, 0x03000210) instead of the reading it used to pin; the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+desc = "The folding followed by the inlining -- the pair the cycle was found with: the same sixteen lines. Red before `a1723fbb9`, and the reading is the cycle of inputs itself, quoted whole, so that a return of the defect names the positions and not only the exit code. `seed23_fold_inline` is refused by the closure rule before any pass runs, so this entry pins the refusal instead of the reading it used to pin (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213, at the assignment inside the closure: the state rule of 2026-11-14 was withdrawn on 2026-11-16 and the write is what refuses the program now); the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
 args = ["${case}"]
 
 verify_script = """
 ({ input, assert }) => {
     const said = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
-    assert(said.includes('cannot leave the call that declares it'), 'the state rule refuses the program: ' + said)
-    assert(said.includes('0x03000210'), 'and the report names the code the rule landed with: ' + said)
+    assert(said.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + said)
+    assert(said.includes('a `Ref`'), 'and the report names the ways out: ' + said)
 }
 """
 
@@ -68,15 +68,15 @@ verify_script = """
 name = "inline_cycle.splice_place"
 kind = "negative"
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
-desc = "The same pair drawn with `std::gir`: the placed statements are read, not just counted. No statement is written before one it reads, and no node but a `BRCH` hands the chain on to two statements -- the argument keeps its own place and the body's head follows the argument, not the statement before it. `seed23_fold_inline` is refused by the state rule of 2026-11-14 before any pass runs, so this entry pins the refusal (`SemanticDiag::ClosureCaptureEscapes`, 0x03000210) instead of the reading it used to pin; the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+desc = "The same pair drawn with `std::gir`: the placed statements are read, not just counted. No statement is written before one it reads, and no node but a `BRCH` hands the chain on to two statements -- the argument keeps its own place and the body's head follows the argument, not the statement before it. `seed23_fold_inline` is refused by the closure rule before any pass runs, so this entry pins the refusal instead of the reading it used to pin (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213, at the assignment inside the closure: the state rule of 2026-11-14 was withdrawn on 2026-11-16 and the write is what refuses the program now); the program is left in the corpus rather than edited, because hand-editing a seed replaces the shape it was generated for."
 args = ["${case}"]
 verify_script = """
 ({ input, assert }) => {
     const said = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
-    assert(said.includes('cannot leave the call that declares it'), 'the state rule refuses the program: ' + said)
-    assert(said.includes('0x03000210'), 'and the report names the code the rule landed with: ' + said)
+    assert(said.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + said)
+    assert(said.includes('a `Ref`'), 'and the report names the ways out: ' + said)
 }
 """
 

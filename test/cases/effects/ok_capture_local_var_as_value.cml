@@ -1,20 +1,19 @@
 /**
  * The same rule read from the type: `total` writes no resource, so its inferred set is empty and
- * the value it stands for fits a parameter that asks for `pure` (design principles 3.3). The write
- * the closure makes is to a cell of `total`'s own frame, which the caller of the value cannot read.
+ * the value it stands for fits a parameter that asks for `pure` (design principles 3.3). The name
+ * it writes is its own frame's, and the closure it makes only reads that name.
+ *
+ * The write used to be made from that closure, and that shape is refused now (design principles
+ * 3.5, 197: a closure captures a value, so it cannot assign the name it captured). What this case
+ * pins is the effect half, which the shape change does not touch: a closure over one of the body's
+ * own names adds no resource to its measurement.
  */
 
 func total(x: int): int {
     var acc = 0
-    let add = (k: int): int => sync {
-        acc = acc + k
-        acc
-    }
-    let _ = loop i = 0 while i < x do sync {
-        add(i)
-        i + 1
-    }
-    acc
+    acc = x * (x - 1) / 2
+    let read = (): int => acc
+    read()
 }
 
 func main(): int sync {

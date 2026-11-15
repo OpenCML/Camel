@@ -6,7 +6,7 @@ desc = "A T enters a T? on assignment as it does on binding and argument passing
 
 [[tests]]
 name = "nullable_assign.enters"
-desc = "`best = hi` with `var best: float?`, a field `acc.best = hi`, an element `xs[0] = hi` and a write from a function that captures the variable all store the value as a `T?`. The path forms stored the bare float into the `float?` slot."
+desc = "`best = hi` with `var best: float?`, a field `acc.best = hi`, an element `xs[0] = hi` and a write from a function that captures the variable all store the value as a `T?`. The path forms stored the bare float into the `float?` slot. The captured variable is a module `var` now: a closure captures a value and cannot assign a name of the call that made it (0x03000213), so the fourth path form writes a name the module owns (`borrowed carrier`) and the conversion it pins is unchanged."
 kind = "behavior"
 case = "../../../cases/compile/nullable_assign.cml"
 args = ["${case}", "${backend}"]

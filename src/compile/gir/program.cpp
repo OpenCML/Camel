@@ -1159,10 +1159,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportEffectfulConditions();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
-                // The state rule (design principles 3.5, rule two): a closure may not carry a `var`
-                // capture out of the evaluation that declared it. Also before the bodies are let
-                // go.
-                checkCellEscapes();
                 // The content rule of `Ref<T>` (the author's ruling of 2026-11-14): a reference
                 // may hold any type but one that holds a reference, because the boxes are
                 // reclaimed by counting the handles that point at them. Also before the bodies are

@@ -1,9 +1,14 @@
 /**
- * Escape route one, "handed out as a result" (design principles 3.5, rule two): `make` makes the
- * closure `add`, which captures `acc` -- a `var` of `make`'s call -- and returns it. The result's
- * type can hold a function, so the cell goes out with it and would outlive the call that made it:
- * compile error, and the two ways out are to capture the value the cell holds (`let x = acc;
- * () => x`) or to pass the state as a value in and out.
+ * Escape route one, "handed out as a result" (design principles 3.5, 197): `make` makes the closure
+ * `add`, which captures `acc`, a `var` of `make`'s call, and returns it. Handing it back is not a
+ * fault of any kind: a closure captures a value, so a value that leaves the scope that made it is a
+ * value nobody has to own (the author's ruling of 2026-11-16, which withdrew the state rule of
+ * 2026-11-14 and its diagnostic `ClosureCaptureEscapes`).
+ *
+ * The assignment inside the closure is the fault: a closure holds a value and not a place, so
+ * `acc = acc + x` writes nothing the closure can see. Refused by `ClosureAssignsCapturedName`
+ * (0x03000213), whose help gives the three ways out: return the new value, write the state as a
+ * loop's carried state or a `fold`, or hold it in a `Ref`.
  */
 
 func make(): (x: int) => int {

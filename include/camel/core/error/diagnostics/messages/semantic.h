@@ -486,7 +486,6 @@ enum class SemanticDiag : uint32_t {
     /// call does not own, and a hand to a function that keeps it -- and the report gives the two rewrites
     /// the author named and no third one, because capturing by value would change what the program means
     /// without saying so. 0x20D and up, after the extent-of codes.
-    ClosureCaptureEscapes             = 0x000210,
     RefContentHoldsRef                = 0x000211,
     ResourceInferenceConflict         = 0x000212,
     ClosureAssignsCapturedName        = 0x000213,

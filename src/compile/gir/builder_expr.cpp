@@ -666,12 +666,6 @@ void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throu
         }
     }
     setModifier(variable, exit);
-    if (!throughCallee) {
-        // The store itself, for the state rule (builder_state.cpp): where a value goes, and whether
-        // that place is one this call owns. A write through a callee is the call's own use, and is
-        // read there from the callee's signature.
-        storeSites_[currGraph_.get()].emplace_back(variable, exit);
-    }
     // A write of a captured variable is what callers of this graph have to see.
     if (!throughCallee) {
         if (auto captured = captureOriginOf_.find(variable); captured != captureOriginOf_.end()) {
