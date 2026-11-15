@@ -1919,13 +1919,14 @@ void Builder::collapseNonEscapingVariableReads() {
             // names, and reading it is what the design says a read does.
             camel::runtime::gc_node_ref_t version = readId;
             if (source == cell) {
-                // The cell's first input is the value `:var/new` made: it is what a reader wants
-                // only when nothing has written the variable yet. A variable that has been written,
-                // met here as a read whose source is still the cell, is a judgement this fold did
-                // not make (the write is somewhere the version record did not reach -- a merge
-                // point, an arm's region), and taking the initial value would answer with a number
-                // the program never had. Leave the read alone; it goes on reading the cell.
-                if (cellInputs.empty() || modifierOf(cell).has_value()) {
+                // The cell's first input is the value `:var/new` made, and it is what a reader wants only when no
+                // write stands before the read. The builder records that: a read whose version is still
+                // the cell was written before any write the version map knew about. Measuring showed the
+                // "a write exists somewhere" test cannot stand in for it -- a variable written in
+                // straight-line code has reads that legitimately take the initial value (step_var's
+                // first statement), and refusing those puts `:var/get` back. What the test would catch is
+                // a write the version record did not reach; that record is the thing to fix, not this.
+                if (cellInputs.empty()) {
                     ++foldTookNothing_;
                     continue;
                 }
