@@ -4323,7 +4323,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             const bool writeOperator =
                 targetOperator != nullptr && targetOperator->uri().rfind(":op/assn", 0) == 0;
             if (writeOperator) {
-                writeOnlyEscaping_.insert(arg);
+                if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
+                    if (const std::string name = moduleLevelName(arg.expr->name());
+                        nodeAt(name).has_value()) {
+                        if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                            writeOnlyEscaping_.insert(node);
+                        }
+                    }
+                }
             } else {
                 requireMutableArgument(arg, calleeLabel);
             }
