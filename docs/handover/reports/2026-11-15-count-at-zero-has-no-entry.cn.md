@@ -49,6 +49,10 @@
 `value.counter_closure` 与 `value.ref_one_cell_two_holders` **四个后端一起变红** —— 两个用例都把句柄**捕获进
 闭包**，捕获那一次没有计数，于是「槽清空」不等于「持有者没了」。
 
+这两个用例今天是绿的，不是绿的错：`test/plans/feat/consistency/values.plan.toml -Jobs 8` 在这一棵树上
+`total: 144, pass: 144, fail: 0`（八个条目 `value.counter_closure.*` 与 `value.ref_one_cell_two_holders.*`
+各四后端，全 `[PASS]`）。所以那四条红是真的被半套的计数弄红的，不是它们本来就红。
+
 按任务边界那条：「**少留一个的代价是崩溃**」。所以本车道没有把半套的计数提交上去：它能让这一格变绿，靠的是
 提前释放还活着的盒子。**停在这里报。**
 
