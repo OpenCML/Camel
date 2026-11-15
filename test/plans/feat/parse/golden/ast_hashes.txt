@@ -27,6 +27,7 @@ fff780ff68187f93 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
 e067b6e6bd567e4e ok test/cases/parse/rulings/doc_comment.cml
 c114c7ec0fbe2a39 ok test/cases/parse/rulings/doc_comment_blank_line.cml
+e684c7ad2f2d0a07 ok test/cases/parse/rulings/dotdot_after_cast.cml
 5f2eabe63d1d75c1 ok test/cases/parse/rulings/dotdot_looser_than_link.cml
 69835e10334a9742 ok test/cases/parse/rulings/dotdot_precedence.cml
 3510751ea04e0db4 ok test/cases/parse/rulings/eager_logic.cml
