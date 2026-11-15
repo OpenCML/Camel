@@ -3734,3 +3734,16 @@ func main(): int sync {
 ```
 
 nvm/fvm/prl 都打印 `0 0`，并给出 `IgnoredSideEffect: The call of '<__assn__>' is not in a sync block, and it takes a var argument`；函数体写成 `sync` 时打印 `1 1`。这违反原则 3.1："活得比函数长的变量（`var` 形参）的写由函数的出口用到"，以及"效应不静默消失"。写不能因为不在 `sync` 块里就不执行。修法与 11-14 那条一致：块内外的写统一成 `:op/assn_l`，对 `var` 形参的最终写由出口用到；`IgnoredSideEffect` 里"takes a var argument"这一支删掉。验收：上例在不写 `sync` 时也打印 `1 1`，四个后端相同。
+
+## 返工（2026-11-15）：别名下"先读后写"排反了，结果确定但错（第 3 路，优先级一，ECOOP 语义）
+
+原则 3.5"可变实参的别名"（负责人 11-13）：`var` 实参与另一个 `var` 实参、或与被调闭包捕获的变量是同一个变量时，对它的访问按书写顺序。pin `29ea0a011` 上实测，"先写后读"对，"先读后写"错，四次中 nvm、prl 结果一致（确定），但读到的是写之后的值：
+
+```camel
+func g(var a: int, var b: int): int sync { let t = b; a = 2; return t; }
+// var x = 0; g(x, x)  ⇒ 期望 t = 0、x = 2（打印 2），实际 22
+let h2 = (var y: int): int => sync { let t = x; y = 2; return t; };
+// h2(x)               ⇒ 期望 2，实际 22；经 if 选函数值、经 apply 转手同样是 22
+```
+
+缺的是经别名的"写在读之后"那条边（读必须在后面那次写之前取到旧版本）：读一个单元是依赖，读到的版本要在下一次写之前定下来。验收：上面三种形状（两个 `var` 实参、`var` 实参加捕获、经函数值与 `apply` 转手）都打印 2，四个后端相同；"先写后读"那组（打印 1）不变。实现方式见负责人对同日"别名的实现方式"的裁定，裁定前先写用例。
