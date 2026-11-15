@@ -1919,6 +1919,27 @@ void Builder::collapseNonEscapingVariableReads() {
             if (draft.header(readId) == nullptr) {
                 continue;
             }
+            // A read of a value that can be *kept* stays a read. `markNonRetainingReads` turns a
+            // read nobody keeps into `:var/peek` and lets the next append change the array in
+            // place; a read that can be kept stays `:var/get` and the memory plan copies instead.
+            // That decision is made once the whole program is built, and this fold runs at the end
+            // of one graph (`leaveScope`), so it cannot ask it: it must leave every reference-
+            // holding value inside its read. Handing the reader the array the variable still owns
+            // makes a later in-place append show through it -- `new_values/peek.cml`'s
+            // `let s = acc` kept `[1, 2]` before, and folding its read made it follow `acc` to
+            // `[1, 2, 3]`. A number, a bool or a string has no place to keep, and folds as before.
+            const Type *readType = nodeTypeOf(read);
+            if (readType != nullptr && readType->code() != TypeCode::String &&
+                isGCTraced(readType->code())) {
+                ++foldTookNothing_;
+                if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                    std::fprintf(
+                        stderr,
+                        "[DBG-W] read=%u writes=- candidate=none kind=- region=- took=kept\n",
+                        static_cast<unsigned>(readId));
+                }
+                continue;
+            }
             // A write gives the cell of this version; what a read wants is the value written, and
             // a write holds it as its second operand. A writer that is not one of those -- the JOIN
             // a branch's writes meet at, say -- gives a cell and no value of its own, so that read

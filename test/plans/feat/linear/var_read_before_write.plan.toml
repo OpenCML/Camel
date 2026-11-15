@@ -36,13 +36,14 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so three of these assignments have no user
+// The fold hands a write's value straight to its reader, so two of these assignments have no user
 // left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
 // writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
 // ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent.
+// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
+// kept is never folded, so that assignment still has a user.
 const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '59:7', '87:7']), `the three assignments the fold left without a user: ${dead.join(', ')}`)
+assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
 }
 """
 timeout_ms = 20000
@@ -65,13 +66,14 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so three of these assignments have no user
+// The fold hands a write's value straight to its reader, so two of these assignments have no user
 // left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
 // writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
 // ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent.
+// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
+// kept is never folded, so that assignment still has a user.
 const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '59:7', '87:7']), `the three assignments the fold left without a user: ${dead.join(', ')}`)
+assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
 }
 """
 timeout_ms = 20000
@@ -94,13 +96,14 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so three of these assignments have no user
+// The fold hands a write's value straight to its reader, so two of these assignments have no user
 // left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
 // writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
 // ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent.
+// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
+// kept is never folded, so that assignment still has a user.
 const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '59:7', '87:7']), `the three assignments the fold left without a user: ${dead.join(', ')}`)
+assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
 }
 """
 timeout_ms = 20000
@@ -123,13 +126,14 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so three of these assignments have no user
+// The fold hands a write's value straight to its reader, so two of these assignments have no user
 // left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
 // writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
 // ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent.
+// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
+// kept is never folded, so that assignment still has a user.
 const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '59:7', '87:7']), `the three assignments the fold left without a user: ${dead.join(', ')}`)
+assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
 }
 """
 timeout_ms = 20000
@@ -152,13 +156,14 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so three of these assignments have no user
+// The fold hands a write's value straight to its reader, so two of these assignments have no user
 // left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
 // writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
 // ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent.
+// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
+// kept is never folded, so that assignment still has a user.
 const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '59:7', '87:7']), `the three assignments the fold left without a user: ${dead.join(', ')}`)
+assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
 }
 """
 timeout_ms = 20000
@@ -181,13 +186,14 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
 assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
 assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so three of these assignments have no user
+// The fold hands a write's value straight to its reader, so two of these assignments have no user
 // left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
 // writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
 // ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent.
+// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
+// kept is never folded, so that assignment still has a user.
 const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '59:7', '87:7']), `the three assignments the fold left without a user: ${dead.join(', ')}`)
+assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
 }
 """
 timeout_ms = 20000
