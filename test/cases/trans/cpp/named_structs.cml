@@ -22,11 +22,9 @@ func main(): int sync {
     println(r.x, r.y, swap(p))
     println(ps->map<(p: Point): int => p.x - p.y>)
     println(ps, w)
-    var acc: Point[] = []
-    (0..3)->foreach<(i: int) => sync {
-        acc = acc->append<{ x: i, y: 10 - i }>
-        return null
-    }>
+    // The array is built with `map`, not with a `foreach` whose body appends to a captured `var`:
+    // a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
+    let acc = (0..3)->map<(i: int): Point => { x: i, y: 10 - i }>
     println(acc)
     return 0
 }
