@@ -11166,7 +11166,7 @@ A scheduling pass executes the program and a translation pass translates it; nei
 **Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::opt::inline std::fvm`)
 
 ```camel
-func before(x: int): int {
+func before(x: int): int uses var stdout {
     return x
 }
 

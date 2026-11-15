@@ -3,13 +3,20 @@
  * ordered before `modify`, even though `before` never touches `i`. (The retired `wait` ordered
  * the direct user of the variable instead -- `+`, hence no edge from `before`.)
  *
+ * `before` stands on that chain because of its declaration, not because it is a call: the clause
+ * says a call of it writes the console (`uses var stdout`, design principles 3.3 -- the clause is
+ * the whole truth a call site reads). A call of a function that declares nothing and whose body
+ * touches nothing is a computation the compiler arranges freely and is not on the chain at all
+ * (design principles 3.1, 3.4), so a `before` written without the clause would leave this program
+ * with no edge to read.
+ *
  * run() is a sync body, and its statements run in writing order. The value is
  *   a = before(1 + 1) = 2, b = i after modify = 11, result 2011
  * The plan checks the control edges on the graph dump (order_direct_user.graph): `before ->
  * modify` is present, and so is `modify ->` the read written after it.
  */
 
-func before(x: int): int {
+func before(x: int): int uses var stdout {
     return x
 }
 

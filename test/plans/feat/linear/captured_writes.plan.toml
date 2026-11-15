@@ -597,7 +597,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "order_direct_user.graph"
-desc = "`before(i + 1); modify(i)` in a sync body: the body orders its statements, so the graph has the control edge `before` -> `modify` even though `before` never touches `i`, and the read written after `modify` follows it. (The retired `wait` ordered the direct user of `i` instead: `+` -> `modify` and no `before` -> `modify`.)"
+desc = "`before(i + 1); modify(i)` in a sync body: the body orders its statements, so the graph has the control edge `before` -> `modify` even though `before` never touches `i`, and the read written after `modify` follows it. (The retired `wait` ordered the direct user of `i` instead: `+` -> `modify` and no `before` -> `modify`.) `before` is a statement of that chain by its declaration (`uses var stdout`, design principles 3.3) and not by being a call: a call of a function that declares nothing and whose body touches nothing is arranged freely and stands on no chain (3.1, 3.4), which `test/plans/feat/compile/chain.plan.toml` reads in both directions."
 kind = "behavior"
 case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::gir"]

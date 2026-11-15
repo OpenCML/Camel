@@ -305,6 +305,110 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
 }
 
+bool Builder::callIsChainStatement(node_handle_t node) {
+    // What a `sync` block's chain carries is decided by what a call runs (design principles 3.4:
+    // "调用按被调函数推出的事实判：函数体含可能出故障的计算、或函数是递归的（递归可能超过深度上限）
+    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that is
+    // not pure, a cast that may fail, a branch or a loop that carries a region.
+    if (!runtime::isChainStatement(*nodeDraftOf(node), nodeIdOf(node))) {
+        return false;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Func)) {
+        // An effect of its own, a computation that may fault, or a call through a function value:
+        // the last one runs something no body of this program names, and nothing says it cannot
+        // fault.
+        return true;
+    }
+    if (isEffectNode(currGraph_.get(), node)) {
+        // The declaration is the whole truth a call site reads (design principles 3.3): a clause that
+        // names a resource, or a `var` parameter, says that a call of this reaches something which is
+        // not the graph -- and the body may well touch nothing, which is the promise the clause makes
+        // to its callers. `test/cases/effects/declared.cml` is that shape: `consume` writes the
+        // handle its clause names and its body only returns 0.
+        return true;
+    }
+    const compile_graph_ptr_t callee = nodeGraphOf(node)->funcTarget(node);
+    return callee == nullptr || !calleeIsFreelyArranged(callee.get());
+}
+
+bool Builder::calleeIsFreelyArranged(DraftGraphBuilder *callee) {
+    const auto known = freelyArrangedGraphs_.find(callee);
+    if (known != freelyArrangedGraphs_.end()) {
+        return known->second;
+    }
+    const auto isBuilt = [&](DraftGraphBuilder *graph) {
+        const auto state = bodyStates_.find(graph);
+        return state != bodyStates_.end() && state->second == BodyState::Built;
+    };
+    // A body that is not finished holds code this walk cannot see yet, so nothing is claimed about
+    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches a
+    // second time is one that reaches itself: that is a recursion, which may go deeper than the
+    // depth limit, so it is a call that may fault (design principles 3.4). Neither answer is
+    // memoized -- the first is about a body that is not finished, and the second is about this walk
+    // and not about the graph it names.
+    if (!isBuilt(callee) || !freelyArrangedActive_.insert(callee).second) {
+        return false;
+    }
+    const bool free = bodyHoldsNoChainStatement(callee);
+    freelyArrangedActive_.erase(callee);
+    freelyArrangedGraphs_[callee] = free;
+    return free;
+}
+
+bool Builder::bodyHoldsNoChainStatement(DraftGraphBuilder *graph) {
+    const auto &draft = graph->transaction().graph();
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        switch (nodeKindOf(node)) {
+        case runtime::GCNodeKind::Func: {
+            // A direct call: the body it names is what this call runs, so the walk follows it.
+            const compile_graph_ptr_t callee = graph->funcTarget(node);
+            if (callee == nullptr || !calleeIsFreelyArranged(callee.get())) {
+                return false;
+            }
+            break;
+        }
+        case runtime::GCNodeKind::Call:
+            // A call through a function value: whose body it runs is not known here, and nothing
+            // says that body cannot fault or reach a resource.
+            return false;
+        case runtime::GCNodeKind::Loop:
+            // A loop may run longer than the depth limit and may fault (camel/runtime/graph.cpp,
+            // `effectSummaryOf`): nothing says it does not, so a body holding one is not arranged
+            // freely. Its parts are nodes of this same draft and are walked as they come.
+            return false;
+        case runtime::GCNodeKind::Brch:
+        case runtime::GCNodeKind::Join:
+            // A branch as a value: choosing an arm is nothing to keep. What the arms hold is nodes
+            // of this draft, and they are walked as they come.
+            break;
+        case runtime::GCNodeKind::Gate:
+            // A GATE computes nothing and cannot fault. Where one stands, the block that wrote it
+            // had a statement on its chain, and that statement is a node of this draft.
+            break;
+        case runtime::GCNodeKind::Data:
+        case runtime::GCNodeKind::Port:
+        case runtime::GCNodeKind::Copy:
+        case runtime::GCNodeKind::Fill:
+        case runtime::GCNodeKind::Accs:
+            // A constant, a port, a copy, a closure value, a field read: computed from what it
+            // reads, with nothing to fail and nothing to order.
+            break;
+        default:
+            // An operator or a conversion, asked exactly as the chain asks it: an effect, a
+            // computation that may fault, or (for a cast) a value check that cannot be moved.
+            if (runtime::isChainStatement(draft, id)) {
+                return false;
+            }
+            break;
+        }
+    }
+    return true;
+}
+
 void Builder::settleEffectfulGraphs() {
     // Whether a call is an effect depends on its callee's body, which may be written later,
     // in another module, or be the caller itself: the set of effectful graphs is the least

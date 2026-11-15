@@ -742,7 +742,7 @@ verify_script = '''
 
 [[tests]]
 name = "order.graph"
-desc = "A law over data inputs fires on a product that carries a wait, and the writing that replaces it keeps what it waited for: each product's value is read only after the effect it is ordered after has happened -- the wait is an invariant of the value, not a shape, and a wait carried by the forwarding GATE the value passes through is that same wait (docs/design/effects/edges.cn.md 4.6 and 5.3), so no computation crosses the effect's ordering (design principles 3.3, 3.4)."
+desc = "A law over data inputs fires on a product that carries a wait, and the writing that replaces it keeps what it waited for: each product's value is read only after the effect it is ordered after has happened -- the wait is an invariant of the value, not a shape, and a wait carried by the forwarding GATE the value passes through is that same wait (docs/design/effects/edges.cn.md 4.6 and 5.3), so no computation crosses the effect's ordering (design principles 3.3, 3.4). The wait exists because `scaled` declares that a call of it writes the console (`uses var stdout`, 3.3): a call of a function that declares nothing and whose body touches nothing is arranged freely and stands on no chain (3.1, 3.4) -- it would leave this program with no wait for the law to keep, which is what `test/plans/feat/compile/chain.plan.toml` reads."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_order.cml"
 args = ["${case}", "std::opt::inline", "std::opt::algebra", "std::jgir"]
