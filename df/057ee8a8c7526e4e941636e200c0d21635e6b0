@@ -1,0 +1,19 @@
+`origin/fsh-dev`（`0a191bc3c`）合并的闸门读数（正文引用了这条 note）。
+
+合并：`df057ee8a8c7526e4e941636e200c0d21635e6b0`，`--no-ff` 合入 `origin/fsh-dev`（`0a191bc3c`，
+两笔）。**无冲突**（`merge-tree` 返回单棵树；实际净改动 1 文件 +11）。推：`d810ac270..df057ee8a`，
+`unpushed=0`，`ls-remote` = df057ee8a8c7526e4e941636e200c0d21635e6b0。
+
+真净增（三点）：`git diff origin/develop...origin/fsh-dev` = 1 文件 **+11**
+（`docs/handover/reviews/questions-2026-10-29.md`，四处返工）。
+
+**假删除已核**：两点 diff 报删 `2026-11-15-var-is-a-name-scope.cn.md`（-262）、
+`var-to-ssa-start.cn.md`（-81）、`agents/test.md`（-3）以及 `stdlib/perf.cml` 与十几个用例——
+全是假象（fsh-dev 停在 `6c8e77878`）。合后实测：该页 `Test-Path` = True，**262 行**，与两点 diff
+声称删掉的行数正好对上；我们的 `perf.cml`、用例改写、`test.md` 全部保留。
+
+闸门（合后 `develop`，**`-Jobs 8`**）：
+    [provenance] tip df057ee8a | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+    [SUMMARY] total: 33, pass: 33, fail: 0        RUN_EXIT=0
+    `node scripts/check-doc-links.mjs --citations` → exit 0
+无 `killed by a signal`、无 `timed out`。
