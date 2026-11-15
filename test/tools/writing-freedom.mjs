@@ -24,12 +24,14 @@
  *                     and red only because a write inside a loop body keeps its unit.
  *
  *   --group arm       The same choice written two ways: a `var` written inside an arm of an `if`
- *                     (`arm_var.cml`) and the branch's own value (`arm_let.cml`). Red today and red
- *                     only because an arm's write keeps its unit.
+ *                     (`arm_var.cml`) and the branch's own value (`arm_let.cml`). It was red only
+ *                     because an arm's write kept its unit; it is green since the branch carries the
+ *                     write as its own value and the unit nothing reads is dropped.
  *
  * The `loop` and `arm` groups are the two halves the `var` group cannot see: on a straight line the
  * whole variable folds away, so that group is green whether or not a unit is lowered; a write inside
- * a loop or an arm keeps its `:var/get`, so those two pairs still separate the two writings.
+ * a loop or an arm kept its `:var/get`, so those two pairs still separate the two writings. The arm
+ * pair is now one writing, and the loop pair is the half still to be lowered.
  *
  *   --group chainpure        `sync` blocks and what the chain carries (design principles 3.4). One
  *                            program shape, two writings of it (a call of a pure function that
