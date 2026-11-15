@@ -1,0 +1,21 @@
+/**
+ * The same choice written two ways: the branch's own value.
+ *
+ * This is one side of the pair `arm_var.cml` / `arm_let.cml`; the two files are one program in two
+ * writings, and `std::jgir canonical=true` must print the same bytes for both (design principles
+ * 3.5: a `var` is a resource and a unit is a representation).
+ *
+ * Nothing here is a unit: the choice is the value the branch computes, which is exactly what
+ * `arm_var.cml`'s `var` must be lowered to.
+ *
+ * Run: camel test/cases/compile/var/arm_let.cml
+ */
+func pick(c: bool): int sync {
+    let x = if c then 1 else 2
+    return x
+}
+
+func main(): int sync {
+    println(pick(true))
+    return 0
+}

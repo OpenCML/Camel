@@ -361,7 +361,23 @@ def describe(doc, vid):
 
 
 def class_difference(left, right, lcolors, rcolors):
-    """The first color class whose multiplicities differ, with a representative of each side."""
+    """The one class to report, with a representative of each side.
+
+    A class is a vertex's own label *and* its neighbours' colors, so one vertex that changed
+    re-colours every class around it: on `test/cases/trans/cml/linear.cml` 123 classes differ and
+    exactly one of them says what is wrong with the printed program. Picking by the color hash --
+    which is what this did -- named the class of a `PORT` node that exists on *both* sides, and
+    `param: {"index": 0, "kind": "normal"}` in the report read as "the printed program lost a
+    normal parameter port". It had not: the port is declared in the printed text and is in the
+    recompiled document. Three lanes spent a night on that sentence before anyone counted the
+    ports (measured 2026-11-15: 3 before, 3 after).
+
+    So a class whose own label is counted the same on both sides is reported last: it differs only
+    in its neighbourhood, which makes it a consequence of another difference and not the thing to
+    chase. The count left/right, the representative and its neighbours are unchanged, and the
+    report says how many further classes moved, because a reader who is told "one class" believes
+    this is the only one.
+    """
 
     def classes(colors, doc):
         out = defaultdict(list)
@@ -371,7 +387,14 @@ def class_difference(left, right, lcolors, rcolors):
 
     lc = classes(lcolors, left)
     rc = classes(rcolors, right)
-    best = None
+    # How many vertices carry each own label. A label holds no allocation -- a node's kind, its
+    # payload, a region's kind and index, a type's shape -- so a label counter that differs is a
+    # vertex that really was added, removed or changed.
+    label_count = (
+        Counter(canon(label) for label in left.V.values()),
+        Counter(canon(label) for label in right.V.values()),
+    )
+    entries = []
     for color in sorted(set(lc) | set(rc)):
         mine = lc.get(color, [])
         other = rc.get(color, [])
@@ -383,11 +406,13 @@ def class_difference(left, right, lcolors, rcolors):
         for vid in other:
             kinds.add(right.V[vid]["k"])
         score = (0 if kinds & {"node", "region", "type"} else 1, -len(mine), color)
-        if best is None or score < best[0]:
-            best = (score, color, mine, other)
-    if best is None:
+        own = canon(left.V[mine[0]] if mine else right.V[other[0]])
+        consequent = label_count[0].get(own, 0) == label_count[1].get(own, 0)
+        entries.append((consequent, score, mine, other))
+    if not entries:
         return None
-    _, color, mine, other = best
+    entries.sort(key=lambda entry: (entry[0], entry[1]))
+    _, _, mine, other = entries[0]
     lines = [
         f"a structural class has {len(mine)} vertex/vertices on the left and "
         f"{len(other)} on the right"
@@ -399,6 +424,20 @@ def class_difference(left, right, lcolors, rcolors):
     if mine and other:
         lines.append("  left neighbors:  " + neighbor_text(left, mine[0]))
         lines.append("  right neighbors: " + neighbor_text(right, other[0]))
+    further = len(entries) - 1
+    if further:
+        lines.append(
+            f"  {further} other class(es) differ as well: a class is a label and its "
+            f"neighbours, so one changed vertex re-colours the classes around it"
+        )
+    if all(entry[0] for entry in entries):
+        # Every class that differs holds the same labels on both sides, so no vertex was added or
+        # removed: what changed is how they are wired. Saying that much keeps the reader from
+        # looking for a vertex that was never lost (`trans/cml/write_value.cml` reads this way).
+        lines.append(
+            "  no vertex label is counted differently on the two sides: the difference is in the "
+            "edges of the class above, not in a missing vertex"
+        )
     return "\n".join(lines)
 
 
