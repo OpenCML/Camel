@@ -4315,6 +4315,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     node_handle_t{},
                     LinkType::Norm};
             }
+            // A name bound by `let` is refused with the reason that names it, and it is refused here
+            // -- before the write path below decides how to remember the argument, and before the
+            // shape check -- because the specific reason must answer for a position where the
+            // generic one could also apply. `let k = 0; k = 5` used to be answered with
+            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), and `AssignmentTargetNotVariable`
+            // ("the target must be a variable") replaced it when the write path stopped asking this
+            // question; a diagnostic that does not say what to change is not the one to keep.
+            if (const auto immutable = immutableNameOf(arg.expr)) {
+                diags_->of(SemanticDiag::ImmutablePassedToVarParam)
+                    .atOrigin(arg.expr->origin())
+                    .commit(*immutable, calleeLabel);
+                throw BuildAbortException();
+            }
             // A write is a `var` argument like any other, but the assignment operator is the write
             // itself: it does not exist after the call, so it cannot carry the cell away. It is
             // remembered apart from the real escapes (a closure capturing the variable, a user
