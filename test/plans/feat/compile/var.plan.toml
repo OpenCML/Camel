@@ -1,0 +1,50 @@
+# Writing freedom: one program, two writings, one canonical graph.
+#
+# The author's acceptance for the `var`-to-SSA work (queue item 1, 2026-11-15): a training step
+# written with an assignment to a `var` and the same step written as a chain of `let` bindings must
+# have `std::jgir canonical=true` print the same bytes, and the canonical output of the derivative
+# of the two writings must be the same bytes again (design principles 3.5: a `var` is a resource,
+# and a unit is a representation).
+#
+# The pair is `test/cases/compile/var/step_var.cml` and `step_let.cml`: one gradient step on a
+# scalar weight, the two writings of it, and nothing else. `test/tools/writing-freedom.mjs` runs
+# both under `std::jgir canonical=true` and both under `std::macro std::jgir canonical=true` (the
+# derivative, expanded) and compares the two documents **byte for byte**; a difference is reported
+# as the first byte at which they part, with two lines of context from each side, plus the shape of
+# the difference (graph and node counts, the first node that differs, and the operators one side has
+# and the other does not). "Not identical" alone is not a usable report over a document of a
+# thousand lines.
+#
+# It is red on 96a27e435, and it is meant to be: the `var` writing still builds a unit. Measured
+# 2026-11-15 by this tool,
+#   [graph] differs first_difference_byte=4083 line=201 column=18 var_bytes=10930 let_bytes=9179
+#   shape: graph 2 nodes var=18 let=13
+#   shape: operators only in the var document: :op/assn_d@1.0 x1, :var/get@1.0 x3, :var/new@1.0 x1
+# and on the derivative side `std::macro` cannot evaluate `grad` at all:
+#   [grad] failed side=var exit=1: error[RuntimeDiag::MacroEvaluationFailed]: 'autodiff:grad' could
+#   not be evaluated by std::macro: RuntimeError: An error has occurred: autodiff: a variable of a
+#   differentiable type that is declared inside the differentiated function is read there. Gradients
+#   do not flow through variables: bind the value with let instead.
+# Both are the one reason -- a `var` is still a unit -- so the entry goes green with item 1 and must
+# not be added to `known_fail`: a red here is the statement that the work is not done.
+#
+# The comparison is on the canonical document only, so nothing here fixes the *format* of that
+# document; a change to `canonical=true` is a change to what equivalence means and is not this
+# plan's business.
+
+id = "compile.var"
+order = 314
+tier = "fast"
+tags = ["feat", "compile", "var", "gir", "autodiff"]
+
+[[tests]]
+name = "var.assignment_and_let_chain_are_one_graph"
+desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "var"]
+expect_exit = 0
+expect_stdout_contains = ["[graph] let identical", "[grad] let identical"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
