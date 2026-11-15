@@ -1,0 +1,45 @@
+`lane-refref` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`701388712ab0775d31e736a961548b8b214719dc`，`--no-ff` 合入 `lane-refref`（`553ef20f2`
++ 同步合并 `c889c8782`）。**无冲突**；净改动 6 文件 `+233/−43`。推：`05bd126be..701388712`，
+`ls-remote` = 701388712ab0775d31e736a961548b8b214719dc。
+
+闸门（合后 `develop`，**重新构建**，`-Jobs 8`）：
+    `feat/compile` + `feat/consistency` → `[SUMMARY] total: 3783, pass: 3765, fail: 2, known failures: 16`
+    `test/plans/feat/compile/ref.plan.toml` 单跑 → `[SUMMARY] total: 58, pass: 58, fail: 0`
+    [provenance] tip 701388712 | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+    允红：[FAIL] var.assignment_and_let_chain_are_one_graph 381.70 ms
+    反向证据：[PASS] ref.closure_deep_capture_control.nvm/fvm/jit/prl（输出 42）
+              [PASS] ref.holds_ref_closure / _deep / _unreadable
+无 `killed by a signal`、无 `timed out`。
+
+## 第二条红及其同树对照（这一笔的处置依据）
+`[FAIL] runner.backend_matrix`。它的**断言全过**（`runner self-test ok`、`negative-sweeps declared=1285
+swept=1107 excluded=178`）；判它红的是 runner 自己的超时余量规则：`timeout_ms = 400000`、
+`test/tools/run-tests.mjs` 的 `TIMEOUT_MARGIN = 4` ⇒ 阈值 100000 ms，它用了 101410 ms（超 1.4%）。
+
+同树对照（判据先写死：≈50 s ⇒ 是 `refref`；≈100 s ⇒ `refref` 无辜；70–80 s ⇒ 再议）：
+
+| 树 | 读数 | 1m 负载 |
+|---|---|---|
+| `701388712`（含 `refref`）第 1 次 | **103350 ms**（wall 98.82 s） | 29.29 |
+| `701388712` 第 2 次 | **104740 ms**（wall 99.93 s） | 20.17 |
+| `05bd126be`（**合前**，detached→临时分支，**重新构建**，provenance `tip 05bd126be … binary built 2026-11-15T05:51:00`） | **104460 ms**（wall 103.07 s） | 24.08 |
+
+**结论：2 倍早于 `refref`。** 计划注释里的 45.8 / 61.7 / 54.5 s 是旧树、旧机器上的读数，**不是本树的控制组**；
+本树合前合后都是 103–105 s，三点相距 1.4%。所以 `refref` 无辜，这笔照合。
+
+**记进此条、将来会反复咬人的一件事**：`runner.backend_matrix` 的阈值是「本计划**自己 CPU** 的 1/4」，
+因此**只要主机负载高到 4 倍它就会假红**；今天 1m 负载 20–29（32 核、六条车道在跑）就是这个情形。
+不要把这条红当成语义回归，也不要靠重跑到绿来关它——它是尺子在量邻居。
+
+## 判据
+- `git grep -n '(void)content;'` = **0 处**。
+- `--stat` 只有 6 文件（`builder.h`、`builder_refs.cpp`、3 个用例、`ref.plan.toml`）；
+  **没有** `modules/state/ref.h`、没有 golden、没有 `known_fail`。
+- `kRefCaptureDepth = 8` **没有出处**（不是设计原则、不是语言文档、不是既有常量：`kMaxLayers` 4、
+  `kMaxInstantiationDepth` 128、`kMaxMacroDepth`/`kMaxFoldedCallDepth` 64、`kMaxStaticMatchDepth` 256；
+  `docs/language/07_statements.md:305` 的「8 层」是泛型实例化，不同事）。已在合并正文写明
+  「**8 是一个未取证的界限，程序若真有 9 层捕获会被误拒**」。
+- 同源缺口（车道报备、未动）：`content` 若是装着闭包的结构体/元组，`ref` 的入参不是函数值，
+  捕获链根本走不到（`refInsideType` 只走类型）——必修第 1 条的剩余一半。
