@@ -1495,6 +1495,7 @@ e537aa341c1c3564 ok test/cases/compile/ref/ref_boxes_made_per_call_ten.cml
 9c5ed6009d7896e0 ok test/cases/compile/ref/ref_closure_capture.cml
 2dc36a2971e3b790 ok test/cases/compile/ref/ref_content_survives.cml
 6ee7d8cfa508dc5c ok test/cases/compile/ref/ref_float.cml
+60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml
 d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
 7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
 a1b48d4570f25659 ok test/cases/compile/rest_params/lambda_rest_annotated.cml
