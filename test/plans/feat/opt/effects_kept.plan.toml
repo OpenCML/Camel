@@ -536,13 +536,12 @@ expect_stdout_contains = ["AGGREGATE graph=probe"]
 
 [[tests]]
 name = "dead_write.aggregate_reading"
-desc = "The aggregate reading, after the whole pipeline: `probe`'s tuple is no longer left behind. Its only table entry was the closure nothing reads, so the sweep stops filling that component and the FILL folds into the template -- an aggregate opt used to leave here. The judgement still names itself when asked before the sweep (dead_write.aggregate_tail_unread.reading, tail-component-read and the three others beside it); what this pins is the outcome: no aggregate left, and the program the same (dead_write.opt.same_output)."
+desc = "The aggregate reading: the arity, the member nodes and the verdict for every aggregate left after opt, so a refusal names its guard."
 kind = "behavior"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
-expect_stdout_contains = ["DEADWRITE graph=probe"]
-expect_stdout_not_contains = ["AGGREGATE graph=probe"]
+expect_stdout_contains = ["AGGREGATE graph=probe"]
 [[tests]]
 name = "dead_write.opt.same_output"
 desc = "And the program still prints the 1 that never depended on the write."
@@ -551,118 +550,3 @@ case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 expect_stdout_exact = "1\n"
-
-# The last member of an aggregate: four shapes that must be refused and one that must be taken.
-#
-# The judgement reads a FILL's payload against its `with` inputs -- the entry at position i names the
-# component that input i fills -- and never the ordinary inputs, which is the reading the four
-# withdrawn guards got wrong (`arity=2 inputs=1`). A refusal is only worth anything if it says which
-# guard refused, so every test below pins the `verdict=` word as well as the program's answer.
-[[tests]]
-name = "dead_write.aggregate_tail_read"
-desc = "A reader of the last member keeps it: the verdict is `tail-component-read` and the sweep takes nothing, whatever the rest of the program reads."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_read.cml"
-args = ["${case}", "std::opt::dce", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["AGGREGATE graph=probe", "verdict=tail-component-read", "SWEEP func=0 call=0 gate=0 oper=0"]
-
-[[tests]]
-name = "dead_write.aggregate_tail_read.same_output"
-desc = "And the program still answers 41."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_read.cml"
-args = ["${case}", "std::opt", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_exact = "41\n"
-
-[[tests]]
-name = "dead_write.aggregate_tail_not_filled"
-desc = "The last component is in the template and no input fills it: `tail-component-not-filled`, and nothing is taken -- the payload has a table of one entry for a tuple of two."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_not_filled.cml"
-args = ["${case}", "std::opt::dce", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["AGGREGATE graph=probe", "slots=1", "tail=-1", "verdict=tail-component-not-filled", "SWEEP func=0 call=0 gate=0 oper=0"]
-
-[[tests]]
-name = "dead_write.aggregate_tail_not_filled.same_output"
-desc = "And the program still answers 41."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_not_filled.cml"
-args = ["${case}", "std::opt", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_exact = "41\n"
-
-[[tests]]
-name = "dead_write.aggregate_tail_held"
-desc = "The graph names the aggregate itself (`return p`): `held-by-the-graph`. The members are the answer, not an internal step, and the sweep takes nothing."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_held.cml"
-args = ["${case}", "std::opt::dce", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["AGGREGATE graph=probe", "verdict=held-by-the-graph", "SWEEP func=0 call=0 gate=0 oper=0"]
-
-[[tests]]
-name = "dead_write.aggregate_tail_held.same_output"
-desc = "And the program still answers 41."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_held.cml"
-args = ["${case}", "std::opt", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_exact = "41\n"
-
-[[tests]]
-name = "dead_write.aggregate_tail_written"
-desc = "The cell the aggregate fills is written again (`var t = (c, x)` then `t = (c, y)`): the FILL is read by `:var/new`, which is no projection of a member -- `read-as-a-whole`, and nothing is taken."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_written.cml"
-args = ["${case}", "std::opt::dce", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["AGGREGATE graph=probe", "verdict=read-as-a-whole", "SWEEP func=0 call=0 gate=0 oper=0"]
-
-[[tests]]
-name = "dead_write.aggregate_tail_written.same_output"
-desc = "And the program still answers 41."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_written.cml"
-args = ["${case}", "std::opt", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_exact = "41\n"
-
-[[tests]]
-name = "dead_write.aggregate_tail_unread.reading"
-desc = "The shape the sweep may take: nobody reads the last member and the last member is one this node fills -- `may-stop-filling-the-tail`."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_unread.cml"
-args = ["${case}", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["AGGREGATE graph=probe", "components=2 slots=2", "tail=9", "verdict=may-stop-filling-the-tail"]
-
-[[tests]]
-name = "dead_write.aggregate_tail_unread.swept"
-desc = "And the sweep takes it: the payload's table goes from two entries to one (nothing is renumbered) and the arithmetic that filled the member loses its last reader -- the count that was four zeros says so."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_unread.cml"
-args = ["${case}", "std::opt::dce", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["AGGREGATE graph=probe", "components=2 slots=1 norm=1 with=1", "SWEEP func=0 call=0 gate=0 oper=1"]
-
-[[tests]]
-name = "dead_write.aggregate_tail_unread.same_output"
-desc = "And the program is the same program: 7, on every backend, with the whole pipeline run."
-kind = "behavior"
-case = "../../../cases/opt/effects/aggregate_tail_unread.cml"
-args = ["${case}", "std::opt", "${backend}"]
-backends = ["nvm", "fvm", "jit", "prl"]
-backends_agree = ["exit_code", "stdout_normalized"]
-expect_exit = 0
-expect_stdout_exact = "7\n"

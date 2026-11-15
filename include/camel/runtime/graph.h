@@ -265,62 +265,30 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 /// graph.
 bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
 
-/// The live set of a frozen graph, the same walk `liveNodesOf(const GraphDraft &)` runs (one kernel,
-/// two faces): the nodes backward reachable from entry, exit, output, return, the norm and `with`
-/// ports and the closure nodes the graph exports, over the norm, `with`, control and sync inputs,
-/// with a loop's region ports and a branch's join. A node outside it can never be run or read by the
-/// program, so a value it reads is read by nobody -- which is what lets a write whose only reader is
-/// such a node be called dead (design principles 3.1, 9.7). Sorted by ref.
+/// The live set of a frozen graph, the same walk `liveNodesOf(const GraphDraft &)` runs (one
+/// kernel, two faces): the nodes backward reachable from entry, exit, output, return, the norm and
+/// `with` ports and the closure nodes the graph exports, over the norm, `with`, control and sync
+/// inputs, with a loop's region ports and a branch's join. A node outside it can never be run or
+/// read by the program, so a value it reads is read by nobody -- which is what lets a write whose
+/// only reader is such a node be called dead (design principles 3.1, 9.7). Sorted by ref.
 std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 
-/// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members the
-/// aggregate has (0 when it is not one), and whether its last member may be dropped -- no root names
-/// it, nothing but the aggregate reads that member, and every reader of the aggregate reads a member
-/// below the last, so nothing has to be renumbered.
+/// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members
+/// the aggregate has (0 when it is not one), and whether its last member may be dropped -- no root
+/// names it, nothing but the aggregate reads that member, and every reader of the aggregate reads a
+/// member below the last, so nothing has to be renumbered.
 uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
 
-/// Which member of an aggregate a `with` input fills, and which input fills the last member.
-///
-/// This is the mapping the judgement below is written in, and it is **not** "member i is input i".
-/// A `FILL`'s payload is `GCFillBody` -- `slotCount` and a table of the components of the object the
-/// node builds (`GCFillBody::slots`, a span of `gc_slot_idx_t`) -- and the i-th `with` input fills
-/// the component that entry names: `writeRuntimeFillSlots` pairs them position by position, and so
-/// does `resolveTupleProjection` when it looks a projection up in the table. A component no entry
-/// names keeps the value the node's template (its norm input) carries. Measured: an aggregate of two
-/// members has one *norm* input and two *with* inputs, so a reader that counts the ordinary inputs
-/// concludes it fills both members from one node and is wrong about every aggregate there is.
-///
-/// `aggregateTailInputIndex` returns the position in the `with` list whose input fills component
-/// `components - 1` of the aggregate's tuple type, or `kInvalidNodeRef` when no input does (the
-/// template supplies it, so there is no member to take). The draft's face is declared in
-/// `camel/runtime/draft.h`, whose `GraphDraft` this header does not name.
-uint32_t aggregateTailInputIndex(const GCGraph &graph, gc_node_ref_t ref);
-
-/// How many components the tuple an aggregate builds has (0 when the node does not build one), read
-/// from its type rather than from its payload: a component the table does not name keeps the value the
-/// template carries and is still a component of the value, so `(x, 7)` is a table of one entry and a
-/// tuple of two. `aggregateArity` above is the table's size; this is the type's.
-uint32_t aggregateComponentCount(const GCGraph &graph, gc_node_ref_t ref);
-
-/// What may be said about the last member of an aggregate, and why. The question is one: may the
-/// node stop filling the last component of the tuple it builds? Every value below is an answer about
-/// **that entry of the table** -- not about the aggregate's inputs -- and each refusal names the
-/// thing that stopped it, in the words of the mapping above.
-///
-/// The vocabulary is new on purpose. The four guards that used to be spelled here (`droppable`, a
-/// root, a member with readers, a reader of the last member) were withdrawn because every one of
-/// them read "member = ordinary input", which `arity=2 inputs=1` disproves; the names are not brought
-/// back, because a name that used to mean one subject and now means another is how a reader ends up
-/// believing the old reading was checked.
+/// What may be said about an aggregate, and nothing more. Two values, both refusals: a member's
+/// lifetime cannot be judged here, because a member is a frame slot the payload names
+/// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary
+/// inputs
+/// -- an aggregate with two members has one input. The four guards that used to live here (a root,
+/// a member with readers, a reader of the last member, droppable) all judged "member = input",
+/// which that reading disproves; keeping them would let the next reader believe this was covered.
 enum class AggregateTailVerdict : uint8_t {
-    NotAnAggregate,          // not a FILL, not a tuple, or a tuple of fewer than two components
-    TailComponentNotFilled,  // no with input names the last component: the member is not this one's
-    TailComponentRead,       // a reader projects the last component out
-    HeldByTheGraph,          // the graph itself names the aggregate, or a wait is attached to it
-    ReadAsAWhole,            // a reader reads the aggregate rather than one of its members
-    SeveralWritings,         // the value has several writings: which one a reader reads is not decided
-    TailMemberIsKept,        // the member's producer is not a value the sweep may take when unread
-    MayStopFillingTheTail,   // nothing reads the last component: the node may stop filling it
+    NotAnAggregate,  // not an aggregate, or too few members to have a last one
+    MappingMismatch, // the member count and the input count disagree: member i is not input i
 };
 
 /// The name of a verdict, for a caller that prints what it decided (`test::deadwrite`).
@@ -948,9 +916,9 @@ class GCGraph : public camel::core::rtdata::Object {
     /// Number of node places: NodeIds are 0 .. nodeCount() - 1, and some of them may be Dead.
     gc_cnt_t nodeCount() const { return nativePayload_.nodeCount; }
     /// Number of nodes that are not Dead: how many node records the graph stores, which is what the
-    /// encoder writes down. It is not the live set -- a node nothing can reach is still stored, and a
-    /// node a sweep erased is not -- so a reader that asks whether the program can still see a value
-    /// asks `camel::runtime::liveNodesOf`, never this.
+    /// encoder writes down. It is not the live set -- a node nothing can reach is still stored, and
+    /// a node a sweep erased is not -- so a reader that asks whether the program can still see a
+    /// value asks `camel::runtime::liveNodesOf`, never this.
     gc_cnt_t storedNodeCount() const;
     /// Number of edges (input table entries).
     gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }

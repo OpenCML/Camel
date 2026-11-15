@@ -268,9 +268,9 @@ void replaceFoldResult(
     const auto kind      = draft.returnKind();
     replaceNode(transaction, id, replacement);
     // The place `id` held in the chain is not the replacement's (`placeLostStatements`, what
-    // `foldDraft` runs once the round's folds are done: a statement that lost its place is given the
-    // one the statement written after it holds, which is the same walk this wrapper would have to
-    // repeat node by node).
+    // `foldDraft` runs once the round's folds are done: a statement that lost its place is given
+    // the one the statement written after it holds, which is the same walk this wrapper would have
+    // to repeat node by node).
     if (replacement == kInvalidNodeRef) {
         return;
     }
@@ -1309,10 +1309,10 @@ bool foldStaticCast(
 /// `replaceFoldResult`, and `eraseNode` for the arms of a pruned branch -- while the splice that
 /// keeps the order (`closeChainOver`, src/runtime/draft.cpp) only fires when it can name a
 /// predecessor that still stands, and silently keeps nothing when it cannot. The fold then reports
-/// that it changed the graph, and the statement it took the place from is left with the source-order
-/// edge alone, which carries no place (docs/design/effects/edges.cn.md 1.5 and 5.3). That is how
-/// `test/cases/opt/e9/rc00_seed30.cml` ends with an `:io/println` that neither reads its value nor
-/// stands in a chain, which `std::opt::dce` reports as a defect of the compiler.
+/// that it changed the graph, and the statement it took the place from is left with the
+/// source-order edge alone, which carries no place (docs/design/effects/edges.cn.md 1.5 and 5.3).
+/// That is how `test/cases/opt/e9/rc00_seed30.cml` ends with an `:io/println` that neither reads
+/// its value nor stands in a chain, which `std::opt::dce` reports as a defect of the compiler.
 ///
 /// So a statement that carries the program's order (`carriesOrdering`) and has no place gets one:
 /// the statement written after it -- the `ORDER` user, which is the source order the graph kept --
@@ -1531,8 +1531,8 @@ size_t foldDraft(
     if (folded > 0 || removed > 0) {
         // Not counted as a fold: it gives a statement back the place a fold took from it, and a
         // count of its own would run another round of folding for a graph that has nothing left to
-        // fold (that extra round reaches a place-check of its own, and a sync edge across two blocks
-        // is what it finds -- `resident_cpu_block.cml`).
+        // fold (that extra round reaches a place-check of its own, and a sync edge across two
+        // blocks is what it finds -- `resident_cpu_block.cml`).
         (void)placeLostStatements(transaction);
     }
     return folded + removed;
@@ -1696,76 +1696,6 @@ bool gateInputsSurvive(const camel::runtime::GraphTransaction &transaction, gc_n
     return true;
 }
 
-/// Stops an aggregate from filling the last component of the tuple it builds, when nothing reads that
-/// component (`camel::runtime::aggregateTailVerdict`, and the reading it rests on: a `FILL`'s payload
-/// names, for each `with` input, which component of the object that input fills -- the members are not
-/// the aggregate's ordinary inputs).
-///
-/// What goes is the table entry that names the last component and the `with` input paired with it. The
-/// component stays a component of the tuple -- the type does not change, and no reader of the aggregate
-/// is renumbered -- and it keeps the value the node's template already carries, so a program that reads
-/// it nowhere is the same program. What the node used to fill it with loses a reader, and the sweep's
-/// next round takes it if it is a value (`isDeadWhenUnread`): this is the rewrite that lets a member
-/// nobody reads reach the closure or the computation behind it.
-bool stopFillingUnreadTailMember(
-    camel::runtime::GraphTransaction &transaction, gc_node_ref_t id) {
-    auto &draft = transaction.edit();
-    const camel::runtime::DraftNodeHeader *header = draft.header(id);
-    if (header == nullptr || header->kind != camel::runtime::GCNodeKind::Fill) {
-        return false;
-    }
-    if (camel::runtime::aggregateTailVerdict(draft, id) !=
-        camel::runtime::AggregateTailVerdict::MayStopFillingTheTail) {
-        return false;
-    }
-    const uint32_t position = camel::runtime::aggregateTailInputIndex(draft, id);
-    const auto withInputs   = draft.withInputsOf(id);
-    if (position == camel::runtime::kInvalidNodeRef || position >= withInputs.size()) {
-        return false;
-    }
-    const auto payload = draft.payloadOf(id);
-    if (payload.size() < sizeof(camel::runtime::GCFillBody)) {
-        return false;
-    }
-    const auto *body = reinterpret_cast<const camel::runtime::GCFillBody *>(payload.data());
-    if (body == nullptr) {
-        return false;
-    }
-    std::vector<size_t> slots;
-    slots.reserve(body->slots().size());
-    for (camel::runtime::gc_slot_idx_t slot : body->slots()) {
-        slots.push_back(static_cast<size_t>(slot));
-    }
-    std::vector<gc_node_ref_t> values(withInputs.begin(), withInputs.end());
-    slots.erase(slots.begin() + position);
-    values.erase(values.begin() + position);
-    // Every input list is copied: a rewrite lays the node's own tail block out again, so a span that
-    // views it (`rewriteNode`'s warning) would cover other entries by the time it is read.
-    const std::vector<gc_node_ref_t> normInputs(
-        draft.normInputsOf(id).begin(), draft.normInputsOf(id).end());
-    const std::vector<gc_node_ref_t> ctrlInputs(
-        draft.ctrlInputsOf(id).begin(), draft.ctrlInputsOf(id).end());
-    const std::vector<gc_node_ref_t> orderInputs(
-        draft.orderInputsOf(id).begin(), draft.orderInputsOf(id).end());
-    const std::vector<gc_node_ref_t> syncInputs(
-        draft.syncInputsOf(id).begin(), draft.syncInputsOf(id).end());
-    draft.rewriteNode(
-        id,
-        camel::runtime::DraftNodeInit{
-            .dataIndex    = header->dataIndex,
-            .dataType     = header->dataType,
-            .kind         = header->kind,
-            .runtimeFlags = header->runtimeFlags,
-            .payload = camel::runtime::makeFillPayload(body->fillKind, slots),
-            .normInputs  = normInputs,
-            .withInputs  = values,
-            .ctrlInputs  = ctrlInputs,
-            .orderInputs = orderInputs,
-            .syncInputs  = syncInputs,
-        });
-    return true;
-}
-
 /// With valuesOnly, only the nodes that are no more than their value: constants and pure
 /// operations (also casts, copies, accesses and fills) that no node reads; gates and syncs stay.
 size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly = false) {
@@ -1775,10 +1705,6 @@ size_t dceDraft(camel::runtime::GraphTransaction &transaction, bool valuesOnly =
     for (bool changed = true; changed;) {
         changed = false;
         for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-            if (stopFillingUnreadTailMember(transaction, id)) {
-                changed = true;
-                continue;
-            }
             if (!valuesOnly && bypassValueGate(transaction, id, gateEdgeBudget)) {
                 ++removed;
                 changed = true;
