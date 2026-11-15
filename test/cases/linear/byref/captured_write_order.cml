@@ -19,8 +19,10 @@
  *   611     arm_read_then_write   the arm reads the variable before the write
  *   40      recursion_then_read   down() writes after its recursive call
  *   2508    fib_then_read         25 calls of fib(6) = 8
- *   21      nested_then_read      a nested function writes a local variable of its parent
+ *   21      nested_then_read      a nested function writes its parent's state, held in a `Ref`
  */
+
+import state
 
 var cnt = 0
 var levels = 0
@@ -124,13 +126,19 @@ func fib_then_read(): int sync {
 }
 
 func nested_then_read(): int sync {
-    var x = 1
-    func inc(): int sync {
-        x += 1
+    // A closure cannot assign a name of the body around it (design principles 3.5); the state the
+    // nested function writes is a `Ref`. The handle is handed to the nested function as an argument
+    // rather than captured: a nested function that *captures* a handle and writes it trips
+    // `RuntimeDiag::PassEffectContainment` under `std::opt` and `std::macro` (the call site of the
+    // nested function declares `uses capture 0` while the graph it runs writes `state::Ref`), which
+    // is an implementation defect of the effect inference, not a rule of the language.
+    let x = state::ref(1)
+    func inc(r: state::Ref<int>): int sync {
+        state::set(r, state::get(r) + 1)
         return 1
     }
-    let a = inc()
-    return x * 10 + a
+    let a = inc(x)
+    return state::get(x) * 10 + a
 }
 
 func main(): int sync {

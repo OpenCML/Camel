@@ -5,14 +5,18 @@
  *   100 110    a read, then the call that writes the top-level variable
  *   120 120    the call, then a read
  *   250        operands of +: the read, then the call
- *   1 2        a local variable a closure writes
+ *   1 2        a reference a closure writes
  *   10 11      a local variable passed to a var parameter
  *   1 2        a value read before a call through a function value, and a read after it
  *   [1, 2, 2]  the elements of an array literal, left to right
  *   (2, 3, 3)  a tuple literal
  *   3 4 4      the fields of a struct literal
+ *
+ * The two sub-cases a closure writes hold their state in a `Ref`: a closure cannot assign a name of
+ * the body around it (design principles 3.5), while a handle is a value it may capture.
  */
 
+import state
 
 var cnt: int = 100
 var lit: int = 1
@@ -36,22 +40,22 @@ func main(): int sync {
     println(cnt, bump())
     println(bump(), cnt)
     println(cnt + bump())
-    var c = 1
+    let c = state::ref(1)
     let step = (): int => sync {
-        c += 1
-        c
+        state::set(c, state::get(c) + 1)
+        state::get(c)
     }
-    println(c, step())
+    println(state::get(c), step())
     var d = 10
     println(d, inc(d))
-    var e = 1
+    let e = state::ref(1)
     let write_e = (): int => sync {
-        e += 1
-        e
+        state::set(e, state::get(e) + 1)
+        state::get(e)
     }
-    let before = e
+    let before = state::get(e)
     write_e()
-    println(before, e)
+    println(before, state::get(e))
     println([lit, lit_step(), lit])
     println((lit, lit_step(), lit))
     let fields = { a: lit, b: lit_step(), c: lit }
