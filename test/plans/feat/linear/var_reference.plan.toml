@@ -117,7 +117,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_tensor.default"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: default (no pass)."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}"]
@@ -133,7 +133,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.fvm"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::fvm"]
@@ -149,7 +149,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::jit"]
@@ -165,7 +165,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::tf"]
@@ -181,7 +181,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline"]
@@ -197,7 +197,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.specialize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::specialize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::specialize"]
@@ -213,7 +213,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.devirtualize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::devirtualize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::devirtualize"]
@@ -229,7 +229,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.fold"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::fold."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::fold."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::fold"]
@@ -245,7 +245,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.cse"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::cse."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::cse."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::cse"]
@@ -261,7 +261,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.dce"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::dce"]
@@ -277,7 +277,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt"]
@@ -293,7 +293,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.simplify"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt"]
@@ -309,7 +309,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro"]
@@ -325,7 +325,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_inline"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::inline."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -341,7 +341,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_specialize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::specialize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
@@ -357,7 +357,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_devirtualize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::devirtualize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
@@ -373,7 +373,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_fold"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::fold."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
@@ -389,7 +389,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_cse"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::cse."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
@@ -405,7 +405,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_dce"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
@@ -421,7 +421,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_opt"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -437,7 +437,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_simplify"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -453,7 +453,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.all_6"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
@@ -469,7 +469,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.all_macro_9"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
@@ -485,7 +485,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt_fvm"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -501,7 +501,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -517,7 +517,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt_tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -533,7 +533,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_fvm"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -549,7 +549,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
@@ -565,7 +565,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
@@ -581,7 +581,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.specialize_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::specialize std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
@@ -597,7 +597,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.simplify_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -613,7 +613,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_opt_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -629,7 +629,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_opt_tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
@@ -2500,530 +2500,464 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.default"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: default (no pass)."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: default (no pass)."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::fvm."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::fvm."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::fvm"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::jit."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::jit."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::jit"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::tf."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::tf."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::tf"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::inline."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.specialize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::specialize."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::specialize."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::specialize"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.devirtualize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::devirtualize."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::devirtualize."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::devirtualize"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.fold"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::fold."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::fold."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::fold"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.cse"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::cse."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::cse."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::cse"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.dce"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::dce."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::dce."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::dce"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.simplify"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_inline"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::inline."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_specialize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::specialize."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::specialize."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_devirtualize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::devirtualize."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::devirtualize."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_fold"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::fold."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::fold."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_cse"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::cse."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::cse."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_dce"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::dce."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::dce."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_opt"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_simplify"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.all_6"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.all_macro_9"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt_fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::fvm."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt std::fvm."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::fvm"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt std::jit."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.opt_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::tf."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt std::tf."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::tf"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline_fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::fvm."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::inline std::fvm."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::jit."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::inline std::jit."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.inline_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::tf."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::inline std::tf."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.specialize_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::specialize std::jit."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt::specialize std::jit."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.simplify_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::opt std::jit."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_opt_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::jit."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt std::jit."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.macro_opt_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::tf."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. Pipeline: std::macro std::opt std::tf."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 25
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
@@ -3971,12 +3905,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_alias_captured"
-desc = "A closure that reads the cell of `v`, and a `let` name of the same array: the closure reads whatever the cell holds at the call, and the write to `v[0]` copies because the cell is a second name of the array `big` is, so `big` keeps its value while the closure sees the write."
+desc = "A closure over the value `v` held when it was made, and a `let` name of the same array: the closure holds that value, so `f()` reads what the name held then, and the write to `v[0]` copies because the cell of `v` is a second name of the array `big` is, so `big` keeps its value. The closure names `v0`, the `let` binding of the value (a closure may not name a `var` assigned after it is made, design principles 3.5)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_alias_captured.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout = "big[0] = 1  v[0] = 9  f() = 9\n"
+expect_stdout = "big[0] = 1  v[0] = 9  f() = 1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 
