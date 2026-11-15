@@ -96,6 +96,7 @@ import { first_with_as_param, jvp, split, transpose } from transforms
 /// program of its own -- `y` is `x * x` at 3, and the pullback read at `ct = 1.0` answers the
 /// derivative there, one member per parameter.
 /// @example let (y, pullback) = vjp((x: float) => x * x)(3.0)    // y = 9.0, and pullback(1.0) is (6.0)
+#macro
 export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
     return <...ws> (...xs) => {
         let (y, lin) = split(jvp(f))<...ws>(...xs)
@@ -124,6 +125,7 @@ export func vjp::<F>(f: F): Vjp<F> when is_function::<F>() {
 /// (measured 2026-11-15): the reading takes `<...ws>` and was given `<>`.
 /// @example-fragment `f` is a function value, so the example is a fragment of a program that declares one
 /// @example let slope = grad(f)
+#macro
 export func grad::<F>(f: F): GradientOf<F> when is_function::<F>() {
     let reading = vjp(first_with_as_param(f))
     return <...ws> (...xs) => {

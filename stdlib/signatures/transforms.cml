@@ -43,6 +43,7 @@ export type Tangent<T>
 /// tangents and returns the pair `(value, tangent)`. `jvp(f)(2.0, 1.0)` is the value `f(2.0)`
 /// together with the derivative of `f` at 2 in the direction 1.
 /// @example let forward = jvp((x: float) => x * x)
+#macro
 export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// The step of `vjp` that separates a lifted function into the part computable now and the linear
 /// residue (design 4.2, 4.4). Implemented for the straight-line tier (`modules/transforms/split.cpp`):
@@ -64,6 +65,7 @@ export func jvp::<F>(f: F): Jvp<F> when is_function::<F>()
 /// it is given -- the condition the transpose step (M3) reads -- and both halves speak in `Tangent<T>`
 /// at the top of this file.
 /// @example let step = split
+#macro
 export func split(f: (v: float, d: float) => (float, float)): (v: float, d: float) => (float, (float, float) => float)
 
 /// The transpose of a linear function: `transpose(f)` takes the cotangent of `f`'s result and
@@ -85,6 +87,7 @@ export func split(f: (v: float, d: float) => (float, float)): (v: float, d: floa
 /// that makes it is `modules/transforms/transpose.cpp#transposeSignature`. So `transpose(f)` is
 /// called as `transpose(f)(1.0)` for a one-`float` function -- one argument, the cotangent.
 /// @example let back = transpose((x: float) => 2.0 * x + 3.0 * x)
+#macro
 export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 
 
@@ -101,6 +104,7 @@ export func transpose::<F>(f: F): Transpose<F> when is_function::<F>()
 /// branch or a loop in the body is refused the same way, because the elementwise tier batches
 /// straight-line bodies.
 /// @example let batched = vmap((x: f32) => x * 2.0)
+#macro
 export func vmap::<F>(f: F): Vmap<F> when is_function::<F>()
 
 /// Memory for recomputation: `remat(f)` gives a function whose graph is `f`'s graph with the
@@ -154,4 +158,5 @@ export type FirstWithAsParam<F> = match type WithOf<F> { case (W, ...Rest) => <.
 /// than a value).
 /// @example-fragment `weighted` is a function the program declares, because the example needs a `with` parameter
 /// @example let reinterpreted = first_with_as_param(weighted)
+#macro
 export func first_with_as_param::<F>(f: F): FirstWithAsParam<F> when is_function::<F>()
