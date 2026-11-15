@@ -9171,21 +9171,20 @@ None: choice: the two ways out are the writer's to choose
 A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.
 ```
 
-**Example** (`test/cases/consistency/partial_application/var_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/var_parameter.cml`)
+**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
 
 ```camel
-with <var total: int>
+var total: int = 0
+
+with <var acc: int>
 func add(x: int): int sync {
-    total = total + x
-    return total
+    acc = acc + x
+    return acc
 }
 
 func main(): int sync {
-    var t = 0
-    let g = add<t>
-    println(g(1), g(2), g(3), t)
-    let direct = add<t>
-    println(direct(10), t)
+    let g = add<total>
+    println(g(1), total)
     return 0
 }
 ```

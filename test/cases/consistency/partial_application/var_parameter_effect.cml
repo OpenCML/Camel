@@ -1,12 +1,12 @@
 /**
- * The second source of the family: both helpers bind a `var` context parameter with `add<t>`, and
- * a partial application cannot bind one (design principles 3.5, the author's ruling of
- * 2026-11-15) -- the function value has no call of its own to write the value back to. Refused at
- * each binding, `guarded`'s and `ignored`'s.
+ * Both helpers bind a `var` context parameter with `add<t>`, and a partial application cannot bind
+ * one (design principles 3.5, the author's ruling of 2026-11-15) -- the function value has no call
+ * of its own to write the value back to. Refused at each binding, `guarded`'s and `ignored`'s; the
+ * cell is the `var t` of the body that binds it, which is the shape a local cell takes.
  *
  * This source used to pin what a value that captured the cell did: `g(1)` recorded as a write of
  * `t`, the call running inside a sync block, `EffectNotExecuted` outside one. That reading is
- * retired with the binding it needed; the source stays as the refusal's second example.
+ * retired with the binding it needed; the source stays as the refusal's own example.
  */
 
 with <var total: int>

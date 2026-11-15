@@ -1,30 +1,32 @@
 /**
- * A `with` parameter declared `var` is a variable the function writes: the call passes it in,
- * the body writes it, and the call hands the new value back. The function value a partial
- * application makes has no call of its own to write it back to, so `f<w>` cannot bind one
- * (design principles 3.5, the author's ruling of 2026-11-15) -- refused at each binding here,
- * `let g = add<t>` and `let direct = add<t>`.
+ * Three arguments of one `println` are calls of a function value that takes its context argument
+ * from the call that made it. The value is a partial application (`graph model Q9,
+ * partial-application-var`), and the context argument is a `Ref` handle: a handle is a value, so the
+ * value may hold it and every call writes the box through it, which is what the three calls add up.
  *
- * This program used to be the pinned example of the opposite reading (graph model Q9,
- * `partial-application-var`): the value captured the cell and the calls accumulated to `1 3 6 6`
- * and `16 16`. That reading is retired; the source stays as the refusal's own example.
- *
- * The report names `t`, the name written here. It used to be `ClosureAssignsCapturedName`, the
- * closure rule, which the binding borrowed -- the help it printed offers three ways out, all of
- * which keep the partial application.
+ * The context argument used to be `with <var total: int>`. That shape is retired: a function value
+ * from a partial application has nowhere to write a `var` context parameter back (design principles
+ * 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name had when it was made,
+ * not the name, so the write is refused where the value is made (`SemanticDiag::
+ * ClosureAssignsCapturedName`, 0x03000213, at `add<t>`; the author's ruling of 2026-11-16, items 197
+ * and 198). What stays is what this case reads: two partial applications of one function, three calls
+ * of the first, and the accumulator each of them leaves.
  */
 
-with <var total: int>
+import state
+
+with <total: state::Ref<int>>
 func add(x: int): int sync {
-    total = total + x
-    return total
+    let next = state::get(total) + x
+    state::set(total, next)
+    return next
 }
 
 func main(): int sync {
-    var t = 0
+    let t = state::ref(0)
     let g = add<t>
-    println(g(1), g(2), g(3), t)
+    println(g(1), g(2), g(3), state::get(t))
     let direct = add<t>
-    println(direct(10), t)
+    println(direct(10), state::get(t))
     return 0
 }

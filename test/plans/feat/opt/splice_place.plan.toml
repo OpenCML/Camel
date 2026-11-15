@@ -12,10 +12,10 @@ tags = ["feat", "opt", "control"]
 # followers is a chain that forks, which is no chain (docs/design/effects/edges.cn.md 5.3), and the
 # seal reported it as an internal error of the pass.
 #
-# Three programs of the whole corpus reached it. What is locked here: the statement the sync edge
-# names follows the body's tail, the nodes that only waited on the call go on waiting on what the
-# call became, the seal reports no fork, and the values are the ones the program computes with
-# nothing but the executor -- to the byte, on every back end.
+# These are the three programs of the whole corpus that reached it. What is locked here: the
+# statement the sync edge names follows the body's tail, the nodes that only waited on the call go
+# on waiting on what the call became, the seal reports no fork, and the values are the ones the
+# program computes with nothing but the executor -- to the byte, on every back end.
 
 [defaults]
 kind = "behavior"
@@ -23,39 +23,51 @@ expect_exit = 0
 timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
-# The first of the three programs is no longer one of them. Three arguments of one `println` were
-# calls through a partial application of a function with a `with <var>` parameter, and each splice
-# left the `:var/peek` and the block's gate beside the statement that really follows -- but a
-# partial application cannot bind a `var` context parameter at all (design principles 3.5, the
-# author's ruling of 2026-11-15), so the program is refused while its graph is built and no spliced
-# graph exists to read. Its four entries pinned one splice each (`std::opt`, `std::opt std::opt`,
-# `std::opt::inline`, and the executor alone) and there is nothing left for them to pin: the
-# refusal is the same before every pass, so one entry on one back end is the reading.
-#
-# The refusal, and why it changed code: it used to be `ClosureAssignsCapturedName` (0x03000213), the
-# rule that a closure holds a value and not a name -- a rule this program does not break. The
-# binding borrowed it: the forwarder graph a partial application makes hands the bound cell to a
-# `var` parameter, so the closure rule met it one graph later, and its help names three ways out
-# that all keep the partial application, which is the opposite of what this program has to do. A
-# reader who looks the code up reads another rule's exits. The rule now has its own code,
-# `VarContextParameterCannotBeBound` (0x03000216), reported at the binding with the name the program
-# wrote (`t`) instead of the temporary the graph had made for it.
+# Three arguments of one `println` are calls of a function value whose context argument is a `Ref`
+# handle; each splice left the block's gate beside the statement that really follows. The context
+# argument used to be `with <var total: int>`, which a partial application may not bind any more: a
+# function value from a partial application has nowhere to write a `var` context parameter back
+# (design principles 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name
+# had when it was made, not the name (the ruling of 2026-11-16, items 197 and 198), so `add<t>` was
+# refused at the binding -- by `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) until
+# `VarContextParameterCannotBeBound` (0x03000216) gave the rule its own report. A handle is a value,
+# so the same three calls, the same accumulator and the same chain are still exercised.
 
 [[tests]]
-name = "var_parameter.refused_at_the_binding"
+name = "var_parameter.reference"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`let g = add<t>` binds a `var` context parameter, which a partial application cannot carry, so the program is refused at the binding before any pass runs (design principles 3.5). The refusal is `VarContextParameterCannotBeBound` (0x03000216) and it names `t`; it used to be `ClosureAssignsCapturedName` (0x03000213), borrowed, because the rule had no report of its own and the closure rule met the same binding second-hand."
-kind = "negative"
-args = ["-E", "short", "${case}"]
-backends = ["nvm"]
-backends_agree = []
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::VarContextParameterCannotBeBound"
-expect_diagnostic_code = "0x03000216"
-expect_diagnostic_line = 25
-expect_diagnostic_column = 13
-expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
-expect_output_contains = ["name=SemanticDiag::VarContextParameterCannotBeBound", "'t'", "var_parameter.cml:25:13:"]
+desc = "The values with nothing but the executor: three calls through a partial application whose context argument is a `Ref` handle, and the accumulator after them. The context argument is a handle since 2026-11-16, when a `var` context parameter stopped being bindable by a partial application (design principles 3.5; `SemanticDiag::ClosureAssignsCapturedName` was the refusal at `add<t>`); the reading is the one this entry had."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "${backend}"]
+
+[[tests]]
+name = "var_parameter.opt"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "`std::opt` inlines the three calls: the chain of the block keeps one follower per statement and the values do not change. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt", "${backend}"]
+
+[[tests]]
+name = "var_parameter.opt_twice"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt", "std::opt", "${backend}"]
+
+[[tests]]
+name = "var_parameter.opt_inline"
+case = "../../../cases/consistency/partial_application/var_parameter.cml"
+desc = "`std::opt::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
+expect_stdout_exact = "1 3 6 6\n16 16\n"
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+args = ["${case}", "std::opt::inline", "${backend}"]
 
 # The call that builds the `tee` is destructured by a `let`, so the statement the chain names after
 # it is the `accs` that takes the tuple apart, while the two `println`s after it waited on the call
