@@ -28,6 +28,7 @@
 #include "camel/core/rtdata/struct.h"
 #include "camel/core/rtdata/tuple.h"
 #include "camel/core/type/composite/composite.h"
+#include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/runtime/reachable.h"
 #include "camel/utils/log.h"
@@ -1480,6 +1481,258 @@ std::vector<gc_node_ref_t> draftRuntimeNodeRefs(const GraphTransaction &transact
     return planDraftPayload(draft).runtimeRefsByDraftId;
 }
 
+namespace {
+
+/// A short spelling of a list of node references, for the sentences of the delivery check.
+std::string spelledRefs(std::span<const gc_node_ref_t> refs) {
+    if (refs.empty()) {
+        return "none";
+    }
+    std::string text;
+    for (size_t i = 0; i < refs.size(); ++i) {
+        text += i == 0 ? "" : ",";
+        text += std::to_string(refs[i]);
+    }
+    return text;
+}
+
+/// Whether the encoder writes no order input on `id`: the edge says nothing on a node that
+/// arranges itself freely, so the payload plan drops them (this file, `planDraftPayload`, and
+/// `carriesOrdering`, which is the same rule read by the rewrite side). The delivery check has to
+/// read that rule the same way or it would report every order edge of such a node as lost.
+bool takesNoOrder(const GraphDraft &draft, gc_node_ref_t id) {
+    const DraftNodeHeader *header = draft.header(id);
+    if (header == nullptr || header->kind == GCNodeKind::Dead || header->kind == GCNodeKind::Cast ||
+        !nodeIsFreelySchedulable(draft, id)) {
+        return false;
+    }
+    if (header->kind == GCNodeKind::Brch || header->kind == GCNodeKind::Loop) {
+        for (uint32_t region = 1; region < draft.regionCount(); ++region) {
+            if (draft.region(region).owner == id) {
+                return false; // it stands for its region and carries its order
+            }
+        }
+    }
+    return true;
+}
+
+} // namespace
+
+void verifyDraftDelivery(
+    const GraphTransaction &transaction, const GCGraph &graph, std::string_view name) {
+    const GraphDraft &draft                       = transaction.graph();
+    const std::vector<gc_node_ref_t> draftToGraph = draftRuntimeNodeRefs(transaction);
+
+    // The sentence every refusal carries: which graph, and which edge. A graph that does not hold
+    // an edge its draft holds is an edit the caller wrote and will never see, so the commit is the
+    // last place that can say so -- and the one place that knows both sides.
+    const auto refuse = [&](const std::string &sentence) -> void {
+        throw std::runtime_error(
+            std::format(
+                "the graph '{}' this commit made is not the draft it encoded: {}",
+                name,
+                sentence));
+    };
+    // The node the graph holds for a draft node. A live draft node the graph has no node for is
+    // already a disagreement: the commit encoded this draft itself, so every one of them is there.
+    const auto graphNodeOf = [&](gc_node_ref_t id) {
+        const gc_node_ref_t ref = id < draftToGraph.size() ? draftToGraph[id] : kInvalidNodeRef;
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref) || graph.node(ref) == nullptr ||
+            graph.node(ref)->kind == GCNodeKind::Dead) {
+            refuse(
+                std::format(
+                    "draft node {} is live and the graph has no node for it (the draft's numbering "
+                    "gives "
+                    "it {}, and the graph holds {} node place(s) that are not dead).",
+                    id,
+                    ref == kInvalidNodeRef ? std::string("nothing") : std::to_string(ref),
+                    static_cast<uint64_t>(graph.storedNodeCount())));
+        }
+        return ref;
+    };
+    // The draft's inputs of one kind, in the graph's numbering, in the order the draft holds them.
+    const auto mappedInputs =
+        [&](gc_node_ref_t id, std::span<const gc_node_ref_t> inputs, const char *kind) {
+            std::vector<gc_node_ref_t> refs;
+            refs.reserve(inputs.size());
+            for (gc_node_ref_t input : inputs) {
+                const gc_node_ref_t pred =
+                    input < draftToGraph.size() ? draftToGraph[input] : kInvalidNodeRef;
+                if (pred == kInvalidNodeRef) {
+                    refuse(
+                        std::format(
+                            "the draft's {} input of node {} names draft node {}, which the graph "
+                            "has no node "
+                            "for; a committed graph cannot hold an edge to nothing.",
+                            kind,
+                            id,
+                            input));
+                }
+                refs.push_back(pred);
+            }
+            return refs;
+        };
+    // A run of inputs the graph must hold exactly as the draft does, in the same order (the ports
+    // and the control inputs are runs of one list and their order is the port order).
+    const auto sameRun = [&](gc_node_ref_t id,
+                             gc_node_ref_t ref,
+                             const char *kind,
+                             std::vector<gc_node_ref_t>
+                                 expected,
+                             std::span<const gc_node_ref_t>
+                                 actual) {
+        if (expected.size() == actual.size() &&
+            std::equal(expected.begin(), expected.end(), actual.begin())) {
+            return;
+        }
+        refuse(
+            std::format(
+                "node {} (graph node {}) has its {} inputs as [{}] in the draft and as [{}] in the "
+                "graph.",
+                id,
+                ref,
+                kind,
+                spelledRefs(expected),
+                spelledRefs(actual)));
+    };
+    // A set of side edges (order, sync): the graph holds one array per kind, sorted by (user,
+    // pred), so the order the draft wrote them in says nothing.
+    const auto sameSideEdges = [&](gc_node_ref_t id,
+                                   gc_node_ref_t ref,
+                                   const char *kind,
+                                   std::vector<gc_node_ref_t>
+                                       expected,
+                                   std::vector<gc_node_ref_t>
+                                       actual) {
+        std::sort(expected.begin(), expected.end());
+        std::sort(actual.begin(), actual.end());
+        for (gc_node_ref_t pred : expected) {
+            if (!std::binary_search(actual.begin(), actual.end(), pred)) {
+                refuse(
+                    std::format(
+                        "the {} edge from node {} to node {} (graph nodes {} -> {}) is in the "
+                        "draft and "
+                        "not in the graph: the graph's {} inputs of that node are [{}].",
+                        kind,
+                        pred,
+                        id,
+                        pred,
+                        ref,
+                        kind,
+                        spelledRefs(actual)));
+            }
+        }
+        for (gc_node_ref_t pred : actual) {
+            if (!std::binary_search(expected.begin(), expected.end(), pred)) {
+                refuse(
+                    std::format(
+                        "the graph holds a {} edge from node {} to node {} (graph nodes {} -> {}) "
+                        "that the "
+                        "draft does not: the draft's {} inputs of that node are [{}].",
+                        kind,
+                        pred,
+                        id,
+                        pred,
+                        ref,
+                        kind,
+                        spelledRefs(expected)));
+            }
+        }
+    };
+    const auto sidePreds = [&](gc_node_ref_t ref, bool order) {
+        std::vector<gc_node_ref_t> preds;
+        if (order) {
+            for (const GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+                preds.push_back(edge.pred);
+            }
+        } else {
+            for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+                preds.push_back(edge.pred);
+            }
+        }
+        std::sort(preds.begin(), preds.end());
+        return preds;
+    };
+
+    // Every edge the draft holds, in the numbering the graph gives its nodes: the four kinds of
+    // the design (a data port -- the normal run and the context one -- a control input, an order
+    // edge and a sync edge), so a graph that lost or gained one anywhere is caught.
+    for (gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (draft.header(id) == nullptr || !draft.alive(id)) {
+            continue;
+        }
+        const gc_node_ref_t ref = graphNodeOf(id);
+        sameRun(
+            id,
+            ref,
+            "normal",
+            mappedInputs(id, draft.normInputsOf(id), "normal"),
+            graph.normInputsOf(ref));
+        sameRun(
+            id,
+            ref,
+            "context",
+            mappedInputs(id, draft.withInputsOf(id), "context"),
+            graph.withInputsOf(ref));
+        sameRun(
+            id,
+            ref,
+            "control",
+            mappedInputs(id, draft.ctrlInputsOf(id), "control"),
+            graph.ctrlInputsOf(ref));
+        const std::vector<gc_node_ref_t> order = sidePreds(ref, true);
+        if (takesNoOrder(draft, id)) {
+            if (!order.empty()) {
+                refuse(
+                    std::format(
+                        "the graph orders node {} (graph node {}) after [{}], and a node that "
+                        "arranges "
+                        "itself freely carries no order edge.",
+                        id,
+                        ref,
+                        spelledRefs(order)));
+            }
+        } else {
+            sameSideEdges(
+                id,
+                ref,
+                "order",
+                mappedInputs(id, draft.orderInputsOf(id), "order"),
+                order);
+        }
+        sameSideEdges(
+            id,
+            ref,
+            "sync",
+            mappedInputs(id, draft.syncInputsOf(id), "sync"),
+            sidePreds(ref, false));
+    }
+
+    // And the graph's side: a node or an edge nobody wrote is as wrong as one the draft lost. The
+    // runs and the side arrays were compared as sets above, so what is left is a node the draft has
+    // no place for.
+    std::vector<gc_node_ref_t> graphToDraft(graph.nodeCount(), kInvalidNodeRef);
+    for (gc_node_ref_t id = 0; id < draftToGraph.size(); ++id) {
+        const gc_node_ref_t ref = draftToGraph[id];
+        if (ref != kInvalidNodeRef && ref < graphToDraft.size()) {
+            graphToDraft[ref] = id;
+        }
+    }
+    for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+        const GCNode *node = graph.node(ref);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            continue;
+        }
+        if (graphToDraft[ref] == kInvalidNodeRef) {
+            refuse(
+                std::format(
+                    "the graph holds node {} (kind {}) that the draft has no node for.",
+                    ref,
+                    static_cast<int>(node->kind)));
+        }
+    }
+}
+
 bool nodeIsFreelySchedulable(const GraphDraft &draft, gc_node_ref_t id, bool byShape) {
     const DraftNodeHeader *header = draft.header(id);
     if (header == nullptr || !draft.alive(id)) {
@@ -1694,9 +1947,7 @@ namespace {
 struct DraftLiveFace {
     const GraphDraft &draft;
 
-    bool alive(gc_node_ref_t ref) const {
-        return draft.header(ref) != nullptr && draft.alive(ref);
-    }
+    bool alive(gc_node_ref_t ref) const { return draft.header(ref) != nullptr && draft.alive(ref); }
     GCNodeKind kindOf(gc_node_ref_t ref) const {
         const DraftNodeHeader *header = draft.header(ref);
         return header != nullptr ? header->kind : GCNodeKind::Dead;
@@ -1760,8 +2011,11 @@ struct FrozenLiveFace {
         return node != nullptr ? node->kind : GCNodeKind::Dead;
     }
     void roots(std::vector<gc_node_ref_t> &into) const {
-        for (gc_node_ref_t ref : {graph.entryNodeRef(), graph.exitNodeRef(),
-                                  graph.outputNodeRef(), graph.returnNodeRef()}) {
+        for (gc_node_ref_t ref :
+             {graph.entryNodeRef(),
+              graph.exitNodeRef(),
+              graph.outputNodeRef(),
+              graph.returnNodeRef()}) {
             into.push_back(ref);
         }
         for (gc_node_ref_t ref : graph.normPorts()) {
@@ -1808,8 +2062,7 @@ struct FrozenLiveFace {
     }
 };
 
-template <typename Face>
-std::vector<gc_node_ref_t> liveNodesWith(const Face &face) {
+template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &face) {
     std::unordered_set<gc_node_ref_t> visited;
     std::vector<gc_node_ref_t> worklist;
     auto pushRoot = [&](gc_node_ref_t ref) {
@@ -1893,6 +2146,282 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node) {
         draft.syncUsersOf(node));
 }
 
+namespace {
+
+/// Not a component of any tuple, and not a position in any input list: the answers this section
+/// gives when there is no such thing.
+inline constexpr size_t kNoMember = std::numeric_limits<size_t>::max();
+
+/// The last component of the tuple an aggregate builds, or `npos` when the node is not a tuple FILL.
+/// The count comes from the **type**, not from the payload: a component no table entry names keeps
+/// the value the template carries and is still a component of the value, so a table of one entry can
+/// describe a tuple of two -- measured on `let p = (x, 7)`, where the constant goes into the template.
+size_t aggregateComponentsOf(const camel::core::type::Type *type) {
+    if (type == nullptr || type->code() != camel::core::type::TypeCode::Tuple) {
+        return kNoMember;
+    }
+    const auto *tupleType = static_cast<const camel::core::type::TupleType *>(type);
+    return tupleType == nullptr ? kNoMember : tupleType->size();
+}
+
+/// The two faces of a graph, in the words the aggregate judgement is written in (the idiom
+/// `liveNodesWith` above uses): every question here is asked of a draft and of a frozen graph the
+/// same way, so the judgement below has one implementation and cannot answer differently.
+struct DraftAggregateFace {
+    const GraphDraft &draft;
+
+    bool alive(gc_node_ref_t ref) const { return ref != kInvalidNodeRef && draft.alive(ref); }
+    GCNodeKind kindOf(gc_node_ref_t ref) const {
+        const DraftNodeHeader *header = draft.header(ref);
+        return header != nullptr ? header->kind : GCNodeKind::Dead;
+    }
+    const camel::core::type::Type *typeOf(gc_node_ref_t ref) const {
+        const DraftNodeHeader *header = draft.header(ref);
+        return header != nullptr ? header->dataType : nullptr;
+    }
+    /// The components this node fills, in the order its `with` inputs fill them.
+    std::span<const gc_slot_idx_t> fillSlotsOf(gc_node_ref_t ref) const {
+        const auto payload = draft.payloadOf(ref);
+        if (payload.size() < sizeof(GCFillBody)) {
+            return {};
+        }
+        return reinterpret_cast<const GCFillBody *>(payload.data())->slots();
+    }
+    bool isTupleFill(gc_node_ref_t ref) const {
+        const auto payload = draft.payloadOf(ref);
+        return payload.size() >= sizeof(GCFillBody) &&
+               reinterpret_cast<const GCFillBody *>(payload.data())->fillKind == GCFillKind::Tuple;
+    }
+    bool accsTupleIndexOf(gc_node_ref_t ref, uint32_t &index) const {
+        // The kind first: the payload of an ACCS and the payload of an OPER are both bytes, and
+        // reading a caller's payload in the other one's shape gives a member index that means nothing.
+        if (kindOf(ref) != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto payload = draft.payloadOf(ref);
+        if (payload.size() < sizeof(GCAccsBody)) {
+            return false;
+        }
+        const auto *body = reinterpret_cast<const GCAccsBody *>(payload.data());
+        if (body->accsKind != GCAccsKind::TupleIndex) {
+            return false;
+        }
+        index = body->value;
+        return true;
+    }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return draft.withInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t ref) const {
+        return draft.normUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t ref) const {
+        return draft.withUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t ref) const {
+        return draft.ctrlUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> orderUsersOf(gc_node_ref_t ref) const {
+        return draft.orderUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> syncUsersOf(gc_node_ref_t ref) const {
+        return draft.syncUsersOf(ref);
+    }
+    bool namedByGraph(gc_node_ref_t ref) const {
+        for (gc_node_ref_t named :
+             {draft.entryNode(), draft.exitNode(), draft.outputNode(), draft.returnNode()}) {
+            if (named == ref) {
+                return true;
+            }
+        }
+        for (auto list : {draft.normPorts(), draft.withPorts(), draft.closureNodes()}) {
+            if (std::find(list.begin(), list.end(), ref) != list.end()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    bool hasWritings() const { return !draft.writings().empty(); }
+    /// A value the sweep may take when unread: constants and pure operations, casts, copies, accesses
+    /// and fills -- what `rewrite.cpp#isValueOnly` calls a value rather than a statement. Asked the
+    /// same way on both faces, without the shape reading, so the two cannot disagree.
+    bool valueOnly(gc_node_ref_t ref) const {
+        switch (kindOf(ref)) {
+        case GCNodeKind::Data:
+            return draft.header(ref)->dataIndex < 0;
+        case GCNodeKind::Cast:
+        case GCNodeKind::Copy:
+        case GCNodeKind::Accs:
+        case GCNodeKind::Fill:
+        case GCNodeKind::Oper:
+            return camel::runtime::nodeIsFreelySchedulable(draft, ref, false);
+        default:
+            return false;
+        }
+    }
+};
+
+struct FrozenAggregateFace {
+    const GCGraph &graph;
+
+    bool alive(gc_node_ref_t ref) const {
+        if (ref == kInvalidNodeRef || !graph.containsNodeRef(ref)) {
+            return false;
+        }
+        const GCNode *node = graph.node(ref);
+        return node != nullptr && node->kind != GCNodeKind::Dead;
+    }
+    GCNodeKind kindOf(gc_node_ref_t ref) const {
+        const GCNode *node = graph.node(ref);
+        return node != nullptr ? node->kind : GCNodeKind::Dead;
+    }
+    const camel::core::type::Type *typeOf(gc_node_ref_t ref) const {
+        const GCNode *node = graph.node(ref);
+        return node != nullptr ? node->dataType() : nullptr;
+    }
+    std::span<const gc_slot_idx_t> fillSlotsOf(gc_node_ref_t ref) const {
+        const auto *body = graph.nodeBodyAs<GCFillBody>(ref);
+        return body != nullptr ? body->slots() : std::span<const gc_slot_idx_t>{};
+    }
+    bool isTupleFill(gc_node_ref_t ref) const {
+        const auto *body = graph.nodeBodyAs<GCFillBody>(ref);
+        return body != nullptr && body->fillKind == GCFillKind::Tuple;
+    }
+    bool accsTupleIndexOf(gc_node_ref_t ref, uint32_t &index) const {
+        if (kindOf(ref) != GCNodeKind::Accs) {
+            return false;
+        }
+        const auto *body = graph.nodeBodyAs<GCAccsBody>(ref);
+        if (body == nullptr || body->accsKind != GCAccsKind::TupleIndex) {
+            return false;
+        }
+        index = body->value;
+        return true;
+    }
+    std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
+        return graph.withInputsOf(ref);
+    }
+    std::span<const gc_node_ref_t> normUsersOf(gc_node_ref_t ref) const {
+        return graph.normUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> withUsersOf(gc_node_ref_t ref) const {
+        return graph.withUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> ctrlUsersOf(gc_node_ref_t ref) const {
+        return graph.ctrlUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> orderUsersOf(gc_node_ref_t ref) const {
+        return graph.orderUsersOf(ref);
+    }
+    std::span<const gc_node_ref_t> syncUsersOf(gc_node_ref_t ref) const {
+        return graph.syncUsersOf(ref);
+    }
+    bool namedByGraph(gc_node_ref_t ref) const {
+        for (gc_node_ref_t named : {graph.entryNodeRef(),
+                                    graph.exitNodeRef(),
+                                    graph.outputNodeRef(),
+                                    graph.returnNodeRef()}) {
+            if (named == ref) {
+                return true;
+            }
+        }
+        for (auto list : {graph.normPorts(), graph.withPorts(), graph.closureNodes()}) {
+            if (std::find(list.begin(), list.end(), ref) != list.end()) {
+                return true;
+            }
+        }
+        return false;
+    }
+    bool hasWritings() const { return !graph.writings().empty(); }
+    bool valueOnly(gc_node_ref_t ref) const {
+        switch (kindOf(ref)) {
+        case GCNodeKind::Data:
+            return graph.node(ref)->dataIndex < 0;
+        case GCNodeKind::Cast:
+        case GCNodeKind::Copy:
+        case GCNodeKind::Accs:
+        case GCNodeKind::Fill:
+        case GCNodeKind::Oper:
+            return camel::runtime::nodeIsFreelySchedulable(graph, ref);
+        default:
+            return false;
+        }
+    }
+};
+
+/// The position in a FILL's `with` list whose input fills component `last`, or `npos` when no input
+/// does: the table is read position by position against the inputs (`writeRuntimeFillSlots` pairs
+/// them, and so does `resolveTupleProjection`), and an entry past the end of the input list names no
+/// producer at all.
+size_t tailInputPosition(
+    std::span<const gc_slot_idx_t> slots, std::span<const gc_node_ref_t> values, size_t last) {
+    const size_t paired = std::min(slots.size(), values.size());
+    for (size_t position = 0; position < paired; ++position) {
+        if (slots[position] == last) {
+            return position;
+        }
+    }
+    return kNoMember;
+}
+
+template <typename Face>
+AggregateTailVerdict aggregateTailVerdictWith(const Face &face, gc_node_ref_t ref) {
+    if (!face.alive(ref) || face.kindOf(ref) != GCNodeKind::Fill || !face.isTupleFill(ref)) {
+        return AggregateTailVerdict::NotAnAggregate;
+    }
+    const size_t components = aggregateComponentsOf(face.typeOf(ref));
+    if (components == kNoMember || components < 2) {
+        return AggregateTailVerdict::NotAnAggregate;
+    }
+    // A value with several writings is not one value: which writing a reader of the aggregate reads is
+    // the extraction's question, so nothing here may be concluded about a member before it is answered
+    // (writings_extract.cpp#select; "extract first, then rewrite").
+    if (face.hasWritings()) {
+        return AggregateTailVerdict::SeveralWritings;
+    }
+    const size_t last    = components - 1;
+    const auto slots     = face.fillSlotsOf(ref);
+    const auto producers = face.withInputsOf(ref);
+    const size_t position = tailInputPosition(slots, producers, last);
+    if (position == kNoMember) {
+        return AggregateTailVerdict::TailComponentNotFilled;
+    }
+    // The aggregate itself may be held: a root or a port names it, or a wait is attached to it, and
+    // then it is a statement or an exported value, not a value this node builds for its readers.
+    if (face.namedByGraph(ref) || !face.ctrlUsersOf(ref).empty() || !face.orderUsersOf(ref).empty() ||
+        !face.syncUsersOf(ref).empty()) {
+        return AggregateTailVerdict::HeldByTheGraph;
+    }
+    // Who reads the aggregate. A reader that projects a component below the last one is unaffected by
+    // the last component stopping being filled; any other reader -- a call argument, a join, an
+    // operator, a `var` position a callee writes -- reads the value as a whole, and a member written
+    // elsewhere is exactly such a reader.
+    for (auto readers : {face.normUsersOf(ref), face.withUsersOf(ref)}) {
+        for (gc_node_ref_t reader : readers) {
+            uint32_t member = 0;
+            if (!face.accsTupleIndexOf(reader, member)) {
+                return AggregateTailVerdict::ReadAsAWhole;
+            }
+            if (member == last) {
+                return AggregateTailVerdict::TailComponentRead;
+            }
+            if (member >= components) {
+                return AggregateTailVerdict::ReadAsAWhole; // a projection past the tuple: not one member
+            }
+        }
+    }
+    // The member is a value: taking its last read may not leave a run nobody asked for, so the node
+    // that produces it has to be one the sweep may take when nothing reads it. A statement or an
+    // effect on the other side of this entry is refused, and so is a member somebody else still reads.
+    const gc_node_ref_t producer = producers[position];
+    if (!face.valueOnly(producer)) {
+        return AggregateTailVerdict::TailMemberIsKept;
+    }
+    return AggregateTailVerdict::MayStopFillingTheTail;
+}
+
+} // namespace
+
 uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref) {
     const DraftNodeHeader *header = draft.header(ref);
     if (header == nullptr || !draft.alive(ref) || header->kind != GCNodeKind::Fill) {
@@ -1921,32 +2450,80 @@ uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref) {
     return body->slotCount;
 }
 
-AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref) {
-    const uint32_t arity = aggregateArity(draft, ref);
-    if (arity < 2) {
-        return AggregateTailVerdict::NotAnAggregate;
+uint32_t aggregateTailInputIndex(const GraphDraft &draft, gc_node_ref_t ref) {
+    const camel::runtime::DraftNodeHeader *header =
+        draft.alive(ref) ? draft.header(ref) : nullptr;
+    if (header == nullptr || header->kind != GCNodeKind::Fill) {
+        return kInvalidNodeRef;
     }
-    // The members of an aggregate are the frame slots its payload names (`GCFillBody::slots` is a
-    // span of `gc_slot_idx_t`), not its ordinary inputs: an aggregate with two members has one
-    // input. So the member-to-node mapping this question needs is the inversion "which node writes
-    // that slot", which no layer provides yet -- and until it does, the only honest answer is that
-    // the shape cannot be judged.
-    return AggregateTailVerdict::MappingMismatch;
+    const size_t components = aggregateComponentsOf(header->dataType);
+    if (components == kNoMember || components < 2) {
+        return kInvalidNodeRef;
+    }
+    const auto payload = draft.payloadOf(ref);
+    if (payload.size() < sizeof(GCFillBody)) {
+        return kInvalidNodeRef;
+    }
+    const auto *body = reinterpret_cast<const GCFillBody *>(payload.data());
+    if (body->fillKind != GCFillKind::Tuple) {
+        return kInvalidNodeRef;
+    }
+    const size_t position = tailInputPosition(body->slots(), draft.withInputsOf(ref), components - 1);
+    return position == kNoMember ? kInvalidNodeRef : static_cast<uint32_t>(position);
+}
+
+uint32_t aggregateTailInputIndex(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Fill) {
+        return kInvalidNodeRef;
+    }
+    const size_t components = aggregateComponentsOf(node->dataType());
+    if (components == kNoMember || components < 2) {
+        return kInvalidNodeRef;
+    }
+    const auto *body = graph.nodeBodyAs<GCFillBody>(ref);
+    if (body == nullptr || body->fillKind != GCFillKind::Tuple) {
+        return kInvalidNodeRef;
+    }
+    const size_t position = tailInputPosition(body->slots(), graph.withInputsOf(ref), components - 1);
+    return position == kNoMember ? kInvalidNodeRef : static_cast<uint32_t>(position);
+}
+
+AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref) {
+    return aggregateTailVerdictWith(DraftAggregateFace{draft}, ref);
+}
+
+uint32_t aggregateComponentCount(const GCGraph &graph, gc_node_ref_t ref) {
+    const GCNode *node = graph.node(ref);
+    if (node == nullptr || node->kind != GCNodeKind::Fill) {
+        return 0;
+    }
+    const size_t components = aggregateComponentsOf(node->dataType());
+    return components == kNoMember ? 0 : static_cast<uint32_t>(components);
 }
 
 AggregateTailVerdict aggregateTailVerdict(const GCGraph &graph, gc_node_ref_t ref) {
-    if (aggregateArity(graph, ref) < 2) {
-        return AggregateTailVerdict::NotAnAggregate;
-    }
-    return AggregateTailVerdict::MappingMismatch;
+    return aggregateTailVerdictWith(FrozenAggregateFace{graph}, ref);
 }
 
 const char *aggregateTailVerdictName(AggregateTailVerdict verdict) {
     switch (verdict) {
     case AggregateTailVerdict::NotAnAggregate:
         return "not-an-aggregate";
-    case AggregateTailVerdict::MappingMismatch:
-        return "mapping-mismatch";
+    case AggregateTailVerdict::TailComponentNotFilled:
+        return "tail-component-not-filled";
+    case AggregateTailVerdict::TailComponentRead:
+        return "tail-component-read";
+    case AggregateTailVerdict::HeldByTheGraph:
+        return "held-by-the-graph";
+    case AggregateTailVerdict::ReadAsAWhole:
+        return "read-as-a-whole";
+    case AggregateTailVerdict::SeveralWritings:
+        return "several-writings";
+    case AggregateTailVerdict::TailMemberIsKept:
+        return "tail-member-is-kept";
+    case AggregateTailVerdict::MayStopFillingTheTail:
+        return "may-stop-filling-the-tail";
     }
     return "unknown";
 }

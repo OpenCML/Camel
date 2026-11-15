@@ -1,0 +1,19 @@
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
+// The last component is not a member this node fills: `7` is a constant, so the front end puts it in
+// the template the FILL copies and the table names only component 0. There is no member to take, and
+// the reading says which shape refused: `tail-component-not-filled` (a table of one entry describing
+// a tuple of two -- the number of members is the type's, not the payload's).
+
+func probe(x: int): int sync {
+    var c = 0
+    let w = (c = 41) * 0
+    let p = (c, 7)
+    return w + p.0
+}
+
+func main(): int sync {
+    println(probe(2))
+    return 0
+}

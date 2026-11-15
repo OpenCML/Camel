@@ -6,13 +6,13 @@
 #pragma once
 #include "camel/execute/pass/opt.h"
 
-inline constexpr const char *kEdgesCycleTestPass = "test::edges_cycle";
-inline constexpr const char *kEdgesTypeTestPass  = "test::edges_type";
-inline constexpr const char *kEdgesOkTestPass    = "test::edges_ok";
-inline constexpr const char *kCommitConflictTestPass = "test::commit_conflict";
-inline constexpr const char *kCommitMergeTestPass    = "test::commit_merge";
-inline constexpr const char *kEdgesOrderOkTestPass   = "test::edges_order_ok";
-inline constexpr const char *kEdgesOrderPureTestPass = "test::edges_order_pure";
+inline constexpr const char *kEdgesCycleTestPass         = "test::edges_cycle";
+inline constexpr const char *kEdgesTypeTestPass          = "test::edges_type";
+inline constexpr const char *kEdgesOkTestPass            = "test::edges_ok";
+inline constexpr const char *kCommitConflictTestPass     = "test::commit_conflict";
+inline constexpr const char *kCommitMergeTestPass        = "test::commit_merge";
+inline constexpr const char *kEdgesOrderOkTestPass       = "test::edges_order_ok";
+inline constexpr const char *kEdgesOrderPureTestPass     = "test::edges_order_pure";
 inline constexpr const char *kEdgesOrderScheduleTestPass = "test::edges_order_schedule";
 inline constexpr const char *kEdgesOrderSpliceTestPass   = "test::edges_order_splice";
 inline constexpr const char *kEdgesOrderReplaceTestPass  = "test::edges_order_replace";
@@ -22,6 +22,8 @@ inline constexpr const char *kEdgesSyncForkGateTestPass  = "test::edges_sync_for
 inline constexpr const char *kEdgesSyncCycleTestPass     = "test::edges_sync_cycle";
 inline constexpr const char *kEdgeUsersTestPass          = "test::edge_users";
 inline constexpr const char *kEdgesEditOnlyTestPass      = "test::edges_edit_only";
+inline constexpr const char *kEdgesCommitDiffTestPass    = "test::edges_commit_differential";
+inline constexpr const char *kEdgesDeliveryCheckTestPass = "test::edges_delivery_check";
 
 // Each adds nodes to the root graph, commits, and prints "EDGES accepted" or
 // "EDGES refused: <the commit's message>".
@@ -152,16 +154,45 @@ class EdgesSyncCycleTestPass : public RuntimeGraphRewritePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
 
-// An edit whose only difference is one sync edge, and a session that changes nothing. The commit
-// keeps the graph a session edited only while the copy it encoded differs from that graph, and
-// `sameContent` decides. The order and sync edges are the graph's own arrays beside the node
-// columns, so a comparison that reads the columns, the ports and the regions but not those two
-// arrays answers "the same graph" for an edit that wrote an edge: the commit then releases the copy
-// and hands back the graph the edit never reached. The pass writes the edge between two statements
-// the graph already has (no node is added, removed or changed), prints whether the edge is in the
-// graph the commit made and whether the graph object is the one it was (`reused=1` is the copy
-// thrown away), and then commits a session that changed nothing, which must keep the old version.
+// An edit whose only difference is one sync edge, and a session that changes nothing. What the
+// commit delivers is the draft's own answer to whether it still is the graph it was decoded from,
+// never a comparison of the encoded copy with the old graph: the order and sync edges are the
+// graph's own arrays beside the node columns, so a comparison that reads the columns, the ports and
+// the regions but not those two arrays answered "the same graph" for an edit that wrote an edge,
+// and the commit released the copy it had encoded and handed back the graph the edit never
+// reached. The pass writes the edge between two statements the graph already has (no node is added,
+// removed or changed), prints whether the edge is in the graph the commit made and whether the
+// graph object is the one it was (`reused=1` is the copy thrown away), and then commits a session
+// that changed nothing, which must keep the old version.
 class EdgesEditOnlyTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// The same edit twice, once alone and once beside a write nothing reads: two commits of one
+// program, and the graphs they make must hold the same edges. A commit whose answer depends on a
+// write somewhere else in the transaction is a commit that is not reproducible, and the shape this
+// case was written for is the one where the unrelated write was what made the commit notice the
+// edit at all. Prints the four edge lists of the graph each run made (`DIFF a ...`, `DIFF b ...`)
+// and whether the two are the same; the unrelated write adds a node and no edge, so the lists are
+// what must agree.
+class EdgesCommitDifferentialTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};
+
+// The commit's delivery check (camel/runtime/graph_build.h, `verifyDraftDelivery`): the graph a
+// commit made, read back against the draft it encoded, edge by edge. The first half commits with
+// the check on and prints that the commit was accepted; the second hands the check a draft that
+// holds one sync edge the graph does not -- the state an encoding that lost an edge leaves -- and
+// prints the refusal, which names the graph, the edge and the node. It runs in a Release build
+// because a test asked for it, which is the point: the check reports a value, it is not an ASSERT
+// that a shipped build compiles out.
+class EdgesDeliveryCheckTestPass : public RuntimeGraphRewritePass {
   public:
     using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
     const camel::runtime::Program *

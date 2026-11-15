@@ -726,24 +726,28 @@ EdgesSyncCycleTestPass::apply(const camel::runtime::Program *program, std::ostre
     }
 }
 
-// An edit whose only difference is one sync edge, and a session that changes nothing. The commit
-// keeps the graph a session edited only while the copy it encoded differs from that graph, and
-// `sameContent` decides; the order and sync edges are the graph's own arrays beside the node
-// columns, not ports and not entries of a node. A comparison that reads everything but those two
-// arrays answers "the same graph" for an edit that wrote an edge: the commit releases the copy and
-// hands back the graph the edit never reached. The edit here is written between two statements the
-// graph already has, so no node is added, removed or changed and the edge is the whole difference;
-// `reused` is the object identity of the graph, so a commit that threw the copy away shows as
-// `reused=1` with the edge missing, and one that kept it as `reused=0` with the edge there.
-const camel::runtime::Program *
-EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
-    using namespace camel::runtime;
+namespace {
+
+/// The graph the edge cases edit and the pair of statements they write the one sync edge between: a
+/// user that is a statement of the body and waits on nothing yet, and a predecessor the user cannot
+/// reach that no chain holds. So the edge fills one place of one chain, adds no node, removes none,
+/// and closes no loop -- the whole difference between the graph before and after is that edge.
+struct EdgePair {
+    GCGraph *target    = nullptr;
+    gc_node_ref_t user = kInvalidNodeRef;
+    gc_node_ref_t pred = kInvalidNodeRef;
+    size_t operators   = 0;
+    size_t statements  = 0;
+};
+
+EdgePair findEdgePair(const Program *program) {
+    EdgePair found;
     if (program == nullptr || program->root() == nullptr) {
-        return program;
+        return found;
     }
     // A graph that is not the program's root, edited the way a pass over a function value edits it
     // (`graph.open` in modules/graph/txn.cpp roots the session at the function's graph and commits
-    // detached): the shape the comparison sits on.
+    // detached): the shape the commit's delivery sits on.
     GCGraph *target = program->root();
     for (const GraphId ref : program->root()->refs()) {
         GCGraph *called = const_cast<Program *>(program)->graph(ref);
@@ -752,11 +756,8 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
             break;
         }
     }
-    const GraphId targetId = target->id();
-    // Two statements the graph already has: a user that waits on nothing yet, and a predecessor
-    // nothing waits on. Neither is added or changed, so the edge is the whole difference.
+    found.target = target;
     std::vector<gc_node_ref_t> statements;
-    std::vector<gc_node_ref_t> operators;
     std::vector<gc_node_ref_t> sameRegion;
     gc_node_ref_t maxRef = 0;
     for (auto it = target->nodes().begin(); it != target->nodes().end(); ++it) {
@@ -774,67 +775,133 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
         if (node->kind != GCNodeKind::Oper) {
             continue;
         }
-        operators.push_back(ref);
+        ++found.operators;
         if (camel::runtime::graph::is_chain_statement(*target, ref)) {
             statements.push_back(ref);
         }
     }
-    gc_node_ref_t user = kInvalidNodeRef;
-    gc_node_ref_t pred = kInvalidNodeRef;
+    found.statements = statements.size();
     // The statement of the body that waits on nothing yet: a chain is a run, so the edge goes into
     // a place that is free, and the graph has one sync edge more after the edit than before.
     for (const gc_node_ref_t ref : statements) {
         if (target->syncPredsOf(ref).empty()) {
-            user = ref;
+            found.user = ref;
             break;
         }
     }
-    if (user != kInvalidNodeRef) {
-        // Nothing the user already reaches can become its predecessor: the edge would close a loop
-        // (the seal refuses it), so the reach is walked first over every kind of user an edge has.
-        std::vector<gc_node_ref_t> reach;
-        std::vector<char> seen(static_cast<size_t>(maxRef) + 1, 0);
-        reach.push_back(user);
-        seen[user] = 1;
-        for (size_t at = 0; at < reach.size(); ++at) {
-            const gc_node_ref_t from = reach[at];
-            for (auto users : {target->normUsersOf(from), target->withUsersOf(from),
-                               target->ctrlUsersOf(from), target->syncUsersOf(from),
-                               target->orderUsersOf(from)}) {
-                for (const gc_node_ref_t next : users) {
-                    if (next < seen.size() && !seen[next]) {
-                        seen[next] = 1;
-                        reach.push_back(next);
-                    }
+    if (found.user == kInvalidNodeRef) {
+        return found;
+    }
+    // Nothing the user already reaches can become its predecessor: the edge would close a loop
+    // (the seal refuses it), so the reach is walked first over every kind of user an edge has.
+    std::vector<gc_node_ref_t> reach;
+    std::vector<char> seen(static_cast<size_t>(maxRef) + 1, 0);
+    reach.push_back(found.user);
+    seen[found.user] = 1;
+    for (size_t at = 0; at < reach.size(); ++at) {
+        const gc_node_ref_t from = reach[at];
+        for (auto users :
+             {target->normUsersOf(from),
+              target->withUsersOf(from),
+              target->ctrlUsersOf(from),
+              target->syncUsersOf(from),
+              target->orderUsersOf(from)}) {
+            for (const gc_node_ref_t next : users) {
+                if (next < seen.size() && !seen[next]) {
+                    seen[next] = 1;
+                    reach.push_back(next);
                 }
             }
         }
-        // A node the user does not reach, that waits on nothing and nothing waits on: it can start a
-        // chain. A statement first, since a chain is a run of statements; a node that only computes
-        // a value the user reads is upstream of it and closes no loop either.
-        for (const gc_node_ref_t ref : statements) {
-            if (pred == kInvalidNodeRef && ref != user && !seen[ref] &&
-                target->syncUsersOf(ref).empty() && target->syncPredsOf(ref).empty()) {
-                pred = ref;
-            }
-        }
-        for (const gc_node_ref_t ref : sameRegion) {
-            if (pred != kInvalidNodeRef || ref == user || seen[ref] ||
-                !target->syncUsersOf(ref).empty()) {
-                continue;
-            }
-            const GCNode *node = target->node(ref);
-            if (node != nullptr && node->kind != GCNodeKind::Join &&
-                node->kind != GCNodeKind::Func) {
-                pred = ref;
-            }
+    }
+    // A node the user does not reach, that waits on nothing and nothing waits on: it can start a
+    // chain. A statement first, since a chain is a run of statements; a node that only computes a
+    // value the user reads is upstream of it and closes no loop either.
+    for (const gc_node_ref_t ref : statements) {
+        if (found.pred == kInvalidNodeRef && ref != found.user && !seen[ref] &&
+            target->syncUsersOf(ref).empty() && target->syncPredsOf(ref).empty()) {
+            found.pred = ref;
         }
     }
-    os << "EDITONLY oper=" << operators.size() << " statements=" << statements.size() << "\n";
-    if (user == kInvalidNodeRef || pred == kInvalidNodeRef) {
+    for (const gc_node_ref_t ref : sameRegion) {
+        if (found.pred != kInvalidNodeRef || ref == found.user || seen[ref] ||
+            !target->syncUsersOf(ref).empty()) {
+            continue;
+        }
+        const GCNode *node = target->node(ref);
+        if (node != nullptr && node->kind != GCNodeKind::Join && node->kind != GCNodeKind::Func) {
+            found.pred = ref;
+        }
+    }
+    return found;
+}
+
+/// Every edge of `graph` as one line of text: the two data-port runs, the control run, and the two
+/// side arrays, each edge as `kind:user>pred;`. Two graphs made by two runs of one edit are the
+/// same graph, edge for edge, exactly when this line is the same; a digest would say that too and
+/// say nothing about which edge differed, which is what a red reading has to show.
+std::string spelledEdges(const GCGraph &graph) {
+    std::string text;
+    const auto add = [&text](const char *kind, gc_node_ref_t user, gc_node_ref_t pred) {
+        text += kind;
+        text += std::to_string(user);
+        text += '>';
+        text += std::to_string(pred);
+        text += ';';
+    };
+    for (auto it = graph.nodes().begin(); it != graph.nodes().end(); ++it) {
+        const gc_node_ref_t ref = it.ref();
+        const GCNode *node      = graph.node(ref);
+        if (node == nullptr || node->kind == GCNodeKind::Dead) {
+            continue;
+        }
+        for (const gc_node_ref_t pred : graph.normInputsOf(ref)) {
+            add("norm:", ref, pred);
+        }
+        for (const gc_node_ref_t pred : graph.withInputsOf(ref)) {
+            add("with:", ref, pred);
+        }
+        for (const gc_node_ref_t pred : graph.ctrlInputsOf(ref)) {
+            add("ctrl:", ref, pred);
+        }
+        for (const GCGraphOrderEdge &edge : graph.orderPredsOf(ref)) {
+            add("order:", edge.user, edge.pred);
+        }
+        for (const GCGraphSyncEdge &edge : graph.syncPredsOf(ref)) {
+            add("sync:", edge.user, edge.pred);
+        }
+    }
+    return text.empty() ? std::string("none") : text;
+}
+
+} // namespace
+
+// An edit whose only difference is one sync edge, and a session that changes nothing. What the
+// commit delivers is the draft's own answer to whether it still is the graph it was decoded from;
+// the order and sync edges are the graph's own arrays beside the node columns, not ports and not
+// entries of a node, and a comparison that reads everything but those two arrays answered "the same
+// graph" for an edit that wrote an edge -- which is what a commit used to decide delivery by, and
+// then released the copy it had encoded and handed back the graph the edit never reached. The edit
+// here is written between two statements the graph already has, so no node is added, removed or
+// changed and the edge is the whole difference; `reused` is the object identity of the graph, so a
+// commit that threw the copy away shows as `reused=1` with the edge missing, and one that kept it
+// as `reused=0` with the edge there.
+const camel::runtime::Program *
+EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const EdgePair pair = findEdgePair(program);
+    os << "EDITONLY oper=" << pair.operators << " statements=" << pair.statements << "\n";
+    if (pair.user == kInvalidNodeRef || pair.pred == kInvalidNodeRef) {
         os << "EDITONLY no_pair\n";
         return program;
     }
+    GCGraph *target          = pair.target;
+    const GraphId targetId   = target->id();
+    const gc_node_ref_t user = pair.user;
+    const gc_node_ref_t pred = pair.pred;
     os << "EDITONLY pair user=" << user << " pred=" << pred << "\n";
 
     const GCGraph *base = target;
@@ -849,8 +916,7 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
             const GCGraph *after = next->graph(targetId);
             const auto preds     = after->syncPredsOf(user);
             os << "EDITONLY sync wrote=" << (wrote ? 1 : 0) << " before=" << before
-               << " after=" << after->syncEdges().size()
-               << " sync_in=" << preds.size()
+               << " after=" << after->syncEdges().size() << " sync_in=" << preds.size()
                << " mine=" << ((preds.size() == 1 && preds[0].pred == pred) ? 1 : 0)
                << " reused=" << (after == base ? 1 : 0) << "\n";
             program = next;
@@ -860,8 +926,9 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
             return program;
         }
     }
-    // Nothing at all: the graph must stay the one it was and the copy the commit encoded must be
-    // released. This is the optimization the case above must not take away.
+    // Nothing at all: the graph must stay the one it was. The draft wrote nothing and the commit
+    // found nothing to close in it, so the commit makes no version of it at all -- this is the
+    // optimization the case above must not take away, and the draft's own record is what keeps it.
     {
         RuntimeGraphDraftSession session(context_, program, target);
         (void)session.edit(target);
@@ -874,6 +941,139 @@ EdgesEditOnlyTestPass::apply(const camel::runtime::Program *program, std::ostrea
             return program;
         }
     }
+}
+
+// The same edit twice on one program, once alone and once beside a write nothing reads: the two
+// graphs the commits make must be the same graph edge for edge. A commit whose answer depends on a
+// write somewhere else in the transaction is not reproducible -- two programs that differ only in
+// an unrelated write would commit to different graphs -- and the shape that was measured is the one
+// where the unrelated write was what made the commit notice the edit at all (`by_cpp` green because
+// something else happened to change, rather than because the edge was legal). The unrelated write
+// here is a node nothing reads and nothing runs, so it adds no edge: the node count differs between
+// the two runs and the four edge lists must not.
+const camel::runtime::Program *
+EdgesCommitDifferentialTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const EdgePair pair = findEdgePair(program);
+    os << "DIFF oper=" << pair.operators << " statements=" << pair.statements << "\n";
+    if (pair.user == kInvalidNodeRef || pair.pred == kInvalidNodeRef) {
+        os << "DIFF no_pair\n";
+        return program;
+    }
+    GCGraph *target          = pair.target;
+    const GraphId targetId   = target->id();
+    const gc_node_ref_t user = pair.user;
+    const gc_node_ref_t pred = pair.pred;
+    os << "DIFF pair user=" << user << " pred=" << pred << "\n";
+    // One run of the edit. `unrelated` adds the write nothing reads; everything else is the same
+    // session, the same draft and the same edge. The session commits detached, so both runs start
+    // from the program this pass was given.
+    const auto run = [&](bool unrelated, std::string &error) -> std::string {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction = session.edit(target);
+        auto &draft       = transaction.edit();
+        if (!draft.setSyncPredecessor(user, pred)) {
+            error = "the draft refused the one edge the case is about";
+            return {};
+        }
+        if (unrelated) {
+            // A node nothing reads and nothing runs: it changes the graph and it is no edge.
+            blankNode(transaction);
+        }
+        try {
+            const Program *next  = session.commit(true);
+            const GCGraph *after = next->graph(targetId);
+            if (after == nullptr) {
+                error = "the program the commit made does not hold the graph";
+                return {};
+            }
+            return spelledEdges(*after);
+        } catch (const std::exception &exception) {
+            error = exception.what();
+            return {};
+        }
+    };
+    std::string error;
+    const std::string alone = run(false, error);
+    if (!error.empty()) {
+        os << "DIFF refused: " << error << "\n";
+        return program;
+    }
+    const std::string withUnrelatedWrite = run(true, error);
+    if (!error.empty()) {
+        os << "DIFF refused: " << error << "\n";
+        return program;
+    }
+    // The two lines are what a red reading shows: the edge list of each committed graph, in full.
+    os << "DIFF a " << alone << "\n";
+    os << "DIFF b " << withUnrelatedWrite << "\n";
+    os << "DIFF same=" << (alone == withUnrelatedWrite ? 1 : 0) << "\n";
+    return program;
+}
+
+// The commit's delivery check (camel/runtime/graph_build.h, `verifyDraftDelivery`). The first half
+// commits the one-edge edit with the check on -- a Release build does not run it unless a test asks
+// -- and prints that the commit was accepted. The second half hands the check a pair that
+// disagrees: a draft that holds the edge, and the graph the commit made before it was written. That
+// is the state an encoding that lost an edge leaves behind, and the check must name it: the graph,
+// the kind of edge, the two nodes. It reports by throwing (never by an ASSERT, which `NDEBUG` makes
+// nothing of), so a shipped build that runs it can still say what is wrong.
+const camel::runtime::Program *
+EdgesDeliveryCheckTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
+    using namespace camel::runtime;
+    if (program == nullptr || program->root() == nullptr) {
+        return program;
+    }
+    const EdgePair pair = findEdgePair(program);
+    if (pair.user == kInvalidNodeRef || pair.pred == kInvalidNodeRef) {
+        os << "DELIVERY no_pair\n";
+        return program;
+    }
+    GCGraph *target        = pair.target;
+    const GraphId targetId = target->id();
+    os << "DELIVERY pair user=" << pair.user << " pred=" << pair.pred << "\n";
+    setDraftDeliveryCheckEnabled(true);
+    const Program *next = program;
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction = session.edit(target);
+        auto &draft       = transaction.edit();
+        if (!draft.setSyncPredecessor(pair.user, pair.pred)) {
+            os << "DELIVERY no_pair\n";
+            return program;
+        }
+        try {
+            next = session.commit(true);
+            os << "DELIVERY commit checked=" << (draftDeliveryCheckEnabled() ? 1 : 0)
+               << " accepted=" << (next->graph(targetId) != nullptr ? 1 : 0) << "\n";
+        } catch (const std::exception &error) {
+            os << "DELIVERY refused: " << error.what() << "\n";
+            return program;
+        }
+    }
+    // The pair that disagrees: the same edit written into a draft of the graph the commit started
+    // from, and that graph itself handed to the check as what was installed. That is exactly the
+    // state an encoding that lost the edge leaves -- the draft holds it, the graph does not -- and
+    // nothing commits here.
+    {
+        RuntimeGraphDraftSession session(context_, program, target);
+        auto &transaction = session.edit(target);
+        auto &draft       = transaction.edit();
+        if (!draft.setSyncPredecessor(pair.user, pair.pred)) {
+            os << "DELIVERY no_second_pair\n";
+            return next;
+        }
+        try {
+            verifyDraftDelivery(transaction, *target, target->name());
+            os << "DELIVERY missed\n";
+        } catch (const std::exception &error) {
+            os << "DELIVERY refused: " << error.what() << "\n";
+        }
+    }
+    return next;
 }
 
 // One node read in every kind there is, and the two readings of its users. The draft keeps one

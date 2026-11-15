@@ -128,6 +128,11 @@ void debugDraftRootOpened(const GraphTransaction &transaction);
 void debugDraftRootClosed(const GraphTransaction &transaction);
 #endif
 
+/// A flag of a cell of its own rather than a member: the check is about every commit of the
+/// process, and a test sets it without opening a session.
+bool draftDeliveryCheckEnabled();
+void setDraftDeliveryCheckEnabled(bool enabled);
+
 class RuntimeGraphDraftSession {
   public:
     /// `location` names the place the session was opened, for the Debug-only safepoint check
@@ -257,6 +262,11 @@ class RuntimeGraphDraftSession {
         /// the same way every other handle does, and the graph it commits is the transaction's.
         std::unique_ptr<GraphTransaction> transaction;
         RuntimeDraftIdentity identity;
+        /// The draft's `mutations()` when the last commit that delivered it finished. What the
+        /// session wrote since then is what the next commit has to deliver: `mutations()` counts
+        /// the commit's own closing of the draft too, so the counter alone would make a second
+        /// commit over the same draft look like a write.
+        uint64_t deliveredMutations = 0;
     };
 
     GraphTransaction &ensureDraft(GCGraph *graph);
