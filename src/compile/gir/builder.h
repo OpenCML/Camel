@@ -1192,9 +1192,9 @@ class Builder {
         /// The ports of the region (a loop's condition or body), in order: the element, then the
         /// values of the state.
         std::vector<node_handle_t> ports;
-        /// The variables the arm stores into itself, and the functions it calls: what else it
-        /// writes is what those write (capturedWritesOf), known once every body is built.
-        std::set<node_handle_t> directWrites;
+        /// The functions the arm calls: what it writes is what those write (capturedWritesOf),
+        /// known once every body is built. A store the arm makes itself is a value of the
+        /// program's own, not an effect (design principles 3.1), so it is not part of this set.
         std::vector<DraftGraphBuilder *> callees;
         camel::core::type::Type *exitType() const { return type; }
     };
@@ -1393,8 +1393,6 @@ class Builder {
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
         std::vector<node_handle_t> variables;
-        /// Variables known to be written (by the arms of a branch), besides what `graphs` write.
-        std::set<node_handle_t> written;
         camel::source::origin_id_t origin;
         std::string subject;
         std::string verb;

@@ -4674,7 +4674,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         unit_->pendingIgnoredWrites.push_back(
             {std::move(writingGraphs),
              capturedWrites,
-             {},
              gct->origin(),
              subject,
              "it writes"});
