@@ -118,7 +118,8 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
 static bytecode_vec_t compileRuntimeGraph(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
     GUARD(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
     GUARD(
         graph->hasNodePayload(),
@@ -417,6 +418,9 @@ static bytecode_vec_t compileRuntimeGraph(
             if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
                 (*localPcOrigins)[currIdx] = nodeOrigin;
             }
+            if (localPcNodes) {
+                (*localPcNodes)[currIdx] = runtimeNodeIndex;
+            }
 
             continue;
         }
@@ -605,6 +609,9 @@ static bytecode_vec_t compileRuntimeGraph(
         if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
             (*localPcOrigins)[currIdx] = nodeOrigin;
         }
+        if (localPcNodes) {
+            (*localPcNodes)[currIdx] = runtimeNodeIndex;
+        }
 
         if (bytecodes.size() > bytecodeStart) {
             valueProducerMap[runtimeNodeIndex] = currIdx;
@@ -656,8 +663,9 @@ static bytecode_vec_t compileRuntimeGraph(
 bytecode_vec_t compile(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
-    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins);
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
+    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins, localPcNodes);
 }
 
 LinkedBytecodeResult compileAndLink(
