@@ -137,8 +137,13 @@ const onBrch = edges.filter((edge) => edge.toKind === 'BRCH')
 const onLoop = edges.filter((edge) => edge.toKind === 'LOOP')
 assert(onBrch.length === 1, `expected one order edge on a BRCH, got ${onBrch.length}`)
 assert(onLoop.length === 1, `expected one order edge on a LOOP, got ${onLoop.length}`)
-assert(onBrch[0].from === ':var/get', `the order edge on the BRCH is from ${onBrch[0].from}, not from the read before the branch`)
-assert(onLoop[0].from === ':var/get', `the order edge on the LOOP is from ${onLoop[0].from}, not from the read before the loop`)
+// The read before the branch and the read before the loop are gone from this graph: the fold gave
+// their users the value the write produced, and the node that carries that value now is the COPY.
+// An order edge belongs to the node that holds the value and runs with it, so the edge the read
+// used to carry is the COPY's. Both ends are named, so the assertion says which node the edge hangs
+// on and not merely that one exists.
+assert(onBrch[0].from === 'COPY' && onBrch[0].to === 'BRCH', `the order edge the branch waits on is ${onBrch[0].from} -> ${onBrch[0].to}, not COPY -> BRCH: the COPY carries the value of the read before the branch, and the edge went with the value`)
+assert(onLoop[0].from === 'COPY', `the order edge the loop waits on is from ${onLoop[0].from}, not from the COPY that carries the value of the read before the loop`)
 // The two writes inside the first arm are what the fix must not take away: an order edge whose
 // two ends are in the same arm is the one such an edge is for.
 const inside = edges.filter((edge) => edge.to === ':op/assn_l')
