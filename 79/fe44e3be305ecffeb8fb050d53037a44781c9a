@@ -1,0 +1,41 @@
+`lane-handleown` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`79fe44e3be305ecffeb8fb050d53037a44781c9a`，`--no-ff` 合入 `lane-handleown`（`2bbaa042b`
++ 同步合并 `a15c0705a`）。**无冲突**；净改动 4 文件 `+38/−14`。推：`3cf8925fc..79fe44e3b`，
+`ls-remote` = 79fe44e3be305ecffeb8fb050d53037a44781c9a。
+
+闸门（合后 `develop`，`-Jobs 8`，主机 88，**重新构建**过——这笔改 C++）：
+    `feat/compile` + `feat/runtime` + `feat/opt` →
+    [SUMMARY] total: 3912, pass: 3895, fail: 1, known failures: 16        RUN_EXIT=1
+    唯一红：[FAIL] var.assignment_and_let_chain_are_one_graph  230.69 ms   ← 计划自述「It is red on 96a27e435, and it is meant to be」
+    [PASS] runtime.draft_node_owner.stale_handle_is_refused  72.80 ms
+    [provenance] tip 79fe44e3b | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+无 `killed by a signal`、无 `timed out`。
+
+## 判据
+- **没有第二条红**（`fail: 1`，就是授权那条）。
+- `git grep -n 'node\.draft->' -- src/compile/gir/draft_graph_builder.cpp` = **空**；`fromRef` 里
+  `node.draft` 只用于「是不是 nullptr」与「拿地址查表」，不再解引用。
+- 登记值 `DraftRegistration { builder, epoch }`：构造时 `draftOwners()[&draft()] =
+  DraftRegistration{this, draft().epoch()}`（`draft_graph_builder.cpp:60`，在草稿确定属于本建图器的那一刻写），
+  析构 `draftOwners().erase(&draft())` 擦除。
+- **`Refused:` 那行仍打得出来**：它由计划第 6 条正则断言
+  `^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$`，
+  该用例 `[PASS]`；同一份 `expect_stdout_matches` 里的 `released_owner=none` 也匹配了——即「地址上没有任何草稿时
+  仍答 none，且不再读那块内存」。**runner 不把用例 stdout 回显到日志**，所以我手里没有该行的字面副本，只有断言通过。
+- 探针已随修复删除：`git grep from_ref_probe` 只剩 `src/passes/test/draft_node_owner.cpp:59` 的一行**注释**
+  （指认旧代码会打那行），源码里没有打印点。
+- 核心读数（写进合并正文）：`[from_ref_probe] nobody owns 0x…; read epoch 48 for a handle made in epoch 48`
+  —— **从无人拥有的地址读出 48，与句柄 epoch 相同 ⇒ 旧门通过、答案看起来对**；缺陷不是答案错，而是理由是读那块
+  内存得来的，所以它现在不红只因为那块内存碰巧还装着旧值。
+
+## 顺手核到、但不是这笔改的（报告用，未修、未动）
+同一形状还在两处，`src/compile/gir/builder_support.h`：
+- `nodeIsCurrent`（第 128 行）`node.epoch == node.draft->epoch()`——它自己的注释说它的用途正是**跨 body 的句柄表**
+  在问之前的那一问（「a body a pass has measured is let go and the allocator hands its memory to the next draft」），
+  也就是它被设计成在句柄可能已过期时被调用，却仍然读那块草稿。
+- `nodeDraftOf` 的 GUARD（第 112、119 行）同样读 `node.draft->epoch()`（条件一次、报告再一次）。
+这两处**不在**这笔车道的范围内（它的判据是 `draft_graph_builder.cpp` 清空），我没有动源码。
+另：`docs/handover/reports/2026-11-15-is-the-stream-family-load-dependent.cn.md:58` 现在说
+「`DraftGraphBuilder::fromRef` 判定时**无条件**读 `node.draft->epoch()`」——这句在本合并之后已不成立（那正是被修掉的读），
+属文档漂移，留给写那条读数的人。
