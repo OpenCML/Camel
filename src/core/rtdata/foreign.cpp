@@ -56,10 +56,11 @@ uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
 }
 
-/// The kind the state module gives its reference handle (`refDescriptor()` in modules/state/module.cpp):
-/// the blocks with this kind are the boxes a count reclaims, and the anchor compares their created count
-/// producing rows. A string compare per block, and blocks are made rarely; anything else would need
-/// the descriptor to carry a flag into code that does not know the reference type.
+/// The kind the state module gives its reference handle (`refDescriptor()` in
+/// modules/state/module.cpp): the blocks with this kind are the boxes a count reclaims, and the
+/// anchor compares their created count producing rows. A string compare per block, and blocks are
+/// made rarely; anything else would need the descriptor to carry a flag into code that does not
+/// know the reference type.
 std::string_view countedKind() { return "state.ref"; }
 
 /// The boxes that a count reclaims which this thread made. An executor reads the program-wide
@@ -103,6 +104,10 @@ void ForeignResourceControlBlock::retain() noexcept {
     refCount_.fetch_add(1, std::memory_order_acq_rel);
 }
 
+void ForeignResourceControlBlock::retainHolder() noexcept {
+    holderCount_.fetch_add(1, std::memory_order_acq_rel);
+}
+
 void ForeignResourceControlBlock::releaseReference() noexcept { (void)release(); }
 
 void ForeignResourceControlBlock::releaseFromWrapperFinalizer() noexcept {
@@ -110,7 +115,31 @@ void ForeignResourceControlBlock::releaseFromWrapperFinalizer() noexcept {
     (void)release();
 }
 
-bool ForeignResourceControlBlock::releaseCountNow() noexcept { return release(); }
+// The plan's count reached zero: no holder is left, so the resource goes now -- and only the
+// resource. The block's memory stays, because the wrappers that name it are the collector's to
+// release, and a wrapper outliving the last holder is the ordinary case (`--gc-check foreign` sees
+// exactly that: `live` is a count of handles still reachable, not of holders).
+//
+// Freeing the block here instead was the alternative, and it is wrong until the handle value itself
+// stops living on the collected heap: every wrapper names the block by raw pointer, so a block
+// deleted under a live wrapper leaves `ForeignResourceObject::finalize` handing a dangling pointer
+// to the deferred queue.
+bool ForeignResourceControlBlock::releaseCountNow() noexcept {
+    if (holderCount_.fetch_sub(1, std::memory_order_acq_rel) != 1) {
+        return false;
+    }
+    countedOut_.store(true, std::memory_order_release);
+    {
+        auto &live = liveControlBlocks();
+        std::lock_guard<std::mutex> lock(live.mutex);
+        // Nothing holds the resource any more, so the exit sweep must not take it a second time.
+        live.blocks.erase(this);
+    }
+    dispose();
+    counters().releasedControlBlocks.fetch_add(1, std::memory_order_acq_rel);
+    counters().liveControlBlocks.fetch_sub(1, std::memory_order_acq_rel);
+    return true;
+}
 
 bool ForeignResourceControlBlock::release() noexcept {
     {
@@ -125,9 +154,14 @@ bool ForeignResourceControlBlock::release() noexcept {
         live.blocks.erase(this);
     }
 
+    // `dispose` is what the last reference does, unless the count already did it -- in which case
+    // only the memory is left to free, and the two readings below were taken at zero.
+    const bool countedOut = countedOut_.load(std::memory_order_acquire);
     dispose();
-    counters().releasedControlBlocks.fetch_add(1, std::memory_order_acq_rel);
-    counters().liveControlBlocks.fetch_sub(1, std::memory_order_acq_rel);
+    if (!countedOut) {
+        counters().releasedControlBlocks.fetch_add(1, std::memory_order_acq_rel);
+        counters().liveControlBlocks.fetch_sub(1, std::memory_order_acq_rel);
+    }
     delete this;
     return true;
 }
@@ -262,7 +296,7 @@ bool retainCountNow(Object *value) noexcept {
     if (control == nullptr) {
         return false;
     }
-    control->retain();
+    control->retainHolder();
     return true;
 }
 
@@ -340,7 +374,7 @@ void resetCountedCreationAnchorForTests() noexcept {
     anchor.missing.store(0, std::memory_order_relaxed);
     anchor.rows.store(0, std::memory_order_relaxed);
     anchor.rowsSeen.store(0, std::memory_order_relaxed);
-    countedBlocksOnThisThread = 0;
+    countedBlocksOnThisThread     = 0;
     reportedCreationsOnThisThread = 0;
 }
 

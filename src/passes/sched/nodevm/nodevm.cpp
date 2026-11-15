@@ -749,6 +749,14 @@ slot_t NodeVMSchedPass::call(
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
                             evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);
+                            // This node's output was written by the marked evaluator itself, so
+                            // the count's rows at this position are run from the slot it left.
+                            camel::runtime::applyRefEntriesForNode(
+                                *currPlan,
+                                currFrame,
+                                nodeRef,
+                                n->dataIndex == 0 ? slot_t{0}
+                                                  : currFrame->get<slot_t>(n->dataIndex));
                             break;
                         }
                         throwRuntimeFault(
@@ -778,6 +786,11 @@ slot_t NodeVMSchedPass::call(
                 }
 
                 currFrame->set(n->dataIndex, result);
+                // The count's rows at this position: the holds this node's output takes and the
+                // references that come back once it has run. Run whether or not the anchor above
+                // was asked for -- counting is what releases a box (design principles 10.5) and the
+                // flag only says whether the process reports what it released.
+                camel::runtime::applyRefEntriesForNode(*currPlan, currFrame, nodeRef, result);
             } break;
 
             case GCNodeKind::Loop:

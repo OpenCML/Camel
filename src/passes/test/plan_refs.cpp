@@ -12,10 +12,22 @@
  *     ... tail-kind <n> balanced yes|no
  * then one line per producing position:
  *   PLAN_REFS <graph> at <position> value <ref> kind <n> copies <n> kept <0|1> uses <n>
- * and one line per reference that comes back: `give` when a use of the value ended, `packed` when the
- * value that packed it in died (a closure tuple or an aggregate), which is later than the use.
+ * and one line per reference that comes back: `give` when a use of the value ended, `packed` when
+ * the value that packed it in died (a closure tuple or an aggregate), which is later than the use.
  *   PLAN_REFS <graph> at <position> give <ref> x<n>
  *   PLAN_REFS <graph> at <position> packed <ref> x<n>
+ *
+ * Route 4's column and the entries the same walk lays out are printed beside them, under their own
+ * prefixes so that a reader (and the entries below) can tell the two readings apart:
+ *   PLAN_LAST_USE <graph> at <position> value <ref> last-use <position|none>
+ *   PLAN_REF_ENTRIES <graph> at <position> retain <ref> x<n>
+ *   PLAN_REF_ENTRIES <graph> at <position> give <ref> x<n> [packed]
+ *   PLAN_REF_ENTRIES <graph> retains <n> give-backs <n> kept <n> balanced yes|no
+ * `last-use none` is an answer and not a gap: nothing reads that value, so its producing reference
+ * comes back at its own position. The entries are the schedule one row per thing to do -- the holds
+ * a producing node's output takes (`retain`) and the references that come back (`give`) -- and
+ * their balance is `produced + retains == give-backs + kept`, recomputed here from the rows
+ * themselves.
  *
  * `produced` is the number of values the plan counts (ports, constants and nodes that only forward
  * a value are not among them), `copies` the references beyond each value's own, `give-backs` the
@@ -42,7 +54,7 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         if (!graph->hasNodePayload()) {
             continue;
         }
-        const ExecPlan &plan = graph->execPlan();
+        const ExecPlan &plan   = graph->execPlan();
         const std::string name = graph->name();
         const size_t produced  = plan.refProducedTotal();
         const size_t copies    = plan.refCopiesTotal();
@@ -58,8 +70,8 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
             os << " tail none";
         } else {
             const GCNode *tail = graph->node(plan.tailValueRef);
-            os << " tail " << plan.tailValueRef
-               << " tail-kind " << (tail == nullptr ? -1 : static_cast<int>(tail->kind));
+            os << " tail " << plan.tailValueRef << " tail-kind "
+               << (tail == nullptr ? -1 : static_cast<int>(tail->kind));
         }
         os << " balanced " << (balanced ? "yes" : "no") << "\n";
         // The uses of each value, counted from the rows themselves: a reference comes back once per
@@ -94,6 +106,39 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                    << "\n";
             }
         }
+        // Route 4's column, printed as it is: for every value the table counts, the position after
+        // which it is never read again. `none` is an answer (nothing reads the value) and not a
+        // gap.
+        for (size_t i = 0; i < plan.topo.size(); ++i) {
+            if (i >= plan.refProducedAt.size() || plan.refProducedAt[i] == 0) {
+                continue;
+            }
+            os << "PLAN_LAST_USE " << name << " at " << i << " value " << plan.topo[i]
+               << " last-use ";
+            const uint32_t last =
+                i < plan.lastUseAt.size() ? plan.lastUseAt[i] : ExecPlan::kNoLastUse;
+            if (last == ExecPlan::kNoLastUse) {
+                os << "none";
+            } else {
+                os << last;
+            }
+            os << "\n";
+        }
+        // The same schedule as the entries a back end reads, one row per thing to do, and the
+        // balance recomputed from the rows: `produced + retains == give-backs + kept`.
+        for (size_t i = 0; i < plan.topo.size(); ++i) {
+            for (const ExecPlan::RefEntry &entry : plan.refEntriesAt(i)) {
+                os << "PLAN_REF_ENTRIES " << name << " at " << i << " "
+                   << (entry.kind == ExecPlan::RefEntryKind::Retain ? "retain" : "give")
+                   << " value " << entry.value << " x" << entry.count
+                   << (entry.packed ? " packed" : "") << "\n";
+            }
+        }
+        os << "PLAN_REF_ENTRIES " << name << " retains "
+           << plan.refEntriesOfKind(ExecPlan::RefEntryKind::Retain) << " give-backs "
+           << plan.refEntriesOfKind(ExecPlan::RefEntryKind::GiveBack) << " kept "
+           << plan.refKeptTotal() << " balanced " << (plan.refEntriesBalance() ? "yes" : "no")
+           << "\n";
     }
     return program;
 }

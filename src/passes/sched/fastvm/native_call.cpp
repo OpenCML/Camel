@@ -58,5 +58,19 @@ slot_t FastVMSchedPass::invokeNativeOperator(const Bytecode &bc, ctx::Frame &fra
     if (anchorWanted) {
         camel::runtime::noteCountedCreationAt(frame.graph(), pc, boxes.sinceBegin());
     }
+    // The count's rows at this instruction's position -- the same site the anchor above is asked at,
+    // because it is the one place all three bytecode back ends (std::fvm's two interpreter loops and
+    // std::jit's native operator call) reach the operator. Bytecode has a destination slot here and
+    // not a node, so the node comes from the plan's own slot table and the entry is the same one the
+    // other back ends call; the value the operator just made is handed over rather than read back,
+    // because the caller publishes it into the slot after this returns. Run whether or not
+    // --gc-check was asked for: counting is what releases a box (design principles 10.5).
+    if (const auto *runtimeGraph = frame.graph()) {
+        const camel::runtime::ExecPlan &plan = runtimeGraph->execPlan();
+        const camel::runtime::gc_node_ref_t node = plan.refNodeOfSlot(bc.result);
+        if (node != camel::runtime::kInvalidNodeRef) {
+            camel::runtime::applyRefEntriesForNode(plan, &frame, node, result);
+        }
+    }
     return result;
 }
