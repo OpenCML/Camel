@@ -1498,6 +1498,9 @@ df2285a6921cfa9b ok test/cases/compile/prelude_signatures/imported_name.cml
 d5bfbf7a13058125 ok test/cases/compile/ref/err_holds_ref.cml
 c7bf8d2161fb4912 ok test/cases/compile/ref/err_holds_ref_closure.cml
 d25fac2d6357568d ok test/cases/compile/ref/err_holds_ref_closure_depth.cml
+54175d59bc3c5230 ok test/cases/compile/ref/err_holds_ref_closure_in_collection.cml
+233d5aa2f4bea8da ok test/cases/compile/ref/err_holds_ref_closure_in_struct.cml
+91ef977693cbe4b8 ok test/cases/compile/ref/err_holds_ref_closure_in_struct_unread.cml
 ec6c1dec0f711e6c ok test/cases/compile/ref/err_holds_ref_closure_unread.cml
 a603f90011a7fd12 ok test/cases/compile/ref/ref_boxes_are_counted.cml
 c87e262c61f310e1 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
@@ -1507,6 +1510,7 @@ d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 6e031bde2d13dbbf ok test/cases/compile/ref/ref_closure.cml
 9c5ed6009d7896e0 ok test/cases/compile/ref/ref_closure_capture.cml
 7d411e6e4d48eaf9 ok test/cases/compile/ref/ref_closure_capture_depth.cml
+741aa91059b3ac82 ok test/cases/compile/ref/ref_closure_in_container_control.cml
 2dc36a2971e3b790 ok test/cases/compile/ref/ref_content_survives.cml
 6ee7d8cfa508dc5c ok test/cases/compile/ref/ref_float.cml
 60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml

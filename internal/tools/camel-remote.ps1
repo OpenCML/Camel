@@ -317,7 +317,20 @@ param(
     # The stage runs before the plan on purpose: the plan reads the record, so a record that failed
     # must stop the run rather than be read later as a plan that failed. `-Plan <the parse plan>`
     # beside it is the verification, and needs no separate call.
+    #
+    # It prints the build time of the binary it records with -- `out/<tag>/bin/camel-parsecheck built
+    # YYYY-MM-DD HH:mm` -- because the one failure mode this stage cannot show on its own is a stale
+    # binary: with `-NoBuild` beside it, the record is taken by whatever the host built last, which may
+    # be days older than the tree asking for it, and the line then says `(NOT REBUILT -- may be
+    # stale)` instead of looking like a fresh build. A record whose provenance is invisible is how a
+    # golden gets silently re-recorded from the wrong parser.
     [switch]$UpdateAstHashes,
+    # With -UpdateAstHashes, re-hash only these files (globs, repeatable) instead of the whole list.
+    # `--only` restricts what is rewritten, not what the record must cover, so the check that follows
+    # still reads every line: recording the whole list also *replaces* every line that no longer
+    # matches, which would turn a golden into whatever the tree happens to produce, while a name
+    # selected here can only move the lines it names.
+    [string[]]$AstOnly = @(),
     # Run these of the repository's static checkers on the host, after the build and after the plan:
     # names from the table below, comma-separated, or `all` for every one of them. Each checker's
     # output is printed verbatim with its exit code, and the run exits non-zero when one failed.
@@ -553,6 +566,12 @@ $name = Split-Path -Leaf $Path
 $branch = (git -C $Path rev-parse --abbrev-ref HEAD).Trim()
 if ($branch -eq 'HEAD') {
     Write-Host "[camel-remote] detached HEAD in $name; check out a branch first"
+    exit 2
+}
+# `-AstOnly` selects which lines a recording rewrites; with no recording there is no stage that could
+# read it, and a request nobody carries out must not look like one that ran.
+if ($AstOnly.Count -gt 0 -and -not $UpdateAstHashes) {
+    Write-Host "[camel-remote] -AstOnly names what -UpdateAstHashes rewrites; give -UpdateAstHashes, or drop -AstOnly"
     exit 2
 }
 
@@ -1140,11 +1159,19 @@ $buildCmd = if ($Config -eq 'Debug') { "npm run debug$stackTraceArg" } else { "n
     # (`out/latest` for a Release run, `out/debug` for a Debug one -- the install this run built, not
     # whichever one happens to be newest). The recorded file leaves base64-encoded between two
     # markers, so it costs no second connection and cannot be mangled by the line filter above it.
+    #
+    # The `[machine]` line comes first and names the build time of the binary that does the recording:
+    # a stale binary is the one failure mode this stage cannot show in its own output, and with
+    # `-NoBuild` the record is taken by whatever the host built last. `-NoBuild` therefore appends
+    # `(NOT REBUILT -- may be stale)` to that line rather than leaving it looking like a fresh build.
+    $astBuiltNote = if ($NoBuild) { ' (NOT REBUILT -- may be stale)' } else { '' }
+    $astOnlyArgs = ($AstOnly | ForEach-Object { " --only '$_'" }) -join ''
     $astStage = if ($UpdateAstHashes) {
         @'
 echo '__CAMEL_REMOTE_AST_START__'
+echo "[machine] out/TAG/bin/camel-parsecheck built $(date -r out/TAG/bin/camel-parsecheck '+%Y-%m-%d %H:%M')NOTE"
 echo '[camel-remote] recording the AST snapshot (frontend.ast_snapshot) on the host'
-CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --update 2>&1
+CAMEL_HOME="$R/out/TAG" python3 test/tools/parsecheck/check.py snapshot --updateONLY 2>&1
 astc=$?
 echo "AST_UPDATE_EXIT=$astc"
 if [ $astc -ne 0 ]; then
@@ -1154,7 +1181,7 @@ fi
 echo '__CAMEL_REMOTE_AST_FILE_BEGIN__'
 base64 "$R/test/plans/feat/parse/golden/ast_hashes.txt"
 echo '__CAMEL_REMOTE_AST_FILE_END__'
-'@ -replace 'TAG', $verifyTag
+'@.Replace('TAG', $verifyTag).Replace('NOTE', $astBuiltNote).Replace('ONLY', $astOnlyArgs)
     } else { ':' }
 
     # One block per checker: a header naming it and the command it runs, the command's own stdout and
