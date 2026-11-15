@@ -1,12 +1,10 @@
-# `compile.stream.*` 的红不是负载相关的：单跑 40 轮 0 次，全量 7 轮 0 次，红在别族
+# `compile.stream.*` 的红不是负载相关的：单跑 40 轮、全量 7 轮，0 次
 
-- 车道 `lane-streamred`，工作树 `D:\Projects\Camel-wt\streamred`，树 `df057ee8a`（`origin/develop`）。
-- **每轮同一份二进制**（`build` 只在第一次做，其余 `-NoBuild`，守卫按内容指纹放行；红轮与绿轮 `binary built` 相同）：
+- 车道 `lane-streamred`，树 `df057ee8a`（`origin/develop`），工作树 `D:\Projects\Camel-wt\streamred`。
+- 全程同一份二进制（`build` 只做一次，其余 `-NoBuild`，内容指纹守卫放行；红轮与绿轮 `binary built` 相同）：
   `[provenance] tip df057ee8a8c7526e4e941636e200c0d21635e6b0 | binary built 2026-11-15T03:10:45-05:00 | tree /home/zjwei/camel-work/streamred | tier fast | jobs <1|8>`
 
-## 1. `test/plans/feat/compile/stream.plan.toml` 单跑：40 轮
-
-147 条（102 个 `[[tests]]` 展开）。每轮原文都是 `[SUMMARY] total: 147, pass: 147, fail: 0`。
+## 1. `test/plans/feat/compile/stream.plan.toml` 单跑 40 轮
 
 | 轮 | `-Jobs 1` | `-Jobs 8` | 轮 | `-Jobs 1` | `-Jobs 8` |
 |---|---|---|---|---|---|
@@ -21,52 +19,56 @@
 | 9 | 绿 f0 | 绿 f0 | 19 | 绿 f0 | 绿 f0 |
 | 10 | 绿 f0 | 绿 f0 | 20 | 绿 f0 | 绿 f0 |
 
-- **`compile.stream.*` 红 0 次 / 40 轮。** 宿主 1 分钟负载 **15.11–27.05**（32 核），两个宽度都在真负载下量。
-- 用例墙钟：`-Jobs 1` 10.5–11.3 s；`-Jobs 8` 1.4–1.9 s。
+**红 0 次 / 40 轮**；每轮原文 `[SUMMARY] total: 147, pass: 147, fail: 0`。宿主 1 分钟负载 15.11–27.05（32 核），
+墙钟 `-Jobs 1` 10.5–11.3 s、`-Jobs 8` 1.4–1.9 s。
 
-## 2. 全量 `test/plans/feat/compile`，`-Jobs 8`：7 轮（继续在跑）
+## 2. 全量 `test/plans/feat/compile`，`-Jobs 8`：7 轮
 
-| 轮 | `[SUMMARY]` 原文 | 红 |
+| 轮 | `[SUMMARY]` | 红 |
 |---|---|---|
-| 1 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
-| 2 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
-| 3 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
+| 1–3 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
 | 4 | total: 2490, pass: 2473, fail: 1, known failures: 16 | `ref.boxes_made_per_call_ten.prl` |
-| 5 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
-| 6 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
-| 7 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
+| 5–7 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
 
-**`compile.stream.*` 在全量里也是 0 次 / 7 轮。** 唯一那条红属于别的族，原文：
+`compile.stream.*` 在全量里 0 次 / 7 轮。唯一那条红在别族，原文：
 
 ```
 [FAIL] ref.boxes_made_per_call_ten.prl                       96.36 ms
-    [INFO] verification exited 1
     [INFO] verification output: Error: nothing accumulated: the live blocks do not follow the
            calls that are over: FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
     [stdout] 10 41
-    [stdout] FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
 ```
 
 ## 3. 判定
 
-- 「全量红、单跑绿」这个**形状**在这个 tip 上存在，但承载它的是 `ref`，不是 `stream`。
-- `ref` 那一格不是被谁污染的**base rate**：它自己那一格的注释写着 `p≈0.3-0.5 at --jobs 4, ≈0.25 at --jobs 1.
-  Do not rerun to close it`（`test/plans/feat/compile/ref.plan.toml`），且 `docs/handover/questions/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md`
-  今天在 `--jobs 4` 量到 5 红 / 10 轮、`--jobs 1` 同样红。⇒ 它不需要任何计划前缀来解释自己。
-- `stream` 族历史那 8–11 条红有出处：**win-x64 腿的图所有权不变量**（`src/compile/gir/builder_support.h#nodeGraphOf`；
-  同一句 GUARD 在 v0.2.40 的树上读作 `builder_support.h(125)`、在 `df057ee8a` 上读作 `builder_support.h(151)`），
-  Linux 读已释放内存时"恰好读得到"，从不报警
+- 「全量红、单跑绿」这个形状只出现 1 次（`ref`，全量 r4），**一次观测不足以判它被谁污染**：`ref.plan.toml`
+  单跑 `-Jobs 8` **0 红 / 10 轮**（52 条，每轮 `fail: 0`）。两边的 p 都在 0.1 附近，这个样本分不开。
+- `ref` 自己的注释写着 `p≈0.3-0.5 at --jobs 4, ≈0.25 at --jobs 1`，那是**另一份二进制**（`50fdda557c`）上的读数；
+  不同二进制，p 搬不过来 —— 这正是本页每轮都记 `binary built` 的理由。
+- `stream` 族历史那 8–11 条红不是宿主能复现的东西：它们是 win-x64 腿的图所有权不变量
   （`docs/handover/reviews/2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md`）。
 
-## 4. 二分：**没做**，且原计划不适用
+## 4. `(125)` 与 `(151)` 是源码行号，不是节点数
 
-它的触发条件是「全量里 `stream` 红、单跑绿」——47 轮里一次都没出现。替代读数（正在量）：`ref.plan.toml`
-单跑 10 轮。若它自己就红，「全量才红」就不需要任何计划前缀；若它单跑全绿，二分才成为必需。
+- `GUARD` → `cml::fail_invariant`，报告里的 `Location : <file>(<line>)` 取自 `std::source_location::line()`
+  （`src/utils/assert.cpp#fail_invariant`）；`include/camel/utils/assert.h` 写明它是 "the same report and the same
+  abort as an `ASSERT`, in every build"，**没有 `NDEBUG` 分支** —— 宿主跑的是同一个检查。
+- Windows 抓到它的方式与 Linux 相同：打印 Location/Function/Guarantee/Reading 后 `std::abort()`，退出码 3。
+- 同一句 GUARD：v0.2.40 的树上它在 `builder_support.h` 第 125 行、是 `nodeGraphOf` 的第 3 行；`df057ee8a` 上第 151 行
+  —— epoch 修复把 `nodeDraftOf` 及其注释写长了 26 行。**一个位置，行号移动**，既不是节点数，也不是两次读数。
+- 宿主可见：`test/plans/feat/runtime/draft_node_owner.plan.toml` 用合成构造逼出这个条件，
+  `[PASS] runtime.draft_node_owner.stale_handle_is_refused 67.33 ms`；它的断言要求宿主打出
+  `Refused: handle made in epoch N at 0x…, and the address now holds epoch N`。
 
-## 5. 若要修，第一个该看的地方
+## 5. 两种形状各自是什么（读码）
 
-`src/compile/gir/captures.cpp#Builder::captureInto`（`graph->outerGraph() != nullptr`）与
-`src/compile/gir/builder_support.h#nodeGraphOf` ＋ `src/compile/gir/draft_graph_builder.cpp#DraftGraphBuilder::fromRef`
-（`fromRef` 返回空 = 建图器已析构、而地址和 epoch 都还没被复用）。两条同一个形状：「一个 handle 活过了它的图」，
-Windows 的分配器才把它暴露出来。先查 `src/compile/gir/builder.h` 的 `Builder::variables_` 之外哪些 handle 表在跨 body
-使用前没有问 `nodeIsCurrent`（今天只有 `builder_state.cpp#cellsOfBody` 与 `#carryOutOf` 问过）。
+- 第 151 行：`DraftGraphBuilder::draft()` 是 `transaction_->edit()`，草稿归事务 —— 所以这是**草稿还活着、建图器已析构**
+  （析构里 `draftOwners().erase(&draft())`），是建图器的生命周期缺陷，不是内存坏掉。
+- `nodeDraftOf` 的 epoch 拒绝：草稿本身已销毁、地址被后来的草稿占用 —— 那一次读确实落在已释放内存上；epoch 是让它
+  可被判据读出来、而不是静默读错的那一半。两种形状共一句结论：**一个 handle 活过了它的所有者**。
+
+## 6. 若要修，第一个该看的地方
+
+`src/compile/gir/captures.cpp#Builder::captureInto`（`graph->outerGraph() != nullptr`，与上面两句同一形状）与
+`src/compile/gir/builder_support.h#nodeGraphOf`；再查 `src/compile/gir/builder.h` 的 `Builder::variables_` 之外哪些
+handle 表在跨 body 使用前没有问 `nodeIsCurrent`（今天只有 `builder_state.cpp#cellsOfBody` 与 `#carryOutOf` 问过）。
