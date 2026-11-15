@@ -86,3 +86,12 @@ created`、`live = 0`。若将来某处需要在**帧返回的那一行**就归�
 原因不是它没达到读数，而是达到了读数却弄坏了树：`test/plans/feat/opt/defun.plan.toml` 在它之后是
 `total: 21, pass: 12, fail: 9, killed by a signal: 8`，只把这两行注释掉就是 `pass: 21, fail: 0`。
 一个活着的 `Variant` 丢了类型，然后八个进程死掉。**泄漏比这个好。**
+
+## 两页后写的记录
+
+- `2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md`：按裁定做了「每多一个持有者 +1、
+  持有者消失 −1」之后量到的反面结果——四后端 `released = 0`、`live = 1001`，因为**出生时那一份 retain 没有主**，
+  并提出「产出处的减一由编译器发 dup/drop」的默认建议。
+- `2026-11-15-a-function-typed-slot-holds-a-tagged-variant.cn.md`：上面那次撤回里撞到的冲突单独立案——defun 之后
+  声明为函数类型的槽里装着带 tag 的 Variant，追踪按槽的类型读它；基线运行中没有任何收集点，所以这条路径从未被
+  走过，**任何一次运行中收集都会撞上**。
