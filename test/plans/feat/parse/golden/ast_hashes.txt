@@ -2502,6 +2502,7 @@ a81719fa7579a1b0 ok test/cases/definitions/grad.cml
 9667d9a6fe936e07 ok test/cases/definitions/kernels.cml
 9e42e1f2eace2938 ok test/cases/definitions/mean_empty.cml
 1c054a011b19c87f ok test/cases/definitions/numel_shape.cml
+c03be9bfb2de2e2f ok test/cases/effects/callback_captured_handle_opt.cml
 3c65e5ec401bed66 ok test/cases/effects/callback_write_ignored.cml
 5da978a23352b00a ok test/cases/effects/callback_write_through_parameter.cml
 5c1e0c7e893ee634 ok test/cases/effects/declared.cml
