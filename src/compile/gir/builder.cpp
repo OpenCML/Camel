@@ -1129,6 +1129,9 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name, parameterPortOrigins(context_, gct));
+    // The construction node this graph is written as, so that a capture made inside the body can ask
+    // the scan of the program's closures what this closure's last use is (3.5, 198).
+    graphGctOf_[graph.get()] = gct;
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The condition belongs to the function, not to its instance: it is evaluated when
         // this graph is selected by a call, where the types and the `with` arguments of the

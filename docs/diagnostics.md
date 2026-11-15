@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-318 diagnostics: 295 errors, 23 warnings. 15 carry a machine-applicable edit, 303 say why they carry none.
+321 diagnostics: 298 errors, 23 warnings. 15 carry a machine-applicable edit, 306 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -274,6 +274,9 @@ prints one entry.
 | `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
 | `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
+| `0x03000213` | [SemanticDiag::ClosureAssignsCapturedName](#closureassignscapturedname) | Error | no |
+| `0x03000214` | [SemanticDiag::CapturedVarWrittenAfterTheClosure](#capturedvarwrittenaftertheclosure) | Error | no |
+| `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -9075,6 +9078,113 @@ func wide(x: int): int sync {
 func main(): int sync {
     let h = pick(true)
     println(h(1))
+    return 0
+}
+```
+
+### ClosureAssignsCapturedName
+
+`0x03000213` · Error · `SemanticDiag::ClosureAssignsCapturedName`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name.
+```
+
+**Help**
+
+```text
+A closure holds a value, not a place, so an assignment to a name outside it would write nothing the closure can see. Three ways out: return the new value as the closure's result and let the caller bind it; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`, so every round hands the next one a value; or hold the state in a `Ref` (`let r = ref(0)`, `get(r)`, `set(r, v)`), which a closure may capture because a handle is a value.
+```
+
+**Example** (`test/cases/compile/var_closure/err_closure_assigns_captured.cml`, run as `camel test/cases/compile/var_closure/err_closure_assigns_captured.cml`)
+
+```camel
+func make(x: int): int {
+    var total = 0
+    func add(k: int): int {
+        total = total + k
+        return total
+    }
+    let a = add(x)
+    a
+}
+
+func main(): int sync {
+    println(make(3))
+    return 0
+}
+```
+
+### CapturedVarWrittenAfterTheClosure
+
+`0x03000214` · Error · `SemanticDiag::CapturedVarWrittenAfterTheClosure`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read.
+```
+
+**Help**
+
+```text
+The closure holds the value `{0}` had when it was made, so this assignment cannot reach it. Three ways out: return the new value as the closure's result; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on assigning a name of its own, bind it first (`let x0 = x`) and let the closure mention `x0`.
+```
+
+**Example** (`test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`)
+
+```camel
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    x = 2
+    println(g())
+    return 0
+}
+```
+
+### CapturedVarHandedToVarParameter
+
+`0x03000215` · Error · `SemanticDiag::CapturedVarHandedToVarParameter`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure.
+```
+
+**Help**
+
+```text
+The write stands in the callee and is handed back to `{0}` where the call is, so it changes a name the closure already holds the value of. Three ways out: return the new value instead of writing it back; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on handing the name to a call, bind it first (`let x0 = x`) and hand `x0` on.
+```
+
+**Example** (`test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`)
+
+```camel
+func bump(var p: int): void {
+    p = p + 10
+}
+
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    bump(x)
+    println(g())
     return 0
 }
 ```
