@@ -36,6 +36,7 @@
 #include <functional>
 #include <map>
 #include <numeric>
+#include <set>
 #include <stdexcept>
 #define DEBUG_LEVEL -1
 
@@ -4363,6 +4364,10 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
         if (!droppedGraphs_.contains(camel::runtime::toValue(currGraph_->graphId()))) {
+            // The write the body leaves in a `var` parameter is used here, where the body leaves:
+            // the cell is the caller's, and what the body last wrote into it is what the caller
+            // finds there afterwards (design principles 3.1).
+            outputAnchor = exitUsesVariableParameterWrites(currGraph_, outputAnchor);
             setGraphReturnFromResult(
                 currGraph_,
                 nodeIdOf(outputAnchor),
@@ -4761,13 +4766,98 @@ void Builder::markLoopStateInPlaceOne(
     }
 }
 
+node_handle_t
+Builder::exitUsesVariableParameterWrites(const compile_graph_ptr_t &graph, node_handle_t anchor) {
+    const FunctionType *funcType = graph != nullptr ? graph->funcType() : nullptr;
+    if (funcType == nullptr || anchor == nullptr) {
+        return anchor;
+    }
+    // A `var` parameter is a cell the caller made: what the body leaves in it is what the caller
+    // reads afterwards, so the write outlives the call and is a result of the function beside the
+    // returned value (design principles 3.1). The write the body leaves is the one `recordWrite`
+    // recorded last on the port -- the same node a read of the parameter takes as its version
+    // (Builder::valueVersionOf) -- and a parameter the body never wrote has none.
+    node_vec_t writers;
+    const auto collect = [&](const auto &ports, const bool with) {
+        const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+        for (size_t i = 0; i < ports.size() && i < count; ++i) {
+            if (!(with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i))) {
+                continue;
+            }
+            const node_handle_t port = graph->view().ref(ports[i]);
+            if (port == nullptr) {
+                continue;
+            }
+            if (const auto writer = modifierOf(port);
+                writer.has_value() && sameGraph(*writer, graph)) {
+                writers.push_back(*writer);
+            }
+        }
+    };
+    collect(graph->view().withPorts(), true);
+    collect(graph->view().normPorts(), false);
+    if (writers.empty()) {
+        return anchor;
+    }
+    // What the exit already uses, reached back the way the run time lays the graph out: data ports,
+    // sync edges and the control edges it waits on. Inside a `sync` block the chain carries the
+    // write to the exit already, so nothing is added there and the two bodies build one shape --
+    // the same `:op/assn_l` node, used by the same exit, whether the write is written in a block or
+    // not.
+    const auto *draft = nodeDraftOf(anchor);
+    std::set<draft_node_ref_t> reached{nodeIdOf(anchor)};
+    std::vector<draft_node_ref_t> work{nodeIdOf(anchor)};
+    while (!work.empty()) {
+        const draft_node_ref_t id = work.back();
+        work.pop_back();
+        for (const auto inputs :
+             {draft->normInputsOf(id), draft->withInputsOf(id), draft->ctrlInputsOf(id)}) {
+            for (const draft_node_ref_t input : inputs) {
+                if (reached.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+        for (const draft_node_ref_t input : draft->syncInputsOf(id)) {
+            if (reached.insert(input).second) {
+                work.push_back(input);
+            }
+        }
+    }
+    node_handle_t gate = nullptr;
+    for (node_handle_t writer : writers) {
+        if (reached.contains(nodeIdOf(writer))) {
+            continue;
+        }
+        if (gate == nullptr) {
+            if (nodeIsKind(anchor, runtime::GCNodeKind::Gate)) {
+                // The exit's own GATE, made for the chain tail: the wait goes on it.
+                gate = anchor;
+            } else {
+                gate = graph->addGateNode(nodeTypeOf(anchor));
+                linkNodes(LinkType::Norm, anchor, gate);
+            }
+        }
+        if (linkCheek(writer, gate) && !runtime::hasControlDependency(
+                                           *nodeTransactionOf(gate), nodeIdOf(writer),
+                                           nodeIdOf(gate))) {
+            // The control edge is what makes the write run where the value it wrote has no reader
+            // of its own in the body (docs/design/effects/edges.cn.md 1; design principles 3.5,
+            // F3): the exit waits on it, and the wait is why it runs at all.
+            writeControlLink(writer, gate);
+        }
+    }
+    return gate != nullptr ? gate : anchor;
+}
+
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
     if (graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     if (result == nullptr) {
-        result = graph->addStaticDataNode(Data::null());
-        setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(result), Type::Void());
+        result               = graph->addStaticDataNode(Data::null());
+        node_handle_t anchor = exitUsesVariableParameterWrites(graph, result);
+        setGraphReturnFromResult(graph, nodeIdOf(anchor), nodeIdOf(result), Type::Void());
         return;
     }
     // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
@@ -4777,7 +4867,9 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
         value = nodeDraftOf(result)->ref(normInputsOf(result).front());
     }
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
-    setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
+    setGraphReturnFromResult(
+        graph, nodeIdOf(exitUsesVariableParameterWrites(graph, result)), nodeIdOf(value),
+        nodeTypeOf(value));
 }
 
 } // namespace camel::compile::gir
