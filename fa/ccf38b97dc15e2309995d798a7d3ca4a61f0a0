@@ -1,0 +1,33 @@
+`lane-ssa2` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`faccf38b97dc15e2309995d798a7d3ca4a61f0a0`，`--no-ff` 合入 `lane-ssa2`（`afb856f66`
++ 同步合并 `166fb45a5`）。**无冲突**（`merge-tree` 返回单棵树）；净改动 19 文件 `+915/−16`
+（含 11 份 var→SSA 过程页）。推：`701388712..faccf38b9`，
+`ls-remote` = faccf38b97dc15e2309995d798a7d3ca4a61f0a0。
+
+闸门（合后 `develop`，**重新构建**，`-Jobs 8`）：
+    `feat/compile` + `feat/opt` → `[SUMMARY] total: 3911, pass: 3888, fail: 7, known failures: 16`
+    `test/plans/feat/compile/var.plan.toml` 单跑 → `[SUMMARY] total: 3, pass: 3, fail: 0`
+    [provenance] tip faccf38b9 | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+无 `killed by a signal`、无 `timed out`。
+
+## 三个形状读数（各自在合后树上跑过）
+| 断言 | 读数 |
+|---|---|
+| 硬指标 `var.assignment_and_let_chain_are_one_graph` | **`[PASS]`**（单跑 200.27 ms、全量里 243.85 ms）——`ce610cacb` 那条故意红**已转绿** |
+| `var.write_in_branch_is_the_value_the_arm_wrote` | **`[PASS]`**，断言 stdout 含 `1` 且**不含 `0`**（臂里的写经 JOIN 到达读；答 `0` 就是折叠退回了 `:var/new` 的初值） |
+| `var.write_in_loop_is_the_accumulated_value` | **`[PASS]`**，断言 stdout 含 `3` 且**不含 `0`**（循环体三轮各加一；答 `0`/`1` 都是错的） |
+
+## 「新红 0」的核验
+7 条红全部是 `e24ce4aaf` 就红的老红，与车道报的一致：
+`camel_passes.cse.subject` / `.by_cpp` / `.by_camel` / `.property`、
+`camel_passes.cse_written_variable.by_cpp` / `.by_camel`、`cml_var_holding_a_lambda`。
+**没有一条新红。** 总数 3911 与车道报的 3905 相差 6，是两棵树不同（我这边还带着 `refref` 之后的门禁改动），不影响结论。
+
+## `graph.attrs` 重锚（`afb856f66`）
+- 旧：`only(19, 'graph::scale=3')` —— 0-based 19 是 `var a = doubled(3)`，该 OPER 随 `var` 折叠**已正确消失**。
+- 新：扫 main 体 0-based 19..27 的 OPER，要求其一带 `graph::scale=3`；承载它的是 0-based 22 的 `a = a * 4`，
+  而第 22 行另有精确断言 `graph::plain, graph::scale=3`。**断言同一条 tag 属性，不是同一个行号。**
+- **反向验证在提交正文里留痕**：摘掉 `#scale(3)` ⇒
+  `no OPER of main's body carries graph::scale=3: ["graph::plain","graph::scale=5"]`；放回 ⇒ PASS。
+  （我核的是正文里的这段读数，没有自己再摘一次——那要改 `stdlib/graph.cml`，不是合并位该做的事。）
