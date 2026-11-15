@@ -72,7 +72,7 @@ func main(): int {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The loop has side effects but is never executed: nothing depends on it and it is not in a sync block. ...
+warning[SemanticDiag::EffectNotExecuted]: The loop is never executed: nothing needs what it gives, so nothing runs it. ...
 ```
 
 同一个警告也用于**读**：读外部资源的结果没人用时不执行，和读一个变量没人用一样。`sync` 改变的不是"写要不要执行"，而是区域里相邻语句的先后（4.3）。
