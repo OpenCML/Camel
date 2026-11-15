@@ -3004,27 +3004,24 @@ node_handle_t Builder::buildBranch(
         return origin != captureOriginOf_.end() ? origin->second : variable;
     };
     std::vector<DraftGraphBuilder *> armCallees;
-    std::set<node_handle_t> directWrites;
     for (const arm_ptr_t &arm : armList) {
         armCallees.insert(armCallees.end(), arm->callees.begin(), arm->callees.end());
-        for (node_handle_t variable : arm->directWrites) {
-            directWrites.insert(originOf(variable));
-        }
     }
     if (ArmBuild *outer = activeArm()) {
         // The arms of this branch are part of the arm it is in.
         outer->callees.insert(outer->callees.end(), armCallees.begin(), armCallees.end());
-        for (const arm_ptr_t &arm : armList) {
-            outer->directWrites.insert(arm->directWrites.begin(), arm->directWrites.end());
-        }
     }
+    // A `var` an arm writes is the branch's value, not an effect (design principles 3.1): a write
+    // to a `var` is a value, so the arm does not report one. What is reported here is a write by a
+    // callee an arm calls to a variable that callee captured -- that write is not handed back where
+    // the call stands (reportIgnoredCapturedWrites).
     if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {armCallees, origins, directWrites, gct->origin(), "The branch", "an arm writes"});
+            {armCallees, origins, gct->origin(), "The branch", "an arm writes"});
     }
 
     if (synced_) {
@@ -4074,57 +4071,24 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         return origin != captureOriginOf_.end() ? origin->second : variable;
     };
     std::vector<DraftGraphBuilder *> callees;
-    std::set<node_handle_t> directWrites;
     for (const arm_ptr_t &part : parts) {
         callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-        for (node_handle_t variable : part->directWrites) {
-            directWrites.insert(originOf(variable));
-        }
     }
     if (ArmBuild *outer = activeArm()) {
         // The parts of this loop are part of the arm it is in.
         outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-        for (const arm_ptr_t &part : parts) {
-            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
-        }
     }
-    // A `var` the body writes is a state of the loop, so the store it used to make is not there to
-    // record the write; the write is the loop's all the same, and a block of the enclosing body
-    // that is not a `sync` block runs the loop only when something needs what it gives -- so the
-    // write runs only then, which is what IgnoredSideEffect says about every write outside one. It
-    // is recorded as the write of the loop's part, which is what a store in a part was (design
-    // principles 3.5, F3; the ruling of 2026-11-15 on a write outside a `sync` block).
-    for (const LoopCarriedState &state : carried) {
-        capturedWrites.push_back(state.cell);
-        directWrites.insert(originOf(state.cell));
-        // A read of the cell written before the loop has to come before it, and the loop is the
-        // node that runs with the read's part: an order edge on the LOOP, which is the edge the
-        // write inside the body used to leave through the resources of the block it stands in
-        // (docs/design/effects/edges.cn.md 4.6). A read the fold replaces keeps the edge: what the
-        // read ordered is ordered by the version (GraphDraft::replaceOrderEdgesAt).
-        const std::vector<VariableUse> pending(pendingUsesOf(state.cell));
-        for (const VariableUse &use : pending) {
-            if (!use.isRead || use.node == nullptr || use.node == loopNode ||
-                !sameGraph(use.node, currGraph_) || !nodeTakesAnOrder(use.node) ||
-                !nodeTakesAnOrder(loopNode)) {
-                continue;
-            }
-            if (hasDirectDataDependency(use.node, loopNode) || dataPathReaches(use.node, loopNode)) {
-                continue;
-            }
-            linkNodes(LinkType::Order, use.node, loopNode);
-        }
-        // The loop is the write the block after it sees: a write written after it is ordered after
-        // the loop, and the cell itself has no store to be ordered by.
-        recordWrite(state.cell, loopNode, true);
-    }
+    // What the loop's parts write is not an effect: a write to a `var` is a value (design
+    // principles 3.1), and the body's writes are the states the LOOP hands on. What is left to
+    // report here is a write by a callee the parts call to a variable that callee captured: that
+    // write is not handed back where the call stands (reportIgnoredCapturedWrites).
     if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+            {callees, origins, gct->origin(), "The loop", "its body writes"});
     }
 
     if (synced_) {
@@ -4530,26 +4494,22 @@ node_handle_t Builder::buildStreamLoop(
         return origin != captureOriginOf_.end() ? origin->second : variable;
     };
     std::vector<DraftGraphBuilder *> callees;
-    std::set<node_handle_t> directWrites;
     for (const arm_ptr_t &part : parts) {
         callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-        for (node_handle_t variable : part->directWrites) {
-            directWrites.insert(originOf(variable));
-        }
     }
     if (ArmBuild *outer = activeArm()) {
         outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-        for (const arm_ptr_t &part : parts) {
-            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
-        }
     }
+    // What the loop's parts write is not an effect (design principles 3.1): a write to a `var` is
+    // a value, so only a write by a callee the parts call to a variable that callee captured is
+    // reported here (reportIgnoredCapturedWrites).
     if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+            {callees, origins, gct->origin(), "The loop", "its body writes"});
     }
     if (synced_) {
         // The loop is a statement of the block, like a call: the statement written before it

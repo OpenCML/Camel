@@ -147,7 +147,10 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
 
 void Builder::reportIgnoredCapturedWrites() {
     for (const PendingIgnoredWrite &pending : unit_->pendingIgnoredWrites) {
-        std::set<node_handle_t> written = pending.written;
+        // A write to a variable the callee captured and did not hand back at the call. A `var`
+        // write is not an effect (design principles 3.1), so `pending.variables` names a variable
+        // only when one of the bodies this statement runs writes it.
+        std::set<node_handle_t> written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
         }
