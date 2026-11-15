@@ -191,3 +191,39 @@ camel-remote.ps1 -Plan @('a','b')                                  # 要点名�
 
 `slow` 层轮转抽到 `feat/tools/debugger`：`debugger.dap_session`、`debugger.dap_stepping` 两条红，
 **与今晚的语义改动无关**（它们起于 DAP 会话与单步）。**先记不修，下一轮轮转再看**，不插进正在合的这一批。
+## 10. `lane-byref` 报的两条缺陷（不归它修，记账）
+
+### A：捕获一个 `Ref` 句柄并写它，被效应推断判成 `uses capture 0`
+`std::opt` / `std::macro` / `std::defunctionalize` 下被拒：
+```
+error[RuntimeDiag::PassEffectContainment]: Pass 'std::defunctionalize report=false' returned a program
+whose call site reaches past the type it declares: node 2 of graph 'f' (a call of 'inc', which is 'a')
+declares uses capture 0; the graph it runs touches write state::Ref
+```
+最小复现（默认流水线跑出 `21`，带上优化就拒）：
+```camel
+import state
+func f(): int sync {
+    let x = state::ref(1)
+    func inc(): int sync { state::set(x, state::get(x) + 1); return 1 }
+    let a = inc()
+    return state::get(x) * 10 + a
+}
+```
+**这是实现缺陷，不是语言规则**：写穿捕获的句柄被记成 `uses capture 0`，而它实际触碰 `write state::Ref`。修法在 `decideCaptureByValue` 之后的效应推断。
+**用例的绕法（句柄当实参传）是正当的**——用例不该为实现的缺陷买单，`captured_write_order.cml` 的注释已记下这个形状。
+
+### B：非 `sync` 体里 `set` 单独成句，写被丢掉
+```camel
+func p(): int {                  // 非 sync 函数体
+    let c = state::ref(0)
+    state::set(c, 1)             // warning: EffectNotExecuted
+    return state::get(c)         // 印 0
+}
+```
+同文件里 `println(...)` 在非 sync 体里**照常执行**；`let v = state::set(c, 7)` 其值被用到时也照常执行（`v + get(c)` = 14）。只有「`set` 单独成句 + 后面有读者」这一形状丢了写。
+
+**按原则 3.3 的字面它该被执行**（「对 `Ref` 的写由之后的读者用到（3.1）」）——设计原则与代码冲突时原则优先，**所以这是缺陷，不是待裁定**。它直接决定了 `lambda_capture_write` 为什么必须改成 `sync`：原用例「后置的读把写拉活」那个机制**对 `Ref` 不成立**。
+
+### 教训
+**同一条 `Ref` 语义，在 `var` 上成立的「后置的读把写拉活」在 `Ref` 上不成立**——迁移时最容易漏的正是这种「只换了载体、没换机制」的地方。`byref` 认出了它并只报不改，是对的。

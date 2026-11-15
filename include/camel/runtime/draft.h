@@ -680,6 +680,26 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// Erases a set of nodes that nothing outside the set reads -- a unit of the graph with no
+    /// reader left -- and hands the place each one held in its block's chain to the statement
+    /// written after it, the way `eraseNode` does (`closeChainOver`, `spliceOrderEdgesOver`).
+    ///
+    /// The question "may these go" is asked **here**, not by the caller, and asked before anything
+    /// is erased: a node that the graph names (`namesNode`: the exit, the output, the returned
+    /// value, the entry, a port, a capture, a region's result or a control region's port), a node
+    /// that is not alive, a node given twice, or a node whose value a **normal or `with` port of a
+    /// node outside the set** reads, makes the answer `false` and leaves the graph as it was found.
+    /// The set is what makes the question answerable at once: the nodes of a unit read each other
+    /// (a store reads the cell, the GATE that hands the statement's value out reads the store), so
+    /// asking one node at a time would call the unit's own nodes readers.
+    ///
+    /// Sequencing edges -- the chain of a `sync` block, a control edge, an ordering -- are not
+    /// reads (docs/design/effects/edges.cn.md 1.5, 5.3): a node nobody reads can still be what a
+    /// block's chain or a branch's control runs after, and that is exactly the case the place
+    /// handover exists for. The unit's own readers are erased before what they read, so a producer
+    /// never goes while the node that reads it is still there; `true` says every node of the set is
+    /// gone.
+    bool eraseUnreadNodes(std::span<const gc_node_ref_t> nodes);
     /// Whether the graph names `id` by something other than a read, so that a policy which erases a
     /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
     /// the entry, the exit, the node whose value it returns, its ports, its captures, the result of
