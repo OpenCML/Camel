@@ -172,6 +172,12 @@ fvm/jit 把 `main` 与 11 次 `burn` 全部放在**一个线程、一份固定�
 本页**只增文档与量测脚本，不改任何 `src/`、`test/`、期望值**，所以前三条与基线一样；第四条的红是这条车道
 要修、而这一侧修不了的那一格（`--jobs 4` 下约 1/4 概率撞上，见表一）。
 
+合进 `origin/develop` `4d475aaaf` 并重建之后（tip `79d11165a`，二进制 `50fdda557c`），同样四条、同样
+`--jobs 4` 的读数是：`--changed` 3998/4028 红 **14**（11 个 `stream.*`、`docs.snippets_compile`、本车道那一格、
+以及 §9 的 `agree_with_fvm`；选择面比上表宽得多，因为合并碰了 `src/compile` 与 `src/trans`）；
+`feat/compile` 2466/2490 红 **8**（全 `stream.*`）；`feat/opt` 1412/1412 红 **0**；
+`ref.plan.toml` 52/52 红 **0** —— 最后这一行是**抽到绿**，不是那一格变稳了：同一棵树连跑 10 轮它红 5 轮。
+
 ## 7. 复现
 
 ```powershell
@@ -199,4 +205,27 @@ test\cases\compile\ref\ref_boxes_made_per_call_ten.cml std::prl`（对照后端�
   fvm/jit 的 `2` 与 prl 的 0/4/5/6 是同一个缺陷的两面，都要等计划侧的最后使用分析。
 - 用例自己的注释说这个程序「2 blocks on fvm, jit and prl, three on nvm」：**已过期**（nvm 今天读 0），
   本车道未改，留给做计划侧那一条的人一并改。
+
+## 9. 顺带发现（都不修，记在这里）
+
+**（一）`trans.cpp` 的 `agree_with_fvm` 在合并后的基线上就红，与本车道无关。**
+`--changed` 宽选时会选中它（合并碰了 `src/compile`、`src/trans`）。红法是编译链而不是判据：
+`test/cases/trans/cpp/mean_axis_elements.cml` 的 C++ 程序**编不过**（175 个程序里 174 个 same，
+1 个 `does not build`，`G:\DevEnvs\LLVM\bin\clang++.EXE`）。该用例最后一次改动是 `3c5770946`，
+它是 `f135bbb16` 的祖先 —— 也就是说这道红**在基线之前就在**，不是本车道、也不是这次合并引入的。
+**不修**，另派。想单跑它：
+`node scripts/test.js test/plans/feat/trans --jobs 4`（约 60 s，因为要编 175 个程序）。
+
+**（二）合并之后必须先重建再跑，否则会读到一批可信的假红。**
+本次合并（`origin/develop` `4d475aaaf`）带来了 `src/compile/gir` 的改动；用合并**之前**的二进制跑合并**之后**
+的计划树，`ref.one_box_two_names.{nvm,fvm,prl}` 与 `….jit`、`….one_box_two_names_order` 共 5 条会全红，
+重建之后 5 条全绿。规则写成一句可复用的：
+
+> **改了 `src/`、`include/`、`stdlib/` 或合进了这样的改动之后，跑任何计划之前先 `npm run build`；
+> 二进制不加盖自己不会变，而它给出的红和真红长得一模一样。**
+
+它和另外两种「假读数」同族，都是**同一份东西的两个副本不同步**：主检出里 `out/latest/build-info.json` 是旧件
+（构建产物的时间戳不说明它对应哪个源码）；在**没有 `.git`** 的目录里跑 `git`，读到的是别人仓库的答案
+（`git` 会沿父目录往上找）。三种情况的共同点是：**读数看起来完全可信，错在它不来自你以为的那个树。**
+判据是 `[provenance]` 那一行（`tip`、`binary built`、`tree`），它由 runner 自己打印，不靠记忆。
 
