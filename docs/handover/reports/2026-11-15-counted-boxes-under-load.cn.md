@@ -68,6 +68,25 @@
 
 **不压测时 prl 的读数是确定的，但它是 `live=11`**：没有回收跑过，一块都没还回来（这正是 `docs/handover/reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md` 里量到的「每一块的计数还是到不了零」）。所以 `live <= 3` 这条断言只有在压测 GC 真的跑过时才有机会成立，而压测 GC 在哪停，取决于线程调度。
 
+> **更正（2026-11-15 晚，车道 `lane-prlcount`）：上表那一行与它下面这段话把「不压测时 `live=11`」写成了 prl 的特征。它不是。**
+>
+> 同一组旗标（只 `--gc-check foreign,verify=both --gc generational`，不带 `--gc-stress`）下，`std::nvm`、
+> `std::fvm`、`std::jit`、`std::prl` 四个后端各跑 3 次，**12 次全是
+> `created=11 released=0 live=11 disposed=11 finalized=0`**
+> （`docs/handover/reports/2026-11-15-prl-counted-boxes-return/D-nostress-all.tsv`）。原读数（prl 20 次全
+> `11/0/11`）一个字没错，错的是由它推出的那一句「prl 不归还」——四个后端在没有收集的时候一样一块都不还。
+>
+> 理由：一次运行里唯一会把 `live` 减一的入口是
+> `src/core/rtdata/foreign.cpp#ForeignResourceObject::finalize`，它只由收集器在发现 wrapper 已死时调用；
+> `Frame::set` 与 `src/passes/sched/taskflow/taskflow_frame_pool.cpp#TaskflowFramePool::release` 只清槽、不减计数
+> （`clearGcSlots`），退出时的 `disposeAllForeignResources` 是 `retain → dispose → release` 净零，也不减 `live`。
+> 于是 `live` 是「退出时还没有被任何一次收集看见的死箱子」，`--gc-stress` 只是让收集真的跑起来。
+> **所以被放弃的是「prl 不归还」这条推断，不是那一行读数**；取代它的是与后端无关的一句：没有收集就没有归还。
+> prl 多出来的只是「哪一次收集落在哪个程序点」由调度决定。
+>
+> 下面两节的结论不受影响：`live <= 3` 只有在压测 GC 真的跑过时才有机会成立，而 prl 的收集点落在哪取决于调度。
+> 详见 `docs/handover/reports/2026-11-15-prl-counted-boxes-return.cn.md`。
+
 ### thousand 那对：作者那个问题的正面回答
 
 `ref.boxes_made_per_call_thousand`（同一个程序、范围长一百倍）在 `prl` 上跑了 20 遍，**20 遍全是 `created=1001 released=1001 live=0`**；ten 那一档 `created=11`，`live` 有时 0、有时 4/5/6。所以：

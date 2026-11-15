@@ -6,25 +6,27 @@ import { sqrt } from math
 import { mean } from array
 import { stdev } from statistics
 
-with <var result: float[], repeat: int>
-export func timeit(fn: () => void): void {
+// The durations, one per repetition, the first repetition first. `timeit` used to take the array as
+// a `var` parameter and hand it on through a partial application, which is a `var` captured by a
+// value; a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
+// The answer is a value now, so nothing is carried.
+with <repeat: int>
+export func timeit(fn: () => void): float[] sync {
     if repeat <= 0 then {
-        return null
+        return []
     } else sync {
         let start = now()
         fn()
         let duration = now() - start
-        result = result->append<duration>
         '[{:>3}] {:.6f} s'->format<repeat, duration>->println
-        return timeit<result, repeat - 1>(fn)
+        let rest = timeit<repeat - 1>(fn)
+        return concat([duration], rest)
     }
 }
 
 with <repeat: int>
 export func perfms(fn: () => void): (float, float) sync {
-    var results: float[] = []
-
-    timeit<results, repeat>(fn)
+    let results = timeit<repeat>(fn)
 
     // 计算均值和标准差
     let average = mean(results) * 1000.0

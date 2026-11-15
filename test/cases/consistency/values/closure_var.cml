@@ -1,23 +1,24 @@
 /**
- * Nested closures that capture a var: the capture is a reference, so both closures and the
- * function that declared the variable see every write.
+ * A running sum written as a value: the helper takes the sum and gives the new one back, so the
+ * caller sees every step and no closure captures anything.
+ *
+ * The shape this case used to pin -- two nested closures capturing one `var` and each writing it,
+ * so that both saw every write -- is refused by the ruling of 2026-11-15 (design principles 3.5).
+ * The three lines printed are the same: 3, 24, 249.
  */
+
+func add(total: int, x: int): int sync {
+    return total + x + x + 1
+}
 
 func main(): int sync {
     var total = 0
-    let add = (x: int) => sync {
-        let twice = (y: int) => sync {
-            total = total + y + y
-        }
-        twice(x)
-        total = total + 1
-    }
-    add(1)
+    total = add(total, 1)
     println(total)
-    add(10)
+    total = add(total, 10)
     println(total)
     total = total * 2
-    add(100)
+    total = add(total, 100)
     println(total)
     return 0
 }
