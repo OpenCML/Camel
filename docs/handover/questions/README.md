@@ -5,9 +5,12 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：0 页
+## 现在在等作者：2 页
 
-（目录为空：没有页在等回答。）
+| 页 | 问什么 |
+| --- | --- |
+| [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ |
+| [`cc-2026-11-15-who-paces-the-stress-collections`](cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ |
 
 ## 生成器不会删的行：106 行（页已不在 `questions/` 里）
 
