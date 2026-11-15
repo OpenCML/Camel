@@ -1952,7 +1952,11 @@ void Builder::collapseNonEscapingVariableReads() {
                             writesSeen);
                     }
                 } else {
-                    const auto kind = draft.region(nodeIdOf(candidate)).kind;
+                    // The candidate's region, by id: `region()` takes a region id, and a node's is
+                    // `nodeRegion`. An arm's or a loop's write is a write of that region, and the
+                    // fold does not stand for it here (a region is laid out as one piece).
+                    const auto regionId = draft.nodeRegion(nodeIdOf(candidate));
+                    const auto kind     = draft.region(regionId).kind;
                     const bool refused =
                         kind == camel::runtime::GCRegionKind::Arm ||
                         kind == camel::runtime::GCRegionKind::LoopCond ||
@@ -1966,7 +1970,7 @@ void Builder::collapseNonEscapingVariableReads() {
                             writesSeen,
                             static_cast<unsigned>(nodeIdOf(candidate)),
                             static_cast<int>(nodeKindOf(candidate)),
-                            static_cast<int>(kind),
+                            static_cast<int>(regionId),
                             refused ? "nothing" : "fold");
                     }
                     if (refused) {
