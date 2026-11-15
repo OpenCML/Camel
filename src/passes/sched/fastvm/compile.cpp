@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "compile.h"
+#include "camel/core/mm.h"
+#include <iostream>
+#include <algorithm>
 #include "camel/runtime/exec_plan.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
@@ -126,6 +129,15 @@ static bytecode_vec_t compileRuntimeGraph(
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
     const auto &plan              = graph->execPlan();
+    // The reader of the position-to-node side table: while --gc-check asks for the counted
+    // blocks, the table is built for this compile and printed here, one line per instruction that
+    // belongs to a node, with what the plan says that node does to the count. A caller that does
+    // not pass a table gets a compile that does not build one (no memory, one null check).
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> anchorSites;
+    const bool anchorSitesWanted = camel::core::mm::allocatorChecks().printForeignResources;
+    if (anchorSitesWanted) {
+        localPcNodes = &anchorSites;
+    }
     const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
     const auto *returnNode        = graph->returnNode();
@@ -656,6 +668,29 @@ static bytecode_vec_t compileRuntimeGraph(
 
     BytecodeOptimizer optimizer(opt.optimizationStrategies);
     optimizer.optimize(bytecodes, 0, localPcOrigins);
+
+    if (anchorSitesWanted) {
+        std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(anchorSites.begin(),
+                                                                          anchorSites.end());
+        std::sort(sites.begin(), sites.end());
+        for (const auto &[pc, ref] : sites) {
+            const size_t position =
+                ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
+            const uint32_t taken =
+                position < plan.refCopiesAt.size() ? plan.refCopiesAt[position] : 0;
+            const uint32_t given =
+                position < plan.refGiveBackAt.size() ? plan.refGiveBackAt[position] : 0;
+            const bool produces =
+                position < plan.refProducedAt.size() && plan.refProducedAt[position] != 0;
+            if (taken == 0 && given == 0 && !produces) {
+                continue;
+            }
+            std::cout << "PLAN_REF_SITES " << graph->name() << " at " << pc << " node " << ref
+                      << " +" << taken << " -" << given << (produces ? " produces" : " no-row")
+                      << "\n";
+        }
+        std::cout.flush();
+    }
 
     return bytecodes;
 }
