@@ -2450,7 +2450,7 @@ a857ca3ede6054d9 ok test/cases/consistency/operator_overloads/specific/ns/use_ge
 4ec7bcfbaabd05f6 ok test/cases/consistency/partial_application/graph.cml
 23654daecbf0a58a ok test/cases/consistency/partial_application/overload_choice.cml
 2a307859d3b305d4 ok test/cases/consistency/partial_application/values.cml
-7a6c87e66cd1afe0 ok test/cases/consistency/partial_application/var_parameter.cml
+e4734b033845ffd2 ok test/cases/consistency/partial_application/var_parameter.cml
 4c59ea9e7fe9f315 ok test/cases/consistency/partial_application/var_parameter_effect.cml
 10df48795e1a7cc6 ok test/cases/consistency/surface/lambda_call.cml
 b8a388af7a45be93 ok test/cases/consistency/surface/member_chain.cml
@@ -3126,7 +3126,7 @@ ab2a3d1ee4f50942 ok test/cases/modules/nn/embedding_index_error.cml
 34b48f7d991a18a1 ok test/cases/modules/nn/embedding_mf.cml
 74332761350dbea1 ok test/cases/modules/nn/graph_autograd_multi_param_demo.cml
 dd4874766974d739 ok test/cases/modules/nn/gru_lite.cml
-2c5d6208952ba2a4 ok test/cases/modules/nn/lr.cml
+2c235605d9b11f4f ok test/cases/modules/nn/lr.cml
 1086c82adf37be44 ok test/cases/modules/nn/lrit.cml
 f75b0caceb86d188 ok test/cases/modules/nn/matrix_factorization.cml
 d6c9b2164f447b1a ok test/cases/modules/nn/mnist.cml
@@ -3902,7 +3902,7 @@ d11b14bff2076906 ok test/cases/opt/e9/rc09_seed15.cml
 1ab961c9714024c3 ok test/cases/opt/effects/dead_write_aggregate_two_members.cml
 1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
 3f5c8d5f2d756ced ok test/cases/opt/effects/dead_write_held_by_program.cml
-2ae419419bf80bc4 ok test/cases/opt/effects/dead_write_rooted_closure.cml
+6812e0df2f41e5dc ok test/cases/opt/effects/dead_write_rooted_closure.cml
 a4d7f13da29104db ok test/cases/opt/effects/fold_keeps_arm_effect.cml
 2f78e2337519b9c3 ok test/cases/opt/effects/fold_keeps_arm_effect_chain.cml
 35692af85ef94ddb ok test/cases/opt/effects/fold_keeps_inner_fault.cml
@@ -3938,7 +3938,7 @@ d9dd773d5b3f0732 ok test/cases/opt/generic/control_data_paths.cml
 c7eeec50ef7ca63c ok test/cases/opt/generic/control_unused_argument.cml
 e60fea526b7f3895 ok test/cases/opt/generic/cse_arm_constants.cml
 749e77a713a11896 ok test/cases/opt/generic/cycle_drops.cml
-9b7e52ff664ac15f ok test/cases/opt/generic/effect_order_folded.cml
+58965e1fc9a8a041 ok test/cases/opt/generic/effect_order_folded.cml
 f64ca27a8dbf64af ok test/cases/opt/generic/equal_branch_values.cml
 693e5372d2eea669 ok test/cases/opt/generic/fold_cast.cml
 18a46fd57215810a ok test/cases/opt/generic/fold_cast_fails.cml

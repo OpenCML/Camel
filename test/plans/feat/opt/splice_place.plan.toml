@@ -23,13 +23,19 @@ expect_exit = 0
 timeout_ms = 20000
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 
-# Three arguments of one `println` are calls of a function with a `with <var>` parameter; each
-# splice left the `:var/peek` and the block's gate beside the statement that really follows.
+# Three arguments of one `println` are calls of a function value whose context argument is a `Ref`
+# handle; each splice left the block's gate beside the statement that really follows. The context
+# argument used to be `with <var total: int>`, which a partial application may not bind any more: a
+# function value from a partial application has nowhere to write a `var` context parameter back
+# (design principles 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name
+# had when it was made, not the name (the ruling of 2026-11-16, items 197 and 198), so `add<t>` was
+# refused by `SemanticDiag::ClosureAssignsCapturedName` at the binding. A handle is a value, so the
+# same three calls, the same accumulator and the same chain are still exercised.
 
 [[tests]]
 name = "var_parameter.reference"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "The values with nothing but the executor: three calls through a `with <var>` partial application, and the accumulator after them."
+desc = "The values with nothing but the executor: three calls through a partial application whose context argument is a `Ref` handle, and the accumulator after them. The context argument is a handle since 2026-11-16, when a `var` context parameter stopped being bindable by a partial application (design principles 3.5; `SemanticDiag::ClosureAssignsCapturedName` was the refusal at `add<t>`); the reading is the one this entry had."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -38,7 +44,7 @@ args = ["${case}", "${backend}"]
 [[tests]]
 name = "var_parameter.opt"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`std::opt` inlines the three calls: the chain of the block keeps one follower per statement and the values do not change."
+desc = "`std::opt` inlines the three calls: the chain of the block keeps one follower per statement and the values do not change. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -47,7 +53,7 @@ args = ["${case}", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_twice"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report."
+desc = "The same graph through the pass twice: the second round finds nothing left to splice and no fork to report. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
@@ -56,7 +62,7 @@ args = ["${case}", "std::opt", "std::opt", "${backend}"]
 [[tests]]
 name = "var_parameter.opt_inline"
 case = "../../../cases/consistency/partial_application/var_parameter.cml"
-desc = "`std::opt::inline` alone splices the same bodies and writes the same chain."
+desc = "`std::opt::inline` alone splices the same bodies and writes the same chain. The context argument is a `Ref` handle since 2026-11-16 (design principles 3.5; the carrier the case used before was refused at `add<t>`)."
 expect_stdout_exact = "1 3 6 6\n16 16\n"
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
