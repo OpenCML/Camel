@@ -424,6 +424,11 @@ df952f8a8f9dd6b0 ok docs/tutorial/examples/geometry.cml
 f5a44b1707cc0ece ok docs/tutorial/examples/shapes.cml
 e3a25ecda08fd103 ok examples/algorithms/binary_search.cml
 7956b77f3b54405c ok examples/algorithms/merge_sort.cml
+6f4651452e09ddb1 ok examples/case-study/edits.cml
+c76e2e38aceb01c4 ok examples/case-study/train.cml
+27358af07efbb978 ok examples/case-study/writings/moved.cml
+ccb636b6bb8bdb50 ok examples/case-study/writings/renamed.cml
+c79b11576c441c54 ok examples/case-study/writings/swapped.cml
 5ede3cd26d50aec9 ok examples/cli/exit_status.cml
 d4a0932fc585aa7d ok examples/cli/temperature.cml
 22a5ea0a9ce873eb ok examples/data/dedup_sets.cml
@@ -2078,6 +2083,8 @@ a697f497a304c872 ok test/cases/compile/unused_values/fallible_sync.cml
 998ca17dab28ada2 ok test/cases/compile/unused_values/loop_statements_used.cml
 3c286fa1686be1d8 ok test/cases/compile/unused_values/pure_body.cml
 95ed7504bd6f8377 ok test/cases/compile/unused_values/pure_sync.cml
+e4d108190a15a18f ok test/cases/compile/var/step_let.cml
+6fe22c1e60003a30 ok test/cases/compile/var/step_var.cml
 98c8adc3a294a312 ok test/cases/compile/when/applied.cml
 741c37f4d3c2d3e6 ok test/cases/compile/when/fold_broken_body.cml
 8dd1f2c91149b5af ok test/cases/compile/when/function_query.cml
