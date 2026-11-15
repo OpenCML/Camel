@@ -320,6 +320,14 @@ expect_stdout_exact = ""
 #                               value is still read, so it must run, and the program prints the 41
 #                               it wrote
 #
+# The write of `dead_write_rooted_closure` is written **before** the closure is made. It used to be
+# written after it, and that program is refused now: a closure holds the value the name had when it
+# was made (design principles 3.5, the author's ruling of 2026-11-16, item 198), so a write written
+# after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). Its sibling
+# `dead_write_dropped_closure` keeps the write after the closure and stays legal, because the rule
+# runs to the closure's last use and that closure is never used -- so a reader who asks why the two
+# probes are ordered differently has the answer here rather than in a missing case.
+#
 # The judgement itself has its own reading below (`test::deadwrite`), which prints the answer for
 # each write without a pipeline around it.
 [[tests]]
@@ -340,7 +348,7 @@ expect_stdout_exact = "1\n"
 
 [[tests]]
 name = "dead_write_rooted_closure.reference"
-desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left."
+desc = "No pass: the closure is called in the same `sync` block and reads the 41 the write left. The write is written before the closure since 2026-11-16: written after it, it would be `CapturedVarWrittenAfterTheClosure` (0x03000214), because a closure holds the value the name had when it was made (design principles 3.5, item 198). The reading is the one this entry had."
 case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
@@ -348,7 +356,7 @@ expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "dead_write_rooted_closure.opt"
-desc = "The write is read by the call of the closure: it is no dead write, it must run, and the same 41 is printed."
+desc = "The write is read by the call of the closure: it is no dead write, it must run, and the same 41 is printed. Its write stands before the closure since 2026-11-16 (design principles 3.5, item 198; written after it the program is `CapturedVarWrittenAfterTheClosure`), so what keeps it alive here is the cell the call reads, not a write that reaches a closure made earlier."
 case = "../../../cases/opt/effects/dead_write_rooted_closure.cml"
 args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
