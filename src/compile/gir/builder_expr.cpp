@@ -547,6 +547,9 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 }
 
 void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee) {
+    if (!throughCallee) {
+        writesOf_[variable].push_back(exit);
+    }
     // `A(i); modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second half
     // follows from setModifier. The first half is the read this write meets: every read takes the
     // version the write before it produced, and a read written before the first write reads the
@@ -1848,6 +1851,9 @@ void Builder::collapseNonEscapingVariableReads() {
     static int foldTookJoin_    = 0;
     static int foldTookWrite_   = 0;
     static int foldTookNothing_ = 0;
+    // The reads that took the value a straight-line write wrote, found by writesOf_ and not by the
+    // version record (the branch that a read of a still-cell source takes).
+    static int foldTookFold_ = 0;
     struct FoldCountsReport {
         ~FoldCountsReport() {
             if (std::getenv("CAMEL_LOG_DEBUG") == nullptr) {
@@ -1855,12 +1861,13 @@ void Builder::collapseNonEscapingVariableReads() {
             }
             std::fprintf(
                 stderr,
-                "[DBG-FOLD] initial=%d loop=%d join=%d write=%d nothing=%d\n",
+                "[DBG-FOLD] initial=%d loop=%d join=%d write=%d nothing=%d fold=%d\n",
                 foldTookInitial_,
                 foldSawLoop_,
                 foldTookJoin_,
                 foldTookWrite_,
-                foldTookNothing_);
+                foldTookNothing_,
+                foldTookFold_);
         }
     };
     static FoldCountsReport foldCountsReport_;
@@ -1919,43 +1926,57 @@ void Builder::collapseNonEscapingVariableReads() {
             // names, and reading it is what the design says a read does.
             camel::runtime::gc_node_ref_t version = readId;
             if (source == cell) {
-                // The cell's first input is the value `:var/new` made, and it is what a reader wants only when no
-                // write stands before the read. The builder records that: a read whose version is still
-                // the cell was written before any write the version map knew about. Measuring showed the
-                // "a write exists somewhere" test cannot stand in for it -- a variable written in
-                // straight-line code has reads that legitimately take the initial value (step_var's
-                // first statement), and refusing those puts `:var/get` back. What the test would catch is
-                // a write the version record did not reach; that record is the thing to fix, not this.
-                if (cellInputs.empty()) {
-                    ++foldTookNothing_;
-                    continue;
-                }
-                // Whether *some* write exists is the wrong question (`step_var`'s first statement
-                // reads before it writes, and it legitimately takes the initial value). The question
-                // is whether a write is ordered after this read: recordWrite writes that order edge
-                // for every read the write meets. A write already past -- inside a branch or a loop
-                // -- leaves no such edge, and then this read must take what that write wrote. That
-                // write is not in the version record, which is the defect this branch reports
-                // instead of papering over it with the value `:var/new` made.
-                bool writeAfter = false;
-                for (const auto &users : {draft.ctrlUsersOf(readId), draft.syncUsersOf(readId)}) {
-                    for (camel::runtime::gc_node_ref_t user : users) {
-                        const auto written = draft.normInputsOf(user);
-                        if (!written.empty() && written[0] == cellId) {
-                            writeAfter = true;
-                            break;
-                        }
-                    }
-                    if (writeAfter) {
-                        break;
+                // A read wants the value written last before it. No write before it means the
+                // variable has not been written yet, and then it is the value `:var/new` made.
+                node_handle_t candidate = nullptr;
+                size_t writesSeen        = 0;
+                if (const auto it = writesOf_.find(cell); it != writesOf_.end()) {
+                    writesSeen = it->second.size();
+                    for (const node_handle_t exit : it->second) {
+                        if (nodeIdOf(exit) >= readId) { continue; }
+                        if (nodeKindOf(exit) != camel::runtime::GCNodeKind::Oper) { continue; }
+                        const auto ins = draft.normInputsOf(nodeIdOf(exit));
+                        if (ins.empty() || ins[0] != cellId) { continue; }
+                        candidate = exit;
                     }
                 }
-                if (!writeAfter) {
-                    ++foldTookNothing_;
-                    continue;
+                if (candidate == nullptr) {
+                    if (cellInputs.empty()) { ++foldTookNothing_; continue; }
+                    version = cellInputs[0];
+                    ++foldTookInitial_;
+                    if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                        std::fprintf(
+                            stderr,
+                            "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- took=initial\n",
+                            static_cast<unsigned>(readId),
+                            writesSeen);
+                    }
+                } else {
+                    const auto kind = draft.region(nodeIdOf(candidate)).kind;
+                    const bool refused =
+                        kind == camel::runtime::GCRegionKind::Arm ||
+                        kind == camel::runtime::GCRegionKind::LoopCond ||
+                        kind == camel::runtime::GCRegionKind::LoopBody ||
+                        kind == camel::runtime::GCRegionKind::Dead;
+                    if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                        std::fprintf(
+                            stderr,
+                            "[DBG-W] read=%u writes=%zu candidate=%u kind=%d region=%d took=%s\n",
+                            static_cast<unsigned>(readId),
+                            writesSeen,
+                            static_cast<unsigned>(nodeIdOf(candidate)),
+                            static_cast<int>(nodeKindOf(candidate)),
+                            static_cast<int>(kind),
+                            refused ? "nothing" : "fold");
+                    }
+                    if (refused) {
+                        ++foldTookNothing_;
+                        continue;
+                    }
+                    const auto w = draft.normInputsOf(nodeIdOf(candidate));
+                    version = w[1];
+                    ++foldTookFold_;
                 }
-                version = cellInputs[0];
-                ++foldTookInitial_;
             } else if (nodeKindOf(source) == camel::runtime::GCNodeKind::Loop) {
                 // A write inside a loop is carried state: the version a read after the loop takes is
                 // the loop, which is not a value the fold can stand in for (schedule item 3). Folding

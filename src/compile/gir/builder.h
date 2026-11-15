@@ -1010,6 +1010,11 @@ class Builder {
     };
     std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
     std::unordered_set<node_handle_t> knownCellUsers_;
+    /// The exits a cell was written at, in the order the writes were recorded, for the writes that
+    /// are not a call's (recordWrite's `throughCallee` false): a straight-line write of the body. The
+    /// fold asks which of them stands before a read, because that is the value the read sees; a
+    /// write only a call made is not a statement of this body and is not ordered here.
+    std::unordered_map<node_handle_t, std::vector<node_handle_t>> writesOf_;
     std::unordered_set<node_handle_t> escapingVariables_;
     // Variables whose only reason for standing in `escapingVariables_` is that a write handed them
     // to `__assn__` as a `var` argument (requireMutableArgument records that, because the operator's
