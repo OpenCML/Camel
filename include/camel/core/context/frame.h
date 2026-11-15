@@ -47,18 +47,6 @@ class Frame : public rtdata::Object {
     const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
 
-    /// The node this frame is running, for a reader that needs to know where a value is being
-    /// made: the anchor of the count asks the plan whether the node that made a box is one of its
-    /// producing rows, and the executor is the only place that knows which node that is. Written
-    /// only while --gc-check asks for the counters, so a program that does not pass the flag
-    /// never writes it; -1 means no node has been named.
-    int64_t currentNode() const noexcept { return currentNode_; }
-    void setCurrentNode(int64_t ref) noexcept { currentNode_ = ref; }
-
-  private:
-    int64_t currentNode_ = -1;
-
-  public:
     const type::TupleType *runtimeDataLayout() const {
         GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for data layout.");
         return runtimeGraph_->runtimeDataType();
