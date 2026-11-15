@@ -1,4 +1,4 @@
-# `compile.stream.*` 的红不是负载相关的：单跑 40 轮、全量 7 轮，0 次
+# `compile.stream.*` 的红不是负载相关的；缺陷形状是「句柄活过了它的建图器」
 
 - 车道 `lane-streamred`，树 `df057ee8a`（`origin/develop`），工作树 `D:\Projects\Camel-wt\streamred`。
 - 全程同一份二进制（`build` 只做一次，其余 `-NoBuild`，内容指纹守卫放行；红轮与绿轮 `binary built` 相同）：
@@ -20,17 +20,9 @@
 | 10 | 绿 f0 | 绿 f0 | 20 | 绿 f0 | 绿 f0 |
 
 **红 0 次 / 40 轮**；每轮原文 `[SUMMARY] total: 147, pass: 147, fail: 0`。宿主 1 分钟负载 15.11–27.05（32 核），
-墙钟 `-Jobs 1` 10.5–11.3 s、`-Jobs 8` 1.4–1.9 s。
-
-## 2. 全量 `test/plans/feat/compile`，`-Jobs 8`：7 轮
-
-| 轮 | `[SUMMARY]` | 红 |
-|---|---|---|
-| 1–3 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
-| 4 | total: 2490, pass: 2473, fail: 1, known failures: 16 | `ref.boxes_made_per_call_ten.prl` |
-| 5–7 | total: 2490, pass: 2474, fail: 0, known failures: 16 | — |
-
-`compile.stream.*` 在全量里 0 次 / 7 轮。唯一那条红在别族，原文：
+墙钟 `-Jobs 1` 10.5–11.3 s、`-Jobs 8` 1.4–1.9 s。全量 `feat/compile -Jobs 8` 另 7 轮，stream 族仍 0 次；
+唯一红是 `ref.boxes_made_per_call_ten.prl`（1/7），该计划单跑 `-Jobs 8` 0 红 / 10 轮 —— 两个样本分不开，
+不足以判它被谁污染，故未做二分；它注释里的 `p` 量自另一份二进制 `50fdda557c`，搬不过来。那条红的原文：
 
 ```
 [FAIL] ref.boxes_made_per_call_ten.prl                       96.36 ms
@@ -39,36 +31,36 @@
     [stdout] 10 41
 ```
 
-## 3. 判定
+## 2. 结论：**甲**——有缺陷，形状是「建图器先析构、句柄后使用」
 
-- 「全量红、单跑绿」这个形状只出现 1 次（`ref`，全量 r4），**一次观测不足以判它被谁污染**：`ref.plan.toml`
-  单跑 `-Jobs 8` **0 红 / 10 轮**（52 条，每轮 `fail: 0`）。两边的 p 都在 0.1 附近，这个样本分不开。
-- `ref` 自己的注释写着 `p≈0.3-0.5 at --jobs 4, ≈0.25 at --jobs 1`，那是**另一份二进制**（`50fdda557c`）上的读数；
-  不同二进制，p 搬不过来 —— 这正是本页每轮都记 `binary built` 的理由。
-- `stream` 族历史那 8–11 条红不是宿主能复现的东西：它们是 win-x64 腿的图所有权不变量
-  （`docs/handover/reviews/2026-11-02-the-generator-reads-a-draft-node-after-its-builder.cn.md`）。
+判据（从历史失败点出发能否构造该调用序）答案是**能**，两条证据都在树里：
 
-## 4. `(125)` 与 `(151)` 是源码行号，不是节点数
+- **生产代码自述**：`builder_diagnostics.cpp` 的 `syncedReads_` 循环写着「a synced read names the graph it was made
+  in, and that graph is handed over when its body is complete and **released with its builder**」，随后必须用
+  `DraftGraphBuilder::fromRef(read) == nullptr` 把它**跳过**。若「建图器必然活过句柄」成立，这段跳过与这句注释都是多余的。
+- **判据用例已在宿主上跑绿**：`runtime.draft_node_owner.stale_handle_is_refused` 先 `builderA.reset()` 再把句柄拿去问
+  （`[PASS] 67.33 ms`，本页 tip），断言要求打出 `Refused: handle made in epoch N at 0x…, and the address now holds epoch N`。
+  「建图器析构后使用句柄」这条路是**通的**，只是没有人把它当成缺陷去修。
+
+## 3. 那个 `(125)` 与 `(151)` 是源码行号，不改变上面的判定
 
 - `GUARD` → `cml::fail_invariant`，报告里的 `Location : <file>(<line>)` 取自 `std::source_location::line()`
   （`src/utils/assert.cpp#fail_invariant`）；`include/camel/utils/assert.h` 写明它是 "the same report and the same
-  abort as an `ASSERT`, in every build"，**没有 `NDEBUG` 分支** —— 宿主跑的是同一个检查。
-- Windows 抓到它的方式与 Linux 相同：打印 Location/Function/Guarantee/Reading 后 `std::abort()`，退出码 3。
+  abort as an `ASSERT`, in every build"，**没有 `NDEBUG` 分支** —— 宿主跑的是同一个检查，不是 Windows 才有。
 - 同一句 GUARD：v0.2.40 的树上它在 `builder_support.h` 第 125 行、是 `nodeGraphOf` 的第 3 行；`df057ee8a` 上第 151 行
-  —— epoch 修复把 `nodeDraftOf` 及其注释写长了 26 行。**一个位置，行号移动**，既不是节点数，也不是两次读数。
-- 宿主可见：`test/plans/feat/runtime/draft_node_owner.plan.toml` 用合成构造逼出这个条件，
-  `[PASS] runtime.draft_node_owner.stale_handle_is_refused 67.33 ms`；它的断言要求宿主打出
-  `Refused: handle made in epoch N at 0x…, and the address now holds epoch N`。
+  —— epoch 修复把 `nodeDraftOf` 及其注释写长了 26 行。**一个位置，行号移动**：既不是节点数，也不是两次读数。
 
-## 5. 两种形状各自是什么（读码）
+## 4. 两种形状各自是什么（读码）
 
 - 第 151 行：`DraftGraphBuilder::draft()` 是 `transaction_->edit()`，草稿归事务 —— 所以这是**草稿还活着、建图器已析构**
-  （析构里 `draftOwners().erase(&draft())`），是建图器的生命周期缺陷，不是内存坏掉。
-- `nodeDraftOf` 的 epoch 拒绝：草稿本身已销毁、地址被后来的草稿占用 —— 那一次读确实落在已释放内存上；epoch 是让它
-  可被判据读出来、而不是静默读错的那一半。两种形状共一句结论：**一个 handle 活过了它的所有者**。
+  （析构里 `draftOwners().erase(&draft())`）。
+- `nodeDraftOf` 的 epoch 拒绝：草稿本身已销毁、地址被后来的草稿占用。两条共一句：**一个 handle 活过了它的所有者**，
+  而 `DraftGraphBuilder::fromRef` 判定时**无条件**读 `node.draft->epoch()` —— 这一读就是本缺陷所在。
 
-## 6. 若要修，第一个该看的地方
+## 5. 若要修，第一个该看的地方
 
-`src/compile/gir/captures.cpp#Builder::captureInto`（`graph->outerGraph() != nullptr`，与上面两句同一形状）与
-`src/compile/gir/builder_support.h#nodeGraphOf`；再查 `src/compile/gir/builder.h` 的 `Builder::variables_` 之外哪些
-handle 表在跨 body 使用前没有问 `nodeIsCurrent`（今天只有 `builder_state.cpp#cellsOfBody` 与 `#carryOutOf` 问过）。
+`src/compile/gir/draft_graph_builder.cpp#DraftGraphBuilder::fromRef`：它用「读已释放草稿的 epoch」来回答「这个句柄还归谁」，
+把登记改成不依赖被读对象（把 epoch 存进 `draftOwners()` 的值里，或让 `Builder::syncedReads_` 在 body 交接时清空）。
+其次 `src/compile/gir/captures.cpp#Builder::captureInto`（`graph->outerGraph() != nullptr`，同一形状）；
+`src/compile/gir/builder.h` 的 `Builder::variables_` 之外，哪些 handle 表跨 body 使用前没问 `nodeIsCurrent`
+（今天只有 `builder_state.cpp#cellsOfBody` 与 `#carryOutOf` 问过）。
