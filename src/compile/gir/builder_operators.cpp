@@ -4408,6 +4408,11 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     if (const std::string name = moduleLevelName(arg.expr->name());
                         nodeAt(name).has_value()) {
                         if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                            // The assignment is the write itself (design principles 3.5, 192): a
+                            // closure's own body may not write a name it captured (197), and the
+                            // body that declares the name may not write one a closure of that body
+                            // already holds the value of (198).
+                            requireCapturedNameWritable(node, name, false, arg.expr->origin());
                             writeOnlyEscaping_.insert(node);
                         }
                     }

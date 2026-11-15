@@ -1,0 +1,22 @@
+/**
+ * A closure mentions `x`, and `x` is then handed to a call whose parameter is `var`: the callee writes
+ * it back where the call stands, which is an assignment to `x` written at the call (design principles
+ * 3.5, 192). The closure is used again after that call, so the write lands between the making of the
+ * closure and its last use -- a compile error (3.5, 198).
+ *
+ * Read it against `ok_update_reads_captured.cml`: there the closure is written at the call's own
+ * argument position, so its last use is that call and the write-back counts after it. Here the
+ * closure outlives the call that writes the name.
+ */
+
+func bump(var p: int): void {
+    p = p + 10
+}
+
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    bump(x)
+    println(g())
+    return 0
+}
