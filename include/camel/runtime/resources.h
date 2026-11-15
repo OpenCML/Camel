@@ -227,17 +227,21 @@ struct EffectContainmentReport {
     /// Readings of unknown class (GraphFootprint::anyOf, or an access of class Unknown): the
     /// analysis cannot name the resource, so a type that cannot spell it is not proved against it.
     size_t anyUnknown = 0;
-    size_t anyObject = 0;
-    size_t anyHandle = 0;
+    size_t anyObject  = 0;
+    size_t anyHandle  = 0;
     /// A cell of a variable: not something a `uses` clause can spell (design effects plan 5.1).
     size_t variableCell = 0;
     /// A call site whose callee the graph does not resolve -- `__root__`'s indirect call of the
-    /// entry, today. This one is a gap in the analysis rather than a limit of the language: the type
-    /// at that call site is written, the checker just does not find the body behind the value. It
-    /// has its own count for that reason, and it is a to-do, not a silence.
+    /// entry, today. This one is a gap in the analysis rather than a limit of the language: the
+    /// type at that call site is written, the checker just does not find the body behind the value.
+    /// It has its own count for that reason, and it is a to-do, not a silence.
     size_t unresolved = 0;
     /// Readings declined for a reason the counts above do not name.
     size_t other = 0;
+    /// The two numbers answer different questions and do not add up to one another: `checked`
+    /// counts call sites, `declined` counts readings, and one site can contribute several readings.
+    /// The summary line says which unit is which, so that no one reads "19 checked plus 3 declined"
+    /// as 22 call sites.
     size_t declined() const {
         return anyUnknown + anyObject + anyHandle + variableCell + unresolved + other;
     }
@@ -266,8 +270,8 @@ sem::ResourceSignature bodySignature(const Program &program, const GCGraph &grap
 /// `declared` widened to name everything `body` names and never narrower: what a type has to carry
 /// once the body under it reaches more than the clause did. A clause the `body` cannot be written
 /// as leaves `declared` as it is (widening never invents a promise the language cannot spell).
-sem::ResourceSignature widened(
-    const sem::ResourceSignature &declared, const sem::ResourceSignature &body);
+sem::ResourceSignature
+widened(const sem::ResourceSignature &declared, const sem::ResourceSignature &body);
 
 /// The text forms (core.resources, test output).
 std::string toString(const NodeAccess &access);
