@@ -1502,8 +1502,8 @@ ec6c1dec0f711e6c ok test/cases/compile/ref/err_holds_ref_closure_unread.cml
 a603f90011a7fd12 ok test/cases/compile/ref/ref_boxes_are_counted.cml
 c87e262c61f310e1 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
 d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
-e537aa341c1c3564 ok test/cases/compile/ref/ref_boxes_made_per_call_ten.cml
-395cdd4206cb37a9 ok test/cases/compile/ref/ref_boxes_made_per_call_thousand.cml
+747da304d63a50a9 ok test/cases/compile/ref/ref_boxes_made_per_call_ten.cml
+6790cc04312cce5a ok test/cases/compile/ref/ref_boxes_made_per_call_thousand.cml
 6e031bde2d13dbbf ok test/cases/compile/ref/ref_closure.cml
 9c5ed6009d7896e0 ok test/cases/compile/ref/ref_closure_capture.cml
 7d411e6e4d48eaf9 ok test/cases/compile/ref/ref_closure_capture_depth.cml
