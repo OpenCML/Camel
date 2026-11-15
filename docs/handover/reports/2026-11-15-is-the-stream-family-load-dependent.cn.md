@@ -57,10 +57,19 @@
 - `nodeDraftOf` 的 epoch 拒绝：草稿本身已销毁、地址被后来的草稿占用。两条共一句：**一个 handle 活过了它的所有者**，
   而 `DraftGraphBuilder::fromRef` 判定时**无条件**读 `node.draft->epoch()` —— 这一读就是本缺陷所在。
 
+> **已修（`79fe44e3b`）。** 上面这句读的是当时的事实，现在不再是：`fromRef` 改成先查
+> `draftOwners()`，拿不到就返回 `nullptr`，该文件里已无 `node.draft->`。登记值变成
+> `DraftRegistration{builder, epoch}`。改前那条探针读数值得留在这里，因为它说明了这类缺陷为何能长期不红：
+> `[from_ref_probe] nobody owns 0x…; read epoch 48 for a handle made in epoch 48`
+> —— **从无人拥有的地址读出 48，与句柄的 epoch 相同，于是旧的门通过、答案看起来对**。
+> 缺陷不是「答案错」，是「理由是读那块内存得来的」；它不红只因为那块内存碰巧还装着旧值。
+
 ## 5. 若要修，第一个该看的地方
 
-`src/compile/gir/draft_graph_builder.cpp#DraftGraphBuilder::fromRef`：它用「读已释放草稿的 epoch」来回答「这个句柄还归谁」，
-把登记改成不依赖被读对象（把 epoch 存进 `draftOwners()` 的值里，或让 `Builder::syncedReads_` 在 body 交接时清空）。
+`src/compile/gir/draft_graph_builder.cpp#DraftGraphBuilder::fromRef`——**已修，见上一节**。
+仍在的同一形状：`src/compile/gir/builder_support.h#nodeIsCurrent`（128 行）与 `#nodeDraftOf` 的 GUARD
+（112、119 行）仍读 `node.draft->epoch()`，而 `nodeIsCurrent` 的注释说它正是为「跨 body 的过期句柄」而设
+—— 一个被设计成在句柄可能已失效时调用的函数，却靠读那个对象来回答。
 其次 `src/compile/gir/captures.cpp#Builder::captureInto`（`graph->outerGraph() != nullptr`，同一形状）；
 `src/compile/gir/builder.h` 的 `Builder::variables_` 之外，哪些 handle 表跨 body 使用前没问 `nodeIsCurrent`
 （今天只有 `builder_state.cpp#cellsOfBody` 与 `#carryOutOf` 问过）。
