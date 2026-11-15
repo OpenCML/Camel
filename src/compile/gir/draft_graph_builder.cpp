@@ -56,9 +56,11 @@ DraftGraphBuilder *DraftGraphBuilder::fromRef(const runtime::DraftNodeRef &node)
     // RED MEASUREMENT, removed by the fix that follows: this call reads the draft the handle names,
     // and that draft may be gone. When no builder is registered at the address, the epoch printed
     // here is read from memory no one owns -- which is the defect, measured instead of described.
+    // It goes to standard output, where the plan's log carries it: a reading that no plan can print
+    // is a reading nobody can compare between the two states of this function.
     if (node.draft != nullptr && draftOwners().find(node.draft) == draftOwners().end()) {
         std::fprintf(
-            stderr,
+            stdout,
             "[from_ref_probe] nobody owns %p; read epoch %llu for a handle made in epoch %llu\n",
             static_cast<const void *>(node.draft),
             static_cast<unsigned long long>(node.draft->epoch()),
