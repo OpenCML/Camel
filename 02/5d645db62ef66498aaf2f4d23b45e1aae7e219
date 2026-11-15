@@ -1,0 +1,50 @@
+`lane-regionroot` 合并的闸门读数与归属实验（正文引用了这条 note）。
+
+合并：`025d645db62ef66498aaf2f4d23b45e1aae7e219`，`--no-ff` 合入 `lane-regionroot`（`52a1f295d`
++ 7 笔，经 `65153ab86` 同步）。**无冲突**，58 文件 `+1094/−391`。
+推：`0692517fc..025d645db`，`ls-remote` = 025d645db62ef66498aaf2f4d23b45e1aae7e219。
+
+闸门（合后 `develop`，重建，`-Jobs 8`）：`--changed`（base `0692517fc`）**选中 345 个计划**
+→ `[SUMMARY] total: 9391, pass: 9269, fail: 79, skip: 11, known failures: 32`
+[provenance] tip 025d645db | tier fast | jobs 8 | 无 `killed`、无 `timed out`
+
+## 一、归属：`regionroot` 新增 0 条语义红
+同一个 `--changed` 集在 `0692517fc`（合前）上只跑那 19 个出红计划：`total: 6043, pass: 5922,
+fail: 94, skip: 7, known 20`。逐条比对红名单（`[FAIL] <name>` 集合差）：
+
+| 方向 | 条数 | 内容 |
+|---|---|---|
+| **只在合后树上红** | **1** | `ref.boxes_made_per_call_ten.prl` |
+| **只在合前树上红** | 16 | 全是 `poison:*` 条目（见下） |
+
+那 1 条是**已知的排期计数红**：它一个计划内的计数随并行排布变化（整跑 1/7、单跑 0/10，
+「两个样本分不开」），车道文档里早已记着**不许靠重跑关掉**。它不是 `regionroot` 的语义账。
+
+16 条 `poison:*` 在合前红、合后绿，方向是对的：`poison` 夹具断言「这条已知红仍然红」，而这一笔
+（`a21ca5d82`「两条测量改动的门，靠改动本身而不是对着改动保持诚实」）把它们改成读新规则，
+所以它们在合后树上通过——**是夹具跟着规则走，不是红被藏起来**。
+
+`feat.consistency.new_values` 的 23 条、`showcase_d4` 的 17 条（`search.*`）：**在合前树上同样红**，
+逐条同名同数，属基线账（`ssa2` 的面），与本笔无关。
+
+## 二、`region_roots` 自己的 12 条全绿
+`plain_body`（nvm/fvm/jit/prl/default）、`resource_write`（nvm/fvm/jit/prl）、`dead_loop`、`read_only`
+——「写到程序外资源的值是它所在区域的根」的四种形状都跑通了。
+
+## 三、两条不变量的处置方向（这是这一笔最要紧的一处）
+- `runtime.graph_draft_ledger.never_rises`：**改代码**让清单继续零增长，清单与断言**没动**。
+- `gate.conformance_matrix`：旧格子是 `println(3)`（写，如今会执行），换成**等价证据**——
+  同一问题问在「外部**读**」上（`get_env` 一个不存在的变量），仍不执行、读数仍是 `""`。
+  一条是缺陷被修，一条是同一断言换到仍成立的那半条规则上。**没有「改断言迁就读数」。**
+
+## 四、附带两处，别被它们骗了
+- `feat/modules/tiles.plan.toml` 单跑：`total: 109, pass: 102, fail: 1, skip: 6`，红的是
+  `resident_cpu_block`。它在 `0692517fc` 上**同样红**（基线），但**症状变了**：合前是 placement JSON
+  不含 `"downloads":2,…,"uploads":1`，合后该用例的 stderr 多出一条
+  `resident_cpu_block.cml:17:20: [Warn]: The assignment has side effects but is never executed`。
+  也就是说这条基线红没有被这一笔修好，它的失败方式被规则换了——将来查它的人要知道这一点。
+  （车道报的「103 pass / 0 fail」是 39 笔之前的读数，与现在的树不同。）
+- `ast_hashes.txt` 两笔共 **19 行新增**：`87e634621` 14 增 10 换（十个改写 + 四个新增），
+  `952d62f46` 5 换（tutorial 的五个示例），两笔都**只碰这一个文件**。
+  两个 `gpu_scope` 用例改名（`..._does_not_run` → `..._runs_and_is_not_warned`），
+  `git grep` 旧名在 `test/plans/` 下 **0 命中**。
