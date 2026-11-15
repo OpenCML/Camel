@@ -2686,7 +2686,7 @@ a115744b731bf807 ok test/cases/linear/byref/var_argument_declared.cml
 6b54ece00315d63f ok test/cases/linear/byref/var_argument_reads_the_nearest_write.cml
 ecea883b0c1a24bc ok test/cases/linear/byref/var_argument_shape.cml
 8cc68398ab281745 ok test/cases/linear/byref/var_argument_statement_place.cml
-52d2dc67af07716d ok test/cases/linear/byref/var_capture_reference.cml
+e84d2fc724034852 ok test/cases/linear/byref/var_capture_reference.cml
 3ef7e3177575e622 ok test/cases/linear/byref/var_function_as_value_function.cml
 67d2c3eb1b6d6c25 ok test/cases/linear/byref/var_function_to_operator.cml
 6459ea9ecca389d9 ok test/cases/linear/byref/var_param_jit.cml

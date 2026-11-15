@@ -12,11 +12,20 @@
  * (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold the state in a `Ref`
  * (`let r = ref(0)`, `get(r)`, `set(r, v)`) and let the closure capture the handle, which is a value.
  *
- * What is not here any more, and why: an `if` arm writing a `var` of the surrounding function is
- * still legal (the arm is not a closure, the branch hands the new value on) and is pinned by
- * `captured_write_order.cml`; a closure that only reads a `var` is still legal -- it sees the value
- * the name had when it was made -- and is pinned by `var_alias_captured.cml` and
- * `captured_write_graph.cml`.
+ * What is not here any more, and why:
+ *
+ *   - An `if` arm writing a `var` of the surrounding function is still legal (the arm is not a
+ *     closure; the branch hands the new value on) and is pinned by `captured_write_order.cml`
+ *     (`arm_then_read`, `arm_call_then_read`, `write_then_arm_read`, `arm_read_then_write`) and by
+ *     `captured_write_graph.cml` (`arms`).
+ *
+ *   - A closure that only *reads* a local `var` is still legal, and it sees the value the name had
+ *     when the closure was made. This file used to pin that shape twice -- `base` in the `map`
+ *     lambda, `v` in `nested` -- but both closures also assigned the name, so the shape left with
+ *     them. **No case pins it now.** `captured_write_graph.cml`'s `look()` reads a `var`, but a
+ *     top-level one, which is the exempt class, not this one; `var_alias_captured.cml` has a
+ *     closure that only reads, but it reads a `let`. Named here so that the next reader does not
+ *     take this file for complete coverage of the legal half.
  */
 
 func nested(): int sync {
