@@ -11,6 +11,13 @@
 #include "builder_helpers.h"
 #include "builder_support.h"
 
+namespace {
+// The `[DBG-W]` and `[DBG-FOLD]` lines of the fold are one reading of `CAMEL_LOG_DEBUG` for the
+// whole file. The environment is asked once, so `test/tools/check-env-switches.mjs` has one ledger
+// line to allow instead of one per print, and the switch is a single place to look for.
+const bool kVarFoldDebug = std::getenv("CAMEL_LOG_DEBUG") != nullptr;
+} // namespace
+
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/numeric_convert.h"
@@ -1856,7 +1863,7 @@ void Builder::collapseNonEscapingVariableReads() {
     static int foldTookFold_ = 0;
     struct FoldCountsReport {
         ~FoldCountsReport() {
-            if (std::getenv("CAMEL_LOG_DEBUG") == nullptr) {
+            if (!kVarFoldDebug) {
                 return;
             }
             std::fprintf(
@@ -1919,6 +1926,27 @@ void Builder::collapseNonEscapingVariableReads() {
             if (draft.header(readId) == nullptr) {
                 continue;
             }
+            // A read of a value that can be *kept* stays a read. `markNonRetainingReads` turns a
+            // read nobody keeps into `:var/peek` and lets the next append change the array in
+            // place; a read that can be kept stays `:var/get` and the memory plan copies instead.
+            // That decision is made once the whole program is built, and this fold runs at the end
+            // of one graph (`leaveScope`), so it cannot ask it: it must leave every reference-
+            // holding value inside its read. Handing the reader the array the variable still owns
+            // makes a later in-place append show through it -- `new_values/peek.cml`'s
+            // `let s = acc` kept `[1, 2]` before, and folding its read made it follow `acc` to
+            // `[1, 2, 3]`. A number, a bool or a string has no place to keep, and folds as before.
+            const Type *readType = nodeTypeOf(read);
+            if (readType != nullptr && readType->code() != TypeCode::String &&
+                isGCTraced(readType->code())) {
+                ++foldTookNothing_;
+                if (kVarFoldDebug) {
+                    std::fprintf(
+                        stderr,
+                        "[DBG-W] read=%u writes=- candidate=none kind=- region=- took=kept\n",
+                        static_cast<unsigned>(readId));
+                }
+                continue;
+            }
             // A write gives the cell of this version; what a read wants is the value written, and
             // a write holds it as its second operand. A writer that is not one of those -- the JOIN
             // a branch's writes meet at, say -- gives a cell and no value of its own, so that read
@@ -1949,7 +1977,7 @@ void Builder::collapseNonEscapingVariableReads() {
                             readKind == camel::runtime::GCRegionKind::LoopBody ||
                             readKind == camel::runtime::GCRegionKind::LoopCond) {
                             ++foldTookNothing_;
-                            if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                            if (kVarFoldDebug) {
                                 std::fprintf(
                                     stderr,
                                     "[DBG-W] read=%u writes=%zu readregion=%d candidate=- kind=- "
@@ -1979,7 +2007,7 @@ void Builder::collapseNonEscapingVariableReads() {
                     }
                     if (aCallWroteBeforeTheRead) {
                         ++foldTookNothing_;
-                        if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                        if (kVarFoldDebug) {
                             std::fprintf(
                                 stderr,
                                 "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- "
@@ -1994,7 +2022,7 @@ void Builder::collapseNonEscapingVariableReads() {
                     if (cellInputs.empty()) { ++foldTookNothing_; continue; }
                     version = cellInputs[0];
                     ++foldTookInitial_;
-                    if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                    if (kVarFoldDebug) {
                         std::fprintf(
                             stderr,
                             "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- took=initial\n",
@@ -2012,7 +2040,7 @@ void Builder::collapseNonEscapingVariableReads() {
                         kind == camel::runtime::GCRegionKind::LoopCond ||
                         kind == camel::runtime::GCRegionKind::LoopBody ||
                         kind == camel::runtime::GCRegionKind::Dead;
-                    if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                    if (kVarFoldDebug) {
                         std::fprintf(
                             stderr,
                             "[DBG-W] read=%u writes=%zu candidate=%u kind=%d region=%d took=%s\n",
@@ -2089,6 +2117,14 @@ void Builder::collapseNonEscapingVariableReads() {
             if (waitedOnByGate) {
                 continue;
             }
+            // The read stood in a chain, and its place in it is the version's now: what ordered the
+            // read orders the version, and what the read ordered is ordered by the version
+            // (docs/design/effects/edges.cn.md 4). `eraseNode` splices a chain *over* the node it
+            // removes (A -> B -> C becomes A -> C), which keeps the ordering only when the read had
+            // a predecessor; a read at the head of a chain -- the one a BRCH keeps to say "read this
+            // before the branch" -- has none, so its edge would go with it and the branch would lose
+            // the order a later pass reads as its execution order (order_edges_regions.gir).
+            draft.replaceOrderEdgesAt(readId, version);
             // The read's users take the version's value; the read node is not needed any more.
             draft.replaceAllValueUses(readId, version);
             draft.eraseNode(readId);
