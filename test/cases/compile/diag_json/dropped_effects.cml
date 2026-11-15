@@ -1,9 +1,10 @@
 /**
- * Outside a sync block an effectful expression whose result nothing uses does not run
- * (docs/design-principles.cn.md 3.1). That is legal; the compiler warns about each one
- * (SemanticDiag::EffectNotExecuted) and the program runs as written. Lines marked DROPPED get
- * the warning; nothing in a sync block does, nor does a pure expression.
- * Output: `kept 1` and `0 5`.
+ * Which effects run is decided by design principles 3.1: a write to a resource outside the program
+ * is used by the region it is written in, so a bare `println` here runs (the author's ruling of
+ * 2026-11-15, "区域的根"); a call, an assignment and a branch stand on a read of their value or a
+ * place in a sync chain, so the ones nothing depends on do not run and each gets the warning
+ * SemanticDiag::EffectNotExecuted. Nothing in a sync block does, nor does a pure expression.
+ * Output: `operator`, `noisy`, `4`, `kept 1`, `0 5`.
  */
 
 func noisy(x: int): int sync {
@@ -27,13 +28,13 @@ func quiet(x: int): int {
 func dropped(): int {
     var i = 5
     var j = 5
-    println('operator')              // DROPPED line 31: an impure operator
-    noisy(1)                         // DROPPED line 32: a function whose sync body prints
-    let unused = noisy(2)            // DROPPED line 33: bound to a name nothing reads
-    modify(i)                        // DROPPED line 34: a write nothing reads afterwards
-    j = 7                            // DROPPED line 35: an assignment nothing reads afterwards
-    println(noisy(4))                // DROPPED line 36: one warning, for the outer call
-    if quiet(0) > 0 then sync {      // DROPPED line 37: a branch with an effectful arm
+    println('operator')              // RUNS line 31: a write of stdout, and this region runs
+    noisy(1)                         // WARNED line 32: a call the program never needs
+    let unused = noisy(2)            // WARNED line 33: bound to a name nothing reads
+    modify(i)                        // WARNED line 34: a write nothing reads afterwards
+    j = 7                            // WARNED line 35: an assignment nothing reads afterwards
+    println(noisy(4))                // RUNS line 36: the write runs, and reads its argument
+    if quiet(0) > 0 then sync {      // WARNED line 37: a branch the program never needs
         println('arm')
     } else sync {
         println('other arm')

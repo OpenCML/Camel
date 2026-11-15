@@ -1096,8 +1096,8 @@ assert(report.device_work.to_host_bytes === 16, JSON.stringify(report.device_wor
 timeout_ms = 60000
 
 [[tests]]
-name = "gpu_scope.unused_effect_outside_a_sync_block_does_not_run"
-desc = "An effectful expression written outside a sync block whose result nothing uses is not executed, and the compiler reports each one as EffectNotExecuted: evaluation follows the dependencies, and that is the language's own reading of its own program (design principles 3.1 and section 14, misreading 1), not a defect of the scope. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not — this entry is the run without `tiles::compile`, and it is red when a dropped effect runs (the run would print `never`) or when its warning is gone."
+name = "gpu_scope.write_outside_a_sync_block_runs_and_is_not_warned"
+desc = "A write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15): a `println` written in a `#gpu` function body that is not a sync block runs, and no `EffectNotExecuted` is reported for it. What stays demand-driven is a read. The reading belongs to the program and not to the device, so it holds whether the scope is cut into segments or not -- this entry is the run without `tiles::compile`, and it is red when the print stops running or when a warning is reported for it. The one diagnostic the program does report is the tag's, which the run without the pass carries."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
 args = ["--output-format", "json", "${case}", "std::nvm"]
@@ -1105,20 +1105,17 @@ expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
 const diags = JSON.parse(input.stderr)
-assert(input.normalized.stdout === '12.0' + String.fromCharCode(10), JSON.stringify(input.normalized.stdout))
-assert(!input.stdout.includes('never'), input.stdout)
+assert(input.normalized.stdout === 'never' + String.fromCharCode(10) + '12.0' + String.fromCharCode(10), JSON.stringify(input.normalized.stdout))
 const dropped = diags.filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
-assert(dropped.length === 1, JSON.stringify(diags.map((d) => d.data.name)))
-assert(dropped[0].message === "The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.", dropped[0].message)
-assert(dropped[0].code === '0x03100004', dropped[0].code)
+assert(dropped.length === 0, JSON.stringify(dropped.map((d) => d.message)))
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 30000
 
 [[tests]]
-name = "gpu_scope.unused_effect_stays_dropped_through_the_pass"
-desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, and the effect written outside a sync block is still not executed and still reported as EffectNotExecuted. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and it does not make an effect nothing depends on reachable. Red when the pass executes the dropped effect, when it stops reporting it, or when it changes the program's line."
+name = "gpu_scope.write_outside_a_sync_block_runs_through_the_pass"
+desc = "The same program through `tiles::compile` (`--devices cpu`, so no transfer is written): the scope is cut into segments, the statements of a segment become a call, and the write written outside a sync block still runs and is still not reported as EffectNotExecuted. A segment's replaced statements hand their orderings to the call that replaces them; that handover keeps the program's order, and the write's own region is what runs it. Red when the pass stops running the write, when it starts reporting it, or when it changes the program's line."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_unused_effect.cml"
 args = ["--devices", "cpu", "--output-format", "json", "${case}", "tiles::compile", "std::nvm"]
@@ -1126,12 +1123,17 @@ envs = ["CUDA_VISIBLE_DEVICES=-1"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const program = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean).filter((line) => !line.startsWith('TILES_'))
-assert(JSON.stringify(program) === JSON.stringify(['12.0']), input.stdout)
-assert(!input.normalized.stdout.includes('never'), input.stdout)
-const dropped = JSON.parse(input.stderr).filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
-assert(dropped.length === 1, input.stderr)
-assert(dropped[0].message === "The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.", dropped[0].message)
+const lines = input.normalized.stdout.split(String.fromCharCode(10)).filter(Boolean)
+const program = lines.filter((line) => !line.startsWith('TILES_'))
+assert(JSON.stringify(program) === JSON.stringify(['never', '12.0']), input.stdout)
+const raw = input.stderr.trim()
+const diags = raw ? JSON.parse(raw) : []
+const dropped = diags.filter((d) => d.data.name === 'SemanticDiag::EffectNotExecuted')
+assert(dropped.length === 0, input.stderr)
+const row = lines.find((line) => line.startsWith('TILES_PLACEMENT ') && line.includes('"graph":"main"'))
+assert(row, JSON.stringify(lines))
+const report = JSON.parse(row.slice('TILES_PLACEMENT '.length))
+assert(report.body === 'host', row)
 }
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -1139,7 +1141,7 @@ timeout_ms = 30000
 
 [[tests]]
 name = "gpu_scope.arm_effect_runs_only_in_the_arm_taken"
-desc = "A `println` written in an arm of a `#gpu` scope runs only when the program takes that arm: the arm is a block of its own and the branch decides whether it runs, so a run that takes the first arm of one call and the second arm of the next prints each line once. The scope still runs on the device around the effects, and each arm is a segment of its own. An effect made an observable root would run in both arms, so both lines would be printed twice; that is the reading this entry pins (design principles 3.1, section 14, misreading 1)."
+desc = "A `println` written in an arm of a `#gpu` scope runs only when the program takes that arm: the arm is a region of its own, and a region runs the writes written in it, so only the arm the branch takes prints. A run that takes the first arm of one call and the second arm of the next prints each line once. The scope still runs on the device around the effects, and each arm is a segment of its own. Reading the arm's writes as the whole program's roots would run both arms, so both lines would be printed twice; that is the reading this entry pins (design principles 3.1, section 14, misreading 1)."
 kind = "behavior"
 case = "../../../cases/modules/tiles/gpu_scope_arm_effect.cml"
 args = ["--devices", "cpu", "${case}", "tiles::compile", "std::nvm"]

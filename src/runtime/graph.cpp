@@ -17,6 +17,7 @@
 #include "camel/runtime/exec_plan.h"
 #include "camel/runtime/graph_txn.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/region_roots.h"
 #include "runtime/graph_build.h"
 
 #include "camel/core/context/frame.h"
@@ -1969,6 +1970,12 @@ struct DraftLiveFace {
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         return draft.normInputsOf(ref);
     }
+    std::vector<RegionRootCandidate> regionRoots() const {
+        return regionRootCandidatesOfDraft(draft);
+    }
+    gc_node_ref_t decidingOwnerOf(uint32_t region) const {
+        return camel::runtime::decidingOwnerOfDraft(draft, region);
+    }
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
         return draft.withInputsOf(ref);
     }
@@ -2030,6 +2037,12 @@ struct FrozenLiveFace {
     std::span<const gc_node_ref_t> normInputsOf(gc_node_ref_t ref) const {
         return graph.normInputsOf(ref);
     }
+    std::vector<RegionRootCandidate> regionRoots() const {
+        return regionRootCandidatesOf(graph);
+    }
+    gc_node_ref_t decidingOwnerOf(uint32_t region) const {
+        return camel::runtime::decidingOwnerOf(graph, region);
+    }
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
         return graph.withInputsOf(ref);
     }
@@ -2076,38 +2089,73 @@ template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &fa
         pushRoot(root);
     }
 
-    while (!worklist.empty()) {
-        const gc_node_ref_t current = worklist.back();
-        worklist.pop_back();
-        for (gc_node_ref_t input : face.normInputsOf(current)) {
-            pushRoot(input);
-        }
-        for (gc_node_ref_t input : face.withInputsOf(current)) {
-            pushRoot(input);
-        }
-        for (gc_node_ref_t input : face.ctrlInputsOf(current)) {
-            pushRoot(input);
-        }
-        // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement written
-        // before this one in the same `sync` block is live exactly as a data input is.
-        for (gc_node_ref_t input : face.syncInputsOf(current)) {
-            pushRoot(input);
-        }
-        const GCNodeKind kind = face.kindOf(current);
-        if (kind == GCNodeKind::Loop) {
-            // The ports of its regions are part of it, whether the code reads them or not.
-            for (auto part : {GCRegionKind::LoopCond, GCRegionKind::LoopBody}) {
-                if (const uint32_t region = face.loopRegionOf(current, part); region != 0) {
-                    for (gc_node_ref_t port : face.regionPortsOf(region)) {
-                        pushRoot(port);
+    const auto reach = [&] {
+        while (!worklist.empty()) {
+            const gc_node_ref_t current = worklist.back();
+            worklist.pop_back();
+            for (gc_node_ref_t input : face.normInputsOf(current)) {
+                pushRoot(input);
+            }
+            for (gc_node_ref_t input : face.withInputsOf(current)) {
+                pushRoot(input);
+            }
+            for (gc_node_ref_t input : face.ctrlInputsOf(current)) {
+                pushRoot(input);
+            }
+            // A sync edge carries "used" (docs/design/effects/edges.cn.md 1.5): the statement
+            // written before this one in the same `sync` block is live exactly as a data input is.
+            for (gc_node_ref_t input : face.syncInputsOf(current)) {
+                pushRoot(input);
+            }
+            const GCNodeKind kind = face.kindOf(current);
+            if (kind == GCNodeKind::Loop) {
+                // The ports of its regions are part of it, whether the code reads them or not.
+                for (auto part : {GCRegionKind::LoopCond, GCRegionKind::LoopBody}) {
+                    if (const uint32_t region = face.loopRegionOf(current, part); region != 0) {
+                        for (gc_node_ref_t port : face.regionPortsOf(region)) {
+                            pushRoot(port);
+                        }
                     }
                 }
             }
+            if (kind == GCNodeKind::Brch) {
+                pushRoot(face.joinOf(current));
+            } else if (kind == GCNodeKind::Join) {
+                pushRoot(face.brchOf(current));
+            }
         }
-        if (kind == GCNodeKind::Brch) {
-            pushRoot(face.joinOf(current));
-        } else if (kind == GCNodeKind::Join) {
-            pushRoot(face.brchOf(current));
+    };
+    reach();
+
+    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h). A write to a
+    // resource outside the program is used by the region it is written in, so the region's running
+    // runs it although nothing reads what it produces. 3.1 keeps that out of the graph -- "图上不
+    // 加边" -- so it is seeded here, and the seed repeats because a region is seeded only once its
+    // owner (the BRCH or the LOOP) is itself live: a write in an arm nothing takes, or in a loop
+    // nothing needs, is not part of the execution, and the warning for it belongs to the branch or
+    // the loop (`SemanticDiag::EffectNotExecuted`).
+    const std::vector<RegionRootCandidate> regionRoots = face.regionRoots();
+    for (const RegionRootCandidate &candidate : regionRoots) {
+        if (candidate.region == 0) {
+            pushRoot(candidate.node); // the body runs whenever the graph does
+        }
+    }
+    reach();
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const RegionRootCandidate &candidate : regionRoots) {
+            if (candidate.region == 0 || visited.contains(candidate.node)) {
+                continue;
+            }
+            const gc_node_ref_t owner = face.decidingOwnerOf(candidate.region);
+            if (owner == kInvalidNodeRef || !visited.contains(owner)) {
+                continue;
+            }
+            pushRoot(candidate.node);
+            grew = true;
+        }
+        if (grew) {
+            reach();
         }
     }
 

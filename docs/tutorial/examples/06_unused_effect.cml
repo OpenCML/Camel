@@ -1,8 +1,9 @@
-// Evaluation follows dependencies: outside a sync block, an effect nobody uses does not run.
+// Reads follow dependencies; a write to a resource outside the program is used by the region it is
+// written in, so an unused `println` in a body that is not `sync` still runs (design principles 3.1).
 // Run: camel docs/tutorial/examples/06_unused_effect.cml
 
 func greet(): int {
-    println('hello from greet')     // not used, not in a sync block: never runs
+    println('hello from greet')     // a write in the body region: it runs, used result or not
     return 1
 }
 

@@ -1,0 +1,18 @@
+/**
+ * A write to a resource outside the program is a root of the region it is written in (design
+ * principles 3.1): `main` is not a `sync` block, and the three prints are bare statements of its
+ * body. A region runs the writes it holds whether or not anything reads what they produce, so all
+ * three run -- in the order they are written, since they write one resource -- and no diagnostic is
+ * reported.
+ *
+ * This is the case the author's ruling of 2026-11-15 is about ("非同步函数里的打印不执行"): before
+ * it, the three nodes were pruned where a graph is frozen to what its roots reach, and the program
+ * printed nothing while reporting one EffectNotExecuted per line.
+ */
+
+func main(): int {
+    println("alpha")
+    println("beta")
+    println("gamma")
+    return 0
+}
