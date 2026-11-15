@@ -5,14 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：2 页
+## 现在在等作者：1 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-15-does-an-unused-external-read-report-effect-not-executed`](2026-11-15-does-an-unused-external-read-report-effect-not-executed.cn.md) | 没人用的外部读，还要报 `EffectNotExecuted` 吗？ |
-| [`q-2026-11-16-who-reports-when-two-rules-are-broken-at-once`](q-2026-11-16-who-reports-when-two-rules-are-broken-at-once.cn.md) | 一个程序同时违反两条规则时，谁该报？ |
 
-## 生成器不会删的行：112 行（页已不在 `questions/` 里）
+## 生成器不会删的行：113 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -128,6 +127,7 @@
 | [`q-2026-11-15-what-path-a-diagnostic-prints`](../reviews/q-2026-11-15-what-path-a-diagnostic-prints.cn.md) | 诊断的位置行打印哪个路径形式 | 在 `reviews/` |
 | `q-2026-11-15-what-the-side-effect-warning-says-now` | 那条「副作用没有执行」的警告，现在该怎么说话 | 页不在（`questions/` 与 `reviews/` 都没有） |
 | `q-2026-11-16-can-tee-capture-by-reference` | 闭包按值捕获落地了，`tee` 还在按引用：这条规则今天报不报？ | 页不在（`questions/` 与 `reviews/` 都没有） |
+| `q-2026-11-16-who-reports-when-two-rules-are-broken-at-once` | 一个程序同时违反两条规则时，谁该报？ | 页不在（`questions/` 与 `reviews/` 都没有） |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |
