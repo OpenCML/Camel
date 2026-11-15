@@ -31,6 +31,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/resource_conflict.h"
 #include "camel/core/type/typevar.h"
 
 namespace camel::compile::gir {
@@ -1011,18 +1012,18 @@ class Builder {
     std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
     std::unordered_set<node_handle_t> knownCellUsers_;
     /// The exits a cell was written at, in the order the writes were recorded, for the writes that
-    /// are not a call's (recordWrite's `throughCallee` false): a straight-line write of the body. The
-    /// fold asks which of them stands before a read, because that is the value the read sees; a
+    /// are not a call's (recordWrite's `throughCallee` false): a straight-line write of the body.
+    /// The fold asks which of them stands before a read, because that is the value the read sees; a
     /// write only a call made is not a statement of this body and is not ordered here.
     std::unordered_map<node_handle_t, std::vector<node_handle_t>> writesOf_;
     std::unordered_set<node_handle_t> escapingVariables_;
     // Variables whose only reason for standing in `escapingVariables_` is that a write handed them
-    // to `__assn__` as a `var` argument (requireMutableArgument records that, because the operator's
-    // first parameter is two-way). A write is not an escape: the assignment does not exist after the
-    // call, so it cannot hold the cell. They stay out of SSA only while something else keeps them a
-    // resource -- a closure capturing them, a `var` argument to a user function, or a write written
-    // inside a loop, which is carried state (schedule item 3). The fold reads this set, and the
-    // straight-line definition that decides the loop case is written there.
+    // to `__assn__` as a `var` argument (requireMutableArgument records that, because the
+    // operator's first parameter is two-way). A write is not an escape: the assignment does not
+    // exist after the call, so it cannot hold the cell. They stay out of SSA only while something
+    // else keeps them a resource -- a closure capturing them, a `var` argument to a user function,
+    // or a write written inside a loop, which is carried state (schedule item 3). The fold reads
+    // this set, and the straight-line definition that decides the loop case is written there.
     std::unordered_set<node_handle_t> writeOnlyEscaping_;
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
     // callee's capture table that says which variables it writes, and, per call, the variable
@@ -1358,9 +1359,9 @@ class Builder {
     // The bodies a `sync` block's chain already answered for, and whether it may pass them by
     // (`calleeIsFreelyArranged`): a body is walked once for the whole build, not once per call.
     std::unordered_map<DraftGraphBuilder *, bool> freelyArrangedGraphs_;
-    // The bodies the walk of `calleeIsFreelyArranged` is inside right now: a callee that reaches one
-    // of them reaches itself, and that is a recursion. A body that is still being written is not
-    // walked at all (`bodyStates_`), so the recursive call written inside its own body answers
+    // The bodies the walk of `calleeIsFreelyArranged` is inside right now: a callee that reaches
+    // one of them reaches itself, and that is a recursion. A body that is still being written is
+    // not walked at all (`bodyStates_`), so the recursive call written inside its own body answers
     // before it ever gets here.
     std::unordered_set<DraftGraphBuilder *> freelyArrangedActive_;
     // The function bodies and arms of a module, in the order they were built, are in
@@ -1379,6 +1380,25 @@ class Builder {
     // wrote `uses`/`pure` keeps the clause (its contract with its callers), and one that wrote no
     // clause carries what its body was measured to reach (design principles 3.3).
     std::unordered_set<DraftGraphBuilder *> inferredSignatures_;
+    // The signature a declared function's values are made from, by the graph whose body was
+    // declared for it: the one place a conflict between two occurrences of a type variable is
+    // resolved back to a declaration, to report it there and to read the settled set from
+    // (recordResourceConflict, checkInferredResources).
+    std::unordered_map<const camel::core::type::Type *, DraftGraphBuilder *> declaredFuncTypes_;
+    // The pairs of types one occurrence of a type variable bound to different resources
+    // (resource_conflict.h): recorded where they meet, judged once every body is measured, so that
+    // the answer does not depend on which of the two bodies was built first. `unwritten` says the
+    // side wrote no resource clause when the two met, which is where the repair is written.
+    struct ResourceConflict {
+        const camel::core::type::Type *left  = nullptr;
+        const camel::core::type::Type *right = nullptr;
+        bool leftUnwritten                   = false;
+        bool rightUnwritten                  = false;
+    };
+    std::vector<ResourceConflict> resourceConflicts_;
+    // The pairs already reported, by index in `resourceConflicts_`: the check runs once per module
+    // unit, and a pair is one diagnostic.
+    std::unordered_set<size_t> reportedResourceConflicts_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -2550,14 +2570,14 @@ class Builder {
     // computation able to fault, or that is recursive, is a call that may fault). The clause on the
     // declaration is read first and is the whole truth a call site has (3.3): a call a clause says
     // reaches a resource is a statement whatever its body does. Everything else here -- an operator
-    // that is not pure, a cast that may fail, a branch or loop with a region -- is asked of the node
-    // itself by `runtime::isChainStatement`.
+    // that is not pure, a cast that may fail, a branch or loop with a region -- is asked of the
+    // node itself by `runtime::isChainStatement`.
     bool callIsChainStatement(node_handle_t node);
     // Whether a `sync` block's chain may pass a call of `callee` by: the body holds nothing a chain
-    // carries -- no effect, nothing that may fault, no call that is itself not free -- and it is not
-    // recursive, because a recursion may go deeper than the depth limit and so counts as able to
-    // fault (design principles 3.4). Such a callee is one of "the computations the compiler arranges
-    // freely", and a call of it is arranged freely too.
+    // carries -- no effect, nothing that may fault, no call that is itself not free -- and it is
+    // not recursive, because a recursion may go deeper than the depth limit and so counts as able
+    // to fault (design principles 3.4). Such a callee is one of "the computations the compiler
+    // arranges freely", and a call of it is arranged freely too.
     bool calleeIsFreelyArranged(DraftGraphBuilder *callee);
     // The walk behind `calleeIsFreelyArranged`: one body's nodes, a direct call followed into the
     // body it names, and nothing else looked at.
@@ -2687,6 +2707,32 @@ class Builder {
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
     // while the bodies are still in hand.
     void checkInferredResources();
+    // Records one place where two occurrences of a type variable asked for one type and the two
+    // types differed in their resources alone (resource_conflict.h): the type layer asks, while the
+    // bodies are being built, and the pair is judged once every body is measured, so that the
+    // answer does not depend on which of the two bodies happened to be built first. Answers false
+    // when neither side is a declaration this build measured, which leaves the type layer the
+    // reading it had.
+    bool recordResourceConflict(
+        const camel::core::type::Type &left, const camel::core::type::Type &right);
+    // Makes this builder the one the type layer records such pairs with, and puts the previous one
+    // back when it goes out of scope.
+    class ResourceConflictScope {
+      public:
+        explicit ResourceConflictScope(Builder &self)
+            : previous_(camel::core::type::resourceConflictSink()) {
+            camel::core::type::resourceConflictSink() =
+                [&self](const camel::core::type::Type &left, const camel::core::type::Type &right) {
+                    return self.recordResourceConflict(left, right);
+                };
+        }
+        ~ResourceConflictScope() { camel::core::type::resourceConflictSink() = previous_; }
+        ResourceConflictScope(const ResourceConflictScope &)            = delete;
+        ResourceConflictScope &operator=(const ResourceConflictScope &) = delete;
+
+      private:
+        camel::core::type::ResourceConflictSink previous_;
+    };
     // Then holds each body to the state rule (design principles 3.5, rule two; the author's ruling
     // of 2026-11-14): a `var` local lives in the call that declares it and a `var` parameter is the
     // caller's cell lent to the call that received it, so a closure may capture one by reference
@@ -2706,9 +2752,8 @@ class Builder {
     // The place a reference is reached at through the values `call` hands to a box of `content`,
     // when `content` is a function type: a closure's captures are a fact about its graph, and its
     // type does not spell them.
-    std::optional<std::string>
-    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
-        const;
+    std::optional<std::string> refInsideACapturedValue(
+        node_handle_t call, camel::core::type::Type *content, int depth = 0) const;
     // One layer of that walk: the place a reference is reached at through what the closure `value`
     // captured, `through` naming the closures already walked to reach it and `depth` how many
     // layers down this is. A layer that cannot be read -- or one past `kRefCaptureDepth` -- is
@@ -2740,6 +2785,12 @@ class Builder {
     void reportResourceViolation(
         const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
         const camel::core::sem::ResourceSignature &measured, camel::source::origin_id_t noteOrigin);
+    // The report of one place where one type variable was asked for two function types that write
+    // different resources (recordResourceConflict): anchored at the declaration of the side the
+    // position may repair, naming both signatures. Reported with the other per-module diagnostics.
+    void reportResourceConflict(
+        const ResourceConflict &conflict, DraftGraphBuilder *leftOwner,
+        DraftGraphBuilder *rightOwner);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is

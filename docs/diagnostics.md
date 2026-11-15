@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-315 diagnostics: 293 errors, 22 warnings. 15 carry a machine-applicable edit, 300 say why they carry none.
+316 diagnostics: 294 errors, 22 warnings. 15 carry a machine-applicable edit, 301 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -273,6 +273,7 @@ prints one entry.
 | `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
 | `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
+| `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -9021,6 +9022,57 @@ func main(): int sync {
     let outer = state::ref(inner)
     let back = state::get(outer)
     println(state::get(back))
+    return 0
+}
+```
+
+### ResourceInferenceConflict
+
+`0x03000212` · Error · `SemanticDiag::ResourceInferenceConflict`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.
+```
+
+**Help**
+
+```text
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+```
+
+**Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
+
+```camel
+func same::<T>(a: T, b: T): T {
+    return a
+}
+
+func pick(b: bool): (x: int) => int {
+    return same(if b then f else g, wide)
+}
+
+func f(x: int): int {
+    return x + 1
+}
+
+func g(x: int): int {
+    return x + 2
+}
+
+func wide(x: int): int sync {
+    println(x)
+    return x + 3
+}
+
+func main(): int sync {
+    let h = pick(true)
+    println(h(1))
     return 0
 }
 ```

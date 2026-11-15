@@ -248,6 +248,10 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
     // whose guard decides it (`func f(x: ShapeOf<string>)`): the predicate has to be answerable
     // here too, or the type would look like one no case selects.
     GuardScope guardScope(*this);
+    // And it records the pairs of function types one type variable is asked for, which are judged
+    // once every body is measured: a type in a top-level declaration is read here too
+    // (resource_conflict.h).
+    ResourceConflictScope conflictScope(*this);
     ensureRootGraph();
     recorder_  = context_ ? context_->semanticRecorder() : nullptr;
     auto &slot = units_[module.get()];
@@ -782,6 +786,9 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // layer asks for a predicate's answer while it selects a case, and only a build can read one
     // (typevar.h `typeCaseGuardEvaluator`, design principles 5.5).
     GuardScope guardScope(*this);
+    // And it records the pairs of function types one type variable is asked for, judged once every
+    // body is measured (resource_conflict.h).
+    ResourceConflictScope conflictScope(*this);
 
     // The conservative writer set, made before any body is built (design principles 3.1, 3.5):
     // which variables the program writes is in the construction trees, and a function whose module

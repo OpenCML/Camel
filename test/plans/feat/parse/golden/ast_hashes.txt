@@ -2485,6 +2485,7 @@ c4aa969b736c9d37 ok test/cases/effects/err_capture_escapes.cml
 0fe195db9bab7769 ok test/cases/effects/err_closure_capture_pure.cml
 c4bcb3d7b4bdbf70 ok test/cases/effects/err_group_cycle.cml
 7a863dc0022102d5 ok test/cases/effects/err_handle_not_nominal.cml
+1fe13134d137e3a5 ok test/cases/effects/err_inferred_invariant_position.cml
 5b3d1824426bf274 ok test/cases/effects/err_inferred_not_pure.cml
 f9622bb7b9afa2b6 ok test/cases/effects/err_many_parameters_pure.cml
 15937225576f268a ok test/cases/effects/err_module_var_in_clause.cml
@@ -2525,6 +2526,8 @@ fe1e03c7601a0566 ok test/cases/effects/two_references_write_one_object_unsynced.
 a5892bb3d5ebb981 ok test/cases/effects/uses_ambient_covers_body.cml
 93f2f5da8620a912 ok test/cases/effects/value_made_after_a_call_captures_its_version.cml
 d7f37c8b9bb71d48 ok test/cases/effects/writer_table_through_callee.cml
+e88cbf676c43cf82 ok test/cases/effects/unreachable_pair/with/reading.cml
+022a0888a5490272 ok test/cases/effects/unreachable_pair/without/reading.cml
 dcb7bca653fe1a90 ok test/cases/facts/tensors_and_loops.cml
 03e0c61f6ce4ee87 ok test/cases/facts/two_functions.cml
 dcfc2854902fa5b2 ok test/cases/feat/bindings/python_boundary.cml

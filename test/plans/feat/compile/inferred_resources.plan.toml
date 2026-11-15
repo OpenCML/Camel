@@ -1,0 +1,74 @@
+id = "compile.inferred_resources"
+order = 1012
+tier = "fast"
+tags = ["feat", "compile", "effects", "resources", "inference"]
+desc = "Resource inference reads the bodies alone, bottom up (the author's ruling of 2026-11-15): a function's set is what its own body was measured to reach, so the place a value is used does not decide it -- a place that asks for one type and is given two function values that write different resources is a type error there, whose repair is a resource clause on the callee; and deleting a declaration nothing reaches changes no other function's set, byte for byte."
+
+# The ruling this plan holds (docs/handover/reviews/questions-2026-10-29.md, 2026-11-15):
+#
+#   推断只看函数体，自下而上。按调用图的强连通分量，从被调者到调用者逐个求最小不动点；使用处的
+#   类型约束（例如把函数放进对函数类型不变的位置）不反过来决定被调函数的资源。约束不满足就是
+#   类型错误，诊断提示给被调函数写资源子句。这样推断总有唯一结果，删掉一个不可达的声明也不会改变
+#   别的函数的资源。
+#
+# The two readings below are built on one tree: the same program with one unreachable declaration and
+# without it.
+
+[defaults]
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 15000
+
+# ---- One position, one type: the two values must write the same resources ----
+
+[[tests]]
+name = "inference.invariant_position_is_a_type_error"
+desc = "`same::<T>` is given the branch `if b then f else g` and `wide` for one `T`: f and g write nothing and wide prints, and none of the three wrote a clause, so the two sets are what the two bodies were measured to reach. The place they meet does not take one for the other's -- it is a type error at the declaration that writes no clause, and the repair it names is a resource clause there. `same` is written before all three, so the answer does not depend on the order the bodies were built in."
+kind = "behavior"
+case = "../../../cases/effects/err_inferred_invariant_position.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ResourceInferenceConflict"
+expect_output_contains = ["The values 'f' and 'wide' meet where one type is asked for, and the resources they write differ: '(x: int) => int pure' against '(x: int) => int uses var stdout'.", "Write a resource clause on the callee that writes none"]
+
+# ---- Deleting a declaration nothing reaches ----
+
+[[tests]]
+name = "inference.unreachable_declaration.with"
+desc = "`bump` writes the module's `counter` and nothing calls it; `apply` reads the same cell. Every reading but `bump`'s own is the one the next test asserts, byte for byte."
+kind = "behavior"
+case = "../../../cases/effects/unreachable_pair/with/reading.cml"
+args = ["${case}", "test::resources"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const kept = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint') && !l.startsWith('RESOURCES footprint bump '))
+  const expected = [
+    'RESOURCES footprint __root__ read ambient reading:counter; write ambient stdout; external',
+    'RESOURCES footprint apply read variable with 0 whole',
+    'RESOURCES footprint main read ambient reading:counter; write ambient stdout; external',
+  ].join('\n')
+  assert(kept.join('\n') === expected, 'the readings are not the recorded ones:\n' + kept.join('\n'))
+}
+"""
+
+[[tests]]
+name = "inference.unreachable_declaration.without"
+desc = "The same program with `bump` deleted: `__root__`, `apply` and `main` read exactly as they do with it, so a declaration nothing reaches is not part of another function's set. The two files are named alike because the module's name is part of the name a top-level `var` is known by."
+kind = "behavior"
+case = "../../../cases/effects/unreachable_pair/without/reading.cml"
+args = ["${case}", "test::resources"]
+expect_exit = 0
+verify_script = """
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const kept = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint'))
+  const expected = [
+    'RESOURCES footprint __root__ read ambient reading:counter; write ambient stdout; external',
+    'RESOURCES footprint apply read variable with 0 whole',
+    'RESOURCES footprint main read ambient reading:counter; write ambient stdout; external',
+  ].join('\n')
+  assert(kept.join('\n') === expected, 'the readings are not the recorded ones:\n' + kept.join('\n'))
+}
+"""

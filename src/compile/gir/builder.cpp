@@ -745,8 +745,8 @@ node_handle_t Builder::capturedCellIn(DraftGraphBuilder *graph, node_handle_t or
     return nullptr;
 }
 
-std::optional<uint8_t> Builder::capturePositionOf(DraftGraphBuilder *graph,
-                                                 node_handle_t port) const {
+std::optional<uint8_t>
+Builder::capturePositionOf(DraftGraphBuilder *graph, node_handle_t port) const {
     const auto table = capturedValues_.find(graph);
     if (table == capturedValues_.end()) {
         return std::nullopt;
@@ -986,6 +986,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph =
         enterScope(funcType, gct->name(), parameterPortOrigins(context_, gct));
+    // The signature this declaration's values are made from, so that a place where they meet at one
+    // type variable is reported at the declaration (resource_conflict.h). The open signature is the
+    // one place a function's resources are written, and no other function shares it; the interned
+    // type the DECL carries is shared by every declaration with that shape, so it is not recorded.
+    if (graph != nullptr && graph->funcType() != nullptr) {
+        declaredFuncTypes_[graph->funcType()] = graph.get();
+    }
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The declaration's condition, kept while the declarations of one name are read: the
         // next declaration of the name is compared with this one before either body is built
