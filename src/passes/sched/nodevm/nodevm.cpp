@@ -20,6 +20,7 @@
 #include "camel/utils/log.h"
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
 
@@ -360,6 +361,13 @@ slot_t NodeVMSchedPass::call(
             const gc_node_ref_t nodeRef        = en.ref;
             faultNodeRef                       = nodeRef;
             const GCNode *n                    = en.node;
+            // The anchor's site: which node is running, so a box made inside it can ask the plan
+            // whether this node is one of its producing rows. Written only while --gc-check
+            // asks for the counters -- the flag that already pays for them -- so a program that
+            // does not pass it writes nothing on this path.
+            if (camel::core::mm::allocatorChecks().printForeignResources) {
+                currFrame->setCurrentNode(static_cast<int64_t>(nodeRef));
+            }
 
             if (tillNode != kInvalidNodeRef) {
                 if (tillNode == nodeRef) {
