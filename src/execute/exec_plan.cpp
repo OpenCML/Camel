@@ -7,9 +7,11 @@
 
 #include "camel/runtime/exec_plan.h"
 
+#include "camel/core/context/frame.h"
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/ref.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/control_regions.h"
@@ -1074,6 +1076,37 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         }
         plan.refEntryOffsets[idx + 1] = static_cast<uint32_t>(plan.refEntries.size());
     }
+
+    // The slot-to-node half of the same table, for the back ends that run bytecode: an instruction
+    // has a destination slot where the node form has the node. Only an operator claims its slot --
+    // a port, a GATE and a JOIN carry another node's slot and make no value of their own, so a
+    // lookup that found one of them would apply a row at the wrong place. Built once with the rows,
+    // so the run pays one array read and not a table search on the operator's path.
+    if constexpr (kRefEntriesWired) {
+        gc_data_idx_t widest = 0;
+        for (size_t idx = 0; idx < count; ++idx) {
+            if (plan.refProducedAt[idx] == 0) {
+                continue;
+            }
+            const GCNode *node = graph.node(plan.topo[idx]);
+            if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
+                continue;
+            }
+            widest = std::max(widest, node->dataIndex);
+        }
+        plan.refOperNodeBySlot.assign(
+            static_cast<size_t>(widest) + 1, static_cast<uint32_t>(kInvalidNodeRef));
+        for (size_t idx = 0; idx < count; ++idx) {
+            if (plan.refProducedAt[idx] == 0) {
+                continue;
+            }
+            const GCNode *node = graph.node(plan.topo[idx]);
+            if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
+                continue;
+            }
+            plan.refOperNodeBySlot[static_cast<size_t>(node->dataIndex)] = plan.topo[idx];
+        }
+    }
 }
 
 } // namespace
@@ -1100,6 +1133,110 @@ size_t ExecPlan::refEntriesOfKind(RefEntryKind kind) const {
 bool ExecPlan::refEntriesBalance() const {
     return refProducedTotal() + refEntriesOfKind(RefEntryKind::Retain) ==
            refEntriesOfKind(RefEntryKind::GiveBack) + refKeptTotal();
+}
+
+namespace {
+
+/// The type code of the reference handle the runtime counts (`state::Ref`, camel/core/type/ref.h).
+/// A slot of this type is one this count owns; a python object, a file handle and every other
+/// foreign resource is a different code and keeps the lifetime it has today.
+///
+/// It is the handle type's own code and not `TypeCode::Ref`: that code is the compile-time
+/// reference the AST carries (`RefData`, camel/core/data/ref.h), no value of a graph has it, and
+/// comparing against it would skip every row and wire nothing. `TypeCode::Ref` is accepted beside
+/// it because it costs one comparison and a slot that somehow carries it is still not a value to
+/// count -- `retainCountNow` answers false for it either way.
+camel::core::type::TypeCode countedHandleCode() {
+    static const camel::core::type::TypeCode code = camel::core::type::RefType::get()->code();
+    return code;
+}
+
+/// Whether the plan says a back end runs the rows of `value`: the value is one the plan counts, and
+/// the node that makes it is an operator. Both halves are the author's requirement: a value with no
+/// row (`refProducedAt` 0) has nothing to do, and a value whose producer is a CALL or a FILL is
+/// skipped *whole* -- see the note on `applyRefEntriesForNode`.
+bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept {
+    if (plan.graph == nullptr || value >= plan.topoIndexByRef.size()) {
+        return false;
+    }
+    const size_t position = plan.topoIndexByRef[value];
+    if (position == ExecPlan::kNotInPlan || position >= plan.refProducedAt.size()) {
+        return false;
+    }
+    if (plan.refProducedAt[position] == 0) {
+        return false;
+    }
+    const GCNode *node = plan.graph->node(value);
+    return node != nullptr && node->kind == GCNodeKind::Oper;
+}
+
+/// The rows of one position of `topo`: the holds a value taken at that position and the references
+/// that come back there. `applyRefEntriesForNode` is the published entry point; this is the work, and
+/// it is one function so that a back end holding a slot and a back end holding a node cannot drift
+/// apart in what they apply.
+void applyRefEntriesAtPosition(
+    const ExecPlan &plan,
+    camel::core::context::Frame *frame,
+    size_t position,
+    slot_t produced) noexcept {
+    if (!kRefEntriesWired || frame == nullptr || plan.graph == nullptr) {
+        return;
+    }
+    const std::span<const ExecPlan::RefEntry> entries = plan.refEntriesAt(position);
+    if (entries.empty()) {
+        return;
+    }
+    for (const ExecPlan::RefEntry &entry : entries) {
+        if (!rowsOfValueAreExecuted(plan, entry.value)) {
+            continue;
+        }
+        if (entry.value >= plan.dataIndexByRef.size()) {
+            continue;
+        }
+        const gc_data_idx_t slot = plan.dataIndexByRef[entry.value];
+        if (slot == 0) {
+            continue; // the value has no slot: a node whose type is void counted nothing
+        }
+        const camel::core::type::TypeCode code = frame->codeAt(slot);
+        if (code != camel::core::type::TypeCode::Ref && code != countedHandleCode()) {
+            continue;
+        }
+        // The node's own value is the one the operator just made: a back end that runs bytecode
+        // has not published it into its slot yet (it does so after this returns), so the caller
+        // passes it in.
+        const bool ownValue = entry.value < plan.topoIndexByRef.size() &&
+                              plan.topoIndexByRef[entry.value] == position;
+        const slot_t value = ownValue ? produced : frame->get<slot_t>(slot);
+        camel::core::rtdata::Object *object =
+            camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(value);
+        if (object == nullptr) {
+            continue;
+        }
+        for (uint32_t taken = 0; taken < entry.count; ++taken) {
+            if (entry.kind == ExecPlan::RefEntryKind::Retain) {
+                camel::core::rtdata::retainCountNow(object);
+            } else {
+                camel::core::rtdata::giveBackCountNow(object);
+            }
+        }
+    }
+}
+
+} // namespace
+
+void applyRefEntriesForNode(
+    const ExecPlan &plan,
+    camel::core::context::Frame *frame,
+    gc_node_ref_t node,
+    slot_t produced) noexcept {
+    if (node >= plan.topoIndexByRef.size()) {
+        return;
+    }
+    const size_t position = plan.topoIndexByRef[node];
+    if (position == ExecPlan::kNotInPlan) {
+        return;
+    }
+    applyRefEntriesAtPosition(plan, frame, position, produced);
 }
 
 size_t ExecPlan::refProducedTotal() const {

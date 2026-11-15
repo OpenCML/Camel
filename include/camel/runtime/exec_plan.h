@@ -32,6 +32,10 @@
 #include <unordered_map>
 #include <vector>
 
+namespace camel::core::context {
+class Frame; // the slots a back end reads a node's values from (camel/core/context/frame.h)
+} // namespace camel::core::context
+
 namespace camel::runtime {
 
 /// A node of the plan with what a back end reads of it while running, resolved once: the record,
@@ -245,15 +249,16 @@ class ExecPlan {
     /// How many update nodes the plan decided each way.
     size_t storageReuseCount(StorageReuse decision) const;
 
-    /// ---- The references that come back: route 4's plan half, described and not executed ------
+    /// ---- The references that come back: route 4's plan half ------------------------------------
     //
     // Design principles 10.5: a value is freed by counting alone, the count equals the number of
     // its holders, and the count comes from one last-use analysis on the execution plan that every
     // back end follows. What follows is that analysis's output. It is laid out from the "position
-    // of the last use" column below, and no back end executes it yet: the only place a counted
-    // block is released is ForeignResourceObject::finalize, inside a collection (see
-    // docs/handover/reports/2026-11-15-count-at-zero-has-no-entry.cn.md, and the block's lifetime
-    // in the note on `ForeignResourceControlBlock::releaseCountNow`).
+    // of the last use" column below, and the four back ends execute it through one function --
+    // `applyRefEntriesForNode`, called at the site where the node's operator has run -- so that the
+    // count a run keeps and the count the plan printed are one table and not two that agree.
+    // What a count releases is the *resource*: the block's memory still belongs to the wrappers
+    // that name it (see the note on `ForeignResourceControlBlock::releaseCountNow`).
     //
     // The rule is the author's ruling of 2026-11-15 (docs/handover/reviews/
     // 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md): the output of a
@@ -276,9 +281,11 @@ class ExecPlan {
     // captured a handle, the slot that made it was cleared, and the count reached zero while the
     // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
     //
-    // What this table does not decide, and why nothing executes it: a value a callee keeps, or one
-    // a later graph reads, is a holder no edge of this graph shows. Counting those is the rest of
-    // the way to route 4.
+    // What this table does not decide: a value a callee keeps, or one a later graph reads, is a
+    // holder no edge of this graph shows. Counting those is the rest of the way to route 4 -- and
+    // until they are counted, the rows of a value whose holders cannot all be seen are simply not
+    // executed (`applyRefEntriesForNode` only runs the rows of a value an operator node makes), so
+    // a count no edge explains stays above zero instead of reaching it early.
     struct RefGiveBack {
         gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
         gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
@@ -360,6 +367,22 @@ class ExecPlan {
     std::vector<uint32_t> refEntryOffsets;
     std::vector<RefEntry> refEntries;
     std::span<const RefEntry> refEntriesAt(size_t topoIndex) const;
+    /// By data slot: the operator node that makes the slot's value, and `kInvalidNodeRef` for a
+    /// slot no operator makes. A back end that runs bytecode has the instruction's destination slot
+    /// where the node-form back ends have the node, and the rows are keyed by the node; this is that
+    /// translation, filled once with the rows, so that all four back ends reach the count through the
+    /// same one function. Only an operator claims a slot: a port, a GATE and a JOIN carry another
+    /// node's slot and make no value, so a lookup that landed on one of them would apply a row at
+    /// the wrong place.
+    std::vector<uint32_t> refOperNodeBySlot;
+    /// The operator node that makes the value in `slot`; `kInvalidNodeRef` when no operator makes it
+    /// (including every static slot, which the negative index says is a constant).
+    gc_node_ref_t refNodeOfSlot(gc_data_idx_t slot) const {
+        if (slot <= 0 || static_cast<size_t>(slot) >= refOperNodeBySlot.size()) {
+            return kInvalidNodeRef;
+        }
+        return refOperNodeBySlot[static_cast<size_t>(slot)];
+    }
     /// How many entries of each kind the plan holds, which is the balance read row by row:
     /// `produced + retains == giveBacks + kept`.
     size_t refEntriesOfKind(RefEntryKind kind) const;
@@ -463,8 +486,51 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph);
 void noteCountedCreationForNode(const void *graph, gc_node_ref_t node, uint64_t boxes) noexcept;
 void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcept;
 
+/// ---- The count, executed at a node's position -------------------------------------------------
+//
+// `refEntriesAt` is what the plan says about a position; this is the one function that does it, and
+// all four back ends call it at the site where the node's operator has run -- the same site the
+// anchor above is asked at, for the same reason: it is the one place every back end reaches with
+// both the node and the value it just made.
+//
+// It runs the `Retain` rows through `retainCountNow` (one holder more) and the `GiveBack` rows
+// through `giveBackCountNow` (one holder less, and the resource goes when that was the last). Two
+// filters decide which rows run, and both are the author's: a row is skipped whole when the value
+// it names is not a slot of that reference type, and a value's rows are skipped whole -- the holds
+// and the give-backs together -- unless the node that makes the value is an OPERATOR. The second is
+// what keeps the count from being applied at the wrong place: an operator's output is the one kind
+// every back end makes at this site, so `Retain` and `GiveBack` are taken in pairs; a value a call
+// or a FILL makes would have its holds taken on one path and its give-backs on another, and a
+// give-back with no hold behind it is a reference given back before its last use.
+//
+// `produced` is the value the node just made -- the slot the operator wrote, or wrote through the
+// scheduler (bytecode stores `bc->result` after this returns, so a back end that runs bytecode
+// passes the value here and not the slot). The other values a row names are read from their slots;
+// they were made earlier in the same round, and the plan's rows are placed after their producers.
+//
+// Executing the rows is not instrumentation and is not gated on `--gc-check`: what a run releases
+// is the program's behaviour (design principles 10.5), and the flag only says whether the process
+// reports what it released.
+//
+// This is the one entry point, and it is the same one for all four back ends -- no back end derives
+// which rows are due from what it knows about the instruction it is running. The two things a back
+// end supplies are the node it has just run and the value that run made; a back end that holds a
+// slot and not a node asks the plan which operator makes that slot's value (`refNodeOfSlot`), and
+// that lookup is the plan's table and not a second reading of the program.
+void applyRefEntriesForNode(
+    const ExecPlan &plan,
+    camel::core::context::Frame *frame,
+    gc_node_ref_t node,
+    slot_t produced) noexcept;
+
+/// The measurement switch for the wiring above: one build with it `false` is the control for "the
+/// count is what releases a box" -- with the rows not executed, the same program's `released` must
+/// move, and a reading that does not move says the count took no part in it. It is `true` here and
+/// a run never writes it; a measurement flips it by hand, rebuilds, reads, and puts it back.
+inline constexpr bool kRefEntriesWired = true;
+
 /// How many boxes the node being run made: the sites bracket the operator call with it, and hand
-/// the answer to one of the two calls above.
+/// the answer to the call above.
 ///
 /// It is a bracket and not a single read because the box is made inside the operator, and it is
 /// measured on the allocator's per-thread count so that a scheduler running several threads reads

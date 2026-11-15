@@ -166,17 +166,20 @@ class ForeignResourceObject final : public Object {
 // the references).
 //
 // A `Ref` handle is an ordinary traced wrapper whose control block is the box, and the slot's type
-// is what says a slot holds one (`TypeCode::Ref`), so a write path pays a comparison it already
-// makes and not a cast per value. `retainCountNow` takes one reference for a new holder and answers
-// false for a value that is not a counted block (every other foreign resource keeps its present
-// lifetime: released by its wrapper's finalizer). `giveBackCountNow` gives one back and answers
-// true when the count reached zero, so the caller is the one that knows the box was released at
-// that moment -- which is the point of the count, and the reason the answer is returned rather than
-// inferred from a collection later.
+// is what says a slot holds one (`camel::core::type::RefType`, whose code is the `state::Ref` other
+// type -- not `TypeCode::Ref`, which is the compile-time reference a `RefData` carries and which no
+// value of a graph has), so the filter in front of the two calls below is a slot-type comparison and
+// not a cast per value. `retainCountNow` takes one reference for a new holder and answers false for
+// a value that is not a counted block (every other foreign resource keeps its present lifetime:
+// released by its wrapper's finalizer). `giveBackCountNow` gives one back and answers true when the
+// count reached zero, so the caller is the one that knows the box was released at that moment --
+// which is the point of the count, and the reason the answer is returned rather than inferred from a
+// collection later.
 //
-// Neither is called anywhere yet: the writes that will call them are one entry point shared by all
-// four back ends (`camel::core::context::Frame::set` for slots, `Tuple::set` / `Struct::set` /
-// `Array::set` for aggregates), so they are added here first and wired one back end at a time.
+// Who calls them: one entry point shared by all four back ends,
+// `camel::runtime::applyRefEntriesForNode`, which reads the plan's rows for the position the node
+// has just run at (`camel/runtime/exec_plan.h`). Nothing else calls them: a count that is applied
+// in more than one place is a count whose balance no single table can be read against.
 bool retainCountNow(Object *value) noexcept;
 bool giveBackCountNow(Object *value) noexcept;
 
