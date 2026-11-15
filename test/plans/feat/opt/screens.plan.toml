@@ -89,6 +89,7 @@ args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "nn.lr"
+desc = "The training loop's rounds are a `loop` that carries the iteration count since 2026-11-16: a closure holds the value a name had when it was made, not the name (design principles 3.5, items 197 and 198), so the `foreach` element function could no longer write the weight's `var` parameter and the program was refused (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213). `update`'s `var` parameter still writes the weight, the loop's carried state is the way out the diagnostic names, and the program still trains (measured: the loss falls from 0.15 at round 200 to 0.085 at the end). What this entry reads is unchanged: the optimizer under `check_screens=true` may not rewrite a graph its screen skipped."
 case = "../../../cases/modules/nn/lr.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
@@ -459,6 +460,7 @@ args = ["${case}", "std::opt check_screens=true", "std::null"]
 
 [[tests]]
 name = "generic.effect_order_folded"
+desc = "The effect-order corpus reaches the passes with the accumulator a module `var`: since the 2026-11-16 ruling a closure holds the value a name had when it was made, not the name, so the nested function that appends to it could no longer write a `var` of the body around it (design principles 3.5, items 197 and 198; `SemanticDiag::ClosureAssignsCapturedName`, 0x03000213). The program's subject -- effects around folded code -- and this entry's reading, that no pass rewrites a graph its screen skipped, are unchanged."
 case = "../../../cases/opt/generic/effect_order_folded.cml"
 args = ["${case}", "std::opt check_screens=true", "std::null"]
 
