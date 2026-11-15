@@ -2089,6 +2089,14 @@ void Builder::collapseNonEscapingVariableReads() {
             if (waitedOnByGate) {
                 continue;
             }
+            // The read stood in a chain, and its place in it is the version's now: what ordered the
+            // read orders the version, and what the read ordered is ordered by the version
+            // (docs/design/effects/edges.cn.md 4). `eraseNode` splices a chain *over* the node it
+            // removes (A -> B -> C becomes A -> C), which keeps the ordering only when the read had
+            // a predecessor; a read at the head of a chain -- the one a BRCH keeps to say "read this
+            // before the branch" -- has none, so its edge would go with it and the branch would lose
+            // the order a later pass reads as its execution order (order_edges_regions.gir).
+            draft.replaceOrderEdgesAt(readId, version);
             // The read's users take the version's value; the read node is not needed any more.
             draft.replaceAllValueUses(readId, version);
             draft.eraseNode(readId);
