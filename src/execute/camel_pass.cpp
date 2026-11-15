@@ -305,6 +305,13 @@ class CamelPass final : public GraphIRPass {
         return produced;
     }
 
+    /// A pass written in Camel rewrites a graph only through the graph module's API (`open`,
+    /// `replace`, `erase`, `add_constant` and the rest of stdlib/graph.cml). That API cannot make a
+    /// node that carries an access, splice a body in or change what a node is, so the two commit
+    /// checks of the effect analysis are theorems for it, and the ruling of 2026-11-15 is that they
+    /// are not asked of it (docs/design/effects/analysis.cn.md 4.1).
+    bool rewritesThroughTheGraphModuleOnly() const override { return true; }
+
   private:
     std::string module_;
     std::string function_;
