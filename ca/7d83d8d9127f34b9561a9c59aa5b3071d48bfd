@@ -1,0 +1,47 @@
+`refcont` 欠的四条 AST 哈希补齐，闸门读数（提交正文引用了这条 note）。
+
+提交：`ca7d83d8d9127f34b9561a9c59aa5b3071d48bfd`。2 文件 `+33/−2`。
+推：`4d864ca77..ca7d83d8d`，`ls-remote` = ca7d83d8d9127f34b9561a9c59aa5b3071d48bfd。
+
+## 一、四个格子
+金标只加了 4 行、**没有删任何行**：
+    54175d59bc3c5230 ok test/cases/compile/ref/err_holds_ref_closure_in_collection.cml
+    233d5aa2f4bea8da ok test/cases/compile/ref/err_holds_ref_closure_in_struct.cml
+    91ef977693cbe4b8 ok test/cases/compile/ref/err_holds_ref_closure_in_struct_unread.cml
+    741aa91059b3ac82 ok test/cases/compile/ref/ref_closure_in_container_control.cml
+验收按写死的那条通过：`4316 files read as recorded, 0 not in the snapshot yet, of 4316`。
+
+## 二、这笔债欠了三次，但原因不是「没有能力」，是「找不到能力」
+`regionroot` 的新用例、协调位的 `4da099048`、`refcont` 这 4 个——三次的说法都是「录哈希只能在有主机
+二进制的地方跑，车道拿不到」。**这个说法是错的**：`camel-remote.ps1` 一直有 `-UpdateAstHashes`，它自己
+的文档里就写着这个记录「had to be made by hand on the host, which a lane cannot do」。能力在，车道
+（包括合并位）不知道；而 `-Check` 是固定清单，让闸门看起来没有第二扇门。**找不到的能力不算能力。**
+
+所以本笔加的不是一条新通道，而是让已有的那条**可读**：入口文档写明，并加两件东西。
+
+## 三、加的两件东西，都针对这个阶段看不见的那种失败
+1. **`[machine] out/<tag>/bin/camel-parsecheck built YYYY-MM-DD HH:mm`**，录制之前打印；
+   `-NoBuild` 时打印 `built <时间> (NOT REBUILT -- may be stale)`。
+   今晚的近漏就是这里：本地那个二进制是 **2026-11-12 14:57** 的，而 `src/parse` 今天动过
+   （`b278051ea`：`typeof` 就地解析）。用本地二进制**干跑**（不写盘）得到 **31 处差异**，全部是
+   「11/12 的解析器对今天的解析器」。把它录进去，4 个格子会从「未录入」变成「对不上」——更难查、
+   而且静默。
+2. **`-AstOnly <glob>`**（`--only` 的入口）：只重算点名的文件。不带它时 `--update` 会**重写每一行
+   对不上的记录**，等于把金标变成「当前树的输出」；带上它，没点名的行动不了。本笔金标的全部差异就是
+   上面 4 行。
+
+## 四、读法与闸门
+用法：`-UpdateAstHashes -AstOnly <四个用例> -Plan test/plans/feat/parse/frontend.plan.toml`，
+**录与验一次完成**：
+    [machine] out/latest/bin/camel-parsecheck built 2026-11-15 07:25
+    AST snapshot: 4316 lines recorded, 4 added and 0 removed
+    [SUMMARY] total: 8, pass: 8, fail: 0
+合后 `--changed`（base `5b0ec1076`）：
+    [SUMMARY] total: 148, pass: 148, fail: 0
+    check=gpu-plans total=146 pass=22 fail=0 skip=124 red=[] red_more=0 state=read
+gpu 实际覆盖 = 146 − 124 = **22 条**（其余是 `have-cuda-device.mjs` 说这台主机没有可见设备）。
+
+## 五、`-AstOnly` 不是后门
+它是 `-UpdateAstHashes` 的一个限定词，不是通用命令位：`-Check` 的固定清单没被打开，闸门也不会因为
+它跑任意命令。不带 `-UpdateAstHashes` 给 `-AstOnly` 是 **exit 2**（「一个没人执行的请求不能长得像
+执行过的」）。
