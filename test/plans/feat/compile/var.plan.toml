@@ -48,3 +48,33 @@ expect_exit = 0
 expect_stdout_contains = ["[graph] let identical", "[grad] let identical"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
+
+# A write inside an arm of an `if`, and the read after the branch: the arm wrote `1` before the
+# read, so `1` is what the read sees -- not the `0` `:var/new` made. The write reaches the cell
+# through the branch's JOIN, not as a statement of the body, and that is the path this entry pins.
+[[tests]]
+name = "var.write_in_branch_is_the_value_the_arm_wrote"
+desc = "`var x = 0; if true then { x = 1 }` then read `x` prints `1`. A read after a write in an arm takes that write's value; answering `0` means the fold fell back to the value `:var/new` made because an arm's write (recorded through the JOIN) was not seen."
+kind = "behavior"
+case = "../../../cases/compile/var/write_in_branch.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["1"]
+expect_stdout_not_contains = ["0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The same question for a loop body: three turns each add one, so the read after the loop prints
+# `3`. The body's write is carried state (the LOOP hands it on), which the fold must not answer with
+# the initial value or with one turn's increment.
+[[tests]]
+name = "var.write_in_loop_is_the_accumulated_value"
+desc = "`var x = 0; loop i = 0 while i < 3 do { x = x + 1 }` then read `x` prints `3`. A read after a write in a loop body takes the value the loop accumulated; answering `0` or `1` means the fold answered something other than what the write wrote."
+kind = "behavior"
+case = "../../../cases/compile/var/write_in_loop.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["3"]
+expect_stdout_not_contains = ["0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000

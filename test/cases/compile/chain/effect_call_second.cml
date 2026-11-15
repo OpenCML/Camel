@@ -1,0 +1,17 @@
+/**
+ * The other writing of `effect_call_first.cml`: the print of 2 stands before the call of
+ * `announce`, so this program prints 2 and then 1. The order is observable, so the two writings
+ * must not have one canonical graph.
+ *
+ * Run: camel test/cases/compile/chain/effect_call_second.cml
+ */
+func announce(x: int): int {
+    println(x)
+    return x
+}
+
+func main(): int sync {
+    println(2)
+    let a = announce(1)
+    return a
+}

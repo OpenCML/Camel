@@ -1,0 +1,16 @@
+/**
+ * The other writing of `pure_call_first.cml`: the print stands before the call of `twice`. The two
+ * statements are independent -- the call reads nothing the print writes and the print reads nothing
+ * the call gives -- so the canonical graph must be the same document, byte for byte.
+ *
+ * Run: camel test/cases/compile/chain/pure_call_second.cml
+ */
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    println(1)
+    let a = twice(3)
+    return a
+}

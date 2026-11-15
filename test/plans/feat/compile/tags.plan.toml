@@ -70,7 +70,14 @@ const only = (line, value) => {
 }
 only(9, 'graph::scale=2')            // doubled: the tag before the function
 only(14, 'graph::heavy')             // weighed: the nodes half of `on func, nodes`
-only(19, 'graph::scale=3')           // main: the tag before the function
+// main's tag before the function holds for the nodes of its body. Anchored on the body rather
+// than on one line: `var a` has no reader, so the variable folds away and the OPER that
+// `var a = doubled(3)` used to make is not in the graph any more (the `:var/new` it made has no
+// user and is pruned). What is left of the body is the two multiplications inside the blocks,
+// and the function's `graph::scale=3` reaches the one the `#plain` block does not override.
+const body = [19, 20, 21, 22, 23, 24, 25, 26, 27].flatMap((line) => at(line))
+assert(body.length > 0, 'main has no OPER in its body')
+assert(body.some((l) => attrs(l).includes('graph::scale=3')), `no OPER of main's body carries graph::scale=3: ${JSON.stringify(body.map(attrs))}`)
 only(22, 'graph::plain, graph::scale=3') // the block adds plain to the enclosing scale
 only(26, 'graph::scale=5')           // the inner same-name tag wins
 assert(at(26).every((l) => !attrs(l).includes('graph::plain')), 'the inner block does not carry the outer block')

@@ -1,0 +1,17 @@
+/**
+ * The other writing of `fault_call_first.cml`: the print stands before the call of `divide`. The
+ * two writings print the same thing, but only the second one prints before it divides, and a
+ * divisor of zero would fault after the print instead of before it -- which is why the call keeps
+ * its place on the chain and the two documents differ.
+ *
+ * Run: camel test/cases/compile/chain/fault_call_second.cml
+ */
+func divide(x: int): int {
+    return 100 / x
+}
+
+func main(): int sync {
+    println(2)
+    let a = divide(2)
+    return a
+}

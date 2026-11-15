@@ -3,7 +3,7 @@
 // SPDX-License-Identifier: MIT
 
 /**
- * A control region's members are the plan's range for it, and the plan of `positions.cml` is 552
+ * A control region's members are the plan's range for it, and the plan of `positions.cml` is 546
  * nodes -- both as numbers, on the plan pass, so that narrowing either one is red.
  *
  * The S1 lane moved the executor's liveness onto the regions: the seeds are the results of the
@@ -15,14 +15,21 @@
  *      members of its region (docs/design/effects/edges.cn.md 5.2). A change that computed the
  *      range from liveness instead would drop a member that nothing reached and print a smaller
  *      `in-plan`, and this line would say so.
- *   2. the plan has 552 nodes. A change that narrows liveness or a range takes nodes out of the
+ *   2. the plan has 546 nodes. A change that narrows liveness or a range takes nodes out of the
  *      plan; the count is the cheapest way to see it, and it is written here as an exact number
  *      rather than a shape, because "no fewer than" would not see a plan that lost the members.
+ *      The number moved from 552 when a `sync` block's chain stopped carrying the calls that are
+ *      pure and cannot fault (design principles 3.1, 3.4): six GATEs went with them, because a
+ *      GATE is where a block hands a statement's value on and where that value's wait reaches it
+ *      (edges.cn.md 5.3), and a value read from a freely arranged call has no wait to hand on.
+ *      Measured across this change: after `std::opt` the graph went from 554 nodes and 857 edges
+ *      with 10 GATEs to 548 and 843 with 4, the printed positions golden did not change, and the
+ *      plan went from 552 to 546 -- the same six, `main` and `__root__` losing three each.
  *
  * What this check does NOT hold: that the seeds carry the weight. They do not, while the control
  * edges are still built -- the exit walk reaches every region result through the owner's ports as
- * well, so removing the seeding branch leaves both readings identical (measured: 552 and `in-plan ==
- * members` either way).
+ * well, so removing the seeding branch leaves both readings identical (measured on a tree where the
+ * chain still carried every call: 552 and `in-plan == members` either way).
  *
  * Nor does it hold that the range is membership and not liveness, on this program: replacing the
  * membership judgement with `live[n]` also leaves the plan byte-identical (measured: `diff` of the
@@ -57,7 +64,7 @@ const PROGRAM = path.join(REPO_ROOT, 'test', 'cases', 'consistency', 'entering',
 
 /** The number of nodes the plan lays out for this program, as a value: a plan that lost a member
  *  prints fewer, and the message names both numbers rather than "the plan changed". */
-const PLANNED_NODES = 552
+const PLANNED_NODES = 546
 
 const run = spawnSync(CAMEL, [PROGRAM, 'std::opt', 'test::exec_plan'], {
     env,
