@@ -3720,3 +3720,17 @@ A16f 先在 taskflow 守所有顺序边（本日另一条返工）之后重跑�
 3. 拿得出来，就把那个程序收进用例，并在提交说明里补上照例的那一行读数（C++ 净增、中心文件、超 2500 行文件数）：`graph.cpp` 本来就超 2500 行，这一笔又加了 355 行，要说明为什么不放到别处。
 
 按顺序，第 2 路的优先级一仍是：编辑接口统一交接位置、`dce` 删 `deadWrite` 判死的写、E9 错值。
+
+## 返工（2026-11-15）：`sync` 块外对 `var` 形参的写被丢掉（第 3 路，优先级一，ECOOP 语义）
+
+在 pin `29ea0a011` 上实测（`develop` 的 `src/compile/gir/builder_operators.cpp` 同一处仍在）：
+
+```camel
+func main(): int sync {
+    var x = 0;
+    let h = (var y: int): int => { y = 1; return x; };   // 函数体不是 sync
+    println(h(x)); println(x); return 0;
+}
+```
+
+nvm/fvm/prl 都打印 `0 0`，并给出 `IgnoredSideEffect: The call of '<__assn__>' is not in a sync block, and it takes a var argument`；函数体写成 `sync` 时打印 `1 1`。这违反原则 3.1："活得比函数长的变量（`var` 形参）的写由函数的出口用到"，以及"效应不静默消失"。写不能因为不在 `sync` 块里就不执行。修法与 11-14 那条一致：块内外的写统一成 `:op/assn_l`，对 `var` 形参的最终写由出口用到；`IgnoredSideEffect` 里"takes a var argument"这一支删掉。验收：上例在不写 `sync` 时也打印 `1 1`，四个后端相同。
