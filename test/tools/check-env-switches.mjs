@@ -107,6 +107,12 @@ const LEDGER = [
         owner: 'the var-to-SSA line (the fold counters)',
         why: 'the fold counts every exit it takes and prints the counts, and the decisions behind them, only when asked: it reads a run, it does not decide one',
     },
+    {
+        at: 'src/execute/pass.cpp:passBoundaryViolation',
+        reads: 'CAMEL_EFFECT_CONTAINMENT_SUMMARY',
+        owner: 'the effect-containment line (its counters, owed to the same rule it added)',
+        why: 'the containment check prints, per run and only when asked, how many values it checked and why it declined the rest; the counts are how the check is measured, not a switch that decides what the program does -- and this line exists because the guard that asks every `getenv` for a ledger line was added without one for its own',
+    },
 ]
 
 const CALL = /\bgetenv\s*\(/g
