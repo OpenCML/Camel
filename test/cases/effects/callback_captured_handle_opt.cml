@@ -1,0 +1,33 @@
+import state
+
+/**
+ * A closure captures a handle -- a `Ref` -- and is handed to a parameter of function type, and the
+ * call that runs it goes through `std::opt`. The defunctionalizer turns the captures of a function
+ * the program takes as a value into its trailing ordinary parameters (`parameterizeCaptures`,
+ * src/passes/opt/defun/defunctionalize.cpp), so after the rewrite the body reaches the handle as a
+ * parameter: the type the call site reads has to say that use in the parameter's position, because
+ * a signature numbers its resources in the callee's own parameters (resource_semantics.h,
+ * `ResourceSignature`). Left saying `uses capture 0`, it describes a capture the lowered function
+ * no longer has, and the effect-containment check (docs/design/effects/analysis.cn.md 4.1: at each
+ * call site the footprint of the function called must not exceed what the type there declares)
+ * refuses the program.
+ *
+ * A `var` does not show this: a cell of a variable is not something a `uses` clause can spell, so
+ * that reading is declined rather than judged (design effects plan 5.1). A handle is what a clause
+ * names, which is why this case captures one.
+ *
+ * The closure writes the handle, so the write has to reach the value the caller still holds: the
+ * read after the call takes what the call made. Four back ends, one reading.
+ */
+
+func apply(f: (x: int) => void, v: int) {
+    f(v)
+}
+
+func main(): int sync {
+    let r = state::ref(1)
+    let before = state::get(r)
+    apply((x: int) => { let _ = state::set(r, x + before) }, 4)
+    println(before, state::get(r))
+    return 0
+}
