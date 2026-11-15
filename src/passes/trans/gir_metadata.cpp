@@ -6,6 +6,7 @@
 #include "camel/passes/trans/gir_metadata.h"
 #include "camel/core/rtdata/base.h"
 #include "camel/core/rtdata/func.h"
+#include "camel/runtime/resources.h"
 #include <format>
 #include <sstream>
 using namespace std;
@@ -52,45 +53,41 @@ PortInfo portInfo(camel::runtime::GCGraph *graph, camel::runtime::gc_node_ref_t 
     if (!graph)
         return {};
     const auto captured = graph->captureNames();
-    const auto closures = graph->closureNodes();
-    // Captures have their own name table, even when the function has no declared arguments.
-    for (size_t i = 0; i < closures.size(); ++i) {
-        if (closures[i] == nodeRef) {
-            return {
-                i < captured.size() ? string(camel::core::symbolText(captured[i])) : "",
-                "capture",
-                i};
-        }
-    }
-    const auto withPorts      = graph->withPorts();
-    const size_t declaredWith = closures.empty() && captured.size() <= withPorts.size()
-                                    ? withPorts.size() - captured.size()
-                                    : withPorts.size();
-    auto argName              = [&](size_t index) -> string {
+    auto argName        = [&](size_t index) -> string {
         const auto *type = graph->funcType();
         return type && index < type->argNamesCount() ? string(type->argNameAt(index)) : "";
     };
-    for (size_t i = 0; i < withPorts.size(); ++i) {
-        if (withPorts[i] != nodeRef)
-            continue;
-        if (i >= declaredWith) {
-            return {string(camel::core::symbolText(captured[i - declaredWith])), "capture", i};
-        }
-        return {argName(i), "with", i};
+    // Which group the port belongs to and its number there is one question, asked of the graph by
+    // `camel::runtime::portPlacement` and not spelled again here: the printer and the effect walk
+    // read the same ports, and two spellings of the capture numbering is exactly how they came to
+    // disagree.
+    const camel::runtime::PortPlacement placement =
+        camel::runtime::portPlacement(*graph, nodeRef);
+    switch (placement.group) {
+    case camel::runtime::PortGroup::Capture:
+        // Captures have their own name table, even when the function has no declared arguments.
+        return {
+            placement.index < captured.size()
+                ? string(camel::core::symbolText(captured[placement.index]))
+                : "",
+            "capture",
+            placement.index};
+    case camel::runtime::PortGroup::With:
+        return {argName(placement.index), "with", placement.index};
+    case camel::runtime::PortGroup::Norm:
+        break;
+    case camel::runtime::PortGroup::None:
+        return {};
     }
-    const auto normPorts = graph->normPorts();
-    // The ordinary ports are named after the slots their parameters hold in the signature, which
-    // are the ones after **every** `with` slot -- the pack's included, since a pack among the
-    // `with` parameters (`with <..ws>`) writes a slot that no port stands for. `declaredWith`
-    // counts ports, so it would name the first ordinary parameter after the pack.
+    // An ordinary port is named after the slot its parameter holds in the signature, which is the
+    // one after **every** `with` slot -- the pack's included, since a pack among the `with`
+    // parameters (`with <..ws>`) writes a slot that no port stands for. The declared-`with` *port*
+    // count would name the first ordinary parameter after the pack, so the type is asked first.
     const auto *signatureType = graph->funcType();
     const size_t normOffset =
-        signatureType != nullptr ? signatureType->withTypesCount() : declaredWith;
-    for (size_t i = 0; i < normPorts.size(); ++i) {
-        if (normPorts[i] == nodeRef)
-            return {argName(normOffset + i), "normal", i};
-    }
-    return {};
+        signatureType != nullptr ? signatureType->withTypesCount()
+                                 : camel::runtime::declaredWithPorts(*graph);
+    return {argName(normOffset + placement.index), "normal", placement.index};
 }
 
 string portLabel(
