@@ -18,6 +18,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/region_roots.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -512,6 +513,27 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // What the exit depends on, through data, control and sync edges.
     std::unordered_set<draft_node_ref_t> needed;
     std::vector<draft_node_ref_t> work;
+    const auto reach = [&] {
+        while (!work.empty()) {
+            const draft_node_ref_t id = work.back();
+            work.pop_back();
+            for (auto inputs :
+                 {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+                for (draft_node_ref_t input : inputs) {
+                    if (needed.insert(input).second) {
+                        work.push_back(input);
+                    }
+                }
+            }
+            // A statement of a `sync` block is used by the one written after it (and the block's
+            // value by its chain tail): liveness follows a sync edge as it follows a data input.
+            for (draft_node_ref_t input : draft.syncInputsOf(id)) {
+                if (needed.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    };
     for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
         if (root != runtime::kInvalidNodeRef && needed.insert(root).second) {
             work.push_back(root);
@@ -520,23 +542,38 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     if (work.empty()) {
         return; // the body did not build (an error was reported)
     }
-    while (!work.empty()) {
-        const draft_node_ref_t id = work.back();
-        work.pop_back();
-        for (auto inputs :
-             {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
-            for (draft_node_ref_t input : inputs) {
-                if (needed.insert(input).second) {
-                    work.push_back(input);
-                }
-            }
+    reach();
+    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h): a write to a
+    // resource outside the program is used by the region it is written in, so it runs although
+    // nothing reads what it produces. This is the same seed the liveness walk of a graph and the
+    // execution order make; it is made here too because this walk answers the warning and must
+    // agree with them, and it is written the same way so that the two cannot drift: the body's
+    // writes run with the graph, a region's writes run with the region, and a region runs only once
+    // its owner is live.
+    const std::vector<runtime::RegionRootCandidate> regionRoots =
+        runtime::regionRootCandidatesOfDraft(draft);
+    for (const runtime::RegionRootCandidate &candidate : regionRoots) {
+        if (candidate.region == 0 && needed.insert(candidate.node).second) {
+            work.push_back(candidate.node);
         }
-        // A statement of a `sync` block is used by the one written after it (and the block's
-        // value by its chain tail): liveness follows a sync edge as it follows a data input.
-        for (draft_node_ref_t input : draft.syncInputsOf(id)) {
-            if (needed.insert(input).second) {
-                work.push_back(input);
+    }
+    reach();
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const runtime::RegionRootCandidate &candidate : regionRoots) {
+            if (candidate.region == 0 || needed.contains(candidate.node)) {
+                continue;
             }
+            const draft_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, candidate.region);
+            if (owner == runtime::kInvalidNodeRef || !needed.contains(owner)) {
+                continue;
+            }
+            needed.insert(candidate.node);
+            work.push_back(candidate.node);
+            grew = true;
+        }
+        if (grew) {
+            reach();
         }
     }
     std::vector<draft_node_ref_t> dropped;

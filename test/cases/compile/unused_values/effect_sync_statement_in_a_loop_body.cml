@@ -1,8 +1,11 @@
 /**
- * The writing the help used to invite, in a loop body: `sync { ... }` written as a statement there
- * is a block whose value nothing takes, so the block does not run and the call inside it does not
- * run with it -- the warning comes back. That is why the help names `do sync` for a loop body and
- * not a sync block written inside the body.
+ * A `sync { ... }` block written as a statement in a loop body: the block is not a region the
+ * program chooses to run or not -- it is a block, and a block runs with the region around it -- so
+ * the write it holds is a root of the loop body (design principles 3.1), and it runs each round.
+ * Only a region whose owner runs nothing keeps its writes out of the execution.
+ *
+ * This case used to measure the opposite, under the reading that a block whose value nothing takes
+ * does not run. 3.1's rule is about the *region*, and a block is not one.
  */
 
 func main(): int sync {

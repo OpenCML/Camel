@@ -11,8 +11,8 @@
 [`examples/10_unused_effect.cml`](examples/10_unused_effect.cml)：
 
 ```cml
-// An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
-// never runs.
+// A write whose result nothing needs still runs: `greet`'s body is a region, so its `println`
+// prints although nothing uses the result and the body is not a sync block (3.1).
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
 
 func greet(): int {
@@ -31,21 +31,13 @@ camel docs/tutorial/examples/10_unused_effect.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_unused_effect.cml:6:5
-   |
- 6 |     println('hello from greet')
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
 
-只打印了 `1`。`greet` 的返回值 `1` 不依赖那个 `println`，所以它在图上是一个没有人要的节点：**没人要的效应不
-执行**。这不是错误，是语言的一条规则；编译器给这条警告，是为了让忘写的 `sync` 被看见。
+两行都打印了。`greet` 的返回值 `1` 仍然没人依赖那个 `println` 的结果，但 `println` 是**写**：对外部资源的写由它所在的区域用到，`greet` 的函数体就是一个区域，所以它执行，也不需要 `sync`。那什么才"没人要就不执行"？**读**——一个外部读的结果没人要，它就不执行，编译器还会报 `EffectNotExecuted`（[语言参考 4.2](../language/04_execution_model.md#42-按依赖求值)）。
 
-规则与理由：程序能观察到的先后只有两种——**值的传递**与**写出来的顺序**。除此之外一切都可以并行、可以重排、
-可以删掉，所以编译器不必假设任何顺序。要顺序，就写 `sync`。
+规则与理由：程序能观察到的先后只有两种——**值的传递**与**写出来的顺序**。除此之外一切都可以并行、可以重排、可以删掉，所以编译器不必假设任何顺序。要顺序，就写 `sync`。而"是否执行"由另一条规则决定：读看有没有人要结果，写看它所在的区域运行不运行。
 
 ## `sync` 函数体
 
@@ -86,7 +78,7 @@ hello from greet
 
 ```cml
 // A sync function body orders its own statements. What is written inside it -- an arm, a loop
-// body -- is ordered only if it says `sync` itself.
+// body -- runs with its own region, and is ordered by `sync` only if it says `sync` itself.
 // Run: camel docs/tutorial/examples/10_sync_block.cml
 
 func report(second: bool): int sync {
@@ -107,22 +99,15 @@ camel docs/tutorial/examples/10_sync_block.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_sync_block.cml:7:22
-   |
- 7 |     if second then { println('three'); println('four') }
-   |                      ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
 the body is a sync block
+three
 four
 five
 six
 0
 ```
 
-`three` 没有打印：那条 `if` 的臂不是同步块，`println('three')` 的结果没人要，所以不执行；`println('four')` 是
-这条臂的值，也就是 `if` 的值，所以执行。第二个 `if` 的臂写了 `sync`，两句都在。
+`three` 也打印了：那条 `if` 的臂不是同步块，但臂是一个区域，臂里对 `stdout` 的写由这个区域用到——`println('three')` 的结果没人要，它照样执行。臂不写 `sync` 影响的是**顺序**：这两句之间没有先后。第二个 `if` 的臂写了 `sync`，两句都在，而且有先后。
 
 这条规则的理由是**一个块的含义不随它写在哪里而变**：如果臂会继承外层的 `sync`，那么同一段代码写在这里和写在
 别处就有两种意思，读代码的人得往上找才知道它是不是有序的（[设计原则 3.4](../design-principles.cn.md#34-sync-块)）。

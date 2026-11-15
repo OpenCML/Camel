@@ -257,38 +257,33 @@ The first drafts that say something about the language. Each is compiled by
 `node scripts/camel-for-ai.mjs --verify-errors`, which checks that the diagnostic named is the one
 the compiler reports.
 
-### An effect nothing needs does not run
+### A read nothing needs does not run; a write runs with its region
 
-`println` is an effect, and an effect whose result nothing uses is dropped: the program compiles,
-prints nothing from that line, and warns `SemanticDiag::EffectNotExecuted`. **Wrong:**
+Reads are demand-driven: an external *read* whose result nothing uses is dropped, and the compiler
+warns `SemanticDiag::EffectNotExecuted`. A *write* to a resource outside the program is not like
+that: it is used by the region it is written in, so it runs although nothing reads what it returns.
+**Wrong** -- claiming that a bare `println` in a body that is not `sync` is dropped:
 
-<!-- camel-snippet: counter-example: the effect is dropped because nothing needs its result -->
-
-```camel
-func greet(): int {
-    println('hello')
-    return 1
-}
-```
-
-Nothing in that graph needs the `println`; making it run would mean some unused nodes are special.
-Say that it must happen: a `sync` body orders the calls written in it.
+<!-- camel-snippet: counter-example: a write is not dropped for lack of a reader, its region runs it -->
 
 ```camel
-func greet(): int sync {
-    println('hello')
-    return 1
-}
+import { get_env } from env
 
-func main(): int sync {
-    greet()
+func main(): int {
+    println('before')
+    get_env("CAMEL_AI_REFERENCE_NO_SUCH_VARIABLE")     // no diagnostic, and nothing is printed for it
     return 0
 }
 ```
 
 ```text
-hello
+before
 ```
+
+The reads above run only when their value is needed; the second one is wanted by nobody, so it does
+not run and the compiler reports `SemanticDiag::EffectNotExecuted` for it. A **write** is not like
+that: `main`'s body is a region, so a `println('hello')` in a body that is not `sync` prints, and
+`sync` only orders the statements -- it does not enable them.
 
 ### `match` over an `enum` must handle every variant
 

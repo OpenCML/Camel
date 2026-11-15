@@ -342,16 +342,16 @@ func main(): int sync {
 
 这是 Camel 最不同于其他语言的地方，值得慢慢读。
 
-### 6.1 没有被依赖的效应不执行
+### 6.1 读按需，写按区域
 
 在大多数语言里，语句一条接一条执行。在 Camel 里，默认情况下**求值由依赖驱动**：一个表达式被求值，是因为有人要用它的结果。互不依赖的表达式没有先后，可以并行。
 
-这带来一个推论：**在同步块之外，一个结果没人用的调用不会执行**，哪怕它有副作用。[`examples/06_unused_effect.cml`](examples/06_unused_effect.cml)：
+这条规则管的是**读**。**写不一样：对外部资源的写由它所在的区域用到**（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)）——区域运行时，区域里对外部资源的写都执行，不管结果有没有人用，也不需要 `sync`。一个函数体就是一个区域，所以 `main` 调用的函数里，那条结果没人用的 `println` 照样打印。[`examples/06_unused_effect.cml`](examples/06_unused_effect.cml)：
 
 ```cml
 
 func greet(): int {
-    println('hello from greet')     // not used, not in a sync block: never runs
+    println('hello from greet')     // 结果没人用，但它是一次写：函数体这个区域运行，它就执行
     return 1
 }
 
@@ -366,19 +366,13 @@ camel docs/tutorial/examples/06_unused_effect.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/06_unused_effect.cml:5:5
-   |
- 5 |     println('hello from greet')     // not used, not in a sync block: never runs
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
 
-只打印了 `1`。`greet` 的返回值 `1` 不依赖那个 `println`，所以它在图上是一个没有人要的节点。这不是错误，是语言的规则；编译器给出警告，是为了让忘写的 `sync` 被看见。
+两行都打印了。`println` 的返回值仍然没人要，但它是**写**，而写不需要读者；把 `sync` 去掉、加上都不影响这两行，`sync` 管的是顺序，不是是否执行（见 6.2）。
+
+那什么真的不执行？**读**：一个外部读的结果没人要，它就不执行，编译器还会报 `EffectNotExecuted`（第五章 `get_env` 那一节有这样的例子）。还有**区域本身不运行**的时候：没人要的循环体、没走到的分支臂，里面的写也跟着不执行。
 
 ### 6.2 同步块
 
@@ -404,51 +398,53 @@ hello from greet
 
 ```cml
 func f(c: bool): int sync {
-    if c then { println(1); println(2) }   // 臂不是同步块：只有 println(2) 执行
+    if c then { println(1); println(2) }   // 臂不是同步块，但臂是一个区域：两句都执行
     return 0
 }
 ```
 
-`if` 本身在同步链上，臂不在：臂按依赖求值，`println(1)` 的值没有人用，所以不执行；`println(2)` 是臂的值、也就是 `if` 的值，所以执行。要两句都打印，把 `sync` 写在臂上：`if c then sync { println(1); println(2) }`。
+`if` 本身在同步链上，臂不在；臂里的两句是按依赖求值还是都执行？都执行：臂是一个区域，臂里对 `stdout` 的写由这个区域用到，`println(1)` 的值没人要也一样执行。`sync` 在这里决定的只是顺序——臂不是同步块时，两句之间没有先后，谁是 `if` 的值由数据边决定（这里是 `println(2)`）。
 
 ### 6.3 函数的行为由它自己决定
 
-`main` 的函数体是同步块，那它调用的函数里的 `println` 会执行吗？不会。函数编译成它自己的子图，调用只是把这个子图节点放进更大的图里，不改变它的结构。[`examples/06_callee_decides.cml`](examples/06_callee_decides.cml)：
+`main` 的函数体是同步块，那它调用的函数里那条结果没人用的 `println` 会执行吗？会。函数编译成它自己的子图，`println` 在那个子图的函数体区域里，而区域运行它里面的写。[`examples/06_callee_decides.cml`](examples/06_callee_decides.cml)：
 
 ```cml
 
 func log(x: int): int {
-    println(x)          // result unused, body is not a sync block: not executed
+    println(x)          // 结果没人用，但它在函数体这个区域里：执行
     return x + 1
 }
 
 func main(): int sync {
     let a = log(1)
     let b = log(a)
-    println(b)          // prints 3, and nothing else
+    println(b)          // 打印 3
     return 0
 }
 ```
 
 ```text
+1
+2
 3
 ```
 
-两次 `log` 调用按顺序执行了（`b` 是 3），但 `println(x)` 属于 `log` 自己的函数体，那里不是同步块（编译器照样给出 `EffectNotExecuted` 警告）。要打印，把 `log` 声明为 `func log(x: int): int sync { ... }`。
+两次 `log` 调用按顺序执行（`b` 是 3），每次调用都先打印自己的参数：`1`、`2`，最后 `main` 打印 `3`。这正是“函数的行为由它自己决定”——`main` 的 `sync` 不会伸进 `log` 的函数体，`log` 也不因为这个调用者而改变；它的函数体就是一个区域，里面的写都执行。
 
 ### 6.4 `sync` 与函数体
 
-`sync` 写在**函数体**位置时（`func g(): int sync { ... }`），它修饰的是函数体那个块：块里的语句按书写顺序执行。不写 `sync` 的函数体不是同步块，里面 `println` 这类效果不执行（按依赖求值）。[`examples/06_sync_body.cml`](examples/06_sync_body.cml)：
+`sync` 写在**函数体**位置时（`func g(): int sync { ... }`），它修饰的是函数体那个块：块里的语句按书写顺序执行。不写 `sync` 的函数体不是同步块，但它仍然是**一个区域**，里面 `println` 这类**写**照样执行——`sync` 决定顺序，不决定是否执行。[`examples/06_sync_body.cml`](examples/06_sync_body.cml)：
 
 ```cml
 
 func f(): int {
-    println('f')        // 不执行：函数体不是同步块
+    println('f')        // 执行：函数体是一个区域
     return 1
 }
 
 func g(): int sync {
-    println('g')        // 执行：函数体是同步块
+    println('g')        // 执行，而且与相邻语句有先后
     return 2
 }
 
@@ -459,9 +455,12 @@ func main(): int sync {
 ```
 
 ```text
+f
 g
 3
 ```
+
+`f` 和 `g` 都打印了：`f` 的函数体不是同步块，只意味着 `f` 里各语句之间没有 `sync` 给的顺序，不意味着里面的写不执行。
 
 lambda 的函数体需要按顺序执行时，把 `sync` 写在块前：`(x: int) => sync { ... }`。lambda 头上没有 `sync`。
 

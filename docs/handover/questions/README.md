@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：109 行（页已不在 `questions/` 里）
+## 生成器不会删的行：110 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -108,6 +108,7 @@
 | [`2026-11-15-a-function-typed-slot-holds-a-tagged-variant`](../reviews/2026-11-15-a-function-typed-slot-holds-a-tagged-variant.cn.md) | 函数类型的槽里装着带 tag 的 Variant：任何一次运行中收集都会崩 | 在 `reviews/` |
 | [`2026-11-15-can-a-commit-depend-on-unrelated-writes`](../reviews/2026-11-15-can-a-commit-depend-on-unrelated-writes.cn.md) | 同一个图的提交结果，能不能取决于同一事务里有没有别的写入？ | 在 `reviews/` |
 | [`2026-11-15-does-a-returned-calls-slot-keep-a-box-alive`](../reviews/2026-11-15-does-a-returned-calls-slot-keep-a-box-alive.cn.md) | 调用返回之后，它留下的句柄槽还让盒子活着吗？ | 在 `reviews/` |
+| [`2026-11-15-does-an-unused-external-read-report-effect-not-executed`](../reviews/2026-11-15-does-an-unused-external-read-report-effect-not-executed.cn.md) | 没人用的外部读，还要报 `EffectNotExecuted` 吗？ | 在 `reviews/` |
 | [`2026-11-15-how-does-a-camel-pass-warn`](../reviews/2026-11-15-how-does-a-camel-pass-warn.cn.md) | 一个用 Camel 写的 pass，怎么报告一条不致命的诊断？ | 在 `reviews/` |
 | [`2026-11-15-is-a-handles-count-the-slots-or-the-wrappers`](../reviews/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md) | 返回边界上清掉没人命名的盒子：清理点，还是「一个槽一个 wrapper」？ | 在 `reviews/` |
 | [`2026-11-15-is-the-inline-splices-program-observable`](../reviews/2026-11-15-is-the-inline-splices-program-observable.cn.md) | 拼接进来的那段体，归属可观测吗 | 在 `reviews/` |

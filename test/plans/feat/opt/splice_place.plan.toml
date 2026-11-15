@@ -112,7 +112,7 @@ args = ["${case}", "std::opt::inline", "${backend}"]
 [[tests]]
 name = "perf_fib_smoke.reference"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "The timed helper's twenty rounds with nothing but the executor: the numbers are the measurement, the lines and the exit code are the behavior."
+desc = "The timed helper's twenty rounds with nothing but the executor, and the summary line the case writes after them: the numbers are the measurement, the lines and the exit code are the behavior. The summary used to be dropped -- a bare `->println` statement whose value nobody takes -- and runs now, because a write to a resource outside the program is used by the region it is written in (design principles 3.1, the author's ruling of 2026-11-15)."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "${backend}"]
@@ -121,19 +121,21 @@ verify_script = """
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
     assert(!input.normalized.stderr.includes('PassInternalError'), 'the graph was refused by the seal')
     const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
-    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
-    for (let i = 0; i < lines.length; i += 1) {
+    assert(lines.length === 21, `expected the 20 measured rounds and the summary line, got ${lines.length}`)
+    for (let i = 0; i < 20; i += 1) {
         const round = String(20 - i).padStart(3)
         const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
         assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
     }
+    const summary = lines[20].replace(/[0-9]+\.[0-9]{4}/g, '<T>')
+    assert(summary === 'jit perf fib(20): <T> +/- <T> ms', `the summary line is '${lines[20]}'`)
 }
 """
 
 [[tests]]
 name = "perf_fib_smoke.opt"
 case = "../../../cases/linear/jit/perf_fib_smoke.cml"
-desc = "`std::opt` inlines the closure the helper is given: the seal reports no fork, and the run still reports the twenty rounds and exits 0."
+desc = "`std::opt` inlines the closure the helper is given: the seal reports no fork, and the run still reports the twenty rounds, the summary line and exits 0."
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code"]
 args = ["${case}", "std::opt", "${backend}"]
@@ -142,12 +144,14 @@ verify_script = """
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
     assert(!input.normalized.stderr.includes('PassInternalError'), 'the pass built a graph the seal refused')
     const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
-    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
-    for (let i = 0; i < lines.length; i += 1) {
+    assert(lines.length === 21, `expected the 20 measured rounds and the summary line, got ${lines.length}`)
+    for (let i = 0; i < 20; i += 1) {
         const round = String(20 - i).padStart(3)
         const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
         assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
     }
+    const summary = lines[20].replace(/[0-9]+\.[0-9]{4}/g, '<T>')
+    assert(summary === 'jit perf fib(20): <T> +/- <T> ms', `the summary line is '${lines[20]}'`)
 }
 """
 
@@ -163,12 +167,14 @@ verify_script = """
     assert(input.exit_code === 0, `camel exited ${input.exit_code}`)
     assert(!input.normalized.stderr.includes('PassInternalError'), 'the pass built a graph the seal refused')
     const lines = input.normalized.stdout.split('\n').filter((line) => line.length > 0)
-    assert(lines.length === 20, `expected the 20 measured rounds, got ${lines.length}`)
-    for (let i = 0; i < lines.length; i += 1) {
+    assert(lines.length === 21, `expected the 20 measured rounds and the summary line, got ${lines.length}`)
+    for (let i = 0; i < 20; i += 1) {
         const round = String(20 - i).padStart(3)
         const shape = lines[i].replace(/[0-9]+\.[0-9]{6}/g, '<T>')
         assert(shape === `[${round}] <T> s`, `round ${20 - i} is '${lines[i]}'`)
     }
+    const summary = lines[20].replace(/[0-9]+\.[0-9]{4}/g, '<T>')
+    assert(summary === 'jit perf fib(20): <T> +/- <T> ms', `the summary line is '${lines[20]}'`)
 }
 """
 
