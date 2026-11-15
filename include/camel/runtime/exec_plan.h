@@ -18,6 +18,7 @@
 #pragma once
 
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/runtime/graph.h"
 
 #include <algorithm>
@@ -27,6 +28,7 @@
 #include <memory>
 #include <mutex>
 #include <span>
+#include <unordered_map>
 #include <string_view>
 #include <vector>
 
@@ -242,6 +244,82 @@ class ExecPlan {
     /// How many update nodes the plan decided each way.
     size_t storageReuseCount(StorageReuse decision) const;
 
+    /// ---- The references that come back: route 4's plan half, described and not executed ------
+    //
+    // Design principles 10.5: a value is freed by counting alone, the count equals the number of
+    // its holders, and the count comes from one last-use analysis on the execution plan that every
+    // back end follows. What follows is that analysis's output, so far only as a description: no
+    // back end reads it and no reference is given back anywhere today -- the only place a counted
+    // block is released is ForeignResourceObject::finalize, inside a collection (see
+    // docs/handover/reports/2026-11-15-count-at-zero-has-no-entry.cn.md).
+    //
+    // The rule is the author's ruling of 2026-11-15 (docs/handover/reviews/
+    // 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md): the output of a
+    // value node is held by each of its uses, the last use takes the producing reference over, and
+    // every other use is a copy. Said in references: a value is born with one (its producer's),
+    // takes `copies` more (one per copy), and one comes back after each use -- so
+    // `1 + copies = giveBacks + kept`, where `kept` is 1 when the program itself keeps the value
+    // (it is the graph's result): then the surviving reference is the caller's.
+    //
+    // A node that only forwards a value (a JOIN hands on the arm's value, a GATE passes its input
+    // through, a port hands on what it was given) produces nothing of its own: its uses are the uses
+    // of the values it carries, so the arm whose value the JOIN hands on is the one whose reference
+    // comes back, whichever arm runs.
+    //
+    // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
+    // aggregate out of the values it is given -- does not end when the FILL has run: the packing
+    // value holds that reference until it dies itself. So the reference comes back where the packing
+    // value's last reference dies, not at the FILL's position (`packed` marks those rows). This is
+    // the class that made the half count of 2026-11-15 release live boxes: a closure captured a
+    // handle, the slot that made it was cleared, and the count reached zero while the closure still
+    // held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
+    //
+    // What this table does not decide, and why nothing executes it: a value a callee keeps, or one a
+    // later graph reads, is a holder no edge of this graph shows. Counting those is the rest of the
+    // way to route 4.
+    struct RefGiveBack {
+        gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
+        gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
+        uint32_t count      = 0;               // how many references come back there (1 today)
+        /// The reference comes back because the value that packed it in has died, not because a use
+        /// of this value ended.
+        bool packed = false;
+    };
+    /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
+    /// constant, nor a node that only forwards).
+    std::vector<uint8_t> refProducedAt;
+    /// By topo index: how many references the node's output takes beyond the producing one.
+    std::vector<uint32_t> refCopiesAt;
+    /// By topo index: how many references come back when this node has run. The same schedule as
+    /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
+    /// reads this, and the sum over the plan is `refGiveBacksTotal()`.
+    std::vector<uint32_t> refGiveBackAt;
+    /// By topo index: the program keeps the node's value (it is the graph's result).
+    std::vector<uint8_t> refKeptAt;
+    /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
+    /// once the node at that position has run, in the order the producing values are laid out.
+    std::vector<uint32_t> refGiveBackOffsets;
+    std::vector<RefGiveBack> refGiveBacks;
+    std::span<const RefGiveBack> refGiveBacksAt(size_t topoIndex) const {
+        if (topoIndex + 1 >= refGiveBackOffsets.size()) {
+            return {};
+        }
+        return {
+            refGiveBacks.data() + refGiveBackOffsets[topoIndex],
+            refGiveBackOffsets[topoIndex + 1] - refGiveBackOffsets[topoIndex]};
+    }
+    /// The totals the balance `produced + copies = giveBacks + kept + packed` is read from: the rows
+    /// that come back because a use ended, and the rows that come back because the value that packed
+    /// them in died.
+    size_t refProducedTotal() const;
+    size_t refCopiesTotal() const;
+    size_t refGiveBacksTotal() const;
+    size_t refKeptTotal() const;
+    size_t refPackedTotal() const;
+    /// Whether the balance holds: every reference a value is born with is either given back by the
+    /// plan or kept by the program. False would mean this code and the rule disagree.
+    bool refBalanceHolds() const;
+
     /// The operator a back end runs for the OPER node `ref`: the URI the node names, or -- for an
     /// update node the plan marked Copy -- the plain (copying) form of the in-place form it names
     /// (OperatorTable::plainForm). The text lives in the operator table, so the view stays valid.
@@ -260,6 +338,28 @@ class ExecPlan {
         std::shared_ptr<void> codeLease;
     };
     mutable FastVmState fastVm;
+
+    /// The anchor's side table, kept with the plan for the reason `fastVm` is: the compiler knows
+    /// what the run needs later, and the run reads it while it runs. The anchor's pc form -- a back
+    /// end that runs bytecode holds a pc where the node form holds a node -- asks which node an
+    /// instruction belongs to at the moment a counted box is made, which is after the compile that
+    /// knew the answer is over. So the table lives here, with the plan it describes, and lasts
+    /// exactly as long as the graph version that owns it.
+    ///
+    /// Empty unless `--gc-check` asked for the counted blocks: a compile that is not asked fills
+    /// nothing, allocates nothing for it, and every reader of it finds an empty table.
+    ///
+    /// `nodeAtPc` is keyed by the graph's own pc numbering as the compiler emitted it, and the
+    /// optimizer moves those keys with the instructions, in the same call that moves the origin
+    /// table (`BytecodeOptimizer::optimize`), so a pc an interpreter holds in hand finds the row of
+    /// the instruction it is pointing at and never the row of one that used to be there.
+    /// `entryPc` is where that numbering starts in the image the run executes, so an image pc can
+    /// be brought back to a key of `nodeAtPc`.
+    struct CountedSites {
+        std::unordered_map<size_t, gc_node_ref_t> nodeAtPc;
+        size_t entryPc = 0;
+    };
+    mutable CountedSites countedSites;
 
     /// The graph version the plan was built from.
     const GCGraph *graph = nullptr;
@@ -299,6 +399,52 @@ class ExecPlan {
 /// Computes the plan of `graph` (a frozen graph with nodes). Use GCGraph::execPlan, which keeps
 /// the result.
 std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph);
+
+/// ---- The anchor, asked from an executor -------------------------------------------------------
+//
+// One question, two ways of naming the node it is about: a back end that runs nodes holds the node
+// (`noteCountedCreationForNode`), and one that runs bytecode holds a pc of the image it executes
+// (`noteCountedCreationAt`, which finds the node through the plan's counted-site table). Both reach
+// the same decision -- `refProducedAt` at the node's position in the plan -- so the four back ends
+// answer with the same instrument and not with four copies of it.
+//
+// `boxes` is how many boxes the node's execution made, read by the caller from the allocator
+// (`core::rtdata::countedBlocksMade`) around the operator call: the caller is the only place that
+// can bracket the creation, and the count has to come from the allocator rather than from here.
+//
+// These report and return nothing. The node has already run, the value is already in its slot and
+// the count of the program's values is the plan's business; nothing an anchor learns may refuse a
+// creation, reorder a node or take a different path -- an instrument that decides is a test hook.
+void noteCountedCreationForNode(const void *graph, gc_node_ref_t node, uint64_t boxes) noexcept;
+void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcept;
+
+/// How many boxes the node being run made: the sites bracket the operator call with it, and hand
+/// the answer to one of the two calls above.
+///
+/// It is a bracket and not a single read because the box is made inside the operator, and it is
+/// measured on the allocator's per-thread count so that a scheduler running several threads reads
+/// its own work. What a nested executor already reported is subtracted: an operator that runs a
+/// graph (map, foreach, a loop body) is bracketed by its caller, and the callee's boxes are the
+/// callee's nodes' -- reporting them here too would count the same box twice.
+class CountedBoxesBracket {
+  public:
+    /// Read before the operator runs. Called only while --gc-check asks for the counted blocks.
+    void begin() noexcept {
+        made_     = camel::core::rtdata::countedBlocksMadeOnThisThread();
+        reported_ = camel::core::rtdata::countedCreationsReportedOnThisThread();
+    }
+    /// Read after it: what this node's execution made that no nested site has reported.
+    uint64_t sinceBegin() const noexcept {
+        const uint64_t made = camel::core::rtdata::countedBlocksMadeOnThisThread() - made_;
+        const uint64_t nested =
+            camel::core::rtdata::countedCreationsReportedOnThisThread() - reported_;
+        return made > nested ? made - nested : 0;
+    }
+
+  private:
+    uint64_t made_     = 0;
+    uint64_t reported_ = 0;
+};
 
 /// TEST-ONLY: builds the loop tables of `plan` again from `plan.topo`, exactly as buildExecPlan
 /// does once (buildLoopTables), so that a test pass that reorders a plan's `topo` gets the tables

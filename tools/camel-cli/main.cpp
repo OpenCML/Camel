@@ -281,11 +281,17 @@ int runCommand(int argc, char *argv[]) {
             const auto foreignBefore = camel::core::rtdata::foreignResourceStats();
             const size_t disposed    = camel::core::rtdata::disposeAllForeignResources();
             if (reportForeign) {
+                const auto anchor = camel::core::rtdata::countedCreationAnchor();
                 std::cout << "FOREIGN_RESOURCES"
                           << " created=" << foreignBefore.createdControlBlocks
+                          << " counted=" << foreignBefore.createdCountedBlocks
                           << " released=" << foreignBefore.releasedControlBlocks
                           << " live=" << foreignBefore.liveControlBlocks << " disposed=" << disposed
-                          << " finalized=" << foreignBefore.finalizedWrappers << '\n';
+                          << " finalized=" << foreignBefore.finalizedWrappers
+                          << " creations=" << anchor.creations << " checks=" << anchor.checks
+                          << " found=" << anchor.found
+                          << " missing=" << anchor.missing << " rows=" << anchor.rows
+                          << " rows_seen=" << anchor.rowsSeen << '\n';
                 std::cout.flush();
             }
         }

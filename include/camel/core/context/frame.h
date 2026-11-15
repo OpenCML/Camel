@@ -46,6 +46,7 @@ class Frame : public rtdata::Object {
     camel::runtime::GCGraph *runtimeGraph() { return runtimeGraph_; }
     const camel::runtime::GCGraph *runtimeGraph() const { return runtimeGraph_; }
     bool hasRuntimeGraph() const { return runtimeGraph_ != nullptr; }
+
     const type::TupleType *runtimeDataLayout() const {
         GUARD(runtimeGraph_ != nullptr, "Runtime frame has no runtime graph for data layout.");
         return runtimeGraph_->runtimeDataType();

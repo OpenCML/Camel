@@ -153,26 +153,23 @@ assert(input.diagnostics[0].line === 12 && input.diagnostics[0].column === 22, J
 # `docs/handover/reviews/2026-11-05-does-a-println-in-a-loop-body-need-do-sync.cn.md`.
 
 [[tests]]
-name = "unused_values.help_loop_body_names_do_sync"
-desc = "An effect written as a statement of a `loop` body that is not a sync block does not run: the loop's value `3` is what prints, the call is reported as EffectNotExecuted, and the help names the writing that works at that position -- `do sync { ... }` -- instead of a sync block inside the body or a sync block bound to a name. The two writings the help used to give are not in it: one is measured not to run (`unused_values.help_sync_statement_in_a_loop_body_does_not_run`) and one does not parse (`unused_values.help_let_sync_is_not_a_program`)."
-kind = "negative"
+name = "unused_values.loop_body_runs_each_round"
+desc = "An effect written as a statement of a `loop` body that is not a sync block runs in every round: the loop's value is used, so the loop runs, so the write its body holds is a root of the loop body's region (design principles 3.1, \"循环每一轮都执行\"). The three `i=` lines and then `total=3` print, and nothing is reported. The author's ruling of 2026-11-15 overrides the 2026-11-05 reading this entry used to measure, under which only `total=3` printed and the call was reported as EffectNotExecuted."
+kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_loop_body_dropped.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === 'total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-const text = input.normalized.stderr.replace(/\\s+/g, ' ')
-assert(text.includes('SemanticDiag::EffectNotExecuted'), `the dropped call is not reported: ${text}`)
-assert(text.includes("'do sync { ... }'"), `the help does not name 'do sync': ${text}`)
-assert(!text.includes('let u = sync'), `the help names a writing that does not parse: ${text}`)
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('SemanticDiag::EffectNotExecuted'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
 }
 """
 
 [[tests]]
 name = "unused_values.help_loop_body_do_sync_runs"
-desc = "The remedy the help gives for a loop body, written: `do sync { ... }` declares the body a sync block, so the three calls run and the loop's value is unchanged (`total=3`). The one word is the whole difference from `effect_loop_body_dropped.cml`, and nothing is reported."
+desc = "`do sync { ... }` on a loop body: the three calls run and the loop's value is unchanged (`total=3`), which is now the same output as the body that is not a sync block (`unused_values.loop_body_runs_each_round`) -- a write in a running region runs either way."
 kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_loop_body_do_sync.cml"
 args = ["--error-format", "text", "${case}"]
@@ -186,19 +183,17 @@ assert(!input.normalized.stderr.includes('EffectNotExecuted'), input.normalized.
 """
 
 [[tests]]
-name = "unused_values.help_sync_statement_in_a_loop_body_does_not_run"
-desc = "The writing the old help invited, measured where it was offered: a `sync { ... }` block written as a statement of a loop body is itself not needed, so it does not run and the call inside it is still reported as EffectNotExecuted. Only `total=3` prints, which is why the help names `do sync` for a loop body and not a sync block written inside it."
-kind = "negative"
+name = "unused_values.sync_statement_in_a_loop_body_runs"
+desc = "A `sync { ... }` block written as a statement of a loop body is a block, not a region the program chooses to run or not, so it runs with the region around it and the call inside it runs each round (design principles 3.1). `0`, `1`, `2` and `total=3` print and nothing is reported. This entry used to measure the opposite; the ruling of 2026-11-15 is the one that stands."
+kind = "behavior"
 case = "../../../cases/compile/unused_values/effect_sync_statement_in_a_loop_body.cml"
 args = ["--error-format", "text", "${case}"]
 expect_exit = 0
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout.trim()
-assert(out === 'total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
-const text = input.normalized.stderr.replace(/\\s+/g, ' ')
-assert(text.includes('SemanticDiag::EffectNotExecuted'), `the block is not reported: ${text}`)
-assert(text.includes("'do sync { ... }'"), `the help does not name 'do sync': ${text}`)
+const lines = input.normalized.stdout.trim().split(String.fromCharCode(10))
+assert(lines.join('|') === '0|1|2|total=3', `unexpected output: ${JSON.stringify(input.normalized.stdout)}`)
+assert(!input.normalized.stderr.includes('SemanticDiag::EffectNotExecuted'), `the write is a root of its region, so nothing is dropped: ${input.normalized.stderr}`)
 }
 """
 

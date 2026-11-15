@@ -18,6 +18,7 @@
 #include "camel/execute/entry_args.h"
 #include "camel/runtime/control.h"
 #include "camel/runtime/graph.h"
+#include "camel/runtime/region_roots.h"
 #include "camel/utils/log.h"
 #include "camel/utils/scope.h"
 #include "camel/utils/str.h"
@@ -305,6 +306,110 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     }
 }
 
+bool Builder::callIsChainStatement(node_handle_t node) {
+    // What a `sync` block's chain carries is decided by what a call runs (design principles 3.4:
+    // "调用按被调函数推出的事实判：函数体含可能出故障的计算、或函数是递归的（递归可能超过深度上限）
+    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that
+    // is not pure, a cast that may fail, a branch or a loop that carries a region.
+    if (!runtime::isChainStatement(*nodeDraftOf(node), nodeIdOf(node))) {
+        return false;
+    }
+    if (!nodeIsKind(node, runtime::GCNodeKind::Func)) {
+        // An effect of its own, a computation that may fault, or a call through a function value:
+        // the last one runs something no body of this program names, and nothing says it cannot
+        // fault.
+        return true;
+    }
+    if (isEffectNode(currGraph_.get(), node)) {
+        // The declaration is the whole truth a call site reads (design principles 3.3): a clause
+        // that names a resource, or a `var` parameter, says that a call of this reaches something
+        // which is not the graph -- and the body may well touch nothing, which is the promise the
+        // clause makes to its callers. `test/cases/effects/declared.cml` is that shape: `consume`
+        // writes the handle its clause names and its body only returns 0.
+        return true;
+    }
+    const compile_graph_ptr_t callee = nodeGraphOf(node)->funcTarget(node);
+    return callee == nullptr || !calleeIsFreelyArranged(callee.get());
+}
+
+bool Builder::calleeIsFreelyArranged(DraftGraphBuilder *callee) {
+    const auto known = freelyArrangedGraphs_.find(callee);
+    if (known != freelyArrangedGraphs_.end()) {
+        return known->second;
+    }
+    const auto isBuilt = [&](DraftGraphBuilder *graph) {
+        const auto state = bodyStates_.find(graph);
+        return state != bodyStates_.end() && state->second == BodyState::Built;
+    };
+    // A body that is not finished holds code this walk cannot see yet, so nothing is claimed about
+    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches
+    // a second time is one that reaches itself: that is a recursion, which may go deeper than the
+    // depth limit, so it is a call that may fault (design principles 3.4). Neither answer is
+    // memoized -- the first is about a body that is not finished, and the second is about this walk
+    // and not about the graph it names.
+    if (!isBuilt(callee) || !freelyArrangedActive_.insert(callee).second) {
+        return false;
+    }
+    const bool free = bodyHoldsNoChainStatement(callee);
+    freelyArrangedActive_.erase(callee);
+    freelyArrangedGraphs_[callee] = free;
+    return free;
+}
+
+bool Builder::bodyHoldsNoChainStatement(DraftGraphBuilder *graph) {
+    const auto &draft = graph->transaction().graph();
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        const node_handle_t node = draft.ref(id);
+        switch (nodeKindOf(node)) {
+        case runtime::GCNodeKind::Func: {
+            // A direct call: the body it names is what this call runs, so the walk follows it.
+            const compile_graph_ptr_t callee = graph->funcTarget(node);
+            if (callee == nullptr || !calleeIsFreelyArranged(callee.get())) {
+                return false;
+            }
+            break;
+        }
+        case runtime::GCNodeKind::Call:
+            // A call through a function value: whose body it runs is not known here, and nothing
+            // says that body cannot fault or reach a resource.
+            return false;
+        case runtime::GCNodeKind::Loop:
+            // A loop may run longer than the depth limit and may fault (camel/runtime/graph.cpp,
+            // `effectSummaryOf`): nothing says it does not, so a body holding one is not arranged
+            // freely. Its parts are nodes of this same draft and are walked as they come.
+            return false;
+        case runtime::GCNodeKind::Brch:
+        case runtime::GCNodeKind::Join:
+            // A branch as a value: choosing an arm is nothing to keep. What the arms hold is nodes
+            // of this draft, and they are walked as they come.
+            break;
+        case runtime::GCNodeKind::Gate:
+            // A GATE computes nothing and cannot fault. Where one stands, the block that wrote it
+            // had a statement on its chain, and that statement is a node of this draft.
+            break;
+        case runtime::GCNodeKind::Data:
+        case runtime::GCNodeKind::Port:
+        case runtime::GCNodeKind::Copy:
+        case runtime::GCNodeKind::Fill:
+        case runtime::GCNodeKind::Accs:
+            // A constant, a port, a copy, a closure value, a field read: computed from what it
+            // reads, with nothing to fail and nothing to order.
+            break;
+        default:
+            // An operator or a conversion, asked exactly as the chain asks it: an effect, a
+            // computation that may fault, or (for a cast) a value check that cannot be moved.
+            if (runtime::isChainStatement(draft, id)) {
+                return false;
+            }
+            break;
+        }
+    }
+    return true;
+}
+
 void Builder::settleEffectfulGraphs() {
     // Whether a call is an effect depends on its callee's body, which may be written later,
     // in another module, or be the caller itself: the set of effectful graphs is the least
@@ -392,6 +497,48 @@ void Builder::reportResourceViolation(
             : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
 }
 
+void Builder::reportResourceConflict(
+    const ResourceConflict &conflict, DraftGraphBuilder *leftOwner, DraftGraphBuilder *rightOwner) {
+    // Anchored at the declaration that wrote no clause when the two met: the position cannot repair
+    // the one that already says what it writes, and a clause is the repair this asks for. Both are
+    // named, because what the position needs is for the two to agree.
+    DraftGraphBuilder *leftUnwritten  = conflict.leftUnwritten ? leftOwner : nullptr;
+    DraftGraphBuilder *rightUnwritten = conflict.rightUnwritten ? rightOwner : nullptr;
+    DraftGraphBuilder *anchor         = leftUnwritten != nullptr ? leftUnwritten : rightUnwritten;
+    if (anchor == nullptr) {
+        anchor = leftOwner != nullptr ? leftOwner : rightOwner;
+    }
+    if (anchor == nullptr) {
+        return;
+    }
+    const auto nameOf = [](DraftGraphBuilder *graph, const camel::core::type::Type *type) {
+        return graph != nullptr ? graph->name() : camel::core::type::typeToString(type);
+    };
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::ResourceInferenceConflict);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    const auto originOf       = [&](DraftGraphBuilder *graph) {
+        return sourceContext != nullptr && graph != nullptr
+                   ? sourceContext->debugMap().graphOrigin(graph->graphId())
+                   : camel::source::kInvalidOriginId;
+    };
+    const auto origin = originOf(anchor);
+    if (origin != camel::source::kInvalidOriginId) {
+        builder.atOrigin(origin);
+    }
+    DraftGraphBuilder *other = anchor == leftOwner ? rightOwner : leftOwner;
+    const auto otherOrigin   = originOf(other);
+    if (otherOrigin != camel::source::kInvalidOriginId) {
+        builder.relatedOrigin(
+            otherOrigin,
+            "the other value this position is given: the two have to write the same resources");
+    }
+    builder.commit(
+        nameOf(leftOwner, conflict.left),
+        nameOf(rightOwner, conflict.right),
+        camel::core::type::typeToString(conflict.left),
+        camel::core::type::typeToString(conflict.right));
+}
+
 void Builder::reportDroppedEffectsOfBodies() {
     for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
         reportDroppedEffects(graph, true);
@@ -408,6 +555,27 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // What the exit depends on, through data, control and sync edges.
     std::unordered_set<draft_node_ref_t> needed;
     std::vector<draft_node_ref_t> work;
+    const auto reach = [&] {
+        while (!work.empty()) {
+            const draft_node_ref_t id = work.back();
+            work.pop_back();
+            for (auto inputs :
+                 {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
+                for (draft_node_ref_t input : inputs) {
+                    if (needed.insert(input).second) {
+                        work.push_back(input);
+                    }
+                }
+            }
+            // A statement of a `sync` block is used by the one written after it (and the block's
+            // value by its chain tail): liveness follows a sync edge as it follows a data input.
+            for (draft_node_ref_t input : draft.syncInputsOf(id)) {
+                if (needed.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+    };
     for (draft_node_ref_t root : {draft.outputNode(), draft.exitNode(), draft.returnNode()}) {
         if (root != runtime::kInvalidNodeRef && needed.insert(root).second) {
             work.push_back(root);
@@ -416,23 +584,38 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     if (work.empty()) {
         return; // the body did not build (an error was reported)
     }
-    while (!work.empty()) {
-        const draft_node_ref_t id = work.back();
-        work.pop_back();
-        for (auto inputs :
-             {draft.normInputsOf(id), draft.withInputsOf(id), draft.ctrlInputsOf(id)}) {
-            for (draft_node_ref_t input : inputs) {
-                if (needed.insert(input).second) {
-                    work.push_back(input);
-                }
-            }
+    reach();
+    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h): a write to a
+    // resource outside the program is used by the region it is written in, so it runs although
+    // nothing reads what it produces. This is the same seed the liveness walk of a graph and the
+    // execution order make; it is made here too because this walk answers the warning and must
+    // agree with them, and it is written the same way so that the two cannot drift: the body's
+    // writes run with the graph, a region's writes run with the region, and a region runs only once
+    // its owner is live.
+    const std::vector<runtime::RegionRootCandidate> regionRoots =
+        runtime::regionRootCandidatesOfDraft(draft);
+    for (const runtime::RegionRootCandidate &candidate : regionRoots) {
+        if (candidate.region == 0 && needed.insert(candidate.node).second) {
+            work.push_back(candidate.node);
         }
-        // A statement of a `sync` block is used by the one written after it (and the block's
-        // value by its chain tail): liveness follows a sync edge as it follows a data input.
-        for (draft_node_ref_t input : draft.syncInputsOf(id)) {
-            if (needed.insert(input).second) {
-                work.push_back(input);
+    }
+    reach();
+    for (bool grew = true; grew;) {
+        grew = false;
+        for (const runtime::RegionRootCandidate &candidate : regionRoots) {
+            if (candidate.region == 0 || needed.contains(candidate.node)) {
+                continue;
             }
+            const draft_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, candidate.region);
+            if (owner == runtime::kInvalidNodeRef || !needed.contains(owner)) {
+                continue;
+            }
+            needed.insert(candidate.node);
+            work.push_back(candidate.node);
+            grew = true;
+        }
+        if (grew) {
+            reach();
         }
     }
     std::vector<draft_node_ref_t> dropped;

@@ -15,6 +15,7 @@
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/draft_session.h"
 #include "camel/runtime/loop.h"
+#include "camel/runtime/resources.h"
 #include "tiles/device.h"
 #include "tiles/internal/capability.h"
 #include "tiles/internal/graph_values.h"
@@ -595,6 +596,82 @@ const runtime::Program *outlineRegions(
     if (regionRefused)
         return program;
     return count ? session.commit() : program;
+}
+
+const runtime::Program *settleDeclarations(
+    core::context::Context &context, const runtime::Program *program) {
+    // What the rewrite did to a graph is in its body; what a caller reads is the graph's type
+    // (`runtime::Resolver::accessesOf` takes a call's footprint from the callee's declared
+    // clause, not from its body). A device submission is an effect -- `tiles:upload`, the segment
+    // runners and `tiles:download` write the ambient `tiles:driver` -- so a body the pass gave one
+    // no longer fits the `pure` clause its host body carried, and the type has to say so here, or
+    // the next boundary (analysis 4.1, `PassEffectContainment`) finds the body reaching past it.
+    //
+    // It is not only the rewritten graphs: a caller's footprint is read through the callee's
+    // declaration, so widening a callee widens what its callers have to declare, one level per
+    // round. Each round only ever adds a resource to a clause and the accesses there are finite,
+    // so the rounds end; a body no clause can be written for is left as it was, and the boundary
+    // reports it rather than this step hiding it.
+    for (;;) {
+        runtime::RuntimeGraphDraftSession session(
+            context.shared_from_this(), program, program->root());
+        const std::vector<runtime::GCGraph *> graphs = session.collectReachableRuntimeGraphs();
+        std::vector<std::pair<runtime::GCGraph *, core::type::FunctionType *>> wider;
+        for (runtime::GCGraph *graph : graphs) {
+            const auto *type = graph->funcType();
+            if (type == nullptr)
+                continue;
+            const auto declared = type->resources();
+            if (declared.mode == core::sem::ResourceSignature::Mode::Generic)
+                continue; // a type that promises nothing covers whatever the body does
+            const auto body = runtime::bodySignature(*program, *graph);
+            if (core::sem::covers(declared, body))
+                continue;
+            const auto clause = runtime::widened(declared, body);
+            if (!core::sem::covers(clause, body))
+                continue; // not a clause the language can write: the boundary says so instead
+            wider.emplace_back(graph, type->withResources(clause));
+        }
+        if (wider.empty())
+            return program;
+        for (auto &[graph, type] : wider)
+            session.edit(graph).edit().setFuncType(type);
+        // A call through a function value declares the value's type, not the type of the graph the
+        // value names (`runtime::declaredClauseAt` reads the value, and that is what `__root__`'s
+        // call of the entry is). So every value that names a graph whose clause grew is given the
+        // new clause too: a value left at the old one is a call site promising less than the body
+        // behind it does.
+        for (runtime::GCGraph *graph : graphs) {
+            for (runtime::gc_node_ref_t id = 0; id < graph->nodeCount(); ++id) {
+                const auto *node = graph->node(id);
+                if (node == nullptr || node->kind != runtime::GCNodeKind::Data ||
+                    node->dataIndex >= 0)
+                    continue;
+                const auto *nodeType = node->dataType();
+                if (nodeType == nullptr || nodeType->code() != core::type::TypeCode::Function)
+                    continue;
+                const size_t slot = static_cast<size_t>(-node->dataIndex);
+                if (slot >= graph->staticSlots().size())
+                    continue;
+                const auto *function =
+                    core::rtdata::fromSlot<::Function *>(graph->staticSlots()[slot]);
+                if (function == nullptr || function->graph() == nullptr)
+                    continue;
+                const auto found = std::find_if(wider.begin(), wider.end(), [&](const auto &entry) {
+                    return entry.first->id() == function->graphId();
+                });
+                if (found == wider.end() || found->second == nodeType)
+                    continue;
+                auto &draft = session.edit(graph).edit();
+                const auto replacement =
+                    draft.materializeStaticValue(graph->staticSlots()[slot], found->second);
+                draft.setNodeOrigin(replacement, graph->nodeOrigin(id));
+                draft.replaceAllValueUses(id, replacement);
+                draft.eraseNode(id); // its type is the one that no longer says what the body does
+            }
+        }
+        program = session.commit();
+    }
 }
 bool isRegionExec(core::OperId oper) {
     // An operator that calls the graph of the function value it receives is one this module

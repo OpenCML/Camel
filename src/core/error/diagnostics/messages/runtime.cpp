@@ -117,6 +117,14 @@ const std::unordered_map<RuntimeDiag, DiagInfo> &getRuntimeDiagInfoMap() {
             },
         },
         {
+            RuntimeDiag::PassEffectContainment,
+            {
+                "PassEffectContainment",
+                "Pass '{0}' returned a program whose call site reaches past the type it declares: {1}",
+                "A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.",
+            },
+        },
+        {
             RuntimeDiag::MacroEvaluationFailed,
             {
                 "MacroEvaluationFailed",

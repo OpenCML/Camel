@@ -8,6 +8,7 @@
 #include "camel/runtime/exec_plan.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/profile/profile.h"
@@ -15,6 +16,7 @@
 
 #include <algorithm>
 #include <format>
+#include <numeric>
 #include <optional>
 #include <stdexcept>
 #include <string_view>
@@ -807,7 +809,211 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
         plan.storageReuseCount(StorageReuse::Copy));
 }
 
+/// A node that only carries a value on: a JOIN hands on the value of the arm that ran, a GATE
+/// passes its input through, and a port hands on what it was given (an exit port, its input's
+/// value). It produces nothing of its own, so a reference to what it "holds" is a reference to the
+/// value behind it.
+bool forwardsItsValue(const GCNode *node) {
+    return node != nullptr && (node->kind == GCNodeKind::Join || node->kind == GCNodeKind::Gate ||
+                               node->kind == GCNodeKind::Port);
+}
+
+/// A node that packs the values it is given into the value it makes: a FILL builds a closure tuple
+/// (GCFillKind::FunctionClosure) or an aggregate (Tuple, Array, Struct) out of its inputs. The values
+/// it is given do not stop being held when the FILL has run -- the value it made holds them -- so
+/// their reference comes back where that value dies, not here.
+bool packsItsInputs(const GCNode *node) {
+    return node != nullptr && node->kind == GCNodeKind::Fill;
+}
+
+/// The references that come back, per position (ExecPlan::RefGiveBack). The rule is written out in
+/// the header; what this function adds is the one thing the edges have to be walked for: a JOIN's
+/// uses belong to the arms' values, because the JOIN hands on one of them, and only that arm's
+/// value is the one whose reference comes back.
+///
+/// Deliberately apart from planStorageReuse: that walk decides where an update reuses storage and
+/// this one describes which references come back. They read the same edges (executionPredecessorsOf,
+/// the one shared answer to "whose value runs first"), and the day the release is executed they
+/// belong together -- but a table that changes the storage plan while it is being added cannot be
+/// verified by "no reading moved".
+void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
+    const size_t count     = plan.topo.size();
+    const size_t nodeCount = graph.nodeCount();
+    plan.refCopiesAt.assign(count, 0);
+    plan.refProducedAt.assign(count, 0);
+    plan.refKeptAt.assign(count, 0);
+    plan.refGiveBackOffsets.assign(count + 1, 0);
+
+    // The values each node carries: `{its own}` for a producer, the union of its inputs for a node
+    // that only carries a value on (a JOIN, a GATE, a port). A constant carries nothing: the
+    // program holds it, and the graph neither takes nor gives it.
+    std::vector<std::vector<gc_node_ref_t>> carried(nodeCount);
+    for (size_t idx = 0; idx < count; ++idx) {
+        const gc_node_ref_t at = plan.topo[idx];
+        if (at >= nodeCount) {
+            continue;
+        }
+        const GCNode *node = graph.node(at);
+        if (node == nullptr || node->kind == GCNodeKind::Data) {
+            continue; // a constant is the program's: the graph neither takes nor gives it
+        }
+        if (!forwardsItsValue(node)) {
+            carried[at].push_back(at);
+            continue;
+        }
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(graph, at)) {
+            if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
+                predecessor.node >= nodeCount) {
+                continue;
+            }
+            for (const gc_node_ref_t value : carried[predecessor.node]) {
+                if (std::find(carried[at].begin(), carried[at].end(), value) == carried[at].end()) {
+                    carried[at].push_back(value);
+                }
+            }
+        }
+    }
+
+    // Who keeps what out of the graph: the program, when the value is the graph's result. The plan
+    // resolves the result through the forwarding nodes (tailValueRef), so the value named there is
+    // the one whose reference the caller takes over.
+    std::vector<uint8_t> keptByProgram(nodeCount, 0);
+    if (plan.tailValueRef != kInvalidNodeRef && plan.tailValueRef < nodeCount) {
+        for (const gc_node_ref_t value : carried[plan.tailValueRef]) {
+            keptByProgram[value] = 1;
+        }
+    }
+    for (const gc_node_ref_t tailCall : plan.tailCalls) {
+        if (tailCall < nodeCount) {
+            keptByProgram[tailCall] = 1;
+        }
+    }
+
+    // A value's uses, by position: every node that reads it (through forwarding) is one use. A use by a
+    // node that packs its inputs (`packsItsInputs`) is also recorded against that node, because the
+    // reference is then held by the value the packing node made and comes back when *that* dies.
+    std::vector<std::vector<uint32_t>> usesAt(nodeCount);
+    std::vector<std::vector<gc_node_ref_t>> packersOf(nodeCount);
+    for (size_t idx = 0; idx < count; ++idx) {
+        const gc_node_ref_t at = plan.topo[idx];
+        if (at >= nodeCount) {
+            continue;
+        }
+        const bool packs = packsItsInputs(graph.node(at));
+        for (const camel::execute::ExecutionPredecessor &predecessor :
+             camel::execute::executionPredecessorsOf(graph, at)) {
+            if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
+                predecessor.node >= nodeCount) {
+                continue;
+            }
+            for (const gc_node_ref_t value : carried[predecessor.node]) {
+                usesAt[value].push_back(static_cast<uint32_t>(idx));
+                if (packs && std::find(packersOf[value].begin(), packersOf[value].end(), at) ==
+                                 packersOf[value].end()) {
+                    packersOf[value].push_back(at);
+                }
+            }
+        }
+    }
+
+    // When each value dies, which is where the references it packed into another value come back:
+    // after its last use, and -- when it was itself packed into a value -- after that value dies.
+    // Read in reverse topo order, so a packing node (later in the order than the values it packs)
+    // has its own end computed first.
+    std::vector<uint32_t> endOf(nodeCount, 0);
+    for (size_t idx = count; idx-- > 0;) {
+        const gc_node_ref_t at = plan.topo[idx];
+        if (at >= nodeCount) {
+            continue;
+        }
+        uint32_t end = static_cast<uint32_t>(idx);
+        for (const uint32_t usePosition : usesAt[at]) {
+            end = std::max(end, usePosition);
+        }
+        for (const gc_node_ref_t packer : packersOf[at]) {
+            end = std::max(end, endOf[packer]);
+        }
+        endOf[at] = end;
+    }
+
+    // The rows, in topo order so that the table is a function of the graph and nothing else.
+    std::vector<std::vector<ExecPlan::RefGiveBack>> rows(count);
+    for (size_t idx = 0; idx < count; ++idx) {
+        const gc_node_ref_t value = plan.topo[idx];
+        if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
+            continue; // a forwarder, a port, a constant, or a node the plan does not run
+        }
+        const uint32_t uses = static_cast<uint32_t>(usesAt[value].size());
+        const bool kept     = keptByProgram[value] != 0;
+        plan.refProducedAt[idx] = 1;
+        plan.refKeptAt[idx]     = kept ? 1 : 0;
+        plan.refCopiesAt[idx] = kept ? uses : (uses == 0 ? 0 : uses - 1);
+        for (const uint32_t usePosition : usesAt[value]) {
+            const gc_node_ref_t user = plan.topo[usePosition];
+            if (packsItsInputs(graph.node(user))) {
+                // The value is packed into the value `user` makes: the reference comes back where
+                // that value dies, and the row says so.
+                const uint32_t end = std::min<uint32_t>(endOf[user], static_cast<uint32_t>(count - 1));
+                rows[end].push_back(ExecPlan::RefGiveBack{
+                    .value = value, .at = plan.topo[end], .count = 1, .packed = true});
+                continue;
+            }
+            rows[usePosition].push_back(
+                ExecPlan::RefGiveBack{.value = value, .at = user, .count = 1});
+        }
+        if (uses == 0 && !kept) {
+            // Born with a reference nothing reads: it comes back as soon as the value exists.
+            rows[idx].push_back(ExecPlan::RefGiveBack{.value = value, .at = value, .count = 1});
+        }
+    }
+    plan.refGiveBackAt.assign(count, 0);
+    for (size_t idx = 0; idx < count; ++idx) {
+        plan.refGiveBackOffsets[idx] = static_cast<uint32_t>(plan.refGiveBacks.size());
+        for (const ExecPlan::RefGiveBack &row : rows[idx]) {
+            plan.refGiveBacks.push_back(row);
+            // The same schedule as a per-position count: what an instruction emitted at this position
+            // would do -- the holds taken are the table's copies, these are the give-backs.
+            plan.refGiveBackAt[idx] += row.count;
+        }
+    }
+    plan.refGiveBackOffsets[count] = static_cast<uint32_t>(plan.refGiveBacks.size());
+}
+
 } // namespace
+
+size_t ExecPlan::refProducedTotal() const {
+    return static_cast<size_t>(std::count(refProducedAt.begin(), refProducedAt.end(), uint8_t{1}));
+}
+
+size_t ExecPlan::refCopiesTotal() const {
+    return static_cast<size_t>(std::accumulate(refCopiesAt.begin(), refCopiesAt.end(), uint64_t{0}));
+}
+
+size_t ExecPlan::refGiveBacksTotal() const {
+    size_t total = 0;
+    for (const RefGiveBack &row : refGiveBacks) {
+        total += row.packed ? 0 : row.count;
+    }
+    return total;
+}
+
+size_t ExecPlan::refPackedTotal() const {
+    size_t total = 0;
+    for (const RefGiveBack &row : refGiveBacks) {
+        total += row.packed ? row.count : 0;
+    }
+    return total;
+}
+
+size_t ExecPlan::refKeptTotal() const {
+    return static_cast<size_t>(std::count(refKeptAt.begin(), refKeptAt.end(), uint8_t{1}));
+}
+
+bool ExecPlan::refBalanceHolds() const {
+    return refProducedTotal() + refCopiesTotal() ==
+           refGiveBacksTotal() + refKeptTotal() + refPackedTotal();
+}
 
 size_t ExecPlan::storageReuseCount(StorageReuse decision) const {
     return static_cast<size_t>(std::count(storageReuseAt.begin(), storageReuseAt.end(), decision));
@@ -939,6 +1145,10 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     plan->branchArmEntryOffsets[count] = static_cast<uint32_t>(plan->branchArmEntries.size());
     buildLoopTables(graph, *plan);
     planStorageReuse(graph, *plan);
+    // The references that come back, described and not executed: a separate walk on purpose, so
+    // that adding the table moves no storage decision (no reading moved is how it is checked --
+    // docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md).
+    planRefGiveBacks(graph, *plan);
 
     for (gc_node_ref_t portRef : graph.normPorts()) {
         plan->calleePortSlots.push_back(dataIndexOf(graph, portRef));
@@ -958,6 +1168,35 @@ void rebuildLoopTablesForTests(const GCGraph &graph, ExecPlan &plan) {
     plan.loopEventOffsets.clear();
     plan.elidedAt.clear();
     buildLoopTables(graph, plan);
+}
+
+void noteCountedCreationForNode(const void *graph, gc_node_ref_t node, uint64_t boxes) noexcept {
+    if (graph == nullptr || boxes == 0) {
+        return;
+    }
+    const auto *version  = static_cast<const GCGraph *>(graph);
+    const ExecPlan &plan = version->execPlan();
+    // A node the plan names no position for is not a producing row either: the same answer an
+    // unknown pc gets, and not an excuse to skip the question.
+    const size_t position =
+        node < plan.topoIndexByRef.size() ? plan.topoIndexByRef[node] : plan.topo.size();
+    const bool named = position < plan.refProducedAt.size() && plan.refProducedAt[position] != 0;
+    camel::core::rtdata::recordCountedCreation(named, boxes);
+}
+
+void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcept {
+    if (graph == nullptr || boxes == 0) {
+        return;
+    }
+    const ExecPlan &plan = static_cast<const GCGraph *>(graph)->execPlan();
+    gc_node_ref_t node   = kInvalidNodeRef;
+    if (pc >= plan.countedSites.entryPc) {
+        const auto row = plan.countedSites.nodeAtPc.find(pc - plan.countedSites.entryPc);
+        if (row != plan.countedSites.nodeAtPc.end()) {
+            node = row->second;
+        }
+    }
+    noteCountedCreationForNode(graph, node, boxes);
 }
 
 } // namespace camel::runtime

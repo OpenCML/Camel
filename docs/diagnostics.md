@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-315 diagnostics: 293 errors, 22 warnings. 15 carry a machine-applicable edit, 300 say why they carry none.
+317 diagnostics: 295 errors, 22 warnings. 15 carry a machine-applicable edit, 302 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -273,6 +273,7 @@ prints one entry.
 | `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
 | `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
+| `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -328,6 +329,7 @@ prints one entry.
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
 | `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
+| `0x040001AF` | [RuntimeDiag::PassEffectContainment](#passeffectcontainment) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -8970,7 +8972,7 @@ None: choice: capture the value the cell holds, or pass the state as a value, an
 **Help**
 
 ```text
-A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
+A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/reviews/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
 ```
 
 **Example** (`test/cases/compile/state_escape/err_escape_return.cml`, run as `camel test/cases/compile/state_escape/err_escape_return.cml`)
@@ -9021,6 +9023,57 @@ func main(): int sync {
     let outer = state::ref(inner)
     let back = state::get(outer)
     println(state::get(back))
+    return 0
+}
+```
+
+### ResourceInferenceConflict
+
+`0x03000212` · Error · `SemanticDiag::ResourceInferenceConflict`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.
+```
+
+**Help**
+
+```text
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+```
+
+**Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
+
+```camel
+func same::<T>(a: T, b: T): T {
+    return a
+}
+
+func pick(b: bool): (x: int) => int {
+    return same(if b then f else g, wide)
+}
+
+func f(x: int): int {
+    return x + 1
+}
+
+func g(x: int): int {
+    return x + 2
+}
+
+func wide(x: int): int sync {
+    println(x)
+    return x + 3
+}
+
+func main(): int sync {
+    let h = pick(true)
+    println(h(1))
     return 0
 }
 ```
@@ -11143,6 +11196,50 @@ func main(): int sync {
 }
 ```
 
+### PassEffectContainment
+
+`0x040001AF` · Error · `RuntimeDiag::PassEffectContainment`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' returned a program whose call site reaches past the type it declares: {1}
+```
+
+**Help**
+
+```text
+A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::fold_function_type std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
+}
+```
+
 ### PassesNeverRun
 
 `0x0410000F` · Warn · `RuntimeDiag::PassesNeverRun`
@@ -11166,7 +11263,8 @@ A scheduling pass executes the program and a translation pass translates it; nei
 **Example** (`test/cases/linear/byref/order_direct_user.cml`, run as `camel test/cases/linear/byref/order_direct_user.cml std::nvm std::opt::inline std::fvm`)
 
 ```camel
-func before(x: int): int {
+func before(x: int): int sync {
+    println(x)
     return x
 }
 

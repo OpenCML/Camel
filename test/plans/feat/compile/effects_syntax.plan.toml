@@ -310,14 +310,14 @@ expect_output_contains = ["err_pure_body.cml:6:", "pure", "stdout"]
 
 [[tests]]
 name = "err.pure_body2"
-desc = "The same refusal where the function is only passed as a value: the error is at the declaration whose body reaches past `pure`, not at the call site that reads the declaration. The two reports do not fight: the refusal names the broken promise, and the effect warning still names the dropped call."
+desc = "The same refusal where the function is only passed as a value: the error is at the declaration whose body reaches past `pure`, not at the call site that reads the declaration, and the note names the first use the signature does not name -- the print, at 13:5. The print is not also reported as an effect nobody runs: a write to `stdout` is a root of the region it is written in (design principles 3.1), so the refusal is the only report."
 kind = "negative"
 case = "../../../cases/effects/err_pure_body2.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_body2.cml:12:", "(x: int) => int pure", "stdout", "err_pure_body2.cml:13:"]
+expect_output_contains = ["err_pure_body2.cml:12:", "(x: int) => int pure", "stdout", "at 13:5"]
 
 [[tests]]
 name = "err.uses_live"
@@ -376,14 +376,14 @@ expect_output_contains = ["err_promise_note.cml:7:", "stdout", "at 9:5]"]
 
 [[tests]]
 name = "err.pure_recursive"
-desc = "A recursive `pure` function is held to its clause like any other: the body prints, and the call to itself is a use like any other call, so the declaration is refused and the use is named."
+desc = "A recursive `pure` function is held to its clause like any other: the body prints, and the call to itself is a use like any other call, so the declaration is refused and the note names the first use the signature does not name -- the print, at 9:5. The print is not also reported as an effect nobody runs: a write to `stdout` is a root of the region it is written in (design principles 3.1), so the refusal is the only report."
 kind = "negative"
 case = "../../../cases/effects/err_pure_recursive.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_pure_recursive.cml:9:", "(n: int) => int pure", "stdout"]
+expect_output_contains = ["err_pure_recursive.cml:8:", "(n: int) => int pure", "stdout", "at 9:5"]
 
 [[tests]]
 name = "err.wide_parameters"

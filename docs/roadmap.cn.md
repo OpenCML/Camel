@@ -19,7 +19,7 @@
 - 两条 `*_large_bytecode` 在 poison 和移动压力下转绿；修好后加入不依赖 poison 的回归用例。
 - 真实程序上的内存安全失败不标 `known_fail`。
 
-入口：`docs/handover/questions/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`。
+入口：`docs/handover/reviews/2026-11-06-who-roots-a-program-a-pass-holds-while-a-call-runs.cn.md`。
 
 ### 2. 完成库层自动微分迁移
 

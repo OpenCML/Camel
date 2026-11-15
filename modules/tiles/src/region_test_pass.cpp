@@ -393,7 +393,11 @@ class RegionOutlineTestPass final : public RuntimeGraphRewritePass {
                 }
             }
         }
-        return result;
+        // The same step `tiles::compile` takes: the outline moved host bodies to the device, and
+        // the type over a body that now runs a device submission has to say so (analysis 4.1).
+        // A test pass publishes the program it outlines, and a published program's types are what
+        // its callers read, so this is not a report-only path.
+        return settleDeclarations(*context_, result);
     }
 };
 } // namespace

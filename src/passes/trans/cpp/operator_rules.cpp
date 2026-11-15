@@ -1731,7 +1731,7 @@ Rules buildRules() {
     // `is_numeric::<bool>()` are both false, so there is no string or bool tensor on any backend
     // -- the same `NoMatchingFunction` comes from std::fvm. `c64`/`c128` do not even match the
     // signature although `is_numeric` admits them: the tensor type for a complex element cannot be
-    // formed, and that disagreement is the author's to settle (docs/handover/questions/
+    // formed, and that disagreement is the author's to settle (docs/handover/reviews/
     // questions-2026-10-31-can-a-tensor-hold-a-complex.md). So the `default` below is a branch
     // that does not run: it is a backstop, not a refusal this rule makes, and no element type is
     // turned away with a written call that would be a second answer.

@@ -1,6 +1,11 @@
 /**
- * Outside a sync block a call with an effect whose result nobody uses does not run (design
- * principles 3.1, 3.2): log prints nothing, on every back end.
+ * A write to a resource outside the program is a root of the region it is written in (design
+ * principles 3.1): `log`'s body is a region, the `println` in it writes `stdout`, so every call of
+ * `log` prints -- `log` is called twice, so two lines print before the value of the second call
+ * does, on every back end.
+ *
+ * What 3.1 keeps demand-driven is the *read*: a call whose result nobody uses and that writes
+ * nothing outside does not run.
  */
 
 func log(x: int): int {

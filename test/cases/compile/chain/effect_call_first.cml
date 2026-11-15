@@ -1,0 +1,23 @@
+/**
+ * The counterexample for `pure_call_first.cml`, and the same shape: the call stands in the same
+ * place, between the block's first and last statement, but `announce` writes the console. An
+ * external write is an effect (design principles 3.3), so the call is a statement of the block's
+ * chain (3.4) and the two writings of this block must **not** be one document:
+ * `effect_call_second.cml` prints 2 before 1, this one prints 1 then 2.
+ *
+ * A test that only accepted the pure case would be passed by an implementation that put nothing on
+ * any chain; this one is red exactly when the chain stopped carrying a statement that has an
+ * effect.
+ *
+ * Run: camel test/cases/compile/chain/effect_call_first.cml
+ */
+func announce(x: int): int {
+    println(x)
+    return x
+}
+
+func main(): int sync {
+    let a = announce(1)
+    println(2)
+    return a
+}

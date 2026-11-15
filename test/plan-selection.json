@@ -51,6 +51,16 @@
     ],
     "rules": [
         {
+            "comment": "The two programs the plan-refs plan reads, one from the counted-box table of the compile plans and one from the closure cases. The plan sits in test/plans/feat/tools, which no directory under test/plans/feat mirrors from a test/cases path, so the walk from test/cases reaches nothing here and this rule is the one the self-test asks for: every plan under test/plans must be selected by a case path it names. It comes before the general rules in this list because the first matching file rule applies to a file. Naming the two files adds this plan beside the one the directory rule selects (feat/compile, feat/consistency/values), and the plan is fast, so the rule carries no layer.",
+            "paths": ["test/cases/compile/ref/ref_boxes_made_per_call_ten.cml", "test/cases/consistency/values/ref_one_cell_two_holders.cml"],
+            "plans": ["feat/tools/plan_refs.plan.toml"]
+        },
+        {
+            "comment": "The plan-refs sweep: its case is the tool itself, so a change there selects the plan that runs it -- the same shape as the other tool cases in this list. The sweep is a plan of its own because its bound (1200000 ms, four times the CPU it spends starting one `camel` per case) would make any plan that also names it slow-cost, and a named plan file runs in full whatever `--tier` says.",
+            "paths": ["scripts/check-plan-refs.mjs", "scripts/check-plan-refs-anchor.mjs"],
+            "plans": ["feat/tools/plan_refs_sweep.plan.toml"]
+        },
+        {
             "comment": "The progen seed 23 program of the splice defect `a1723fbb9` fixed (test/cases/opt/inline_cycle): one program, one plan. It is a file rule and not a directory rule for the reason the adb67e081 rule below is one -- the directory rule for test/cases mirrors the segments below test/cases and would look for `test/plans/feat/opt/inline_cycle`, which is a plan file, so nothing would reach it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/cases/opt/inline_cycle/"],
             "plans": ["feat/opt/inline_cycle.plan.toml"]
@@ -61,9 +71,9 @@
             "plans": ["feat/opt/adb67e081.plan.toml", "feat/compile/fold_arms.plan.toml"]
         },
         {
-            "comment": "The writing-freedom comparator: its case is the tool itself, so a change there selects the plan that runs it. The plan is fast, so the rule carries no layer. The tool also has a --group spelling reading, quoted in examples/case-study/README.md and not gated: it compares the case study's program with three writings of it that change no meaning, and two of the three differ today, which is a defect to report and not a red to keep.",
+            "comment": "The writing-freedom comparator: its case is the tool itself, so a change there selects the two plans that run it -- `feat/compile/var` (the `var`-to-SSA pair) and `feat/compile/chain` (what a `sync` block's chain carries). Both are fast, so the rule carries no layer. The tool also has a --group spelling reading, quoted in examples/case-study/README.md and not gated: it compares the case study's program with three writings of it that change no meaning, and two of the three differ today, which is a defect to report and not a red to keep.",
             "paths": ["test/tools/writing-freedom.mjs"],
-            "plans": ["feat/compile/var.plan.toml"]
+            "plans": ["feat/compile/var.plan.toml", "feat/compile/chain.plan.toml"]
         },
         {
             "comment": "The corpus sweep tool: its case is the tool itself, so a change there selects the plan that runs it (a slow plan, so an ordinary change filters it out under --tier fast).",

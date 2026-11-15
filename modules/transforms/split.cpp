@@ -3659,7 +3659,7 @@ SplitGraph buildSplitGraph(
             "result -- the differentiated lambda ends in a call to a `with`-parameterised function "
             "-- and not the two-member tuple fill this cut takes its two halves from, so there is "
             "no pair to cut. This shape is not accepted: "
-            "`docs/handover/questions/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-"
+            "`docs/handover/reviews/2026-11-03-when-a-lambda-ends-with-a-with-call-what-does-"
             "split-cut.cn.md` weighs the three routes through it");
         os << "REINTERP split function=" << function->name()
            << " skip=" << refusalCauseName(RefusalCause::Exit) << " (" << refusal.refusedWhy

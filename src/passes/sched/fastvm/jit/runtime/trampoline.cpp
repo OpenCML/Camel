@@ -423,7 +423,7 @@ slot_t trampolineOper(slot_t *slots, void *ctx, size_t pc) {
 
     slot_t ret;
     try {
-        ret = vm->invokeNativeOperator(bc, *frame);
+        ret = vm->invokeNativeOperator(bc, *frame, pc);
     } catch (const RuntimeFault &fault) {
         throw reportRuntimeFault(
             vm->context(),
@@ -612,7 +612,7 @@ slot_t jitHelperOper(slot_t *slots, void *ctx, size_t pc) {
         }
         slot_t result;
         try {
-            result = vm->invokeNativeOperator(bc, *frame);
+            result = vm->invokeNativeOperator(bc, *frame, pc);
         } catch (const RuntimeFault &fault) {
             // The fault of the operator, at this bytecode: what the interpreter reports.
             throw reportRuntimeFault(

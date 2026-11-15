@@ -1,0 +1,28 @@
+/**
+ * The control of the three container refusals: a record, a tuple and an array, each holding a
+ * closure, and every chain of captures ends at a plain integer. All three boxes are legal, so this
+ * is what says the refusals are about the reference inside those closures and not about a container
+ * being a container, or about a walk that refuses every closure it cannot follow to the bottom.
+ */
+
+import state
+
+type Holder = { cb: () => int, n: int }
+
+func main(): int sync {
+    let k = 7
+    let h = (): int => k + 35
+    let holder: Holder = { cb: h, n: 1 }
+    let pair = (h, 2)
+    let many = [h, (): int => 1]
+    let box_holder = state::ref(holder)
+    let box_pair = state::ref(pair)
+    let box_many = state::ref(many)
+    let held_holder = state::get(box_holder)
+    let held_pair = state::get(box_pair)
+    let held_many = state::get(box_many)
+    println(held_holder.cb())
+    println(held_pair.0())
+    println(held_many[1]())
+    return 0
+}

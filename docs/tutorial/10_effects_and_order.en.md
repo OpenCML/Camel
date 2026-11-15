@@ -6,13 +6,13 @@ Chapter 9's sentence has a price: **an expression is evaluated because somebody 
 "print a line" happen at all? And which of two prints goes first? This chapter is Camel's answer to both: effects and
 order are not defaults, they are **written in the program**, and the graph has edges that say so.
 
-## What nobody needs does not run
+## What nobody needs: a read does not run, a write does
 
 [`examples/10_unused_effect.cml`](examples/10_unused_effect.cml):
 
 ```cml
-// An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println`
-// never runs.
+// A write whose result nothing needs still runs: `greet`'s body is a region, so its `println`
+// prints although nothing uses the result and the body is not a sync block (3.1).
 // Run: camel docs/tutorial/examples/10_unused_effect.cml
 
 func greet(): int {
@@ -31,23 +31,20 @@ camel docs/tutorial/examples/10_unused_effect.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_unused_effect.cml:6:5
-   |
- 6 |     println('hello from greet')
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
 
-Only `1` is printed. The `1` that `greet` returns does not depend on that `println`, so on the graph it is a node nobody
-wants: **an effect nobody needs does not run**. That is not an error but a rule of the language; the compiler gives the
-warning so that a `sync` you forgot to write is visible.
+Both lines are printed. The `1` that `greet` returns still does not depend on that `println`'s result, but a
+`println` is a **write**: a write to a resource outside the program is used by the region it is written in, and
+`greet`'s body is a region, so it runs -- no `sync` needed. What really is dropped for lack of a reader? A **read**:
+an external read whose result nobody uses does not run, and the compiler reports `EffectNotExecuted` for it
+([language reference 4.2](../language/en/04_execution_model.md#42-evaluation-by-dependency)).
 
 The rule and its reason: the only order a program can observe comes from **values being passed** and from **order
 written down**. Everything else may run in parallel, be reordered, be dropped -- so the compiler assumes nothing. Write
-`sync` where order matters.
+`sync` where order matters. Whether something runs at all is a second rule: a read runs when its result is needed, a
+write runs when its region runs.
 
 ## `sync` on a function body
 
@@ -113,23 +110,18 @@ camel docs/tutorial/examples/10_sync_block.cml
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> docs/tutorial/examples/10_sync_block.cml:7:22
-   |
- 7 |     if second then { println('three'); println('four') }
-   |                      ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
 the body is a sync block
+three
 four
 five
 six
 0
 ```
 
-`three` is not printed: that `if`'s arm is not a sync block, `println('three')`'s result is wanted by nobody, so it does
-not run; `println('four')` is the arm's value, which is the `if`'s value, so it runs. The second `if`'s arm says `sync`,
-and both of its statements run.
+`three` is printed too: that `if`'s arm is not a sync block, but the arm is a region, and a write to `stdout` in it is
+used by that region -- `println('three')`'s result is wanted by nobody and it runs all the same. What the arm's missing
+`sync` decides is **order**: those two statements have none. The second `if`'s arm says `sync`, and both of its
+statements run, in order.
 
 The reason for this rule is that **a block's meaning does not change with where it is written**: if an arm inherited the
 outer `sync`, the same lines would mean two different things depending on their neighbours, and a reader would have to

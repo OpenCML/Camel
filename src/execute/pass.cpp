@@ -25,6 +25,7 @@
 #include "camel/passes/test/arm_loop_regions.h"
 #include "camel/passes/test/bounds.h"
 #include "camel/passes/test/broken_boundary.h"
+#include "camel/passes/test/commit_checks.h"
 #include "camel/passes/test/chunks.h"
 #include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/contexts.h"
@@ -36,6 +37,7 @@
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/graph_faces.h"
+#include "camel/passes/test/plan_refs.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepfn.h"
@@ -97,6 +99,7 @@
 #include <format>
 #include <iostream>
 #include <map>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -1056,6 +1059,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kEdgesTypeTestPass, EdgesTypeTestPass),
         TEST_PASS(kEdgesOkTestPass, EdgesOkTestPass),
         TEST_PASS(kCommitConflictTestPass, CommitConflictTestPass),
+        TEST_PASS(kFoldFunctionTypeTestPass, FoldFunctionTypeTestPass),
         TEST_PASS(kKeepFnTestPass, KeepFnTestPass),
         TEST_PASS(kBreakExitTestPass, BreakExitTestPass),
         TEST_PASS(kBreakPortsTestPass, BreakPortsTestPass),
@@ -1099,6 +1103,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
+        TEST_PASS(kPlanRefsTestPass, PlanRefsTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),
@@ -1978,9 +1983,11 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
-/// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control
-/// one), so a place in it is a sync or control edge either way, read from the edges themselves.
+/// the graph reads -- or a place in its block's chain, or the region it is written in (a write to a
+/// resource outside the program, which a running region uses). The chain is carried as two edge
+/// kinds while the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the
+/// control one), so a place in it is a sync or control edge either way, read from the edges
+/// themselves.
 ///
 /// An order edge is not one of them: it orders two nodes that both run and makes neither of them
 /// run (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read
@@ -1997,8 +2004,25 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
         graph.returnNodeRef() == ref) {
         return true;
     }
-    return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
-           !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty();
+    if (!graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
+        !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty()) {
+        return true;
+    }
+    // The third credential (design principles 3.1, the author's ruling of 2026-11-15, "区域的根"):
+    // a write to a resource outside the program is used by the region it is written in -- "一个区域
+    // 运行时，区域里对外部资源的写都被用到 ... 非同步函数体里的裸语句 println(x) 照样执行" -- so it
+    // runs with neither a reader nor a place in a chain, and the region is what stands under it.
+    // The reading itself is `camel/runtime/region_roots.h` (resource class, never an operator
+    // name); this gate asks the same predicate so that the three walks that decide what a region
+    // runs and the check on what a pass returns do not drift apart.
+    if (const camel::runtime::GCNode *node = graph.node(ref);
+        node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
+        const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        if (body != nullptr && camel::core::OperatorTable::instance().writesOutside(body->uri())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// The effects of `program`: every effect node of every graph of it, each at its position in one
@@ -2501,10 +2525,11 @@ bool nodeRunsForItsEffect(
     return !camel::runtime::deadWrite(graph, ref);
 }
 
-/// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives
-/// an effect: a read of its value (a normal or `with` input of another node, or the graph's own
-/// result, which whoever runs the graph reads), or a place in its block's chain, in the spellings
-/// the graphs carry the chain in while the migration runs (`effectStandsOnSomething`).
+/// Every effect a pass hands back stands on one of the credentials design principles 3.1 gives an
+/// effect: a read of its value (a normal or `with` input of another node, or the graph's own
+/// result, which whoever runs the graph reads), a place in its block's chain, in the spellings the
+/// graphs carry the chain in while the migration runs, or the region it is written in
+/// (`effectStandsOnSomething`).
 ///
 /// An effect that stands on neither is in the graph and in no chain: nothing makes it run, so the
 /// program the pass returned is not the program it was given (3.1, 3.3). That is the whole check --
@@ -2620,15 +2645,67 @@ std::string effectOrderViolation(
     return {};
 }
 
+/// A node as a diagnostic names it: the graph it is in, the node, how the graph spells it and,
+/// when the graph's source names it, that name. The reader is looking at a program, so a bare
+/// number would not be enough and the graph's name is what one searches for.
+std::string describeNodeOf(
+    const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
+    camel::runtime::gc_node_ref_t ref) {
+    const camel::runtime::GCNode *node = graph.node(ref);
+    const std::string_view named       = graph.nodeName(ref);
+    std::string what                   = node == nullptr ? std::string("a node") : std::string();
+    if (node != nullptr) {
+        if (node->kind == camel::runtime::GCNodeKind::Func ||
+            node->kind == camel::runtime::GCNodeKind::Call) {
+            const camel::runtime::GCGraph *callee = program.calleeOf(graph, ref);
+            what = callee == nullptr ? std::string("a call") : "a call of '" + callee->name() + "'";
+        } else if (node->kind == camel::runtime::GCNodeKind::Oper) {
+            if (const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref)) {
+                what = std::string(body->uri());
+            } else {
+                what = "an operator";
+            }
+        }
+    }
+    if (!named.empty()) {
+        return std::format(
+            "node {} of graph '{}' ({}, which is '{}')", ref, graph.name(), what, named);
+    }
+    return std::format("node {} of graph '{}' ({})", ref, graph.name(), what);
+}
+
+/// The one-line text the effect-containment diagnostic carries: the call site, the type it
+/// declares as the declaration spells it, and every access the type does not cover.
+std::string effectContainmentText(
+    const camel::runtime::Program &program, const camel::runtime::GCGraph &graph,
+    const camel::runtime::EffectContainment &violation) {
+    std::string beyond;
+    for (const std::string &access : violation.beyond) {
+        beyond += (beyond.empty() ? "" : ", ") + access;
+    }
+    return std::format(
+        "{} declares {}; the graph it runs touches {}",
+        describeNodeOf(program, graph, violation.call),
+        violation.declared.empty() ? std::string("nothing") : violation.declared,
+        beyond);
+}
+
 /// Every generic pass, including a registered nested pass, checks operator ports, entry/exit
 /// and effect credentials. The comparative resource-support and matched-order predicates run
 /// only when selected: by the optimizer's internal checks or graph::check_pass_boundary.
 /// A function-to-function type does not select preservation by itself.
 ///
+/// The commit checks of docs/design/effects/analysis.cn.md 4.1 are asked when `commitChecks` is set:
+/// a pass that rewrites through the graph module alone cannot build an effectful node, so for it
+/// "no extra effect, no lost order" is a theorem and it does not pay for them (the ruling of
+/// 2026-11-15, GraphIRPass::rewritesThroughTheGraphModuleOnly). Effect containment is the item of
+/// 4.1 this commit lands; order completeness is the other one and is not here yet.
+///
 /// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
-    const ProgramEffects &effectsBefore, bool preserveEffects = false) {
+    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true,
+    std::ostream *summary = nullptr) {
     const ProgramEffects effectsAfter = collectEffects(program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
@@ -2674,6 +2751,50 @@ bool passBoundaryViolation(
         diag.commit(spec, credential.text);
         CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect credential)", spec);
         return true;
+    }
+    if (commitChecks) {
+        // Analysis 4.1, effect containment: at each call site the footprint of the function value
+        // called must not exceed what the type at the call site declares. The message names the
+        // call node and the accesses beyond its type, because those two are what a reader has to
+        // look at: the type is the promise a caller relies on.
+        //
+        // The check also says what it declined to judge, when a caller asks for it
+        // (CAMEL_EFFECT_CONTAINMENT_SUMMARY): a decline is the analysis saying it cannot name the
+        // resource, and a number that only ever grows is how that is told apart from a pass whose
+        // program was fine.
+        camel::runtime::EffectContainmentReport report;
+        const camel::runtime::GCGraph *refused = nullptr;
+        std::optional<camel::runtime::EffectContainment> violation;
+        for (const camel::runtime::GCGraph *graph : program.graphs()) {
+            if (graph == nullptr) {
+                continue;
+            }
+            auto found = camel::runtime::effectContainmentViolation(program, *graph, &report);
+            if (found.has_value() && !violation.has_value()) {
+                refused   = graph;
+                violation = std::move(found);
+            }
+        }
+        if (summary != nullptr && std::getenv("CAMEL_EFFECT_CONTAINMENT_SUMMARY") != nullptr) {
+            *summary << std::format(
+                "effect containment: checked {}, declined {} (any unknown {} / any object {} / "
+                "any handle {} / variable cell {} / unresolved {} / other {})\n",
+                report.checked,
+                report.declined(),
+                report.anyUnknown,
+                report.anyObject,
+                report.anyHandle,
+                report.variableCell,
+                report.unresolved,
+                report.other);
+        }
+        if (violation.has_value()) {
+            ctx->rtmDiags()
+                ->of(RuntimeDiag::PassEffectContainment)
+                .commit(spec, effectContainmentText(program, *refused, *violation));
+            CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect containment)", spec);
+            return true;
+        }
     }
     return false;
 }
@@ -2814,7 +2935,8 @@ PassRunResult applyRegisteredPass(
     // The check every pass ends with, for a pass a pass runs by name. Before 2026-11-02 this
     // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
     // through here, and a graph they broke reached the next pass unchecked.
-    if (ctx != nullptr && passBoundaryViolation(ctx, spec, *produced, effectsBefore)) {
+    if (ctx != nullptr && passBoundaryViolation(ctx, spec, *produced, effectsBefore, false,
+                                                !pass->rewritesThroughTheGraphModuleOnly(), &os)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -3323,7 +3445,8 @@ PassApplyResult applyPassesDetailed(
             // Generic admission checks ports, root entry/exit and effect credentials, as does
             // applyRegisteredPass. Resource support and matched ordering are compared only by
             // an explicitly selected checker; this function-to-function result implies neither.
-            if (passBoundaryViolation(ctx, p, *program, effectsBefore)) {
+            if (passBoundaryViolation(ctx, p, *program, effectsBefore, false,
+                                      !pass->rewritesThroughTheGraphModuleOnly(), &os)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =
