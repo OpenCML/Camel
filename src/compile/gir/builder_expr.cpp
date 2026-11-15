@@ -2210,29 +2210,36 @@ void Builder::dropCarriedVariableUnits() {
         // Its stores are the only users it has: a read, a capture, a `var` argument or anything
         // else the builder did not record there keeps the cell (and its unit) as it is.
         const auto writes = writesOf_.find(cell);
-        if (writes == writesOf_.end() || writes->second.empty()) {
-            continue;
-        }
         std::unordered_set<camel::runtime::gc_node_ref_t> stores;
         bool onlyStores = true;
-        for (node_handle_t write : writes->second) {
-            if (!draft.isNamedBy(write)) {
-                onlyStores = false;
-                break;
+        if (writes == writesOf_.end() || writes->second.empty()) {
+            // A write the lowering never made: a write inside a loop body is the loop's carried
+            // state (visitLoopNode), so the cell has no store. What is left of such a cell is its
+            // own unit and the value the cell was made with, and both go -- the `let` writing has
+            // neither. A cell anything at all still uses keeps them, as any other cell does.
+            if (usersOf(cellId, nullptr) || isRoot(cellId) || isRegionResult(cellId)) {
+                continue;
             }
-            stores.insert(nodeIdOf(write));
-        }
-        if (onlyStores) {
-            std::vector<camel::runtime::gc_node_ref_t> users;
-            usersOf(cellId, &users);
-            for (camel::runtime::gc_node_ref_t user : users) {
-                if (!stores.contains(user)) {
+        } else {
+            for (node_handle_t write : writes->second) {
+                if (!draft.isNamedBy(write)) {
                     onlyStores = false;
+                    break;
+                }
+                stores.insert(nodeIdOf(write));
+            }
+            if (onlyStores) {
+                std::vector<camel::runtime::gc_node_ref_t> users;
+                usersOf(cellId, &users);
+                for (camel::runtime::gc_node_ref_t user : users) {
+                    if (!stores.contains(user)) {
+                        onlyStores = false;
+                    }
                 }
             }
-        }
-        if (!onlyStores) {
-            continue;
+            if (!onlyStores) {
+                continue;
+            }
         }
         // The block's own GATEs go with the store. The arm of a `sync` block hands its value out
         // through GATEs that wait for the statement before them, and now that the branch takes the
