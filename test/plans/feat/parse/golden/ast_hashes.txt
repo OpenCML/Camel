@@ -3847,6 +3847,7 @@ d52d50350b44b1cb ok test/cases/opt/algebra_rules/measure.cml
 51d83bb71bf41e41 ok test/cases/opt/camel_passes/fold_constant_budget.cml
 e76ad6a29bda71f4 ok test/cases/opt/camel_passes/fold_fault.cml
 69fb474c5a932ac1 ok test/cases/opt/camel_passes/fold_subject.cml
+4458f4f7e6cb467b ok test/cases/opt/commit_checks/fold_function_type.cml
 0e0caabcbb90b4eb ok test/cases/opt/defun/captured.cml
 48e74295fd29a520 ok test/cases/opt/defun/closure_dispatch.cml
 67b9fbb450feedf7 ok test/cases/opt/defun/effects.cml
