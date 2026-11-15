@@ -193,6 +193,44 @@ struct RequiredOrdering {
 /// through references outside a sync block).
 std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph);
 
+// ---- Effect containment, the first commit check of the effect analysis --------------------------
+//
+// docs/design/effects/analysis.cn.md 4.1: "at each call site, the footprint of the function value
+// called (by instantiation) must not exceed what the type at the call site declares; when it does,
+// refuse, and the diagnostic names the call node and the accesses that are beyond". Read off the
+// analysis above -- `footprintOf` for what the body does, the graph's function type for what it
+// says -- and nothing else.
+//
+// It is a query rather than a check here because what to do with the answer -- which diagnostic,
+// carrying which pass name -- belongs to the pass boundary that knows the pass (execute/pass.cpp).
+// A pass that rewrites through the graph module alone cannot build an effectful node, so for it the
+// answer is a theorem and it does not ask (the ruling of 2026-11-15, GraphIRPass::
+// rewritesThroughTheGraphModuleOnly).
+
+/// A call site of one graph that does more than its type says: the node, the type it declares as
+/// the declaration spells it, and the accesses of the footprint the declaration does not cover.
+struct EffectContainment {
+    gc_node_ref_t call = kInvalidNodeRef;
+    /// The declared clause, in the spelling a type uses (`pure`, `uses var stdout`).
+    std::string declared;
+    /// The accesses beyond it, one line each, sorted and without repeats.
+    std::vector<std::string> beyond;
+};
+
+/// The first call site of `graph` -- FUNC and CALL nodes, by node order -- whose callee does more
+/// than the type there says, or nullopt when every call site is covered. A type that carries no
+/// clause (Generic) promises nothing and `covers` says it covers anything: it is not a violation.
+/// So is a call through a value the graph does not resolve: there is no body to compare.
+///
+/// Only what a type can state is judged: an external resource by name, and a handle a parameter
+/// names. The conservative half of a footprint -- the classes it "cannot name"
+/// (GraphFootprint::anyOf, so 134 of the false readings the first version produced), a cell of a
+/// variable (whose mutability is declared where the variable is, design effects plan 5.1, not in a
+/// `uses` clause) -- is not an access the callee is known to make, and a type that cannot spell it
+/// does not promise against it. Writing variables is what the order check asks about.
+std::optional<EffectContainment>
+effectContainmentViolation(const Program &program, const GCGraph &graph);
+
 /// The text forms (core.resources, test output).
 std::string toString(const NodeAccess &access);
 std::string toString(const NodeResources &resources);

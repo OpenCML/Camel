@@ -54,6 +54,15 @@ class GraphIRPass {
     // `std::rgir`, `std::jgir` draw the classes) or rewrites it (the rules library).
     virtual bool acceptsWritings() const { return false; }
 
+    // A pass whose only rewriting interface is the graph module's -- `open`, `replace`, `erase`,
+    // `add_constant` and the rest of stdlib/graph.cml, which is every handle a pass written in Camel
+    // has on a graph. Such a pass cannot make a node that carries an access, cannot splice a body in
+    // and cannot change what a node is, so for it "no access appears and no order is lost" is a
+    // theorem and the two commit checks of the effect analysis are not asked of it
+    // (docs/design/effects/analysis.cn.md 4.1; the ruling of 2026-11-15: the checks are for the C++
+    // passes, whose interface is wider, and E9's swapped and dropped prints came out of them).
+    virtual bool rewritesThroughTheGraphModuleOnly() const { return false; }
+
   private:
     /// The error value this pass ended with, or NullSlot when it did not fail (failWithErrorValue).
     /// The driver reads it in the same safepoint window as `apply`, so a value the pass made is

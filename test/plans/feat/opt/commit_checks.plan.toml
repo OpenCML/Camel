@@ -1,0 +1,40 @@
+id = "opt.commit_checks"
+order = 482
+tier = "fast"
+tags = ["feat", "opt", "effects", "commit-checks"]
+
+# The first of the two checks the effect analysis makes when a C++ pass commits a program
+# (docs/design/effects/analysis.cn.md 4.1, the ruling of 2026-11-15): at every call site, the
+# footprint of the function value called must not exceed what the type at that call site declares.
+#
+# The case runs a test-only pass that writes exactly that defect, on the smallest program that can
+# show it. It is refused, and the diagnostic names the call site and the accesses the type leaves
+# out. The second check (order completeness) is not landed here; the commit that adds this plan
+# carries the readings of the existing passes it refuses.
+#
+# The second case is the same pass on a program where it has nothing to fold: nothing is refused and
+# the program runs, which is what makes the refusal above about the defect and not about naming the
+# pass.
+
+[defaults]
+kind = "negative"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "commit_checks.effect_containment"
+desc = "A pass gives a function whose body prints the type of one that does not, and leaves the body where it is: the call sites of the printing function now declare `pure` while the body they run writes to the console. The refused program names the call node and the access that is beyond the type."
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::fold_function_type", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectContainment"
+expect_output_contains = ["Pass 'test::fold_function_type' returned a program whose call site", "reaches past the type it declares", "write stdout"]
+
+[[tests]]
+name = "commit_checks.nothing_to_fold"
+desc = "A program whose only function is called and does not print has no second function of its shape to fold: the pass writes nothing, and the commit check has nothing to refuse."
+kind = "behavior"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::fold_function_type", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["fold_function_type: no two functions of one shape to fold", "3"]

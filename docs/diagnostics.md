@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-315 diagnostics: 293 errors, 22 warnings. 15 carry a machine-applicable edit, 300 say why they carry none.
+316 diagnostics: 294 errors, 22 warnings. 15 carry a machine-applicable edit, 301 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -328,6 +328,7 @@ prints one entry.
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
 | `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
+| `0x040001AF` | [RuntimeDiag::PassEffectContainment](#passeffectcontainment) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -11140,6 +11141,50 @@ func main(): int sync {
     let g     = target->rewrite<rules> !! target
     print(g(7.0))
     return 0
+}
+```
+
+### PassEffectContainment
+
+`0x040001AF` · Error · `RuntimeDiag::PassEffectContainment`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' returned a program whose call site reaches past the type it declares: {1}
+```
+
+**Help**
+
+```text
+A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::fold_function_type std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
 }
 ```
 

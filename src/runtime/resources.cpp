@@ -1044,4 +1044,182 @@ std::string toString(const GraphFootprint &fp) {
     return out.empty() ? "none" : out;
 }
 
+// ---- Effect containment (analysis 4.1, the second half of the query section above) --------------
+
+namespace {
+
+/// The footprint as a signature, so that `covers` can answer whether a declaration covers it: the
+/// same mapping the resolver uses to read a declared clause back onto a call site's operands, run
+/// the other way. `withCount` is the callee's, so that a With binding keeps its own numbering.
+sem::ResourceSignature signatureOfFootprint(const GraphFootprint &footprint, size_t withCount) {
+    sem::ResourceSignature signature;
+    signature.mode     = sem::ResourceSignature::Mode::Concrete;
+    signature.result   = footprint.result;
+    signature.anyOf    = footprint.anyOf;
+    signature.external = footprint.external;
+    for (const sem::ResourceAccess &access : footprint.accesses) {
+        if (access.resource.cls == ResourceClass::Ambient ||
+            access.binding.kind == sem::ResourceBinding::Kind::Ambient) {
+            const auto same = std::find_if(
+                signature.ambient.begin(),
+                signature.ambient.end(),
+                [&](const sem::ResourceSignature::AmbientUse &other) { return other.name == access.resource.name; });
+            if (same == signature.ambient.end()) {
+                sem::ResourceSignature::AmbientUse use{.name = access.resource.name, .mode = access.mode};
+                use.unordered = access.unordered;
+                signature.ambient.push_back(use);
+            } else {
+                same->mode      = sem::uniteAccess(same->mode, access.mode);
+                same->unordered = same->unordered || access.unordered;
+            }
+            continue;
+        }
+        if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
+            // A capture: the position in the closure is all a declaration can name.
+            if (std::find(signature.captures.begin(),
+                          signature.captures.end(),
+                          access.binding.index) == signature.captures.end()) {
+                signature.captures.push_back(access.binding.index);
+            }
+            continue;
+        }
+        // A With parameter keeps its own numbering; an ordinary one follows the with parameters.
+        const size_t index = access.binding.kind == sem::ResourceBinding::Kind::With
+                                 ? size_t(access.binding.index)
+                                 : withCount + access.binding.index;
+        const sem::ResourceSignature::ParamUse use{
+            .index = static_cast<uint8_t>(index),
+            .cls   = access.resource.cls,
+            .name  = access.resource.name,
+            .mode  = access.mode,
+        };
+        const auto same = std::find_if(
+            signature.params.begin(),
+            signature.params.end(),
+            [&](const sem::ResourceSignature::ParamUse &other) { return other.index == use.index; });
+        if (same == signature.params.end()) {
+            signature.params.push_back(use);
+        } else {
+            same->mode = sem::uniteAccess(same->mode, use.mode);
+        }
+    }
+    std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    return signature;
+}
+
+std::string accessUseText(const sem::ResourceAccess &access) {
+    const std::string name = !access.resource.name.empty()
+                                 ? sem::resourceDisplayName(access.resource.name)
+                                 : std::string(sem::resourceClassName(access.resource.cls));
+    return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
+}
+
+/// The accesses of `footprint` that `declared` does not cover, each judged by `covers` alone: one
+/// access is beyond the declaration when a source that is that access by itself is not covered.
+std::vector<std::string> beyondCoverage(
+    const sem::ResourceSignature &declared, const GraphFootprint &footprint, size_t withCount) {
+    std::vector<std::string> beyond;
+    for (const sem::ResourceAccess &access : footprint.accesses) {
+        // What a type can state: an external resource, or a handle a parameter names. A cell of a
+        // variable is not in a `uses` clause (design effects plan 5.1: mutability is declared where
+        // the variable is), and an access of unknown class is the analysis saying it cannot tell;
+        // neither is something the callee is known to do past its promise.
+        if (access.resource.cls == ResourceClass::Variable ||
+            access.resource.cls == ResourceClass::Unknown) {
+            continue;
+        }
+        GraphFootprint single;
+        single.accesses.push_back(access);
+        if (!sem::covers(declared, signatureOfFootprint(single, withCount))) {
+            beyond.push_back(accessUseText(access));
+        }
+    }
+    // An effect outside the program that names no resource: a concrete reading only, because an
+    // undeclared operator's "may have an external effect" is a possibility, not a fact.
+    if (footprint.declared && footprint.external && !declared.external) {
+        beyond.push_back("an effect outside the program");
+    }
+    std::sort(beyond.begin(), beyond.end());
+    beyond.erase(std::unique(beyond.begin(), beyond.end()), beyond.end());
+    return beyond;
+}
+
+/// The declared clause of a call site and the graph it runs, or nullopt when the site declares
+/// nothing to compare (`nullptr` out-params) -- a call through a value the graph does not resolve.
+struct CallSite {
+    const sem::ResourceSignature *declared = nullptr;
+    const GCGraph *callee                  = nullptr;
+    size_t withCount                       = 0;
+};
+
+CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_ref_t ref) {
+    CallSite site;
+    const GCNodeKind kind = graph.node(ref)->kind;
+    if (kind == GCNodeKind::Func) {
+        site.callee = program.calleeOf(graph, ref);
+        if (site.callee == nullptr || site.callee->funcType() == nullptr) {
+            return {};
+        }
+        site.declared  = &site.callee->funcType()->resources();
+        site.withCount = site.callee->funcType()->withTypesCount();
+        return site;
+    }
+    // A call: the type of the function value in `with` 0 is what the call site declares.
+    const auto with = graph.withInputsOf(ref);
+    if (with.empty()) {
+        return {};
+    }
+    const gc_node_ref_t value = throughGates(graph, with[0]);
+    const GCNode *node        = graph.node(value);
+    if (node == nullptr || node->dataType() == nullptr ||
+        node->dataType()->code() != core::type::TypeCode::Function) {
+        return {};
+    }
+    const auto *type = static_cast<const core::type::FunctionType *>(node->dataType());
+    site.declared    = &type->resources();
+    site.withCount   = type->withTypesCount();
+    // The body behind it, when the value names a function statically: without it there is no
+    // footprint to compare, and the type promises nothing it is known to break.
+    if (const ::Function *fn = staticFunctionOf(graph, value)) {
+        site.callee = fn->graph();
+    }
+    return site;
+}
+
+} // namespace
+
+std::optional<EffectContainment>
+effectContainmentViolation(const Program &program, const GCGraph &graph) {
+    for (gc_cnt_t i = 0; i < graph.nodeCount(); ++i) {
+        const gc_node_ref_t ref = static_cast<gc_node_ref_t>(i);
+        const GCNode *node      = graph.node(ref);
+        if (node == nullptr) {
+            continue;
+        }
+        if (node->kind != GCNodeKind::Func && node->kind != GCNodeKind::Call) {
+            continue;
+        }
+        const CallSite site = declaredClauseAt(program, graph, ref);
+        if (site.declared == nullptr || site.callee == nullptr) {
+            continue;
+        }
+        if (site.declared->mode != sem::ResourceSignature::Mode::Concrete) {
+            continue; // a type that promises nothing covers everything (sem::covers)
+        }
+        const GraphFootprint footprint = footprintOf(program, site.callee);
+        std::vector<std::string> beyond = beyondCoverage(*site.declared, footprint, site.withCount);
+        if (beyond.empty()) {
+            continue;
+        }
+        return EffectContainment{
+            .call     = ref,
+            .declared = sem::toString(*site.declared),
+            .beyond   = std::move(beyond),
+        };
+    }
+    return std::nullopt;
+}
+
 } // namespace camel::runtime
