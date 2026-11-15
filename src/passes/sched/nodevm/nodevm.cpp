@@ -5,6 +5,7 @@
 #include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/function_call.h"
@@ -764,8 +765,24 @@ slot_t NodeVMSchedPass::call(
                     }
                 }
 
+                // The anchor's site, in the node form: a `Ref` box made while this operator ran has
+                // to be a value the plan names this very node as producing. Asked only while
+                // --gc-check wants the counted blocks -- the flag that already pays for the
+                // counters, so a program that does not pass it reads nothing here and takes the
+                // same path as before -- and the answer is only reported: it cannot refuse the
+                // value, change the frame, or move this node to another order.
+                const bool anchorWanted =
+                    camel::core::mm::allocatorChecks().printForeignResources;
+                camel::runtime::CountedBoxesBracket boxes;
+                if (anchorWanted) {
+                    boxes.begin();
+                }
                 slot_t result =
                     evalNativeOperator(currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
+                if (anchorWanted) {
+                    camel::runtime::noteCountedCreationForNode(
+                        currRuntimeGraph, nodeRef, boxes.sinceBegin());
+                }
 
                 currFrame->set(n->dataIndex, result);
             } break;

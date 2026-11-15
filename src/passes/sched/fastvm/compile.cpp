@@ -129,14 +129,14 @@ static bytecode_vec_t compileRuntimeGraph(
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
     const auto &plan              = graph->execPlan();
-    // The reader of the position-to-node side table: while --gc-check asks for the counted
-    // blocks, the table is built for this compile and printed here, one line per instruction that
-    // belongs to a node, with what the plan says that node does to the count. A caller that does
-    // not pass a table gets a compile that does not build one (no memory, one null check).
-    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> anchorSites;
+    // The position-to-node side table: while --gc-check asks for the counted blocks, one row per
+    // instruction that belongs to a node is written here, with what the plan says that node does to
+    // the count, and the table is kept with the plan it describes -- the run reads it after this
+    // compile is over, at the moment a box is made, and a local table would be gone by then. A
+    // compile that is not asked for it writes nothing and allocates nothing for it.
     const bool anchorSitesWanted = camel::core::mm::allocatorChecks().printForeignResources;
     if (anchorSitesWanted) {
-        localPcNodes = &anchorSites;
+        localPcNodes = &plan.countedSites.nodeAtPc;
     }
     const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
@@ -670,8 +670,10 @@ static bytecode_vec_t compileRuntimeGraph(
     optimizer.optimize(bytecodes, 0, localPcOrigins);
 
     if (anchorSitesWanted) {
-        std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(anchorSites.begin(),
-                                                                          anchorSites.end());
+        // Read back out of the table the run will read: what is printed here and what the anchor
+        // asks about later are one table, not a copy of one.
+        std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(
+            plan.countedSites.nodeAtPc.begin(), plan.countedSites.nodeAtPc.end());
         std::sort(sites.begin(), sites.end());
         for (const auto &[pc, ref] : sites) {
             const size_t position =
@@ -768,6 +770,14 @@ LinkedBytecodeResult compileAndLinkGraphs(
 
         offsetMap[runtimeGraph] = start;
         graphs.push_back({start, codes.size(), runtimeGraph});
+
+        // Where the table's own pc numbering starts in the image this run executes. Set from the
+        // table rather than from the flag, so the two cannot describe different things: a graph
+        // the compile was not asked to lay out keeps an empty table and no entry pc at all.
+        auto &countedSites = runtimeGraph->execPlan().countedSites;
+        if (!countedSites.nodeAtPc.empty()) {
+            countedSites.entryPc = start;
+        }
 
         linked.insert(linked.end(), codes.begin(), codes.end());
         if (auto sourceContext = registerOrigins && ctx ? ctx->sourceContext() : nullptr) {

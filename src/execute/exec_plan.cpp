@@ -8,6 +8,7 @@
 #include "camel/runtime/exec_plan.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/core/type/composite/tuple.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/profile/profile.h"
@@ -1167,6 +1168,35 @@ void rebuildLoopTablesForTests(const GCGraph &graph, ExecPlan &plan) {
     plan.loopEventOffsets.clear();
     plan.elidedAt.clear();
     buildLoopTables(graph, plan);
+}
+
+void noteCountedCreationForNode(const void *graph, gc_node_ref_t node, uint64_t boxes) noexcept {
+    if (graph == nullptr || boxes == 0) {
+        return;
+    }
+    const auto *version  = static_cast<const GCGraph *>(graph);
+    const ExecPlan &plan = version->execPlan();
+    // A node the plan names no position for is not a producing row either: the same answer an
+    // unknown pc gets, and not an excuse to skip the question.
+    const size_t position =
+        node < plan.topoIndexByRef.size() ? plan.topoIndexByRef[node] : plan.topo.size();
+    const bool named = position < plan.refProducedAt.size() && plan.refProducedAt[position] != 0;
+    camel::core::rtdata::recordCountedCreation(named, boxes);
+}
+
+void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcept {
+    if (graph == nullptr || boxes == 0) {
+        return;
+    }
+    const ExecPlan &plan = static_cast<const GCGraph *>(graph)->execPlan();
+    gc_node_ref_t node   = kInvalidNodeRef;
+    if (pc >= plan.countedSites.entryPc) {
+        const auto row = plan.countedSites.nodeAtPc.find(pc - plan.countedSites.entryPc);
+        if (row != plan.countedSites.nodeAtPc.end()) {
+            node = row->second;
+        }
+    }
+    noteCountedCreationForNode(graph, node, boxes);
 }
 
 } // namespace camel::runtime

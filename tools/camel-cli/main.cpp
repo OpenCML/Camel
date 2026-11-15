@@ -288,7 +288,8 @@ int runCommand(int argc, char *argv[]) {
                           << " released=" << foreignBefore.releasedControlBlocks
                           << " live=" << foreignBefore.liveControlBlocks << " disposed=" << disposed
                           << " finalized=" << foreignBefore.finalizedWrappers
-                          << " creations=" << anchor.creations << " found=" << anchor.found
+                          << " creations=" << anchor.creations << " checks=" << anchor.checks
+                          << " found=" << anchor.found
                           << " missing=" << anchor.missing << " rows=" << anchor.rows
                           << " rows_seen=" << anchor.rowsSeen << '\n';
                 std::cout.flush();

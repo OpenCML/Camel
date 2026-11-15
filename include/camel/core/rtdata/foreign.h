@@ -176,16 +176,43 @@ bool giveBackCountNow(Object *value) noexcept;
 // are not expected to line up one to one. What must hold is `missing == 0`: every creation is
 // explained. The third reading is the other direction -- a row that no creation ever exercised,
 // which would be a producing value the table promises and the program never makes.
+//
+// The two sides are measured independently on purpose. `checks` is what the hook asked about, and
+// `creations` is what the allocator made; a hook that quietly stopped being called, or that a back
+// end never reached, reads as `checks < creations` instead of agreeing with itself.
 struct CountedCreationAnchor {
+    /// The boxes that were made, counted by the allocator that made them (`createdCountedBlocks`),
+    /// and not by the hook that asks about them: the anchor is worth something only while its two
+    /// sides are measured independently, so this number is read from the allocator every time the
+    /// anchor is reported (`countedCreationAnchor`, `countedBlocksMade`).
     uint64_t creations = 0;
-    uint64_t found     = 0;
-    uint64_t missing   = 0;
+    /// The boxes the anchor asked about: one question per box made, asked by the executor at the
+    /// site that made it. `checks < creations` is a site the hook never reached, and
+    /// `checks > creations` is one it reached twice.
+    uint64_t checks   = 0;
+    uint64_t found    = 0;
+    uint64_t missing  = 0;
     /// How many of the plan's producing rows were exercised at least once, summed over the graphs
     /// that ran, and how many rows the plans had. `unseen` is the second minus the first.
     uint64_t rowsSeen = 0;
     uint64_t rows     = 0;
 };
-void recordCountedCreation(bool namedByThePlan) noexcept;
+/// The answer for `boxes` boxes that one node execution made, reported once per creation: whether
+/// the plan names the node that is running as one that produces a value. Reports only -- the caller
+/// has already run the node, and nothing here can refuse, undo or reorder anything.
+void recordCountedCreation(bool namedByThePlan, uint64_t boxes = 1) noexcept;
+/// The boxes a count reclaims that exist so far. The creation side of the anchor: an executor site
+/// reads it before and after the operator it runs and hands the difference to the anchor.
+uint64_t countedBlocksMade() noexcept;
+/// The same for the boxes this thread made. What an executor site brackets an operator call with
+/// on a scheduler that runs nodes on several threads, where the program-wide difference would also
+/// hold a neighbour's box and read a node as having made more than it did.
+uint64_t countedBlocksMadeOnThisThread() noexcept;
+/// How many boxes the anchor has already been told about on this thread. A site subtracts the
+/// growth of this from the growth of the count above: an operator that runs a graph (map, foreach,
+/// a loop body) is bracketed too, and its callee's boxes are reported by the callee's own sites,
+/// which are inside that bracket.
+uint64_t countedCreationsReportedOnThisThread() noexcept;
 /// The plan's rows: one call per graph that a run executes, with its count of producing positions.
 void recordPlanRows(uint64_t rows, uint64_t rowsSeen) noexcept;
 CountedCreationAnchor countedCreationAnchor() noexcept;

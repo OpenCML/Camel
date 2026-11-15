@@ -5,6 +5,8 @@
 
 #include "camel/core/mm/deferred.h"
 
+#include "camel/core/mm.h"
+
 #include <algorithm>
 #include <atomic>
 #include <mutex>
@@ -60,6 +62,17 @@ uint64_t loadCounter(const std::atomic<uint64_t> &value) {
 /// the descriptor to carry a flag into code that does not know the reference type.
 std::string_view countedKind() { return "state.ref"; }
 
+/// The boxes that a count reclaims which this thread made. An executor reads the program-wide
+/// counter before and after the operator it runs to learn how many boxes that node execution made;
+/// on a scheduler that runs nodes on several threads (std::prl) the program-wide difference around
+/// one call also holds a neighbour's box, so the site brackets with this one instead. Maintained
+/// only while --gc-check asked for the counted blocks, which is the only time anything reads it.
+thread_local uint64_t countedBlocksOnThisThread = 0;
+
+/// How many boxes the anchor was told about on this thread (see
+/// countedCreationsReportedOnThisThread).
+thread_local uint64_t reportedCreationsOnThisThread = 0;
+
 // The collector's deferred-release queue (mm/deferred.h) calls this after the collection.
 void releaseControlBlockAfterCollection(void *context) noexcept {
     static_cast<ForeignResourceControlBlock *>(context)->releaseFromWrapperFinalizer();
@@ -74,6 +87,11 @@ ForeignResourceControlBlock::ForeignResourceControlBlock(
     counters().createdControlBlocks.fetch_add(1, std::memory_order_acq_rel);
     if (descriptor_.kind == countedKind()) {
         counters().createdCountedBlocks.fetch_add(1, std::memory_order_acq_rel);
+        // The per-thread half of the same count (countedBlocksMadeOnThisThread): maintained only
+        // while --gc-check asked for the counted blocks, because only the anchor reads it.
+        if (camel::core::mm::allocatorChecks().printForeignResources) {
+            ++countedBlocksOnThisThread;
+        }
     }
     counters().liveControlBlocks.fetch_add(1, std::memory_order_acq_rel);
     auto &live = liveControlBlocks();
@@ -258,32 +276,73 @@ bool giveBackCountNow(Object *value) noexcept {
 
 namespace {
 
-CountedCreationAnchor &anchorCounters() {
-    static CountedCreationAnchor value;
+// The anchor's own counters. Atomic: a scheduler that runs nodes on several threads asks from all
+// of them, and the anchor is read once, when the run ends.
+struct AnchorCounters {
+    std::atomic<uint64_t> checks{0};
+    std::atomic<uint64_t> found{0};
+    std::atomic<uint64_t> missing{0};
+    std::atomic<uint64_t> rows{0};
+    std::atomic<uint64_t> rowsSeen{0};
+};
+
+AnchorCounters &anchorCounters() {
+    static AnchorCounters value;
     return value;
 }
 
 } // namespace
 
-void recordCountedCreation(bool namedByThePlan) noexcept {
-    CountedCreationAnchor &anchor = anchorCounters();
-    anchor.creations += 1;
+void recordCountedCreation(bool namedByThePlan, uint64_t boxes) noexcept {
+    if (boxes == 0) {
+        return;
+    }
+    AnchorCounters &anchor = anchorCounters();
+    reportedCreationsOnThisThread += boxes;
+    anchor.checks.fetch_add(boxes, std::memory_order_relaxed);
     if (namedByThePlan) {
-        anchor.found += 1;
+        anchor.found.fetch_add(boxes, std::memory_order_relaxed);
     } else {
-        anchor.missing += 1;
+        anchor.missing.fetch_add(boxes, std::memory_order_relaxed);
     }
 }
 
+uint64_t countedBlocksMade() noexcept { return loadCounter(counters().createdCountedBlocks); }
+
+uint64_t countedBlocksMadeOnThisThread() noexcept { return countedBlocksOnThisThread; }
+
+uint64_t countedCreationsReportedOnThisThread() noexcept { return reportedCreationsOnThisThread; }
+
 void recordPlanRows(uint64_t rows, uint64_t rowsSeen) noexcept {
-    CountedCreationAnchor &anchor = anchorCounters();
-    anchor.rows += rows;
-    anchor.rowsSeen += rowsSeen;
+    AnchorCounters &anchor = anchorCounters();
+    anchor.rows.fetch_add(rows, std::memory_order_relaxed);
+    anchor.rowsSeen.fetch_add(rowsSeen, std::memory_order_relaxed);
 }
 
-CountedCreationAnchor countedCreationAnchor() noexcept { return anchorCounters(); }
+CountedCreationAnchor countedCreationAnchor() noexcept {
+    const AnchorCounters &anchor = anchorCounters();
+    CountedCreationAnchor value;
+    // The creation side is read from the allocator, not accumulated here: what was made is the
+    // number the hook is measured against, so it may not come from the hook (see foreign.h).
+    value.creations = countedBlocksMade();
+    value.checks    = anchor.checks.load(std::memory_order_relaxed);
+    value.found     = anchor.found.load(std::memory_order_relaxed);
+    value.missing   = anchor.missing.load(std::memory_order_relaxed);
+    value.rows      = anchor.rows.load(std::memory_order_relaxed);
+    value.rowsSeen  = anchor.rowsSeen.load(std::memory_order_relaxed);
+    return value;
+}
 
-void resetCountedCreationAnchorForTests() noexcept { anchorCounters() = CountedCreationAnchor{}; }
+void resetCountedCreationAnchorForTests() noexcept {
+    AnchorCounters &anchor = anchorCounters();
+    anchor.checks.store(0, std::memory_order_relaxed);
+    anchor.found.store(0, std::memory_order_relaxed);
+    anchor.missing.store(0, std::memory_order_relaxed);
+    anchor.rows.store(0, std::memory_order_relaxed);
+    anchor.rowsSeen.store(0, std::memory_order_relaxed);
+    countedBlocksOnThisThread = 0;
+    reportedCreationsOnThisThread = 0;
+}
 
 void *ForeignResourceObject::resource() {
     if (!control_) {
