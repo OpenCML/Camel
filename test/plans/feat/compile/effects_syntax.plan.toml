@@ -166,12 +166,12 @@ expect_stdout_exact = "4\n8\n"
 
 [[tests]]
 name = "effect.through_parameter"
-desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add<t>` writes the cell it bound, so a call through the parameter is an effectful call. Outside a sync block a result nothing depends on does not run it and is reported (EffectNotExecuted, the same warning the direct call of the value gets); inside one it runs and the write lands. The reads after the calls show both."
+desc = "The effect of a call through a function-typed parameter is the resource set of the value it is instantiated with: `add` writes the module's `total`, so a call through the parameter is an effectful call. Outside a sync block a result nothing depends on does not run it and is reported (EffectNotExecuted, the same warning the direct call of the value gets); inside one it runs and the write lands. The reads after the calls show both. Classified as borrowing the retired shape: the state moved from a `var` context parameter, which a value cannot assign, to a module `var`, and the four numbers are unchanged."
 kind = "behavior"
 case = "../../../cases/effects/effect_through_parameter.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:20:", "0 0 1 2"]
+expect_output_contains = ["SemanticDiag::EffectNotExecuted", "effect_through_parameter.cml:28:", "0 0 1 2"]
 
 [[tests]]
 name = "effect.parameter_promises_pure"
@@ -234,14 +234,14 @@ expect_output_contains = ["err_inferred_not_pure.cml:18:", "uses var stdout", "(
 
 [[tests]]
 name = "err.pure_parameter_write"
-desc = "A parameter written `pure` takes only a value that promises the empty set: `add<t>` writes the cell it bound and its type says so, so the call is refused where the two meet. The bare type the value was known by is `(x: int) => int`, and the signature the parameter asked for is the one the error names."
+desc = "A parameter written `pure` takes only a value that promises the empty set: `add` writes the module's `total` and its type says so, so the call is refused where the two meet. The type the value is known by is where the argument meets the parameter, and the signature the parameter asked for is the one the error names. Classified as borrowing the retired shape: the state is a module `var` now instead of a `var` context parameter, because a value that carries a cell cannot assign it (0x03000213); the refusal and the signature it names are unchanged."
 kind = "negative"
 case = "../../../cases/effects/err_pure_parameter_write.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
 expect_diagnostic_code = "0x0300000F"
-expect_output_contains = ["err_pure_parameter_write.cml:20:", "usePure: (f: (x: int) => int pure) => int pure"]
+expect_output_contains = ["err_pure_parameter_write.cml:25:", "usePure: (f: (x: int) => int pure) => int pure"]
 
 [[tests]]
 name = "err.promise_through_parameter"
@@ -422,14 +422,14 @@ expect_output_contains = ["err_mutual_recursive_pure.cml:5:", "pure", "stdout"]
 
 [[tests]]
 name = "err.closure_capture_pure"
-desc = "A function declared inside another one writes a variable of the function around it. Which capture that is cannot be read from its own body; the use is read as touching any variable, not skipped, so the `pure` it wrote is refused and the report says what could not be determined."
+desc = "A function declared inside another one writes state the module owns, and the `pure` it wrote is refused at its clause. Classified as borrowing the retired shape: `bump` used to assign a `var` of the function that declares it, which `ClosureAssignsCapturedName` (0x03000213) now refuses before this rule is reached, so the state moved to a module `var`. The declaration inside a body and the refusal of the clause are what the case is about and both are unchanged; what it loses is the \"the capture cannot be placed\" reading, which `err.wide_parameters` and `err.many_parameters_pure` pin through a parameter index instead."
 kind = "negative"
 case = "../../../cases/effects/err_closure_capture_pure.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_closure_capture_pure.cml:8:", "pure"]
+expect_output_contains = ["err_closure_capture_pure.cml:16:", "pure"]
 
 [[tests]]
 name = "err.many_parameters_pure"
@@ -455,14 +455,19 @@ expect_stdout_contains = ["120 true true"]
 #
 # A `pure` function promises none of its caller's resources, and a variable the function itself
 # makes is not one of them: the cell dies with the call and the caller cannot read it, so reads and
-# writes of it -- including through a closure that captures and writes it -- are not this function's
-# effects (design principles 3.3, effect masking). A closure that leaves the call is the exception:
-# what it captured then lives longer than the call, so writing it is an effect and the promise
-# breaks where it is written.
+# writes of it are not this function's effects (design principles 3.3, effect masking). A closure
+# over such a variable is not an exception, because a closure captures a VALUE: it holds what the
+# name had when it was made, and nothing it does reaches a resource (design principles 3.5, the
+# author's ruling of 2026-11-16).
+#
+# What a closure may no longer do is write that name: `ClosureAssignsCapturedName` (0x03000213)
+# refuses the assignment, so the two cases below write the name where it lives and let the closure
+# read it. `err.capture_escapes` was written the other way round (the escape made the capture a
+# resource); the escape is not a fault any more and the program is refused at the write.
 
 [[tests]]
 name = "ok.capture_local_var"
-desc = "A closure captures a `var` of the function that made it and writes it in a loop; the function writes nothing its caller can see, so the program compiles and runs, and the answer is the sum the closure accumulated."
+desc = "A function writes a `var` of its own frame and a closure reads it; the function writes nothing its caller can see, so the program compiles and runs and the answer is the sum the name holds. The closure only reads it: an assignment to a captured name is `ClosureAssignsCapturedName` now (design principles 3.5, 197), which is why the write is written where the name lives."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var.cml"
 args = ["${case}"]
@@ -471,7 +476,7 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "ok.capture_local_var_as_pure_value"
-desc = "The same function measured from its type: a function that writes only its own variables has the empty resource set, so the value it stands for fits a parameter written `pure`. This used to be refused (UsesPromiseViolated), because a capture the walk could not place was read as touching any variable."
+desc = "The same function measured from its type: a function that writes only its own variables has the empty resource set, so the value it stands for fits a parameter written `pure`. A closure over one of those variables does not change the measurement -- it holds a value, not a place (design principles 3.5, the ruling of 2026-11-16) -- and the shape was migrated to a closure that reads, because one that writes is now refused."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var_as_value.cml"
 args = ["${case}"]
@@ -480,27 +485,31 @@ expect_stdout_exact = "3\n"
 
 [[tests]]
 name = "err.capture_escapes"
-desc = "The closure escapes the call that made it, so the variable it captured outlives the call and writing it is a resource of the function that handed it out: `pure` on that function is refused where it is written."
+desc = "The program that used to pin the other side of effect masking: the closure leaves the call, so the cell it captured outlived the call and writing it was a resource of the function that handed it out, which broke the `pure` `make` promises. That reading went with rule two (design principles 3.5, the author's ruling of 2026-11-16): leaving with a value is not a resource, and the program is refused at the assignment instead -- `ClosureAssignsCapturedName` (0x03000213). Classified as testing the withdrawn semantics, so the expectation was changed and not the carrier: the `pure` half of this case has no legal program left to stand on."
 kind = "negative"
 case = "../../../cases/effects/err_capture_escapes.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
-expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_capture_escapes.cml:"]
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+expect_output_contains = ["err_capture_escapes.cml:", "is assigned inside a closure", "return the new value", "carried state", "a `Ref`"]
 
-# ---- A callback that writes a captured variable ----
+# ---- A callback that writes state its caller can read ----
 #
 # A parameter of function type that writes no resource clause is resource-generic: what a call
 # through it reaches is the set the value handed to it reaches at this instantiation (design
-# principles 3.3). So a callback writing a `var` it captured is a write of that variable at the
-# call, as a direct call writes the captures of its callee (3.5). Both shapes are held below: the
-# accepted one, where the read written before the call keeps the value from before it, and the one
-# that is reported, where the call is not in a sync block.
+# principles 3.3). So the write a callback makes is a write at the call, as a direct call writes the
+# captures of its callee. Both shapes are held below: the accepted one, where the read written
+# before the call keeps the value from before it, and the one that is reported, where the call is
+# not in a sync block.
+#
+# What a callback may write is a handle or a module `var`: a closure captures a value, so it cannot
+# assign a `var` of the call that made it (design principles 3.5, 197, the ruling of 2026-11-16),
+# which is the shape these cases were written with.
 
 [[tests]]
 name = "callback.write_through_parameter"
-desc = "A callback that writes a `var` it captured is passed to a parameter of function type and the call that runs it is a statement of a sync block: a read written before the call keeps the value from before it and a read written after it takes the value the call made, for a local variable and for a variable of the module. The same output on all four back ends."
+desc = "A callback that writes state its caller can read is passed to a parameter of function type, and the call that runs it is a statement of a sync block: a read written before the call keeps the value from before it and a read written after it takes the value the call made, for a local `Ref` and for a variable of the module. Borrowing the retired shape on purpose: the local was a `var` the closure captured, which the closure can no longer assign, so it is a handle -- a handle is a value, and writing what it points at is legal. The same output on all four back ends."
 kind = "behavior"
 case = "../../../cases/effects/callback_write_through_parameter.cml"
 args = ["${case}", "${backend}"]
@@ -686,7 +695,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "callback.writer_table_through_callee"
-desc = "A value written by a call through a function value, read after the call: the call is the write, so the read written before it keeps 0 and the read written after it takes 41. Same output on the node VM and the bytecode VM."
+desc = "A value written by a call through a function value, read after the call: the call is the write, so the read written before it keeps 0 and the read written after it takes 41. Same output on the node VM and the bytecode VM. The value is a `Ref` and not a `var` of `main`, because a closure captures a value and cannot assign a captured name (design principles 3.5, 197; 0x03000213) -- borrowed carrier, same reading."
 kind = "behavior"
 case = "../../../cases/effects/writer_table_through_callee.cml"
 args = ["${case}", "${backend}"]

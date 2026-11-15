@@ -1,11 +1,22 @@
-# The state rule: a closure may not carry a `var` capture out of the evaluation that declared it
-# (design principles 3.5, rule two; the author's ruling of 2026-11-14, origin/fsh-dev c8af40747). The rule is the author's, the wording of the reports is
-# this lane's, and nothing new is written in the language: what a closure may do with a cell is the
-# effect analysis the builder already has (src/compile/gir/builder_state.cpp).
+# What these five cases are now, and what they were.
 #
-# A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent
-# to the call that received it. A closure may capture one by reference exactly while it stays inside
-# that evaluation. The rule names the three ways a closure leaves, and this plan has a case for each:
+# They were written for the state rule of 2026-11-14 (rule two): a `var` local lives in the call that
+# declares it, so a closure may capture one by reference only while it stays inside that call, and a
+# closure that leaves -- as a result, into a place the call does not own, or through a call that keeps
+# it -- is `SemanticDiag::ClosureCaptureEscapes` (0x03000210). The author withdrew rule two on
+# 2026-11-16: a closure captures a VALUE (design principles 3.5, "a closure captures a value", which
+# replaces rule two), so carrying a value out of the scope that made it is not a fault of any kind, and
+# the diagnostic is deleted from the compiler, the registry and the generated document. A closure that
+# captures and only reads a `var` now leaves by every one of the five routes below without a report.
+#
+# What is left in these programs is the write: each one has `acc = acc + k` inside the closure, and a
+# closure cannot assign a name it captured (design principles 3.5, 197) -- the value has nowhere to be
+# written. So each is still a compile error, and the rule it is refused by is now
+# `SemanticDiag::ClosureAssignsCapturedName` (0x03000213), the one the author says the five should be
+# read as. The five cases keep their programs and their names, because the program is what names the
+# route; what changed is which rule refuses it.
+#
+# The five routes, and the case for each:
 #
 #   as a result              `make` returns the closure that reads its own `acc`
 #   into a place it does not own
@@ -14,33 +25,20 @@
 #                            `keep` returns it in a pair, and `make` hands `keep` what it was given
 #   one level down           `outer` captures `inner`, which holds the cell
 #
-# A call that merely takes a function is not a way out: `map` and `foreach` take a closure and drop it
-# when they return, and a callee whose signature says nothing promises nothing, so neither is refused.
-# What is refused is a cell that outlives the call that declared it, which is what these cases share.
+# A call that merely takes a function still is not a route and never was: `map` and `foreach` take a
+# closure and drop it when they return. That half of the old plan stands; what does not stand is that
+# leaving at all is a fault.
 #
-# Each is a compile error whose text says what the rule is and gives the two rewrites the author
-# named -- capture the value the cell holds (`let x = acc; (k) => x + k`), or pass the state as a
-# value, in as a parameter and back as the result. The capture is never quietly made by value, so
-# neither is that offered: it would answer a different question than the one the program asks.
+# The bytes of what is refused are pinned: the diagnostic is ClosureAssignsCapturedName, the program is
+# refused before it runs, so the cases print nothing.
 #
-# The bytes of what is refused are pinned too: the diagnostic is ClosureCaptureEscapes, and the
-# program is refused before it runs, so the cases print nothing.
-#
-# The module top level is a scope under the same rule, and that half is NOT in this lane: the top
-# level is evaluated once, before any function runs, and every function it declares is handed out, so
-# a top-level `var` is captured by a function that always carries the cell out -- it has no other use
-# -- and a top-level binding may not write an external resource either (importing a module runs no
-# code). Both were written and measured, and both are refused on the whole tree today for a reason
-# that is not this rule: 246 plan entries go red, and the documentation itself stops compiling
-# (docs/language/05_modules.md:234, docs/language/07_statements.md:38). The refusal is a five-line hunk at two known
-# sites and two ready diagnostics; it needs the 35 test cases and the two doc examples migrated with
-# it, which is a lane of its own. It is filed as a question page,
-# docs/handover/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md, and until then a module
-# `var` works as it did -- the one way out this plan does not refuse.
+# The module top level is a scope under the same rules, and that half is still NOT in this lane: a
+# module `var` works as it did, and its own rule (design principles 3.5, "a module's top level holds
+# declarations only: a top-level `var` has no use") is a lane of its own. It is filed as
+# docs/handover/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md.
 #
 # What is NOT covered here either, by design: `Ref<T>` (the sanctioned way to hand long-lived shared
-# state out) and the hint that tells a writer an in-place update turned into a copy. Both belong to
-# other lanes of the same ruling; this plan pins this rule only.
+# state out). That belongs to another lane of the same ruling.
 
 id = "compile.state_escape"
 order = 1010
@@ -67,91 +65,96 @@ assert(out.trim() === '6', 'the closure reads and writes the cell inside the cal
 
 [[tests]]
 name = "compile.state_escape.escape_return"
-desc = "Route one, as a result: `make` returns the closure that reads `acc`, a `var` of its own call, so the caller reads a cell whose owner has returned. Compile error, with the rule's words and the two rewrites."
+desc = "Route one, as a result: `make` returns the closure that reads `acc`, a `var` of its own call, and the closure assigns it. Being carried out of the call is no longer a fault of its own (design principles 3.5, the ruling of 2026-11-16); the write is. Refused by `ClosureAssignsCapturedName` (0x03000213), with the three ways out the design names."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_return.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
-assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
-assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the report states the rule: ' + text)
+assert(text.includes('return the new value'), 'the first way out is named: ' + text)
+assert(text.includes('carried state'), 'the second way out is named: ' + text)
+assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 }
 """
 
 [[tests]]
 name = "compile.state_escape.escape_field"
-desc = "Route two, a field: `fill` stores the closure that reads its own `acc` into `b.f`, a field of the caller's variable, which outlives the call. Compile error."
+desc = "Route two, a field: `fill` stores the closure that reads its own `acc` into `b.f`, a field of the caller's variable, which outlives the call, and the closure assigns `acc`. The store is not a refusal (3.5, the ruling of 2026-11-16); the write is, and it is `ClosureAssignsCapturedName` (0x03000213)."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_field.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
-assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
-assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the report states the rule: ' + text)
+assert(text.includes('return the new value'), 'the first way out is named: ' + text)
+assert(text.includes('carried state'), 'the second way out is named: ' + text)
+assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 }
 """
 
 [[tests]]
 name = "compile.state_escape.escape_array"
-desc = "Route two, an element: `fill` stores the closure into `out[0]`, an element of the caller's array, which outlives the call. Compile error."
+desc = "Route two, an element: `fill` stores the closure into `out[0]`, an element of the caller's array, which outlives the call, and the closure assigns `acc`. Same reading as the field: the store is legal, the write is `ClosureAssignsCapturedName` (0x03000213)."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_array.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
-assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
-assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the report states the rule: ' + text)
+assert(text.includes('return the new value'), 'the first way out is named: ' + text)
+assert(text.includes('carried state'), 'the second way out is named: ' + text)
+assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 }
 """
 
 [[tests]]
 name = "compile.state_escape.escape_stored_by_callee"
-desc = "Route three, a call that keeps it: `keep` returns the function it is given in a pair, so `make` handing it a closure over its own `acc` puts the cell past the call. Compile error."
+desc = "Route three, a call that keeps it: `keep` returns the function it is given in a pair, so `make` hands it a closure over its own `acc`, and the closure assigns `acc`. Handing it to a function that keeps it is legal now; the write is `ClosureAssignsCapturedName` (0x03000213)."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_stored_by_callee.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
-assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
-assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the report states the rule: ' + text)
+assert(text.includes('return the new value'), 'the first way out is named: ' + text)
+assert(text.includes('carried state'), 'the second way out is named: ' + text)
+assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 }
 """
 
 [[tests]]
 name = "compile.state_escape.escape_into_closure"
-desc = "One level down: `outer` captures `inner`, which holds a cell of `make`'s call, and `make` returns `outer` -- the value's type cannot show the capture, and the rule follows the value into the closure it is. Compile error."
+desc = "One level down: `outer` captures `inner`, which holds a cell of `make`'s call, and `make` returns `outer`. The capture travels into a value whose type cannot show it, and that is still fine (3.5, the ruling of 2026-11-16); the write `inner` makes is not, and it is `ClosureAssignsCapturedName` (0x03000213)."
 kind = "negative"
 case = "../../../cases/compile/state_escape/err_escape_into_closure.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the report states the rule: ' + text)
-assert(text.includes('capture the value the cell holds'), 'the first way out is named: ' + text)
-assert(text.includes('pass the state as a value'), 'the second way out is named: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the report states the rule: ' + text)
+assert(text.includes('return the new value'), 'the first way out is named: ' + text)
+assert(text.includes('carried state'), 'the second way out is named: ' + text)
+assert(text.includes('a `Ref`'), 'the third way out is named: ' + text)
 }
 """
 

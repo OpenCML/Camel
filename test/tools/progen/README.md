@@ -144,9 +144,14 @@ checks it on every generated and every reduced program:
    A pipeline may decline: a located diagnostic of a pass before anything ran is the outcome
    `REFUSED` and is not a finding.
 8. **A closure does not carry a `var` out of the call that declares it** (3.5, rule two; the
-   front end's `SemanticDiag::ClosureCaptureEscapes`). `model.escape_violations` checks it on
-   every generated and reduced program, over the two ways such a closure can leave: as the result
-   of the call whose cell it holds, and handed to a callee whose result can carry a function. The
+   front end's `SemanticDiag::ClosureCaptureEscapes`). The author withdrew that rule on
+   2026-11-16: a closure captures a value, so leaving the call with it is legal, and the front end
+   refuses the write instead (`SemanticDiag::ClosureAssignsCapturedName`, design principles 3.5,
+   197). `model.escape_violations` stays as it is and is now a filter of the shape rather than a
+   check of a rule: it still keeps every generated and reduced program away from the two ways such
+   a closure used to leave -- as the result of the call whose cell it holds, and handed to a callee
+   whose result can carry a function -- which is why the corpora carry no program of those shapes
+   even though they compile. The
    state it used to carry out is written two other ways: the counter is declared and called
    inside the call that owns the cell, so the readings leave as values, and a chain of calls
    passes the state in as a value and takes the next value back.

@@ -516,6 +516,7 @@ The everyday advice is simple: write computation as `let`s and pure functions; p
 [`examples/07_closures.cml`](examples/07_closures.cml):
 
 ```cml
+import state
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -538,9 +539,9 @@ func main(): int sync {
     let ops = [inc, dbl]                     // functions in an array
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
-    var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<(x) => sync { total = total + x }>
-    println(total)
+    let total = state::ref(0)                // shared state: a handle a closure may capture
+    [1, 2, 3]->foreach<(x) => sync { state::set(total, state::get(total) + x) }>
+    println(state::get(total))
     return 0
 }
 ```
@@ -553,7 +554,7 @@ func main(): int sync {
 ```
 
 - Functions are values: they can be bound to a name, passed as arguments, returned, and put in an array. A function type is written `(x: int) => int`.
-- A lambda captures variables from the enclosing scope, and the capture is by reference. The last lambda writes to the captured `total`, so it has the function modifier `sync` in front of it (declaring that it has side effects), and its body is also a sync block (`=> sync { ... }`).
+- A lambda captures variables from the enclosing scope, and it captures the **value**: it holds what the name had when the lambda was made, not the name (`design principles` 3.5). So a lambda cannot assign a captured name (`total = total + x` inside one is the compile error `SemanticDiag::ClosureAssignsCapturedName`), and shared mutable state is a `Ref` instead: the last lambda writes the box the handle `total` points at, so it has the function modifier `sync` in front of it (declaring that it has side effects), and its body is also a sync block (`=> sync { ... }`).
 - Functions with the same name and different parameter types are overloads; a name that stands for a set of overloads can be used as a value only where the expected function type selects one of them (passed to a function whose parameter type is written out); elsewhere wrap it in a lambda. A library operator with one signature (such as `trim`) is a value directly: `xs->map<trim>`.
 
 ## 8. Generics
