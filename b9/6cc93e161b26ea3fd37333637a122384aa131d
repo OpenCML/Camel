@@ -1,0 +1,23 @@
+`lane-transclang` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`b96cc93e161b26ea3fd37333637a122384aa131d`，`--no-ff` 合入 `lane-transclang`（`1a1a752ff`
++ 同步合并 `586fc036e`）。**无冲突**；净改动 1 文件 `+29/-7`。推：`e5c619c5c..b96cc93e1`，
+`ls-remote` = b96cc93e161b26ea3fd37333637a122384aa131d。
+
+**范围核过（只动一处）**：`git diff --name-only origin/develop...lane-transclang` = **1** 个文件
+（`docs/handover/reports/2026-11-15-prl-counted-boxes-return.cn.md`）；diff 的 `@@` 只有 §9(一) 那一段，
+**§9(二) 未动**；无断言、无 `known_fail`、无用例、无计划文件。
+
+闸门（合后 `develop`，`-Jobs 8`，主机 88）：
+    `test/plans/feat/docs_links.plan.toml` → `[SUMMARY] total: 21, pass: 21, fail: 0`
+        `[PASS] docs.snippets_compile 3.52 s`
+    `--changed`（`$env:CAMEL_TEST_BASE='e5c619c5c'`）→ `[SUMMARY] total: 33, pass: 33, fail: 0`
+    `check-doc-links --citations` → exit 0
+    [provenance] tip b96cc93e1 | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+无 `killed by a signal`、无 `timed out`。
+
+它收回的那条红：`trans.cpp` 的 `agree_with_fvm` 原报「`mean_axis_elements.cml` 的 C++ 程序编不过、
+174/175 same」——**不在树里**。三条证据（生成端两提交逐字相同、`9031c009c..df057ee8a` 十四笔不碰
+`src/`/`include/`/`modules/`、主机上两提交都 `PASS agree_with_fvm` 且 175/175 same）指向**旧二进制读新树**；
+原读数来自本机 Windows 的 `G:\DevEnvs\LLVM\bin\clang++.EXE`。并纠正了「174 of 175」的口径：那 `1` 是
+**链接数**（`compile/diag_render/runtime_regex.cml` 的 EXCEPTION），不是差异数。
