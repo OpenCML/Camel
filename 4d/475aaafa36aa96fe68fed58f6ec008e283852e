@@ -1,0 +1,25 @@
+`origin/fsh-dev` 第二次合并的闸门读数（正文引用了这条 note）。
+
+合并：`4d475aaafa36aa96fe68fed58f6ec008e283852e`，`--no-ff` 合入 `origin/fsh-dev`（`c379f9dc3`，
+6 笔领先 / 1 笔落后）。**无冲突**：`git merge-tree --write-tree origin/develop origin/fsh-dev`
+返回单棵树、零冲突。推：`96a27e435..4d475aaaf`，`unpushed=0`。
+
+内容：纯文档五件 —— `docs/design-principles.cn.md` / `.en.md`（各 ±64）、
+`docs/handover/reviews/questions-2026-10-29.md`（+26）、`docs/design/effects/analysis.cn.md`（+2）、
+`docs/design/state/README.cn.md`（+2）。合计 `+92/-66`，无 `src/`、无 `test/`、无 plan。
+
+`--changed`（`$env:CAMEL_TEST_BASE='96a27e435'`，`--jobs 4`）：
+    [SUMMARY] total: 33, pass: 33, fail: 0        RUN_EXIT=0
+    选到 `smoke.core` / `feat.tools.portability` / `feat.docs_links`
+静态检查：`node scripts/check-doc-links.mjs --citations` → `exit 0`
+无 `killed by a signal`、无 `timed out`。
+
+两处易误读，都已核实并写进合并正文：
+1. `git diff origin/develop..origin/fsh-dev -- agents/branching.md` 看似删掉了那条
+   「Run git in a registered worktree…」，**实际不是删除**：fsh-dev 分叉在 `2027d8092`，从未碰过这个文件
+   （净 diff 里没有 `agents/`）。合并后实测：`Run git in a registered worktree` 命中 **1**，
+   「worktree belongs to the lane」命中 **1** —— 两条都在。
+2. 裁定引用的 `Camel-Archive/ECOOP2027/handoff/case-study-request.md` **本机不存在**
+   （`D:\Projects` 下无 `Camel-Archive`）；路径按作者原文保留，内容以裁定正文为准，未改写成别的路径。
+
+`git ls-remote origin refs/heads/develop` = 4d475aaafa36aa96fe68fed58f6ec008e283852e。
