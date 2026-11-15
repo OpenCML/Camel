@@ -522,7 +522,7 @@ ac8be7c61fc900b2 ok stdlib/ckpt.cml
 fcd99c5b56838b14 ok stdlib/opt.cml
 2a0283eedb1877a0 ok stdlib/optim.cml
 9b35942b550de4e6 ok stdlib/para.cml
-1177c501e7e0407b ok stdlib/perf.cml
+8ab5db69d015f0f8 ok stdlib/perf.cml
 9e85f97db6af3694 ok stdlib/prelude.cml
 afdf7917f9dabed7 ok stdlib/process.cml
 aa72db8f6e84d419 ok stdlib/pyplot.cml
@@ -1571,7 +1571,7 @@ df37832c609db5ad ok test/cases/compile/state_escape/err_escape_field.cml
 34569a4d8fbef260 ok test/cases/compile/state_escape/err_escape_into_closure.cml
 dcf7ff986fe30b0b ok test/cases/compile/state_escape/err_escape_return.cml
 69d2aba6548ad19a ok test/cases/compile/state_escape/err_escape_stored_by_callee.cml
-3ace87028cc3d06e ok test/cases/compile/state_escape/ok_capture_within.cml
+00184aa542adefc8 ok test/cases/compile/state_escape/ok_capture_within.cml
 794e40cb47b22c73 ok test/cases/compile/state_escape/ok_top_level_value.cml
 fa56acf80774ec26 ok test/cases/compile/static_expansion/comprehension_field_order.cml
 a8d417a3bae14fb1 ok test/cases/compile/static_expansion/comprehension_value_type.cml
@@ -2163,7 +2163,7 @@ ac4a83ec03d0301e ok test/cases/consistency/attempt/bad_call_argument.cml
 ac88339d5fd9967c ok test/cases/consistency/attempt/compiled.cml
 5e55fbbb069df00d ok test/cases/consistency/attempt/concurrent.cml
 2a4736f0d1fa2e98 ok test/cases/consistency/attempt/depth.cml
-d6bfddf11624d961 ok test/cases/consistency/attempt/effects.cml
+14ebffcb26827320 ok test/cases/consistency/attempt/effects.cml
 df4372312769d5bb ok test/cases/consistency/attempt/fault_in_argument.cml
 40965ec440da328f ok test/cases/consistency/attempt/fault_outside.cml
 79de8f26faeb02d1 ok test/cases/consistency/attempt/forms.cml
@@ -2209,7 +2209,7 @@ f4a6a6e184130e6c ok test/cases/consistency/decorated_overloads_export/use_plain.
 d67ce9d43ef7c9b9 ok test/cases/consistency/entering/arm_cell.cml
 7521f2040acf9ec5 ok test/cases/consistency/entering/arm_cell_void.cml
 c2a6bbfa30152763 ok test/cases/consistency/entering/arms_folded.cml
-12ee4976359d588d ok test/cases/consistency/entering/assignment.cml
+ce5bf481e3a50855 ok test/cases/consistency/entering/assignment.cml
 84228a58a0f28f3a ok test/cases/consistency/entering/empty_array.cml
 4fd452947a789312 ok test/cases/consistency/entering/err_arg_reverse.cml
 5567cd32a25fe728 ok test/cases/consistency/entering/err_arm_cell_unrelated.cml
@@ -2265,7 +2265,7 @@ c72be3ab17af7588 ok test/cases/consistency/faults/fault_after_map_output.cml
 feb01af301ed7b96 ok test/cases/consistency/faults/fault_in_closure.cml
 3658976539a22670 ok test/cases/consistency/faults/fault_in_filter.cml
 0fb38a1c0d3bbdfa ok test/cases/consistency/faults/fault_in_foreach.cml
-59a1c3dfc7de8173 ok test/cases/consistency/faults/fault_in_foreach_closure.cml
+194e90a246a88456 ok test/cases/consistency/faults/fault_in_foreach_closure.cml
 a11a7421d6ef7997 ok test/cases/consistency/faults/fault_in_map.cml
 310dad82564bd248 ok test/cases/consistency/faults/fault_in_nested_map.cml
 329a22082cb598ea ok test/cases/consistency/faults/fault_in_reduce.cml
@@ -2414,7 +2414,7 @@ df24be62df944d9b ok test/cases/consistency/unused_fallible/main_declared.cml
 a1f4c5a5b5efa833 ok test/cases/consistency/unused_fallible/outside_sync.cml
 60c9757c2dc4b42a ok test/cases/consistency/unused_fallible/unused.cml
 0b34ad43d37a9be5 ok test/cases/consistency/unused_fallible/used.cml
-c1be0bc9301a8129 ok test/cases/consistency/values/closure_var.cml
+9b5c471194c342ad ok test/cases/consistency/values/closure_var.cml
 221d0b84c26b091d ok test/cases/consistency/values/content_equality.cml
 5991ad966a8e747f ok test/cases/consistency/values/content_equality_trees.cml
 d56de796713cf084 ok test/cases/consistency/values/counter_closure.cml
@@ -2526,13 +2526,13 @@ a4aa0871c7c78c0f ok test/cases/feat/mm/mem_blocks.cml
 8ff03fbd1a2734a1 ok test/cases/feat/mm/gc/gc_collection_trees.cml
 13030708d817f217 ok test/cases/feat/mm/gc/gc_collections.cml
 2842d4426e5079f7 ok test/cases/feat/mm/gc/gc_fib10.cml
-19390f906a518c31 ok test/cases/feat/mm/gc/gc_heap_workload.cml
+ef202862a7889bd0 ok test/cases/feat/mm/gc/gc_heap_workload.cml
 f64915b2f6865d3d ok test/cases/feat/mm/gc/gc_jit_constants.cml
 f59a11bc9b2fc7e9 ok test/cases/feat/mm/gc/gc_live_large.cml
 9a8d4b4d90f51f3a ok test/cases/feat/mm/gc/gc_live_table.cml
 df69daac325832ab ok test/cases/feat/mm/gc/gc_macro_constants.cml
 02ce5a3524c7b95e ok test/cases/feat/mm/gc/gc_nested_filter.cml
-cb3492f64b50ae99 ok test/cases/feat/mm/gc/gc_nested_foreach.cml
+bd1c71b1698167fc ok test/cases/feat/mm/gc/gc_nested_foreach.cml
 b38b8e7c91460e50 ok test/cases/feat/mm/gc/gc_nested_map.cml
 56a772c08f9296e8 ok test/cases/feat/mm/gc/gc_nested_reduce.cml
 d24c9b69c39c8dac ok test/cases/feat/mm/gc/gc_prl_blocked_worker.cml
@@ -2668,7 +2668,7 @@ a62094d764682bf2 ok test/cases/linear/jit/fib_recursive.cml
 93572e852f246224 ok test/cases/linear/jit/framed_faults.cml
 1a1b42db70dddf0d ok test/cases/linear/jit/framed_loops.cml
 e846e21e6e12da9f ok test/cases/linear/jit/framed_operators.cml
-64f580bcb17ec55f ok test/cases/linear/jit/lambda_points.cml
+cd87e9c0a8189822 ok test/cases/linear/jit/lambda_points.cml
 f14b7c0b0c912429 ok test/cases/linear/jit/list_transform.cml
 5073a2e120f3c1be ok test/cases/linear/jit/list_transform_chain.cml
 3baea5dc8bfdc88a ok test/cases/linear/jit/mutual_tail_check.cml
@@ -2699,7 +2699,7 @@ f594af22cc1d1d78 ok test/cases/linear/nvm/fib2.cml
 d8d553741978c042 ok test/cases/linear/nvm/hello.cml
 0e95331d99e3e266 ok test/cases/linear/nvm/index.cml
 2425295b3423b63d ok test/cases/linear/nvm/inline_unique_subgraph.cml
-701c32e52219f2a2 ok test/cases/linear/nvm/lambda.cml
+19d8d140e7430d24 ok test/cases/linear/nvm/lambda.cml
 427c3d53fa02eed9 ok test/cases/linear/nvm/mapping.cml
 8fe8cf2a8a548be6 ok test/cases/linear/nvm/mutual_tail.cml
 f95bd029a58a7fd1 ok test/cases/linear/nvm/nested_array_type.cml
@@ -3946,7 +3946,7 @@ f3392668e0e9c211 ok test/cases/opt/progen/findings/inline_crash_capturing_lambda
 eb48665c653ea026 ok test/cases/opt/progen/findings/inline_dce_arm_value.cml
 e5d5455ed93e030d ok test/cases/opt/progen/findings/inline_fvm_arm_effect_lost.cml
 7c4c4a0d40df7194 ok test/cases/opt/progen/findings/inline_jit_argument_value.cml
-7e31edd7800cbe6e ok test/cases/opt/progen/findings/inline_jit_arm_value_float.cml
+150ca84e3583b2ea ok test/cases/opt/progen/findings/inline_jit_arm_value_float.cml
 12909808245a1d9d ok test/cases/opt/progen/findings/inline_jit_second_call.cml
 24fc45c0bac52488 ok test/cases/opt/progen/findings/inline_match_value_null.cml
 fcff055ad2237e6f ok test/cases/opt/progen/findings/inline_prl_tail_call_arguments.cml
@@ -4151,7 +4151,7 @@ bd903c977a349a00 ok test/cases/trans/cpp/math_sqrt_domain.cml
 6fecb77f576c15ca ok test/cases/trans/cpp/mean_axis_elements.cml
 f890db06f1098f66 ok test/cases/trans/cpp/mean_axis_rank.cml
 0a7f0a0a62b6da23 ok test/cases/trans/cpp/mean_rank.cml
-5d0c9e7e758c3896 ok test/cases/trans/cpp/named_structs.cml
+88941475229e36ed ok test/cases/trans/cpp/named_structs.cml
 23edbbb99560882c ok test/cases/trans/cpp/narrow_argmax.cml
 1a69536ade0e1939 ok test/cases/trans/cpp/narrow_floats.cml
 09a26a1e1246c189 ok test/cases/trans/cpp/narrow_mean.cml
@@ -4189,7 +4189,7 @@ b302e3aee0e0d7cd ok test/cases/trans/cpp/exec/slice_fault.cml
 808687c77d542885 ok test/cases/trans/cpp/exec/strings.cml
 e852ff9b419a2307 ok test/cases/trans/cpp/exec/tagged.cml
 02975bc62990d2b7 ok test/cases/trans/cpp/exec/tail_calls.cml
-a6e3457209ef768e ok test/cases/trans/cpp/exec/variables.cml
+093852ba01ae0545 ok test/cases/trans/cpp/exec/variables.cml
 5b7af7a1fd78f728 ok test/cases/trans/effect_trace/macro_effect.cml
 b51cbdf6c570d861 ok test/cases/trans/macro/basic.cml
 da24785a3292a46b ok test/cases/trans/macro/branch_chain.cml
