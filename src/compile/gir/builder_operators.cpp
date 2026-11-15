@@ -1961,6 +1961,60 @@ void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
     }
 }
 
+node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
+    // `x = e` where `x` is a `var` the loop around this body carries as a state (visitLoopNode).
+    // The body's `x` is a port of its region, and the value `e` gives is the next state of the
+    // `var`: nothing is stored anywhere, because the cell is not a cell the body can reach -- the
+    // LOOP hands the value on from one round to the next. This is the third of the three places a
+    // write is lowered (design principles 3.5: "a write to an outer `var` in a loop body becomes
+    // the loop's carried state"), and it is why the `var` writing and the `let` writing are one
+    // graph.
+    if (loopStatePorts_.empty() || gct->size() != 3 || gct->at(0) == nullptr ||
+        gct->at(0)->type() != GCT::NodeKind::DREF || gct->at(0)->name() != "__assn__") {
+        return nullptr;
+    }
+    const auto &target = gct->at(1);
+    if (target == nullptr || target->type() != GCT::NodeKind::DREF) {
+        // A path (`v.f = e`, `v[i] = e`) was rewritten into the whole variable's rebinding by
+        // pathAssignmentOf above, or is left to the call as written: either way it is not this.
+        return nullptr;
+    }
+    const auto resolved = nodeAt(moduleLevelName(target->name()));
+    if (!resolved.has_value()) {
+        return nullptr;
+    }
+    const node_handle_t port = resolved.value();
+    if (!loopStatePorts_.contains(port)) {
+        return nullptr; // a `var` of the body itself, or one the loop does not carry
+    }
+    // The value written stands at the state's own place: what the round goes on with has the type
+    // of what it started from, and a value that enters that type implicitly is converted there.
+    Type *stateValueType = valueTypeOf(nodeTypeOf(port));
+    node_handle_t value{};
+    {
+        ExpectedValueScope writeScope(expectedValueType_, stateValueType);
+        value = valueNodeOf(visit(gct->at(2)));
+    }
+    if (value == nullptr) {
+        return nullptr;
+    }
+    if (stateValueType != nullptr) {
+        Type *written = valueTypeOf(nodeTypeOf(value));
+        if (written != nullptr && written != stateValueType &&
+            entersImplicitly(stateValueType, written)) {
+            if (node_handle_t converted = coerceTo(value, stateValueType, gct->at(2));
+                converted != nullptr) {
+                value = converted;
+            }
+        }
+    }
+    // The round's next state of this `var`, and the value a read written after this write in the
+    // same round takes (valueOf). A second write in the round replaces the first: what the round
+    // hands on is the last value it wrote, as a cell would hold.
+    loopStateWrites_[port] = value;
+    return value;
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // A call written in an extent of a signature is run by this build (foldExtentCall).
     struct ExtentCallScope {
@@ -1997,6 +2051,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (node_handle_t rebound = pathAssignmentOf(gct)) {
         LEAVE("LINK");
         return rebound;
+    }
+    // A write to a `var` the loop this body belongs to carries as its own state (visitLoopNode;
+    // design principles 3.5, the third of the three places a write is lowered): `x = e` in the body
+    // is the round's next value of `x`, and there is no cell to store it in -- the cell is the
+    // loop's state, and the LOOP hands the value on. The statement is worth the value `e` gave.
+    if (node_handle_t written = loopStateAssignmentOf(gct)) {
+        if (unusedStatement) {
+            // What this statement is worth is the loop's next state, not a value the position
+            // drops: the unused-pure-value rule (rejectUnusedPureResult) is about a value nobody
+            // wants, and this one the loop wants.
+            discardedValues_.insert(written);
+        }
+        LEAVE("LINK");
+        return written;
     }
     if (unusedStatement) {
         if (node_handle_t rebound = inPlaceRebindingOf(gct)) {

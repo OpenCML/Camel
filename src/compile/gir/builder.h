@@ -1040,6 +1040,18 @@ class Builder {
     /// of its own is a join too, and it is no version of any variable. A later straight-line write
     /// of the same variable replaces it (recordWrite).
     std::unordered_map<node_handle_t, node_handle_t> carriedVersions_;
+    /// The `var`s a loop body wrote, which the loop carries as states of its own (visitLoopNode;
+    /// design principles 3.5: "a write to an outer `var` in a loop body becomes the loop's carried
+    /// state"). While the body is built, the name of such a `var` is a port of the body's region,
+    /// and a write to it is the round's next value, not a store: `loopStatePorts_` says which cell
+    /// a body port stands for, `loopStateWrites_` holds the value the body wrote to the port in
+    /// this round (a read after that write takes it, as it takes a straight-line write's value).
+    std::unordered_map<node_handle_t, node_handle_t> loopStatePorts_;
+    std::unordered_map<node_handle_t, node_handle_t> loopStateWrites_;
+    /// `LINK(DREF __assn__, DREF <name>, value)` where `<name>` is one of those ports: the value
+    /// written is the loop's next state for that `var`, so the statement makes no store and the
+    /// call of the assignment operator is not built at all. Null for everything else.
+    node_handle_t loopStateAssignmentOf(const GCT::node_ptr_t &gct);
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
     // callee's capture table that says which variables it writes, and, per call, the variable
     // each version is of and the access node of each part made so far. Part 0 is the return
@@ -2915,7 +2927,20 @@ class Builder {
     node_handle_t peekVariable(node_handle_t variable);
     // `node` as a value: read when it is a variable, itself otherwise.
     node_handle_t valueOf(node_handle_t node) {
-        return isVariable(node) ? readVariable(node) : node;
+        if (isVariable(node)) {
+            return readVariable(node);
+        }
+        // A state of the loop being built is no variable of this graph: the round's value is the
+        // port itself, or the value the round wrote to it before this read (`x = e` in a loop body,
+        // visitLoopNode). A read written before any write takes the value the round started from,
+        // which is what the port is.
+        if (!loopStateWrites_.empty()) {
+            const auto written = loopStateWrites_.find(node);
+            if (written != loopStateWrites_.end()) {
+                return written->second;
+            }
+        }
+        return node;
     }
     // An operand of a call. A variable named directly stays a variable: whether the callee
     // takes the variable or its value is only known once the callee is resolved.
