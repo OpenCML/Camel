@@ -8,10 +8,11 @@
 # handed, which is how `byref` and the `stream` packer work.
 #
 # The other half of the ruling (a closure may not assign an outer name, and a captured `var` may not be
-# assigned between the making of the closure and its last use) is NOT REPORTED today: see the choice
-# recorded in `docs/handover/questions/q-2026-11-16-can-tee-capture-by-reference.cn.md`, where applying
-# by-value capture everywhere makes `tee`'s five cases fail with `Runtime graph 'side0' breaks its edge
-# invariants`. So the shapes on which that rule would fire keep their cell and produce no diagnostic.
+# assigned between the making of the closure and its last use) is NOT REPORTED today: the author ruled
+# that reporting it before `tee` is migrated to `Ref` would only turn a green ruler into a red one, and
+# that the migration is the next step of the same item rather than a later round. So the shapes on which
+# that rule would fire keep their cell and produce no diagnostic. `tee` itself no longer keeps cells: it
+# holds four `Ref`s (`lane-teeref`), so its five outputs never depended on this choice.
 #
 # The entries are of three kinds, and each says which it is:
 #   - `ok.*` -- legal under the rule as it stands (the regression guards; six of them came from the
