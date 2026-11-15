@@ -3812,3 +3812,36 @@ ECOOP 会话已用这个 pin 写完第 6 节（`Camel-Archive/ECOOP2027/artifact
 4. **`sync` 块里纯调用也上了链**：这个 pin 给块里每条语句都连了控制与同步边。原则 3.4：链只连带效应或可能出故障的语句，纯计算不在链上。注意：张量运算（`reshape`、`@`）按保守分类可能出故障，按原则就该上时间线，这一部分是设计如此；查的是确实纯且不会出故障的调用有没有上链。
 
 另：案例要给出"两种写法求导后导函数的图相同"。今天的规范导出里只有对 `grad` 的调用，导函数在运行时才展开，不在导出里。所以案例要分别导出 `graph_of(grad(loss))` 的规范形式再比较，第 7 路照此做。
+
+## 每日审查（2026-11-15）
+
+范围：develop 过去 24 小时的非合并提交 203 笔，其中动代码（`src/`、`include/`、`modules/`、`stdlib/`）62 笔（31%），代码 +8762/−1685。三个只读审查按领域分看，下面每条都由决策者读代码核实过；没核实的不列。
+
+**必修（优先级一，按所在车道）**
+
+1. **`Ref<Ref>` 检查不健全**（第 3 路）：`src/compile/gir/builder_refs.cpp` 的 `refInsideACapturedValue` 写着 `(void)content;`，`depth` 没用来递归，只手写展开了两层闭包，读不到的捕获物直接放行。原则 3.5 要求 `Ref` 的内容里任何位置都不能有 `Ref`，这是"不会成环、只靠计数回收"的前提，漏一处就是永久泄漏。改成按"握着什么，类型就提到什么"一层层递归，读不到时拒绝。
+2. **`Ref` 盒子靠回收器的终结器释放**（第 4 路）：`modules/state/ref.h` 写明"收集器发现句柄死了时，终结器释放它"，盒子持有 `mm::RootHandle`。这正是"计数做准"要替换的东西，已在优先级一；落地时删掉终结器与根，`ref.plan.toml` 的 `live <= 10` 一类宽松断言改回精确值。
+3. **M2 的后续只做了一个后端**（第 4 路）：`e641bba96` 的说明称"运行中的图标明所属程序"，实际只改了 nvm；`fastvm.cpp:383,396`、`taskflow/handoff.cpp:115,177,196,247`、`taskflow.cpp:582` 等仍用 `programs_.of(graph)` 去猜，nvm 也还留着 `rootProgram != nullptr ? … : &programs_.of(…)` 的退路。四个后端都改成从函数值或帧里取所属程序，删掉 `of`。
+4. **类型层仍握着前端指针**（第 1 路，11-14 每日审查的必修第 3 条未完）：守卫的身份改成了"模块名加谓词原文"，但 `TypeCaseGuard` 里 `condition`、`context` 两个 `void*` 前端句柄还在（`typecall.h`）。与 `typeof` 那条同理，移出核心类型层，身份用模块身份加解析后的谓词编号。
+5. **`typeof` 占位符靠扫字符串识别**（第 1 路）：`builder_diagnostics.cpp:1607` 在 `toString()` 里找子串 `"typeof#"`。连同已排的"名字带模块"一起改：占位符由前端旁表认，不扫文本。
+6. **测试钩子进了产品**（第 2、4 路）：`rewrite.cpp:36` 的全局 `sweepRemovals` 不是原子的，可多线程下被并发递增，只为 `test::deadwrite` 打印；`exec_plan.h:307` 的 `rebuildLoopTablesForTests` 进了产品 API；测试遍在 `src/execute/pass.cpp` 里手写登记。测试用的统计走已有的统计通道（按运行计、原子），只供测试的函数移到测试目录，测试遍的登记由列表生成。
+7. **模块编译结果被丢弃**（第 2 路）：`src/execute/camel_pass.cpp:409` 写 `(void)compileForLoad(...)` 后照样 `declareReads`。编译失败时登记必须停下并带着那条诊断失败；`pass_declarations.cpp` 里第二个读同一个 `.cml` 的解析器与它永不失效的按路径缓存，并到模块加载器那一处。
+8. **按名字的特例**（第 2 路）：`generic.cpp:2044` `if (graph != "__root__")` 按图名跳过轮数上限警告。改成按图的性质判（它是程序的根），或者对根图同样报。
+
+**应修（排在优先级一之后）**
+
+9. **"图的根"列了三处、"有人读"有两种答法**：`liveNodesWith::roots`、`draft_writes.cpp` 的 `namesOf`（多了区域结果与控制区域端口，两份已经不同）、`kindsRegionEntersWithPorts`；`effect_liveness.h` 里 `valueIsRead`（任何读者）与 `FrozenGraphView::isRead`（只数活读者）并存；`FrozenGraphView::isRead` 与 `DraftGraphView::isRead` 逐行相同。收成一个 `roots(graph)` 与一个按视图参数化的活读者判断；另外注释说"活集合在视图上缓存一次"，实际每次调用新建视图，要么真缓存，要么改注释。
+10. **提交读回检查在 release 关闭**：`draft_session.cpp:1503` 默认 `#ifndef NDEBUG true`。11-15 的裁定就是"调试构建与测试里读回"，所以行为对；改的是旁边那句"必须在发出的构建里也成立"的注释，并保证测试跑道开着它。
+11. **`sameContent` 是手写的逐字段清单**：`e4fe5f860` 已经因漏了四个旁挂字段出过错。它现在只决定版本号，改成对编码结果求哈希，或由载荷布局生成比较，不再手列字段。
+12. **两份 fold 不一致，json 那三处补的是症状**：`e9b8a55cc` 写明原生 fold 不发布空槽、Camel 写的 `opt::fold` 会发布；`modules/json/operators.cpp` 因此加了三段同样的空值守卫，其中一段自己说没有程序走得到。修 Camel `opt::fold` 让两份行为一致，然后删掉走不到的守卫。
+13. **ONNX 导出器的计数器不是 RAII**：`exporter.cpp:2660` `++closuresWanted_` 后只在捕获 `ExportError` 时还原，别的异常会让计数错。改成作用域对象。
+14. **`unordered` 写了两份**：`stdlib/test_support.cml` 与 `modules/test_support/module.cpp` 各声明一次，靠拼接字符串比对。属于路线三"唯一的算子定义"，随它合成一份。
+15. **句柄排序的键在建图器里另算一份**：`handleKeyOf` 等用字符串键（`"p{}"`、`"H" + typeMangle`），只有建图器看得见。随 R3 唯一分析并入事实层。`builder.h` 已 3640 行，这几笔还在往里加。
+
+**随新语义删除（已排，不另返工）**：`4fae172f2` 的 `builder_state.cpp` 与 `ClosureCaptureEscapes`；`builder.cpp:1642` 把 `var` 形参写进资源签名的那段（含 `param.runtime > 0xFF` 静默跳过）。
+
+**提交说明与改动不符**：`e641bba96`（"四个后端"，只改了一个）、`3f8c2b3f1`（"每个后端"，只改了 nvm）、`217bc133b`（标题说删死写，实际没删）、`6b43b041d`（说的测试在另一笔里）、`758cd6ebc`（说"顺序没变"，注释自己承认环里的顺序变了）。提交说明只写这一笔做到的，做到一半就写一半。
+
+**比例**：动代码的提交 31%，其余是文档、读数与用例。读数有价值，但优先级一的几项（`var` 化成 SSA、计数做准）在过去两小时没有代码提交，下一轮仍没有就催办。
+
+无需负责人裁定的语义或原则改动。
