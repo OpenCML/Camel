@@ -4662,8 +4662,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    const bool chainStatement =
-        runtime::isChainStatement(*nodeDraftOf(targetNode), nodeIdOf(targetNode));
+    // Outside a `sync` block there is no chain to be a statement of. Inside one, a call is a
+    // statement by what its callee turns out to be (design principles 3.4): a call of a body that
+    // reaches no resource, holds nothing that may fault and is not recursive is one of the
+    // computations the compiler arranges freely, so the chain passes it by and the statement before
+    // this one keeps its place.
+    const bool chainStatement = synced_ && callIsChainStatement(targetNode);
     if (synced_ && chainStatement) {
         linkSyncStatement(lastSyncedNode_, targetNode);
         lastSyncedNode_ = targetNode;

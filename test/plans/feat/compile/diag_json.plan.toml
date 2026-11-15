@@ -237,7 +237,7 @@ args = ["--output-format", "json", "${case}"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'stderr is empty: ' + JSON.stringify(input.stderr))
-assert(input.normalized.stdout === '2011\n', 'stdout is the program output only')
+assert(input.normalized.stdout === '2\n2011\n', 'stdout is the program output only')
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
@@ -366,7 +366,7 @@ case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "tensor::fuse", "std::nvm"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === '2\n2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
 assert(!input.stderr.includes('not found'), 'the pass is known: ' + input.stderr)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
@@ -380,7 +380,7 @@ case = "../../../cases/linear/byref/order_direct_user.cml"
 args = ["${case}", "std::nvm", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
-assert(input.normalized.stdout === '2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
+assert(input.normalized.stdout === '2\n2011\n', 'the program runs once: ' + JSON.stringify(input.normalized.stdout))
 const lines = input.normalized.stderr.trim().split('\n')
 assert(lines.length === 1, 'one warning line: ' + input.normalized.stderr)
 assert(lines[0].includes("[Warn]: Pass 'std::nvm' consumes the graph, so 'std::opt::inline', 'std::fvm' written after it will not run."), lines[0])
@@ -419,7 +419,7 @@ args = ["${case}", "std::opt::inline", "std::fvm"]
 expect_exit = 0
 verify_script = """
 assert(input.stderr === '', 'stderr: ' + input.stderr)
-assert(input.normalized.stdout === '2011\n', 'stdout: ' + input.normalized.stdout)
+assert(input.normalized.stdout === '2\n2011\n', 'stdout: ' + input.normalized.stdout)
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000

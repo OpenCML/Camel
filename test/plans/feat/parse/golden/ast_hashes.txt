@@ -687,6 +687,12 @@ a89879f2aee21391 ok test/cases/compile/casts/conversion_functions.cml
 44d7085a921e95f1 ok test/cases/compile/casts/numeric_as_literal.cml
 ed358782385a8da9 ok test/cases/compile/casts/numeric_as_variable.cml
 7f4c7b8102b244a3 ok test/cases/compile/casts/same_type.cml
+97731a30120a1d2a ok test/cases/compile/chain/effect_call_first.cml
+daf8379e5e0fb4f5 ok test/cases/compile/chain/effect_call_second.cml
+a5994d7be826ce56 ok test/cases/compile/chain/fault_call_first.cml
+1e72362ffb6bf460 ok test/cases/compile/chain/fault_call_second.cml
+af8281e9a67db57a ok test/cases/compile/chain/pure_call_first.cml
+aaf629761f2750c2 ok test/cases/compile/chain/pure_call_second.cml
 ceee83c66f18c8ff ok test/cases/compile/check/clean.cml
 59adde0471119697 no test/cases/compile/check/lexical_error.cml
 9d9bb2bc8b826760 no test/cases/compile/check/lexical_many_errors.cml
@@ -2626,7 +2632,7 @@ d862716e9d2eae51 ok test/cases/linear/byref/let_to_var_param.cml
 4b40ebe76af10b4f ok test/cases/linear/byref/let_to_var_param_indirect.cml
 828166d2a792a730 ok test/cases/linear/byref/let_to_var_with_param.cml
 6eb7aeb7f1ded777 ok test/cases/linear/byref/order_before_after.cml
-6ee8b30050ebcd57 ok test/cases/linear/byref/order_direct_user.cml
+c554ae641fe241d4 ok test/cases/linear/byref/order_direct_user.cml
 a5f750acfa4b8672 ok test/cases/linear/byref/param_assigned.cml
 ebe9d0b97b5a4d01 ok test/cases/linear/byref/param_sorted.cml
 89383817c6b52708 ok test/cases/linear/byref/param_to_var_param.cml
@@ -3872,7 +3878,7 @@ dcef60d2751eac1b ok test/cases/opt/generic/algebra.cml
 a8143083d35fdedb ok test/cases/opt/generic/algebra_commutative.cml
 2abc410990627e85 ok test/cases/opt/generic/algebra_integer.cml
 b350aa63f083a1ea ok test/cases/opt/generic/algebra_library.cml
-6df4189b05d39d72 ok test/cases/opt/generic/algebra_order.cml
+8eb5a42002543117 ok test/cases/opt/generic/algebra_order.cml
 ca5a02b59005a85d ok test/cases/opt/generic/algebra_tensor.cml
 2d4f469ce7a3f7ce ok test/cases/opt/generic/arm_tail_gate.cml
 f19ac2bc4649887b ok test/cases/opt/generic/arm_tail_gate_regions.cml

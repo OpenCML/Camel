@@ -1355,6 +1355,14 @@ class Builder {
     // is legal; the builder warns about it. Graphs whose exit depends on an effect, and the
     // graphs that are branch arms (reported through their branch, not as calls).
     std::unordered_set<DraftGraphBuilder *> effectfulGraphs_;
+    // The bodies a `sync` block's chain already answered for, and whether it may pass them by
+    // (`calleeIsFreelyArranged`): a body is walked once for the whole build, not once per call.
+    std::unordered_map<DraftGraphBuilder *, bool> freelyArrangedGraphs_;
+    // The bodies the walk of `calleeIsFreelyArranged` is inside right now: a callee that reaches one
+    // of them reaches itself, and that is a recursion. A body that is still being written is not
+    // walked at all (`bodyStates_`), so the recursive call written inside its own body answers
+    // before it ever gets here.
+    std::unordered_set<DraftGraphBuilder *> freelyArrangedActive_;
     // The function bodies and arms of a module, in the order they were built, are in
     // ModuleUnit::builtBodies.
     //
@@ -2536,6 +2544,24 @@ class Builder {
     // state-only, a call of a function that declares effects (`sync` modifier, `var`
     // parameter) or whose exit depends on one, a branch with such an arm.
     bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
+    // Whether a call built as `node` is a statement of the `sync` block it is written in: the chain
+    // carries what has an effect or may fault, and a call is one of those by what its callee turns
+    // out to be (design principles 3.4: "调用按被调函数推出的事实判" -- a body that holds a
+    // computation able to fault, or that is recursive, is a call that may fault). The clause on the
+    // declaration is read first and is the whole truth a call site has (3.3): a call a clause says
+    // reaches a resource is a statement whatever its body does. Everything else here -- an operator
+    // that is not pure, a cast that may fail, a branch or loop with a region -- is asked of the node
+    // itself by `runtime::isChainStatement`.
+    bool callIsChainStatement(node_handle_t node);
+    // Whether a `sync` block's chain may pass a call of `callee` by: the body holds nothing a chain
+    // carries -- no effect, nothing that may fault, no call that is itself not free -- and it is not
+    // recursive, because a recursion may go deeper than the depth limit and so counts as able to
+    // fault (design principles 3.4). Such a callee is one of "the computations the compiler arranges
+    // freely", and a call of it is arranged freely too.
+    bool calleeIsFreelyArranged(DraftGraphBuilder *callee);
+    // The walk behind `calleeIsFreelyArranged`: one body's nodes, a direct call followed into the
+    // body it names, and nothing else looked at.
+    bool bodyHoldsNoChainStatement(DraftGraphBuilder *graph);
     // Once the body of `graph` is built: records whether its exit depends on an effect, and
     // warns (EffectNotExecuted) about the effects that the exit does not depend on.
     // With `report` false it only records whether the exit depends on an effect.
