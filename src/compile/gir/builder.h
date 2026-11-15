@@ -784,6 +784,51 @@ class Builder {
     // thing a body has left to drop once every read of the cell took the value
     // (dropCarriedVariableUnits): no other user names the cell, so nothing is left for it to be.
     std::unordered_set<node_handle_t> valueCapturedCells_;
+    // Where each `var` was first captured by a closure of the program, in source offset, and the
+    // closure that did it, by the name the closure is shown with. Design principles 3.5 (198) makes
+    // the name unassignable from the making of the closure to its last use; the report of a write
+    // that lands in that stretch names the closure whose value the write does not reach, so the
+    // place and the name are kept together. A capture whose offset is unknown is not kept here: a
+    // report needs both ends of the stretch to say what it is about.
+    struct CapturedVar {
+        size_t capturedAt = 0;
+        // The source offset of the closure's last use, or `kNoSourceOffset` where the scan could not
+        // answer it. Nothing is reported over a stretch whose end is unknown: a report that guessed
+        // the end would refuse a program the design allows (3.5, 198 -- the rule runs from the
+        // making of the closure to its last use, and not one byte further).
+        size_t lastUse = 0;
+        std::string closure;
+    };
+    std::unordered_map<node_handle_t, CapturedVar> capturedVarOf_;
+    // The last use of a closure the program binds to a name, by the FUNC node the closure is written
+    // as, with the name it is bound to. Only that shape has a last use this scan can prove: a closure
+    // written at a call's argument position is used by that call (3.5, 198), and one the program puts
+    // into another value is used to the end of the scope, which no offset here stands for. Both are
+    // left unreported rather than reported wide.
+    struct ClosureUse {
+        size_t lastUse = 0;
+        // The name the program binds the closure to (`let g = () => ...` gives `g`), which is how a
+        // report shows it: the graph's own name of an anonymous function is one the compiler made.
+        std::string boundName;
+    };
+    std::unordered_map<const GCT::Node *, ClosureUse> closureUseOf_;
+    // The construction node of each graph (the FUNC node it was written as), so that a capture can
+    // ask the scan above what the closure's last use is.
+    std::unordered_map<DraftGraphBuilder *, const GCT::Node *> graphGctOf_;
+    /// Fills `closureUseOf_` out of every module's construction tree: for each closure the program
+    /// binds to a name, the offset of the last place the block that binds it names it.
+    void scanClosureLastUses();
+    // Whether the graph's name is one the compiler made for a body of its own (the generator
+    // machine's step function, `__gen_step__`): the rule of design principles 3.5 is about a
+    // closure the PROGRAM writes, and the compiler's own closures are not asked about (the case
+    // `ok_generator_body_is_not_a_program_closure` keeps that mark visible).
+    static bool compilerMadeClosure(const std::string &graphName);
+    // Whether this graph is a block the program decorated rather than a closure it wrote: a decorated
+    // block is the block as a function of no parameters, passed to its decorators and called where it
+    // is written (language reference 7.6), so the write inside it is the block's own write and not a
+    // write to a value the closure took. Which of the two a decorator makes it is a question the
+    // design does not answer, and this rule does not answer it either: it leaves the shape unreported.
+    bool decoratedBlockGraph(const compile_graph_ptr_t &graph) const;
     // Whether a capture of each cell is a capture of its value, decided once per cell
     // (captureByValue): a port's type is the cell's or the value's, and every capture of the same
     // cell has to agree -- the direct call's with-port, the closure the body of the same function
@@ -873,6 +918,20 @@ class Builder {
     /// The name a capture of `origin` is shown with: the qualified name of a top-level value
     /// (with its module when it is not the current module's), `fallback` otherwise.
     std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
+    /// Design principles 3.5 (197, 198): a closure holds the VALUE a name had when it was made,
+    /// not a place, so the name may not be written from then until the closure's last use. Three
+    /// ways a write is written, and three reports, all made here:
+    ///   - the closure's own body writes the name (`throughCall` false, the cell is one of the
+    ///     graph's capture ports);
+    ///   - the body that declares the name assigns it again (`throughCall` false, the cell is the
+    ///     declared one and a closure captured it earlier);
+    ///   - the body hands the name to a call whose `var` parameter writes it back (`throughCall`
+    ///     true: design principles 3.5, 192 -- the write-back is an assignment written at the call).
+    /// A name of the top level of a module is left alone: its rule is the module `var`'s, not this
+    /// one. Throws BuildAbortException after reporting.
+    void
+    requireCapturedNameWritable(node_handle_t cell, const std::string &name, bool throughCall,
+                                camel::source::origin_id_t at);
     /// Records that the port `port`, made by a machine for a region of a loop, stands for the
     /// value `origin` the machine was handed (the sequence it iterates, the state it starts
     /// from). Written where a capture origin is written, so one table says what value a port is
@@ -1192,9 +1251,9 @@ class Builder {
         /// The ports of the region (a loop's condition or body), in order: the element, then the
         /// values of the state.
         std::vector<node_handle_t> ports;
-        /// The variables the arm stores into itself, and the functions it calls: what else it
-        /// writes is what those write (capturedWritesOf), known once every body is built.
-        std::set<node_handle_t> directWrites;
+        /// The functions the arm calls: what it writes is what those write (capturedWritesOf),
+        /// known once every body is built. A store the arm makes itself is a value of the
+        /// program's own, not an effect (design principles 3.1), so it is not part of this set.
         std::vector<DraftGraphBuilder *> callees;
         camel::core::type::Type *exitType() const { return type; }
     };
@@ -1393,8 +1452,6 @@ class Builder {
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
         std::vector<node_handle_t> variables;
-        /// Variables known to be written (by the arms of a branch), besides what `graphs` write.
-        std::set<node_handle_t> written;
         camel::source::origin_id_t origin;
         std::string subject;
         std::string verb;

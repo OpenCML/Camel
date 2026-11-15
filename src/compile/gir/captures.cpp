@@ -142,6 +142,32 @@ node_handle_t Builder::captureInto(
         // more (dropCarriedVariableUnits).
         valueCapturedCells_.insert(origin);
     }
+    if (isVar && !compilerMadeClosure(graph->name()) && !decoratedBlockGraph(graph)) {
+        // Design principles 3.5 (198): from the making of this closure to its last use the name may
+        // not be assigned, or the closure would go on holding a value the name no longer has. Where
+        // the closure stands is the start of that stretch, and `closureUseOf_` (the scan before
+        // any body is built) gives its end; where the end is not known the stretch is not reported
+        // at all (requireCapturedNameWritable), because a stretch guessed wide refuses a program the
+        // design allows. A name of the top level of a module is another rule's, and a capture whose
+        // place is unknown cannot say where the stretch starts.
+        const size_t at = sourceOffsetOf(refOrigin_);
+        if (at != kNoSourceOffset && topLevelValues_.find(origin) == topLevelValues_.end()) {
+            const auto gct        = graphGctOf_.find(graph.get());
+            const auto knownUse   = gct != graphGctOf_.end() ? closureUseOf_.find(gct->second)
+                                                             : closureUseOf_.end();
+            CapturedVar &known = capturedVarOf_[origin];
+            if (known.closure.empty() || at < known.capturedAt) {
+                known.capturedAt = at;
+                // The name the report shows: the one the program bound the closure to, where the
+                // scan knows it, because an anonymous function's own name is one the compiler made.
+                known.closure = knownUse != closureUseOf_.end() && !knownUse->second.boundName.empty()
+                                    ? knownUse->second.boundName
+                                    : graph->name();
+                known.lastUse =
+                    knownUse != closureUseOf_.end() ? knownUse->second.lastUse : kNoSourceOffset;
+            }
+        }
+    }
     return port;
 }
 
@@ -284,6 +310,75 @@ void Builder::linkCaptureSites() {
             }
         }
     }
+}
+
+bool Builder::compilerMadeClosure(const std::string &graphName) {
+    // The generator machine builds one function of its own -- the step function that runs the body
+    // from one `yield` to the next (`__gen_step__`, gct/builder.cpp visitGeneratorBody) -- and that
+    // function writes the cells of the body it was cut from. The program wrote no closure there, so
+    // the rule of design principles 3.5 is not asked about it: `ok_generator_body_is_not_a_program
+    // _closure` pins that this shape keeps working.
+    return graphName.starts_with("__gen_");
+}
+
+bool Builder::decoratedBlockGraph(const compile_graph_ptr_t &graph) const {
+    const auto found = graph == nullptr ? graphGctOf_.end() : graphGctOf_.find(graph.get());
+    return found != graphGctOf_.end() && found->second != nullptr && found->second->decoratedBlock();
+}
+
+void Builder::requireCapturedNameWritable(
+    node_handle_t cell, const std::string &name, bool throughCall,
+    camel::source::origin_id_t at) {
+    if (cell == nullptr) {
+        return;
+    }
+    // The compiler's own closures are not the program's (visitGeneratorBody's `__gen_step__` writes
+    // the cells of the body it was cut from), and a decorated block's write is the block's own: the
+    // rule asks about a closure the writer made.
+    if (currGraph_ != nullptr &&
+        (compilerMadeClosure(currGraph_->name()) || decoratedBlockGraph(currGraph_))) {
+        return;
+    }
+    // The write stands inside a closure, and the name it writes is one the closure captured from the
+    // body around it: a value has nowhere to write, so the assignment is refused (3.5, 197). A name
+    // of the top level of a module is left to the module `var`'s own rule.
+    if (const auto port = captureOriginOf_.find(cell); port != captureOriginOf_.end()) {
+        if (topLevelValues_.find(port->second) != topLevelValues_.end()) {
+            return;
+        }
+        const std::string shown = originNames_.contains(port->second)
+                                    ? originNames_.at(port->second)
+                                    : name;
+        diags_->of(SemanticDiag::ClosureAssignsCapturedName).atOrigin(at).commit(shown);
+        throw BuildAbortException();
+    }
+    // A write the body that declares the name makes: it changes a name a closure of that body
+    // already holds the value of, and the write does not reach the closure (3.5, 198).
+    const auto captured = capturedVarOf_.find(cell);
+    if (captured == capturedVarOf_.end()) {
+        return;
+    }
+    const CapturedVar &known = captured->second;
+    const size_t writtenAt   = sourceOffsetOf(at);
+    if (writtenAt == kNoSourceOffset || writtenAt <= known.capturedAt) {
+        return;
+    }
+    // The rule runs to the closure's last use and not one byte further: a name assigned after the
+    // closure is done with is a name nothing holds any more, and the design keeps that legal. Where
+    // the end of the stretch is not known the report stays off -- see `CapturedVar::lastUse`.
+    if (known.lastUse == kNoSourceOffset || writtenAt >= known.lastUse) {
+        return;
+    }
+    const std::string shown = known.closure;
+    if (throughCall) {
+        // The write is a call's: a `var` parameter is the caller's cell, and its write-back is the
+        // assignment written at the call (3.5, 192). Named apart from the assignment written here so
+        // that the reader is told where the write actually stands.
+        diags_->of(SemanticDiag::CapturedVarHandedToVarParameter).atOrigin(at).commit(name, shown);
+    } else {
+        diags_->of(SemanticDiag::CapturedVarWrittenAfterTheClosure).atOrigin(at).commit(name, shown);
+    }
+    throw BuildAbortException();
 }
 
 } // namespace camel::compile::gir

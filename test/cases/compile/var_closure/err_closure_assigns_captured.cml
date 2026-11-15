@@ -1,0 +1,25 @@
+/**
+ * A closure writes a name of the body around it: a compile error (design principles 3.5, the author's
+ * ruling of 2026-11-15; the decision of 2026-11-16 makes it the first step of the work that removes
+ * the by-reference capture). `total` is a `var` of `make`, and `add` -- a function written inside
+ * that body -- assigns it. The closure holds the value `total` had when `add` was made, so there is
+ * nothing for the assignment to write.
+ *
+ * The report names the closure and the name it writes, and gives the three ways out: return the new
+ * value, write the state as a loop's carried state or a `fold`, or hold it in a `Ref`.
+ */
+
+func make(x: int): int {
+    var total = 0
+    func add(k: int): int {
+        total = total + k
+        return total
+    }
+    let a = add(x)
+    a
+}
+
+func main(): int sync {
+    println(make(3))
+    return 0
+}

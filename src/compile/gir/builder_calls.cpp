@@ -949,6 +949,11 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
     if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
         if (const std::string name = moduleLevelName(arg.expr->name()); nodeAt(name).has_value()) {
             if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                // A `var` parameter is the caller's cell, and the callee's write-back is the
+                // assignment written at the call (design principles 3.5, 192): where the name is one
+                // a closure of this body already holds the value of, the write-back is the write
+                // 3.5 (198) refuses.
+                requireCapturedNameWritable(node, name, true, arg.expr->origin());
                 escapingVariables_.insert(node);
             }
         }

@@ -185,44 +185,29 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 6000
 
 [[tests]]
-name = "warnings_visible_text"
-desc = "A program without errors prints its warnings on stderr at the default log level, each with name, file:line:column and text, before it runs; stdout is the program's output only."
+name = "arm_write_prints_no_warning_text"
+desc = "A program whose only candidate warning is a direct write to a `var` in a branch arm prints no warning now: a write to a `var` is not an effect (design principles 3.1), and the branch hands the write on as its value (3.5; the ruling of 2026-11-16), so `SemanticDiag::IgnoredSideEffect` is not printed for it. The empty stderr is the point -- the withdrawn rule must not come back -- and the program still prints 11 and exits 11, which is the arm's write reaching the print: the same case asserts both, so the zero is not the whole of it. The text form of a warning (`file:line:col: [Warn]: ... (name=..., code=...)`) is pinned by `feat/compile/diag_options: warn.shown`, and the JSON form by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["${case}"]
 expect_exit = 11
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
-const lines = input.normalized.stderr.trim().split('\n')
-assert(lines.length === 1, 'one warning on stderr, got ' + lines.length + ': ' + input.normalized.stderr)
-const expect = [
-    ['warnings_visible.cml:17:13: [Warn]: The branch is not in a sync block, and an arm writes the captured variable \'c\'.', 'SemanticDiag::IgnoredSideEffect, code=0x03100002'],
-]
-expect.forEach(([text, name], i) => {
-    assert(lines[i].includes(text), `warning ${i + 1}: expected ${text}, got ${lines[i]}`)
-    assert(lines[i].endsWith('(name=' + name + ')'), `warning ${i + 1}: expected name ${name}, got ${lines[i]}`)
-})
+assert(input.stderr === '', 'no warning is printed for a direct write to a var: ' + JSON.stringify(input.stderr))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
 
 [[tests]]
-name = "warnings_visible_json"
-desc = "With --output-format json the warnings of an error-free program are one JSON array on stderr (severity Warn, source ranges); stdout stays the program's output, with no diagnostics array."
+name = "arm_write_prints_no_warning_json"
+desc = "The same program with `--output-format json`: no diagnostics array is written at all, because the arm's direct write to a `var` is a value and not an effect (design principles 3.1, 3.5; the ruling of 2026-11-16), so `SemanticDiag::IgnoredSideEffect` has no entry. stderr is empty and stdout is the program's output, 11: the zero is the conclusion here (the withdrawn rule must stay withdrawn), while the stdout and exit assertions keep the write's hand-over under test. The JSON form of a warning is pinned by `warning_with_error_json`."
 kind = "behavior"
 case = "../../../cases/compile/diag_json/warnings_visible.cml"
 args = ["--output-format", "json", "${case}"]
 expect_exit = 11
 verify_script = """
 assert(input.normalized.stdout === '11\n', 'stdout is the program output only: ' + JSON.stringify(input.normalized.stdout))
-const diags = JSON.parse(input.stderr)
-assert(diags.length === 1, 'one warning, got ' + diags.length)
-assert(diags.every(d => d.severity === 'Warn'), 'severity Warn')
-assert(diags.every(d => d.data.stage === 'typecheck'), 'stage typecheck')
-const got = diags.map(d => d.data.name + '@' + (d.range.start.line + 1) + ':' + (d.range.start.character + 1))
-const want = ['SemanticDiag::IgnoredSideEffect@17:13']
-assert(JSON.stringify(got) === JSON.stringify(want), 'names and positions: ' + got.join(' '))
-assert(diags.every(d => d.data.modulePath.endsWith('warnings_visible.cml')), 'each names its file')
+assert(input.stderr === '', 'no diagnostics array for a program with none: ' + JSON.stringify(input.stderr))
 """
 normalizers = ["strip_ansi", "normalize_newlines"]
 timeout_ms = 6000
