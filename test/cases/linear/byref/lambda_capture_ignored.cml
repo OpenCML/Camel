@@ -6,12 +6,18 @@
  * asserting that a warning was reported. The compiler reports the call as one that is never
  * executed (`SemanticDiag::EffectNotExecuted`). Plan linear.captured_writes, tests
  * lambda_capture_ignored.*.
+ *
+ * The state is a `Ref`: a closure cannot assign a name of the body around it (design principles
+ * 3.5), while a handle is a value it may capture.
  */
+
+import state
+
 func ignored(): int {
-    var c = 0
+    let c = state::ref(0)
     let f = (): void => sync {
-        c += 1
-        println(c)
+        state::set(c, state::get(c) + 1)
+        println(state::get(c))
     }
     f()
     return 0
