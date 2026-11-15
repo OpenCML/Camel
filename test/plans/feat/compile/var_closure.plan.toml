@@ -4,8 +4,11 @@
 # Where the rule stands today. A closure captures a NAME BY VALUE when the name is a top-level value of
 # a module, no function writes it, and the function was used as a value (`decideCaptureByValue`); a
 # capture port is a value then, and reads inside the body are the port. Everywhere else the port is
-# still the CELL, and a by-reference capture's write is legal -- it lands in the cell the closure was
-# handed, which is how `byref` and the `stream` packer work.
+# still the CELL -- and there a by-reference capture's write USED TO BE legal: it landed in the cell the
+# closure was handed, which is how `byref` was written and how the `stream` packer was written. It is not
+# legal any more. `lane-closurediag` refuses that write (the three `err.*` entries at the end), which is
+# why the `byref` cases and the `stream` packer went red: the cases are the migration this plan's third
+# step owes, and the packer holds four `Ref`s since `lane-teeref`.
 #
 # The other half of the ruling (a closure may not assign an outer name, and a captured `var` may not be
 # assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
