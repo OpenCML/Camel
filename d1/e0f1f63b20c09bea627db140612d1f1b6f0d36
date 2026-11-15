@@ -1,0 +1,17 @@
+`lane-prlcount` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`d1e0f1f63b20c09bea627db140612d1f1b6f0d36`，`--no-ff` 合入 `lane-prlcount`（`9f0c6b8e5`
++ 同步合并 `60f52137d`）。**无冲突**。无 `src/`（18 文件，文档 + `ref.plan.toml` 三行注释）。
+推：`9031c009c..d810ac270`（与 snippets 同批），`unpushed=0`。
+
+`--changed`（`$env:CAMEL_TEST_BASE='9031c009c'`，`--jobs 4`）：
+    [SUMMARY] total: 85, pass: 84, fail: 1        RUN_EXIT=1
+    [FAIL] ref.boxes_made_per_call_ten.prl       79.96 ms
+    断言原文：`Error: nothing accumulated: the live blocks do not follow the calls that are over:
+    FOREIGN_RESOURCES created=11 released=6 live=5 disposed=5 finalized=6`
+    → `live <= 3` 不成立（live=5），**这正是这条 note 要维持的那格红**，不是回归。
+静态检查：`check-doc-links --citations` → exit 0
+
+**没有重跑关掉它**（按它自己写进 `ref.plan.toml` 的话：p≈0.3–0.5 at `--jobs 4`、≈0.25 at
+`--jobs 1`，落地前不重跑）。该条目里 `live <= 3`、`created = released + live`、`disposed = live`
+三处断言与合前完全相同（`live <= 3` 命中数 3，未动）。
