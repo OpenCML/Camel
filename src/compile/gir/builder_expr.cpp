@@ -1932,6 +1932,31 @@ void Builder::collapseNonEscapingVariableReads() {
                 size_t writesSeen        = 0;
                 if (const auto it = writesOf_.find(cell); it != writesOf_.end()) {
                     writesSeen = it->second.size();
+                    // A read inside a loop's body or condition of a cell the loop writes does not
+                    // see `:var/new`'s value: it sees the value the previous turn carried, which
+                    // the LOOP hands on and no write of the body stands for. `write_in_loop.cml`
+                    // measures it: `x = x + 1` read the value `:var/new` made on every turn, so the
+                    // turns wrote `1` three times and the read after the loop answered `1`. So a
+                    // loop read of a written cell keeps its `:var/get`, and that is decided before
+                    // the initial value is handed out.
+                    if (writesSeen > 0) {
+                        const auto readRegionId = draft.nodeRegion(readId);
+                        const auto readKind     = draft.region(readRegionId).kind;
+                        if (readKind == camel::runtime::GCRegionKind::LoopBody ||
+                            readKind == camel::runtime::GCRegionKind::LoopCond) {
+                            ++foldTookNothing_;
+                            if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                                std::fprintf(
+                                    stderr,
+                                    "[DBG-W] read=%u writes=%zu readregion=%d candidate=- kind=- "
+                                    "region=- took=loop-read\n",
+                                    static_cast<unsigned>(readId),
+                                    writesSeen,
+                                    static_cast<int>(readRegionId));
+                            }
+                            continue;
+                        }
+                    }
                     for (const node_handle_t exit : it->second) {
                         if (nodeIdOf(exit) >= readId) { continue; }
                         if (nodeKindOf(exit) != camel::runtime::GCNodeKind::Oper) { continue; }
