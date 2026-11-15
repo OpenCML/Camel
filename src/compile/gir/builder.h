@@ -3726,6 +3726,14 @@ class Builder {
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
     // Makes `result` the result of `graph` when its body set none with `return`.
     void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
+    /// The exit's anchor, made to use the write the body leaves in each `var` parameter: the cell is
+    /// the caller's and outlives the call, so the last write into it is a result of the function
+    /// beside the returned value (design principles 3.1). Inside a `sync` block the chain already
+    /// carries that write to the exit, and the walk here finds it there and adds nothing; outside
+    /// one this edge is what keeps it, and what makes it run (3.5, F3: an effect does not vanish in
+    /// silence). Returns `anchor` when there is nothing to add.
+    node_handle_t
+    exitUsesVariableParameterWrites(const compile_graph_ptr_t &graph, node_handle_t anchor);
     /// Reports SemanticDiag::ArgumentNeedsConversion (and aborts) when the arguments of `call`
     /// fit exactly one of `candidates` but for types that leave open what a parameter fixes,
     /// i.e. when writing `as` at those arguments makes the call compile. Returns otherwise.

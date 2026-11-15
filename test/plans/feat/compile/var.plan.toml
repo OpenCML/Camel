@@ -248,3 +248,28 @@ expect_exit = 0
 expect_stdout_exact = "6\n6\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+# --- Step b of the `var`-to-SSA work: the write a body leaves on a `var` parameter ---------------
+#
+# A `var` parameter is a cell the caller made. The cell outlives the call, so the write the body
+# leaves in it is a result of the function beside the returned value (design principles 3.1), and
+# the caller reads that write afterwards. The entry below pins it, and it was red before the exit
+# used the write: outside a `sync` block the write was ordered after the reads written before it
+# and then dropped as an effect nothing ran, so `set(a)` left `a` at `0`.
+#
+# Both positions are in the one case file, because the reading this entry takes is that they agree,
+# not that one of them has a particular shape: `set` writes in a body that is not a sync block,
+# `in_block` writes inside a `sync { ... }` block of a body that is not sync, and the lambda adds
+# the unnamed-body position -- those three were red. `set_sync` (the whole body a sync block) and
+# `clear` (a body that returns `void`) are the controls: measured with the write-back off, they
+# already read correctly, so they are what must not move, not what this entry proves.
+[[tests]]
+name = "var.parameter_write_is_the_callers_value"
+desc = "The write a function body leaves in a `var` parameter is what the caller reads afterwards: `set(a)` (a body that is not a sync block), `in_block(c)` (a `sync { ... }` block inside a body that is not sync) and a lambda leave `41`, `9` and `5` in the caller's cells, and the caller reads those values after each call; `set_sync(b)` (the whole body a sync block) and `clear(d)` (a `void` body) are the controls, correct before this change and unchanged by it. Measured with the write-back off, the three read `0 0`, `0 0`, `0 0` -- the caller's cell kept the value it started with -- while the controls read `0 42` and `0`; with the write-back on all five read what the body wrote. Red before the function's exit used the write: outside a `sync` block the write was ordered after the reads written before it and then dropped (`SemanticDiag::EffectNotExecuted`)."
+kind = "behavior"
+case = "../../../cases/compile/var/var_parameter_write_at_exit.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
