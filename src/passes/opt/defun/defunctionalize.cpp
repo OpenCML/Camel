@@ -399,6 +399,26 @@ template <class Draft> gc_node_ref_t emitCallThroughValue(
     std::span<const gc_node_ref_t> arguments, std::span<const gc_node_ref_t> withArguments,
     gc_node_ref_t value, ty::Type *resultType, uint32_t region, gc_node_ref_t place) {
     const gc_cnt_t count = static_cast<gc_cnt_t>(family.variants.size());
+    // The nodes of the dispatch are written in `region` -- the region the call itself is in, and
+    // the one the arms below are regions of -- and not in the region the draft happens to be
+    // inserting into. Those are the same for a graph this pass writes itself, but not for a call
+    // through a value in a loop body: there the insert point was the form or the root, so the
+    // `BRCH`, the cases it tests against and the `JOIN` landed in region 0 while the arms and the
+    // call were in the body. The order that came out put the branch before the loop and the loop's
+    // own test before the values it reads, so the round never entered -- and a defect that looks
+    // like "the loop does not run" is one a program that prints nothing in it never shows.
+    //
+    // The guard puts the insert point back on every way out, the throw below included. An exit that
+    // missed it would leave every node this pass writes afterwards in the wrong region, which is a
+    // defect in another graph entirely.
+    struct InsertRegionScope {
+        Draft &target;
+        uint32_t outer;
+        ~InsertRegionScope() { target.setInsertRegion(outer); }
+    } regionScope{draft, draft.insertRegion()};
+    if (draft.insertRegion() != region) {
+        draft.setInsertRegion(region);
+    }
 // A value this pass dispatches on has to be the enum of its function type, and that is checked
     // here, where the tag is about to be read. `:enum/tag` and `:enum/field` read a tagged pair; a
     // value that is still a plain reference to a function has no tag at those offsets, and reading
