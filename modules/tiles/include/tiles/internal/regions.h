@@ -118,6 +118,14 @@ const runtime::Program *outlineRegions(
     operator_t executor, const std::string &uri, size_t &count,
     const SegmentDeviceOps *device = nullptr, bool refuseGpuScopes = false,
     slot_t *error = nullptr);
+// The declarations over the bodies `outlineRegions` rewrote: it gave them a device submission, and
+// a caller reads what a call reaches from the callee's type, not from its body (analysis 4.1).
+// Every graph whose body now reaches past its clause has the clause widened to say it, then its
+// callers, until nothing grows. Returns `program` itself when every declaration already covers its
+// body. Both passes that publish what they outlined call it (`tiles::compile` and the outline test
+// passes): a published program's types are what its callers read.
+const runtime::Program *settleDeclarations(
+    core::context::Context &context, const runtime::Program *program);
 // Register semantic-equivalence checks by naming them in a pipeline; no variable gates them.
 void registerRegionTestPasses(
     operator_t run, SegmentDeviceOps device, SegmentDeviceOps host, SegmentDeviceOps preferred);

@@ -1257,4 +1257,80 @@ effectContainmentViolation(const Program &program, const GCGraph &graph, EffectC
     return std::nullopt;
 }
 
+// ---- The declaration over a body a pass rewrote ------------------------------------------------
+
+sem::ResourceSignature bodySignature(const Program &program, const GCGraph &graph) {
+    // The graph's own numbering is its type's: a parameter use is the parameter, with the `with`
+    // ones first. A graph without a type has none to number against, and a footprint measured that
+    // way is a clause no caller could read; the caller compares it against something else anyway.
+    const size_t withCount =
+        graph.funcType() != nullptr ? graph.funcType()->withTypesCount() : size_t(0);
+    return signatureOfFootprint(footprintOf(program, &graph), withCount);
+}
+
+sem::ResourceSignature widened(
+    const sem::ResourceSignature &declared, const sem::ResourceSignature &body) {
+    if (declared.mode == sem::ResourceSignature::Mode::Generic) {
+        // A type that promises nothing already covers everything: there is no clause to widen.
+        return declared;
+    }
+    if (body.mode == sem::ResourceSignature::Mode::Generic) {
+        return declared;
+    }
+    sem::ResourceSignature wider = declared;
+    for (const auto &use : body.params) {
+        const auto same = std::find_if(
+            wider.params.begin(),
+            wider.params.end(),
+            [&](const sem::ResourceSignature::ParamUse &t) { return t.index == use.index; });
+        if (same == wider.params.end()) {
+            wider.params.push_back(use);
+        } else {
+            same->mode = sem::uniteAccess(same->mode, use.mode);
+        }
+    }
+    std::sort(wider.params.begin(), wider.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    for (const auto &use : body.ambient) {
+        const auto same = std::find_if(
+            wider.ambient.begin(),
+            wider.ambient.end(),
+            [&](const sem::ResourceSignature::AmbientUse &t) { return t.name == use.name; });
+        if (same == wider.ambient.end()) {
+            wider.ambient.push_back(use);
+        } else {
+            same->mode      = sem::uniteAccess(same->mode, use.mode);
+            same->unordered = same->unordered || use.unordered;
+        }
+    }
+    std::sort(wider.ambient.begin(), wider.ambient.end(), [](const auto &a, const auto &b) {
+        return a.name < b.name;
+    });
+    for (uint8_t capture : body.captures) {
+        if (std::find(wider.captures.begin(), wider.captures.end(), capture) ==
+            wider.captures.end()) {
+            wider.captures.push_back(capture);
+        }
+    }
+    std::sort(wider.captures.begin(), wider.captures.end());
+    for (ResourceClass cls : body.anyOf) {
+        if (std::find(wider.anyOf.begin(), wider.anyOf.end(), cls) == wider.anyOf.end()) {
+            wider.anyOf.push_back(cls);
+        }
+    }
+    if (!wider.allocates) {
+        wider.allocates = body.allocates;
+    }
+    if (wider.result.kind == sem::ResultAlias::Kind::Unknown) {
+        wider.result = body.result;
+    }
+    wider.external = wider.external || body.external;
+    // A clause that names an ambient resource carries the effect that comes with it, the same way
+    // a written one does (`ambientCarriesExternal`): the two agree, so a widened clause is not
+    // weaker than the body it was built from.
+    sem::ambientCarriesExternal(wider);
+    return wider;
+}
+
 } // namespace camel::runtime

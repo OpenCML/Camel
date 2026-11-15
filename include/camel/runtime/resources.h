@@ -257,6 +257,18 @@ struct EffectContainmentReport {
 std::optional<EffectContainment> effectContainmentViolation(
     const Program &program, const GCGraph &graph, EffectContainmentReport *report = nullptr);
 
+/// The clause a graph's body writes: `footprintOf` measured, said in the graph's own numbering --
+/// the same conversion `effectContainmentViolation` compares a call site against, read the other
+/// way. A pass that rewrote a body reads it to bring the type over that body up to date, instead of
+/// leaving a caller to find out at the next boundary.
+sem::ResourceSignature bodySignature(const Program &program, const GCGraph &graph);
+
+/// `declared` widened to name everything `body` names and never narrower: what a type has to carry
+/// once the body under it reaches more than the clause did. A clause the `body` cannot be written
+/// as leaves `declared` as it is (widening never invents a promise the language cannot spell).
+sem::ResourceSignature widened(
+    const sem::ResourceSignature &declared, const sem::ResourceSignature &body);
+
 /// The text forms (core.resources, test output).
 std::string toString(const NodeAccess &access);
 std::string toString(const NodeResources &resources);
