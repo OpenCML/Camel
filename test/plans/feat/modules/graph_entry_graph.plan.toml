@@ -1,0 +1,26 @@
+id = "modules.graph_entry_graph"
+order = 933
+tier = "fast"
+tags = ["feat", "modules", "graph", "pass"]
+desc = "A pass reaches the graph of the program's entry function with the module's default reads (design principles 9.5): the graph the pipeline hands it makes one call, and `callee` answers the graph that call goes to -- no graph is picked by its name and no node by its place in an id-ordered list."
+
+[defaults]
+kind = "behavior"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "the_programs_call_names_the_entry_functions_graph"
+desc = "A pass asks the graph of the program for its calls and follows the one it finds: `callee` answers the graph of the entry function, and a node of that graph (the multiply `main` writes) is read there. The graph of the program itself holds no operator, so the reading is about the body and not about the root."
+case = "../../../cases/modules/graph_pass/entry_target.cml"
+args = ["${case}", "entry_body::body", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "1\n1\n42\n"
+
+[[tests]]
+name = "the_root_graph_is_still_what_a_pass_is_handed"
+desc = "The reverse reading: `graph_of` of the function a pass is handed is still the root graph `__root__`, and `graphs_of` still reaches that graph by its name. Giving the entry function's graph a default route does not take the root graph away."
+case = "../../../cases/modules/graph_pass/entry_target.cml"
+args = ["${case}", "entry_body::root_still", "std::nvm"]
+expect_exit = 0
+expect_stdout_exact = "ROOT_STILL_THERE\n42\n"
