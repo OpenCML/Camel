@@ -235,35 +235,46 @@ bool mayRemoveDead(const GCGraph &graph) {
         }
 
         // What nothing reads: a GATE or a value computed for nothing.
-        if (valueUsers[ref] != 0) {
+        if (valueUsers[ref] == 0) {
+            switch (node->kind) {
+            case GCNodeKind::Gate:
+            case GCNodeKind::Cast:
+            case GCNodeKind::Copy:
+            case GCNodeKind::Accs:
+            case GCNodeKind::Fill:
+                return true;
+            case GCNodeKind::Data:
+                if (node->dataIndex < 0) {
+                    return true;
+                }
+                break;
+            case GCNodeKind::Oper:
+                if (isPureOperNode(graph, ref)) {
+                    return true;
+                }
+                break;
+            case GCNodeKind::Func:
+                // A closure definition nothing can call: the sweep takes it too, so a graph whose only
+                // dead thing is one must not be screened out (a screen says "there is something here").
+                if (camel::runtime::isUnreadClosure(graph, ref)) {
+                    return true;
+                }
+                break;
+            default:
+                break;
+            }
             continue;
         }
-        switch (node->kind) {
-        case GCNodeKind::Gate:
-        case GCNodeKind::Cast:
-        case GCNodeKind::Copy:
-        case GCNodeKind::Accs:
-        case GCNodeKind::Fill:
+        // An aggregate whose last member nothing reads is something this sweep takes even though
+        // something reads the aggregate: it stops filling the last component, and the node that
+        // produced it loses its last reader. A screen that only asks "does anything read this node"
+        // refuses every graph of that shape, and then the rewrite never runs at all -- measured: the
+        // sweep took nothing (`SWEEP func=0 call=0 gate=0 oper=0`) while a tuple the program still
+        // names kept the closure behind it alive.
+        if (node->kind == GCNodeKind::Fill &&
+            camel::runtime::aggregateTailVerdict(graph, ref) ==
+                camel::runtime::AggregateTailVerdict::MayStopFillingTheTail) {
             return true;
-        case GCNodeKind::Data:
-            if (node->dataIndex < 0) {
-                return true;
-            }
-            break;
-        case GCNodeKind::Oper:
-            if (isPureOperNode(graph, ref)) {
-                return true;
-            }
-            break;
-        case GCNodeKind::Func:
-            // A closure definition nothing can call: the sweep takes it too, so a graph whose only
-            // dead thing is one must not be screened out (a screen says "there is something here").
-            if (camel::runtime::isUnreadClosure(graph, ref)) {
-                return true;
-            }
-            break;
-        default:
-            break;
         }
     }
     return false;
