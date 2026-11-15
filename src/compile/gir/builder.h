@@ -2670,6 +2670,12 @@ class Builder {
     std::optional<std::string>
     refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
         const;
+    // One layer of that walk: the place a reference is reached at through what the closure `value`
+    // captured, `through` naming the closures already walked to reach it and `depth` how many
+    // layers down this is. A layer that cannot be read -- or one past `kRefCaptureDepth` -- is
+    // answered as holding one, because a capture the walk cannot see may be the one that does.
+    std::optional<std::string> refInsideClosureCaptures(
+        node_handle_t value, const std::vector<std::string> &through, int depth) const;
     // The cells of `body` the state rule speaks of: the mutable cells the body itself made, and its
     // `var` parameters, which its caller made and lent to it.
     std::unordered_set<node_handle_t> cellsOfBody(DraftGraphBuilder *body) const;

@@ -1,0 +1,19 @@
+/**
+ * The control of `err_holds_ref_closure_depth`: the same three-layer chain of captures, and the
+ * value at the bottom is a plain integer rather than a reference. A walk that recursed by refusing
+ * what it could not read would turn this legal program red, so this is what says the other refusal
+ * is about the reference down there and not about the depth.
+ */
+
+import state
+
+func main(): int sync {
+    let k = 7
+    let h = (): int => k + 35
+    let g = (): int => h()
+    let f = (): int => g()
+    let box = state::ref(f)
+    let call = state::get(box)
+    println(call())
+    return 0
+}
