@@ -61,8 +61,8 @@ IntervalBound boundOf(const GCGraph &graph, gc_node_ref_t ref) {
 /// for `for i in a..b` and the constant holding the same two integers (a pass may fold the pair)
 /// are read alike (GCGraph::intervalBoundsOf, intervalPairValuesOf). Nothing when `ref` is not
 /// such a pair.
-std::optional<std::pair<IntervalBound, IntervalBound>> intervalBoundsOf(
-    const GCGraph &graph, gc_node_ref_t ref) {
+std::optional<std::pair<IntervalBound, IntervalBound>>
+intervalBoundsOf(const GCGraph &graph, gc_node_ref_t ref) {
     if (const auto pair = graph.intervalBoundsOf(ref)) {
         return std::pair{boundOf(graph, pair->first), boundOf(graph, pair->second)};
     }
@@ -282,8 +282,7 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
         loop.origin     = graph.nodeOrigin(ref);
         const auto norm = graph.normInputsOf(ref);
         if (loop.iterates) {
-            loop.iterableSlot =
-                dataIndexOf(graph, valueBehindGates(graph, norm.front()));
+            loop.iterableSlot = dataIndexOf(graph, valueBehindGates(graph, norm.front()));
             if (graph.loopIterableFormOf(ref) == camel::core::LoopIterableForm::Interval) {
                 // The sequence is the pair of the interval's two bounds: the loop computes the
                 // element of a round from them and the round number, and no array of the interval
@@ -362,19 +361,20 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
         // somebody else in between, and `intruder` below is the first such node.
         //
         // A release build compiles the assertion out, and the tables this function makes are what
-        // every back end runs with. So the same question is asked twice: the assertion stops a debug
-        // build where the plan is made, and the error value below is the answer a release build has
-        // -- the plan is refused, the pass that asked for it fails instead of reporting success, and
-        // no interpreter walks a table that says a round starts somewhere its nodes do not.
-        const bool condEmpty    = condLast == li && condFirst == li;
-        const bool bodyEmpty    = bodyLast == li && bodyFirst == li;
+        // every back end runs with. So the same question is asked twice: the assertion stops a
+        // debug build where the plan is made, and the error value below is the answer a release
+        // build has
+        // -- the plan is refused, the pass that asked for it fails instead of reporting success,
+        // and no interpreter walks a table that says a round starts somewhere its nodes do not.
+        const bool condEmpty     = condLast == li && condFirst == li;
+        const bool bodyEmpty     = bodyLast == li && bodyFirst == li;
         const uint32_t spanFirst = std::min(condFirst, bodyFirst);
         const uint32_t spanEnd   = std::max(condLast, bodyLast);
         uint32_t intruder        = li;
         for (uint32_t at = spanFirst; at < li && intruder == li; ++at) {
             const uint32_t control = regions->controlOf(plan.topo[at]);
             const bool member      = (condRegion != 0 && regions->within(control, condRegion)) ||
-                                regions->within(control, bodyRegion);
+                                     regions->within(control, bodyRegion);
             if (!member) {
                 intruder = at;
             }
@@ -389,7 +389,8 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
                     "Runtime graph '{}' has a loop whose nodes are not one contiguous range in the "
                     "execution order: loop #{} is the LOOP node {} ({}), at position {}, and its "
                     "nodes are [{}, {}) -- the node {} ({}) at position {} is not one of them, and "
-                    "it stands between the loop's nodes and the LOOP node that ends a round. A round "
+                    "it stands between the loop's nodes and the LOOP node that ends a round. A "
+                    "round "
                     "begins at the first of the loop's nodes and the LOOP node ends it, so a plan "
                     "this table describes would run that node as part of every round. This plan "
                     "cannot be run. This is a defect of the compiler, not an error of the program.",
@@ -561,7 +562,8 @@ bool laterUsersAreOrderedAfter(
         }
     }
     for (const gc_node_ref_t user : users[cell]) {
-        if (user < position.size() && position[user] > position[update] && !reached.contains(user)) {
+        if (user < position.size() && position[user] > position[update] &&
+            !reached.contains(user)) {
             return false;
         }
     }
@@ -617,7 +619,8 @@ bool initialValueMadeHere(const GCGraph &graph, gc_node_ref_t init) {
 /// assignment do not. A cell of this graph is judged in order instead (see planStorageReuse); a
 /// cell from elsewhere is judged with this, because the graph may run again.
 bool cellValueMayBeKept(
-    const GCGraph &graph, const std::vector<std::vector<gc_node_ref_t>> &users, gc_node_ref_t cell) {
+    const GCGraph &graph, const std::vector<std::vector<gc_node_ref_t>> &users,
+    gc_node_ref_t cell) {
     if (cell >= users.size()) {
         return true;
     }
@@ -633,6 +636,19 @@ bool cellValueMayBeKept(
     }
     return false;
 }
+
+/// What the uses walk hands to both tables: which value each node carries, who reads a value and
+/// where, which nodes pack a value into a value of their own, and which values the program keeps.
+/// Declared here because planStorageReuse runs the walk and both of its tables are filled from it.
+struct ValueUses {
+    std::vector<std::vector<gc_node_ref_t>> carried;   // by node ref
+    std::vector<std::vector<gc_node_ref_t>> packersOf; // by node ref
+    std::vector<std::vector<uint32_t>> usesAt;         // by node ref, topo positions
+    std::vector<uint8_t> keptByProgram;                // by node ref
+    std::vector<uint32_t> endOf; // by node ref: where the value stops mattering
+};
+void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses);
+void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses);
 
 /// Where each in-place update runs and whether it reuses the storage of the value it is given
 /// (docs/design/arrays-memory/README.cn.md 4.3.1). The update node takes its array from
@@ -653,8 +669,12 @@ bool cellValueMayBeKept(
 void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
     const size_t count = plan.topo.size();
     plan.storageReuseAt.assign(count, StorageReuse::None);
-    const auto &table            = camel::core::OperatorTable::instance();
-    const size_t nodeCount       = graph.nodeCount();
+    // The uses of every value first: this walk and the references that come back read one answer
+    // (the author's ruling of 2026-11-15 -- the last use is computed here, not written twice).
+    ValueUses valueUses;
+    planValueUses(graph, plan, valueUses);
+    const auto &table      = camel::core::OperatorTable::instance();
+    const size_t nodeCount = graph.nodeCount();
     std::vector<std::vector<gc_node_ref_t>> users(nodeCount);
     // The graph's own edges, the way a back end follows them: a node runs after its data, `with`
     // and control inputs, after the statement a sync edge writes before it, and after what an
@@ -807,6 +827,9 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
         plan.storageReuseCount(StorageReuse::Input),
         plan.storageReuseCount(StorageReuse::ByArrayCount),
         plan.storageReuseCount(StorageReuse::Copy));
+    // The other table of the same walk: the references that come back, and the holds that balance
+    // them. Same walk, same order -- `planRefRows` reads the uses above and the last-use column.
+    planRefRows(graph, plan, valueUses);
 }
 
 /// A node that only carries a value on: a JOIN hands on the value of the arm that ran, a GATE
@@ -819,35 +842,41 @@ bool forwardsItsValue(const GCNode *node) {
 }
 
 /// A node that packs the values it is given into the value it makes: a FILL builds a closure tuple
-/// (GCFillKind::FunctionClosure) or an aggregate (Tuple, Array, Struct) out of its inputs. The values
-/// it is given do not stop being held when the FILL has run -- the value it made holds them -- so
-/// their reference comes back where that value dies, not here.
+/// (GCFillKind::FunctionClosure) or an aggregate (Tuple, Array, Struct) out of its inputs. The
+/// values it is given do not stop being held when the FILL has run -- the value it made holds them
+/// -- so their reference comes back where that value dies, not here.
 bool packsItsInputs(const GCNode *node) {
     return node != nullptr && node->kind == GCNodeKind::Fill;
 }
 
-/// The references that come back, per position (ExecPlan::RefGiveBack). The rule is written out in
-/// the header; what this function adds is the one thing the edges have to be walked for: a JOIN's
-/// uses belong to the arms' values, because the JOIN hands on one of them, and only that arm's
-/// value is the one whose reference comes back.
+/// The uses of every value, and route 4's "position of the last use" column.
 ///
-/// Deliberately apart from planStorageReuse: that walk decides where an update reuses storage and
-/// this one describes which references come back. They read the same edges (executionPredecessorsOf,
-/// the one shared answer to "whose value runs first"), and the day the release is executed they
-/// belong together -- but a table that changes the storage plan while it is being added cannot be
-/// verified by "no reading moved".
-void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
+/// The rule is written out in the header; what this function adds is the one thing the edges have
+/// to be walked for: a JOIN's uses belong to the arms' values, because the JOIN hands on one of
+/// them, and only that arm's value is the one whose reference comes back.
+///
+/// It is called from planStorageReuse, as the author's ruling of 2026-11-15 requires ("the last use
+/// is computed by it, not written a second time"): the two walks read the same edges
+/// (executionPredecessorsOf, the one shared answer to "whose value runs first"), so they are one
+/// walk with two tables rather than two walks that must agree.
+void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
     const size_t count     = plan.topo.size();
     const size_t nodeCount = graph.nodeCount();
-    plan.refCopiesAt.assign(count, 0);
-    plan.refProducedAt.assign(count, 0);
-    plan.refKeptAt.assign(count, 0);
-    plan.refGiveBackOffsets.assign(count + 1, 0);
+    auto &carried          = uses.carried;
+    auto &packersOf        = uses.packersOf;
+    auto &usesAt           = uses.usesAt;
+    auto &keptByProgram    = uses.keptByProgram;
+    auto &endOf            = uses.endOf;
+    carried.assign(nodeCount, {});
+    packersOf.assign(nodeCount, {});
+    usesAt.assign(nodeCount, {});
+    keptByProgram.assign(nodeCount, 0);
+    endOf.assign(nodeCount, 0);
+    plan.lastUseAt.assign(count, ExecPlan::kNoLastUse);
 
     // The values each node carries: `{its own}` for a producer, the union of its inputs for a node
     // that only carries a value on (a JOIN, a GATE, a port). A constant carries nothing: the
     // program holds it, and the graph neither takes nor gives it.
-    std::vector<std::vector<gc_node_ref_t>> carried(nodeCount);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
@@ -878,7 +907,6 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
     // Who keeps what out of the graph: the program, when the value is the graph's result. The plan
     // resolves the result through the forwarding nodes (tailValueRef), so the value named there is
     // the one whose reference the caller takes over.
-    std::vector<uint8_t> keptByProgram(nodeCount, 0);
     if (plan.tailValueRef != kInvalidNodeRef && plan.tailValueRef < nodeCount) {
         for (const gc_node_ref_t value : carried[plan.tailValueRef]) {
             keptByProgram[value] = 1;
@@ -890,11 +918,10 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
         }
     }
 
-    // A value's uses, by position: every node that reads it (through forwarding) is one use. A use by a
-    // node that packs its inputs (`packsItsInputs`) is also recorded against that node, because the
-    // reference is then held by the value the packing node made and comes back when *that* dies.
-    std::vector<std::vector<uint32_t>> usesAt(nodeCount);
-    std::vector<std::vector<gc_node_ref_t>> packersOf(nodeCount);
+    // A value's uses, by position: every node that reads it (through forwarding) is one use. A use
+    // by a node that packs its inputs (`packsItsInputs`) is also recorded against that node,
+    // because the reference is then held by the value the packing node made and comes back when
+    // *that* dies.
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
@@ -921,7 +948,6 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
     // after its last use, and -- when it was itself packed into a value -- after that value dies.
     // Read in reverse topo order, so a packing node (later in the order than the values it packs)
     // has its own end computed first.
-    std::vector<uint32_t> endOf(nodeCount, 0);
     for (size_t idx = count; idx-- > 0;) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
@@ -937,6 +963,39 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
         endOf[at] = end;
     }
 
+    // Route 4's column, filled from the same walk: for every value this graph produces, the
+    // position after which it is never read again. A packing value's end is the end of what it
+    // packed, which is why `endOf` is read in reverse above; a value nothing reads has no such
+    // position and says so instead of naming its own.
+    for (size_t idx = 0; idx < count; ++idx) {
+        const gc_node_ref_t value = plan.topo[idx];
+        if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
+            continue;
+        }
+        if (!usesAt[value].empty()) {
+            plan.lastUseAt[idx] = endOf[value];
+        }
+    }
+}
+
+/// The references that come back and the holds they are balanced by, as rows of the plan. The rule
+/// is written out in the header; the placement of the rows is what the last-use column is for: a
+/// reference packed into another value comes back where that value's own last use is, so the column
+/// is the one answer both tables read.
+void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
+    const size_t count        = plan.topo.size();
+    const size_t nodeCount    = graph.nodeCount();
+    const auto &carried       = uses.carried;
+    const auto &usesAt        = uses.usesAt;
+    const auto &keptByProgram = uses.keptByProgram;
+    plan.refCopiesAt.assign(count, 0);
+    plan.refProducedAt.assign(count, 0);
+    plan.refKeptAt.assign(count, 0);
+    plan.refGiveBackOffsets.assign(count + 1, 0);
+    plan.refEntryOffsets.assign(count + 1, 0);
+    plan.refEntries.clear();
+    plan.refGiveBacks.clear();
+
     // The rows, in topo order so that the table is a function of the graph and nothing else.
     std::vector<std::vector<ExecPlan::RefGiveBack>> rows(count);
     for (size_t idx = 0; idx < count; ++idx) {
@@ -944,19 +1003,30 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
         if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
             continue; // a forwarder, a port, a constant, or a node the plan does not run
         }
-        const uint32_t uses = static_cast<uint32_t>(usesAt[value].size());
-        const bool kept     = keptByProgram[value] != 0;
+        const uint32_t uses     = static_cast<uint32_t>(usesAt[value].size());
+        const bool kept         = keptByProgram[value] != 0;
         plan.refProducedAt[idx] = 1;
         plan.refKeptAt[idx]     = kept ? 1 : 0;
-        plan.refCopiesAt[idx] = kept ? uses : (uses == 0 ? 0 : uses - 1);
+        plan.refCopiesAt[idx]   = kept ? uses : (uses == 0 ? 0 : uses - 1);
         for (const uint32_t usePosition : usesAt[value]) {
             const gc_node_ref_t user = plan.topo[usePosition];
             if (packsItsInputs(graph.node(user))) {
                 // The value is packed into the value `user` makes: the reference comes back where
-                // that value dies, and the row says so.
-                const uint32_t end = std::min<uint32_t>(endOf[user], static_cast<uint32_t>(count - 1));
-                rows[end].push_back(ExecPlan::RefGiveBack{
-                    .value = value, .at = plan.topo[end], .count = 1, .packed = true});
+                // that value's own last use is -- the column, not a second answer computed here --
+                // and where nothing reads the packing value, where it is made.
+                const size_t packerPos =
+                    user < plan.topoIndexByRef.size() ? plan.topoIndexByRef[user] : count;
+                uint32_t end = packerPos < plan.lastUseAt.size() ? plan.lastUseAt[packerPos]
+                                                                 : ExecPlan::kNoLastUse;
+                if (end == ExecPlan::kNoLastUse || end >= count) {
+                    end = static_cast<uint32_t>(std::min<size_t>(packerPos, count - 1));
+                }
+                rows[end].push_back(
+                    ExecPlan::RefGiveBack{
+                        .value  = value,
+                        .at     = plan.topo[end],
+                        .count  = 1,
+                        .packed = true});
                 continue;
             }
             rows[usePosition].push_back(
@@ -972,22 +1042,73 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
         plan.refGiveBackOffsets[idx] = static_cast<uint32_t>(plan.refGiveBacks.size());
         for (const ExecPlan::RefGiveBack &row : rows[idx]) {
             plan.refGiveBacks.push_back(row);
-            // The same schedule as a per-position count: what an instruction emitted at this position
-            // would do -- the holds taken are the table's copies, these are the give-backs.
+            // The same schedule as a per-position count: what an instruction emitted at this
+            // position would do -- the holds taken are the table's copies, these are the
+            // give-backs.
             plan.refGiveBackAt[idx] += row.count;
         }
     }
     plan.refGiveBackOffsets[count] = static_cast<uint32_t>(plan.refGiveBacks.size());
+
+    // The same schedule as the entries a back end reads, one row per thing to do. The holds are the
+    // producing node's own output taking the references beyond its own; the give-backs are the rows
+    // just laid out, in the same order at the same positions.
+    plan.refEntryOffsets[0] = 0;
+    for (size_t idx = 0; idx < count; ++idx) {
+        const uint32_t holds      = plan.refCopiesAt[idx];
+        const gc_node_ref_t value = plan.topo[idx];
+        for (uint32_t held = 0; held < holds; ++held) {
+            plan.refEntries.push_back(
+                ExecPlan::RefEntry{
+                    .kind  = ExecPlan::RefEntryKind::Retain,
+                    .value = value,
+                    .count = 1});
+        }
+        for (const ExecPlan::RefGiveBack &row : plan.refGiveBacksAt(idx)) {
+            plan.refEntries.push_back(
+                ExecPlan::RefEntry{
+                    .kind   = ExecPlan::RefEntryKind::GiveBack,
+                    .value  = row.value,
+                    .count  = row.count,
+                    .packed = row.packed});
+        }
+        plan.refEntryOffsets[idx + 1] = static_cast<uint32_t>(plan.refEntries.size());
+    }
 }
 
 } // namespace
+
+std::span<const ExecPlan::RefEntry> ExecPlan::refEntriesAt(size_t topoIndex) const {
+    if (topoIndex + 1 >= refEntryOffsets.size()) {
+        return {};
+    }
+    return {
+        refEntries.data() + refEntryOffsets[topoIndex],
+        refEntryOffsets[topoIndex + 1] - refEntryOffsets[topoIndex]};
+}
+
+size_t ExecPlan::refEntriesOfKind(RefEntryKind kind) const {
+    size_t total = 0;
+    for (const RefEntry &entry : refEntries) {
+        if (entry.kind == kind) {
+            total += entry.count;
+        }
+    }
+    return total;
+}
+
+bool ExecPlan::refEntriesBalance() const {
+    return refProducedTotal() + refEntriesOfKind(RefEntryKind::Retain) ==
+           refEntriesOfKind(RefEntryKind::GiveBack) + refKeptTotal();
+}
 
 size_t ExecPlan::refProducedTotal() const {
     return static_cast<size_t>(std::count(refProducedAt.begin(), refProducedAt.end(), uint8_t{1}));
 }
 
 size_t ExecPlan::refCopiesTotal() const {
-    return static_cast<size_t>(std::accumulate(refCopiesAt.begin(), refCopiesAt.end(), uint64_t{0}));
+    return static_cast<size_t>(
+        std::accumulate(refCopiesAt.begin(), refCopiesAt.end(), uint64_t{0}));
 }
 
 size_t ExecPlan::refGiveBacksTotal() const {
@@ -1054,8 +1175,8 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     for (size_t idx = 0; idx < count; ++idx) {
         plan->topoIndexByRef[plan->topo[idx]] = static_cast<uint32_t>(idx);
     }
-    plan->tailValueRef = hasValueReturn ? camel::execute::resolveRuntimeTailValueRef(mutableGraph)
-                                        : kInvalidNodeRef;
+    plan->tailValueRef =
+        hasValueReturn ? camel::execute::resolveRuntimeTailValueRef(mutableGraph) : kInvalidNodeRef;
     const GCNode *tailValueNode =
         plan->tailValueRef != kInvalidNodeRef ? graph.node(plan->tailValueRef) : nullptr;
     if (!tailValueNode || tailValueNode->dataIndex == 0) {
@@ -1070,11 +1191,11 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
             break;
         }
     }
-    const bool anchorOk = plan->tailValueTopoIndex < count &&
-                          camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
-                              &graph,
-                              plan->topo,
-                              plan->tailValueTopoIndex);
+    const bool anchorOk =
+        plan->tailValueTopoIndex < count && camel::execute::hasOnlyTrivialRuntimeTailSuffixAfter(
+                                                &graph,
+                                                plan->topo,
+                                                plan->tailValueTopoIndex);
 
     // A call whose result reaches the tail JOIN only through forwarding GATEs and nested JOINs
     // is still in tail position.
@@ -1090,8 +1211,8 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         if (node) {
             plan->dataIndexByRef[ref] = node->dataIndex;
         }
-        plan->directCallArgOffsets[idx]    = static_cast<uint32_t>(plan->directCallArgSlots.size());
-        plan->branchArmEntryOffsets[idx]   = static_cast<uint32_t>(plan->branchArmEntries.size());
+        plan->directCallArgOffsets[idx]  = static_cast<uint32_t>(plan->directCallArgSlots.size());
+        plan->branchArmEntryOffsets[idx] = static_cast<uint32_t>(plan->branchArmEntries.size());
         if (node && node->kind == GCNodeKind::Brch) {
             const size_t armCount = graph.armCountOf(ref);
             for (size_t arm = 0; arm < armCount; ++arm) {
@@ -1115,14 +1236,12 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         // A call that writes captured variables hands on a tuple of the result and their new
         // versions, which are the values of its With inputs: it is never a tail call, whose value
         // the caller takes for the callee's own.
-        const bool writesCaptures =
-            node != nullptr && funcWriteMaskOf(graph, ref) != 0;
+        const bool writesCaptures = node != nullptr && funcWriteMaskOf(graph, ref) != 0;
         plan->directCallTailEligible[idx] =
             anchorOk && (ref == plan->tailValueRef) && !writesCaptures;
         plan->directCallFeedsTailJoin[idx] =
-            !writesCaptures &&
-            std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), ref) !=
-                tailJoinArmValues.end();
+            !writesCaptures && std::find(tailJoinArmValues.begin(), tailJoinArmValues.end(), ref) !=
+                                   tailJoinArmValues.end();
     }
     plan->tailAnchorOk = anchorOk;
     if (anchorOk) {
@@ -1144,11 +1263,10 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
     plan->directCallArgOffsets[count]  = static_cast<uint32_t>(plan->directCallArgSlots.size());
     plan->branchArmEntryOffsets[count] = static_cast<uint32_t>(plan->branchArmEntries.size());
     buildLoopTables(graph, *plan);
+    // The storage plan and the references that come back are one walk now (the author's ruling of
+    // 2026-11-15: the last use is computed by the storage walk, not written twice), so the second
+    // table is filled from inside the first and has no call of its own here.
     planStorageReuse(graph, *plan);
-    // The references that come back, described and not executed: a separate walk on purpose, so
-    // that adding the table moves no storage decision (no reading moved is how it is checked --
-    // docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md).
-    planRefGiveBacks(graph, *plan);
 
     for (gc_node_ref_t portRef : graph.normPorts()) {
         plan->calleePortSlots.push_back(dataIndexOf(graph, portRef));

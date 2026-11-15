@@ -28,8 +28,8 @@
 #include <memory>
 #include <mutex>
 #include <span>
-#include <unordered_map>
 #include <string_view>
+#include <unordered_map>
 #include <vector>
 
 namespace camel::runtime {
@@ -38,14 +38,14 @@ namespace camel::runtime {
 /// the input runs, the payload and the arms of a BRCH. They point into the frozen graph, which
 /// does not move, so running a node does not look anything up in the graph.
 struct ExecNode {
-    gc_node_ref_t ref  = kInvalidNodeRef;
-    const GCNode *node = nullptr;
+    gc_node_ref_t ref         = kInvalidNodeRef;
+    const GCNode *node        = nullptr;
     const gc_node_ref_t *norm = nullptr;
     const gc_node_ref_t *with = nullptr;
     const std::byte *body     = nullptr; // the payload; null when the node has none
-    uint32_t normCount = 0;
-    uint32_t withCount = 0;
-    uint32_t armCount  = 0; // BRCH only
+    uint32_t normCount        = 0;
+    uint32_t withCount        = 0;
+    uint32_t armCount         = 0; // BRCH only
 
     std::span<const gc_node_ref_t> normInputs() const { return {norm, normCount}; }
     std::span<const gc_node_ref_t> withInputs() const { return {with, withCount}; }
@@ -64,8 +64,8 @@ struct ExecLoop {
     uint32_t position        = 0; // the topo index of the LOOP node
     uint32_t begin           = 0;
     uint32_t condEnd         = 0;
-    uint32_t stateCount      = 0; // k
-    uint32_t collectionCount = 0; // s
+    uint32_t stateCount      = 0;     // k
+    uint32_t collectionCount = 0;     // s
     bool iterates            = false; // for, for ... while: one element a round
     bool hasCond             = false; // while, for ... while
     /// Where the elements come from (camel::core::LoopIterableForm). `false` (Array): the slot of
@@ -83,8 +83,8 @@ struct ExecLoop {
         int64_t value      = 0; // the constant, when isConstant
         bool isConstant    = false;
     };
-    gc_data_idx_t stateSlot      = 0; // the slot of the LOOP node: the state, a tuple if it wraps
-    gc_data_idx_t iterableSlot   = 0;
+    gc_data_idx_t stateSlot    = 0; // the slot of the LOOP node: the state, a tuple if it wraps
+    gc_data_idx_t iterableSlot = 0;
     /// The two bounds of an interval iterable (intervalIterates): the integers `from` and `to` of
     /// the half-open interval [from, to).
     IntervalBound intervalFrom;
@@ -93,11 +93,11 @@ struct ExecLoop {
     gc_data_idx_t bodyResultSlot = 0;
     /// The slot the rounds are counted in: the number of rounds done while the loop runs, -1 once
     /// its test has stopped it.
-    gc_data_idx_t roundSlot      = 0;
+    gc_data_idx_t roundSlot = 0;
     /// loopSlots[slotsOffset ..< +k] the slots of the first values of the state, then k of the
     /// condition's ports (when hasCond), then the body's ports: the element first (when it
     /// iterates), then k.
-    uint32_t slotsOffset = 0;
+    uint32_t slotsOffset       = 0;
     const gc_data_idx_t *slots = nullptr; // &loopSlots[slotsOffset]
     /// The value type of the node when it wraps its state (k > 1 or it collects); else null.
     const camel::core::type::TupleType *valueType = nullptr;
@@ -110,7 +110,7 @@ struct ExecLoop {
     bool stateComponents            = false;
     uint32_t stateSlotsOffset       = 0;
     const gc_data_idx_t *stateSlots = nullptr; // k slots, by component (stateComponents only)
-    uint64_t origin = 0;
+    uint64_t origin                 = 0;
 };
 
 /// What the memory plan decided about an update node's storage: an "returns a new value" update
@@ -226,7 +226,8 @@ class ExecPlan {
     /// the run, not of the plan). Written by the back ends that run the graph node by node.
     mutable std::unique_ptr<std::atomic<operator_t>[]> resolvedOpers;
 
-    /// ---- In-place updates: where the decision lives (docs/design/arrays-memory/README.cn.md 4.3.1) -------------------
+    /// ---- In-place updates: where the decision lives
+    /// (docs/design/arrays-memory/README.cn.md 4.3.1) -------------------
     //
     // An update node is an OPER node that names the in-place form of an operator and takes its
     // array from `:var/take` of a variable's cell (Builder::pathAssignmentOf,
@@ -239,7 +240,7 @@ class ExecPlan {
     StorageReuse storageReuseOf(gc_node_ref_t ref) const {
         const size_t index = ref < topoIndexByRef.size() ? topoIndexByRef[ref] : kNotInPlan;
         return index == kNotInPlan || index >= storageReuseAt.size() ? StorageReuse::None
-                                                                    : storageReuseAt[index];
+                                                                     : storageReuseAt[index];
     }
     /// How many update nodes the plan decided each way.
     size_t storageReuseCount(StorageReuse decision) const;
@@ -248,10 +249,11 @@ class ExecPlan {
     //
     // Design principles 10.5: a value is freed by counting alone, the count equals the number of
     // its holders, and the count comes from one last-use analysis on the execution plan that every
-    // back end follows. What follows is that analysis's output, so far only as a description: no
-    // back end reads it and no reference is given back anywhere today -- the only place a counted
+    // back end follows. What follows is that analysis's output. It is laid out from the "position
+    // of the last use" column below, and no back end executes it yet: the only place a counted
     // block is released is ForeignResourceObject::finalize, inside a collection (see
-    // docs/handover/reports/2026-11-15-count-at-zero-has-no-entry.cn.md).
+    // docs/handover/reports/2026-11-15-count-at-zero-has-no-entry.cn.md, and the block's lifetime
+    // in the note on `ForeignResourceControlBlock::releaseCountNow`).
     //
     // The rule is the author's ruling of 2026-11-15 (docs/handover/reviews/
     // 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md): the output of a
@@ -262,21 +264,21 @@ class ExecPlan {
     // (it is the graph's result): then the surviving reference is the caller's.
     //
     // A node that only forwards a value (a JOIN hands on the arm's value, a GATE passes its input
-    // through, a port hands on what it was given) produces nothing of its own: its uses are the uses
-    // of the values it carries, so the arm whose value the JOIN hands on is the one whose reference
-    // comes back, whichever arm runs.
+    // through, a port hands on what it was given) produces nothing of its own: its uses are the
+    // uses of the values it carries, so the arm whose value the JOIN hands on is the one whose
+    // reference comes back, whichever arm runs.
     //
     // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
     // aggregate out of the values it is given -- does not end when the FILL has run: the packing
-    // value holds that reference until it dies itself. So the reference comes back where the packing
-    // value's last reference dies, not at the FILL's position (`packed` marks those rows). This is
-    // the class that made the half count of 2026-11-15 release live boxes: a closure captured a
-    // handle, the slot that made it was cleared, and the count reached zero while the closure still
-    // held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
+    // value holds that reference until it dies itself. So the reference comes back where the
+    // packing value's last reference dies, not at the FILL's position (`packed` marks those rows).
+    // This is the class that made the half count of 2026-11-15 release live boxes: a closure
+    // captured a handle, the slot that made it was cleared, and the count reached zero while the
+    // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
     //
-    // What this table does not decide, and why nothing executes it: a value a callee keeps, or one a
-    // later graph reads, is a holder no edge of this graph shows. Counting those is the rest of the
-    // way to route 4.
+    // What this table does not decide, and why nothing executes it: a value a callee keeps, or one
+    // a later graph reads, is a holder no edge of this graph shows. Counting those is the rest of
+    // the way to route 4.
     struct RefGiveBack {
         gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
         gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
@@ -308,9 +310,9 @@ class ExecPlan {
             refGiveBacks.data() + refGiveBackOffsets[topoIndex],
             refGiveBackOffsets[topoIndex + 1] - refGiveBackOffsets[topoIndex]};
     }
-    /// The totals the balance `produced + copies = giveBacks + kept + packed` is read from: the rows
-    /// that come back because a use ended, and the rows that come back because the value that packed
-    /// them in died.
+    /// The totals the balance `produced + copies = giveBacks + kept + packed` is read from: the
+    /// rows that come back because a use ended, and the rows that come back because the value that
+    /// packed them in died.
     size_t refProducedTotal() const;
     size_t refCopiesTotal() const;
     size_t refGiveBacksTotal() const;
@@ -320,6 +322,49 @@ class ExecPlan {
     /// plan or kept by the program. False would mean this code and the rule disagree.
     bool refBalanceHolds() const;
 
+    /// ---- The position of the last use: route 4's column -------------------------------------
+    //
+    // The author's ruling of 2026-11-15 puts the last use on the walk that already decides storage
+    // reuse -- it "carries the execution order and who reads what" -- and says it is computed there
+    // and not written a second time. So `planStorageReuse` fills this column, and the references
+    // that come back are placed from it: a value is never read again after `lastUseAt`, which is
+    // the moment its producing reference is handed over (unless the program keeps it).
+    //
+    // What it answers, for one value: after which position in the plan is this value never read
+    // again. `kNoLastUse` is the honest answer for a value nothing reads -- such a value's
+    // producing reference comes back at its own position.
+    static constexpr uint32_t kNoLastUse = 0xFFFFFFFFu;
+    std::vector<uint32_t> lastUseAt; // by topo index; kNoLastUse for a value nothing reads
+    uint32_t lastUseOf(gc_node_ref_t ref) const {
+        const size_t index = ref < topoIndexByRef.size() ? topoIndexByRef[ref] : kNotInPlan;
+        return index == kNotInPlan || index >= lastUseAt.size() ? kNoLastUse : lastUseAt[index];
+    }
+
+    /// ---- The entries: the holds and the give-backs, as one list per position -----------------
+    //
+    // `refCopiesAt` and `refGiveBackAt` are the same schedule counted; this is the schedule as the
+    // entries a back end reads, one row per thing to do, so that "what the plan says" and "what the
+    // count does" can be compared row by row rather than by two totals that happen to agree. A
+    // `Retain` at a position is the node's output taking the holds beyond its own; a `GiveBack` is
+    // a reference coming back once that position has run.
+    enum class RefEntryKind : uint8_t {
+        Retain   = 0,
+        GiveBack = 1,
+    };
+    struct RefEntry {
+        RefEntryKind kind   = RefEntryKind::GiveBack;
+        gc_node_ref_t value = kInvalidNodeRef; // the value the reference belongs to
+        uint32_t count      = 0;
+        bool packed         = false; // a give-back that comes due when the packing value dies
+    };
+    std::vector<uint32_t> refEntryOffsets;
+    std::vector<RefEntry> refEntries;
+    std::span<const RefEntry> refEntriesAt(size_t topoIndex) const;
+    /// How many entries of each kind the plan holds, which is the balance read row by row:
+    /// `produced + retains == giveBacks + kept`.
+    size_t refEntriesOfKind(RefEntryKind kind) const;
+    bool refEntriesBalance() const;
+
     /// The operator a back end runs for the OPER node `ref`: the URI the node names, or -- for an
     /// update node the plan marked Copy -- the plain (copying) form of the in-place form it names
     /// (OperatorTable::plainForm). The text lives in the operator table, so the view stays valid.
@@ -328,10 +373,10 @@ class ExecPlan {
     /// how long it is (each stored plus one; 0 is "not compiled"), the JIT entry, flags, and how
     /// often an indirect call from it was made. Only FastVM reads and writes it.
     struct FastVmState {
-        uintptr_t entryPc          = 0;
-        uintptr_t graphLength      = 0;
-        uintptr_t jitEntry         = 0;
-        uintptr_t flags            = 0;
+        uintptr_t entryPc           = 0;
+        uintptr_t graphLength       = 0;
+        uintptr_t jitEntry          = 0;
+        uintptr_t flags             = 0;
         uintptr_t indirectCallCount = 0;
         /// Keeps the bytecode range of the version in the interpreter's code space; gives it
         /// back when the version is freed (the plan is freed with it).
