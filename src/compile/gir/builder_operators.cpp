@@ -4315,7 +4315,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     node_handle_t{},
                     LinkType::Norm};
             }
-            requireMutableArgument(arg, calleeLabel);
+            // A write is a `var` argument like any other, but the assignment operator is the write
+            // itself: it does not exist after the call, so it cannot carry the cell away. It is
+            // remembered apart from the real escapes (a closure capturing the variable, a user
+            // function's `var` parameter) so that the SSA fold can tell "kept a resource because it
+            // is written" from "kept a resource because it leaves the body".
+            const bool writeOperator =
+                targetOperator != nullptr && targetOperator->uri().rfind(":op/assn", 0) == 0;
+            if (writeOperator) {
+                writeOnlyEscaping_.insert(arg);
+            } else {
+                requireMutableArgument(arg, calleeLabel);
+            }
             // A `var` parameter is two-way: the callee reads the caller's variable and writes into
             // it, so the argument is accepted only when each side's type accepts the other's values
             // (design principles 3.5). A shape one side leaves open is not such a pair: a

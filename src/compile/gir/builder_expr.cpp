@@ -1840,9 +1840,20 @@ void Builder::collapseNonEscapingVariableReads() {
     }
     for (auto &[cell, reads] : byCell) {
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
-        // is shared with a closure: both keep their cell.
-        if (nodeKindOf(cell) == camel::runtime::GCNodeKind::Port ||
-            escapingVariables_.contains(cell)) {
+        // is shared with a closure: both keep their cell. A `var` that only a write put in
+        // `escapingVariables_` is not the same thing: the assignment is the write, it does not
+        // exist after the call, so being written is not a way of leaving the body. It is given to
+        // the fold here, and what keeps it a resource then has to be a real escape (written into
+        // `escapingVariables_` by a capture or a user function's `var` parameter) or a write the
+        // fold cannot stand for -- a read whose version is a carried state (the LOOP) is not
+        // folded below, so one such read is enough to keep the cell:
+        //   straight-line (foldable): every read's version is a write of the same body, and no
+        //   read's version is a LOOP. Anything else -- a loop's carried state, a read whose version
+        //   is a merge point the fold does not accept, an arm's region -- is not straight-line.
+        if (nodeKindOf(cell) == camel::runtime::GCNodeKind::Port) {
+            continue;
+        }
+        if (escapingVariables_.contains(cell) && !writeOnlyEscaping_.contains(cell)) {
             continue;
         }
         const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
