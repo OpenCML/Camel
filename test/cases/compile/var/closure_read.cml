@@ -1,0 +1,24 @@
+/**
+ * A `var` read by a closure: the value is written in one place and read in another (inside the
+ * closure's own graph), so no fold can put the write where the read is.
+ *
+ * Design principles 3.5 allows this: a `var` that a closure mentions may not be assigned from the
+ * closure's creation to its last use, and here the assignment happens before the closure is made.
+ * What the read must see is `2`, the value the assignment wrote -- not the `1` the `var` started
+ * with, which nobody reads.
+ *
+ * The same program written without `var` is `closure_read_let.cml`: the closure captures a value
+ * instead of a cell. The two writings must have one canonical graph (`std::jgir canonical=true`),
+ * which is what `test/plans/feat/compile/var.plan.toml` measures: the `var` writing keeps a unit,
+ * its closure reads that unit through `:var/get`, and the `let` writing hands the value to the
+ * closure.
+ *
+ * Run: camel test/cases/compile/var/closure_read.cml std::nvm
+ */
+func main(): int sync {
+    var x = 1
+    x = 2
+    let read = () => x
+    println(read())
+    return 0
+}
