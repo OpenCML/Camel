@@ -1,0 +1,21 @@
+reftime 的合并读数（正文只有一行标题，读数记在这里；已推的提交不改写）。
+
+合并：`0e94f3ba4 Hold each call's counted reference pair to the exit reading the tree already keeps`，
+`--no-ff` 合入 `lane-reftime`（`338da2a36`，4 笔：`e3c2306f9` `bbe00df8b` `56db9d195` `338da2a36`），
+无源码冲突。同步合并 `af19effb3`（工作树 `D:\Projects\Camel-wt\refcore` 内 `git merge origin/develop`）
+只一处冲突：`docs/handover/questions/README.md`（派生文件，取 develop 侧后
+`node scripts/check-doc-links.mjs --questions-index --write` 重生成：`52 page(s) in the directory,
+54 kept row(s)`；`--check` = `no broken links in 62 document(s)`），
+`git diff origin/develop -- README.md` 只有 header 50→52 与 reftime 新加那两页的两行。
+
+闸门（在 `af19effb3` 上，`internal/tools/camel-remote.ps1`，主机 88zjwei）：
+  [SUMMARY] total: 68, pass: 68, fail: 0
+  test/plans/feat/opt/defun.plan.toml = 21/21，test/plans/feat/compile/ref = 47/47
+  `killed by a signal` 不出现，`timed out` 不出现
+  RUN_EXIT=0，GATE_EXIT=0
+  [provenance] tip af19effb3 | tier fast | jobs 4 | tree /home/zjwei/camel-work/refcore
+
+合进主检出后 `HEAD^{tree} == af19effb3^{tree}` = True，即被量的树就是推上去的树。
+`git ls-remote origin refs/heads/develop` = 0e94f3ba41ecc44111e6cd908f825ab0b39aa28f，`unpushed=0`。
+
+注：`-Check all` 是静态层（16 项），不选 `slow`/`milestone` 测试；这一笔只按点名跑了计划。
