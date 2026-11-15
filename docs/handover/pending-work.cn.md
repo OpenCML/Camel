@@ -227,3 +227,13 @@ func p(): int {                  // 非 sync 函数体
 
 ### 教训
 **同一条 `Ref` 语义，在 `var` 上成立的「后置的读把写拉活」在 `Ref` 上不成立**——迁移时最容易漏的正是这种「只换了载体、没换机制」的地方。`byref` 认出了它并只报不改，是对的。
+
+## 11. 作者把两条 `Ref` 缺陷升到第一档（2026-11-16）
+
+`origin/fsh-dev` 的合并提交 `704ff582a` 标题原话：
+
+> **`Merge develop: by-reference capture cases migrated, the var unit deleted through the edit interface; put the two Ref defects into priority one`**
+
+**所以第 10 节记的 A 与 B 不是「顺带记一笔的债」，它们是第一档的一部分。** 已派 `lane-refdiag`（只诊断不改源码），要求它给出：同一根因还是两个缺陷、修法的 `file#Symbol`、**预测炸开范围（标注预判）**、可证伪判据、以及**风险**——尤其「修完之后会不会有写从『不执行』变成『执行』」。
+
+**作者把指令写在合并提交的标题里，没有改 `docs/roadmap.cn.md`。** 这一点要记住：**他的裁定以提交到达 `origin/fsh-dev`，载体可以是标题、可以是 `docs/handover/reviews/` 下的页——不一定是任务书文件。** 巡检时必须读 `origin/fsh-dev` 的最新一笔标题，不能只看 roadmap 有没有变。
