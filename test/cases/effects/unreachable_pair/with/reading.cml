@@ -1,0 +1,30 @@
+/**
+ * Deleting a declaration nothing reaches leaves every other function's measured resources the same
+ * (the ruling of 2026-11-15): a function's set is what its own body was measured to reach, and a
+ * declaration written somewhere else is not part of that. `bump` writes the module's `counter`,
+ * `apply` reads the same cell, and nothing calls `bump` -- so deleting it is this file against
+ * `without/reading.cml`, and every reading but `bump`'s own is the same in both, byte for byte.
+ *
+ * The two files are named alike on purpose: the module's name is part of the name of the resource a
+ * top-level `var` is (`counter` is `reading:counter` here), so two differently named modules could
+ * not be compared word for word. `bump` is written last for the same reason -- the numbering of the
+ * graphs the two files share does not move with it.
+ */
+
+var counter = 0
+
+func apply(x: int): int sync {
+    var local = x
+    local = local + counter
+    return local
+}
+
+func main(): int sync {
+    println(apply(1))
+    return 0
+}
+
+func bump(): int sync {
+    counter = counter + 1
+    return 0
+}

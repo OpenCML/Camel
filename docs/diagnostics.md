@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-315 diagnostics: 293 errors, 22 warnings. 15 carry a machine-applicable edit, 300 say why they carry none.
+316 diagnostics: 294 errors, 22 warnings. 15 carry a machine-applicable edit, 301 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -273,6 +273,7 @@ prints one entry.
 | `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
 | `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
+| `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8970,7 +8971,7 @@ None: choice: capture the value the cell holds, or pass the state as a value, an
 **Help**
 
 ```text
-A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
+A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/reviews/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
 ```
 
 **Example** (`test/cases/compile/state_escape/err_escape_return.cml`, run as `camel test/cases/compile/state_escape/err_escape_return.cml`)
@@ -9021,6 +9022,57 @@ func main(): int sync {
     let outer = state::ref(inner)
     let back = state::get(outer)
     println(state::get(back))
+    return 0
+}
+```
+
+### ResourceInferenceConflict
+
+`0x03000212` · Error · `SemanticDiag::ResourceInferenceConflict`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.
+```
+
+**Help**
+
+```text
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+```
+
+**Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
+
+```camel
+func same::<T>(a: T, b: T): T {
+    return a
+}
+
+func pick(b: bool): (x: int) => int {
+    return same(if b then f else g, wide)
+}
+
+func f(x: int): int {
+    return x + 1
+}
+
+func g(x: int): int {
+    return x + 2
+}
+
+func wide(x: int): int sync {
+    println(x)
+    return x + 3
+}
+
+func main(): int sync {
+    let h = pick(true)
+    println(h(1))
     return 0
 }
 ```

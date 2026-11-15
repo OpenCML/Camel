@@ -35,7 +35,7 @@
 # (docs/language/05_modules.md:234, docs/language/07_statements.md:38). The refusal is a five-line hunk at two known
 # sites and two ready diagnostics; it needs the 35 test cases and the two doc examples migrated with
 # it, which is a lane of its own. It is filed as a question page,
-# docs/handover/questions/2026-11-14-who-migrates-the-module-level-var.cn.md, and until then a module
+# docs/handover/reviews/2026-11-14-who-migrates-the-module-level-var.cn.md, and until then a module
 # `var` works as it did -- the one way out this plan does not refuse.
 #
 # What is NOT covered here either, by design: `Ref<T>` (the sanctioned way to hand long-lived shared

@@ -410,7 +410,7 @@ expect_output_contains = [":op/assn_l"]
 #                    the program still prints the 41 it wrote -- the wall against relaxing too far
 [[tests]]
 name = "dead_write.direct.answer"
-desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see docs/handover/questions/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md."
+desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see docs/handover/reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md."
 case = "../../../cases/modules/selected_protection/dead_write.cml"
 args = ["${case}", "policy::direct", "order=false", "faults=false", "test::deadwrite"]
 expect_exit = 0

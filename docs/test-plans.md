@@ -1571,7 +1571,7 @@ entry starts demanding a diagnostic it never wanted (`match.complete` in
 `consistency/match.plan.toml` was red that way when the line was deleted). Read it as "this entry
 inherits nothing here", and write the absence as `expect_no_diagnostics = true` -- the reasoning and
 the readings are in
-[`docs/handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+[`docs/handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
 
 `test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
 that writes a field its kind does not evaluate, naming the plan, the line and the entry:

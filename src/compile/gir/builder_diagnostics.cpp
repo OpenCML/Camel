@@ -309,8 +309,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
 bool Builder::callIsChainStatement(node_handle_t node) {
     // What a `sync` block's chain carries is decided by what a call runs (design principles 3.4:
     // "调用按被调函数推出的事实判：函数体含可能出故障的计算、或函数是递归的（递归可能超过深度上限）
-    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that is
-    // not pure, a cast that may fail, a branch or a loop that carries a region.
+    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that
+    // is not pure, a cast that may fail, a branch or a loop that carries a region.
     if (!runtime::isChainStatement(*nodeDraftOf(node), nodeIdOf(node))) {
         return false;
     }
@@ -321,11 +321,11 @@ bool Builder::callIsChainStatement(node_handle_t node) {
         return true;
     }
     if (isEffectNode(currGraph_.get(), node)) {
-        // The declaration is the whole truth a call site reads (design principles 3.3): a clause that
-        // names a resource, or a `var` parameter, says that a call of this reaches something which is
-        // not the graph -- and the body may well touch nothing, which is the promise the clause makes
-        // to its callers. `test/cases/effects/declared.cml` is that shape: `consume` writes the
-        // handle its clause names and its body only returns 0.
+        // The declaration is the whole truth a call site reads (design principles 3.3): a clause
+        // that names a resource, or a `var` parameter, says that a call of this reaches something
+        // which is not the graph -- and the body may well touch nothing, which is the promise the
+        // clause makes to its callers. `test/cases/effects/declared.cml` is that shape: `consume`
+        // writes the handle its clause names and its body only returns 0.
         return true;
     }
     const compile_graph_ptr_t callee = nodeGraphOf(node)->funcTarget(node);
@@ -342,8 +342,8 @@ bool Builder::calleeIsFreelyArranged(DraftGraphBuilder *callee) {
         return state != bodyStates_.end() && state->second == BodyState::Built;
     };
     // A body that is not finished holds code this walk cannot see yet, so nothing is claimed about
-    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches a
-    // second time is one that reaches itself: that is a recursion, which may go deeper than the
+    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches
+    // a second time is one that reaches itself: that is a recursion, which may go deeper than the
     // depth limit, so it is a call that may fault (design principles 3.4). Neither answer is
     // memoized -- the first is about a body that is not finished, and the second is about this walk
     // and not about the graph it names.
@@ -495,6 +495,48 @@ void Builder::reportResourceViolation(
         unnamed.empty()
             ? std::string("an effect outside the program")
             : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
+}
+
+void Builder::reportResourceConflict(
+    const ResourceConflict &conflict, DraftGraphBuilder *leftOwner, DraftGraphBuilder *rightOwner) {
+    // Anchored at the declaration that wrote no clause when the two met: the position cannot repair
+    // the one that already says what it writes, and a clause is the repair this asks for. Both are
+    // named, because what the position needs is for the two to agree.
+    DraftGraphBuilder *leftUnwritten  = conflict.leftUnwritten ? leftOwner : nullptr;
+    DraftGraphBuilder *rightUnwritten = conflict.rightUnwritten ? rightOwner : nullptr;
+    DraftGraphBuilder *anchor         = leftUnwritten != nullptr ? leftUnwritten : rightUnwritten;
+    if (anchor == nullptr) {
+        anchor = leftOwner != nullptr ? leftOwner : rightOwner;
+    }
+    if (anchor == nullptr) {
+        return;
+    }
+    const auto nameOf = [](DraftGraphBuilder *graph, const camel::core::type::Type *type) {
+        return graph != nullptr ? graph->name() : camel::core::type::typeToString(type);
+    };
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::ResourceInferenceConflict);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    const auto originOf       = [&](DraftGraphBuilder *graph) {
+        return sourceContext != nullptr && graph != nullptr
+                   ? sourceContext->debugMap().graphOrigin(graph->graphId())
+                   : camel::source::kInvalidOriginId;
+    };
+    const auto origin = originOf(anchor);
+    if (origin != camel::source::kInvalidOriginId) {
+        builder.atOrigin(origin);
+    }
+    DraftGraphBuilder *other = anchor == leftOwner ? rightOwner : leftOwner;
+    const auto otherOrigin   = originOf(other);
+    if (otherOrigin != camel::source::kInvalidOriginId) {
+        builder.relatedOrigin(
+            otherOrigin,
+            "the other value this position is given: the two have to write the same resources");
+    }
+    builder.commit(
+        nameOf(leftOwner, conflict.left),
+        nameOf(rightOwner, conflict.right),
+        camel::core::type::typeToString(conflict.left),
+        camel::core::type::typeToString(conflict.right));
 }
 
 void Builder::reportDroppedEffectsOfBodies() {
