@@ -817,6 +817,14 @@ bool forwardsItsValue(const GCNode *node) {
                                node->kind == GCNodeKind::Port);
 }
 
+/// A node that packs the values it is given into the value it makes: a FILL builds a closure tuple
+/// (GCFillKind::FunctionClosure) or an aggregate (Tuple, Array, Struct) out of its inputs. The values
+/// it is given do not stop being held when the FILL has run -- the value it made holds them -- so
+/// their reference comes back where that value dies, not here.
+bool packsItsInputs(const GCNode *node) {
+    return node != nullptr && node->kind == GCNodeKind::Fill;
+}
+
 /// The references that come back, per position (ExecPlan::RefGiveBack). The rule is written out in
 /// the header; what this function adds is the one thing the edges have to be walked for: a JOIN's
 /// uses belong to the arms' values, because the JOIN hands on one of them, and only that arm's
@@ -881,13 +889,17 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
         }
     }
 
-    // A value's uses, by position: every node that reads it (through forwarding) is one use.
+    // A value's uses, by position: every node that reads it (through forwarding) is one use. A use by a
+    // node that packs its inputs (`packsItsInputs`) is also recorded against that node, because the
+    // reference is then held by the value the packing node made and comes back when *that* dies.
     std::vector<std::vector<uint32_t>> usesAt(nodeCount);
+    std::vector<std::vector<gc_node_ref_t>> packersOf(nodeCount);
     for (size_t idx = 0; idx < count; ++idx) {
         const gc_node_ref_t at = plan.topo[idx];
         if (at >= nodeCount) {
             continue;
         }
+        const bool packs = packsItsInputs(graph.node(at));
         for (const camel::execute::ExecutionPredecessor &predecessor :
              camel::execute::executionPredecessorsOf(graph, at)) {
             if (predecessor.kind != camel::execute::ExecutionPredecessor::Kind::Data ||
@@ -896,8 +908,32 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
             }
             for (const gc_node_ref_t value : carried[predecessor.node]) {
                 usesAt[value].push_back(static_cast<uint32_t>(idx));
+                if (packs && std::find(packersOf[value].begin(), packersOf[value].end(), at) ==
+                                 packersOf[value].end()) {
+                    packersOf[value].push_back(at);
+                }
             }
         }
+    }
+
+    // When each value dies, which is where the references it packed into another value come back:
+    // after its last use, and -- when it was itself packed into a value -- after that value dies.
+    // Read in reverse topo order, so a packing node (later in the order than the values it packs)
+    // has its own end computed first.
+    std::vector<uint32_t> endOf(nodeCount, 0);
+    for (size_t idx = count; idx-- > 0;) {
+        const gc_node_ref_t at = plan.topo[idx];
+        if (at >= nodeCount) {
+            continue;
+        }
+        uint32_t end = static_cast<uint32_t>(idx);
+        for (const uint32_t usePosition : usesAt[at]) {
+            end = std::max(end, usePosition);
+        }
+        for (const gc_node_ref_t packer : packersOf[at]) {
+            end = std::max(end, endOf[packer]);
+        }
+        endOf[at] = end;
     }
 
     // The rows, in topo order so that the table is a function of the graph and nothing else.
@@ -913,8 +949,17 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
         plan.refKeptAt[idx]     = kept ? 1 : 0;
         plan.refCopiesAt[idx] = kept ? uses : (uses == 0 ? 0 : uses - 1);
         for (const uint32_t usePosition : usesAt[value]) {
+            const gc_node_ref_t user = plan.topo[usePosition];
+            if (packsItsInputs(graph.node(user))) {
+                // The value is packed into the value `user` makes: the reference comes back where
+                // that value dies, and the row says so.
+                const uint32_t end = std::min<uint32_t>(endOf[user], static_cast<uint32_t>(count - 1));
+                rows[end].push_back(ExecPlan::RefGiveBack{
+                    .value = value, .at = plan.topo[end], .count = 1, .packed = true});
+                continue;
+            }
             rows[usePosition].push_back(
-                ExecPlan::RefGiveBack{.value = value, .at = plan.topo[usePosition], .count = 1});
+                ExecPlan::RefGiveBack{.value = value, .at = user, .count = 1});
         }
         if (uses == 0 && !kept) {
             // Born with a reference nothing reads: it comes back as soon as the value exists.
@@ -943,7 +988,15 @@ size_t ExecPlan::refCopiesTotal() const {
 size_t ExecPlan::refGiveBacksTotal() const {
     size_t total = 0;
     for (const RefGiveBack &row : refGiveBacks) {
-        total += row.count;
+        total += row.packed ? 0 : row.count;
+    }
+    return total;
+}
+
+size_t ExecPlan::refPackedTotal() const {
+    size_t total = 0;
+    for (const RefGiveBack &row : refGiveBacks) {
+        total += row.packed ? row.count : 0;
     }
     return total;
 }
@@ -953,7 +1006,8 @@ size_t ExecPlan::refKeptTotal() const {
 }
 
 bool ExecPlan::refBalanceHolds() const {
-    return refProducedTotal() + refCopiesTotal() == refGiveBacksTotal() + refKeptTotal();
+    return refProducedTotal() + refCopiesTotal() ==
+           refGiveBacksTotal() + refKeptTotal() + refPackedTotal();
 }
 
 size_t ExecPlan::storageReuseCount(StorageReuse decision) const {

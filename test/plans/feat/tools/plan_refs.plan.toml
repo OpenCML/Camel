@@ -40,7 +40,7 @@ verify_script = '''
     if (m) produced.add(Number(m[1]))
   }
   const orphan = lines.filter(l => {
-    const m = l.match(/ at \d+ give (\d+) x\d+/)
+    const m = l.match(/ at \d+ (?:give|packed) (\d+) x\d+/)
     return m !== null && !produced.has(Number(m[1]))
   })
   assert(orphan.length === 0,
@@ -53,18 +53,19 @@ verify_script = '''
     'the program still prints what it printed, after the table: ' + said)
   // Every graph of the program is read, and the main one is among them: the table is per graph, a
   // program is several graphs, and a summary line naming no graph would be one table for all.
-  assert(summaries.every(l => / produced \d+ copies \d+ give-backs \d+ kept \d+ tail (none|\d+ tail-kind -?\d+) balanced yes$/
+  assert(summaries.every(l => / produced \d+ copies \d+ give-backs \d+ kept \d+ packed \d+ tail (none|\d+ tail-kind -?\d+) balanced yes$/
       .test(l)), 'every summary line has its shape: ' + summaries.join(' | '))
   const main = summaries.find(l => l.startsWith('PLAN_REFS main '))
   assert(main !== undefined, 'the main graph is read: ' + summaries.join(' | '))
   // The reading this entry pins: six values the plan counts, none of them read twice (`copies` 0),
-  // six references that come back, and nothing kept -- the program's result is a constant
-  // (`tail 11 tail-kind 0`), so no counted value of `main` outlives the graph. A change to the
-  // rule, to the walk, or to how many times a value is read moves one of these four numbers.
-  assert(/ produced 6 copies 0 give-backs 6 kept 0 /.test(main),
+  // six references that come back when their use ends, none packed into another value, and nothing
+  // kept -- the program's result is a constant (`tail 11 tail-kind 0`), so no counted value of
+  // `main` outlives the graph. A change to the rule, to the walk, or to how many times a value is
+  // read moves one of these numbers.
+  assert(/ produced 6 copies 0 give-backs 6 kept 0 packed 0 /.test(main),
     'the main graph counts six values, each read once or not at all: ' + main)
   const rootLine = summaries.find(l => l.startsWith('PLAN_REFS __root__ '))
-  assert(rootLine !== undefined && / produced 1 copies 0 give-backs 0 kept 1 /.test(rootLine),
+  assert(rootLine !== undefined && / produced 1 copies 0 give-backs 0 kept 1 packed 0 /.test(rootLine),
     'the root graph keeps what it makes: ' + (rootLine || 'none'))
 }
 '''
@@ -89,13 +90,26 @@ verify_script = '''
     'every graph balances: ' + summaries.join(' | '))
   const main = summaries.find(l => l.startsWith('PLAN_REFS main '))
   assert(main !== undefined, 'the main graph is read: ' + summaries.join(' | '))
-  // The reading this entry pins, and the reason the entry exists: a value read three times takes
-  // two more references than the one it is born with (a closure capture is one of the three reads),
-  // and a value the program keeps takes one more than its uses. Eleven values, four copies, fifteen
-  // references coming back, nothing kept -- the count follows the holders on paper before it can
-  // follow them at run time.
-  assert(/ produced 11 copies 4 give-backs 15 kept 0 /.test(main),
-    'the main graph counts eleven values, four of them read more than once: ' + main)
+  // The reading this entry pins, and the reason the entry exists: a value read three times takes two
+  // more references than the one it is born with, and one of those three reads is the closure
+  // capture -- so that reference is not given back where the closure was made, it is given back
+  // where the closure dies (`packed 1`, and the `packed` row is at the closure's last use, not at
+  // the FILL that captured it). Eleven values, four copies, fourteen references back when their use
+  // ends, one packed into the closure, nothing kept.
+  assert(/ produced 11 copies 4 give-backs 14 kept 0 packed 1 /.test(main),
+    'the main graph counts eleven values, four of them read more than once, one packed: ' + main)
+  // The packed row is where the closure dies, which is after the FILL: the capture's reference comes
+  // back at the closure's last use and nowhere else on `main`.
+  const packedRows = lines.filter(l => / at \d+ packed \d+ x\d+/.test(l))
+  assert(packedRows.length > 0, 'the capture is a row of its own: ' + said)
+  const captureRow = packedRows.find(l => l.includes(' packed 1 x1'))
+  assert(captureRow !== undefined, 'the captured value comes back as a packed row: ' +
+    packedRows.join(' | '))
+  const captureAt = Number(captureRow.match(/ at (\d+) packed /)[1])
+  const fillAt = Number([...lines].find(l => l.includes(' value ' + 3 + ' kind 4 '))?.match(/ at (\d+) /)?.[1])
+  assert(Number.isFinite(fillAt) && captureAt > fillAt,
+    'the capture comes back after the value that packed it, not at the FILL: packed at ' + captureAt +
+      ', the FILL at ' + fillAt)
   // A graph that keeps its result and reads it once: one value, one copy, one reference back.
   const keepsItsResult = summaries.filter(l => / produced 1 copies 1 give-backs 1 kept 1 /.test(l))
   assert(keepsItsResult.length >= 1,
@@ -103,3 +117,22 @@ verify_script = '''
       summaries.join(' | '))
 }
 '''
+
+# The balance over every case the tree has: `test::plan_refs` prints it per graph, and a graph that
+# does not balance means the walk missed a path -- which is a reference given back too early the day
+# a back end executes the table. One sweep, because the property is the walk's and not a program's:
+# a new case is covered the day it is added, with no plan entry to remember.
+[[tests]]
+name = "plan_refs.every_case_balances"
+desc = "Every case the tree has is read through `test::plan_refs`, and every graph of every case that compiles balances `produced + copies == give-backs + kept + packed`, with no graph left unprinted."
+kind = "behavior"
+tool = "node"
+case = "../../../../scripts/check-plan-refs.mjs"
+args = ["${case}"]
+expect_exit = 0
+expect_stdout_contains = ["unbalanced=0", "silent=0", "every graph of every case that compiles balances"]
+# The sweep starts one `camel` per case: 3776 cases, 2571 of them readable, 23993 graphs, about
+# 238500 ms of CPU on one core and 54 s of wall clock at eight at a time. The bound is four times
+# that work (the runner's margin), stated here because the number is the work's and not a guess; a
+# host that runs the sweep slower spends wall clock, not CPU, so the bound stays a bound.
+timeout_ms = 1200000

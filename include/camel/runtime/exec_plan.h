@@ -260,17 +260,28 @@ class ExecPlan {
     // (it is the graph's result): then the surviving reference is the caller's.
     //
     // A node that only forwards a value (a JOIN hands on the arm's value, a GATE passes its input
-    // through) produces nothing of its own: its uses are the uses of the values it carries, so the
-    // arm whose value the JOIN hands on is the one whose reference comes back, whichever arm runs.
+    // through, a port hands on what it was given) produces nothing of its own: its uses are the uses
+    // of the values it carries, so the arm whose value the JOIN hands on is the one whose reference
+    // comes back, whichever arm runs.
     //
-    // What this table does not decide, and why nothing executes it: a use that keeps the value
-    // beyond itself -- an element stored into an aggregate, a closure capture, a callee that keeps
-    // its argument -- is a holder the plan cannot see from an edge, and a value a later graph reads
-    // is not named here at all. Counting those is the half of route 4 that is not written yet.
+    // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
+    // aggregate out of the values it is given -- does not end when the FILL has run: the packing
+    // value holds that reference until it dies itself. So the reference comes back where the packing
+    // value's last reference dies, not at the FILL's position (`packed` marks those rows). This is
+    // the class that made the half count of 2026-11-15 release live boxes: a closure captured a
+    // handle, the slot that made it was cleared, and the count reached zero while the closure still
+    // held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
+    //
+    // What this table does not decide, and why nothing executes it: a value a callee keeps, or one a
+    // later graph reads, is a holder no edge of this graph shows. Counting those is the rest of the
+    // way to route 4.
     struct RefGiveBack {
         gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
         gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
         uint32_t count      = 0;               // how many references come back there (1 today)
+        /// The reference comes back because the value that packed it in has died, not because a use
+        /// of this value ended.
+        bool packed = false;
     };
     /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
     /// constant, nor a node that only forwards).
@@ -291,11 +302,14 @@ class ExecPlan {
             refGiveBacks.data() + refGiveBackOffsets[topoIndex],
             refGiveBackOffsets[topoIndex + 1] - refGiveBackOffsets[topoIndex]};
     }
-    /// The totals the balance `produced + copies = giveBacks + kept` is read from.
+    /// The totals the balance `produced + copies = giveBacks + kept + packed` is read from: the rows
+    /// that come back because a use ended, and the rows that come back because the value that packed
+    /// them in died.
     size_t refProducedTotal() const;
     size_t refCopiesTotal() const;
     size_t refGiveBacksTotal() const;
     size_t refKeptTotal() const;
+    size_t refPackedTotal() const;
     /// Whether the balance holds: every reference a value is born with is either given back by the
     /// plan or kept by the program. False would mean this code and the rule disagree.
     bool refBalanceHolds() const;

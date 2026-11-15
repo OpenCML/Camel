@@ -8,18 +8,22 @@
  * makes a change to it visible.
  *
  * One line per graph, which is the balance:
- *   PLAN_REFS <graph> produced <n> copies <n> give-backs <n> kept <n> tail <ref|none> balanced yes|no
+ *   PLAN_REFS <graph> produced <n> copies <n> give-backs <n> kept <n> packed <n> tail <ref> ...
+ *     ... tail-kind <n> balanced yes|no
  * then one line per producing position:
- *   PLAN_REFS <graph> at <position> value <ref> copies <n> kept <0|1> uses <n>
- * and one line per reference that comes back:
+ *   PLAN_REFS <graph> at <position> value <ref> kind <n> copies <n> kept <0|1> uses <n>
+ * and one line per reference that comes back: `give` when a use of the value ended, `packed` when the
+ * value that packed it in died (a closure tuple or an aggregate), which is later than the use.
  *   PLAN_REFS <graph> at <position> give <ref> x<n>
+ *   PLAN_REFS <graph> at <position> packed <ref> x<n>
  *
  * `produced` is the number of values the plan counts (ports, constants and nodes that only forward
  * a value are not among them), `copies` the references beyond each value's own, `give-backs` the
- * references the plan hands back, `kept` the values the program itself keeps (the graph's result).
- * The columns are read in this order on purpose: the first four balance, and `balanced` is that
- * arithmetic (`produced + copies == give-backs + kept`) recomputed here from the numbers the plan
- * reports, not from the plan's own answer, so a plan that miscounts one side shows it.
+ * references that come back when a use ends, `packed` the ones that come back when the value that
+ * packed them in dies (a closure tuple or an aggregate), `kept` the values the program itself keeps
+ * (the graph's result). The columns are read in this order on purpose: the first five balance as
+ * `produced + copies == give-backs + kept + packed`, and `balanced` is that arithmetic recomputed
+ * here from the numbers the plan reports, not from the plan's own answer.
  *
  * A graph whose plan is empty prints only its summary line: a pass with nothing to say says it.
  */
@@ -44,11 +48,12 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
         const size_t copies    = plan.refCopiesTotal();
         const size_t giveBacks = plan.refGiveBacksTotal();
         const size_t kept      = plan.refKeptTotal();
+        const size_t packed    = plan.refPackedTotal();
         bool balanced          = plan.refBalanceHolds();
         // The same arithmetic, from the numbers printed: a reader must be able to check the line.
-        balanced = balanced && produced + copies == giveBacks + kept;
+        balanced = balanced && produced + copies == giveBacks + kept + packed;
         os << "PLAN_REFS " << name << " produced " << produced << " copies " << copies
-           << " give-backs " << giveBacks << " kept " << kept;
+           << " give-backs " << giveBacks << " kept " << kept << " packed " << packed;
         if (plan.tailValueRef == kInvalidNodeRef) {
             os << " tail none";
         } else {
@@ -77,8 +82,8 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                    << " uses " << usesOf[ref] << "\n";
             }
             for (const ExecPlan::RefGiveBack &row : plan.refGiveBacksAt(i)) {
-                os << "PLAN_REFS " << name << " at " << i << " give " << row.value << " x"
-                   << row.count << "\n";
+                os << "PLAN_REFS " << name << " at " << i << (row.packed ? " packed " : " give ")
+                   << row.value << " x" << row.count << "\n";
             }
         }
     }
