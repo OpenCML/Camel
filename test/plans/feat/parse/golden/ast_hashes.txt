@@ -541,7 +541,7 @@ e5785f40146107c0 ok stdlib/sim.cml
 eba878f8d66c3dbe ok stdlib/statistics.cml
 9f90e55ee60e5feb ok stdlib/std.cml
 5b0539b0fbb86ec1 ok stdlib/str.cml
-cd98045d0d3ef21b ok stdlib/stream.cml
+1df6aaef0265dfcb ok stdlib/stream.cml
 95098d3e31cd398d ok stdlib/tensor.cml
 7f3d1e7a0d8e126d ok stdlib/tensor_definitions.cml
 7412e62e8d9372be ok stdlib/test_support.cml
