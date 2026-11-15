@@ -3,12 +3,12 @@
  * ordered before `modify`, even though `before` never touches `i`. (The retired `wait` ordered
  * the direct user of the variable instead -- `+`, hence no edge from `before`.)
  *
- * `before` stands on that chain because of its declaration, not because it is a call: the clause
- * says a call of it writes the console (`uses var stdout`, design principles 3.3 -- the clause is
- * the whole truth a call site reads). A call of a function that declares nothing and whose body
- * touches nothing is a computation the compiler arranges freely and is not on the chain at all
- * (design principles 3.1, 3.4), so a `before` written without the clause would leave this program
- * with no edge to read.
+ * `before` is on that chain because it writes the console before it answers: its body is a `sync`
+ * body with a print in it, so a call of it is a statement of the caller's chain by what the body
+ * holds (design principles 3.4). A call of a function that declares nothing and whose body only
+ * computes is a computation the compiler arranges freely and stands on no chain at all (3.1), so
+ * the print is the premise of the edge this program exists to read -- and it is the `2` the
+ * program prints before `2011`, since `before` is given `1 + 1`.
  *
  * run() is a sync body, and its statements run in writing order. The value is
  *   a = before(1 + 1) = 2, b = i after modify = 11, result 2011
@@ -16,7 +16,8 @@
  * modify` is present, and so is `modify ->` the read written after it.
  */
 
-func before(x: int): int uses var stdout {
+func before(x: int): int sync {
+    println(x)
     return x
 }
 

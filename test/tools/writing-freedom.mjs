@@ -23,6 +23,11 @@
  *                            program shape, two writings of it (a call of a pure function that
  *                            cannot fault, then a print; and the two statements swapped). The call
  *                            has no order to keep, so the two documents must be one.
+ *   --group chainpure_edges  The same two writings, read for the other half of that claim: the call
+ *                            and the statement beside it are joined by no edge of any kind, while
+ *                            the call stays in the graph and its value is still read. The byte
+ *                            comparison is repeated here so that this group's one reading is
+ *                            "apart, and still one document", not "apart" alone.
  *   --group chainpure_effect The same shape with a callee that prints: an effect, so the call keeps
  *                            its place on the chain and the two writings must part.
  *   --group chainpure_fault  The same shape with a callee that divides: pure, and able to fault, so
@@ -50,6 +55,12 @@
  *   [graph] let identical bytes=9179 sha256=1a2b3c4d5e6f7081
  *   [graph] let differs first_difference_byte=4083 first_difference_offset=4084 line=132 column=9
  *   [grad] let failed exit=1: error[RuntimeDiag::MacroEvaluationFailed]: ...
+ *
+ * A group that says `disjoint` reads a second line per case and per graph: no edge of any kind
+ * joins the two nodes the selectors name, and the node the first selector names still has its value
+ * read (so "no edge" is not reached by dropping the call). Either side missing is a failure too.
+ *   [edges] first apart FUNC n1 <-> :io/println n3 graph=g1 edges=0 reads_of_the_call=1
+ *   [edges] first joined FUNC n1 <-> :io/println n3 graph=g1 by control, sync
  *
  * The exit code is 0 when every phase of every case reads what its group says it must -- identical
  * where the writing changes no meaning, parted where it does -- and 1 otherwise.
@@ -144,6 +155,20 @@ const GROUPS = {
             ['first', 'test/cases/compile/chain/pure_call_first.cml'],
             ['second', 'test/cases/compile/chain/pure_call_second.cml'],
         ],
+    },
+    // The same two writings, read for what "the chain does not carry the call" means in the
+    // document rather than in the bytes: the call and the statement beside it are joined by no edge
+    // of any kind -- the block's chain is what used to join them -- while the call stays in the
+    // graph and its value is still read, so "apart" is not reached by dropping the call. `op`
+    // matches the operator's name with or without the version the dump appends (`:io/println@1.0`).
+    chainpure_edges: {
+        expect: 'identical',
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['first', 'test/cases/compile/chain/pure_call_first.cml'],
+            ['second', 'test/cases/compile/chain/pure_call_second.cml'],
+        ],
+        disjoint: [{ from: { kind: 'FUNC' }, to: { op: ':io/println' } }],
     },
     chainpure_effect: {
         expect: 'differs',
@@ -370,6 +395,89 @@ function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
     return false
 }
 
+/// Whether a canonical node is the one a selector names: `kind` is the node's kind, `op` its
+/// operator (the dump writes the version beside it, as `:io/println@1.0`).
+function matchesSelector(node, selector) {
+    if (selector.kind !== undefined && node.kind !== selector.kind) return false
+    if (selector.op !== undefined) {
+        const op = node.payload && node.payload.op
+        if (typeof op !== 'string') return false
+        if (op !== selector.op && !op.startsWith(`${selector.op}@`)) return false
+    }
+    return true
+}
+
+/// A graph's edges, whichever way the dump writes them: the canonical document keeps every edge as
+/// one entry in the input list of the node it arrives at, and a plain `std::jgir` document may carry
+/// a list of its own. A reading that silently saw no edges would call every pair "apart".
+function edgesOf(graph) {
+    if (Array.isArray(graph.edges)) return graph.edges
+    const out = []
+    for (const node of graph.nodes || []) {
+        for (const input of node.inputs || []) {
+            out.push({ source: input.source, target: node.id, kind: input.kind })
+        }
+    }
+    return out
+}
+
+/// A group's `disjoint` readings, on one case's canonical document: for every graph holding a node
+/// the first selector names and one the second names, no edge of any kind may join them, and the
+/// first one's value must still be read. A reading line is written either way.
+function checkDisjoint(phase, label, document) {
+    if (document === null) {
+        console.log(`[edges] ${label} no document to read`)
+        return false
+    }
+    let ok = true
+    for (const pair of group.disjoint) {
+        let read = 0
+        for (const graph of document.graphs || []) {
+            const from = (graph.nodes || []).filter((node) => matchesSelector(node, pair.from))
+            const to = (graph.nodes || []).filter((node) => matchesSelector(node, pair.to))
+            if (from.length === 0 || to.length === 0) continue
+            const edges = edgesOf(graph)
+            for (const a of from) {
+                for (const b of to) {
+                    read += 1
+                    const shape = `${pair.from.kind} ${a.id} <-> ${pair.to.op} ${b.id} graph=${graph.id}`
+                    const joined = edges.filter(
+                        (edge) =>
+                            (edge.source === a.id && edge.target === b.id) ||
+                            (edge.source === b.id && edge.target === a.id),
+                    )
+                    if (joined.length > 0) {
+                        ok = false
+                        const kinds = [...new Set(joined.map((edge) => edge.kind))].sort()
+                        console.log(`[edges] ${label} joined ${shape} by ${kinds.join(', ')}`)
+                        continue
+                    }
+                    const reads = edges.filter((edge) => edge.source === a.id && edge.kind === 'normal')
+                    if (reads.length === 0) {
+                        ok = false
+                        console.log(
+                            `[edges] ${label} apart ${shape} edges=0 reads_of_the_call=0: the call ` +
+                                `is in the graph and nothing reads it`,
+                        )
+                        continue
+                    }
+                    console.log(
+                        `[edges] ${label} apart ${shape} edges=0 reads_of_the_call=${reads.length}`,
+                    )
+                }
+            }
+        }
+        if (read === 0) {
+            ok = false
+            console.log(
+                `[edges] ${label} nothing to read: no graph holds both a ${pair.from.kind} and a ` +
+                    `${pair.to.op} node`,
+            )
+        }
+    }
+    return ok
+}
+
 const [referenceLabel, referenceCase] = cases[0]
 // What this group's readings must be, and the reading it is checked against: `identical` for a
 // writing that changes no meaning, `differs` for the counterexample that orders something
@@ -384,9 +492,10 @@ for (const [label, file] of cases) {
 
 let ok = true
 for (const [phase, passes] of group.phases) {
-    const referenceRun = run(referenceCase, passes)
-    for (const [label, file] of cases.slice(1)) {
-        const same = report(phase, passes, referenceLabel, referenceRun, label, run(file, passes))
+    const runs = cases.map(([label, file]) => [label, run(file, passes)])
+    const referenceRun = runs[0][1]
+    for (const [label, caseRun] of runs.slice(1)) {
+        const same = report(phase, passes, referenceLabel, referenceRun, label, caseRun)
         if (same === null) {
             // A side did not finish: the reading above says which one and why, and nothing was
             // compared, so the group's expectation is neither met nor broken -- it is not read.
@@ -399,6 +508,12 @@ for (const [phase, passes] of group.phases) {
                 `[${phase}] ${label} reads ${same ? 'identical' : 'differs'}, and this group ` +
                     `expects ${expectation}`,
             )
+        }
+    }
+    if (group.disjoint) {
+        for (const [label, caseRun] of runs) {
+            if (caseRun.status !== 0) continue
+            if (!checkDisjoint(phase, label, canonicalJson(caseRun.stdout))) ok = false
         }
     }
 }

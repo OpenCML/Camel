@@ -742,7 +742,7 @@ verify_script = '''
 
 [[tests]]
 name = "order.graph"
-desc = "A law over data inputs fires on a product that carries a wait, and the writing that replaces it keeps what it waited for: each product's value is read only after the effect it is ordered after has happened -- the wait is an invariant of the value, not a shape, and a wait carried by the forwarding GATE the value passes through is that same wait (docs/design/effects/edges.cn.md 4.6 and 5.3), so no computation crosses the effect's ordering (design principles 3.3, 3.4). The wait exists because `scaled` declares that a call of it writes the console (`uses var stdout`, 3.3): a call of a function that declares nothing and whose body touches nothing is arranged freely and stands on no chain (3.1, 3.4) -- it would leave this program with no wait for the law to keep, which is what `test/plans/feat/compile/chain.plan.toml` reads."
+desc = "A law over data inputs fires on a product that carries a wait, and the writing that replaces it keeps what it waited for: each product's value is read only after the effect it is ordered after has happened -- the wait is an invariant of the value, not a shape, and a wait carried by the forwarding GATE the value passes through is that same wait (docs/design/effects/edges.cn.md 4.6 and 5.3), so no computation crosses the effect's ordering (design principles 3.3, 3.4). The wait exists because `scaled`'s body is a `sync` body that prints its argument, so a call of it is a statement of the caller's chain (3.4); a call of a function that declares nothing and whose body only computes is arranged freely and stands on no chain (3.1), which would leave this program with no wait for the law to keep -- that side is what `test/plans/feat/compile/chain.plan.toml` reads. The two calls are ordered against each other as their prints are: the second product waits on a print the first does not, and the products do not wait on one another, because a chain carries statements and a product is a pure value (3.1)."
 kind = "behavior"
 case = "../../../cases/opt/generic/algebra_order.cml"
 args = ["${case}", "std::opt::inline", "std::opt::algebra", "std::jgir"]
@@ -777,7 +777,16 @@ verify_script = '''
   const waits=orderedAfter(m);
   assert(waits.some(w=>w.label===':io/println'),'the rewritten product is read before the effect it was ordered after');
  }
- assert(muls.some(m=>orderedAfter(m).some(w=>muls.includes(w))),'the order between the two calls was lost');
+ // The two calls are ordered against each other, and the order lands on the statements: each calls'
+ // print is a chain statement, so the second call's product waits on a print the first one's product
+ // does not wait for. The products themselves are pure values and neither waits on the other --
+ // a chain carries statements, not computations (design principles 3.1, 3.4) -- which is why this
+ // reads the prints and not the sums.
+ const orderedApart=(a,b)=>{
+  const waitedByA=new Set(orderedAfter(a).map(w=>w.id));
+  return orderedAfter(b).some(w=>w.label===':io/println'&&!waitedByA.has(w.id));
+ };
+ assert(orderedApart(muls[0],muls[1])||orderedApart(muls[1],muls[0]),'the two calls are not ordered against each other: neither call waits on an effect the other does not');
 }
 '''
 
@@ -790,7 +799,7 @@ args = ["${case}", "std::opt", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "first\nscaled 0.4 0.4\nlast\n"
+expect_stdout_exact = "first\n2.0\n2.0\nscaled 0.4 0.4\nlast\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 

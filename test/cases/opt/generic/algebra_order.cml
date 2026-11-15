@@ -8,14 +8,17 @@
  * writing has to keep the order: the graph test checks the control edge, the run tests check that
  * the effects still happen in program order on every back end.
  *
- * `scaled` stands on that chain by its declaration and not by being a call (`uses var stdout`,
- * design principles 3.3): a call of a function that declares nothing and whose body touches nothing
- * is arranged freely and is on no chain (3.1, 3.4), and this program would have no wait to keep.
+ * `scaled` prints its argument before it computes, and its body is a `sync` body: the print is what
+ * makes a call of it a statement of the caller's chain (design principles 3.4), where a call of a
+ * function that declares nothing and whose body only computes would be arranged freely and stand on
+ * no chain (3.1). The premise of this program is therefore that the prints are real, and they are
+ * the `2` lines the run tests expect -- `scaled` is called twice, with `2.0`.
  *
  *   camel algebra_order.cml std::opt::inline std::opt::algebra std::jgir
  */
 
-func scaled(x: float): float uses var stdout {
+func scaled(x: float): float sync {
+    println(x)
     let t = x * 0.1
     return t + t
 }

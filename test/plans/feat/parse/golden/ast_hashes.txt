@@ -2632,7 +2632,7 @@ d862716e9d2eae51 ok test/cases/linear/byref/let_to_var_param.cml
 4b40ebe76af10b4f ok test/cases/linear/byref/let_to_var_param_indirect.cml
 828166d2a792a730 ok test/cases/linear/byref/let_to_var_with_param.cml
 6eb7aeb7f1ded777 ok test/cases/linear/byref/order_before_after.cml
-b2e3a3929565c9cf ok test/cases/linear/byref/order_direct_user.cml
+c554ae641fe241d4 ok test/cases/linear/byref/order_direct_user.cml
 a5f750acfa4b8672 ok test/cases/linear/byref/param_assigned.cml
 ebe9d0b97b5a4d01 ok test/cases/linear/byref/param_sorted.cml
 89383817c6b52708 ok test/cases/linear/byref/param_to_var_param.cml
@@ -3876,7 +3876,7 @@ dcef60d2751eac1b ok test/cases/opt/generic/algebra.cml
 a8143083d35fdedb ok test/cases/opt/generic/algebra_commutative.cml
 2abc410990627e85 ok test/cases/opt/generic/algebra_integer.cml
 b350aa63f083a1ea ok test/cases/opt/generic/algebra_library.cml
-aaabf5d3463056ca ok test/cases/opt/generic/algebra_order.cml
+8eb5a42002543117 ok test/cases/opt/generic/algebra_order.cml
 ca5a02b59005a85d ok test/cases/opt/generic/algebra_tensor.cml
 2d4f469ce7a3f7ce ok test/cases/opt/generic/arm_tail_gate.cml
 f19ac2bc4649887b ok test/cases/opt/generic/arm_tail_gate_regions.cml

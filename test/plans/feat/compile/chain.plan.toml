@@ -49,6 +49,23 @@ expect_stdout_contains = ["expect=identical", "[graph] second identical"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 120000
 
+# The second half of the same claim, read where a reader would look for it: in the document. Two
+# writings that come out as one document could still both put the call on the chain (one edge, one
+# order, written the same way), so the edges are read as edges: the call and the print are joined by
+# nothing at all, in both writings, and the call is still in the graph with its value read. Red
+# today with `by control, sync` on both cases.
+[[tests]]
+name = "sync.pure_call_has_no_edge_to_the_statement_beside_it"
+desc = "In both writings of the `sync` block, the call of the pure function and the print beside it are joined by no edge of any kind -- the block's chain is what used to join them -- and the call is still in the graph with its value read by the block's result, so the reading is not reached by dropping the call. Red today: `by control, sync`."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "chainpure_edges"]
+expect_exit = 0
+expect_stdout_contains = ["expect=identical", "[graph] second identical", "[edges] first apart FUNC", "[edges] second apart FUNC", "edges=0 reads_of_the_call=1"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
 [[tests]]
 name = "sync.effect_call_stays_on_the_chain"
 desc = "The counterexample the acceptance above needs: the same two statements, with a callee that prints. A call that reaches a resource is a statement of the block's chain (design principles 3.3, 3.4), so the two writings of the block order two different things and their canonical documents must part. This is the reading an implementation that put nothing on any chain would fail, and it is what keeps `sync.pure_call_is_arranged_freely` from being a statement about a chain that stopped carrying anything."
