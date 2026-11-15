@@ -1,0 +1,21 @@
+﻿run	start	secs	load_before	load_after	pass	fail	ten_fail_backends	count_lines
+1	14:49:56	3.7	44	38.7	47	0		
+2	14:50:02	3.8	40.4	42.9	47	0		
+3	14:50:08	2.8	37.1	41.3	47	0		
+4	14:50:13	3.1	42.2	39.7	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
+5	14:50:18	3.4	64.8	41.1	47	0		
+6	14:50:23	3	36.4	39.3	47	0		
+7	14:50:28	4.3	35.1	74.2	47	0		
+8	14:50:35	4.3	71.6	73.7	47	0		
+9	14:50:41	5.7	90.4	85.9	47	0		
+10	14:50:49	4.3	81.6	65.2	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
+11	14:50:55	4.5	83.1	70.3	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=7 live=4 disposed=4 finalized=7
+12	14:51:01	3.7	64.8	66.7	47	0		
+13	14:51:07	3.8	64.8	55.4	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5
+14	14:51:13	3.9	61.3	80.7	47	0		
+15	14:51:19	3.7	73.7	54.4	47	0		
+16	14:51:25	4.1	58.8	62	47	0		
+17	14:51:31	4	61.4	53.2	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=7 live=4 disposed=4 finalized=7
+18	14:51:37	4.6	60.7	44.8	47	0		
+19	14:51:43	3.1	32.9	24.3	47	0		
+20	14:51:49	2.8	29.4	47.4	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5

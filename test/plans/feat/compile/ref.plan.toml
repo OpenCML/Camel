@@ -355,3 +355,104 @@ verify_script = '''
     'two writes to one reference keep their written order (graph same): ' + seen)
 }
 '''
+
+# ---- two names of one handle ----
+#
+# Design principles 3.3, handle types (负责人 2026-11-15): a handle is a run-time value, so two
+# names may be one handle. Two same-typed handle names in one function (`Ref<T>` with the same `T`,
+# or one `#resource` type) are one resource, and the accesses through them keep the order they are
+# written in, unless the values are provably different.
+#
+# `main` hands one reference to one call twice, so inside the callee the two parameters are two
+# names of one box and nothing in the body tells them apart. They used to be two resources keyed by
+# their position: `write_then_read` answered `12` on all four backends -- the read ran before the
+# write that was written before it -- and no ORDER edge was in either graph. The key of a handle a
+# body received is now its handle type (`Builder::handleKeyOf`, `handleOrderKeyOf`), so two
+# same-typed names are one resource.
+#
+# `param_and_fresh` is the control for the "unless" half: a box the body makes is provably not the
+# box a parameter names, so no order edge joins the read of the one to the write of the other.
+# Two *different* references handed in through two same-typed parameters are ordered all the same,
+# and that is what the rule allows: from inside the body the values are not provably different, and
+# proving it would take a callee specialized on which arguments are one value (design principles
+# 3.5 records the same gap for two `var` arguments).
+
+[[tests]]
+name = "ref.one_box_two_names"
+desc = "One reference handed to one call twice: inside the callee the two `Ref<int>` parameters may name one box, so their accesses keep the written order. `read_then_write` (read first, write second) answers the old content, `12`; `write_then_read` (write first, read second) answers the new content, `22`; the same read then write in a `sync` body answers `1` there too; a box the body makes is provably not the parameter's, so it answers `12` whatever the order. All four backends must agree."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_one_box_two_names.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '12\n22\n1\n12\n',
+    'the written order of the two names decides what the read takes: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.one_box_two_names_order"
+desc = "The same program through `camel inspect --gir`: the two same-typed handle parameters are one resource, so `read_then_write` holds one ORDER edge from its read to its write and `write_then_read` one from its write to its read (the direction is the written order), while `param_and_fresh` holds none -- a box the body made is provably not the caller's."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_one_box_two_names.cml"
+args = ["inspect", "--gir", "${case}"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const dot = input.normalized.stdout
+  const blocks = []
+  const stack = []
+  for (const line of dot.split('\n')) {
+    const t = line.trim()
+    if (t.startsWith('subgraph cluster_')) {
+      stack.push({ name: null, reads: [], writes: [], order: [] })
+      continue
+    }
+    if (t === '}') { if (stack.length) blocks.push(stack.pop()); continue }
+    if (!stack.length) continue
+    const top = stack[stack.length - 1]
+    const cluster = t.match(/^label="(.*)";$/)
+    if (cluster) {
+      if (top.name === null) top.name = cluster[1]
+      continue
+    }
+    const node = t.match(/^(N[0-9A-F]+) \[label="(state:get|state:set)"/)
+    if (node) {
+      if (node[2] === 'state:get') top.reads.push(node[1])
+      else top.writes.push(node[1])
+      continue
+    }
+    const edge = t.match(/^(N[0-9A-F]+) -> (N[0-9A-F]+) \[label="ORDER"/)
+    if (edge) top.order.push([edge[1], edge[2]])
+  }
+  const of = (name) => blocks.find((b) => b.name === name)
+  const seen = blocks.map((b) => b.name + '=' + b.order.length).join(' ')
+  for (const name of ['read_then_write', 'write_then_read', 'param_and_fresh']) {
+    assert(of(name) !== undefined, name + ' is in the dump: ' + seen)
+  }
+  const first = of('read_then_write')
+  const second = of('write_then_read')
+  const fresh = of('param_and_fresh')
+  const nodes = (b) => 'get=' + b.reads.join(',') + ' set=' + b.writes.join(',')
+  assert(first.reads.length === 1 && first.writes.length === 1,
+    'read_then_write holds one read and one write: ' + nodes(first))
+  assert(second.reads.length === 1 && second.writes.length === 1,
+    'write_then_read holds one read and one write: ' + nodes(second))
+  const joins = (b, from, to) => b.order.some(([f, t]) => f === from && t === to)
+  assert(joins(first, first.reads[0], first.writes[0]),
+    'the read written first is ordered before the write written second: ' + seen + ' ' +
+    nodes(first) + ' edges=' + JSON.stringify(first.order))
+  assert(joins(second, second.writes[0], second.reads[0]),
+    'the write written first is ordered before the read written second: ' + seen + ' ' +
+    nodes(second) + ' edges=' + JSON.stringify(second.order))
+  assert(fresh.order.length === 0,
+    'a box the body made is provably not the caller\'s, so no order edge joins them: ' + seen +
+    ' edges=' + JSON.stringify(fresh.order))
+}
+'''
