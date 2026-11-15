@@ -11,6 +11,13 @@
 #include "builder_helpers.h"
 #include "builder_support.h"
 
+namespace {
+// The `[DBG-W]` and `[DBG-FOLD]` lines of the fold are one reading of `CAMEL_LOG_DEBUG` for the
+// whole file. The environment is asked once, so `test/tools/check-env-switches.mjs` has one ledger
+// line to allow instead of one per print, and the switch is a single place to look for.
+const bool kVarFoldDebug = std::getenv("CAMEL_LOG_DEBUG") != nullptr;
+} // namespace
+
 #include "camel/compile/gir/static_function.h"
 #include "camel/core/data/composite/struct.h"
 #include "camel/core/numeric_convert.h"
@@ -1856,7 +1863,7 @@ void Builder::collapseNonEscapingVariableReads() {
     static int foldTookFold_ = 0;
     struct FoldCountsReport {
         ~FoldCountsReport() {
-            if (std::getenv("CAMEL_LOG_DEBUG") == nullptr) {
+            if (!kVarFoldDebug) {
                 return;
             }
             std::fprintf(
@@ -1932,7 +1939,7 @@ void Builder::collapseNonEscapingVariableReads() {
             if (readType != nullptr && readType->code() != TypeCode::String &&
                 isGCTraced(readType->code())) {
                 ++foldTookNothing_;
-                if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                if (kVarFoldDebug) {
                     std::fprintf(
                         stderr,
                         "[DBG-W] read=%u writes=- candidate=none kind=- region=- took=kept\n",
@@ -1970,7 +1977,7 @@ void Builder::collapseNonEscapingVariableReads() {
                             readKind == camel::runtime::GCRegionKind::LoopBody ||
                             readKind == camel::runtime::GCRegionKind::LoopCond) {
                             ++foldTookNothing_;
-                            if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                            if (kVarFoldDebug) {
                                 std::fprintf(
                                     stderr,
                                     "[DBG-W] read=%u writes=%zu readregion=%d candidate=- kind=- "
@@ -2000,7 +2007,7 @@ void Builder::collapseNonEscapingVariableReads() {
                     }
                     if (aCallWroteBeforeTheRead) {
                         ++foldTookNothing_;
-                        if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                        if (kVarFoldDebug) {
                             std::fprintf(
                                 stderr,
                                 "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- "
@@ -2015,7 +2022,7 @@ void Builder::collapseNonEscapingVariableReads() {
                     if (cellInputs.empty()) { ++foldTookNothing_; continue; }
                     version = cellInputs[0];
                     ++foldTookInitial_;
-                    if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                    if (kVarFoldDebug) {
                         std::fprintf(
                             stderr,
                             "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- took=initial\n",
@@ -2033,7 +2040,7 @@ void Builder::collapseNonEscapingVariableReads() {
                         kind == camel::runtime::GCRegionKind::LoopCond ||
                         kind == camel::runtime::GCRegionKind::LoopBody ||
                         kind == camel::runtime::GCRegionKind::Dead;
-                    if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                    if (kVarFoldDebug) {
                         std::fprintf(
                             stderr,
                             "[DBG-W] read=%u writes=%zu candidate=%u kind=%d region=%d took=%s\n",

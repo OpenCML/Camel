@@ -101,6 +101,12 @@ const LEDGER = [
         owner: 'the tiles line (its test pass)',
         why: 'a switch of the test pass itself',
     },
+    {
+        at: 'src/compile/gir/builder_expr.cpp:collapseNonEscapingVariableReads',
+        reads: 'CAMEL_LOG_DEBUG',
+        owner: 'the var-to-SSA line (the fold counters)',
+        why: 'the fold counts every exit it takes and prints the counts, and the decisions behind them, only when asked: it reads a run, it does not decide one',
+    },
 ]
 
 const CALL = /\bgetenv\s*\(/g
