@@ -1932,24 +1932,28 @@ void Builder::collapseNonEscapingVariableReads() {
                 size_t writesSeen        = 0;
                 if (const auto it = writesOf_.find(cell); it != writesOf_.end()) {
                     writesSeen = it->second.size();
-                    // A read inside a loop's body or condition of a cell the loop writes does not
-                    // see `:var/new`'s value: it sees the value the previous turn carried, which
-                    // the LOOP hands on and no write of the body stands for. `write_in_loop.cml`
-                    // measures it: `x = x + 1` read the value `:var/new` made on every turn, so the
-                    // turns wrote `1` three times and the read after the loop answered `1`. So a
-                    // loop read of a written cell keeps its `:var/get`, and that is decided before
-                    // the initial value is handed out.
+                    // A read inside an arm, a loop body or a loop condition of a cell that is written
+                    // somewhere does not see `:var/new`'s value. In a loop it sees the value the
+                    // previous turn carried, which the LOOP hands on and no write of the body stands
+                    // for: `write_in_loop.cml` (`x = x + 1`) read the value `:var/new` made on every
+                    // turn, so the turns wrote `1` and the read after the loop answered `1` instead
+                    // of `3`. In an arm it may see a value another arm wrote, or the one a write
+                    // before the branch produced: `warnings_visible.cml` (`var c = 0; inc(c); if
+                    // c > 0 then { c += 10 }`) read the initial `0` inside the arm and answered `1`
+                    // where `11` is what the program says. So such a read keeps its `:var/get`, and
+                    // that is decided before the initial value is handed out.
                     if (writesSeen > 0) {
                         const auto readRegionId = draft.nodeRegion(readId);
                         const auto readKind     = draft.region(readRegionId).kind;
-                        if (readKind == camel::runtime::GCRegionKind::LoopBody ||
+                        if (readKind == camel::runtime::GCRegionKind::Arm ||
+                            readKind == camel::runtime::GCRegionKind::LoopBody ||
                             readKind == camel::runtime::GCRegionKind::LoopCond) {
                             ++foldTookNothing_;
                             if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
                                 std::fprintf(
                                     stderr,
                                     "[DBG-W] read=%u writes=%zu readregion=%d candidate=- kind=- "
-                                    "region=- took=loop-read\n",
+                                    "region=- took=region-read\n",
                                     static_cast<unsigned>(readId),
                                     writesSeen,
                                     static_cast<int>(readRegionId));
@@ -1957,12 +1961,33 @@ void Builder::collapseNonEscapingVariableReads() {
                             continue;
                         }
                     }
+                    // A write this fold cannot name: a call that wrote the cell through a `var`
+                    // argument leaves its value in no node's input, so a read after it can take
+                    // neither that value nor the initial one -- the call has already run. Whether a
+                    // write came before the read and whether that write can be named are two
+                    // questions: only "no write before it" licenses `:var/new`'s value.
+                    bool aCallWroteBeforeTheRead = false;
                     for (const node_handle_t exit : it->second) {
                         if (nodeIdOf(exit) >= readId) { continue; }
-                        if (nodeKindOf(exit) != camel::runtime::GCNodeKind::Oper) { continue; }
+                        if (nodeKindOf(exit) != camel::runtime::GCNodeKind::Oper) {
+                            aCallWroteBeforeTheRead = true;
+                            continue;
+                        }
                         const auto ins = draft.normInputsOf(nodeIdOf(exit));
                         if (ins.empty() || ins[0] != cellId) { continue; }
                         candidate = exit;
+                    }
+                    if (aCallWroteBeforeTheRead) {
+                        ++foldTookNothing_;
+                        if (std::getenv("CAMEL_LOG_DEBUG") != nullptr) {
+                            std::fprintf(
+                                stderr,
+                                "[DBG-W] read=%u writes=%zu candidate=none kind=- region=- "
+                                "took=call-write\n",
+                                static_cast<unsigned>(readId),
+                                writesSeen);
+                        }
+                        continue;
                     }
                 }
                 if (candidate == nullptr) {
