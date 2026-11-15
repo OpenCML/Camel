@@ -3783,6 +3783,8 @@ let h2 = (var y: int): int => sync { let t = x; y = 2; return t; };
 
 其后是第 2 项（多返回值写回）、第 3 项（闭包捕获检查）与计数做准，其余车道照常。每完成一项在本表报一句，决策者转告 ECOOP。
 
+**2026-11-15 状态**：第 1 项底稿已搬进 `examples/case-study/`，底稿目录 `docs/handover/reports/case-study-draft/` 已删除（内容全部搬走，不再有两份会走散的手抄本）：`train.cml` 逐字节未改；`edits.cml` 按实测重写——选择节点改成按算子、按类型、按"只有一个"来做，不再按下标或名字读写法；两条改写的真实结果（`drop_print` 被接受、`break_rate` 被 §4.2 第 2 条拒绝）与三种写法各自的逐字节读数记在 `examples/case-study/README.md`，并由 `test/plans/feat/examples.plan.toml` 的三条用例钉住；写入自由度比较另由 `node test/tools/writing-freedom.mjs --group spelling` 给出。第 2 项的验收在 `test/plans/feat/compile/var.plan.toml`，今天是红的，红的唯一原因是 `var` 仍被造成一个单元。
+
 **补充（2026-11-15 夜）：案例的三处要求（ECOOP 会话，与论文的说法对得上）**
 
 1. **遍不靠写法找节点**。论文的定理说"变换默认看不见写法"（原则 9.5"图接口默认看不见写法"）。底稿 `edits.cml` 用 `name(h) == 'main'` 找图、用 `prints[0]` 取第一个，都读了写法（图名，以及 `nodes` 按创建编号排的顺序）。改成：对程序本身取图（遍拿到的 `p` 就是入口函数值，用 `graph_of(p)`），按算子与类型筛节点；要删打印就删全部打印，或者按规范顺序挑，不按编号挑第一个。

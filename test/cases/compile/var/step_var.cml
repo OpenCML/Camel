@@ -1,0 +1,34 @@
+/**
+ * One gradient step on a scalar weight, written with assignment to a `var`.
+ *
+ * `step_let.cml` is the same step written as a chain of `let` bindings. Renaming and rewriting an
+ * assignment as a binding are two writings of one program, so `std::jgir canonical=true` must print
+ * the same bytes for the two files, and so must the canonical output of the derivative (design
+ * principles 3.5: a `var` is a resource, and whether it carries a unit is a matter of
+ * representation, not of meaning).
+ *
+ * Measured 2026-11-15 on 96a27e435 -- it is not the same bytes yet, and both halves are red for one
+ * reason: the `var` writing still builds a unit. Its graph carries `:var/new`, three `:var/get` and
+ * one `:var/assn_d` that the `let` writing has none of (18 nodes against 13), and `grad` refuses the
+ * `var` writing before it builds anything ("Gradients do not flow through variables: bind the value
+ * with let instead"). `test/plans/feat/compile/var.plan.toml` holds the comparison; `test/tools/
+ * writing-freedom.mjs` prints where the two documents part. The pair goes green when a unit is
+ * lowered to SSA (the queue's item 1).
+ *
+ * Run: camel test/cases/compile/var/step_var.cml
+ */
+import { grad } from autodiff
+
+with <w: float>
+func loss(x: float): float {
+    var weight = w
+    weight = weight - 0.1 * (weight * x - 3.0) * x
+    let residual = weight * x - 3.0
+    return residual * residual
+}
+
+func main(): int sync {
+    let d = grad(loss)
+    println(d<1.0>(2.0))
+    return 0
+}

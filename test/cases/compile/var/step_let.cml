@@ -1,0 +1,21 @@
+/**
+ * The same gradient step as `step_var.cml`, written as a chain of `let` bindings: the weight the
+ * assignment wrote is a new binding carrying the new value. This file is the reference writing --
+ * the one whose canonical output the `var` writing has to match byte for byte.
+ *
+ * Run: camel test/cases/compile/var/step_let.cml
+ */
+import { grad } from autodiff
+
+with <w: float>
+func loss(x: float): float {
+    let weight = w - 0.1 * (w * x - 3.0) * x
+    let residual = weight * x - 3.0
+    return residual * residual
+}
+
+func main(): int sync {
+    let d = grad(loss)
+    println(d<1.0>(2.0))
+    return 0
+}
