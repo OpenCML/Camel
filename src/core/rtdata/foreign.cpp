@@ -54,11 +54,11 @@ uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
 }
 
-/// The kind the reference type gives its handle (`RefType::resourceHandleName()`): the blocks with
-/// this kind are the boxes a count reclaims, and the anchor compares their creations with the plan's
+/// The kind the state module gives its reference handle (`refDescriptor()` in modules/state/module.cpp):
+/// the blocks with this kind are the boxes a count reclaims, and the anchor compares their created count
 /// producing rows. A string compare per block, and blocks are made rarely; anything else would need
 /// the descriptor to carry a flag into code that does not know the reference type.
-std::string_view countedKind() { return "state::Ref"; }
+std::string_view countedKind() { return "state.ref"; }
 
 // The collector's deferred-release queue (mm/deferred.h) calls this after the collection.
 void releaseControlBlockAfterCollection(void *context) noexcept {
