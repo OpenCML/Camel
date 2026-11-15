@@ -4315,7 +4315,25 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     node_handle_t{},
                     LinkType::Norm};
             }
-            requireMutableArgument(arg, calleeLabel);
+            // A write is a `var` argument like any other, but the assignment operator is the write
+            // itself: it does not exist after the call, so it cannot carry the cell away. It is
+            // remembered apart from the real escapes (a closure capturing the variable, a user
+            // function's `var` parameter) so that the SSA fold can tell "kept a resource because it
+            // is written" from "kept a resource because it leaves the body".
+            const bool writeOperator =
+                targetOperator != nullptr && targetOperator->uri().rfind(":op/assn", 0) == 0;
+            if (writeOperator) {
+                if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
+                    if (const std::string name = moduleLevelName(arg.expr->name());
+                        nodeAt(name).has_value()) {
+                        if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                            writeOnlyEscaping_.insert(node);
+                        }
+                    }
+                }
+            } else {
+                requireMutableArgument(arg, calleeLabel);
+            }
             // A `var` parameter is two-way: the callee reads the caller's variable and writes into
             // it, so the argument is accepted only when each side's type accepts the other's values
             // (design principles 3.5). A shape one side leaves open is not such a pair: a
@@ -4644,8 +4662,12 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         }
     }
 
-    const bool chainStatement =
-        runtime::isChainStatement(*nodeDraftOf(targetNode), nodeIdOf(targetNode));
+    // Outside a `sync` block there is no chain to be a statement of. Inside one, a call is a
+    // statement by what its callee turns out to be (design principles 3.4): a call of a body that
+    // reaches no resource, holds nothing that may fault and is not recursive is one of the
+    // computations the compiler arranges freely, so the chain passes it by and the statement before
+    // this one keeps its place.
+    const bool chainStatement = synced_ && callIsChainStatement(targetNode);
     if (synced_ && chainStatement) {
         linkSyncStatement(lastSyncedNode_, targetNode);
         lastSyncedNode_ = targetNode;

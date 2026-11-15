@@ -1,0 +1,21 @@
+/**
+ * The half of the rule that has to refuse rather than pass: the closure put into the box captured a
+ * function value whose graph this program does not hold -- `f` is a parameter, so what it captured
+ * is the caller's and not written here. The walk cannot see inside it, so it cannot show that no
+ * reference is in there, and the box is refused. A walk that passed what it could not read would
+ * be exactly the leak the rule exists to prevent.
+ */
+
+import state
+
+func make(f: () => int): int sync {
+    let g = (): int => f()
+    let box = state::ref(g)
+    let call = state::get(box)
+    return call()
+}
+
+func main(): int sync {
+    let k = 42
+    return make((): int => k)
+}

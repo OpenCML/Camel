@@ -922,14 +922,17 @@ class ModelBuilder {
             auto *value =
                 static_cast<camel::compile::gir::ExportedValue *>(EntityAccess::node(entity));
             const auto node = value != nullptr ? value->node : camel::runtime::DraftNodeRef{};
-            // A handle names its draft by the address *and* the epoch the draft was made with
-            // (`include/camel/runtime/draft.h#isNamedBy`), and this one is read while the graph it
-            // was made in may already have been handed over and released: the exported value
-            // outlives the builder, so the address it names can hold a later draft whose node 0 is
-            // another node. Asking the draft costs one comparison and keeps the type below from
-            // being read out of a graph this value does not belong to.
-            const auto *header =
-                node && node.draft->isNamedBy(node) ? node.draft->header(node.id) : nullptr;
+            // A handle names its draft by the address *and* the epoch the draft was made with, and
+            // this one is read while the graph it was made in may already have been handed over and
+            // released: the exported value outlives the builder, so the address it names can hold a
+            // later draft whose node 0 is another node, and the bytes there are not this call's to
+            // read. The owner is asked of the registration instead, which wrote the address and the
+            // epoch down while the draft was alive; asking the draft whether the handle names it
+            // would read the very memory whose ownership is the question.
+            const camel::runtime::DraftNodeHeader *header = nullptr;
+            if (auto *owner = camel::compile::gir::DraftGraphBuilder::fromRef(node)) {
+                header = owner->view().header(node.id);
+            }
             if (header != nullptr && header->dataType != nullptr) {
                 ext.signatures.push_back(sourceSpelling(header->dataType->toString()));
             }

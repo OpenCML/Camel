@@ -1,13 +1,13 @@
-// `sync` in the function body position: the body is a sync block, and its statements run in order.
+// `sync` in the function body position orders its statements; a body without it still runs its writes.
 // Run: camel docs/tutorial/examples/06_sync_body.cml
 
 func f(): int {
-    println('f')        // not executed: the body is not a sync block
+    println('f')        // runs: the body is a region
     return 1
 }
 
 func g(): int sync {
-    println('g')        // executed: the body is a sync block
+    println('g')        // runs, and in order with its neighbours
     return 2
 }
 

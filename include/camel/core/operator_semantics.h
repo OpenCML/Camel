@@ -514,6 +514,15 @@ struct OperatorSemantics {
     /// not one of the program's own variables or objects, or a declaration that says so without
     /// itemizing it. An operator nobody declared is external (the conservative reading).
     bool external() const;
+    /// It **writes** a resource outside the program (design principles 3.1): an access whose mode
+    /// writes and whose resource is not one of the program's own variables, objects or handles, or
+    /// the conservative reading of an operator that declares no effect at all and of one that says
+    /// an effect exists without itemizing an access -- 3.3's "写全局资源", which is a write. This is
+    /// the narrower half of `external()`, and the two are asked by different readers: "does anything
+    /// outside see it" (the effect summary) and "does the region that runs it owe its running" (the
+    /// region's roots, camel/runtime/region_roots.h). Reading `console` or `env` is the first
+    /// without being the second.
+    bool writesOutside() const;
     /// It can raise a fault. The fault table decides: a declared empty table is an operator with
     /// no fault path at all, and an operator that declares none may fault (design principles
     /// 3.3). It is the one place the fault fact lives: the traits and the may-fault reading of

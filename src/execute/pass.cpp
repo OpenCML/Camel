@@ -1980,9 +1980,11 @@ GraphOrder orderOfGraph(const GCGraph &graph) {
 
 /// Whether the effect `ref` stands on something in `graph` (design principles 3.1): a read of its
 /// value -- a normal or `with` input of another node, or the graph's own result, which whoever runs
-/// the graph reads -- or a place in its block's chain. The chain is carried as two edge kinds while
-/// the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the control
-/// one), so a place in it is a sync or control edge either way, read from the edges themselves.
+/// the graph reads -- or a place in its block's chain, or the region it is written in (a write to a
+/// resource outside the program, which a running region uses). The chain is carried as two edge
+/// kinds while the migration runs (docs/design/effects/edges.cn.md 5.3: the sync edge replaces the
+/// control one), so a place in it is a sync or control edge either way, read from the edges
+/// themselves.
 ///
 /// An order edge is not one of them: it orders two nodes that both run and makes neither of them
 /// run (edges.cn.md 1.5), so an effect whose only company is an order edge stands on nothing. Read
@@ -1999,8 +2001,25 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
         graph.returnNodeRef() == ref) {
         return true;
     }
-    return !graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
-           !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty();
+    if (!graph.syncPredsOf(ref).empty() || !graph.syncUsersOf(ref).empty() ||
+        !graph.ctrlInputsOf(ref).empty() || !graph.ctrlUsersOf(ref).empty()) {
+        return true;
+    }
+    // The third credential (design principles 3.1, the author's ruling of 2026-11-15, "区域的根"):
+    // a write to a resource outside the program is used by the region it is written in -- "一个区域
+    // 运行时，区域里对外部资源的写都被用到 ... 非同步函数体里的裸语句 println(x) 照样执行" -- so it
+    // runs with neither a reader nor a place in a chain, and the region is what stands under it.
+    // The reading itself is `camel/runtime/region_roots.h` (resource class, never an operator
+    // name); this gate asks the same predicate so that the three walks that decide what a region
+    // runs and the check on what a pass returns do not drift apart.
+    if (const camel::runtime::GCNode *node = graph.node(ref);
+        node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
+        const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
+        if (body != nullptr && camel::core::OperatorTable::instance().writesOutside(body->uri())) {
+            return true;
+        }
+    }
+    return false;
 }
 
 /// The effects of `program`: every effect node of every graph of it, each at its position in one
@@ -2503,10 +2522,11 @@ bool nodeRunsForItsEffect(
     return !camel::runtime::deadWrite(graph, ref);
 }
 
-/// Every effect a pass hands back stands on one of the two credentials design principles 3.1 gives
-/// an effect: a read of its value (a normal or `with` input of another node, or the graph's own
-/// result, which whoever runs the graph reads), or a place in its block's chain, in the spellings
-/// the graphs carry the chain in while the migration runs (`effectStandsOnSomething`).
+/// Every effect a pass hands back stands on one of the credentials design principles 3.1 gives an
+/// effect: a read of its value (a normal or `with` input of another node, or the graph's own
+/// result, which whoever runs the graph reads), a place in its block's chain, in the spellings the
+/// graphs carry the chain in while the migration runs, or the region it is written in
+/// (`effectStandsOnSomething`).
 ///
 /// An effect that stands on neither is in the graph and in no chain: nothing makes it run, so the
 /// program the pass returned is not the program it was given (3.1, 3.3). That is the whole check --

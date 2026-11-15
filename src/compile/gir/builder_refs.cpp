@@ -17,6 +17,11 @@
  *     function value are a fact about its graph, not about its type -- the same reading the state
  *     rule takes, builder_state.cpp). A closure may go into a box when it captured no reference.
  *
+ * The second walk follows what each closure took for as many layers as there are: a closure may
+ * capture a closure that captured a closure, and the reference can be at the bottom of that chain.
+ * One layer the walk cannot read is refused and not passed -- a capture it cannot see is a capture
+ * that may hold the reference, and a single box that holds one is never freed (3.5).
+ *
  * The report is placed where the reference is made, which is the node whose value is the `Ref<T>`:
  * one place per box, so a program with two such boxes is told about two places.
  */
@@ -50,6 +55,34 @@ bool isFunctionValue(node_handle_t value) {
     }
     const Type *type = valueTypeOf(nodeTypeOf(value));
     return type != nullptr && type->code() == TypeCode::Function;
+}
+
+/// How many closures deep the walk follows the values a closure captured. A chain longer than this
+/// is not read, and a layer that is not read is refused like one that cannot be (see below).
+constexpr int kRefCaptureDepth = 8;
+
+/// The closures a walk went through to reach a value, as one piece of text for a report.
+string joinedNames(const vector<string> &names) {
+    string joined;
+    for (const string &name : names) {
+        if (!joined.empty()) {
+            joined += "' -> '";
+        }
+        joined += name;
+    }
+    return joined;
+}
+
+/// The report clause for a layer of the capture walk that could not be read. It is a refusal and
+/// not a pass: the rule's premise is that no box holds a reference at any depth (design principles
+/// 3.5), so a capture this walk cannot see may be the one that holds one, and letting it through
+/// would be exactly the box that is never freed.
+string unreadableCaptureClause(const vector<string> &through, const string &why) {
+    string clause = "it holds a closure whose captures cannot be read (" + why + ")";
+    if (!through.empty()) {
+        clause += ", reached through '" + joinedNames(through) + "'";
+    }
+    return clause + ", so a Ref may be inside it";
 }
 
 /// Where a type holds a reference, if it does: the clause a report names the place with.
@@ -145,61 +178,81 @@ optional<string> refInsideType(Type *type, int depth = 0) {
 } // namespace
 
 // A closure may go into a box only when it captured no reference: a function type does not spell
-// its captures, so the values the closure took are read from the graph it was built as. A value
-// this cannot read is not refused: refusing a program costs a program, and what the rule protects
-// is a count that never reaches zero, which needs a reference to be there.
+// its captures, so the values the closure took are read from the graph it was built as, one layer
+// at a time, and a layer this cannot read is refused rather than passed.
 optional<string> Builder::refInsideACapturedValue(
     node_handle_t call, Type *content, int depth) const {
-    if (call == nullptr || content == nullptr || depth > 8) {
+    if (call == nullptr || content == nullptr) {
         return nullopt;
     }
-    (void)content;
-    // Every value the call hands in. Only a value of a function type is read: what a function
-    // captured is a fact about the graph behind the value, and the graph is asked for a function
-    // value only. Anything else in the call holds no captures, so there is nothing to follow.
+    // Only a function type has captures to follow: what a closure took is a fact about the graph
+    // behind its value, and every other shape of `content` was walked by refInsideType.
+    if (content->code() != TypeCode::Function) {
+        return nullopt;
+    }
     const auto &draft = nodeTransactionOf(call)->graph();
+    // Every value the call hands in. Only a value of a function type is read: anything else in the
+    // call holds no captures, so there is nothing to follow.
     for (draft_node_ref_t input : normInputsOf(call)) {
         const node_handle_t value = draft.ref(input);
         if (!isFunctionValue(value)) {
             continue;
         }
-        const compile_graph_ptr_t closure = functionValueGraphOf(value);
-        if (closure == nullptr) {
+        if (optional<string> where = refInsideClosureCaptures(value, {}, depth)) {
+            return where;
+        }
+    }
+    return nullopt;
+}
+
+// One layer of that walk: the place a reference is reached at through what the closure `value`
+// captured, `through` naming the closures already walked to reach it. `depth` is how many layers
+// down this is, and running out of layers is answered like a layer that cannot be read.
+optional<string> Builder::refInsideClosureCaptures(
+    node_handle_t value, const vector<string> &through, int depth) const {
+    if (depth > kRefCaptureDepth) {
+        return unreadableCaptureClause(
+            through, "the chain of closures is deeper than this walk follows");
+    }
+    const compile_graph_ptr_t closure = functionValueGraphOf(value);
+    if (closure == nullptr) {
+        return unreadableCaptureClause(through, "its graph is not one this program holds");
+    }
+    const auto held = capturedValues_.find(closure.get());
+    if (held == capturedValues_.end()) {
+        // A capture is recorded when the closure is built, so a graph with no entry took no value:
+        // there is nothing inside it to follow, which is a reading and not a failure to read.
+        return nullopt;
+    }
+    for (const CapturedValue &captured : held->second) {
+        // The origin is a node of the enclosing graph, kept in a table that outlives it: a handle
+        // that no longer names its draft cannot be typed, so it is a layer not read.
+        if (!nodeIsCurrent(captured.origin)) {
+            return unreadableCaptureClause(through, "a value it captured is no longer built");
+        }
+        Type *type = valueTypeOf(nodeTypeOf(captured.origin));
+        if (type == nullptr) {
+            return unreadableCaptureClause(through, "the type of a value it captured is unknown");
+        }
+        if (refInsideType(type, 0).has_value()) {
+            string where =
+                "it holds a Ref, in the value '" + captured.name + "' the closure captures";
+            if (!through.empty()) {
+                where += ", reached through '" + joinedNames(through) + "'";
+            }
+            return where;
+        }
+        // A closure that captured a closure: the reference, if there is one, is inside what that
+        // one took, one layer further down the same walk (design principles 5.5: the walk takes the
+        // layer the type names, and keeps taking them).
+        if (type->code() != TypeCode::Function) {
             continue;
         }
-        const auto held = capturedValues_.find(closure.get());
-        if (held == capturedValues_.end()) {
-            continue;
-        }
-        for (const CapturedValue &captured : held->second) {
-            Type *type =
-                captured.origin == nullptr ? nullptr : valueTypeOf(nodeTypeOf(captured.origin));
-            if (type == nullptr) {
-                continue;
-            }
-            if (refInsideType(type, 0).has_value()) {
-                return "it holds a Ref, in the value '" + captured.name + "' the closure captures";
-            }
-            // A closure that captured a closure: the reference is inside what that one took.
-            if (type->code() != TypeCode::Function || !isFunctionValue(captured.origin)) {
-                continue;
-            }
-            const compile_graph_ptr_t inner = functionValueGraphOf(captured.origin);
-            if (inner == nullptr) {
-                continue;
-            }
-            const auto deeper = capturedValues_.find(inner.get());
-            if (deeper == capturedValues_.end()) {
-                continue;
-            }
-            for (const CapturedValue &held2 : deeper->second) {
-                Type *type2 =
-                    held2.origin == nullptr ? nullptr : valueTypeOf(nodeTypeOf(held2.origin));
-                if (type2 != nullptr && refInsideType(type2, 0).has_value()) {
-                    return "it holds a Ref, in the value '" + held2.name +
-                           "' a closure the closure captures captures";
-                }
-            }
+        vector<string> deeper = through;
+        deeper.push_back(captured.name);
+        if (optional<string> inside =
+                refInsideClosureCaptures(captured.origin, deeper, depth + 1)) {
+            return inside;
         }
     }
     return nullopt;

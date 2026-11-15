@@ -5,8 +5,16 @@
 # two boxes hold each other's handles, the count would never reach zero, and the program's values
 # would no longer be reclaimed by counting alone. The rule looks one layer at a time into what `T`
 # holds -- the type itself, a field, an element, a variant's payload, what a function takes and
-# returns, and the values a closure captures -- and each of the two refusals below has a control
+# returns, and the values a closure captures -- and each of the refusals below has a control
 # beside it that must stay legal, so a refusal cannot be green for the wrong reason.
+#
+# A closure's captures are not in its type, so that part of the walk follows the graph the value
+# was built as, and it follows it for as many layers as the chain of captures has: a closure may
+# capture a closure that captured a closure, and the reference can be at the bottom. A layer the
+# walk cannot read is refused and not passed -- a capture it cannot see may be the one holding the
+# reference, and one box that holds one is never freed. `ref.holds_ref_closure_deep` and
+# `ref.holds_ref_closure_unreadable` are the two halves of that: a reference three layers down, and
+# a capture whose graph is the caller's, both of which used to compile and run with no report.
 #
 # Two references made in one body are two resources: no order edge joins the operations on one to
 # the operations on the other, while two operations on one reference keep the order they are
@@ -108,6 +116,25 @@ verify_script = '''
 # ---- the content: no Ref, one layer at a time ----
 
 [[tests]]
+name = "ref.closure_deep_capture_control"
+desc = "The control of `ref.holds_ref_closure_deep`: a three-layer chain of captures whose bottom value is a plain integer goes into a reference and answers 42 through the call. The walk follows what each closure took, so this is the program that says the refusal three layers down is about the reference at the bottom and not about the depth or about a capture the walk declined to read."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_closure_capture_depth.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '42\n',
+    'a chain of captures with no reference at the bottom is a legal content: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
 name = "ref.holds_ref"
 desc = "`Ref<Ref<int>>` is refused where the outer reference is made, by name: the content is a reference itself. The report says what the rule is (the count would never reach zero), not that two types did not match."
 kind = "negative"
@@ -140,6 +167,50 @@ verify_script = '''
   assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
   assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
   assert(text.includes('captures'), 'the report names the closure capture the Ref is reached through: ' + text)
+}
+'''
+
+[[tests]]
+name = "ref.holds_ref_closure_deep"
+desc = "The same rule three layers in: the closure that goes into the reference captured a closure, which captured a closure, which holds the reference. A function type does not spell its captures, so the walk has to follow what each closure took, one layer at a time, instead of stopping at the second layer: this program was accepted with no report at all, which is one box that can never be freed. The report names the value the reference is reached through and the closures the walk went through to reach it."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref_closure_depth.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
+  assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
+  assert(text.includes('captures'), 'the report names the closure capture the Ref is reached through: ' + text)
+  assert(text.includes("'n'"),
+    'the report names the value the reference is reached through, three closures down: ' + text)
+  assert(text.includes("'g'") && text.includes("'h'"),
+    'the report names the closures the walk went through to reach it: ' + text)
+}
+'''
+
+[[tests]]
+name = "ref.holds_ref_closure_unreadable"
+desc = "The other half of the walk, the one that has to refuse instead of pass: the closure put into the reference captured a function value whose graph this program does not hold (`f` is a parameter, so what it captured is the caller's). The walk cannot see inside it, so it cannot show that no reference is in there. This program used to compile and run (exit 42, no report); it is refused now, and the report says which value the walk could not read rather than claiming it found a reference."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref_closure_unread.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
+  assert(text.includes('captures cannot be read'),
+    'the report says the capture could not be read, not that a Ref was found: ' + text)
+  assert(text.includes("'f'"),
+    'the report names the value the walk could not read: ' + text)
+  assert(text.includes('may be inside it'),
+    'the report says why an unread capture is refused: ' + text)
 }
 '''
 

@@ -14,6 +14,7 @@
 #include "camel/core/context/context.h"
 #include "camel/runtime/control_regions.h"
 #include "camel/runtime/exec_plan.h"
+#include "camel/runtime/region_roots.h"
 
 #include "camel/core/rtdata/array.h"
 #include "camel/core/rtdata/func.h"
@@ -222,6 +223,27 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         std::vector<gc_node_ref_t> fromExit{startRef};
         reachBack(fromExit, used);
         live = used;
+        // The second seed is 3.1's other root of a region (camel/runtime/region_roots.h): a write to
+        // a resource outside the program is used by the region it is written in, so the region's
+        // running runs it although nothing reads what it produces. Written in the body, it runs
+        // whenever the graph runs -- and a graph is planned as it is invoked, so the body's writes
+        // come in here without a condition. Written in an arm or in a loop, it runs with that region,
+        // so it is seeded below with the region's result and under the same owner-live condition: a
+        // write in an arm nothing takes, or in a loop nothing needs, is not part of the execution
+        // (`SemanticDiag::EffectNotExecuted` names the branch or the loop).
+        //
+        // The nodes are laid out by the walk at the end of this function, which visits every node
+        // `live` holds, and the members of a control region are laid out as that region's piece
+        // whatever brought them in, so seeding here is all a write needs.
+        const std::vector<camel::runtime::RegionRootCandidate> regionRoots =
+            camel::runtime::regionRootCandidatesOf(*graph);
+        for (const camel::runtime::RegionRootCandidate &candidate : regionRoots) {
+            if (candidate.region != 0) {
+                continue;
+            }
+            std::vector<gc_node_ref_t> body{candidate.node};
+            reachBack(body, live);
+        }
         // The seed is the region's result, and the ruling above says why: a region runs because its
         // owner runs. So a region is seeded only once its owner is in the execution. Seeding every
         // region of the graph instead laid out the members of a region whose owner nothing reached,
@@ -256,6 +278,20 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
                     continue;
                 }
                 seeds.push_back(region->result);
+            }
+            // 3.1's other root, under the same condition: the writes a running region owes
+            // (camel/runtime/region_roots.h; the body's came in above).
+            for (const camel::runtime::RegionRootCandidate &candidate : regionRoots) {
+                if (candidate.region == 0 || live[candidate.node]) {
+                    continue;
+                }
+                const gc_node_ref_t owner =
+                    camel::runtime::decidingOwnerOf(*graph, candidate.region);
+                if (owner == camel::runtime::kInvalidNodeRef || !graph->containsNodeRef(owner) ||
+                    !live[owner]) {
+                    continue;
+                }
+                seeds.push_back(candidate.node);
             }
             if (!seeds.empty()) {
                 reachBack(seeds, live);

@@ -217,6 +217,18 @@ bool OperatorTable::hasExternalEffect(std::string_view uri) const {
     return !id || hasExternalEffect(*id);
 }
 
+bool OperatorTable::writesOutside(OperId id) const {
+    const sem::OperatorSemantics *facts = record(id);
+    // An operator nobody declared writes the global resource (design principles 3.3), which is
+    // the same reading `hasExternalEffect` gives it and the same one `accessList` publishes.
+    return facts == nullptr || facts->writesOutside();
+}
+
+bool OperatorTable::writesOutside(std::string_view uri) const {
+    const auto id = lookup(uri);
+    return !id || writesOutside(*id);
+}
+
 namespace {
 
 /// The resource declaration against the `var` parameters of the signature (design principles

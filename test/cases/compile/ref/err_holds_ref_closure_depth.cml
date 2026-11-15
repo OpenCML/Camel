@@ -1,0 +1,20 @@
+/**
+ * The same rule three layers in, and it is the depth that used to hide it: the closure put into the
+ * box captured a closure, which captured a closure, which holds the reference. A function type does
+ * not spell its captures, so the walk has to follow the values a closure took, one layer at a time,
+ * and this program was accepted with no report at all -- one box that can never be freed, which is
+ * exactly the leak the rule exists to prevent.
+ */
+
+import state
+
+func main(): int sync {
+    let n = state::ref(0)
+    let h = (): int => state::get(n)
+    let g = (): int => h()
+    let f = (): int => g()
+    let box = state::ref(f)
+    let call = state::get(box)
+    println(call())
+    return 0
+}

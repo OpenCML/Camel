@@ -1,0 +1,15 @@
+/**
+ * The warning still has a subject. A write is a root of the region it is written in, and a region
+ * runs because its owner runs (design principles 3.1): this loop's value is taken by nobody, so the
+ * loop does not run -- "循环每一轮都执行" is a promise about a loop that runs -- and the print
+ * written in its body does not run either. Nothing is printed, and the warning is still the one that
+ * says so, for the loop and for the write inside it.
+ */
+
+func main(): int {
+    loop s = 0 for i in [0, 1, 2] do {
+        println("round")
+        s + i
+    }
+    return 0
+}

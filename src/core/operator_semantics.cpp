@@ -251,6 +251,27 @@ bool OperatorSemantics::external() const {
     return false;
 }
 
+bool OperatorSemantics::writesOutside() const {
+    // The narrower half of external(): a write, not a read. An operator nobody declared is read as
+    // writing the "global" resource, and so is one whose declaration says an effect exists without
+    // itemizing it (design principles 3.3) -- the same conservative reading `accessList` publishes.
+    // A declaration that **does** itemize its accesses is decided by them, and that is what keeps a
+    // read of `env` or `console` exactly as demand-driven as it was: `get_env` is effectful and
+    // reaches outside, and it writes nothing.
+    if (declaredEffect == Effect::Undeclared) {
+        return true;
+    }
+    if (!resources) {
+        return declaredEffect == Effect::Effectful;
+    }
+    for (const ResourceAccess &access : resources->accesses) {
+        if (writes(access.mode) && reachesOutside(access.resource.cls)) {
+            return true;
+        }
+    }
+    return false;
+}
+
 Effect OperatorSemantics::effect() const {
     // The access list decides, where it is declared: an empty one is a pure operator, and one
     // that reaches outside the program is effectful (docs/design/op-semantics/README.cn.md 4.2).
