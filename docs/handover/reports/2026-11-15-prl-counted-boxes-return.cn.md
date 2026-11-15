@@ -208,13 +208,35 @@ test\cases\compile\ref\ref_boxes_made_per_call_ten.cml std::prl`（对照后端�
 
 ## 9. 顺带发现（都不修，记在这里）
 
-**（一）`trans.cpp` 的 `agree_with_fvm` 在合并后的基线上就红，与本车道无关。**
-`--changed` 宽选时会选中它（合并碰了 `src/compile`、`src/trans`）。红法是编译链而不是判据：
-`test/cases/trans/cpp/mean_axis_elements.cml` 的 C++ 程序**编不过**（175 个程序里 174 个 same，
-1 个 `does not build`，`G:\DevEnvs\LLVM\bin\clang++.EXE`）。该用例最后一次改动是 `3c5770946`，
-它是 `f135bbb16` 的祖先 —— 也就是说这道红**在基线之前就在**，不是本车道、也不是这次合并引入的。
-**不修**，另派。想单跑它：
-`node scripts/test.js test/plans/feat/trans --jobs 4`（约 60 s，因为要编 175 个程序）。
+**（一）`trans.cpp` 的 `agree_with_fvm`：已消失，是旧二进制造成的假红，与本车道无关。**
+这里原先记的是「`test/cases/trans/cpp/mean_axis_elements.cml` 的 C++ 程序**编不过**（175 个程序里
+174 个 same、1 个 `does not build`，`G:\DevEnvs\LLVM\bin\clang++.EXE`）」。2026-11-15 复现为绿，
+**那道红不在树里**。三条证据：
+
+- **生成端两端相同。** `src/passes/trans/cpp/operator_rules.cpp` 里 `r["tensor:mean_axis"]` 的规则体
+  （包括它选 `rt::meanAxis(…)` 与 `rt::meanAxis(…)[0]` 的那两个分支）在 `3c5770946` 与 `df057ee8a`
+  上逐字相同，唯一的差异是那段注释的折行；`include/camel/standalone/array.h` 的 `meanAxis` 也逐字相同
+  （注释里 `modules/math/minmax.h` → `camel/core/math/minmax.h` 是 `6a809183e` 的头文件搬家）。用例文件
+  自 `3c5770946` 起 0 笔改动。
+- **两端是同一份编译器。** `9031c009c..df057ee8a` 十四笔里没有一笔碰 `src/`、`include/`、`modules/`
+  （只有 docs、`scripts/check-doc-snippets.mjs`、`stdlib/perf.cml`、几个 `.cml` 用例和计划文件）。
+- **主机两个提交都绿**（88，clang 23.1.2，`camel-remote.ps1 -Jobs 8`）：
+  `3c5770946` → `[PASS] agree_with_fvm 52.49 s`、`[SUMMARY] total: 101, pass: 101, fail: 0`；
+  `9031c009c` → `[PASS] agree_with_fvm 51.11 s`、`[SUMMARY] total: 103, pass: 103, fail: 0`。
+  同一台 Windows 机器、同一把 clang，重建之后也是 175/175 same：同机器同编译器，差别只在二进制新旧。
+
+当初那个读数是**本机 Windows** 上的（clang 路径 `G:\DevEnvs\LLVM\bin\clang++.EXE`），正是（二）说的那一类
+——用合并**之前**的二进制读合并**之后**的树。（一）和（二）本来是同一条，这里按（二）的规则收回。
+
+「174 of 175」那个数字另有出处，它不是 `same` 的计数：`run.py --standalone --expect=… --baseline=…`
+印的是 `PASS: 174 of 175 program(s) need no Camel runtime; 1 link it, all in the baseline`——
+那个 `1` 是**链接数**（`test/cases/compile/diag_render/runtime_regex.cml`，`bridged.txt` 里的 EXCEPTION），
+不是差异数。`agree_with_fvm` 的 `same` 计数是 `PASS: 175 of 175 programs agree with std::fvm`。
+
+判据（可复用）：**红先读 `[provenance]` 的 `binary built`，不看用例的 git 历史**——红的日期在二进制里，
+不在文件历史里；「用例最后一次改动」只说明用例文本何时变过，说明不了红何时出生。
+
+想单跑它：`node scripts/test.js test/plans/feat/trans --jobs 4`（约 60 s，因为要编 175 个程序）。
 
 **（二）合并之后必须先重建再跑，否则会读到一批可信的假红。**
 本次合并（`origin/develop` `4d475aaaf`）带来了 `src/compile/gir` 的改动；用合并**之前**的二进制跑合并**之后**
