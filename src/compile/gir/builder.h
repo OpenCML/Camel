@@ -2546,9 +2546,12 @@ class Builder {
         std::unordered_map<draft_node_ref_t, uint8_t> capturePositions;
         // The resources this reach names by value rather than by parameter (design effects plan
         // 3.2): a handle access is an access of the value that names the handle, so two operations
-        // on one reference reach one resource and two operations on two references reach two. The
-        // keys are read by orderEffectsOnOneResourceIn alone; a signature names its resources by
-        // parameter, and that is what `reach` above holds.
+        // on one reference reach one resource. A value the body received is keyed by its handle
+        // type rather than by its position (`handleKeyOf`): two same-typed names may name one box
+        // and nothing in the body tells them apart, so they are one resource; two handle types,
+        // and a value the body made itself, are provably different. The keys are read by
+        // orderEffectsOnOneResourceIn alone; a signature names its resources by parameter, and that
+        // is what `reach` above holds.
         std::vector<std::string> valueKeys;
         bool unplaceable = false;
     };
