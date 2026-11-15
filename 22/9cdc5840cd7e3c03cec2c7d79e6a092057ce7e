@@ -1,0 +1,24 @@
+`fsh-dev` 合并的闸门读数（正文已带读数；这里补上合后量的那一半）。
+
+合并：`229cdc584 Bring the author's reworked specs, the answered pages and the two per-call counting cases`，
+`--no-ff` 合入 `origin/fsh-dev`（`8a2226386`，111 笔领先、0 笔落后）。**无冲突**：
+`git merge-tree --write-tree origin/develop origin/fsh-dev` 返回单棵树，`HEAD^{tree} == 8a2226386^{tree}` = True。
+
+内容：只带文档（`docs/design-principles.*`、四个新的 `docs/design/**` 章节、
+`docs/handover/reviews/questions-2026-10-29.md` +689 行）+ 已答复页整体 `questions/ → reviews/` 的搬移；
+两笔新用例 `ref_boxes_made_per_call_ten` / `_thousand` 与它们已在上一步随 `reftime` 进树，路径与条目一致。
+
+点名跑 `test/plans/feat/compile/ref.plan.toml`（作者新的判据）：
+  [SUMMARY] total: 47, pass: 47, fail: 0
+  `ref.boxes_made_per_call_ten` / `ref.boxes_made_per_call_thousand` 在 nvm/fvm/jit/prl 全绿
+  RUN_EXIT=0；`killed by a signal`、`timed out` 都不出现
+  [provenance] tip 229cdc584 | tier fast | jobs 4 | tree /home/zjwei/camel-work/Camel
+静态检查：`check-doc-links` exit 0。
+
+`--changed --changed-base 0e94f3ba4`：选到 3 个计划（`smoke.core`、`feat.tools.portability`、
+`feat.docs_links`），`[SUMMARY] total: 33, pass: 33, fail: 0`，RUN_EXIT=0。
+
+合入前基线（`0e94f3ba4` 上的全量，fast 层）：`total: 9411, pass: 9365, fail: 0, skip: 11,
+known failures: 35`，无 `killed by a signal`、无 `timed out`。
+
+`git ls-remote origin refs/heads/develop` = 229cdc5840cd7e3c03cec2c7d79e6a092057ce7e。
