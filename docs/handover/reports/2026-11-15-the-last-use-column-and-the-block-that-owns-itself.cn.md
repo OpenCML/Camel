@@ -100,22 +100,46 @@
   （`ForeignResourceObject::finalize`）照样把 `control_` 塞进延迟释放队列 → use-after-free。
 
 `docs/handover/reports/2026-11-15-count-at-zero-has-no-entry.cn.md` §4 第 4 条写的是「终结器在块已被计数释放后
-必须成为空操作」——**这条要求把两件事绑在一起**：要么块不 `delete`（计数只 `dispose()` 资源，内存交给最后一个
-wrapper 释放），要么计数释放时把所有 wrapper 的 `control_` 清掉。前者需要一个新的状态位与一条「谁删块」的规则，
-后者需要 wrapper 的反向索引。两者都会动 `created/released/live` 的含义，也就是 §4 的验收读数，所以这是**作者的
-一条裁定**，不是车道能自己定的事。今天先做的那一半（这一列 + 条目）不改变任何运行时读数，正是为此。
+必须成为空操作」——**这条要求把两件事绑在一起**。作者随后的答复把它分成了甲与丙（见 §6a）。
 
-**下一步（给接的人，按顺序）**：1) 作者裁定「谁删块」；2) `releaseCountNow` 按裁定改（今天它就是
-`bool releaseCountNow() noexcept { return release(); }`，要变成「先 `dispose()`、不 `delete`」）；
-3) 三个执行点加同一个入口（`nodevm.cpp#NodeVMSchedPass::call`、`fastvm/native_call.cpp#FastVMSchedPass::invokeNativeOperator`、
-`taskflow.cpp#TaskflowExecSchedPass::executePreparedOperator`——anchor 的
-`noteCountedCreation*` 就挂在这三处，是四个后端共用的那种位置），读 `refEntriesAt`，
-`op == Retain` 走 `retainCountNow`、`GiveBack` 走 `giveBackCountNow`，都先看槽的类型是不是 `TypeCode::Ref`
-（`retainCountNow` 今天不查 kind，只查「是不是 `ForeignResourceObject`」，直接对每个值调用会把 python 对象、
-文件句柄也算进去）；4) 删终结器那条路径；5) 再量 §4 那张表，那时 `live` 才是「持有者还剩几个」。
+## 6a. 甲是过渡，丙是终点（作者答复 2026-11-15）
+
+**甲（已在本次提交里落地）**：计数只决定**资源**何时释放，wrapper（句柄这个值本身）暂时仍由回收器释放。原则
+10.5 末句允许这一过渡——「核实之前程序的值仍留在分代堆上，不影响正确性」；可观察的是资源何时释放，那一半由
+计数管。实现上：`ForeignResourceControlBlock` 现在有两个数——`refCount_`（**wrapper** 的个数，回收器那边）与
+`holderCount_`（**持有者**的个数，计划里的加减一）。`releaseCountNow` 让 `holderCount_` 减到 0 时只
+`dispose()` 资源、把它从登记表里摘掉、`released +1 / live -1`，**不 `delete this`**；块的**内存**仍由最后
+一个 wrapper 的终结器（`release()`）释放，那时 `disposed_` 已经是真，`dispose()` 是空操作。所以终结器只管
+wrapper 的内存，资源与计数它一概不碰。
+
+**丙（终点，本次不做）**：句柄这个值**本身就是被计数的引用**，不再有一个带终结器的 wrapper——
+计数为零就意味着没有任何持有者，也就不存在「还活着的 wrapper 指着已释放的块」这个问题，
+**既不需要终结器，也不需要乙那条「块反向找到 wrapper」的登记表（乙不取）**。丙随「程序的值移出回收堆」
+那一步（收敛阶段）做，到那时把终结器路径整个删掉。**判别用（`Ref` 活着、计数归零、终结器随后到达 ⇒ 甲下
+`finalized=1` 且不崩）是甲到丙过渡期的看门人，丙落地时才能删，现在不能少。**
+
+## 6b. 还没做的：四个后端执行条目（作者点名为「剩下的主要工作」）
+
+`applyRefEntriesForNode` 不在本次提交里。落点已经确定（anchor 的 `noteCountedCreation*` 就挂在这三处，是
+四个后端共用的那种位置）：`nodevm.cpp#NodeVMSchedPass::call` 的 `case GCNodeKind::Oper` 之后、
+`fastvm/native_call.cpp#FastVMSchedPass::invokeNativeOperator` 之后、`taskflow.cpp#TaskflowExecSchedPass::executePreparedOperator`
+之后；读 `graph->execPlan().refEntriesAt(topoIndexByRef[node])`，`Retain` 走 `retainCountNow`、`GiveBack` 走
+`giveBackCountNow`。**两条必须写进实现的约束**：1) 先看槽的类型是不是 `TypeCode::Ref`——`retainCountNow` 今天
+只查「是不是 `ForeignResourceObject`」，直接对每个值调用会把 python 对象与文件句柄也算进去；2) 只执行**产出
+位置是算子节点**的那些值（`refProducedAt` 那一行的 `topo[idx]` 是 `GCNodeKind::Oper`）：算子的产出是四个后端
+唯一都经过同一个函数的值，其余产出（CALL、FILL）在 `fastvm` 里不经过这个入口——只做一边会变成
+「retain 跳过、give-back 执行」，那是**早释放**，比不释放坏。跳过的那一类落在退出清扫上（`live` 留着，
+永不为零），符合「宁可少释放也不要早释放」。
+
+**重量时的判据（作者原话三条）**：1) 四个后端都执行条目；2) 资源在计数归零时释放；3) 运行中途读数不随次数
+增长（跑 1 次与跑 10 次的 `live`/`finalized` 对比，`ref.boxes_made_per_call_ten` 与 `..._thousand` 正是这一对）。
+
+**下一步（给接的人，按顺序）**：1) 按 §6b 在三个入口执行条目（§6a 的甲已经落地，所以这一步现在只剩调用）；
+2) 删终结器那条路径——但那要等 §6a 的丙；3) 再量 §4 那张表，那时 `live` 才是「持有者还剩几个」。
 
 ## 7. 这一页没有做的事
 
 没有改期望值、没有加 `known_fail`、没有动 `faccf38b9` 的折叠、没有改 `docs/design-principles.cn.md`、
 没有改 `planStorageReuse` 的复用判据（`owned` 仍是对的：读在更新**之前**才妨碍复用，读在更新**之后**是程序
-本来的意思，用这一列去卡它只会白白少复用），没有让任何后端执行条目。
+本来的意思，用这一列去卡它只会白白少复用）。**没有让任何后端执行条目**（§6b），所以甲落地后运行时读数与
+落地前逐位相同——这正是甲作为过渡的样子：它只换了「谁在计数归零时做什么」，而今天还没有人把计数走到零。
