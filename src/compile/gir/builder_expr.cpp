@@ -1887,14 +1887,26 @@ void Builder::collapseNonEscapingVariableReads() {
                 }
                 version = cellInputs[0];
             } else {
-                if (nodeKindOf(source) != camel::runtime::GCNodeKind::Oper) {
-                    continue;
+                if (nodeKindOf(source) == camel::runtime::GCNodeKind::Join) {
+                    // A branch's JOIN selects between the values its arms give. When it carries a
+                    // value -- its type is the value's and not a cell's -- the read takes the join
+                    // itself: that is the branch's result, which is what a write inside a branch is
+                    // (`if c then { x = 1 }` merges 1 and the value from before the branch).
+                    Type *sourceType = nodeTypeOf(source);
+                    if (sourceType == nullptr || valueTypeOf(sourceType) != sourceType) {
+                        continue;
+                    }
+                    version = nodeIdOf(source);
+                } else {
+                    if (nodeKindOf(source) != camel::runtime::GCNodeKind::Oper) {
+                        continue;
+                    }
+                    const auto written = draft.normInputsOf(nodeIdOf(source));
+                    if (written.size() < 2) {
+                        continue;
+                    }
+                    version = written[1];
                 }
-                const auto written = draft.normInputsOf(nodeIdOf(source));
-                if (written.size() < 2) {
-                    continue;
-                }
-                version = written[1];
             }
             if (version == cellId || draft.header(version) == nullptr) {
                 continue;
