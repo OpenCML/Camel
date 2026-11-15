@@ -81,3 +81,20 @@ test/tools/writing-freedom.mjs
 真正的病不是纪律松，是**判据缺**：「不许改期望」这条规矩单独存在时，**遇到「新语义下旧用例变红」，它只能把我推向「去把旧机制补回来」**。
 
 判据已写进 `agents/test.md` 末条：**先问那条用例测的是不是已撤回的规则。**
+
+## 5. 生成文档里的示例已经不再示范那条诊断（2026-11-16 记）
+
+`diagnostics/examples.tsv` 仍把 `SemanticDiag::IgnoredSideEffect` 的示例钉在 `warnings_visible.cml`，**而那个例子现在已不再触发这条警告**（臂里直写 `var` 按 3.1 不是效应）。
+
+`docs.links.diag_catalog` 的 `doc_is_generated` **是绿的**——因为它比的是**页面正文与源码是否一致**，不是**示例是否还示范了这条诊断**。
+
+同源的还有一处：该诊断的 help 文字仍是旧读法（「A write outside one is ordered after the reads written before it…」）。
+
+### 要做的
+1. 给 `IgnoredSideEffect` 换一个**真的会触发它**的示例（`reportIgnoredCapturedWrites` 那一支仍活着：被调函数捕获写、调用处没交回）；
+2. 改 help 文字，去掉「顺序」那半句（新语义下 `var` 的写之间没有顺序边）。
+
+### 判据
+**「示例能过检查」与「示例示范了这条诊断」是两件事。** 检查只证明前者。**改完之后要有一个读数能证明后者**——例如把该示例的诊断码与它出现在目录里的用途对上，或让检查在「示例不产生该诊断」时报红。
+
+**在做到这一步之前，`IgnoredSideEffect` 的目录页会一直是绿的，而它是错的。**
