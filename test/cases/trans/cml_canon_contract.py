@@ -285,6 +285,28 @@ def ordering_edges(document):
     return edges
 
 
+def joined_by_one_edge(document, gid, source, target):
+    """Whether one edge of the graph the document holds joins `source` to `target` directly.
+
+    The canonical reduction (`std::jgir canonical=true`) drops an `order` edge whose two ends a
+    path of two or more edges already orders, and keeps one whose ends a single edge joins. The
+    checker (`test/tools/cml_roundtrip.py`) counts the single edge too: a pair a data edge joins is
+    ordered by that edge. The two counts differ, and this query is what tells them apart -- a
+    document that carries such an `order` edge still compares equal to the same document with the
+    edge taken out, which is why the demo below no longer starts from "strip every `order` input".
+    """
+    for graph in document["graphs"]:
+        if graph["id"] != gid:
+            continue
+        for node in graph["nodes"]:
+            if node["id"] != target:
+                continue
+            for item in node["inputs"]:
+                if item["source"] == source:
+                    return True
+    return False
+
+
 def ordered_through_another_path(document, gid, source, target):
     """Whether `source` reaches `target` over at least two edges of the graph the document holds.
 
@@ -379,14 +401,45 @@ assert nine[1] in ordering_edges(double).get(zero, {}), (
     f"{ordering_edges(double).get(zero, {})}"
 )
 
-# The checker reads them: dropping one ordered pair from a document makes it different, and so
-# does dropping the `order` edge of a pair that carries no other kind.
-dropped = copy.deepcopy(ordered)
-for graph in dropped["graphs"]:
-    for node in graph["nodes"]:
-        node["inputs"] = [item for item in node["inputs"] if item["kind"] != "order"]
-assert differing_fields(ordered, dropped) == {"node.inputs"}
-compare(write("dropped_order.json", dropped), write("ordered.json", ordered), False)
+# The checker reads them. The document keeps `order` edges whose two ends a single edge already
+# joins: the fold hands the value a write produced straight to its user, so the pair is joined by
+# that data edge and the `order` edge it used to need carries no ordering of its own. The checker
+# counts the single edge as ordering the pair, so taking such an edge out leaves the document
+# equal -- which is asserted here, edge by edge. "Dropping a pair no path orders makes the
+# document different" is asserted just below, on `double`, where the pair is the program's own.
+implied, unimplied = [], []
+for (gid, target), sources in ordering_edges(ordered).items():
+    for source, kinds in sources.items():
+        if "order" not in kinds:
+            continue
+        if joined_by_one_edge(ordered, gid, source, target):
+            implied.append((gid, source, target))
+        else:
+            unimplied.append((gid, source, target))
+assert implied, (
+    "the document carries no `order` edge whose ends one edge joins, so this reading says nothing "
+    f"about the two counts: {len(unimplied)} edge(s), none implied")
+for gid, source, target in implied:
+    without = copy.deepcopy(ordered)
+    for graph in without["graphs"]:
+        for node in graph["nodes"]:
+            node["inputs"] = [
+                item
+                for item in node["inputs"]
+                if not (
+                    item["kind"] == "order"
+                    and (graph["id"], item["source"], node["id"]) == (gid, source, target)
+                )
+            ]
+    assert differing_fields(ordered, without) == {"node.inputs"}
+    compare(
+        write(f"implied_{source}_{target}.json", without),
+        write("ordered_again.json", ordered),
+        True,
+    )
+print(
+    f"ordering: {len(implied)} `order` edge(s) whose ends one edge joins (dropping them leaves the "
+    f"document equal) and {len(unimplied)} that no path orders")
 
 unpaired = copy.deepcopy(double)
 for graph in unpaired["graphs"]:
