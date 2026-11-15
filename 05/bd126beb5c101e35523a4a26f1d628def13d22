@@ -1,0 +1,37 @@
+`lane-regreads` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`05bd126beb5c101e35523a4a26f1d628def13d22`，`--no-ff` 合入 `lane-regreads`（`96d053b9f`
++ 同步合并 `005a27f59`）。**无冲突**；净改动 4 文件 `+36/−19`。推：`13cfb702b..05bd126be`，
+`ls-remote` = 05bd126beb5c101e35523a4a26f1d628def13d22。
+
+闸门（合后 `develop`，**重新构建**，`-Jobs 8`，`feat/compile` + `feat/runtime` + `feat/opt`）：
+    [SUMMARY] total: 3912, pass: 3895, fail: 1, known failures: 16        RUN_EXIT=1
+    唯一红：[FAIL] var.assignment_and_let_chain_are_one_graph  227.73 ms
+    [PASS] runtime.draft_node_owner.stale_handle_is_refused  71.70 ms
+    [provenance] tip 05bd126be | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+无 `killed by a signal`、无 `timed out`。**没有第二条红。**
+
+## 三个读数（改前，车道在已释放句柄上量的）
+    [DRAFT_NODE_OWNER] probe_node_draft_of=returned handle_epoch=48 epoch_read=48
+    [DRAFT_NODE_OWNER] probe_node_is_current=1
+    [DRAFT_NODE_OWNER] probe_is_named_by=1 handle_epoch=48 epoch_read=48
+改后：`current_of_released=0`、`released_owner=none`（后者由 `79fe44e3b` 引入）。三条都曾是「答案对、理由不存」。
+
+## 判据
+- **`nodeIsCurrent` 的断言真的在计划里**：`test/plans/feat/runtime/draft_node_owner.plan.toml` 的
+  `expect_stdout_matches` 第一条即 `\[DRAFT_NODE_OWNER\] current_of_released=0`（合后树实测，不是只在报告里）。
+- **`Refused:` 仍打得出来**：同一份断言里第 7 条是该行正则
+  `^\[DRAFT_NODE_OWNER\] Refused: handle made in epoch \d+ at 0x[0-9a-f]+, and the address now holds epoch \d+$`，
+  用例 `[PASS]`。runner 不回显通过用例的 stdout，故无字面副本，只有断言这一层。
+- **`nodeDraftOf` 仍 abort**：改后 GUARD 条件从「地址上的 epoch 是另一个」换成「那个 epoch 没有草稿登记在这个地址」，
+  `GUARD` 本身与 abort 行为未动；返回值改为 owner 的 `view()`。
+- **`git grep -c 'node\.draft->'` 在合后树上**：源码 **0 文件**；唯一命中是
+  `docs/handover/reports/2026-11-15-is-the-stream-family-load-dependent.cn.md:3`（散文里描述旧读法）。
+- **没有残留的临时断言**：`git log --oneline origin/develop...lane-regreads -- …/draft_node_owner.plan.toml`
+  只有 `96d053b9f` 一笔；车道工作树 `porc=0`。为让 runner 打出 stdout 而故意红过一次的那次改动没有留在历史里。
+- **`analyze.cpp#isNamedBy` 的诚实说明已写进合并正文**：车道声明它构造不出能到达该表达式的语义路径，
+  于是改量「同一表达式在 pass 里对已释放句柄求值」，没有假装量到了真路径。
+
+## 顺带
+推之前发现本地 `develop` 有别人的一笔未推提交 `13cfb702b`（`agents/test.md` +1，作者 Zhenjie Wei，
+18:15:44）；我推的时候它已经在 `origin/develop` 上了，所以没有夹带任何不属于这批的内容。
