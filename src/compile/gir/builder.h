@@ -2677,12 +2677,13 @@ class Builder {
     // returns, and the values a closure captured -- and the report is a RefContentHoldsRef at the
     // place the box is made (builder_refs.cpp).
     void checkRefContents();
-    // The place a reference is reached at through the values `call` hands to a box of `content`,
-    // when `content` is a function type: a closure's captures are a fact about its graph, and its
-    // type does not spell them.
+    // The place a reference is reached at through the values `call` hands to a box of `content`:
+    // a closure's captures are a fact about its graph and its type does not spell them, so the
+    // walk follows the content into the value the call hands in -- a record's field, a tuple's
+    // part, an array's element, however many layers down -- and opens the closures it finds there,
+    // for as long as the graphs hold values it has not opened yet.
     std::optional<std::string>
-    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
-        const;
+    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content) const;
     // One layer of that walk: the place a reference is reached at through what the closure `value`
     // captured, `through` naming the closures already walked to reach it and `depth` how many
     // layers down this is. A layer that cannot be read -- or one past `kRefCaptureDepth` -- is
