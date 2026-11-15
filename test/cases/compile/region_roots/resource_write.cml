@@ -1,0 +1,25 @@
+/**
+ * The rule is read from the resource a write names, not from the operator's name (design principles
+ * 3.1 and 3.3): `seed` writes the generator `rng`, which is outside the program too, and here it is
+ * a bare statement of a body that is not `sync`.
+ *
+ * The two keys are the same exactly when the seed outside the block ran: `firstKeyLo` is a `sync`
+ * function, so its own seed and draw always run. So the printed line and the exit code both say
+ * whether the write the body holds was honoured.
+ */
+
+import { next_key, seed } from random
+
+func firstKeyLo(): int sync {
+    seed(7)
+    return next_key().lo
+}
+
+func main(): int {
+    seed(7)
+    let outside = next_key()
+    let inside = firstKeyLo()
+    let same = outside.lo == inside
+    println("keys agree")
+    if same then 0 else 1
+}
