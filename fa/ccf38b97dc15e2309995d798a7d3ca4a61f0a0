@@ -31,3 +31,17 @@
 - **反向验证在提交正文里留痕**：摘掉 `#scale(3)` ⇒
   `no OPER of main's body carries graph::scale=3: ["graph::plain","graph::scale=5"]`；放回 ⇒ PASS。
   （我核的是正文里的这段读数，没有自己再摘一次——那要改 `stdlib/graph.cml`，不是合并位该做的事。）
+**补充（合并后追加，说明这条绿是怎么来的）**
+
+`var.assignment_and_let_chain_are_one_graph` 在 `faccf38b9` 上变绿，**原因是「这个程序」的 `var` 链
+被完整折叠、`:var/new` 因无 user 被剪掉**，而不是 `var` 不再是单元：
+
+- 该计划断言的是 `[graph] let identical` 与 `[grad] let identical`——两份 canonical 文档逐字节相同，
+  且**导数侧现在能求出来**（旧红的症状是 `grad` 根本求不出来）。逐字节相同意味着该程序的图里已无
+  `:var/new`/`:var/get`/`:op/assn_d`，否则字节会不同。
+- **但 `var` 仍被造成单元**：同一棵树上 `warnings_visible.cml` 的 dump 仍含 `N09 [:var/new]`（3 个 user）。
+- 作者第 1 项要求的三处**一处都还没做**：①删掉单元节点与它的按引用捕获口；②分支赋值成为分支的值；
+  ③循环赋值成为循环的状态。
+
+所以这条绿的正确说法是：**「直线、无调用、无臂/循环的那一个程序，`var` 链被折叠并剪枝，两份 canonical
+文档因此相同」**，不是「`var` 已经是 SSA」。不要用它回答「`var` 化成 SSA 开工了吗」。
