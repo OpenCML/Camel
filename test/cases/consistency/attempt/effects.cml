@@ -1,40 +1,45 @@
 /**
  * What happened inside the boundary before the fault stays. Lines printed before the fault are
- * printed, in order; a var written before the fault keeps the value written (a var is a shared
- * cell: nothing is rolled back); what would have run after the fault did not run. Outside the
- * boundary nothing is disturbed: the nodes after the `attempt` run as after any call.
+ * printed, in order; a box written before the fault keeps the value written (the content of a
+ * reference is written where the write stands: nothing is rolled back); what would have run after
+ * the fault did not run. Outside the boundary nothing is disturbed: the nodes after the `attempt`
+ * run as after any call.
+ *
+ * The state that has to survive a boundary is a `Ref`, not a `var`: a closure may keep the handle
+ * (design principles 3.5, the exit for state that outlives a call), and the ruling of 2026-11-15
+ * keeps a closure from assigning an outer name at all.
  */
 
+import state
+
 func main(): int sync {
-    var total = 1
-    // A function with a var parameter cannot be handed to an operator; the closure captures
-    // the variable instead (by reference, design principles 3.5).
+    let total = state::ref(1)
     let work = (d: int): int => sync {
         println('work begins')
-        total = total + 10
-        println(format<total>('total is {}'))
+        total->state::set(total->state::get + 10)
+        println(format<total->state::get>('total is {}'))
         let q = 100 / d
-        total = total + 1000
+        total->state::set(total->state::get + 1000)
         println('work ends')
         return q
     }
     println('before')
     let a = attempt(work)(4) !! -1
     println(a)
-    println(total)
+    println(total->state::get)
     let b = attempt(work)(0) !! -1
     println(b)
-    println(total)
-    var seen = 0
+    println(total->state::get)
+    let seen = state::ref(0)
     let c = attempt(() => sync {
         (0..6)->foreach<(x: int) => sync {
-            seen = seen + 12 / (3 - x)
-            println(seen)
+            seen->state::set(seen->state::get + 12 / (3 - x))
+            println(seen->state::get)
         }>
-        return seen
+        return seen->state::get
     })() !! -1
     println(c)
-    println(seen)
+    println(seen->state::get)
     println('after')
     return 0
 }
