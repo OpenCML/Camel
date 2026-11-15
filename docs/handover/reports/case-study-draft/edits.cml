@@ -1,0 +1,44 @@
+// Two rewrites of the training program, written in Camel against the graph module.
+import { Node, Graph, name, nodes, inputs, op, op_name, type_of, type_name, open, replace, erase, commit, graphs_of } from graph
+
+func opText(n: Node): string {
+    return match op(n) {
+        case null => ''
+        case o => op_name(o)
+    }
+}
+
+func typeText(n: Node): string {
+    return match type_of(n) {
+        case null => ''
+        case t => type_name(t)
+    }
+}
+
+func nodesOf::<F>(p: F, g: string): Node[] {
+    let found = graphs_of(p)->filter<(h: Graph): bool => name(h) == g>
+    return nodes(found[0])
+}
+
+/// Lists the operators of `main` (to find what to rewrite).
+export func list::<F>(p: F): F! sync {
+    nodesOf(p, 'main')->foreach<(n: Node) => println(opText(n) + ' : ' + typeText(n))>
+    return p
+}
+
+/// Drops the first printing call of `main`: a rewrite that loses an effect.
+export func drop_print::<F>(p: F): F! sync {
+    let t = open(p)
+    let prints = nodesOf(p, 'main')->filter<(n: Node): bool => opText(n) == ':io/println'>
+    erase(t, prints[0])
+    return commit(t)
+}
+
+/// Puts a string where the learning rate, a float, is passed: a rewrite that breaks a type.
+export func break_rate::<F>(p: F): F! sync {
+    let t = open(p)
+    let floats = nodesOf(p, 'main')->filter<(n: Node): bool => typeText(n) == 'float' && opText(n) == ''>
+    let texts = nodesOf(p, 'main')->filter<(n: Node): bool => typeText(n) == 'string'>
+    replace(t, floats[0], texts[0])
+    return commit(t)
+}
