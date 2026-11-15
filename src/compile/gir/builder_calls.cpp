@@ -282,15 +282,26 @@ node_handle_t Builder::createFuncDataNode(
         node_vec_t refNodes;
         const std::vector<CapturedValue> captured = capturedValues_[graph.get()];
         for (const CapturedValue &value : captured) {
-            node_handle_t ref = captureInto(currGraph_, value.origin, value.name);
+            node_handle_t ref      = captureInto(currGraph_, value.origin, value.name);
+            // The port the closure holds says whether this capture is a value or a cell: a value
+            // port is not a variable, a by-reference port is (`captureInto`). Asked of the port
+            // rather than worked out again from the origin, so that what is handed over here is
+            // the node the capture table holds, not one derived from the origin a second time.
+            const bool byValue = !isVariable(value.port);
             // A call written before this value in the same graph may be a writer of the variable
             // the value captures (the conservative writer set), and the closure reads it when it
             // runs: what it captures is the variable as it stands after that call, not the cell
             // from before it. The claim is the same one readVariableThrough takes, met here
             // because the read is inside the value rather than in this graph.
             if (const node_handle_t claim = claimedWriterOf(currGraph_.get(), value.origin);
-                claim != nullptr && sameGraph(claim, currGraph_) && ref != nullptr) {
+                claim != nullptr && sameGraph(claim, currGraph_) && ref != nullptr &&
+                isVariable(ref)) {
                 ref = variableAfterCall(ref, claim);
+            }
+            if (byValue && isVariable(ref)) {
+                // A value port is handed the value the variable holds where the closure is made,
+                // never the cell (design principles 3.5).
+                ref = readVariable(ref);
             }
             refNodes.push_back(ref);
         }
@@ -823,6 +834,14 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         }
         for (draft_node_ref_t port : graph->view().normPorts()) {
             linkNodes(LinkType::Norm, graph->view().ref(port), call);
+        }
+        // A target whose captures are values is called with values: this graph holds them, so its
+        // own captures of the same variables are values as well (`captureByValue`).
+        for (const CapturedValue &value : capturedValues_[target.get()]) {
+            if (!isVariable(value.port)) {
+                valuePortGraphs_.insert(graph.get());
+                break;
+            }
         }
         addCaptureSite(call, target);
         bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);

@@ -232,3 +232,44 @@ compare_to = "var.closure_read_graph"
 compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+# The value capture port. This case exists because the port once crashed on exactly this program:
+# the closure's capture port is a value (`int`, not `var int`), and the call site of a direct call
+# of that function recorded a `:var/get` of the cell as what the call was worth; the fold at the
+# end of the caller's body erased the read, and `linkCaptureSites` linked a node that was gone, so
+# the builder aborted (`nodeTypeOf`, "Draft node is null", through `settleStreamLinearity`).
+[[tests]]
+name = "var.capture_value_port"
+desc = "The minimal trigger of the value capture port (`var c = 5`, a function reading `c`, one direct call of it and one value made of it): a closure that reads a variable of the module's top level is handed its value, so `read_c`'s capture port is `int` and its graph holds no `:var/get`, and a direct call of that function is handed the node the capture table holds rather than one read off the cell at the link step. It is here because the value port used to crash on this program: the read the call site recorded was erased by the fold, and the link step then linked a node that was gone (nodeTypeOf, the guarantee `node != nullptr`, through `settleStreamLinearity`). Both writings of the call must print 6."
+kind = "behavior"
+case = "../../../cases/compile/var/capture_value_port.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "6\n6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# --- Step b of the `var`-to-SSA work: the write a body leaves on a `var` parameter ---------------
+#
+# A `var` parameter is a cell the caller made. The cell outlives the call, so the write the body
+# leaves in it is a result of the function beside the returned value (design principles 3.1), and
+# the caller reads that write afterwards. The entry below pins it, and it was red before the exit
+# used the write: outside a `sync` block the write was ordered after the reads written before it
+# and then dropped as an effect nothing ran, so `set(a)` left `a` at `0`.
+#
+# Both positions are in the one case file, because the reading this entry takes is that they agree,
+# not that one of them has a particular shape: `set` writes in a body that is not a sync block,
+# `in_block` writes inside a `sync { ... }` block of a body that is not sync, and the lambda adds
+# the unnamed-body position -- those three were red. `set_sync` (the whole body a sync block) and
+# `clear` (a body that returns `void`) are the controls: measured with the write-back off, they
+# already read correctly, so they are what must not move, not what this entry proves.
+[[tests]]
+name = "var.parameter_write_is_the_callers_value"
+desc = "The write a function body leaves in a `var` parameter is what the caller reads afterwards: `set(a)` (a body that is not a sync block), `in_block(c)` (a `sync { ... }` block inside a body that is not sync) and a lambda leave `41`, `9` and `5` in the caller's cells, and the caller reads those values after each call; `set_sync(b)` (the whole body a sync block) and `clear(d)` (a `void` body) are the controls, correct before this change and unchanged by it. Measured with the write-back off, the three read `0 0`, `0 0`, `0 0` -- the caller's cell kept the value it started with -- while the controls read `0 42` and `0`; with the write-back on all five read what the body wrote. Red before the function's exit used the write: outside a `sync` block the write was ordered after the reads written before it and then dropped (`SemanticDiag::EffectNotExecuted`)."
+kind = "behavior"
+case = "../../../cases/compile/var/var_parameter_write_at_exit.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

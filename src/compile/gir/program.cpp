@@ -624,6 +624,7 @@ bool Builder::buildLibraryEntry(
 
 void Builder::scanProgramWriters() {
     programWriters_.clear();
+    programValueNames_.clear();
     // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
     // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
     // principles 4.3). The variable it writes is the base of its target: the variable itself
@@ -755,8 +756,21 @@ void Builder::scanProgramWriters() {
                 }
             }
         }
+        // A name read where a call is not made is a value the program wants: `let k = f` makes a
+        // value of `f`, and `f(1)` calls it. A `LINK` (and a `WITH` or `TAPP` that binds one) puts
+        // its callee first; every other node reads every child. The value is what a capture of a
+        // closure is about (a function value holds the values its captures had when it was made),
+        // so the two are told apart here, before any body is built.
+        const bool calleeFirst = node->type() == GCT::NodeKind::LINK ||
+                                 node->type() == GCT::NodeKind::WITH ||
+                                 node->type() == GCT::NodeKind::TAPP;
         for (size_t i = 0; i < node->size(); ++i) {
-            pending.push_back({node->at(i), function});
+            const GCT::node_ptr_t child = node->at(i);
+            if (child != nullptr && !(calleeFirst && i == 0) &&
+                (child->type() == GCT::NodeKind::DREF || child->type() == GCT::NodeKind::NREF)) {
+                programValueNames_.insert(child->name());
+            }
+            pending.push_back({child, function});
         }
     }
     // A function's write of a name it declared is dropped: the cell is the function's own, and only
