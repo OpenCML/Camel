@@ -232,3 +232,19 @@ compare_to = "var.closure_read_graph"
 compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+
+# The value capture port. This case exists because the port once crashed on exactly this program:
+# the closure's capture port is a value (`int`, not `var int`), and the call site of a direct call
+# of that function recorded a `:var/get` of the cell as what the call was worth; the fold at the
+# end of the caller's body erased the read, and `linkCaptureSites` linked a node that was gone, so
+# the builder aborted (`nodeTypeOf`, "Draft node is null", through `settleStreamLinearity`).
+[[tests]]
+name = "var.capture_value_port"
+desc = "The minimal trigger of the value capture port (`var c = 5`, a function reading `c`, one direct call of it and one value made of it): a closure that reads a variable of the module's top level is handed its value, so `read_c`'s capture port is `int` and its graph holds no `:var/get`, and a direct call of that function is handed the node the capture table holds rather than one read off the cell at the link step. It is here because the value port used to crash on this program: the read the call site recorded was erased by the fold, and the link step then linked a node that was gone (nodeTypeOf, the guarantee `node != nullptr`, through `settleStreamLinearity`). Both writings of the call must print 6."
+kind = "behavior"
+case = "../../../cases/compile/var/capture_value_port.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "6\n6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000

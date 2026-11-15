@@ -822,6 +822,10 @@ class Builder {
     // with its captures). The value holds the captures the graph had then, so the graph
     // cannot take one more.
     std::unordered_set<DraftGraphBuilder *> valueUsedGraphs_;
+    // The graphs made to forward a call of a function whose captures are values (a function the
+    // program also makes a value of, `forwardingGraphOf`): they hold those values, so their own
+    // captures of the same variables are values too.
+    std::unordered_set<DraftGraphBuilder *> valuePortGraphs_;
     // The captures refused so (CaptureAfterRecursiveCall), each reported once.
     std::set<std::pair<DraftGraphBuilder *, node_handle_t>> lateCaptures_;
     // A direct call of a graph (a FUNC node): its captures are passed as With inputs after
@@ -848,6 +852,10 @@ class Builder {
     /// the new ports are shown with.
     node_handle_t
     captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
+    /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
+    /// cell: a value of the top level of a module, that no function of the program writes, captured
+    /// by a graph the program is making a value of (not by one a direct call is being built for).
+    bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) const;
     /// The name a capture of `origin` is shown with: the qualified name of a top-level value
     /// (with its module when it is not the current module's), `fallback` otherwise.
     std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
@@ -2499,9 +2507,17 @@ class Builder {
     // stands after the call. The functions are kept with the set until a function type carries
     // what it writes, which is when the set can be narrowed.
     std::unordered_map<std::string, std::set<const GCT::Node *>> programWriters_;
+    // The names the program makes a value of, by the name each is written with: a function name
+    // read where a value is wanted (`let k = f`) and not where a call is made (`f(1)`). A value
+    // holds the values its captures had when it was made; a direct call is handed the cells.
+    std::unordered_set<std::string> programValueNames_;
     // Fills `programWriters_` out of every module's construction tree. Runs before the bodies
     // are built: a function its module has not built yet still writes what its body says.
     void scanProgramWriters();
+    // Whether the program makes a value of the function `name` writes.
+    bool programMakesValueOf(const std::string &name) const {
+        return programValueNames_.contains(name);
+    }
     // Whether some function of the program writes a variable that `name` is written with.
     bool programWrites(const std::string &name) const { return programWriters_.contains(name); }
     // The variables visible where the builder stands, by the name the source writes each with and
