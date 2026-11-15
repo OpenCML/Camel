@@ -1838,6 +1838,32 @@ void Builder::collapseNonEscapingVariableReads() {
         }
         byCell[info.cell].push_back({read, info.source});
     }
+    // Every exit of this fold is counted, because three times now a condition was written, compiled,
+// and had no effect -- each time found by guessing at readings. The counts go to stderr when
+// CAMEL_LOG_DEBUG is set: initial (the value `:var/new` made, only for a variable never written),
+// loop (carried state, not folded), join (a branch's value merge point), write (the value a write
+// wrote), nothing (a source the fold does not stand for, or the read kept for another reason).
+    static int foldTookInitial_ = 0;
+    static int foldSawLoop_     = 0;
+    static int foldTookJoin_    = 0;
+    static int foldTookWrite_   = 0;
+    static int foldTookNothing_ = 0;
+    struct FoldCountsReport {
+        ~FoldCountsReport() {
+            if (std::getenv("CAMEL_LOG_DEBUG") == nullptr) {
+                return;
+            }
+            std::fprintf(
+                stderr,
+                "[DBG-FOLD] initial=%d loop=%d join=%d write=%d nothing=%d\n",
+                foldTookInitial_,
+                foldSawLoop_,
+                foldTookJoin_,
+                foldTookWrite_,
+                foldTookNothing_);
+        }
+    };
+    static FoldCountsReport foldCountsReport_;
     for (auto &[cell, reads] : byCell) {
         // A `var` parameter of this graph is a resource shared with the caller, and a captured cell
         // is shared with a closure: both keep their cell. A `var` that only a write put in
@@ -1893,10 +1919,24 @@ void Builder::collapseNonEscapingVariableReads() {
             // names, and reading it is what the design says a read does.
             camel::runtime::gc_node_ref_t version = readId;
             if (source == cell) {
-                if (cellInputs.empty()) {
+                // The cell's first input is the value `:var/new` made: it is what a reader wants
+                // only when nothing has written the variable yet. A variable that has been written,
+                // met here as a read whose source is still the cell, is a judgement this fold did
+                // not make (the write is somewhere the version record did not reach -- a merge
+                // point, an arm's region), and taking the initial value would answer with a number
+                // the program never had. Leave the read alone; it goes on reading the cell.
+                if (cellInputs.empty() || modifierOf(cell).has_value()) {
+                    ++foldTookNothing_;
                     continue;
                 }
                 version = cellInputs[0];
+                ++foldTookInitial_;
+            } else if (nodeKindOf(source) == camel::runtime::GCNodeKind::Loop) {
+                // A write inside a loop is carried state: the version a read after the loop takes is
+                // the loop, which is not a value the fold can stand in for (schedule item 3). Folding
+                // it would answer with the value from before the loop.
+                ++foldSawLoop_;
+                continue;
             } else {
                 if (nodeKindOf(source) == camel::runtime::GCNodeKind::Join) {
                     // A branch's JOIN selects between the values its arms give. When it carries a
@@ -1905,18 +1945,23 @@ void Builder::collapseNonEscapingVariableReads() {
                     // (`if c then { x = 1 }` merges 1 and the value from before the branch).
                     Type *sourceType = nodeTypeOf(source);
                     if (sourceType == nullptr || valueTypeOf(sourceType) != sourceType) {
+                        ++foldTookNothing_;
                         continue;
                     }
                     version = nodeIdOf(source);
+                    ++foldTookJoin_;
                 } else {
                     if (nodeKindOf(source) != camel::runtime::GCNodeKind::Oper) {
+                        ++foldTookNothing_;
                         continue;
                     }
                     const auto written = draft.normInputsOf(nodeIdOf(source));
                     if (written.size() < 2) {
+                        ++foldTookNothing_;
                         continue;
                     }
                     version = written[1];
+                    ++foldTookWrite_;
                 }
             }
             if (version == cellId || draft.header(version) == nullptr) {
