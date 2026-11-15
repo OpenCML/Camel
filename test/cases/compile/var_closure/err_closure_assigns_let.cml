@@ -1,0 +1,22 @@
+/**
+ * A closure assigns a name bound outside it: the program is refused, and today the rule that
+ * answers is the `var` parameter's, not the closure rule.
+ *
+ * Design principles 3.5 (the author's ruling of 2026-11-15) says a closure assigns no name from
+ * outside itself. That clause is **not reported today**: the assignment inside the closure goes
+ * through `__assn__`'s `var` parameter, so the refusal that stands is `ImmutablePassedToVarParam`
+ * -- a `let` has no cell to be written through, in a closure or outside one. The three ways out
+ * the older report named (a `let` parameter, the closure's result, a `Ref`) still apply.
+ *
+ * Kept as a pin because the program has to keep being refused, whichever rule is the one answering.
+ */
+
+func main(): int sync {
+    let k = 1
+    let bump = (): int => sync {
+        k = k + 1
+        k
+    }
+    println(bump())
+    return 0
+}

@@ -1,0 +1,18 @@
+/**
+ * A closure the loop body makes is a new one on every turn, and the `var` it captures is a new
+ * binding on every turn too: what the rule of design principles 3.5 looks at is this turn alone,
+ * so the three closures are three separate captures and nothing is reported.
+ *
+ * Each turn makes `step` (10, 20, 30), captures it, and adds what the closure reads back, so the
+ * program prints 60.
+ */
+
+func main(): int sync {
+    let (last, total) = loop i = 0, acc = 0 while i < 3 do {
+        var step = (i + 1) * 10
+        let f = () => step
+        (i + 1, acc + f())
+    }
+    println(total)
+    return 0
+}

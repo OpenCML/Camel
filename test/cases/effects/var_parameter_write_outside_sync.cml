@@ -1,0 +1,29 @@
+/**
+ * A `var` parameter is the caller's cell, and that cell outlives the call: the write the body
+ * leaves in it is a result of the function beside the returned value, so the body's exit is what
+ * uses it (design principles 3.1). The same rule holds whether the body is a `sync` block or not:
+ * a write nobody in the body reads afterwards still runs, and the caller finds it in its own cell.
+ *
+ * Before the rule was written, a body that was not a `sync` block dropped the write ("nothing
+ * depends on it"), and the first two lines printed `0 0`.
+ */
+
+func bump(var v: int): void {
+    v = v + 1
+}
+
+func main(): int sync {
+    var x = 0
+    // `y` is `x`'s cell, so `y = 1` writes the caller's `x`, and `return x` reads it after.
+    let store = (var y: int): int => { y = 1; return x }
+    println(store(x))
+    println(x)
+    // The same write with a `sync` body: this body always ran it, and it is the reading the body
+    // without `sync` has to agree with.
+    let storeSync = (var z: int): int => sync { z = 2; return z }
+    println(storeSync(x))
+    println(x)
+    bump(x)
+    println(x)
+    return 0
+}

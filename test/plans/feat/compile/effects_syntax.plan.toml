@@ -747,3 +747,27 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_output_contains = ["err_write_entry_reaches.cml:5:", "() => int uses var stderr"]
+
+# ---- The write a body leaves in a `var` parameter is a result of the function ----
+#
+# Came from the retired `hold/varexit-cases` branch, where the same property was built as a source
+# change; the main line has it (`lane-varparam`, `2427c2bf5`), so only the measurement is kept.
+
+[[tests]]
+name = "var_parameter.write_outside_sync"
+desc = "The write a body leaves in a `var` parameter is a result of the function like the returned value: the cell outlives the call, so the body's exit uses the last write, and it runs with a `sync` body and without one alike (design principles 3.1, no effect vanishing in silence). The lambda body that is not `sync` used to drop it -- `0 0` here -- and now prints what the `sync` body prints. Four back ends, one reading."
+kind = "behavior"
+case = "../../../cases/effects/var_parameter_write_outside_sync.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error", "Internal", "bad any_cast", "IgnoredSideEffect", "EffectNotExecuted"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+const want = ["1", "1", "2", "2", "3"].join('\n')
+assert(out === want, `unexpected output: ${out}`)
+}
+"""
+timeout_ms = 30000
