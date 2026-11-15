@@ -14,6 +14,7 @@
 #include "camel/core/type/composite/tuple.h"
 #include "camel/core/type/intern.h"
 #include "camel/core/type/other.h"
+#include "camel/core/type/resource_conflict.h"
 #include "camel/core/type/storage.h"
 #include "camel/core/type/text.h"
 #include "camel/core/type/typecall.h"
@@ -22,6 +23,14 @@
 #include <algorithm>
 
 namespace camel::core::type {
+
+ResourceConflictSink &resourceConflictSink() {
+    // One for the process: a build installs its own on the way in and restores the previous one on
+    // the way out (Builder::ResourceConflictScope), the way the `match type` guard evaluator is
+    // installed and restored.
+    static ResourceConflictSink sink;
+    return sink;
+}
 
 // ---- TypeVarType ----
 
@@ -773,7 +782,7 @@ Type *substituteTypeVars(Type *type, const type_bindings_t &bindings) {
             // not an answer of false -- the unguarded case after a guarded one would otherwise
             // take a subject the guard was written to decide (`FamilyOf<int>` answered `int[5]`,
             // the default, while `is_numeric::<int>` was never asked).
-            bool undecided = false;
+            bool undecided        = false;
             const auto guardHolds = [&](size_t arm, const type_bindings_t &binds) {
                 const std::shared_ptr<const TypeCaseGuard> &guard = match->armGuard(arm);
                 if (guard == nullptr) {
@@ -1291,6 +1300,17 @@ bool unifyTypeVars(Type *pattern, Type *actual, type_bindings_t &bindings) {
         // this one writes none. A clause written in one argument is then not a requirement the
         // others have to keep, and the call's result promises no more than the arguments stated.
         Type *bound = findTypeBinding(bindings, var->name());
+        // Two occurrences that are one type in every part but their resources: the variable would
+        // have to be two types at once, and which of the two it is taken for is not a question the
+        // place they meet may answer -- that would let a use decide what the callee reaches. The
+        // compiler in hand records the pair and judges it once the bodies are measured
+        // (resource_conflict.h); a build without one keeps the reading below.
+        if (bound != nullptr && !bound->equals(actual) &&
+            typeEqualsIgnoringResources(bound, actual)) {
+            if (ResourceConflictSink &sink = resourceConflictSink(); sink) {
+                sink(*bound, *actual);
+            }
+        }
         // A variable several arguments give takes the join of what they give (the relation of the
         // mixed join): the element `void` of an empty literal constrains nothing, and of two types
         // one enters the other, the one it enters is the solution (a named struct over the unnamed

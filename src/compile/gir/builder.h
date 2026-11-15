@@ -31,6 +31,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/resource_conflict.h"
 #include "camel/core/type/typevar.h"
 
 namespace camel::compile::gir {
@@ -1358,6 +1359,25 @@ class Builder {
     // wrote `uses`/`pure` keeps the clause (its contract with its callers), and one that wrote no
     // clause carries what its body was measured to reach (design principles 3.3).
     std::unordered_set<DraftGraphBuilder *> inferredSignatures_;
+    // The signature a declared function's values are made from, by the graph whose body was
+    // declared for it: the one place a conflict between two occurrences of a type variable is
+    // resolved back to a declaration, to report it there and to read the settled set from
+    // (recordResourceConflict, checkInferredResources).
+    std::unordered_map<const camel::core::type::Type *, DraftGraphBuilder *> declaredFuncTypes_;
+    // The pairs of types one occurrence of a type variable bound to different resources
+    // (resource_conflict.h): recorded where they meet, judged once every body is measured, so that
+    // the answer does not depend on which of the two bodies was built first. `unwritten` says the
+    // side wrote no resource clause when the two met, which is where the repair is written.
+    struct ResourceConflict {
+        const camel::core::type::Type *left  = nullptr;
+        const camel::core::type::Type *right = nullptr;
+        bool leftUnwritten                   = false;
+        bool rightUnwritten                  = false;
+    };
+    std::vector<ResourceConflict> resourceConflicts_;
+    // The pairs already reported, by index in `resourceConflicts_`: the check runs once per module
+    // unit, and a pair is one diagnostic.
+    std::unordered_set<size_t> reportedResourceConflicts_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -2648,6 +2668,32 @@ class Builder {
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
     // while the bodies are still in hand.
     void checkInferredResources();
+    // Records one place where two occurrences of a type variable asked for one type and the two
+    // types differed in their resources alone (resource_conflict.h): the type layer asks, while the
+    // bodies are being built, and the pair is judged once every body is measured, so that the
+    // answer does not depend on which of the two bodies happened to be built first. Answers false
+    // when neither side is a declaration this build measured, which leaves the type layer the
+    // reading it had.
+    bool recordResourceConflict(
+        const camel::core::type::Type &left, const camel::core::type::Type &right);
+    // Makes this builder the one the type layer records such pairs with, and puts the previous one
+    // back when it goes out of scope.
+    class ResourceConflictScope {
+      public:
+        explicit ResourceConflictScope(Builder &self)
+            : previous_(camel::core::type::resourceConflictSink()) {
+            camel::core::type::resourceConflictSink() =
+                [&self](const camel::core::type::Type &left, const camel::core::type::Type &right) {
+                    return self.recordResourceConflict(left, right);
+                };
+        }
+        ~ResourceConflictScope() { camel::core::type::resourceConflictSink() = previous_; }
+        ResourceConflictScope(const ResourceConflictScope &)            = delete;
+        ResourceConflictScope &operator=(const ResourceConflictScope &) = delete;
+
+      private:
+        camel::core::type::ResourceConflictSink previous_;
+    };
     // Then holds each body to the state rule (design principles 3.5, rule two; the author's ruling
     // of 2026-11-14): a `var` local lives in the call that declares it and a `var` parameter is the
     // caller's cell lent to the call that received it, so a closure may capture one by reference
@@ -2667,9 +2713,8 @@ class Builder {
     // The place a reference is reached at through the values `call` hands to a box of `content`,
     // when `content` is a function type: a closure's captures are a fact about its graph, and its
     // type does not spell them.
-    std::optional<std::string>
-    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
-        const;
+    std::optional<std::string> refInsideACapturedValue(
+        node_handle_t call, camel::core::type::Type *content, int depth = 0) const;
     // The cells of `body` the state rule speaks of: the mutable cells the body itself made, and its
     // `var` parameters, which its caller made and lent to it.
     std::unordered_set<node_handle_t> cellsOfBody(DraftGraphBuilder *body) const;
@@ -2695,6 +2740,12 @@ class Builder {
     void reportResourceViolation(
         const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
         const camel::core::sem::ResourceSignature &measured, camel::source::origin_id_t noteOrigin);
+    // The report of one place where one type variable was asked for two function types that write
+    // different resources (recordResourceConflict): anchored at the declaration of the side the
+    // position may repair, naming both signatures. Reported with the other per-module diagnostics.
+    void reportResourceConflict(
+        const ResourceConflict &conflict, DraftGraphBuilder *leftOwner,
+        DraftGraphBuilder *rightOwner);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is

@@ -392,6 +392,48 @@ void Builder::reportResourceViolation(
             : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
 }
 
+void Builder::reportResourceConflict(
+    const ResourceConflict &conflict, DraftGraphBuilder *leftOwner, DraftGraphBuilder *rightOwner) {
+    // Anchored at the declaration that wrote no clause when the two met: the position cannot repair
+    // the one that already says what it writes, and a clause is the repair this asks for. Both are
+    // named, because what the position needs is for the two to agree.
+    DraftGraphBuilder *leftUnwritten  = conflict.leftUnwritten ? leftOwner : nullptr;
+    DraftGraphBuilder *rightUnwritten = conflict.rightUnwritten ? rightOwner : nullptr;
+    DraftGraphBuilder *anchor         = leftUnwritten != nullptr ? leftUnwritten : rightUnwritten;
+    if (anchor == nullptr) {
+        anchor = leftOwner != nullptr ? leftOwner : rightOwner;
+    }
+    if (anchor == nullptr) {
+        return;
+    }
+    const auto nameOf = [](DraftGraphBuilder *graph, const camel::core::type::Type *type) {
+        return graph != nullptr ? graph->name() : camel::core::type::typeToString(type);
+    };
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::ResourceInferenceConflict);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    const auto originOf       = [&](DraftGraphBuilder *graph) {
+        return sourceContext != nullptr && graph != nullptr
+                   ? sourceContext->debugMap().graphOrigin(graph->graphId())
+                   : camel::source::kInvalidOriginId;
+    };
+    const auto origin = originOf(anchor);
+    if (origin != camel::source::kInvalidOriginId) {
+        builder.atOrigin(origin);
+    }
+    DraftGraphBuilder *other = anchor == leftOwner ? rightOwner : leftOwner;
+    const auto otherOrigin   = originOf(other);
+    if (otherOrigin != camel::source::kInvalidOriginId) {
+        builder.relatedOrigin(
+            otherOrigin,
+            "the other value this position is given: the two have to write the same resources");
+    }
+    builder.commit(
+        nameOf(leftOwner, conflict.left),
+        nameOf(rightOwner, conflict.right),
+        camel::core::type::typeToString(conflict.left),
+        camel::core::type::typeToString(conflict.right));
+}
+
 void Builder::reportDroppedEffectsOfBodies() {
     for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
         reportDroppedEffects(graph, true);

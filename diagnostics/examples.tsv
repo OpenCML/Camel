@@ -194,6 +194,7 @@ SemanticDiag::Redeclaration	test/cases/compile/generics/err_redecl.cml
 SemanticDiag::RefContentHoldsRef	test/cases/compile/ref/err_holds_ref.cml
 SemanticDiag::ReservedIdentifier	test/cases/compile/surface/reserved_function_name.cml
 SemanticDiag::ResourceGroupCycle	test/cases/effects/err_group_cycle.cml
+SemanticDiag::ResourceInferenceConflict	test/cases/effects/err_inferred_invariant_position.cml
 SemanticDiag::RestArgumentNotLast	test/cases/compile/rest_params/rest_arg_not_last.cml
 SemanticDiag::RestArgumentNotTuple	test/cases/compile/rest_params/rest_arg_not_tuple.cml
 SemanticDiag::RestArgumentsMismatch	test/cases/compile/rest_params/rest_too_few.cml
