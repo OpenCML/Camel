@@ -85,6 +85,14 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                 os << "PLAN_REFS " << name << " at " << i << (row.packed ? " packed " : " give ")
                    << row.value << " x" << row.count << "\n";
             }
+            // The same schedule keyed the way an instruction is: what a back end emitted at this
+            // position would do, one count for the holds taken and one for the ones given back.
+            const uint32_t taken = i < plan.refCopiesAt.size() ? plan.refCopiesAt[i] : 0;
+            const uint32_t given = i < plan.refGiveBackAt.size() ? plan.refGiveBackAt[i] : 0;
+            if (taken != 0 || given != 0) {
+                os << "PLAN_REFS " << name << " at " << i << " count +" << taken << " -" << given
+                   << "\n";
+            }
         }
     }
     return program;

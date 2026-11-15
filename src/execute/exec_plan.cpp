@@ -966,10 +966,14 @@ void planRefGiveBacks(const GCGraph &graph, ExecPlan &plan) {
             rows[idx].push_back(ExecPlan::RefGiveBack{.value = value, .at = value, .count = 1});
         }
     }
+    plan.refGiveBackAt.assign(count, 0);
     for (size_t idx = 0; idx < count; ++idx) {
         plan.refGiveBackOffsets[idx] = static_cast<uint32_t>(plan.refGiveBacks.size());
         for (const ExecPlan::RefGiveBack &row : rows[idx]) {
             plan.refGiveBacks.push_back(row);
+            // The same schedule as a per-position count: what an instruction emitted at this position
+            // would do -- the holds taken are the table's copies, these are the give-backs.
+            plan.refGiveBackAt[idx] += row.count;
         }
     }
     plan.refGiveBackOffsets[count] = static_cast<uint32_t>(plan.refGiveBacks.size());

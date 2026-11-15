@@ -288,6 +288,10 @@ class ExecPlan {
     std::vector<uint8_t> refProducedAt;
     /// By topo index: how many references the node's output takes beyond the producing one.
     std::vector<uint32_t> refCopiesAt;
+    /// By topo index: how many references come back when this node has run. The same schedule as
+    /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
+    /// reads this, and the sum over the plan is `refGiveBacksTotal()`.
+    std::vector<uint32_t> refGiveBackAt;
     /// By topo index: the program keeps the node's value (it is the graph's result).
     std::vector<uint8_t> refKeptAt;
     /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
