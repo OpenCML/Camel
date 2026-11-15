@@ -3868,3 +3868,14 @@ ECOOP 证明方的反例：不变类型（对函数类型不变的位置）参�
 - **"`var` 化成 SSA"一项仍是进行中**，验收照决策者 11-15 晚的答复：闭包按值捕获 → `var` 形参多返回值写回 → 分支与循环自动携带 → 删单元节点与按引用的捕获口；合并时报 `shape:` 行与 `:var/new` 是否还在。
 - `var.assignment_and_let_chain_are_one_graph` 绿了，但它测的是"能整条折叠的程序"；验收要再加一例折叠不掉的（`var` 在循环里被写、在循环外被读，或被闭包读），新旧两种写法规范图相同才算。
 - 提交说明只写这一笔做到的（11-15 每日审查已提过一次）。
+
+## 新排（2026-11-15 夜，第 5 路，优先级一，ECOOP）：用 Camel 组合出来的 `grad` 跑通案例，然后只留这一份
+
+ECOOP 要在论文里说"求导是用语言写出来的遍"。决策者在 pin `29ea0a011` 上实测：案例用的 `autodiff.grad` 是 C++ 引擎（`modules/autodiff`，走遍的机制），不是 `stdlib/vjp.cml` 里用 `vjp(first_with_as_param(f))` 组合出来的那个。现在库里有两份 `grad`，违反"同一件事一份实现"，也违反"图变换用 Camel 自己写"。把案例的 `loss` 交给 `vjp.grad`，卡在两处：
+
+1. **`vjp.grad` 丢掉了其余的 `with` 参数**：`vjp` 返回 `<...ws> (...xs) => …`，`grad` 却返回 `(...xs) => …`，`loss` 有第二个 `with` 参数（数据 `y`）时报 `ArgumentsMismatch`（`vjp.cml:120`）。改成把其余的 `with` 列表照传：`<...ws> (...xs) => reading<...ws>(...xs)` 一类。
+2. **缺 `f32` 转 `float` 的转置规则**：把 `y` 改成普通参数绕过第 1 处之后，`transpose` 报"the rule the index filed for `:op/ftod` was written for another shape: the rule takes (float), and the operator has (f32)"（`dtod_t` 只写了 `float`）。按 `rules.cml` 的家族写法补成对所有浮点宽度的一条规则。
+
+验收：`examples/case-study/train.cml` 换成 `import { grad } from vjp`、写法 `grad(loss)<y>(layer, X)`，四个后端打印与引擎版逐字相同（`loss after` 与权重）。
+
+**之后只留一份**：组合版在现有求导用例（`test/plans` 里引用 `autodiff.grad`/`with_grad` 的全部）上与引擎版结果一致后，`autodiff.grad`、`with_grad` 改为调用组合版，C++ 引擎里与之重复的部分删除。不一致的逐条列出，缺规则的补规则。
