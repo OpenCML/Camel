@@ -22,6 +22,7 @@
 #include "camel/runtime/effect_liveness.h"
 
 #include "camel/core/operator_table.h"
+#include "camel/core/resource_semantics.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/intern.h"
@@ -43,6 +44,8 @@
 #include <vector>
 
 namespace camel::runtime {
+
+namespace sem = camel::core::sem;
 
 namespace {
 
@@ -802,6 +805,171 @@ RuntimeSpecializationKey makeRuntimeSpecializationKey(
     return key;
 }
 
+/// The `uses` clause of a graph that lost formals, renumbered.
+///
+/// A clause names a parameter by its position in the signature (`sem::ResourceSignature::ParamUse`:
+/// `with` parameters first, ordinary ones after them -- core/resource_semantics.h) and a capture by
+/// its place in the closure. Binding a value into a call erases the formal it was given to
+/// (`eraseFormalFromDraft`), so every position after it moves down one. A clause copied from the
+/// base graph would keep the old numbers and name a parameter the specialized graph no longer has:
+/// the call site would declare a use on parameter 1 of a graph that takes one, and the containment
+/// check (docs/design/effects/analysis.cn.md 4.1) would read the specialized graph's own body as
+/// reaching past that declaration -- which is what specializing a defunctionalized function through
+/// its captured handle did.
+///
+/// A use on the erased formal itself is not dropped silently: the argument is a constant the graph
+/// holds now, so a handle use becomes an access to that handle by name -- the name the use already
+/// carries -- which is what the footprint of the constant reads. A use whose class is not a handle
+/// (a `var` cell) has no name to move and is left out; the check names no cell (analysis 5.1,
+/// `beyondCoverage`).
+sem::ResourceSignature renumberClauseAfterBindings(
+    const sem::ResourceSignature &clause, size_t withCount, size_t normCount, size_t closureCount,
+    std::span<const DraftFormalBinding> bindings) {
+    if (clause.mode != sem::ResourceSignature::Mode::Concrete) {
+        return clause;
+    }
+    std::vector<bool> withGone(withCount, false);
+    std::vector<bool> normGone(normCount, false);
+    std::vector<bool> closureGone(closureCount, false);
+    for (const DraftFormalBinding &binding : bindings) {
+        if (!binding.bindsValue()) {
+            continue; // a type refinement keeps the port
+        }
+        switch (binding.kind) {
+        case FormalKind::Norm:
+            if (binding.index < normGone.size()) {
+                normGone[binding.index] = true;
+            }
+            break;
+        case FormalKind::With:
+            if (binding.index < withGone.size()) {
+                withGone[binding.index] = true;
+            }
+            break;
+        case FormalKind::Closure:
+            if (binding.index < closureGone.size()) {
+                closureGone[binding.index] = true;
+            }
+            break;
+        }
+    }
+    const auto survivingBefore = [](const std::vector<bool> &gone, size_t position) {
+        size_t kept = 0;
+        for (size_t i = 0; i < position && i < gone.size(); ++i) {
+            kept += gone[i] ? 0 : 1;
+        }
+        return kept;
+    };
+    size_t survivingWith = 0;
+    for (bool gone : withGone) {
+        survivingWith += gone ? 0 : 1;
+    }
+
+    sem::ResourceSignature out = clause;
+    out.params.clear();
+    out.captures.clear();
+    const auto keepByName = [&out](const sem::ResourceSignature::ParamUse &use) {
+        if ((use.cls != sem::ResourceClass::Handle && use.cls != sem::ResourceClass::Foreign) ||
+            use.name.empty()) {
+            return;
+        }
+        const auto same = std::find_if(
+            out.ambient.begin(),
+            out.ambient.end(),
+            [&](const sem::ResourceSignature::AmbientUse &other) {
+                return other.name == use.name;
+            });
+        if (same == out.ambient.end()) {
+            out.ambient.push_back(
+                sem::ResourceSignature::AmbientUse{.name = use.name, .mode = use.mode});
+            return;
+        }
+        same->mode = sem::uniteAccess(same->mode, use.mode);
+    };
+    for (const sem::ResourceSignature::ParamUse &use : clause.params) {
+        const size_t index = use.index;
+        if (index < withCount) {
+            if (withGone[index]) {
+                keepByName(use);
+                continue;
+            }
+            sem::ResourceSignature::ParamUse moved = use;
+            moved.index = static_cast<uint8_t>(survivingBefore(withGone, index));
+            out.params.push_back(moved);
+            continue;
+        }
+        const size_t norm = index - withCount;
+        if (norm >= normCount) {
+            out.params.push_back(use); // an index past the signature: not this one to renumber
+            continue;
+        }
+        if (normGone[norm]) {
+            keepByName(use);
+            continue;
+        }
+        sem::ResourceSignature::ParamUse moved = use;
+        moved.index = static_cast<uint8_t>(survivingWith + survivingBefore(normGone, norm));
+        out.params.push_back(moved);
+    }
+    for (uint8_t capture : clause.captures) {
+        if (capture < closureGone.size() && closureGone[capture]) {
+            continue; // the captured value is a constant of the specialized graph now
+        }
+        out.captures.push_back(
+            capture < closureGone.size()
+                ? static_cast<uint8_t>(survivingBefore(closureGone, capture))
+                : capture);
+    }
+    std::sort(out.params.begin(), out.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    std::sort(out.ambient.begin(), out.ambient.end(), [](const auto &a, const auto &b) {
+        return a.name < b.name;
+    });
+    std::sort(out.captures.begin(), out.captures.end());
+    out.captures.erase(std::unique(out.captures.begin(), out.captures.end()), out.captures.end());
+    return out;
+}
+
+/// The same declaration with that clause: one interned signature, the parameters the base graph
+/// stated and nothing else changed. The parameter list is copied as it stands rather than rebuilt
+/// from the ports: what a binding erases here is the shape the caller matches arguments against,
+/// which is another question than the promise this rewrites.
+void setRenumberedClause(GraphDraft &draft, const sem::ResourceSignature &clause) {
+    const auto *type = draft.funcType();
+    if (type == nullptr || clause == type->resources()) {
+        return;
+    }
+    camel::core::type::FunctionTypeFactory factory;
+    const bool named = type->hasArgNames();
+    factory.setHasCompileInfo(named);
+    factory.setResources(clause);
+    for (size_t i = 0; i < type->withTypesCount(); ++i) {
+        const std::string name = named ? std::string(type->argNameAt(i)) : std::string();
+        if (type->hasWithRest() && i + 1 == type->withTypesCount()) {
+            factory.addWithRest(name, type->withRestType());
+        } else if (type->withIsConstasAt(i)) {
+            factory.addWithConstasArg(name, type->withTypeAt(i));
+        } else {
+            factory.addWithArg(
+                name, type->withTypeAt(i), type->withIsVarAt(i), type->withNeedsValueAt(i));
+        }
+    }
+    for (size_t i = 0; i < type->normTypesCount(); ++i) {
+        const std::string name =
+            named ? std::string(type->argNameAt(type->withTypesCount() + i)) : std::string();
+        if (type->hasRest() && i + 1 == type->normTypesCount()) {
+            factory.addRestArg(name, type->restPack());
+        } else if (type->normIsConstasAt(i)) {
+            factory.addConstasArg(name, type->normTypeAt(i));
+        } else {
+            factory.addNormArg(name, type->normTypeAt(i), type->normIsVarAt(i));
+        }
+    }
+    factory.setExitType(type->hasExitType() ? type->exitType() : camel::core::type::Type::Void());
+    draft.setFuncType(factory.build());
+}
+
 GCGraph *specializeGraphWithBindings(
     RuntimeGraphDraftSession &session, const GCGraph *baseGraph,
     std::span<const DraftFormalBinding> bindings, std::string_view tag, size_t nonce) {
@@ -835,6 +1003,21 @@ GCGraph *specializeGraphWithBindings(
     }
     if (refinesTypes) {
         (void)reinferDraftTypes(*draft);
+    }
+    // The declaration the copy publishes has to be the one the copy can keep: the formals the
+    // bindings erased are gone, so every position the clause numbers after one of them moves down
+    // (`renumberClauseAfterBindings`). It goes after the re-inference above because that keeps the
+    // clause it finds and rewrites the parameter types; the clause set here is the one the copy
+    // encodes.
+    if (const auto *baseType = baseGraph->funcType(); baseType != nullptr) {
+        setRenumberedClause(
+            *draft,
+            renumberClauseAfterBindings(
+                baseType->resources(),
+                baseType->withTypesCount(),
+                baseType->normTypesCount(),
+                baseGraph->closureNodes().size(),
+                bindings));
     }
     GCGraph *specialized = encodeSpecializedGraph(session, *draft, baseGraph, tag, nonce);
     session.rememberSpecialization(std::move(cacheKey), specialized);
