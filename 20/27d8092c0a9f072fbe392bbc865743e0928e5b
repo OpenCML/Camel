@@ -1,0 +1,19 @@
+`lane-countdet` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`2027d8092c0a9f072fbe392bbc865743e0928e5b`，`--no-ff` 合入 `lane-countdet`（`5df09f740` +
+同步合并 `b8bc870c5`）。**无冲突**。纯文档：14 文件 `+454`，`src/` `test/` `include/` `stdlib/`
+`modules/` 命中数 **0**。推：`6ee071938..2027d8092`，`unpushed=0`。
+
+`--changed`（`$env:CAMEL_TEST_BASE='6ee071938'`，`--jobs 4`）：
+    [SUMMARY] total: 33, pass: 33, fail: 0        RUN_EXIT=0
+    选到的是 `smoke.core` / `feat.tools.portability` / `feat.docs_links`
+静态检查：`node scripts/check-doc-links.mjs --citations` → `exit 0`
+无 `killed by a signal`、无 `timed out`。
+
+它带来的结论（合并正文里已写，这里记数）：
+`ref.boxes_made_per_call_ten.prl` 那次红 **不是并行负载**——`--jobs 1`（不加任何测试并行）20 轮红 5 轮，
+`--jobs 4` 20 轮红 6 轮（25% vs 30%，无可分辨差别）；`created=11` 恒定，变的是 `live`（0/3/4/5/6），
+而 `fvm`/`jit` 各 100/100 轮读 `11/9/2`、`nvm` 20/20 读 `11/11/0`。
+按原则 10.5 与 2026-11-15 的裁定，依赖调度的 `live` 是计数缺陷，不是噪声；**不按「重跑绿了」结案**。
+
+`git ls-remote origin refs/heads/develop` = 2027d8092c0a9f072fbe392bbc865743e0928e5b。
