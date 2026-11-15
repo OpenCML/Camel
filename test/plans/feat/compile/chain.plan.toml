@@ -1,0 +1,74 @@
+# What a `sync` block's chain carries: only the statements that have an effect or may fault.
+#
+# Design principles 3.4, read with 3.1's list of the three edges: a sync block's chain carries the
+# statements that have an effect or that may fault; a computation that is pure *and* cannot fault is
+# arranged freely -- "纯计算没有顺序边；纯且不会出故障的计算也不在同步链上". A call is one of those by
+# what its callee turns out to be: a body that reaches a resource or holds an operation that may
+# fault makes the call a statement, and so does recursion ("调用按被调函数推出的事实判：函数体含可能出
+# 故障的计算、或函数是递归的（递归可能超过深度上限）就算可能出故障").
+#
+# One program shape, three callees (`test/cases/compile/chain/`):
+#
+#   pure_call_*    `twice(x) = x * 2`: pure, infallible, not recursive. The call's value is read by
+#                  the block's last statement and by nothing between it and the print, so the two
+#                  statements have no order to keep and the two writings must have ONE canonical
+#                  document, byte for byte. That byte-for-byte equality *is* the definition of
+#                  "the order of these two statements is unobservable" -- node and edge counts, or
+#                  "not identical", would not be.
+#   effect_call_*  `announce(x) = { println(x); x }`: the call writes the console, so it keeps its
+#                  chain place and the two writings must PART (they print 1,2 and 2,1).
+#   fault_call_*   `divide(x) = 100 / x`: pure, and able to fault, so it is not "freely arranged"
+#                  either, and the two writings must PART (one of them prints before it divides).
+#
+# The counterexamples are not decoration: an implementation that put nothing on any chain would pass
+# every `identical` case, so the acceptance is one of each, read by the same tool.
+#
+# `test/tools/writing-freedom.mjs --group <name>` runs both cases of a group under
+# `std::jgir canonical=true` and compares the documents byte for byte, reporting the first byte at
+# which they part with two lines of context from each side and the shape of the difference.
+#
+# Red today (`b96cc93e1`): `twice` is a call, and a call is a statement of the chain whatever its
+# callee holds, so the pure writing stands on the chain and the two documents part. The fix makes the
+# chain ask the callee.
+
+id = "compile.chain"
+order = 315
+tier = "fast"
+tags = ["feat", "compile", "sync", "gir", "effects"]
+desc = "A `sync` block's chain carries the statements that have an effect or may fault and not the ones that are pure and cannot fault: one program shape with three callees, read as one canonical document for the freely arranged call and as two different documents for the effecting and the faulting one."
+
+[[tests]]
+name = "sync.pure_call_is_arranged_freely"
+desc = "A call of a pure, infallible, non-recursive function standing between the first and last statement of a `sync` block has no order to keep: the block written with the call before the print and the block written with the print before the call have one canonical graph, byte for byte (`std::jgir canonical=true`). Red today: every call is a statement of the chain, so the call's place reaches the graph and the two writings part."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "chainpure"]
+expect_exit = 0
+expect_stdout_contains = ["expect=identical", "[graph] second identical"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "sync.effect_call_stays_on_the_chain"
+desc = "The counterexample the acceptance above needs: the same two statements, with a callee that prints. A call that reaches a resource is a statement of the block's chain (design principles 3.3, 3.4), so the two writings of the block order two different things and their canonical documents must part. This is the reading an implementation that put nothing on any chain would fail, and it is what keeps `sync.pure_call_is_arranged_freely` from being a statement about a chain that stopped carrying anything."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "chainpure_effect"]
+expect_exit = 0
+expect_stdout_contains = ["expect=differs", "[graph] second differs"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+[[tests]]
+name = "sync.faulting_call_stays_on_the_chain"
+desc = "The second counterexample: the same two statements, with a callee that divides. It is pure and it may fault, and a fault is observable (design principles 3.4, 3.9), so it is not one of the computations the compiler may arrange freely: the two writings of the block must part. This is the case that separates \"pure\" from \"freely arranged\", which is the whole content of the clause."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "chainpure_fault"]
+expect_exit = 0
+expect_stdout_contains = ["expect=differs", "[graph] second differs"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000

@@ -19,6 +19,15 @@
  *                     declarations swapped, one independent computation moved past a print. None of
  *                     the three depends on the `var`-to-SSA work.
  *
+ *   --group chainpure        `sync` blocks and what the chain carries (design principles 3.4). One
+ *                            program shape, two writings of it (a call of a pure function that
+ *                            cannot fault, then a print; and the two statements swapped). The call
+ *                            has no order to keep, so the two documents must be one.
+ *   --group chainpure_effect The same shape with a callee that prints: an effect, so the call keeps
+ *                            its place on the chain and the two writings must part.
+ *   --group chainpure_fault  The same shape with a callee that divides: pure, and able to fault, so
+ *                            it is not "freely arranged" either and the two writings must part.
+ *
  * A report that says only "not identical" is useless in a document of a thousand lines, so a
  * difference is reported as a place and as a shape:
  *
@@ -28,14 +37,22 @@
  *     side has, the first node that differs with the operator each side put there, and the
  *     operators one side has and the other does not.
  *
- * Usage: node writing-freedom.mjs --group var|spelling [--camel <path>]
+ * A group says what its two writings must be. `expect = 'identical'`, the default, is the reading a
+ * group takes when the two writings change no meaning: one canonical document, byte for byte. A
+ * group with `expect = 'differs'` is the counterexample -- a writing whose two sides order
+ * something observable -- and its reading is the opposite one: the same two statements swapped must
+ * part. Without one of each, "identical" proves nothing: an implementation that put nothing on any
+ * chain would pass every `identical` case.
+ *
+ * Usage: node writing-freedom.mjs --group var|spelling|chainpure|... [--camel <path>]
  *
  * One line per phase per case, always, so that "identical" is a reading and not an absence:
  *   [graph] let identical bytes=9179 sha256=1a2b3c4d5e6f7081
  *   [graph] let differs first_difference_byte=4083 first_difference_offset=4084 line=132 column=9
  *   [grad] let failed exit=1: error[RuntimeDiag::MacroEvaluationFailed]: ...
  *
- * The exit code is 0 when every phase of every case is identical and 1 otherwise.
+ * The exit code is 0 when every phase of every case reads what its group says it must -- identical
+ * where the writing changes no meaning, parted where it does -- and 1 otherwise.
  */
 
 import { spawnSync } from 'node:child_process'
@@ -90,7 +107,10 @@ const CAMEL = argv.has('--camel')
       )
 
 /// Every group names its cases in the order it compares them: the first one is the reference, and
-/// each of the others is compared against it. `phases` are the pipelines a case is run in.
+/// each of the others is compared against it. `phases` are the pipelines a case is run in, and
+/// `expect` is `identical` (the default: the other writings change no meaning, so the documents are
+/// the same bytes) or `differs` (the counterexample: this group's two writings order something
+/// observable, so the documents must part).
 const GROUPS = {
     // One gradient step, two writings: this is the acceptance for "a unit is lowered to SSA".
     var: {
@@ -111,6 +131,34 @@ const GROUPS = {
             ['renamed', 'examples/case-study/writings/renamed.cml'],
             ['swapped', 'examples/case-study/writings/swapped.cml'],
             ['moved', 'examples/case-study/writings/moved.cml'],
+        ],
+    },
+    // What a `sync` block's chain carries (design principles 3.4). The three groups are one program
+    // shape with three callees, so the reading separates what the order of two statements depends
+    // on: the pure and infallible call is arranged freely and the two writings are one document;
+    // the call that prints and the call that divides are not, and the two writings part.
+    chainpure: {
+        expect: 'identical',
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['first', 'test/cases/compile/chain/pure_call_first.cml'],
+            ['second', 'test/cases/compile/chain/pure_call_second.cml'],
+        ],
+    },
+    chainpure_effect: {
+        expect: 'differs',
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['first', 'test/cases/compile/chain/effect_call_first.cml'],
+            ['second', 'test/cases/compile/chain/effect_call_second.cml'],
+        ],
+    },
+    chainpure_fault: {
+        expect: 'differs',
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['first', 'test/cases/compile/chain/fault_call_first.cml'],
+            ['second', 'test/cases/compile/chain/fault_call_second.cml'],
         ],
     },
 }
@@ -268,7 +316,9 @@ function shapeOfDifference(referenceLabel, referenceDocument, label, document) {
     return lines
 }
 
-/// One phase of one case, compared against the reference case.
+/// One phase of one case, compared against the reference case: `true` when the two documents are
+/// the same bytes, `false` when they part, and `null` when a side did not finish (nothing was
+/// compared, so no reading of the group's expectation is possible).
 function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
     // A side that did not finish has no document to compare: say which side, why, and the first line
     // of the diagnostic it wrote. The write reports a diagnostic to standard output, so the reason is
@@ -282,7 +332,7 @@ function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
             (run_.stdout.toString('utf8').split('\n').find((l) => l.trim().length > 0) || '').trim() ||
             (run_.stderr.toString('utf8').split('\n').find((l) => l.trim().length > 0) || '').trim()
         console.log(`[${phase}] ${label} failed side=${side} exit=${run_.status}: ${first}`)
-        return false
+        return null
     }
     const offset = firstDifference(referenceRun.stdout, caseRun.stdout)
     if (offset < 0) {
@@ -321,7 +371,13 @@ function report(phase, passes, referenceLabel, referenceRun, label, caseRun) {
 }
 
 const [referenceLabel, referenceCase] = cases[0]
-console.log(`writing-freedom: group=${groupName} reference=${referenceLabel}`)
+// What this group's readings must be, and the reading it is checked against: `identical` for a
+// writing that changes no meaning, `differs` for the counterexample that orders something
+// observable. A group says one or the other and never both, so "the two documents are the same"
+// is a claim about this pair and not a claim about every pair.
+const expectation = group.expect || 'identical'
+const expectIdentical = expectation !== 'differs'
+console.log(`writing-freedom: group=${groupName} reference=${referenceLabel} expect=${expectation}`)
 for (const [label, file] of cases) {
     console.log(`  case ${label}: ${path.relative(ROOT, file)}`)
 }
@@ -330,7 +386,20 @@ let ok = true
 for (const [phase, passes] of group.phases) {
     const referenceRun = run(referenceCase, passes)
     for (const [label, file] of cases.slice(1)) {
-        ok = report(phase, passes, referenceLabel, referenceRun, label, run(file, passes)) && ok
+        const same = report(phase, passes, referenceLabel, referenceRun, label, run(file, passes))
+        if (same === null) {
+            // A side did not finish: the reading above says which one and why, and nothing was
+            // compared, so the group's expectation is neither met nor broken -- it is not read.
+            ok = false
+            continue
+        }
+        if (same !== expectIdentical) {
+            ok = false
+            console.log(
+                `[${phase}] ${label} reads ${same ? 'identical' : 'differs'}, and this group ` +
+                    `expects ${expectation}`,
+            )
+        }
     }
 }
 
