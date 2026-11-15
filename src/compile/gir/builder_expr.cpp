@@ -2157,7 +2157,7 @@ void Builder::collapseNonEscapingVariableReads() {
 }
 
 void Builder::dropCarriedVariableUnits() {
-    if (carriedVersions_.empty() || currGraph_ == nullptr) {
+    if (currGraph_ == nullptr) {
         return;
     }
     auto &draft = currGraph_->transaction().edit();
@@ -2191,10 +2191,26 @@ void Builder::dropCarriedVariableUnits() {
         }
         return false;
     };
+    // The cells whose unit may be left unread: the ones a branch or a loop carried, and the ones a
+    // closure captured by value. The second is the same question with one more answer: every read
+    // of such a cell took the value (the capture is the read, and the fold gave it the value the
+    // write wrote), so what is left is the unit -- `:var/new`, its store and the GATEs that handed
+    // the statement's value out -- and nobody uses it. Design principles 3.5 (197): the closure
+    // holds the value, so the cell is not a resource of the body and there is nothing left for it
+    // to be. The `let` writing of the same program has none of those nodes, which is what the pair
+    // of writings is compared on.
+    std::vector<node_handle_t> cells;
     for (const auto &[cell, carried] : carriedVersions_) {
-        if (!draft.isNamedBy(cell) || !draft.isNamedBy(carried)) {
-            continue;
+        if (draft.isNamedBy(cell) && draft.isNamedBy(carried)) {
+            cells.push_back(cell);
         }
+    }
+    for (const node_handle_t cell : valueCapturedCells_) {
+        if (draft.isNamedBy(cell)) {
+            cells.push_back(cell);
+        }
+    }
+    for (const node_handle_t cell : cells) {
         // The cell is a cell of this graph that is not a resource any more. A captured cell, a
         // `var` parameter and one handed to a call as a `var` argument are `escapingVariables_`;
         // a read still recorded for it is the fold's business and is not folded here, so such a
@@ -2286,18 +2302,22 @@ void Builder::dropCarriedVariableUnits() {
                 }
             }
         }
-        // Each store is now read by the JOIN that carried it and by no one else: the JOIN's control
-        // input from it goes with the store, because the slot of the JOIN holds the value the store
-        // wrote, which is what the store stood for.
+        // A store whose value nobody reads is not a statement any more. The fold gave every reader
+        // of the cell the value the write wrote, so what the store wrote is never read out of the
+        // cell; a `var` write is a value, not an effect (design principles 3.5, 3.1), so the store
+        // goes with the unit. What it may still have is a *sequencing* user -- the chain of the
+        // block it stood in, the GATE that handed the statement's value out, the JOIN or LOOP that
+        // carried it -- and those are what `eraseNode` splices over it. A value user of the store
+        // (a normal or a `with` input) keeps it: that is a node the program wrote that reads what
+        // the write wrote, and the unit is what carries it.
         bool storedOnly = true;
         for (camel::runtime::gc_node_ref_t store : stores) {
-            std::vector<camel::runtime::gc_node_ref_t> users;
-            usersOf(store, &users);
-            for (camel::runtime::gc_node_ref_t user : users) {
-                if (doomed.contains(user)) {
-                    continue;
-                }
-                if (nodeKindOf(nodeDraftOf(cell)->ref(user)) != camel::runtime::GCNodeKind::Join) {
+            std::vector<camel::runtime::gc_node_ref_t> valueUsers;
+            for (auto users : {draft.normUsersOf(store), draft.withUsersOf(store)}) {
+                valueUsers.insert(valueUsers.end(), users.begin(), users.end());
+            }
+            for (camel::runtime::gc_node_ref_t user : valueUsers) {
+                if (!doomed.contains(user)) {
                     storedOnly = false;
                 }
             }
