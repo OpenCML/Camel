@@ -1971,10 +1971,10 @@ struct DraftLiveFace {
         return draft.normInputsOf(ref);
     }
     std::vector<RegionRootCandidate> regionRoots() const {
-        return regionRootCandidatesOf(draft);
+        return regionRootCandidatesOfDraft(draft);
     }
     gc_node_ref_t decidingOwnerOf(uint32_t region) const {
-        return camel::runtime::decidingOwnerOf(draft, region);
+        return camel::runtime::decidingOwnerOfDraft(draft, region);
     }
     std::span<const gc_node_ref_t> withInputsOf(gc_node_ref_t ref) const {
         return draft.withInputsOf(ref);

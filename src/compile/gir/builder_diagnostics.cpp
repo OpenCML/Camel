@@ -447,7 +447,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // writes run with the graph, a region's writes run with the region, and a region runs only once
     // its owner is live.
     const std::vector<runtime::RegionRootCandidate> regionRoots =
-        runtime::regionRootCandidatesOf(draft);
+        runtime::regionRootCandidatesOfDraft(draft);
     for (const runtime::RegionRootCandidate &candidate : regionRoots) {
         if (candidate.region == 0 && needed.insert(candidate.node).second) {
             work.push_back(candidate.node);
@@ -460,7 +460,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
             if (candidate.region == 0 || needed.contains(candidate.node)) {
                 continue;
             }
-            const draft_node_ref_t owner = runtime::decidingOwnerOf(draft, candidate.region);
+            const draft_node_ref_t owner = runtime::decidingOwnerOfDraft(draft, candidate.region);
             if (owner == runtime::kInvalidNodeRef || !needed.contains(owner)) {
                 continue;
             }

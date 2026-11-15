@@ -1,11 +1,16 @@
 /**
- * An effect whose result nothing uses does not run (design principles 3.1): `x` is never read, so
- * the println bound to it is not needed and prints nothing. A warning names it. The other half of
- * the same rule as the effects that must run: a pass may neither drop an effect that is used nor
- * start one that is not.
+ * An external *read* whose result nothing uses does not run (design principles 3.1: reads stay
+ * demand-driven -- "没人用时不执行也看不出区别"), so the program prints nothing, and a pass may
+ * neither drop an effect that is used nor start one that is not. A warning names it.
+ *
+ * This line was `println(3)` until the author's ruling of 2026-11-15: a write to a resource outside
+ * the program is used by the region it is written in, so it runs now -- and a matrix cell about
+ * passes that must not invent output needs the half of 3.1 that still does not run.
  */
 
+import { get_env } from env
+
 func main(): int {
-    let x = println(3)
+    let x = get_env("CAMEL_CONFORMANCE_NO_SUCH_VARIABLE")
     return 0
 }
