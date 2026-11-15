@@ -54,6 +54,7 @@ using camel::runtime::GCNodeKind;
 using camel::runtime::GCOperBody;
 using camel::runtime::GCRegion;
 using camel::runtime::GraphId;
+using camel::runtime::kInvalidGraphId;
 using camel::runtime::kInvalidNodeRef;
 using camel::runtime::Program;
 
@@ -526,6 +527,33 @@ slot_t typeNameKernel(ArgsView &, ArgsView &norm, Context &) {
     return stringSlot(norm.get<Handle *>(0)->typeRef()->toString());
 }
 
+/// The graph a CALL node runs: the function value it reads first, which is its first `With` input.
+/// A call written by name reads a FUNC node, and a call through a value reads a DATA node holding
+/// a static function; both are answered by the entries that already resolve a callee
+/// (`GCGraph::calleeIdOf`, `GCGraph::staticFunctionGraphOf`), so this adds no rule of its own. A
+/// call whose function value is neither -- a parameter of function type, a closure being filled --
+/// names no graph here: which graph runs is decided when the call runs, and
+/// `staticFunctionGraphOf` refuses a half-built function for the same reason.
+GraphId calledGraphOf(const GCGraph &graph, gc_node_ref_t call) {
+    const std::span<const gc_node_ref_t> with = graph.withInputsOf(call);
+    if (with.empty()) {
+        return kInvalidGraphId;
+    }
+    const gc_node_ref_t target = with.front();
+    const GCNode *value        = graph.node(target);
+    if (value == nullptr || value->kind == GCNodeKind::Dead) {
+        return kInvalidGraphId;
+    }
+    switch (value->kind) {
+    case GCNodeKind::Func:
+        return graph.calleeIdOf(target);
+    case GCNodeKind::Data:
+        return graph.staticFunctionGraphOf(target).graph;
+    default:
+        return kInvalidGraphId;
+    }
+}
+
 /// The graph a CALL or FUNC node names, null for any other node. A node of the draft being
 /// rewritten names no graph: a draft is not a published version, so a condition cannot follow a
 /// call (and a rule's pattern cannot match one).
@@ -539,7 +567,9 @@ slot_t calleeKernel(ArgsView &, ArgsView &norm, Context &) {
     if (node.kind != GCNodeKind::Call && node.kind != GCNodeKind::Func) {
         return NullSlot;
     }
-    const GraphId callee = graph.calleeIdOf(handle->index());
+    const GraphId callee = node.kind == GCNodeKind::Call
+                               ? calledGraphOf(graph, handle->index())
+                               : graph.calleeIdOf(handle->index());
     if (!isValid(callee) || handle->program()->graph(callee) == nullptr) {
         return NullSlot;
     }

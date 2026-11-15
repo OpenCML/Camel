@@ -265,6 +265,8 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 help: Ensure the index is within the valid range of the collection.
 ```
 
+位置行里的路径就是你写在命令行上的那个写法：`camel fault.cml` 打印 `fault.cml:4:15`，写成 `.\fault.cml` 就打印 `.\fault.cml:4:15`，给绝对路径就打印绝对路径。编译器不把它改写成别的形式，所以同一份源码在哪台机器上都给出同一段诊断。
+
 把故障隔离在子图边界上的算子是 `attempt`（见 [6.10.1](06_expressions.md)）。
 
 **`exit(n)`** 立即结束程序，退出码为 `n`；此前的输出照常写出。

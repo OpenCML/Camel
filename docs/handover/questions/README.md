@@ -11,7 +11,7 @@
 | --- | --- |
 | [`2026-11-15-does-an-unused-external-read-report-effect-not-executed`](2026-11-15-does-an-unused-external-read-report-effect-not-executed.cn.md) | 没人用的外部读，还要报 `EffectNotExecuted` 吗？ |
 
-## 生成器不会删的行：106 行（页已不在 `questions/` 里）
+## 生成器不会删的行：109 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -121,6 +121,9 @@
 | [`2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with`](../reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) | 产出处的那一个减一由谁发：编译器，还是运行时？ | 在 `reviews/` |
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](../reviews/2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ | 在 `reviews/` |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
+| [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
+| [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
+| [`q-2026-11-15-what-path-a-diagnostic-prints`](../reviews/q-2026-11-15-what-path-a-diagnostic-prints.cn.md) | 诊断的位置行打印哪个路径形式 | 在 `reviews/` |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |

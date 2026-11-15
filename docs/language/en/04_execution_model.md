@@ -287,6 +287,8 @@ error[RuntimeDiag::IndexOutOfRange]: Index 5 is out of range for an array of len
 help: Ensure the index is within the valid range of the collection.
 ```
 
+The path in the location line is the one written on the command line: `camel fault.cml` prints `fault.cml:4:15`, `.\fault.cml` prints `.\fault.cml:4:15`, and an absolute path is printed as an absolute path. The compiler does not rewrite it, so the same source gives the same diagnostic on any machine.
+
 The operator that isolates a fault at a subgraph boundary is `attempt` ([6.10.1](06_expressions.md#6101-fault-isolation-attempt)).
 
 **`exit(n)`** ends the program immediately with exit code `n`; earlier output is written out as usual.

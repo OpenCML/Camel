@@ -1,0 +1,33 @@
+// A linear model trained by gradient descent: the loss, its gradient as a library
+// transform, and a training step that takes the model in and gives a new one back.
+import { grad } from autodiff
+import { reshape, shape, sum } from tensor
+import { sgd } from nn
+
+type Linear = { weight: f32[...] }
+
+with <layer: Linear, y: f32[...]>
+func loss(X: f32[...]): float {
+    let err = X @ layer.weight - y
+    return float(sum(err * err)) / float(shape(X)[0])
+}
+
+func step(layer: Linear, X: f32[...], y: f32[...], rate: float): Linear {
+    let g = grad(loss)<layer, y>(X)
+    return sgd(layer, g, rate)
+}
+
+func train(layer: Linear, X: f32[...], y: f32[...], rate: float, n: int): Linear {
+    return if n == 0 then layer else train(step(layer, X, y, rate), X, y, rate, n - 1)
+}
+
+func main(): int sync {
+    let X = reshape<[4, 2]>([1.0, 0.0, 0.0, 1.0, 1.0, 1.0, 2.0, 1.0] as f32[])
+    let y = reshape<[4, 1]>([2.0, -1.0, 1.0, 3.0] as f32[])
+    let start: Linear = { weight: reshape<[2, 1]>([0.0, 0.0] as f32[]) }
+    let trained = train(start, X, y, 0.1, 200)
+    println(format<loss<start, y>(X)>('loss before: {:.4f}'))
+    println(format<loss<trained, y>(X)>('loss after:  {:.4f}'))
+    println(trained.weight)
+    return 0
+}

@@ -54,6 +54,12 @@ DraftNodeOwnerTestPass::apply(const camel::runtime::Program *program, std::ostre
     // The builder goes: nothing owns that address any more, and the handle is all that is left.
     builderA.reset();
 
+    // The first question, asked while the address belongs to no draft at all: it has no owner, and
+    // the answer must not be obtained by reading what is left at the address. The two states of the
+    // code are compared on this line, and on the `[from_ref_probe]` line the old one prints.
+    const bool releasedHasOwner = DraftGraphBuilder::fromRef(stale) != nullptr;
+    say(os, std::format("released_owner={}", releasedHasOwner ? "live" : "none"));
+
     // Something that lands on the address. Node 0 of the new draft is a Gate, not a Copy, so a
     // handle read through the new draft is visibly the wrong node rather than a matching one.
     std::vector<compile_graph_ptr_t> alive;

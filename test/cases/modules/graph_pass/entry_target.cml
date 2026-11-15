@@ -1,0 +1,5 @@
+func main(): int sync {
+    let days = 7
+    println(days * 6)
+    return 0
+}
