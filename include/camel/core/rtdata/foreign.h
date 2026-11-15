@@ -61,6 +61,10 @@ class ForeignResourceControlBlock final {
     void retain() noexcept;
     void releaseReference() noexcept;
     void releaseFromWrapperFinalizer() noexcept;
+    /// Gives one reference back and says whether it was the last, so a caller that holds a value
+    /// learns the count reached zero at that moment (design principles 10.5) instead of learning it
+    /// from a later collection. `releaseReference` is the same call without the answer.
+    bool releaseCountNow() noexcept;
     void dispose() noexcept;
 
     void *resource();
@@ -79,7 +83,7 @@ class ForeignResourceControlBlock final {
   private:
     ~ForeignResourceControlBlock() = default;
 
-    void release() noexcept;
+    bool release() noexcept;
 
     ForeignResourceDescriptor descriptor_;
     void *resource_   = nullptr;
@@ -128,6 +132,32 @@ class ForeignResourceObject final : public Object {
 
     ForeignResourceControlBlock *control_ = nullptr;
 };
+
+/// ---- The count a counted value is held by ------------------------------------------------
+//
+// Design principles 10.5: an immutable value is freed by counting alone, the count is the number of
+// its holders, and the count comes from one last-use analysis on the execution plan that every back
+// end follows. These two functions are the whole runtime surface for that count -- the author's
+// ruling of 2026-11-15 is that the compiler emits the duplicate and the drop and the runtime
+// provides nothing else (docs/handover/reviews/
+// 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) -- and where they are
+// called is the plan's business (camel::runtime::ExecPlan::refGiveBacksAt names the positions and
+// the references).
+//
+// A `Ref` handle is an ordinary traced wrapper whose control block is the box, and the slot's type
+// is what says a slot holds one (`TypeCode::Ref`), so a write path pays a comparison it already
+// makes and not a cast per value. `retainCountNow` takes one reference for a new holder and answers
+// false for a value that is not a counted block (every other foreign resource keeps its present
+// lifetime: released by its wrapper's finalizer). `giveBackCountNow` gives one back and answers
+// true when the count reached zero, so the caller is the one that knows the box was released at
+// that moment -- which is the point of the count, and the reason the answer is returned rather than
+// inferred from a collection later.
+//
+// Neither is called anywhere yet: the writes that will call them are one entry point shared by all
+// four back ends (`camel::core::context::Frame::set` for slots, `Tuple::set` / `Struct::set` /
+// `Array::set` for aggregates), so they are added here first and wired one back end at a time.
+bool retainCountNow(Object *value) noexcept;
+bool giveBackCountNow(Object *value) noexcept;
 
 ForeignResourceStats foreignResourceStats();
 /// Releases every external resource that is still held, newest first, and returns how many were

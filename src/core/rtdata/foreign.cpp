@@ -75,14 +75,16 @@ void ForeignResourceControlBlock::retain() noexcept {
     refCount_.fetch_add(1, std::memory_order_acq_rel);
 }
 
-void ForeignResourceControlBlock::releaseReference() noexcept { release(); }
+void ForeignResourceControlBlock::releaseReference() noexcept { (void)release(); }
 
 void ForeignResourceControlBlock::releaseFromWrapperFinalizer() noexcept {
     counters().finalizedWrappers.fetch_add(1, std::memory_order_acq_rel);
-    release();
+    (void)release();
 }
 
-void ForeignResourceControlBlock::release() noexcept {
+bool ForeignResourceControlBlock::releaseCountNow() noexcept { return release(); }
+
+bool ForeignResourceControlBlock::release() noexcept {
     {
         // Under the registry's lock, so that disposeAllForeignResources never retains a block
         // whose last reference is being dropped.
@@ -90,7 +92,7 @@ void ForeignResourceControlBlock::release() noexcept {
         std::lock_guard<std::mutex> lock(live.mutex);
         size_t oldCount = refCount_.fetch_sub(1, std::memory_order_acq_rel);
         if (oldCount != 1) {
-            return;
+            return false;
         }
         live.blocks.erase(this);
     }
@@ -99,6 +101,7 @@ void ForeignResourceControlBlock::release() noexcept {
     counters().releasedControlBlocks.fetch_add(1, std::memory_order_acq_rel);
     counters().liveControlBlocks.fetch_sub(1, std::memory_order_acq_rel);
     delete this;
+    return true;
 }
 
 void ForeignResourceControlBlock::dispose() noexcept {
@@ -205,6 +208,42 @@ void ForeignResourceObject::dispose() noexcept {
     if (control_) {
         control_->dispose();
     }
+}
+
+namespace {
+
+/// The control block of a value a slot may hold a reference to, or null. A counted value is a
+/// `Ref` handle: an ordinary traced wrapper whose control block is the box. Anything else (a python
+/// object, a file handle) answers null and keeps the lifetime it has today.
+ForeignResourceControlBlock *countedBlockOf(Object *value) noexcept {
+    if (value == nullptr) {
+        return nullptr;
+    }
+    auto *wrapper = dynamic_cast<ForeignResourceObject *>(value);
+    if (wrapper == nullptr) {
+        return nullptr;
+    }
+    ForeignResourceControlBlock *control = wrapper->control();
+    return control != nullptr && !control->disposed() ? control : nullptr;
+}
+
+} // namespace
+
+bool retainCountNow(Object *value) noexcept {
+    ForeignResourceControlBlock *control = countedBlockOf(value);
+    if (control == nullptr) {
+        return false;
+    }
+    control->retain();
+    return true;
+}
+
+bool giveBackCountNow(Object *value) noexcept {
+    ForeignResourceControlBlock *control = countedBlockOf(value);
+    if (control == nullptr) {
+        return false;
+    }
+    return control->releaseCountNow();
 }
 
 void *ForeignResourceObject::resource() {
