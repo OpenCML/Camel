@@ -3,22 +3,22 @@
 // Run: camel examples/functions/closures.cml
 //
 // State a closure would keep for itself is state the program writes as values that go in and come
-// back out (design principles 3.5, rule two; the author's ruling of 2026-11-14): a `var` lives in
-// the call that declares it, so a closure may capture one by reference only while it stays inside
-// that call. The shape this example used to show -- a factory returning a closure over its own
-// `var count` -- is a compile error now, and it is worth seeing what it says:
+// back out (design principles 3.5): a closure captures the VALUE a name had when it was made, not
+// the name, so it can hold state but it cannot write it. The shape this example used to show -- a
+// factory returning a closure that increments its own `var count` -- is still a compile error, and
+// the report has moved from the escape to the assignment (the author's ruling of 2026-11-16):
 //
 //     func make_counter(): () => int {
 //         var count = 0
 //         return (): int => sync { count = count + 1 return count }
 //     }
 //
-//     error: 'count' cannot leave the call that declares it: a closure captures it by reference,
-//     and this value is carried out. (SemanticDiag::ClosureCaptureEscapes, 0x03000210)
+//     error: 'count' is assigned inside a closure, and a closure holds the value the name had when
+//     it was made, not the name. (SemanticDiag::ClosureAssignsCapturedName, 0x03000213)
 //
-// The report names two rewrites, and the counter below uses the second: pass the state as a value,
-// in as a parameter and back out as the result. A cell a program really must share, rather than
-// thread, is written with `Ref<T>`.
+// The report names three rewrites, and the counter below uses the second: pass the state as a
+// value, in as a parameter and back out as the result. A cell a program really must share, rather
+// than thread, is written with `Ref<T>`.
 
 type IntFn = (x: int) => int
 
