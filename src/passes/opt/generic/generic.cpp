@@ -268,9 +268,9 @@ void replaceFoldResult(
     const auto kind      = draft.returnKind();
     replaceNode(transaction, id, replacement);
     // The place `id` held in the chain is not the replacement's (`placeLostStatements`, what
-    // `foldDraft` runs once the round's folds are done: a statement that lost its place is given the
-    // one the statement written after it holds, which is the same walk this wrapper would have to
-    // repeat node by node).
+    // `foldDraft` runs once the round's folds are done: a statement that lost its place is given
+    // the one the statement written after it holds, which is the same walk this wrapper would have
+    // to repeat node by node).
     if (replacement == kInvalidNodeRef) {
         return;
     }
@@ -1309,10 +1309,10 @@ bool foldStaticCast(
 /// `replaceFoldResult`, and `eraseNode` for the arms of a pruned branch -- while the splice that
 /// keeps the order (`closeChainOver`, src/runtime/draft.cpp) only fires when it can name a
 /// predecessor that still stands, and silently keeps nothing when it cannot. The fold then reports
-/// that it changed the graph, and the statement it took the place from is left with the source-order
-/// edge alone, which carries no place (docs/design/effects/edges.cn.md 1.5 and 5.3). That is how
-/// `test/cases/opt/e9/rc00_seed30.cml` ends with an `:io/println` that neither reads its value nor
-/// stands in a chain, which `std::opt::dce` reports as a defect of the compiler.
+/// that it changed the graph, and the statement it took the place from is left with the
+/// source-order edge alone, which carries no place (docs/design/effects/edges.cn.md 1.5 and 5.3).
+/// That is how `test/cases/opt/e9/rc00_seed30.cml` ends with an `:io/println` that neither reads
+/// its value nor stands in a chain, which `std::opt::dce` reports as a defect of the compiler.
 ///
 /// So a statement that carries the program's order (`carriesOrdering`) and has no place gets one:
 /// the statement written after it -- the `ORDER` user, which is the source order the graph kept --
@@ -1531,8 +1531,8 @@ size_t foldDraft(
     if (folded > 0 || removed > 0) {
         // Not counted as a fold: it gives a statement back the place a fold took from it, and a
         // count of its own would run another round of folding for a graph that has nothing left to
-        // fold (that extra round reaches a place-check of its own, and a sync edge across two blocks
-        // is what it finds -- `resident_cpu_block.cml`).
+        // fold (that extra round reaches a place-check of its own, and a sync edge across two
+        // blocks is what it finds -- `resident_cpu_block.cml`).
         (void)placeLostStatements(transaction);
     }
     return folded + removed;

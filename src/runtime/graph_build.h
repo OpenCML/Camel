@@ -14,6 +14,7 @@
 #include <optional>
 #include <span>
 #include <string>
+#include <string_view>
 #include <unordered_map>
 #include <unordered_set>
 #include <vector>
@@ -21,6 +22,7 @@
 namespace camel::runtime {
 
 class GraphDraft;
+class GraphTransaction;
 class Program;
 
 /// The graph's cold data: its names and the names it captures.
@@ -223,5 +225,15 @@ void validateRuntimeGraphCalls(
 void validateRuntimeGraphEdges(
     const Program &program, const GCGraph *graph, GraphState state = GraphState::Executable);
 
-} // namespace camel::runtime
+/// What the commit delivered, read back against the draft it encoded: `graph`, the graph the
+/// program holds for `transaction`'s draft, must hold exactly the draft's edges -- the four kinds
+/// (a data port in its normal and its context run, a control input, an order edge, a sync edge),
+/// both ways, in the numbering the encoder gave the draft's nodes. `name` is the graph's name, for
+/// the sentence. Throws std::runtime_error naming the edge that disagrees: a graph the commit made
+/// without an edge its draft holds is an edit the caller wrote and will never see, and this is the
+/// only place that knows both sides of it. A debug build runs this at every commit; a Release build
+/// runs it in a test that asks for it (`camel::runtime::setDraftDeliveryCheckEnabled`).
+void verifyDraftDelivery(
+    const GraphTransaction &transaction, const GCGraph &graph, std::string_view name);
 
+} // namespace camel::runtime

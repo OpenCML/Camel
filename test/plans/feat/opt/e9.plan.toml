@@ -323,4 +323,11 @@ args = ["${case}", "std::opt", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
 expect_output_not_contains = ["enters region", "PassInternalError", "internal error"]
+# The three back ends that lay every graph's tables out up front meet a second defect of the same
+# fixed point here -- a loop whose table cannot run -- and carry it as a known failure:
+known_fail = ["fvm", "jit", "prl"]
+known_fail_owner = "lane-looptable (the lane that added the refusal)"
+known_fail_reason = "the loop table of graph `e22` is refused by src/execute/exec_plan.cpp#buildLoopTables, and the refusal is right: `begin` = condFirst = 10 and `condEnd` = bodyFirst = 4 are inverted, and the Test at 4 reads the condition's result node (node 8, at position 8) before node 8 has run, because `std::opt` lays the loop out as body 4,5,6 then nodes 13,8,16 that are not the loop's then cond 10,11 then body 12,13,14"
+known_fail_msg = "has a loop whose nodes are not one contiguous range in the execution order: loop #0 is the LOOP node 15"
+known_fail_note = "Three layers, so that this mark is not read as 'the check was too strict'. (1) The check is right: begin > condEnd cannot run, whatever the program prints. (2) It is not a new defect: that loop never runs today -- the Test at position 4 reads node 8's slot before node 8 has run, sees an unbound slot and leaves the loop -- which is why this entry, whose program prints nothing, has been green all along; its green never said anything about the loop. (3) The check was not widened to fit it: widening it to accept this order means accepting a Test that fires before its result, and that is the defect, not a shape. Why three of the four back ends: nvm builds a graph's plan when it calls that graph (src/passes/sched/nodevm/nodevm.cpp:317,678) and never runs `e22`, while fvm/jit/prl compile every graph up front (src/passes/sched/fastvm/compile.cpp:127) and so meet the table. The ordering itself comes from `std::opt`'s fixed point (src/passes/opt/opt/opt.cpp#OptimizeRewritePass::apply -> simplifyGraph), not from any named step: std::opt::inline, std::opt::devirtualize, std::opt::specialize and std::opt::algebra, each alone, leave the order clean. Measured 2026-11-15 on lane-looptable's tree (be5cb26da + the refusal)."
 

@@ -348,12 +348,60 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
                 bodyLast  = at + 1;
             }
         }
-        const bool condEmpty = condLast == li && condFirst == li;
-        const bool bodyEmpty = bodyLast == li && bodyFirst == li;
-        ASSERT(
-            (condEmpty || bodyEmpty || condLast == bodyFirst) && (bodyEmpty || bodyLast == li) &&
-                (!bodyEmpty || condEmpty || condLast == li),
-            "The nodes of a loop are not one range in the execution order.");
+        // The nodes of the loop: the nodes of its condition and those of its body. They are one
+        // piece of the execution order -- one unbroken range that ends at the LOOP node that ends a
+        // round -- because a round begins at the first of them and the LOOP node ends it: a node
+        // that is not one of them, standing inside that range, runs as part of every round.
+        //
+        // Where the condition stands *inside* that range is not this question. A graph may make the
+        // condition out of what the body's nodes make (`[body ...] [cond ...] [body ...]`), and the
+        // set of the loop's nodes is still one range; the plan runs it because the Test fires where
+        // the condition's nodes have run (ExecLoop::condEnd). What must not happen is a node of
+        // somebody else in between, and `intruder` below is the first such node.
+        //
+        // A release build compiles the assertion out, and the tables this function makes are what
+        // every back end runs with. So the same question is asked twice: the assertion stops a debug
+        // build where the plan is made, and the error value below is the answer a release build has
+        // -- the plan is refused, the pass that asked for it fails instead of reporting success, and
+        // no interpreter walks a table that says a round starts somewhere its nodes do not.
+        const bool condEmpty    = condLast == li && condFirst == li;
+        const bool bodyEmpty    = bodyLast == li && bodyFirst == li;
+        const uint32_t spanFirst = std::min(condFirst, bodyFirst);
+        const uint32_t spanEnd   = std::max(condLast, bodyLast);
+        uint32_t intruder        = li;
+        for (uint32_t at = spanFirst; at < li && intruder == li; ++at) {
+            const uint32_t control = regions->controlOf(plan.topo[at]);
+            const bool member      = (condRegion != 0 && regions->within(control, condRegion)) ||
+                                regions->within(control, bodyRegion);
+            if (!member) {
+                intruder = at;
+            }
+        }
+        const bool oneRange = intruder == li;
+        ASSERT(oneRange, "The nodes of a loop are not one range in the execution order.");
+        const uint32_t index = static_cast<uint32_t>(plan.loops.size());
+        if (!oneRange) {
+            const gc_node_ref_t intruderRef = plan.topo[intruder];
+            throw std::runtime_error(
+                std::format(
+                    "Runtime graph '{}' has a loop whose nodes are not one contiguous range in the "
+                    "execution order: loop #{} is the LOOP node {} ({}), at position {}, and its "
+                    "nodes are [{}, {}) -- the node {} ({}) at position {} is not one of them, and "
+                    "it stands between the loop's nodes and the LOOP node that ends a round. A round "
+                    "begins at the first of the loop's nodes and the LOOP node ends it, so a plan "
+                    "this table describes would run that node as part of every round. This plan "
+                    "cannot be run. This is a defect of the compiler, not an error of the program.",
+                    graph.name(),
+                    index,
+                    ref,
+                    graph.nodeOrigin(ref),
+                    li,
+                    spanFirst,
+                    spanEnd,
+                    intruderRef,
+                    graph.nodeOrigin(intruderRef),
+                    intruder));
+        }
         // A loop whose body ends in a tuple nothing reads keeps the state as its components
         // instead of making the tuple again every round (ExecLoop::stateComponents).
         size_t elidedTopo = 0;
@@ -365,7 +413,6 @@ void buildLoopTables(const GCGraph &graph, ExecPlan &plan) {
         }
         loop.begin   = !condEmpty ? condFirst : (!bodyEmpty ? bodyFirst : li);
         loop.condEnd = !bodyEmpty ? bodyFirst : li;
-        const uint32_t index = static_cast<uint32_t>(plan.loops.size());
         events.push_back({loop.begin, li, index * 3 + static_cast<uint32_t>(ExecLoopEvent::Begin)});
         events.push_back(
             {loop.condEnd, li, index * 3 + static_cast<uint32_t>(ExecLoopEvent::Test)});
@@ -900,6 +947,17 @@ std::unique_ptr<ExecPlan> buildExecPlan(const GCGraph &graph) {
         plan->calleePortSlots.push_back(dataIndexOf(graph, portRef));
     }
     return plan;
+}
+
+void rebuildLoopTablesForTests(const GCGraph &graph, ExecPlan &plan) {
+    // What buildLoopTables appends to, given back first: the tables are a function of the order, so
+    // a second call on a reordered plan must not find the first call's rows beside its own.
+    plan.loops.clear();
+    plan.loopSlots.clear();
+    plan.loopEvents.clear();
+    plan.loopEventOffsets.clear();
+    plan.elidedAt.clear();
+    buildLoopTables(graph, plan);
 }
 
 } // namespace camel::runtime

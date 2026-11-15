@@ -61,8 +61,7 @@ DeadWriteTestPass::apply(const camel::runtime::Program *program, std::ostream &o
             }
             os << "AGGREGATE graph=" << graph->name() << " node=" << ref
                << " arity=" << camel::runtime::aggregateArity(*graph, ref)
-               << " inputs=" << graph->normInputsOf(ref).size()
-               << " members=";
+               << " inputs=" << graph->normInputsOf(ref).size() << " members=";
             for (gc_node_ref_t member : graph->normInputsOf(ref)) {
                 const GCNode *memberNode = graph->node(member);
                 os << member << ":"

@@ -265,26 +265,27 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref);
 /// graph.
 bool isUnreadClosure(const GCGraph &graph, gc_node_ref_t ref);
 
-/// The live set of a frozen graph, the same walk `liveNodesOf(const GraphDraft &)` runs (one kernel,
-/// two faces): the nodes backward reachable from entry, exit, output, return, the norm and `with`
-/// ports and the closure nodes the graph exports, over the norm, `with`, control and sync inputs,
-/// with a loop's region ports and a branch's join. A node outside it can never be run or read by the
-/// program, so a value it reads is read by nobody -- which is what lets a write whose only reader is
-/// such a node be called dead (design principles 3.1, 9.7). Sorted by ref.
+/// The live set of a frozen graph, the same walk `liveNodesOf(const GraphDraft &)` runs (one
+/// kernel, two faces): the nodes backward reachable from entry, exit, output, return, the norm and
+/// `with` ports and the closure nodes the graph exports, over the norm, `with`, control and sync
+/// inputs, with a loop's region ports and a branch's join. A node outside it can never be run or
+/// read by the program, so a value it reads is read by nobody -- which is what lets a write whose
+/// only reader is such a node be called dead (design principles 3.1, 9.7). Sorted by ref.
 std::vector<gc_node_ref_t> liveNodesOf(const GCGraph &graph);
 
-/// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members the
-/// aggregate has (0 when it is not one), and whether its last member may be dropped -- no root names
-/// it, nothing but the aggregate reads that member, and every reader of the aggregate reads a member
-/// below the last, so nothing has to be renumbered.
+/// The aggregate questions of `camel/runtime/draft.h`, asked of a frozen graph: how many members
+/// the aggregate has (0 when it is not one), and whether its last member may be dropped -- no root
+/// names it, nothing but the aggregate reads that member, and every reader of the aggregate reads a
+/// member below the last, so nothing has to be renumbered.
 uint32_t aggregateArity(const GCGraph &graph, gc_node_ref_t ref);
 
 /// What may be said about an aggregate, and nothing more. Two values, both refusals: a member's
 /// lifetime cannot be judged here, because a member is a frame slot the payload names
-/// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary inputs
-/// -- an aggregate with two members has one input. The four guards that used to live here (a root, a
-/// member with readers, a reader of the last member, droppable) all judged "member = input", which
-/// that reading disproves; keeping them would let the next reader believe this was covered.
+/// (`GCFillBody::slots` is a span of `gc_slot_idx_t`) and not one of the aggregate's ordinary
+/// inputs
+/// -- an aggregate with two members has one input. The four guards that used to live here (a root,
+/// a member with readers, a reader of the last member, droppable) all judged "member = input",
+/// which that reading disproves; keeping them would let the next reader believe this was covered.
 enum class AggregateTailVerdict : uint8_t {
     NotAnAggregate,  // not an aggregate, or too few members to have a last one
     MappingMismatch, // the member count and the input count disagree: member i is not input i
@@ -915,9 +916,9 @@ class GCGraph : public camel::core::rtdata::Object {
     /// Number of node places: NodeIds are 0 .. nodeCount() - 1, and some of them may be Dead.
     gc_cnt_t nodeCount() const { return nativePayload_.nodeCount; }
     /// Number of nodes that are not Dead: how many node records the graph stores, which is what the
-    /// encoder writes down. It is not the live set -- a node nothing can reach is still stored, and a
-    /// node a sweep erased is not -- so a reader that asks whether the program can still see a value
-    /// asks `camel::runtime::liveNodesOf`, never this.
+    /// encoder writes down. It is not the live set -- a node nothing can reach is still stored, and
+    /// a node a sweep erased is not -- so a reader that asks whether the program can still see a
+    /// value asks `camel::runtime::liveNodesOf`, never this.
     gc_cnt_t storedNodeCount() const;
     /// Number of edges (input table entries).
     gc_cnt_t edgeCount() const { return nativePayload_.edgeCount; }
