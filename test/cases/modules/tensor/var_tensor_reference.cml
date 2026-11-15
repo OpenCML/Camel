@@ -1,9 +1,12 @@
 /**
- * A tensor variable passed to a `var` parameter and captured by a lambda is one object: the
- * callee and the lambda replace the tensor the caller's variable holds. Expected output:
+ * A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the
+ * caller's variable holds (design principles 3.5, "`var` 形参是传入值、传回新值"). A closure that
+ * mentions the variable holds the *value* the name had when the closure was made, so it cannot
+ * write the caller's variable back: it returns the new tensor instead, and the caller binds it.
+ * Expected output:
  *   2        w = zeros + 0.5, written by the callee
  *   10 10    forwarded twice to another var parameter; the callee's result and the caller's view
- *   20 20    doubled by a lambda that captured the variable
+ *   20 20    doubled by a closure over the value of w, and bound back by the caller
  */
 
 import { zeros, sum } from tensor
@@ -24,11 +27,10 @@ func main(): int sync {
     println(sum(w))
     let s = twice(w)
     println('{} {}'->format<s, sum(w)>)
-    let f = (): float => sync {
-        w = w * 2.0
-        return float(sum(w))
-    }
-    let r = f()
+    let f = (): f32[?, ?] => w * 2.0
+    let doubled = f()
+    w = doubled
+    let r = float(sum(w))
     println('{} {}'->format<r, sum(w)>)
     return 0
 }

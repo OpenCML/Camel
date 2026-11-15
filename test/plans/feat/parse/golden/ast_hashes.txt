@@ -27,6 +27,7 @@ fff780ff68187f93 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
 e067b6e6bd567e4e ok test/cases/parse/rulings/doc_comment.cml
 c114c7ec0fbe2a39 ok test/cases/parse/rulings/doc_comment_blank_line.cml
+e684c7ad2f2d0a07 ok test/cases/parse/rulings/dotdot_after_cast.cml
 5f2eabe63d1d75c1 ok test/cases/parse/rulings/dotdot_looser_than_link.cml
 69835e10334a9742 ok test/cases/parse/rulings/dotdot_precedence.cml
 3510751ea04e0db4 ok test/cases/parse/rulings/eager_logic.cml
@@ -2652,15 +2653,15 @@ d23c73b264350152 ok test/cases/gpu/nofallback/supported.cml
 b70bd5af7d690258 ok test/cases/gpu/profile/host_loop.cml
 7a8d0e1a850cd6bf ok test/cases/gpu/reading/device_reading.cml
 e5f8aa109a35bd48 ok test/cases/linear/byref/captured_write_graph.cml
-477ea93538f1ce2f ok test/cases/linear/byref/captured_write_order.cml
+71ef8d98c7857435 ok test/cases/linear/byref/captured_write_order.cml
 96252ba12a81bdc9 ok test/cases/linear/byref/captured_write_value.cml
 f1961aa372c30a49 ok test/cases/linear/byref/element_assigned.cml
 94938ecb06b95bde ok test/cases/linear/byref/element_assigned_append.cml
 46b39920af429b7c ok test/cases/linear/byref/element_assigned_copy.cml
 26bd5decfc969c75 ok test/cases/linear/byref/field_assigned.cml
 160a4367f09242cd ok test/cases/linear/byref/inplace_write_then_read.cml
-3c183898a55da2f7 ok test/cases/linear/byref/lambda_capture_ignored.cml
-d573bc14f29c96c4 ok test/cases/linear/byref/lambda_capture_write.cml
+ff20ae56a12cd333 ok test/cases/linear/byref/lambda_capture_ignored.cml
+930dc2f3a06fd3a6 ok test/cases/linear/byref/lambda_capture_write.cml
 938ec16b6da17038 ok test/cases/linear/byref/let_alias_to_var_param.cml
 a289636a8695d642 ok test/cases/linear/byref/let_appended.cml
 266aa5855c0de3a5 ok test/cases/linear/byref/let_assigned.cml
@@ -2677,7 +2678,7 @@ ebe9d0b97b5a4d01 ok test/cases/linear/byref/param_sorted.cml
 89383817c6b52708 ok test/cases/linear/byref/param_to_var_param.cml
 5b7221fdc08e8be8 ok test/cases/linear/byref/path_assigned.cml
 ce132601c3114616 ok test/cases/linear/byref/path_assigned_allocs.cml
-39df6d834bd0904d ok test/cases/linear/byref/var_alias_captured.cml
+a046c74373d621a9 ok test/cases/linear/byref/var_alias_captured.cml
 713f43925e3b14c2 ok test/cases/linear/byref/var_alias_read_then_param.cml
 15cc7e3bf2dc0057 ok test/cases/linear/byref/var_alias_through_param.cml
 7714619417a41c2f ok test/cases/linear/byref/var_alias_two_cells.cml
@@ -2685,7 +2686,7 @@ a115744b731bf807 ok test/cases/linear/byref/var_argument_declared.cml
 6b54ece00315d63f ok test/cases/linear/byref/var_argument_reads_the_nearest_write.cml
 ecea883b0c1a24bc ok test/cases/linear/byref/var_argument_shape.cml
 8cc68398ab281745 ok test/cases/linear/byref/var_argument_statement_place.cml
-5a01799bfa8655ab ok test/cases/linear/byref/var_capture_reference.cml
+e84d2fc724034852 ok test/cases/linear/byref/var_capture_reference.cml
 3ef7e3177575e622 ok test/cases/linear/byref/var_function_as_value_function.cml
 67d2c3eb1b6d6c25 ok test/cases/linear/byref/var_function_to_operator.cml
 6459ea9ecca389d9 ok test/cases/linear/byref/var_param_jit.cml
@@ -2747,7 +2748,7 @@ c022c1c70fd22ebb ok test/cases/linear/nvm/decorator_value_pass.cml
 4022990a81db2bae ok test/cases/linear/nvm/duplicate_inputs.cml
 f2516357b4c9fe97 ok test/cases/linear/nvm/fib.cml
 048c5f3ea512e47f ok test/cases/linear/nvm/fib1.cml
-f594af22cc1d1d78 ok test/cases/linear/nvm/fib2.cml
+31dbf5ca842df18f ok test/cases/linear/nvm/fib2.cml
 235678a7ba5072a3 ok test/cases/linear/nvm/fill_mixed.cml
 d8d553741978c042 ok test/cases/linear/nvm/hello.cml
 0e95331d99e3e266 ok test/cases/linear/nvm/index.cml
@@ -2786,7 +2787,7 @@ c3090bba2c255256 ok test/cases/linear/runtime/var_read_before_write.cml
 14e7a4815f77a4f0 ok test/cases/linear/subscript/slice_positions.cml
 a93ea50fc6e7d8a9 ok test/cases/linear/subscript/string_slice.cml
 7bbe6f7ac818e071 ok test/cases/linear/subscript/take_rows.cml
-a4bd0e5170e296f1 ok test/cases/linear/toplevel_var/argument_order.cml
+d18a836838acf450 ok test/cases/linear/toplevel_var/argument_order.cml
 cc1571977471264b ok test/cases/linear/toplevel_var/counter.cml
 5581a92c94c70970 ok test/cases/linear/toplevel_var/counter_lib.cml
 e83a4d42aebd0dd1 ok test/cases/linear/toplevel_var/err_pure_parameter.cml
@@ -3612,7 +3613,7 @@ b1b950fa3fabdc19 ok test/cases/modules/tensor/take_negative.cml
 81965c701e749fff ok test/cases/modules/tensor/thread_pools.cml
 2d024bd7ccf87643 ok test/cases/modules/tensor/thread_values.cml
 1256d6a4ad35d326 ok test/cases/modules/tensor/transcendentals.cml
-41a84f7c30f255b1 ok test/cases/modules/tensor/var_tensor_reference.cml
+c2ae40c16453c5c0 ok test/cases/modules/tensor/var_tensor_reference.cml
 d39cc81031ca46cb ok test/cases/modules/tensor/whole_extrema.cml
 fd3e1ad6454a772a ok test/cases/modules/tensor/whole_extrema_fault_kind.cml
 d3dbf50c5127def2 ok test/cases/modules/tensor/whole_extrema_on_an_empty_tensor.cml

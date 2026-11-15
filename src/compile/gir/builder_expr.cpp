@@ -2299,36 +2299,31 @@ void Builder::dropCarriedVariableUnits() {
                 }
             }
         }
-        // A store whose value nobody reads is not a statement any more. The fold gave every reader
-        // of the cell the value the write wrote, so what the store wrote is never read out of the
-        // cell; a `var` write is a value, not an effect (design principles 3.5, 3.1), so the store
-        // goes with the unit. What it may still have is a *sequencing* user -- the chain of the
-        // block it stood in, the GATE that handed the statement's value out, the JOIN or LOOP that
-        // carried it -- and those are what `eraseNode` splices over it. A value user of the store
-        // (a normal or a `with` input) keeps it: that is a node the program wrote that reads what
-        // the write wrote, and the unit is what carries it.
-        bool storedOnly = true;
-        for (camel::runtime::gc_node_ref_t store : stores) {
-            std::vector<camel::runtime::gc_node_ref_t> valueUsers;
-            for (auto users : {draft.normUsersOf(store), draft.withUsersOf(store)}) {
-                valueUsers.insert(valueUsers.end(), users.begin(), users.end());
-            }
-            for (camel::runtime::gc_node_ref_t user : valueUsers) {
-                if (!doomed.contains(user)) {
-                    storedOnly = false;
-                }
-            }
-            if (store == draft.exitNode() || store == draft.outputNode() ||
-                store == draft.returnNode()) {
-                storedOnly = false;
-            }
+        // What is left of the unit is a set nothing outside it reads: the stores, the GATEs that
+        // handed the statement's value out, and (below) the cell and the value it was made with.
+        // The fold gave every reader of the cell the value the write wrote, so what a store wrote
+        // is never read out of the cell; a `var` write is a value, not an effect (design principles
+        // 3.5, 3.1), so the store goes with the unit. What a store may still have is a *sequencing*
+        // user -- the chain of the block it stood in, the GATE that handed the statement's value
+        // out, the JOIN or the LOOP that carried it -- and those are not readers: the erase hands
+        // the place on and splices the orderings over the node (docs/design/effects/edges.cn.md
+        // 1.5, 5.3). The permission belongs to the draft interface and not to this builder
+        // (`GraphDraft::eraseUnreadNodes`): a node outside the set that still reads one of these,
+        // or a node the graph names, keeps the whole unit as it was, and the call says so.
+        std::vector<camel::runtime::gc_node_ref_t> going(doomed.begin(), doomed.end());
+        std::sort(going.begin(), going.end());
+        std::vector<node_handle_t> chained;
+        chained.reserve(going.size());
+        for (const camel::runtime::gc_node_ref_t node : going) {
+            chained.push_back(nodeDraftOf(cell)->ref(node));
         }
-        if (!storedOnly) {
+        if (!draft.eraseUnreadNodes(going)) {
             continue;
         }
-        for (const camel::runtime::gc_node_ref_t node : doomed) {
-            chainedNodes_.erase(nodeDraftOf(cell)->ref(node));
-            draft.eraseNode(node);
+        // The nodes went through the interface, so this builder's record of which of them stood in
+        // a chain is the only thing left to let go of.
+        for (const node_handle_t &node : chained) {
+            chainedNodes_.erase(node);
         }
         writesOf_.erase(cell);
         knownCellUsers_.erase(cell);
@@ -2344,8 +2339,8 @@ void Builder::dropCarriedVariableUnits() {
         // it was made with, then that value's own source. Only a value of this unit is taken -- a
         // data node or a copy -- so nothing that can do something on its own is dropped here.
         for (camel::runtime::gc_node_ref_t node = cellId;;) {
-            if (draft.header(node) == nullptr || !draft.alive(node) || usersOf(node, nullptr) ||
-                isRoot(node)) {
+            const camel::runtime::DraftNodeHeader *header = draft.header(node);
+            if (header == nullptr || !draft.alive(node)) {
                 break;
             }
             camel::runtime::gc_node_ref_t below = 0;
@@ -2353,15 +2348,19 @@ void Builder::dropCarriedVariableUnits() {
             if (inputs.size() == 1) {
                 below = inputs[0];
             }
-            if (node != cellId) {
-                const camel::runtime::DraftNodeHeader *header = draft.header(node);
-                if (header == nullptr ||
-                    (header->kind != camel::runtime::GCNodeKind::Data &&
-                     header->kind != camel::runtime::GCNodeKind::Copy)) {
-                    break;
-                }
+            if (node != cellId &&
+                header->kind != camel::runtime::GCNodeKind::Data &&
+                header->kind != camel::runtime::GCNodeKind::Copy) {
+                break;
             }
-            draft.eraseNode(node);
+            // The same permission asked of one node, and the same erase: the cell goes first, then
+            // the value it was made with, then that value's own source. A node anything still
+            // reads keeps itself and the value below it -- that value is shared with something the
+            // program wrote, and the unit is what carries it.
+            const camel::runtime::gc_node_ref_t only[1] = {node};
+            if (!draft.eraseUnreadNodes(only)) {
+                break;
+            }
             if (below == 0) {
                 break;
             }
