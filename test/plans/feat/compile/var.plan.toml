@@ -78,3 +78,39 @@ expect_stdout_contains = ["3"]
 expect_stdout_not_contains = ["0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+# A loop body that writes an outer `var`, and the same accumulation written as the loop's carried
+# value: one program in two writings, so the canonical documents must be the same bytes. Red today,
+# and a red here is the statement that queue item 1 is not done -- specifically, the third of the
+# author's three places: a loop assignment must become the loop's state. A write inside a loop body
+# keeps its `:var/get` (the value the previous turn carried is not any node's input), so the `var`
+# writing still builds a unit while the `let` writing has none. Do not add this entry to
+# `known_fail`: it must stay red until the lowering exists, and it is meant to be the acceptance that
+# can tell "the unit was lowered" from "the unit was folded away".
+[[tests]]
+name = "var.a_loop_assignment_is_the_loops_state"
+desc = "`var total = 0` written in a loop body and the same accumulation written as the loop's carried value have one canonical graph: `std::jgir canonical=true` prints the same bytes. Red today because the write in a loop body keeps its `:var/get`/`:var/new` while the `let` writing is the LOOP's state."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "loop"]
+expect_exit = 0
+expect_stdout_contains = ["[graph] let identical"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# The same question for an arm of an `if`: `var x = 0; if c then { x = 1 } else { x = 2 }` against
+# `let x = if c then 1 else 2`. Red today, and a red here is the statement that the second of the
+# author's three places is not done either: a branch assignment must become the branch's result.
+# The arm's write reaches the cell through the JOIN, so its `:var/get` stays and the `var` writing
+# still builds a unit. Not `known_fail`, for the same reason.
+[[tests]]
+name = "var.an_arm_assignment_is_the_branch_result"
+desc = "`var x = 0` written in each arm of an `if` and the same choice written as the branch's value have one canonical graph: `std::jgir canonical=true` prints the same bytes. Red today because an arm's write keeps its `:var/get`/`:var/new` while the `let` writing is the branch's own result."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "arm"]
+expect_exit = 0
+expect_stdout_contains = ["[graph] let identical"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
