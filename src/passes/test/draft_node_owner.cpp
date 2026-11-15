@@ -61,8 +61,8 @@ DraftNodeOwnerTestPass::apply(const camel::runtime::Program *program, std::ostre
     say(os, std::format("released_owner={}", releasedHasOwner ? "live" : "none"));
 
     // The question a table of handles is asked before it is walked
-    // (`builder_state.cpp#cellsOfBody`, `#carryOutOf`), asked while the address belongs to no draft
-    // at all. It answered `1` here before the answer was taken from the registration: the released
+    // (`builder_linearity.cpp#Builder::settleStreamLinearity`, over the table the captures are recorded
+    // in), asked while the address belongs to no draft at all. It answered `1` here before the answer was taken from the registration: the released
     // draft's epoch was still in the bytes the handle names, so the comparison passed on memory
     // nobody owned. `nodeDraftOf` and the semantic analyzer's `isNamedBy` were the same read; they
     // now refuse on the same question, and this line is what can be asked of them without aborting.

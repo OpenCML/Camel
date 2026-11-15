@@ -318,7 +318,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "captured_var_in_two_arms.nvm"
-desc = "A call writes a captured `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (nvm)"
+desc = "A call writes a `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (nvm). The `var` is the module's now, not one the lambda captured: `bump(v)` on a captured name is refused at the call (0x03000213), and the arm question is the same one (borrowed carrier)."
 kind = "behavior"
 case = "../../../cases/compile/function_values/captured_var_in_two_arms.cml"
 args = ["${case}", "${run_nvm}"]
@@ -335,7 +335,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "captured_var_in_two_arms.fvm"
-desc = "A call writes a captured `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (fvm)"
+desc = "A call writes a `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (fvm). Same carrier as the nvm entry: the module's `var`, since a captured name cannot be assigned (0x03000213)."
 kind = "behavior"
 case = "../../../cases/compile/function_values/captured_var_in_two_arms.cml"
 args = ["${case}", "${run_fvm}"]
@@ -352,7 +352,7 @@ timeout_ms = 8000
 
 [[tests]]
 name = "captured_var_in_two_arms.jit"
-desc = "A call writes a captured `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (jit)"
+desc = "A call writes a `var` and both arms of an `if` read it: the one access node was made in the arm the first reader stood in, so the graph broke the branch-arm invariant (progen A3) (jit). Same carrier as the other two: the module's `var`, since a captured name cannot be assigned (0x03000213)."
 kind = "behavior"
 case = "../../../cases/compile/function_values/captured_var_in_two_arms.cml"
 args = ["${case}", "${run_jit}"]

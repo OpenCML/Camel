@@ -1,8 +1,12 @@
 /**
- * Escape route three read through a second closure (design principles 3.5, rule two): `inner`
- * captures `acc`, a `var` of `make`'s call, and `outer` captures `inner`. Returning `outer` hands
- * the cell out inside a value whose type cannot show it -- the capture travels one level down, so
- * the rule has to follow a captured value into the closure it is, not just this body's own cells.
+ * Escape route three read through a second closure (design principles 3.5, 197): `inner` captures
+ * `acc`, a `var` of `make`'s call, and `outer` captures `inner`. Returning `outer` hands the value
+ * out inside a value whose type cannot show what it holds -- the capture travels one level down, so
+ * anything that has to follow a captured value has to follow it into the closure it is. That is
+ * legal now (the author's ruling of 2026-11-16: a closure captures a value).
+ *
+ * The assignment `inner` makes is the fault: `acc = acc + x` writes nothing the closure can see.
+ * Refused by `ClosureAssignsCapturedName` (0x03000213).
  */
 
 func make(): (y: int) => int {

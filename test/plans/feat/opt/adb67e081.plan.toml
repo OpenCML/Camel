@@ -65,19 +65,19 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_reference"
-desc = "`rc04_seed72` as the state rule of 2026-11-14 leaves it: a compile error, `SemanticDiag::ClosureCaptureEscapes` at the closure that carries its call's `var` out. It used to be the reference the inlined run reproduced (exit 0, no output); that reading is gone with the program, and the entry now pins the refusal instead of deleting the case -- the shape stays in the corpus, and the day the seed is regenerated under the rule it is this entry that has to be rewritten, not a case that quietly vanished. What is lost is stated rather than implied: the splice cycle this pair used to exercise needs a program the front end accepts, so `rc04_seed72` no longer exercises it at all."
+desc = "`rc04_seed72` as the closure rule leaves it: a compile error, `SemanticDiag::ClosureAssignsCapturedName` at the assignment inside the closure that captured its call's `var`. The entry has pinned a refusal since the program became illegal, and the refusal changed on 2026-11-16: `SemanticDiag::ClosureCaptureEscapes` (0x03000210) was withdrawn by the author -- a closure captures a value and leaving with it is legal (design principles 3.5) -- so what refuses the program is now the write itself, one step later. It used to be the reference the inlined run reproduced (exit 0, no output); that reading is gone with the program, and the entry pins the refusal instead of deleting the case -- the shape stays in the corpus, and the day the seed is regenerated under the rule it is this entry that has to be rewritten, not a case that quietly vanished. What is lost is stated rather than implied: the splice cycle this pair used to exercise needs a program the front end accepts, so `rc04_seed72` no longer exercises it at all."
 kind = "negative"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the state rule refuses the program: ' + text)
-assert(text.includes('0x03000210'), 'and it names the code the rule landed with: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + text)
+assert(text.includes('a `Ref`'), 'and it names the ways out: ' + text)
 }
 """
 timeout_ms = 20000
@@ -89,14 +89,14 @@ kind = "negative"
 case = "../../../cases/opt/adb67e081/rc04_seed72.cml"
 args = ["${case}"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureCaptureEscapes"
-expect_diagnostic_code = "0x03000210"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
-assert(text.includes('cannot leave the call that declares it'), 'the state rule refuses the program: ' + text)
-assert(text.includes('0x03000210'), 'and it names the code the rule landed with: ' + text)
+assert(text.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + text)
+assert(text.includes('a `Ref`'), 'and it names the ways out: ' + text)
 }
 """
 timeout_ms = 20000
@@ -120,7 +120,7 @@ timeout_ms = 20000
 # under the pass.
 [[tests]]
 name = "adb67e081.rc04_seed72_within_call_no_pass"
-desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above)."
+desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above). What made this half legal had to change with the rule: the closure used to write `v16`, which the withdrawn state rule allowed and `ClosureAssignsCapturedName` (0x03000213) refuses, so the write is now the line before the closure is made and the closure only reads `v16`. The value is the same (`0 / -2` is 0) and so is this reading."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
 args = ["${case}", "std::stats", "${run_nvm}"]
@@ -141,7 +141,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_within_call_inline"
-desc = "The same program under `std::opt::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red."
+desc = "The same program under `std::opt::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red. Same carrier as the entry above: the closure reads `v16` and the write that used to be inside it is one line up."
 kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
 args = ["${case}", "std::opt::inline", "std::stats", "${run_nvm}"]

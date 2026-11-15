@@ -1,7 +1,17 @@
 /**
- * The legal half of `rc04_seed72`: `k14` declares `var v16`, a closure captures it by reference,
- * and the closure is called inside `k14`, so the cell stays in the call that declares it (design
- * principles 3.5, rule two). The rest of the reduced program of result `adb67e081` is unchanged.
+ * The legal half of `rc04_seed72`: `k14` declares `var v16`, a closure captures it and reads it,
+ * and the closure is called inside `k14`. The rest of the reduced program of result `adb67e081`
+ * is unchanged.
+ *
+ * The closure used to WRITE `v16` (`v16 /= -2` inside it), and that was legal because the state
+ * rule of 2026-11-14 let a closure write a captured cell as long as the cell stayed inside the
+ * call that declared it. The author withdrew that premise on 2026-11-16 (design principles 3.5:
+ * a closure captures a value, so it cannot assign the name it captured), and today the write is
+ * refused where it is written -- `SemanticDiag::ClosureAssignsCapturedName`, 0x03000213 -- so the
+ * "legal half" this file was made for was the half that stopped being legal. The write moved out
+ * of the closure, to the line before it is made, and the value `f17` reads is the same one:
+ * `v16` is 0 either way (`0 / -2` is 0), so the program's answer is unchanged and the reading
+ * these entries guard -- `direct_calls` -- is the same reading.
  *
  * What this entry guards, and what it does not (measured 2026-11-15 on 6c64f2042):
  *
@@ -17,8 +27,8 @@
 
 func k14(a15: int): int sync {
     var v16 = r1(3, 0);
+    v16 /= -2;
     let f17 = (p17: int): int => sync {
-        v16 /= -2;
         return v16 + p17;
     };
     return f17(a15);
