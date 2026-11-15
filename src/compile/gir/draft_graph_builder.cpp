@@ -16,6 +16,7 @@
 #include "camel/core/type/composite/func.h"
 
 #include <algorithm>
+#include <cstdio>
 #include <format>
 #include <limits>
 #include <unordered_map>
@@ -52,6 +53,17 @@ DraftGraphBuilder::DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> 
 DraftGraphBuilder::~DraftGraphBuilder() { draftOwners().erase(&draft()); }
 
 DraftGraphBuilder *DraftGraphBuilder::fromRef(const runtime::DraftNodeRef &node) {
+    // RED MEASUREMENT, removed by the fix that follows: this call reads the draft the handle names,
+    // and that draft may be gone. When no builder is registered at the address, the epoch printed
+    // here is read from memory no one owns -- which is the defect, measured instead of described.
+    if (node.draft != nullptr && draftOwners().find(node.draft) == draftOwners().end()) {
+        std::fprintf(
+            stderr,
+            "[from_ref_probe] nobody owns %p; read epoch %llu for a handle made in epoch %llu\n",
+            static_cast<const void *>(node.draft),
+            static_cast<unsigned long long>(node.draft->epoch()),
+            static_cast<unsigned long long>(node.epoch));
+    }
     // The address is not the identity: a draft that was destroyed leaves its memory to the next
     // one, and a builder is registered for that address again. The epoch the handle carries says
     // which draft it named, so a handle whose draft is gone finds no owner here instead of finding
