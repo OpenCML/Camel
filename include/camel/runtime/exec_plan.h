@@ -242,6 +242,64 @@ class ExecPlan {
     /// How many update nodes the plan decided each way.
     size_t storageReuseCount(StorageReuse decision) const;
 
+    /// ---- The references that come back: route 4's plan half, described and not executed ------
+    //
+    // Design principles 10.5: a value is freed by counting alone, the count equals the number of
+    // its holders, and the count comes from one last-use analysis on the execution plan that every
+    // back end follows. What follows is that analysis's output, so far only as a description: no
+    // back end reads it and no reference is given back anywhere today -- the only place a counted
+    // block is released is ForeignResourceObject::finalize, inside a collection (see
+    // docs/handover/reports/2026-11-15-count-at-zero-has-no-entry.cn.md).
+    //
+    // The rule is the author's ruling of 2026-11-15 (docs/handover/reviews/
+    // 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md): the output of a
+    // value node is held by each of its uses, the last use takes the producing reference over, and
+    // every other use is a copy. Said in references: a value is born with one (its producer's),
+    // takes `copies` more (one per copy), and one comes back after each use -- so
+    // `1 + copies = giveBacks + kept`, where `kept` is 1 when the program itself keeps the value
+    // (it is the graph's result): then the surviving reference is the caller's.
+    //
+    // A node that only forwards a value (a JOIN hands on the arm's value, a GATE passes its input
+    // through) produces nothing of its own: its uses are the uses of the values it carries, so the
+    // arm whose value the JOIN hands on is the one whose reference comes back, whichever arm runs.
+    //
+    // What this table does not decide, and why nothing executes it: a use that keeps the value
+    // beyond itself -- an element stored into an aggregate, a closure capture, a callee that keeps
+    // its argument -- is a holder the plan cannot see from an edge, and a value a later graph reads
+    // is not named here at all. Counting those is the half of route 4 that is not written yet.
+    struct RefGiveBack {
+        gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
+        gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
+        uint32_t count      = 0;               // how many references come back there (1 today)
+    };
+    /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
+    /// constant, nor a node that only forwards).
+    std::vector<uint8_t> refProducedAt;
+    /// By topo index: how many references the node's output takes beyond the producing one.
+    std::vector<uint32_t> refCopiesAt;
+    /// By topo index: the program keeps the node's value (it is the graph's result).
+    std::vector<uint8_t> refKeptAt;
+    /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
+    /// once the node at that position has run, in the order the producing values are laid out.
+    std::vector<uint32_t> refGiveBackOffsets;
+    std::vector<RefGiveBack> refGiveBacks;
+    std::span<const RefGiveBack> refGiveBacksAt(size_t topoIndex) const {
+        if (topoIndex + 1 >= refGiveBackOffsets.size()) {
+            return {};
+        }
+        return {
+            refGiveBacks.data() + refGiveBackOffsets[topoIndex],
+            refGiveBackOffsets[topoIndex + 1] - refGiveBackOffsets[topoIndex]};
+    }
+    /// The totals the balance `produced + copies = giveBacks + kept` is read from.
+    size_t refProducedTotal() const;
+    size_t refCopiesTotal() const;
+    size_t refGiveBacksTotal() const;
+    size_t refKeptTotal() const;
+    /// Whether the balance holds: every reference a value is born with is either given back by the
+    /// plan or kept by the program. False would mean this code and the rule disagree.
+    bool refBalanceHolds() const;
+
     /// The operator a back end runs for the OPER node `ref`: the URI the node names, or -- for an
     /// update node the plan marked Copy -- the plain (copying) form of the in-place form it names
     /// (OperatorTable::plainForm). The text lives in the operator table, so the view stays valid.

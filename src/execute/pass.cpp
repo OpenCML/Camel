@@ -36,6 +36,7 @@
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/graph_faces.h"
+#include "camel/passes/test/plan_refs.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepfn.h"
@@ -1099,6 +1100,7 @@ const std::vector<std::pair<std::string, PassFactory>> &testPasses() {
         TEST_PASS(kArmLoopRegionsTestPass, ArmLoopRegionsTestPass),
         TEST_PASS(kLoopInputsTestPass, LoopInputsTestPass),
         TEST_PASS(kExecPlanTestPass, ExecPlanTestPass),
+        TEST_PASS(kPlanRefsTestPass, PlanRefsTestPass),
         TEST_PASS(kExhaustPermSpaceTestPass, ExhaustPermSpaceTestPass),
         TEST_PASS(kThrowBadAllocTestPass, ThrowBadAllocTestPass),
         TEST_PASS(kLoopCollectTestPass, LoopCollectTestPass),

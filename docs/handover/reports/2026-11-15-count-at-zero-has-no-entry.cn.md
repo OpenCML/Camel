@@ -22,6 +22,18 @@
 `fvm`/`jit` 稳读 2、`nvm` 稳读 0，都是这个定义的函数：前者收集少跑一次，后者刚刚好跑够
 （`docs/handover/reports/2026-11-15-count-at-zero-before.cn.md` 表一、表二）。
 
+**这一行读数是在哪一刻取的**（查过一遍，因为它决定 `11/11/0` 站不站得住）：`FOREIGN_RESOURCES` 由
+`tools/camel-cli/main.cpp` 里 `run()` 的局部对象 `ReleaseExternalResources` 的析构函数打印，析构发生在
+`applyPassesDetailed` 返回之后、`run()` 返回时；打印用的是 `foreignResourceStats()` 在
+`disposeAllForeignResources()` **之前**取的快照，只有 `disposed=` 来自那次处置的返回值。所以那一行量的是
+**程序停下、帧已释放之后、退出处置之前**的状态：那一刻没有任何槽还合法地指着那 2 个块（`FramePool::release`
+只把 `top_` 挪过帧，被释放的帧不再是根），它们只是「wrapper 已死、之后再没有一次收集看见它」。**`live=2`
+是缺陷本体，不是合法持有**；`released=11 / live=0` 才是这条验收要的形状（11 个在运行中被释放，退出路径无事可做）。
+
+**给下一个人：`test/plans/feat/compile/ref.plan.toml` 里 `live <= 3` 这条断言今天量的不是「还有几个持有者」，
+而是「退出前有几个已死未收的 wrapper」。** 看见 `live=2` 不要读成「泄漏了 2 个」——同一个词在两个时刻指
+两件事，这是这一格最难懂的地方。
+
 ## 2. 为什么「归零即释放」不能只改运行时：计数长在 wrapper 上，持有者在槽里
 
 一块的 `refCount_` 起于 1（`include/camel/core/rtdata/foreign.h#ForeignResourceControlBlock`），这一份跟着
