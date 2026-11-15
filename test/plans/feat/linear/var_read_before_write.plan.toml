@@ -10,9 +10,14 @@ tags = ["feat", "linear", "var", "effects"]
 # write left in the cell (`var a = 1; let b = a; modify(a)` printed `a=2 b=2`).
 #
 # What a `sync` block adds is the other direction (3.5, F3): a statement of it runs whether or not
-# the variable is read afterwards, which is why every write here is still reported by
-# SemanticDiag::IgnoredSideEffect -- the diagnostic names a write whose execution nothing uses, not
-# a write whose order is unknown.
+# the variable is read afterwards. This file used to read that as "every write here is reported by
+# SemanticDiag::IgnoredSideEffect", one warning per write outside a sync block -- eight of them.
+# The ruling of 2026-11-15 (design principles 3.1, 3.5) retired that reading for `var`: a write to
+# one of the program's own variables is a value, so a `var` argument and an assignment are not
+# effects and are not reported by that diagnostic; a write that is not handed back where it is
+# written still is, and a write whose value nobody reads is reported as a value
+# (SemanticDiag::UnusedAssignedValue). The six entries below were changed on that ruling, not to
+# make anything pass: they asserted the retired rule.
 #
 # Each function below is written outside a sync block; `main` is a `sync` block so that they run.
 # Every value is asserted on both sides: the read before the write keeps the old value, and the
@@ -20,7 +25,7 @@ tags = ["feat", "linear", "var", "effects"]
 
 [[tests]]
 name = "var_read_before_write.default"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: default (interpreter)."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and what is left is the arm at 66:13 and the loop body at 76:5, with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: default (interpreter)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}"]
@@ -31,26 +36,31 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
-// unobservable also reports "never executed", which is not one of the eight.
-const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
-assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
-assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so two of these assignments have no user
-// left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
-// writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
-// ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
-// kept is never folded, so that assignment still has a user.
-const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
+// The rule this case was written for is retired: it required a diagnostic for every write outside
+// a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
+// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
+// handed back where the call stands, and an assignment is that same shape, so neither is reported
+// by IgnoredSideEffect any more. What is left is the two writes that are not handed back -- the
+// arm's write at 66:13 and the loop body's at 76:5 -- and they are pinned at their positions.
+const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(ignored.slice().sort()) === JSON.stringify(['66:13', '76:5']), `the two writes outside a sync block that are still reported: ${ignored.join(', ')}: ${input.normalized.stderr}`)
+// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
+// the fold handed these assignments' values straight to their readers, so nothing needs the
+// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
+// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
+// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
+// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
+// 59:7 is not one of them: a read of a value that can be kept is never folded.
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.nvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::nvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and what is left is the arm at 66:13 and the loop body at 76:5, with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_nvm}"]
@@ -61,26 +71,31 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
-// unobservable also reports "never executed", which is not one of the eight.
-const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
-assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
-assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so two of these assignments have no user
-// left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
-// writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
-// ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
-// kept is never folded, so that assignment still has a user.
-const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
+// The rule this case was written for is retired: it required a diagnostic for every write outside
+// a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
+// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
+// handed back where the call stands, and an assignment is that same shape, so neither is reported
+// by IgnoredSideEffect any more. What is left is the two writes that are not handed back -- the
+// arm's write at 66:13 and the loop body's at 76:5 -- and they are pinned at their positions.
+const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(ignored.slice().sort()) === JSON.stringify(['66:13', '76:5']), `the two writes outside a sync block that are still reported: ${ignored.join(', ')}: ${input.normalized.stderr}`)
+// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
+// the fold handed these assignments' values straight to their readers, so nothing needs the
+// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
+// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
+// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
+// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
+// 59:7 is not one of them: a read of a value that can be kept is never folded.
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.fvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::fvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and what is left is the arm at 66:13 and the loop body at 76:5, with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_fvm}"]
@@ -91,26 +106,31 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
-// unobservable also reports "never executed", which is not one of the eight.
-const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
-assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
-assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so two of these assignments have no user
-// left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
-// writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
-// ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
-// kept is never folded, so that assignment still has a user.
-const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
+// The rule this case was written for is retired: it required a diagnostic for every write outside
+// a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
+// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
+// handed back where the call stands, and an assignment is that same shape, so neither is reported
+// by IgnoredSideEffect any more. What is left is the two writes that are not handed back -- the
+// arm's write at 66:13 and the loop body's at 76:5 -- and they are pinned at their positions.
+const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(ignored.slice().sort()) === JSON.stringify(['66:13', '76:5']), `the two writes outside a sync block that are still reported: ${ignored.join(', ')}: ${input.normalized.stderr}`)
+// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
+// the fold handed these assignments' values straight to their readers, so nothing needs the
+// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
+// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
+// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
+// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
+// 59:7 is not one of them: a read of a value that can be kept is never folded.
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.jit"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::jit."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and what is left is the arm at 66:13 and the loop body at 76:5, with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_jit}"]
@@ -121,26 +141,31 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
-// unobservable also reports "never executed", which is not one of the eight.
-const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
-assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
-assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so two of these assignments have no user
-// left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
-// writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
-// ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
-// kept is never folded, so that assignment still has a user.
-const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
+// The rule this case was written for is retired: it required a diagnostic for every write outside
+// a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
+// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
+// handed back where the call stands, and an assignment is that same shape, so neither is reported
+// by IgnoredSideEffect any more. What is left is the two writes that are not handed back -- the
+// arm's write at 66:13 and the loop body's at 76:5 -- and they are pinned at their positions.
+const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(ignored.slice().sort()) === JSON.stringify(['66:13', '76:5']), `the two writes outside a sync block that are still reported: ${ignored.join(', ')}: ${input.normalized.stderr}`)
+// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
+// the fold handed these assignments' values straight to their readers, so nothing needs the
+// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
+// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
+// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
+// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
+// 59:7 is not one of them: a read of a value that can be kept is never folded.
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.prl"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Pipeline: std::prl."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and what is left is the arm at 66:13 and the loop body at 76:5, with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_prl}"]
@@ -151,26 +176,31 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
-// unobservable also reports "never executed", which is not one of the eight.
-const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
-assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
-assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so two of these assignments have no user
-// left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
-// writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
-// ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
-// kept is never folded, so that assignment still has a user.
-const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
+// The rule this case was written for is retired: it required a diagnostic for every write outside
+// a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
+// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
+// handed back where the call stands, and an assignment is that same shape, so neither is reported
+// by IgnoredSideEffect any more. What is left is the two writes that are not handed back -- the
+// arm's write at 66:13 and the loop body's at 76:5 -- and they are pinned at their positions.
+const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(ignored.slice().sort()) === JSON.stringify(['66:13', '76:5']), `the two writes outside a sync block that are still reported: ${ignored.join(', ')}: ${input.normalized.stderr}`)
+// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
+// the fold handed these assignments' values straight to their readers, so nothing needs the
+// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
+// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
+// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
+// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
+// 59:7 is not one of them: a read of a value that can be kept is never folded.
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.opt_nvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one; the order edges survive std::opt. Pipeline: std::opt, then std::nvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and what is left is the arm at 66:13 and the loop body at 76:5, with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. The order edges survive std::opt. Pipeline: std::opt, then std::nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "std::opt", "std::nvm"]
@@ -181,19 +211,24 @@ verify_script = """
 const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
 const out = input.normalized.stdout.trim().split('\n')
 assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.join(' | ')}`)
-// The writes outside a sync block are the IgnoredSideEffect diagnostics. A write the fold made
-// unobservable also reports "never executed", which is not one of the eight.
-const names = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map(() => 'IgnoredSideEffect')
-assert(names.length === 8, `expected the 8 writes outside a sync block to be reported, got ${names.length}: ${input.normalized.stderr}`)
-assert(names.every(n => n === 'IgnoredSideEffect'), `only IgnoredSideEffect names a write whose order is untold: ${names.join(', ')}`)
-// The fold hands a write's value straight to its reader, so two of these assignments have no user
-// left: the lazy runtime does not run them, and the compiler says so. They are not one of the eight
-// writes outside a sync block, so they are counted apart -- and asserted, not tolerated: if they
-// ever disappear, the fold has started dropping a statement that has side effects, and that must be
-// red, not silent. The `int[]` assignment at 59:7 is not one of them: a read of a value that can be
-// kept is never folded, so that assignment still has a user.
-const dead = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::EffectNotExecuted')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(dead) === JSON.stringify(['52:7', '87:7']), `the two assignments the fold left without a user: ${dead.join(', ')}`)
+// The rule this case was written for is retired: it required a diagnostic for every write outside
+// a sync block, and expected eight SemanticDiag::IgnoredSideEffect -- one per `var` argument, per
+// assignment, per branch arm and per loop body. The ruling of 2026-11-15 (design principles 3.1,
+// 3.5) makes a write to a `var` a value and not an effect: the write a `var` argument takes is
+// handed back where the call stands, and an assignment is that same shape, so neither is reported
+// by IgnoredSideEffect any more. What is left is the two writes that are not handed back -- the
+// arm's write at 66:13 and the loop body's at 76:5 -- and they are pinned at their positions.
+const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(ignored.slice().sort()) === JSON.stringify(['66:13', '76:5']), `the two writes outside a sync block that are still reported: ${ignored.join(', ')}: ${input.normalized.stderr}`)
+// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
+// the fold handed these assignments' values straight to their readers, so nothing needs the
+// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
+// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
+// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
+// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
+// 59:7 is not one of them: a read of a value that can be kept is never folded.
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
 }
 """
 timeout_ms = 20000

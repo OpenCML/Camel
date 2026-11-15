@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-317 diagnostics: 295 errors, 22 warnings. 15 carry a machine-applicable edit, 302 say why they carry none.
+318 diagnostics: 295 errors, 23 warnings. 15 carry a machine-applicable edit, 303 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -289,6 +289,7 @@ prints one entry.
 | `0x031001C0` | [SemanticDiag::NeverArgumentCall](#neverargumentcall) | Warn | no |
 | `0x031001C1` | [SemanticDiag::FailNotExecuted](#failnotexecuted) | Warn | no |
 | `0x031001C2` | [SemanticDiag::StatementAfterFail](#statementafterfail) | Warn | no |
+| `0x031001C3` | [SemanticDiag::UnusedAssignedValue](#unusedassignedvalue) | Warn | no |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
@@ -9124,18 +9125,18 @@ func main(): int {
 
 **Fix**
 
-None: context: an effect reachable only from a branch that never runs; the repair moves or removes the call, and where belongs to the design
+None: context: a statement that reaches outside the program is reachable only from a region that never runs; the repair moves it or removes it, and where belongs to the design
 
 **Message**
 
 ```text
-{0} has side effects but is never executed: {1}.
+{0} reaches outside the program and is never executed: {1}.
 ```
 
 **Help**
 
 ```text
-Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
+This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
@@ -9623,6 +9624,37 @@ func main(): int sync {
     fail<'NoPremise'>('the premise of this program does not hold')
     println('after')
     return 0
+}
+```
+
+### UnusedAssignedValue
+
+`0x031001C3` · Warn · `SemanticDiag::UnusedAssignedValue`
+
+**Fix**
+
+None: choice: a stored value no reader takes can be removed or read, and which one is the intent
+
+**Message**
+
+```text
+The value this assignment stores is never read.
+```
+
+**Help**
+
+```text
+An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+```
+
+**Example** (`test/cases/compile/var/unused_assigned_value.cml`, run as `camel test/cases/compile/var/unused_assigned_value.cml std::nvm`)
+
+```camel
+func main(): int {
+    var x = 0;
+    let y = x;
+    x = 1;
+    return println(y)
 }
 ```
 

@@ -531,6 +531,10 @@ enum class SemanticDiag : uint32_t {
     /// A statement written after a `fail` in the same block: the `fail` never returns, so the statement
     /// is never reached.
     StatementAfterFail = 0x1001C2,
+    /// A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
+    /// 2026-11-15: assigning to a `var` is not an effect, so a write nothing reads is a value nothing
+    /// uses -- one rule for one thing, and the words are the words of a dropped value, not of an effect).
+    UnusedAssignedValue = 0x1001C3,
 };
 
 constexpr DiagType diagTypeOf(SemanticDiag) { return DiagType::SemanticDiag; }

@@ -1856,8 +1856,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
-                "{0} has side effects but is never executed: {1}.",
-                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync {{ ... }}'; in an arm of an 'if', write 'then sync {{ ... }}' or 'else sync {{ ... }}'; in a function body, declare the body 'func f(): T sync {{ ... }}', or use the effect's result. A bare 'sync {{ ... }}' written as a statement of a body that is not a sync block is not run either.",
+                "{0} reaches outside the program and is never executed: {1}.",
+                "This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync {{ ... }}', 'do sync {{ ... }}', 'then sync {{ ... }}'), or write the statement on the path the data takes.",
             },
         },
         {
@@ -1962,6 +1962,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StatementAfterFail",
                 "This statement cannot run: the 'fail' written before it never returns.",
                 "A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.",
+            },
+        },
+        {
+            SemanticDiag::UnusedAssignedValue,
+            {
+                "UnusedAssignedValue",
+                "The value this assignment stores is never read.",
+                "An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.",
             },
         },
     };

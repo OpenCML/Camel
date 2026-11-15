@@ -4424,7 +4424,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // All arguments are read before the call is recorded as a writer: a variable passed both
     // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
     std::vector<Passed> passed;
-    bool hasVarArgument = false;
     // What a `var` position says about the argument: the parameter's type, and the name the
     // signature gives it, which the diagnostic uses (`with` parameters first, as written).
     const auto argLabel = [&](bool with, size_t index) {
@@ -4455,7 +4454,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         Passed arg       = passArgument(withInputs[i], isVar, param.first, param.second);
         arg.link         = LinkType::With;
         passed.push_back(arg);
-        hasVarArgument |= isVar;
     }
     for (size_t i = 0; i < normInputs.size(); i++) {
         bool isVar       = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
@@ -4463,7 +4461,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         Passed arg       = passArgument(normInputs[i], isVar, param.first, param.second);
         arg.link         = LinkType::Norm;
         passed.push_back(arg);
-        hasVarArgument |= isVar;
     }
     for (const Passed &arg : passed) {
         tryRemoveCtrlLink(arg.node, targetNode);
@@ -4588,31 +4585,31 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             capturedWrites.push_back(use.origin);
         }
     }
-    if (!synced_) {
+    if (!synced_ && !capturedWrites.empty()) {
+        // A `var` argument is a value passed in and handed back: the write it takes is written back
+        // where the call stands (design principles 3.1 and 3.5, the ruling of 2026-11-15), so a
+        // call that takes one is not reported for that reason -- `sync` has nothing to do with it,
+        // and an assignment (`__assn__`, whose first parameter is a `var`) is that same shape.
+        // What stays reported here is a write to a variable the callee captured: that write is not
+        // handed back at the call, so where the call stands still decides whether it runs.
         const std::string subject =
             std::format("The call of '{}: {}'", targetName, targetFuncType->toString());
-        if (hasVarArgument) {
-            diags_->of(SemanticDiag::IgnoredSideEffect)
-                .atOrigin(gct->origin())
-                .commit(subject, "it takes a var argument");
-        } else if (!capturedWrites.empty()) {
-            // The graphs whose writes count here: the callee's, and the one of each function value
-            // the call hands to a parameter whose resources are the value's.
-            std::vector<DraftGraphBuilder *> writingGraphs;
-            if (targetGraph) {
-                writingGraphs.push_back(targetGraph.get());
-            }
-            for (const compile_graph_ptr_t &value : argumentFunctions) {
-                writingGraphs.push_back(value.get());
-            }
-            unit_->pendingIgnoredWrites.push_back(
-                {std::move(writingGraphs),
-                 capturedWrites,
-                 {},
-                 gct->origin(),
-                 subject,
-                 "it writes"});
+        // The graphs whose writes count here: the callee's, and the one of each function value
+        // the call hands to a parameter whose resources are the value's.
+        std::vector<DraftGraphBuilder *> writingGraphs;
+        if (targetGraph) {
+            writingGraphs.push_back(targetGraph.get());
         }
+        for (const compile_graph_ptr_t &value : argumentFunctions) {
+            writingGraphs.push_back(value.get());
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {std::move(writingGraphs),
+             capturedWrites,
+             {},
+             gct->origin(),
+             subject,
+             "it writes"});
     }
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {

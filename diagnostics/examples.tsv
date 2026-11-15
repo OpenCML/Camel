@@ -268,6 +268,7 @@ SemanticDiag::TypeVariableUnused	test/cases/compile/generic_head/err_unused_head
 SemanticDiag::UnknownResource	test/cases/effects/err_unknown_resource.cml
 SemanticDiag::UnresolvedReference	test/cases/compile/check/semantic_error.cml
 SemanticDiag::UnresolvedTypeReference	test/cases/compile/array_alias/bare_tensor.cml
+SemanticDiag::UnusedAssignedValue	test/cases/compile/var/unused_assigned_value.cml
 SemanticDiag::UnusedFallibleValue	test/cases/compile/unused_values/fallible_sync.cml
 SemanticDiag::UnusedPureResult	test/cases/compile/native/para_unordered_pure_result.cml
 SemanticDiag::UsesPromiseViolated	test/cases/effects/err_promise_through_parameter.cml

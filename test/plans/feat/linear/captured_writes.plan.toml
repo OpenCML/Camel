@@ -936,7 +936,7 @@ const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const seen = diags.map(d => d.data.name + ' at ' + at(d))
 assert(seen.join(' | ') === 'SemanticDiag::EffectNotExecuted at 16:5', 'diagnostics: ' + seen.join(' | '))
-assert(diags[0].message === 'The call has side effects but is never executed: nothing depends on it and it is not in a sync block.',
+assert(diags[0].message === 'The call reaches outside the program and is never executed: nothing needs what it gives, so nothing runs it.',
     'message: ' + diags[0].message)
 }
 """
