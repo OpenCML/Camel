@@ -1,0 +1,23 @@
+`lane-handleorder` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`6ee071938c236de466672191c6f93263a9425b62`，`--no-ff` 合入 `lane-handleorder`（`7e423f9d6` +
+它的同步合并 `4bf36bdd6`）。**无冲突**。推：`f16886373..6ee071938`，`unpushed=0`。
+
+判据一：`test/plans/feat/compile/ref.plan.toml`（合后的 `develop`，`--jobs 4`，树 `6ee071938`）
+    [SUMMARY] total: 52, pass: 52, fail: 0        RUN_EXIT=0
+    [provenance] tip 6ee071938 | tier fast | jobs 4 | tree /home/zjwei/camel-work/Camel
+
+判据二：`ref.one_box_two_names` 四个后端全部 `[PASS]`
+  （`nvm 71.88 ms`、`fvm 93.40 ms`、`jit 72.85 ms`、`prl 75.87 ms`），
+  该条目的 `verify_script` 逐字节比 `stdout_normalized === '12\n22\n1\n12\n'`，
+  并 `backends_agree = ["exit_code", "stdout_normalized"]` —— 所以**四后端都打 `12/22/1/12`**
+  （第四个值 `1` 是 `sync` 体内那次读，同一程序），不是「四个都绿」这种间接说法。
+  `ref.one_box_two_names_order` 也 `[PASS]`：`read_then_write` 一条 get→set、`write_then_read`
+  一条 set→get，`param_and_fresh` 0 条。
+
+`--changed`（`$env:CAMEL_TEST_BASE='f16886373'`，`-NoBuild`）：
+    [SUMMARY] total: 4005, pass: 3989, fail: 0, known failures: 16        RUN_EXIT=0
+
+两处都无 `killed by a signal`、无 `timed out`。
+
+`git ls-remote origin refs/heads/develop` = 6ee071938c236de466672191c6f93263a9425b62。
