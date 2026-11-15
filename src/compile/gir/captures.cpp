@@ -83,8 +83,19 @@ node_handle_t Builder::captureInto(
     }
 
     const std::string shown = captureNameOf(origin, name.empty() ? originNames_[origin] : name);
-    // A captured variable is captured by reference: the port holds the same cell.
-    node_handle_t port = graph->addPortNode(nodeTypeOf(origin), shown, false);
+    // A capture of a value, where the value is what the port holds: the capture a closure makes
+    // of a variable it reads, and nothing writes. A `var` is still a cell a closure may share
+    // (`escapingVariables_`, below), so the port is a value port only where nothing can write the
+    // name while the capturing body holds it: no function of the program writes it (the
+    // conservative writer set, scanProgramWriters), the cell is one the program declared
+    // (`:var/new`) and not a `var` parameter a caller handed in, and the graph is one the program
+    // is making a value of (its captures are closure ports, values it holds) rather than one a
+    // direct call is being built for (whose capture ports become with-ports). Where that holds the
+    // port carries the value the variable had where the capture is written, its type is that
+    // value's, and nothing that reads the port can write the variable.
+    const bool byValue = captureByValue(graph, origin);
+    Type *portType     = byValue ? valueTypeOf(nodeTypeOf(origin)) : nodeTypeOf(origin);
+    node_handle_t port = graph->addPortNode(portType != nullptr ? portType : nodeTypeOf(origin), shown, false);
     graph->edit().removeNormPort(nodeIdOf(port));
     if (graph->parameterized()) {
         // Called directly already: its captures are with-ports, after the declared ones.
@@ -116,13 +127,55 @@ node_handle_t Builder::captureInto(
         violation.what   = valueType != nullptr ? valueType->toString() : std::string("a stream");
         streamViolations_.push_back(std::move(violation));
     }
-    if (isVar) {
+    if (isVar && !byValue) {
+        // A cell the closure shares: the port is the variable, reads of it are `:var/get`, and the
+        // cell has to be kept because a body reads it as a cell.
         variables_.insert(port);
         captures_[graph.get()].variables.push_back(origin);
-        // The cell is shared with the closure: it is a resource, so it keeps its cell.
         escapingVariables_.insert(origin);
+    } else if (isVar) {
+        // A value port names the variable of the capturing graph's scope without making it one:
+        // a read of it reads a value (`variables_` is what makes `:var/get` of a name), and the
+        // cell keeps no share in it, so no unit is kept for a body that only reads.
+        captures_[graph.get()].variables.push_back(origin);
     }
     return port;
+}
+
+bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) const {
+    if (!isVariable(origin)) {
+        return false;
+    }
+    // The body is built for a function the program makes a value of, and only for one: the value
+    // holds the values its captures had when it was made, while a direct call is handed the cells
+    // (its capture ports become with-ports, which is the by-reference capture of item 2 of the
+    // `var`-to-SSA work). A graph made to forward a call of such a function holds the same values,
+    // so its captures are values too.
+    if (!programMakesValueOf(graph->name()) && !valuePortGraphs_.contains(graph.get())) {
+        return false;
+    }
+    // A `var` parameter is a cell a caller handed in: it is the caller's, and the callee's writes
+    // go through to it. Only a cell the program declared itself is a candidate.
+    if (nodeKindOf(origin) != camel::runtime::GCNodeKind::Oper) {
+        return false;
+    }
+    // A value of the top level of a module: the one binding whose cell no body of the program
+    // declares, and the capture this first step of the `var`-to-SSA work is about. A cell a body
+    // declares is a cell that body writes and hands on (a `var` argument, a `var` parameter, a
+    // closure that assigns it, a loop that carries it), and none of those paths is a value yet.
+    const auto topLevel = topLevelValues_.find(origin);
+    if (topLevel == topLevelValues_.end()) {
+        return false;
+    }
+    const std::string &name = topLevel->second.name;
+    if (name.empty()) {
+        return false;
+    }
+    // A name some function of the program writes is shared: that write would have to reach the
+    // body through the cell, and a value port cannot carry it. This is the conservative set, so a
+    // write of another binding that happens to share the name costs the capture its value port --
+    // the safe direction, because it only keeps a cell that could have been a value.
+    return !programWrites(name);
 }
 
 void Builder::noteMachinePortOrigin(node_handle_t port, node_handle_t origin) {
@@ -140,11 +193,22 @@ void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &call
     site.values.reserve(captured.size());
     for (const CapturedValue &value : captured) {
         node_handle_t here = captureInto(currGraph_, value.origin, value.name);
+        if (!isVariable(value.port) && here != nullptr && isVariable(here)) {
+            // A callee whose capture port carries a value (a function the program also makes a
+            // value of, `captureByValue`) is handed the value the variable holds here, never the
+            // cell: the read is the node the capture table holds for this call, and the control
+            // edge keeps it alive to the link step (linkCaptureSites turns it into the With input,
+            // tryRemoveCtrlLink). A read nothing uses is erased when the body ends, and the call
+            // would be linked to a node that is gone -- which is where this port crashed.
+            node_handle_t read = readVariable(here);
+            linkNodes(LinkType::Ctrl, read, call);
+            here = read;
+        }
         site.values.push_back(here);
-        // What the capture is worth as of this call: a capture of a variable already written
-        // here passes that write's version on, not the cell. The call is linked to it later
+        // What the capture is worth as of this call: a capture of a variable already written here
+        // passes that write's version on, not the cell. The call is linked to it later
         // (linkCaptureSites), when the caller may already have written again.
-        site.versions.push_back(valueVersionOf(here));
+        site.versions.push_back(isVariable(value.port) ? valueVersionOf(here) : nullptr);
     }
     captureSites_.push_back(std::move(site));
 }

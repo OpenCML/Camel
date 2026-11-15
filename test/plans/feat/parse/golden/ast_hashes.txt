@@ -2102,6 +2102,7 @@ a697f497a304c872 ok test/cases/compile/unused_values/fallible_sync.cml
 95ed7504bd6f8377 ok test/cases/compile/unused_values/pure_sync.cml
 f7d270690e555876 ok test/cases/compile/var/arm_let.cml
 3fd30129bca7ed96 ok test/cases/compile/var/arm_var.cml
+4895c5ee54d6cfb2 ok test/cases/compile/var/capture_value_port.cml
 faf7a471321f79c8 ok test/cases/compile/var/closure_read.cml
 7e95a32da81d0116 ok test/cases/compile/var/closure_read_let.cml
 487321f8e39636cc ok test/cases/compile/var/loop_let.cml

@@ -1,0 +1,23 @@
+// The minimal trigger of the value capture port, and the case that holds it: a closure that reads a
+// variable of the module's top level is handed the *value* the variable held where the closure was
+// written (`read_c`'s capture port is `int`, not `var int`), and the call site of a direct call of
+// that function is handed a node taken from the capture table.
+//
+// It is here because the value port used to crash on exactly this program. The call site recorded a
+// `:var/get` of the cell as what the call was worth, the fold at the end of the caller's body
+// erased that read (nothing used it yet), and `linkCaptureSites` then linked a node that was no
+// longer there: the builder aborted in `settleStreamLinearity` (`nodeTypeOf`, "Draft node is
+// null"). The two prints are the same program written the two ways the port has to serve: the call
+// made directly, and the same function reached through the value.
+var c = 5
+
+func read_c(a: int): int {
+    return a + c
+}
+
+func main(): int sync {
+    println(read_c(1))
+    let k = read_c
+    println(k(1))
+    return 0
+}
