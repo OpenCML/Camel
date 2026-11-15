@@ -1930,6 +1930,30 @@ void Builder::collapseNonEscapingVariableReads() {
                     ++foldTookNothing_;
                     continue;
                 }
+                // Whether *some* write exists is the wrong question (`step_var`'s first statement
+                // reads before it writes, and it legitimately takes the initial value). The question
+                // is whether a write is ordered after this read: recordWrite writes that order edge
+                // for every read the write meets. A write already past -- inside a branch or a loop
+                // -- leaves no such edge, and then this read must take what that write wrote. That
+                // write is not in the version record, which is the defect this branch reports
+                // instead of papering over it with the value `:var/new` made.
+                bool writeAfter = false;
+                for (const auto &users : {draft.ctrlUsersOf(readId), draft.syncUsersOf(readId)}) {
+                    for (camel::runtime::gc_node_ref_t user : users) {
+                        const auto written = draft.normInputsOf(user);
+                        if (!written.empty() && written[0] == cellId) {
+                            writeAfter = true;
+                            break;
+                        }
+                    }
+                    if (writeAfter) {
+                        break;
+                    }
+                }
+                if (!writeAfter) {
+                    ++foldTookNothing_;
+                    continue;
+                }
                 version = cellInputs[0];
                 ++foldTookInitial_;
             } else if (nodeKindOf(source) == camel::runtime::GCNodeKind::Loop) {
