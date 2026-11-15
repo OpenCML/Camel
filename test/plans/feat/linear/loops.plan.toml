@@ -815,3 +815,16 @@ expect_exit = 0
 expect_stdout_exact = "200 200 200 199\n1 1 1\n200 199 0 -1 198 1\n151 200 1 2 5 1\n200 199 1 2 3 1 1\n200 199 10 20 30 10 1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
+
+[[tests]]
+name = "loops.outer_ref"
+desc = "A body reads a `Ref` the loop did not make, and the box survives every round: the reference a counted value is born with comes back at its last use, and a loop's round is not linear -- a value the round reads from outside the loop is still held when the next round begins, so its reference cannot come back at that read. Read only (three `box 0`), written in the body (1 2 3), written in the body and read after the loop (3), and two loops nested over one box (4) all print what they printed before the count existed, instead of `state::get` answering \"the value is not a reference\" on the second round; a loop that touches no outer `Ref` is the control (6)."
+kind = "behavior"
+case = "../../../cases/loops/outer_ref.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "box 0\nbox 0\nbox 0\n0\nset 1\nset 2\nset 3\n0\n3\n4\n6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000

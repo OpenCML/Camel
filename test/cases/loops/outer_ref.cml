@@ -1,0 +1,71 @@
+// A loop body reads a `Ref` the loop did not make (design principles 3.10 with 10.5).
+//
+// The reference a counted value is born with comes back at its last use, and a loop's execution
+// order is not linear: a round runs its range again. A value the round reads from outside the loop
+// is still held when the next round begins, so its reference cannot come back at that read -- it
+// used to, and the box was released at the end of the first round, so `state::get` answered "the
+// value is not a reference" on the second. The four functions below are the four shapes of that:
+// read the outer reference only, write it in the body, write it in the body and read it after the
+// loop (the write reaches the box the loop left), and two loops nested over one box. `plain` is the
+// control: a loop that touches no outer `Ref` reads what it read before.
+
+import state
+
+func read_only(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 3 do sync {
+        println(`box ${state::get(box)}`)
+        i + 1
+    }
+    return 0
+}
+
+func written(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 3 do sync {
+        state::set(box, state::get(box) + 1)
+        println(`set ${state::get(box)}`)
+        i + 1
+    }
+    return 0
+}
+
+func after(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 3 do sync {
+        state::set(box, state::get(box) + 1)
+        i + 1
+    }
+    return state::get(box)
+}
+
+func nested(): int sync {
+    let box = state::ref(0)
+    loop i = 0 while i < 2 do sync {
+        loop j = 0 while j < 2 do sync {
+            state::set(box, state::get(box) + 1)
+            j + 1
+        }
+        i + 1
+    }
+    return state::get(box)
+}
+
+func plain(): int sync {
+    var total = 0
+    loop i = 0 while i < 3 do sync {
+        var t = i + 1
+        total = total + t
+        i + 1
+    }
+    return total
+}
+
+func main(): int sync {
+    println(read_only())
+    println(written())
+    println(after())
+    println(nested())
+    println(plain())
+    return 0
+}
