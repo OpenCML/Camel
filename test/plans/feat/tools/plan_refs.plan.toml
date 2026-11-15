@@ -117,3 +117,38 @@ verify_script = '''
       summaries.join(' | '))
 }
 '''
+
+[[tests]]
+name = "plan_refs.last_use_column"
+desc = "Route 4's column, pinned: for a value the plan counts, the position after which it is never read again. The `burn` graph of the counted-box case makes a box at position 1 and reads it at position 2, so the column answers 2 and the entry that hands the producing reference back sits there; `main`'s value at position 10 has no reader at all and answers `none`, which is an answer: its reference comes back at its own position. The entries printed beside the table must balance row by row (`produced + retains == give-backs + kept`)."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_boxes_made_per_call_ten.cml"
+args = ["${case}", "test::plan_refs"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'the program ran: exit=' + input.exit_code + ' ' + said)
+  const lastUses = out.split('\n').filter(l => l.startsWith('PLAN_LAST_USE '))
+  assert(lastUses.length > 0, 'the pass printed the last-use column: ' + said)
+  // The value `burn` makes at position 1 is read once, at position 2: after 2 it is never read
+  // again, and that is what the column answers for it.
+  const burnBox = lastUses.find(l => l === 'PLAN_LAST_USE burn at 1 value 1 last-use 2')
+  assert(burnBox !== undefined,
+    'the box burn makes is last read where burn reads it: ' + lastUses.join(' | '))
+  // The reference the box was born with comes back there, which is the one entry that hands it on.
+  const entries = out.split('\n').filter(l => l.startsWith('PLAN_REF_ENTRIES '))
+  const handBack = entries.find(l => l === 'PLAN_REF_ENTRIES burn at 2 give value 1 x1')
+  assert(handBack !== undefined, 'the producing reference comes back at the last use: ' + entries.join(' | '))
+  // A value nothing reads has no last use, and says so instead of naming its own position.
+  const unread = lastUses.find(l => l === 'PLAN_LAST_USE main at 10 value 10 last-use none')
+  assert(unread !== undefined,
+    'a value nothing reads answers none: ' + lastUses.join(' | '))
+  assert(entries.find(l => l === 'PLAN_REF_ENTRIES main at 10 give value 10 x1') !== undefined,
+    'and its reference comes back where it is made: ' + entries.join(' | '))
+  const balances = entries.filter(l => l.includes(' retains ') && l.includes(' balanced '))
+  assert(balances.length > 0 && balances.every(l => l.endsWith(' balanced yes')),
+    'the entries balance row by row: ' + balances.join(' | '))
+}
+'''

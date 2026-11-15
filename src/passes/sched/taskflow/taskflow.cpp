@@ -1922,11 +1922,19 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     // On the calling thread: an operator decides itself whether its elements are worth
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
+    //
+    // The count's rows are run at both exits, because a marked operator is an operator node like
+    // any other: the rows of the values it uses come due when it has run. Its own value is a
+    // collection, so its own holds are filtered out by the type -- the same answer the other back
+    // ends give.
     if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
+        camel::runtime::applyRefEntriesForNode(graph->execPlan(), frame, nodeRef, *value);
         return *value;
     }
-    const auto *node = requireNode(graph, nodeRef);
-    return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    const auto *node   = requireNode(graph, nodeRef);
+    const slot_t result = node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    camel::runtime::applyRefEntriesForNode(graph->execPlan(), frame, nodeRef, result);
+    return result;
 }
 
 slot_t TaskflowExecSchedPass::executeLinearNode(
@@ -2190,6 +2198,14 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         }
         // Publish before this region is released, including on the task-graph path.
         frame->set(dataIndexOf(graph, nodeRef), result);
+        // The count's rows at this node's position -- the same site the anchor above is asked at.
+        // Run whether or not --gc-check was asked for: what a run releases is the program's
+        // behaviour (design principles 10.5) and the flag only says whether it is reported.
+        camel::runtime::applyRefEntriesForNode(
+            plan != nullptr && plan->shared != nullptr ? *plan->shared : graph->execPlan(),
+            frame,
+            nodeRef,
+            result);
         return result;
     };
 
