@@ -1,0 +1,22 @@
+/**
+ * A `var` written inside a loop body, and read after the loop.
+ *
+ * Three turns of the body each add one, so the value the read after the loop sees is `3`. The write
+ * is carried state -- a LOOP hands the value on from one turn to the next -- and it is also a write
+ * of the body: a fold that answered the value `:var/new` made (`0`) or the value from before the
+ * loop would be wrong, and so would one that answered a single turn's increment.
+ *
+ * The write inside the body reaches `Builder::writeInLoop`/the LOOP exit rather than a statement of
+ * the body, so this case pins the other half of the same question `write_in_branch.cml` asks.
+ *
+ * Run: camel test/cases/compile/var/write_in_loop.cml
+ */
+func main(): int sync {
+    var x = 0
+    let _ = loop i = 0 while i < 3 do sync {
+        x = x + 1
+        i + 1
+    }
+    println(x)
+    return 0
+}

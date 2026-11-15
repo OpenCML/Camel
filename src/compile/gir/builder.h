@@ -1010,7 +1010,20 @@ class Builder {
     };
     std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
     std::unordered_set<node_handle_t> knownCellUsers_;
+    /// The exits a cell was written at, in the order the writes were recorded, for the writes that
+    /// are not a call's (recordWrite's `throughCallee` false): a straight-line write of the body. The
+    /// fold asks which of them stands before a read, because that is the value the read sees; a
+    /// write only a call made is not a statement of this body and is not ordered here.
+    std::unordered_map<node_handle_t, std::vector<node_handle_t>> writesOf_;
     std::unordered_set<node_handle_t> escapingVariables_;
+    // Variables whose only reason for standing in `escapingVariables_` is that a write handed them
+    // to `__assn__` as a `var` argument (requireMutableArgument records that, because the operator's
+    // first parameter is two-way). A write is not an escape: the assignment does not exist after the
+    // call, so it cannot hold the cell. They stay out of SSA only while something else keeps them a
+    // resource -- a closure capturing them, a `var` argument to a user function, or a write written
+    // inside a loop, which is carried state (schedule item 3). The fold reads this set, and the
+    // straight-line definition that decides the loop case is written there.
+    std::unordered_set<node_handle_t> writeOnlyEscaping_;
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
     // callee's capture table that says which variables it writes, and, per call, the variable
     // each version is of and the access node of each part made so far. Part 0 is the return
@@ -2696,6 +2709,12 @@ class Builder {
     std::optional<std::string>
     refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
         const;
+    // One layer of that walk: the place a reference is reached at through what the closure `value`
+    // captured, `through` naming the closures already walked to reach it and `depth` how many
+    // layers down this is. A layer that cannot be read -- or one past `kRefCaptureDepth` -- is
+    // answered as holding one, because a capture the walk cannot see may be the one that does.
+    std::optional<std::string> refInsideClosureCaptures(
+        node_handle_t value, const std::vector<std::string> &through, int depth) const;
     // The cells of `body` the state rule speaks of: the mutable cells the body itself made, and its
     // `var` parameters, which its caller made and lent to it.
     std::unordered_set<node_handle_t> cellsOfBody(DraftGraphBuilder *body) const;

@@ -517,7 +517,7 @@ aa87dbb3e6e7550f ok stdlib/autodiff.cml
 ac8be7c61fc900b2 ok stdlib/ckpt.cml
 3107d055a745e2fa ok stdlib/env.cml
 44e92953d1e198d8 ok stdlib/fs.cml
-4c7705c1a7ca83cb ok stdlib/graph.cml
+847f657163e219c5 ok stdlib/graph.cml
 4244f94a27e30451 ok stdlib/hash.cml
 0114fed9deda94a1 ok stdlib/io.cml
 700b1a3ebdd69676 ok stdlib/json.cml
@@ -2990,6 +2990,8 @@ ae72c3f152f64055 ok test/cases/modules/graph_pass/camel_import_values.cml
 9e76d36fd0b1a2e8 ok test/cases/modules/graph_pass/chainlib.cml
 b2c0cdb4305042cf ok test/cases/modules/graph_pass/cross_arm.cml
 b552f7c949a34d32 ok test/cases/modules/graph_pass/edits.cml
+82f0e1e742761969 ok test/cases/modules/graph_pass/entry_body.cml
+fb750683e92efc64 ok test/cases/modules/graph_pass/entry_target.cml
 38195707d426d540 ok test/cases/modules/graph_pass/firstuser.cml
 81a8f18e2578f2a1 ok test/cases/modules/graph_pass/fold_constants.cml
 83737a024e9f2742 ok test/cases/modules/graph_pass/fold_target.cml
