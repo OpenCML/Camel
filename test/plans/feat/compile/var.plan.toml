@@ -28,6 +28,15 @@
 # Both are the one reason -- a `var` is still a unit -- so the entry goes green with item 1 and must
 # not be added to `known_fail`: a red here is the statement that the work is not done.
 #
+# Measured again 2026-11-15 in the evening on f4bb08f241: the entry now **passes**, and the reading
+# above is why it can pass while the work is not done. The step it names has a `var` chain that
+# folds entirely into values, so `:var/new` is left with no user and is pruned; two documents with
+# no unit in either are the same bytes whether or not a unit is ever lowered. A green there is not
+# evidence. The entries at the end of this file are the ones that carry a `var` a fold cannot
+# take out -- one written in a loop and read after it, one read by a closure -- and they are red,
+# for the reason the pair above is red on an older tree. Its assertions are left exactly as they
+# were: they are a real reading again once the pair it names keeps a unit.
+#
 # The comparison is on the canonical document only, so nothing here fixes the *format* of that
 # document; a change to `canonical=true` is a change to what equivalence means and is not this
 # plan's business.
@@ -39,7 +48,7 @@ tags = ["feat", "compile", "var", "gir", "autodiff"]
 
 [[tests]]
 name = "var.assignment_and_let_chain_are_one_graph"
-desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA."
+desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -76,5 +85,114 @@ args = ["${case}", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["3"]
 expect_stdout_not_contains = ["0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# --- the discriminating half: a `var` a fold cannot take out of the program --------------------
+#
+# The entry at the top compares two writings of one gradient step, and that step's `var` chain folds
+# away, so both documents are the same bytes with no unit in either and the entry says nothing
+# about lowering one. The two programs below are the author's counterexample shape (2026-11-15 in
+# the evening): the `var` is written in a loop and read outside it, or read by a closure. A read in
+# another place cannot be answered by the value alone, so `:var/new` keeps a user, a unit is built,
+# and the two writings of the same program do not print the same document until a unit is lowered
+# to SSA.
+#
+# Each shape is three entries and has two halves:
+#   * the program's own behavior -- it runs under `std::nvm` and prints the value the write wrote
+#     (`21` from the loop, `2` from the closure), never the value the `var` started with;
+#   * the pair's canonical graph -- the `var` writing and the `let` writing, both under
+#     `std::jgir canonical=true`, compared byte for byte by a `differential` entry
+#     (`compare_fields = ["stdout_normalized"]`), which is the shape the first entry uses and the
+#     shape the author asked for: one canonical graph for two writings.
+#
+# Red today, and red only because a unit is still built: the `var` writing's document carries
+# `:var/new`, the `:var/get` the read runs (and, in the closure, a `:var/get` inside the closure's
+# own graph instead of the value arriving there), and `:op/assn_l` for the write, while the `let`
+# writing carries none of them. The entries go green with the SSA lowering and must not be added to
+# `known_fail`: a red here is the statement that the work is not done.
+
+# The loop writing: `total` is written on every round and read after the loop, so the write is
+# carried state the fold cannot put where the read is. Three rounds add `i * 7`, so the read must
+# see `21`.
+[[tests]]
+name = "var.loop_write_outside_read_is_the_accumulated_value"
+desc = "`var total = 0; loop i = 0 while i < 3 do { total = total + i * 7 }` then read `total` prints `21`. The write is loop-carried state and the read is after the loop, so no fold can answer it with the value `var` started from (`0`) or with one round's `i * 7`."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_write_outside_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["21"]
+expect_stdout_not_contains = ["0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The `var` writing's canonical document, which the next entry is compared against. Its own
+# assertion is that the document is produced (`exit 0`): what it must equal is the other writing's,
+# not a stored shape, and a shape stored here would freeze the dump instead of the equivalence.
+[[tests]]
+name = "var.loop_write_outside_read_graph"
+desc = "The canonical graph (`std::jgir canonical=true`) of the `var` writing of the loop program. The reference document for `var.loop_write_outside_read_is_the_let_writing`; it is not asserted against a stored shape, because the reading this plan takes is that the two writings agree, not that either has a particular shape."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_write_outside_read.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The same program without `var`: the accumulated value is the loop's second carried state. Red
+# today: the `var` writing carries the value in a unit (one loop state plus `:var/new`,
+# `:op/assn_l` and the `:var/get` after the loop), the `let` writing carries it as a loop state
+# (two states, the body's tuple, and the extraction of the value after the loop), so the two
+# documents part wherever the unit is.
+[[tests]]
+name = "var.loop_write_outside_read_is_the_let_writing"
+desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing still carries the value in a unit (`:var/new`, `:op/assn_l`, the `:var/get` after the loop, and one loop state) where the `let` writing carries it as the loop's second state; green when a unit is lowered to SSA."
+kind = "differential"
+case = "../../../cases/compile/var/loop_write_outside_read_let.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+compare_to = "var.loop_write_outside_read_graph"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The closure writing: the `var` is written before the closure is made and read inside it, which
+# design principles 3.5 allows and which no fold can put where the read is.
+[[tests]]
+name = "var.closure_read_is_the_value_the_assignment_wrote"
+desc = "`var x = 1; x = 2; let read = () => x` then call `read()` prints `2`, the value the assignment wrote -- not the `1` the `var` started with. The read is in the closure's own graph, so answering `1` means the fold answered the initial binding instead of the write."
+kind = "behavior"
+case = "../../../cases/compile/var/closure_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2"]
+expect_stdout_not_contains = ["1"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The `var` writing's canonical document, the reference for the differential entry below (same
+# reason for asserting only `exit 0`).
+[[tests]]
+name = "var.closure_read_graph"
+desc = "The canonical graph (`std::jgir canonical=true`) of the `var` writing of the closure program. The reference document for `var.closure_read_is_the_let_writing`; asserted only to be produced, because the reading is the agreement of the two writings, not a stored shape."
+kind = "behavior"
+case = "../../../cases/compile/var/closure_read.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# Same program, the value captured instead of a cell. Red today: the `var` writing keeps the unit
+# (`:var/new`, `:op/assn_l`, a `:var/get` inside the closure's graph, which reads the cell through
+# the closure's context), while the `let` writing hands the value to the closure and its graph
+# holds a port and nothing else.
+[[tests]]
+name = "var.closure_read_is_the_let_writing"
+desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing's closure graph holds a `:var/get` that reads the unit through the closure's context, and its body graph holds `:var/new` and `:op/assn_l`, where the `let` writing's closure receives the value as a captured input and has no such nodes; green when a unit is lowered to SSA."
+kind = "differential"
+case = "../../../cases/compile/var/closure_read_let.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+compare_to = "var.closure_read_graph"
+compare_fields = ["exit_code", "stdout_normalized"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
