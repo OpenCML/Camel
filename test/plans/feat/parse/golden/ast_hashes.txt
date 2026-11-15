@@ -2115,6 +2115,9 @@ e4d108190a15a18f ok test/cases/compile/var/step_let.cml
 adae243535451365 ok test/cases/compile/var/var_parameter_write_at_exit.cml
 6ee4975163840c41 ok test/cases/compile/var/write_in_branch.cml
 29f664fcceaaa7c6 ok test/cases/compile/var/write_in_loop.cml
+4fc80034c90d477e ok test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml
+a9f6a2882d82fa49 ok test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml
+e451136d83ceb542 ok test/cases/compile/var_closure/err_closure_assigns_captured.cml
 da0ef0a6c2880a4e ok test/cases/compile/var_closure/err_closure_assigns_let.cml
 b459cb8942026e80 ok test/cases/compile/var_closure/ok_closure_in_loop_body.cml
 59ff7e4c37023c3b ok test/cases/compile/var_closure/ok_generator_body_is_not_a_program_closure.cml
