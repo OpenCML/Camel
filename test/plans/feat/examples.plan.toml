@@ -254,3 +254,59 @@ expect_output_not_contains = ["do not agree", "Traceback"]
 # wherever the package is not installed. The bound is its own because the CPU the run may use is a
 # quarter of it.
 timeout_ms = 60000
+
+# ---- the case study (ECOOP 2027 sec. 6) -------------------------------------------------------
+#
+# `examples/case-study/train.cml` is the paper's thirty-line program: a linear model trained by
+# gradient descent, with the loss and its gradient as library transforms, and the entry that prints
+# the loss before and after and the trained weight. It runs on the four back ends and prints the same
+# three lines on each, which is what `examples.case_study.train` records.
+#
+# The two rewrite passes live in `examples/case-study/edits.cml`, a pass library beside the program,
+# so a command names the directory as a module root (`CAMEL_PACKAGES`) instead of the program
+# importing its own rewriter. The two entries below record what the two rewrites did on 2026-11-15,
+# measured on the tree at 96a27e435 and re-measured on the merge that brought this example in:
+#
+#   edits::drop_print  Erases every printing call. ACCEPTED: the commit takes the graph (exit 0) and
+#                      the program then prints nothing at all -- the effect is gone and no clause of
+#                      src/runtime/graph.cpp's validator says so. Section 4 of
+#                      docs/technical/17_graph_rewrite_api_contracts.md has no "the effects of the
+#                      program are contained" clause yet: that is R3 (docs/design/effects/
+#                      analysis.cn.md 4.1), which is queued, not landed.
+#   edits::break_rate  Hands the model where the learning rate goes. REJECTED: exit 1, nothing runs,
+#                      and the message is `GraphInvalid: Runtime graph 'main' breaks its edge
+#                      invariants (1 violation(s)): graph 'main' node 13 (10): passes a Linear as
+#                      ordinary argument 3 of 'train', which takes a float.` That is clause 2 of
+#                      section 4.2 (the types on an edge must be compatible, calls included), raised
+#                      by the commit and reported through the pass's own `F!` as
+#                      RuntimeDiag::UnhandledError. The pass driver turns a failure the commit
+#                      *throws* into RuntimeDiag::PassInternalError; a pass written in Camel gets the
+#                      same violation back as an error value and passes it on, which is the shape the
+#                      case study shows.
+
+[[tests]]
+name = "examples.case_study.train"
+desc = "The paper's training program: 200 gradient steps of a linear model, the loss before and after, and the trained weight, identical on the four back ends."
+case = "../../../examples/case-study/train.cml"
+golden = "golden/examples/case_study_train.txt"
+
+[[tests]]
+name = "examples.case_study.drop_print"
+desc = "The rewrite that erases every printing call is accepted by the commit and the program then prints nothing: section 4 of the rewrite contracts has no effect-containment clause yet, so a lost effect is not a refusal."
+case = "../../../examples/case-study/train.cml"
+args = ["${case}", "edits::drop_print", "${backend}"]
+envs = ["CAMEL_PACKAGES=examples/case-study"]
+golden = "golden/examples/case_study_drop_print.txt"
+timeout_ms = 120000
+
+[[tests]]
+name = "examples.case_study.break_rate"
+desc = "The rewrite that hands the model where the learning rate goes is refused at commit: section 4.2 clause 2 of the rewrite contracts (an edge's types must be compatible) reports a Linear passed as ordinary argument 3 of train, which takes a float, and nothing runs."
+case = "../../../examples/case-study/train.cml"
+args = ["${case}", "edits::break_rate", "${backend}"]
+envs = ["CAMEL_PACKAGES=examples/case-study"]
+snapshot_stream = "stderr"
+golden = "golden/examples/case_study_break_rate.txt"
+expect_exit = 1
+expect_output_not_contains = ["Segmentation fault"]
+timeout_ms = 120000

@@ -32,8 +32,17 @@ namespace {
 // graphs (62 functions that each return a string literal could not be compiled).
 constexpr size_t kInitialArenaBlockBytes = 1024;
 
-std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> &draftOwners() {
-    static std::unordered_map<const runtime::GraphDraft *, DraftGraphBuilder *> owners;
+/// What the registry remembers about a draft that has a builder: who owns it, and the epoch the
+/// draft was made with. The epoch is kept here, put in while the draft was alive, and never asked
+/// of the draft again -- a handle outlives the draft it names, so answering a handle by reading
+/// that draft reads memory that may already have been released and handed to another draft.
+struct DraftRegistration {
+    DraftGraphBuilder *builder = nullptr;
+    uint64_t epoch             = 0;
+};
+
+std::unordered_map<const runtime::GraphDraft *, DraftRegistration> &draftOwners() {
+    static std::unordered_map<const runtime::GraphDraft *, DraftRegistration> owners;
     return owners;
 }
 
@@ -46,21 +55,28 @@ DraftGraphBuilder::DraftGraphBuilder(std::shared_ptr<runtime::GraphTransaction> 
     // The front end places every node itself, so a read across the border of an arm is left for
     // the validator to report rather than moving the reader into the arm.
     draft().setInheritsRegions(false);
-    draftOwners()[&draft()] = this;
+    // The epoch goes into the registration: it is read here, while the draft is this builder's, and
+    // it is the only place a later lookup reads it from.
+    draftOwners()[&draft()] = DraftRegistration{this, draft().epoch()};
 }
 
 DraftGraphBuilder::~DraftGraphBuilder() { draftOwners().erase(&draft()); }
 
 DraftGraphBuilder *DraftGraphBuilder::fromRef(const runtime::DraftNodeRef &node) {
-    // The address is not the identity: a draft that was destroyed leaves its memory to the next
-    // one, and a builder is registered for that address again. The epoch the handle carries says
-    // which draft it named, so a handle whose draft is gone finds no owner here instead of finding
-    // the owner of the graph that took its place.
-    if (node.draft == nullptr || node.draft->epoch() != node.epoch) {
+    if (node.draft == nullptr) {
         return nullptr;
     }
+    // The registration answers, and it is asked without reading the draft. Two things can be there:
+    // nothing, because the draft was released with its builder, or a later draft that the allocator
+    // put at the same address and that is registered itself. Both are decided from what a builder
+    // wrote down while it was alive -- the address and the epoch its draft was made with -- and
+    // never from the draft the handle names: a handle outlives that draft, so nothing at the
+    // address is this call's to read, not even for the epoch.
     auto it = draftOwners().find(node.draft);
-    return it != draftOwners().end() ? it->second : nullptr;
+    if (it == draftOwners().end() || it->second.epoch != node.epoch) {
+        return nullptr;
+    }
+    return it->second.builder;
 }
 
 void DraftGraphBuilder::setFuncType(camel::core::type::FunctionType *funcType) {
