@@ -75,7 +75,11 @@ class RegionPass final : public RuntimeGraphRewritePass {
             failWithErrorValue(refusal);
             return nullptr;
         }
-        return result;
+        // The segments above moved host bodies to the device: a body the device runs touches the
+        // ambient `tiles:driver`, and the type over it still spells what the host body did. The
+        // type is what a caller reads (analysis 4.1), so it is brought up to the body here -- by
+        // this pass, which is the one that changed the body -- and never by widening the check.
+        return settleDeclarations(*context_, result);
     }
 };
 } // namespace

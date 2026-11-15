@@ -12,6 +12,7 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -2174,7 +2175,19 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     auto invoke = [&](operator_t function, ArgsView &with, ArgsView &normal) {
         with.setResultType(graph->node(nodeRef)->dataType());
         normal.setResultType(with.resultType());
+        // The anchor's site, in the node form -- the same one NodeVM uses, because this scheduler
+        // runs nodes too and this is where its operator runs. Bracketed per thread: this scheduler
+        // runs nodes of one graph on several threads, and the program-wide counter's difference
+        // around one call would also hold a neighbour's box.
+        const bool anchorWanted = camel::core::mm::allocatorChecks().printForeignResources;
+        camel::runtime::CountedBoxesBracket boxes;
+        if (anchorWanted) {
+            boxes.begin();
+        }
         const slot_t result = function(with, normal, *context_);
+        if (anchorWanted) {
+            camel::runtime::noteCountedCreationForNode(graph, nodeRef, boxes.sinceBegin());
+        }
         // Publish before this region is released, including on the task-graph path.
         frame->set(dataIndexOf(graph, nodeRef), result);
         return result;

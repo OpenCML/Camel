@@ -88,8 +88,20 @@ bool debugRunForeignResourceSelfTest(GenerationalAllocatorWithGC &allocator) {
         .disposeCount    = &disposeCount,
         .moveNotifyCount = &moveNotifyCount,
     };
+    // The count looks for the kind the state module's reference descriptor carries, so a block of
+    // any other kind must not be counted: this is the half of the check that a Ref-only program
+    // cannot give, because such a program has nothing else to mistake for a box.
+    const rtdata::ForeignResourceStats beforeCounted = rtdata::foreignResourceStats();
     rtdata::ForeignResourceObject *object =
         rtdata::ForeignResourceObject::create(allocator, selfTestDescriptor(), resource);
+    const rtdata::ForeignResourceStats afterCounted = rtdata::foreignResourceStats();
+    if (afterCounted.createdControlBlocks != beforeCounted.createdControlBlocks + 1) {
+        throw std::runtime_error("foreign resource self-test did not make one control block");
+    }
+    if (afterCounted.createdCountedBlocks != beforeCounted.createdCountedBlocks) {
+        throw std::runtime_error(
+            "foreign resource self-test counted a block whose kind is not the reference's");
+    }
 
     {
         ForeignRootedHandle rooted(

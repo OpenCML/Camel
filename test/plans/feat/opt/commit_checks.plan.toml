@@ -1,0 +1,81 @@
+id = "opt.commit_checks"
+order = 482
+tier = "fast"
+tags = ["feat", "opt", "effects", "commit-checks"]
+
+# The first of the two checks the effect analysis makes when a C++ pass commits a program
+# (docs/design/effects/analysis.cn.md 4.1, the ruling of 2026-11-15): at every call site, the
+# footprint of the function value called must not exceed what the type at that call site declares.
+#
+# The case runs a test-only pass that writes exactly that defect, on the smallest program that can
+# show it. It is refused, and the diagnostic names the call site and the accesses the type leaves
+# out. The second check (order completeness) is not landed here; the commit that adds this plan
+# carries the readings of the existing passes it refuses.
+#
+# The second case is the same pass on a program where it has nothing to fold: nothing is refused and
+# the program runs, which is what makes the refusal above about the defect and not about naming the
+# pass.
+
+[defaults]
+kind = "negative"
+timeout_ms = 20000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "commit_checks.effect_containment"
+desc = "A pass gives a function whose body prints the type of one that does not, and leaves the body where it is: the call sites of the printing function now declare `pure` while the body they run writes to the console. The refused program names the call node and the access that is beyond the type."
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::fold_function_type", "std::nvm"]
+expect_exit = 1
+expect_diagnostic_name = "RuntimeDiag::PassEffectContainment"
+expect_output_contains = ["Pass 'test::fold_function_type' returned a program whose call site", "reaches past the type it declares", "write stdout"]
+
+[[tests]]
+name = "commit_checks.nothing_to_fold"
+desc = "A program whose only function is called and does not print has no second function of its shape to fold: the pass writes nothing, and the commit check has nothing to refuse."
+kind = "behavior"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::fold_function_type", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["fold_function_type: no two functions of one shape to fold", "3"]
+
+# What the check declined to judge, so that "I looked and it is fine" and "I refused to look" do not
+# read the same in a log. Both numbers are pinned: a checker that stays green by declining more has
+# to raise `declined` first, and one that judges nothing has to keep `checked` above zero.
+[[tests]]
+name = "commit_checks.counts_what_it_declines"
+desc = "With CAMEL_EFFECT_CONTAINMENT_SUMMARY set, the check says what it compared and what it declined, and the two counts are pinned so that silence has to show up as a number."
+kind = "behavior"
+case = "../../../cases/compile/generics/pipelines.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
+expect_exit = 0
+timeout_ms = 60000
+expect_stdout_contains = ["effect containment: checked"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('effect containment: checked '))
+assert(line !== undefined, `no summary line in: ${out}`)
+const m = line.match(/^effect containment: checked (\d+), declined (\d+) \(any unknown (\d+) \/ any object (\d+) \/ any handle (\d+) \/ variable cell (\d+) \/ unresolved (\d+) \/ other (\d+)\)$/)
+assert(m !== null, `the summary line does not parse: ${line}`)
+const n = m.slice(1).map(Number)
+const [checked, declined, unknown, object, handle, variable, unresolved, other] = n
+const parts = n.slice(2).reduce((a, b) => a + b, 0)
+assert(parts === declined, `the components do not add up: ${line}`)
+assert(checked > 0, `checked ${checked}: a checker that judges no call site is green for no reason`)
+assert(declined <= 3, `declined=${declined} (any unknown ${unknown} / any object ${object} / any handle ${handle} / variable cell ${variable} / unresolved ${unresolved} / other ${other}), checked=${checked}: 3 is what this program needed on 2026-11-15, and a checker that stays green by declining more has to raise this number first`)
+assert(unknown <= 3, `any unknown=${unknown}: 3 is what this program needed on 2026-11-15`)
+}
+"""
+
+[[tests]]
+name = "commit_checks.declines_add_up"
+desc = "The components of the summary are counted apart, so a gap in the analysis -- a call site the graph does not resolve -- cannot hide inside the conservative readings of the resource classes."
+kind = "behavior"
+case = "../../../cases/compile/pass_guard/plain.cml"
+args = ["${case}", "test::fold_function_type", "std::nvm"]
+envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
+expect_exit = 0
+timeout_ms = 20000
+expect_stdout_contains = ["effect containment: checked"]
