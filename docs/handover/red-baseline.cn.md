@@ -13,6 +13,20 @@
 
 **判据**：`N > 0` 就是新红，**必须当场解释或停手**；`N = 0` 才允许说「没有新红」。**没有基线，红集不是读数，是噪声。**
 
+## 兑现记录（只增不删：基线不是删行，是记下它已经兑现了）
+
+| 日期 | 谁 | 兑现了什么 | 读数 |
+|---|---|---|---|
+| 2026-11-16 | `lane-byref`（`24ffae0d6`） | **`feat.linear` 那四族 98 行**（`var_reference` 67、`captured_writes` 24、`toplevel_var` 6、`recursion_and_calls` 1） | **`feat.linear` 850 / 846 / fail 0**（882−32=850，走掉的是重复不是读数） |
+
+**同一批量到的两行**（`feat.mm`，`lane-byref` 说「可能也绿了，我没跑」——**现在跑了**）：
+`poison:linear.captured_writes:captured_write_order.default` 与
+`poison:linear.var_reference:var_tensor.default`，在合并 tip 上**均已转绿**，因为它们的底层程序已经改了。
+`poison:modules.resources:core` 仍红，**是既有红，不在基线内**。
+
+**基线剩余**：`174 − 98 = 76`（`feat.compile` 30、`feat.consistency` 36、`feat.trans` 5、
+`feat.docs_links` 1、`feat.mm` 4），四舍五入到下表逐行。
+
 ## 计数规则：按「程序 + 断言」，不按后端行数
 
 一个程序在十几个后端/优化组合下各算一条是**实现细节的倍数**，不是覆盖的倍数。下表按程序列，
