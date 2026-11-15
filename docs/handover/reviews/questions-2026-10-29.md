@@ -3879,3 +3879,5 @@ ECOOP 要在论文里说"求导是用语言写出来的遍"。决策者在 pin `
 验收：`examples/case-study/train.cml` 换成 `import { grad } from vjp`、写法 `grad(loss)<y>(layer, X)`，四个后端打印与引擎版逐字相同（`loss after` 与权重）。
 
 **之后只留一份**：组合版在现有求导用例（`test/plans` 里引用 `autodiff.grad`/`with_grad` 的全部）上与引擎版结果一致后，`autodiff.grad`、`with_grad` 改为调用组合版，C++ 引擎里与之重复的部分删除。不一致的逐条列出，缺规则的补规则。
+
+**补充（2026-11-15 夜，负责人问）：`grad(loss)` 写在每一步里，导函数只能求一次。** 案例的 `step` 每一步都写 `grad(loss)<layer, y>(X)`。`grad(loss)` 只依赖常量 `loss`，按原则是常量子表达式，导函数只应求一次。引擎版今天实测如此：20、200、2000 步分别 45、55、238 ms，每步约 0.1 ms，`modules/autodiff/pullback.cpp` 对同一个函数的导数做了记忆。组合版（`vjp.grad`）的验收加一条：训练 2000 步，`REINTERP`/`TRANSPOSE` 这些变换记录各只出现一次，耗时与引擎版同量级。靠的是通用机制（常量子表达式只算一次，或在 `std::macro` 阶段提前求值），不在 `grad` 里另写缓存。
