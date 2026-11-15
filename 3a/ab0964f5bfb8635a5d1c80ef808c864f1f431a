@@ -1,0 +1,46 @@
+`lane-varcase` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`3aab0964f5bfb8635a5d1c80ef808c864f1f431a`，`--no-ff` 合入 `lane-varcase`（`81138b60c`，
+两笔：`6769f1639` 用例与 plan、`81138b60c` 补 AST 金标）。6 文件 `+210/−3`。**零冲突。**
+推：`c1d24898..3aab0964f`，`ls-remote` = 3aab0964f5bfb8635a5d1c80ef808c864f1f431a。
+
+合之前先把本地 `develop` 从 `b8ee81ead`（押着的 `commitcheck` 合并）`reset --hard` 回 `c1d24898`：
+`c1d24898..b8ee81ead` 里只有那条合并提交本身，两笔车道提交都在 `lane-commitcheck` 上，**没有任何
+分支外的独有提交**，所以没有东西丢。
+
+## 闸门（合后 `develop`，重建，`-Jobs 8`）
+    `--changed`（base `c1d24898`）→ `[SUMMARY] total: 124, pass: 121, fail: 3`
+    `check=gpu-plans total=146 pass=22 fail=0 skip=124 red=[] red_more=0 seconds=10 state=read mode=report`
+    [provenance] tip 3aab0964f | tier fast | jobs 8
+
+**gpu 层这次干净**（22 通过、0 红），说明上一笔 `commitcheck` 那 3 条 `nofallback`/`resident_loop` 红
+确实是它的新规则触发的，不是 gpu 层自身的基线。**gpu 层实际覆盖 = total − skip = 146 − 124 = 22 条**；
+124 条 skip 是 `skip_unless = ["node", "test/tools/have-cuda-device.mjs", "0"]` 说这台主机没有可见的
+CUDA 设备，整条不执行——**skip 与 pass 在总数上长得一样，所以每笔都把这一行抄出来。**
+
+## 3 条红：2 条是设计如此，1 条不是本笔的
+    [FAIL] var.loop_write_outside_read_is_the_let_writing     ← 设计如此
+    [FAIL] var.closure_read_is_the_let_writing                ← 设计如此
+    [FAIL] frontend.ast_snapshot
+`var.plan.toml` 因此读 **9 / 7 / 2**：七绿两红，**那两条红就是本笔要的尺子**，不是缺陷。`var` 仍被
+造成单元时它们必须红；作者三件事做完（删单元节点与按引用捕获口、分支赋值成分支结果、循环赋值成循环
+状态）它们才会因为没有东西可判而转绿。
+
+**`frontend.ast_snapshot` 没有按预期变绿，而且不是本笔的责任**：
+```
+ast snapshot: 4312 files read as recorded, 4 not in the snapshot yet, of 4316 in the corpus
+```
+这 4 个是 **`refcont` 的 4 个新用例**（`err_holds_ref_closure_in_collection`、`err_holds_ref_closure_in_struct`、
+`err_holds_ref_closure_in_struct_unread`、`ref_closure_in_container_control`）——金标里 `cases/compile/ref/`
+只有 3 条旧记录。`81138b60c` 补的是协调位 `4da099048` 那两处 `desc` 的账（那两笔确实补上了），
+但一条车只能补自己看得见的账。**归 `refcont`，我没有重录金标**（重录金标不是合并位的活）。
+
+## 本笔要说清的三件事
+1. **它是作者今晚要的那把尺子。** `var.assignment_and_let_chain_are_one_graph` 那条绿「没有判别力」：
+   它绿是因为那个程序的 `var` 链被折叠并剪枝，不是因为 `var` 不再是单元。本笔加的两组程序**折不掉**，
+   于是「单元还在」这件事第一次有了会红的读数。
+2. **`std::gir` 的差别恰好是「单元」与「携带的状态」。** `let` 孪生体把值当循环的第二个状态
+   （`LOOP` 2 states + `FILL` + `.1` ACCS），`var` 版是 1 个 state + GATE 过的 `:op/assn_l` + 循环之后的
+   `:var/get`。两张图并排放，差别就是作者第 2、3 项要动的地方。
+3. **`81138b60c` 是补协调位的账，不是补自己的。** `4da099048` 改了 `desc` 的引用文字却没重录哈希。
+   **改 `.cml` 的任何字节都改哈希，注释和 `desc` 也算**——归因不能按「这笔看起来碰不到哈希」去猜。
