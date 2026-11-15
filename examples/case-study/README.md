@@ -251,7 +251,8 @@ Three readings, and only the first is what the paper says today:
    the numbering follows the order the writer wrote the two `let`s in. That is a defect in the
    canonical numbering of `std::jgir canonical=true`, not in the writer, and not in the graph.
    -> It is a red of the canonical-numbering acceptance of principle 9.5 (the graph interface does
-   not see spelling by default), queued there and not a defect of this example.
+   not see spelling by default): `docs/handover/reviews/questions-2026-10-29.md`, the rework section
+   of 2026-11-15 night, item 2, and it is queued there, not a defect of this example.
 3. **Moved: one more edge, so not the same graph.** 63 nodes on both sides but **94 edges** against
    93, and the extra one is an ordering input on the `train` call, coming from `:io/println`. A sync
    block is a chain: "in a sync block the later statements depend on the earlier ones through sync
@@ -261,8 +262,9 @@ Three readings, and only the first is what the paper says today:
    canonicalization can make these two documents equal -- the paper's sentence about them needs the
    edge named, or a change that lets a call which cannot fault leave the block's chain.
    -> It is a red of rework item 4 (a pure call placed on a `sync` block's chain, principle 3.4:
-   `train` is recursive, and 3.4 counts a recursive call as possibly faulting), and not a defect of
-   this example.
+   `train` is recursive, and 3.4 counts a recursive call as possibly faulting) --
+   `docs/handover/reviews/questions-2026-10-29.md`, the rework section of 2026-11-15 night, item 4 --
+   and not a defect of this example.
 
 ## The `var`-to-SSA acceptance (red, and red for one reason)
 
