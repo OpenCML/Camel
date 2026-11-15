@@ -2808,6 +2808,73 @@ node_handle_t Builder::buildBranch(
     std::vector<draft_node_ref_t> joinWithInputs(
         withInputsOf(joinNode).begin(),
         withInputsOf(joinNode).end());
+    // A `var` is a name for values, so a write inside a branch is the branch's result. A statement
+    // branch joins no value, but when exactly one arm writes exactly one `var` of the enclosing
+    // graph the value can still be merged: the arm that wrote gives its value, which already stands
+    // in the join's WITH slot, and the arm that did not write (an `if` without `else`) gives the
+    // value the `var` had before the branch. That is the shape the ruling names:
+    // `if c then { x = 1 }` is `x = if c then 1 else x`.
+    // Narrow on purpose, and silent where it does not fit: the WITH slots are one per arm and not
+    // one per variable, so a branch whose arms write two or more `var`s has no slot to merge them
+    // in and keeps its cells; so does a `var` that escapes through a closure or a `var` argument,
+    // and so does a `var` parameter. A write inside a loop is carried state, the third item of the
+    // schedule: this path sees a JOIN, never a LOOP.
+    node_handle_t mergeVariable{};
+    if (joinsNoValue && (absentElse || dropsArmValues) && joinWithInputs.size() == 2) {
+        std::vector<node_handle_t> written;
+        for (const arm_ptr_t &arm : armList) {
+            for (node_handle_t variable : arm->touchedOrder) {
+                if (arm->touched.at(variable).writerAfter.has_value()) {
+                    written.push_back(variable);
+                }
+            }
+        }
+        if (written.size() == 1 && !escapingVariables_.contains(written.front()) &&
+            nodeKindOf(written.front()) != camel::runtime::GCNodeKind::Port) {
+            const node_handle_t variable = written.front();
+            Type *valueType              = valueTypeOf(nodeTypeOf(variable));
+            // The value the `var` has before the branch: the one its last write wrote, or the one
+            // the cell was made with when nothing had written it yet.
+            std::optional<draft_node_ref_t> beforeValue;
+            if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
+                std::vector<draft_node_ref_t> operands(
+                    normInputsOf(version).begin(), normInputsOf(version).end());
+                if (operands.size() >= 2) {
+                    beforeValue = operands[1];
+                }
+            } else {
+                std::vector<draft_node_ref_t> made(
+                    normInputsOf(variable).begin(), normInputsOf(variable).end());
+                if (!made.empty()) {
+                    beforeValue = made[0];
+                }
+            }
+            // The slot of the arm that wrote is the one whose value has the variable's type; the
+            // other holds what the arm that did not write gives (`null` for a missing `else`) and
+            // is where the value from before the branch goes.
+            int elseSlot = -1;
+            int armSlot  = -1;
+            for (size_t i = 0; i < joinWithInputs.size(); ++i) {
+                const node_handle_t slot = nodeDraftOf(variable)->ref(joinWithInputs[i]);
+                if (nodeTypeOf(slot) == valueType) {
+                    armSlot = static_cast<int>(i);
+                } else {
+                    elseSlot = static_cast<int>(i);
+                }
+            }
+            const Type *beforeType =
+                beforeValue.has_value()
+                    ? nodeTypeOf(nodeDraftOf(variable)->ref(*beforeValue))
+                    : nullptr;
+            // Both the arm's value and the one from before the branch must be of the variable's
+            // value type, or the join would carry two types: such a shape keeps its cell.
+            if (valueType != nullptr && beforeType == valueType && armSlot >= 0 && elseSlot >= 0) {
+                joinWithInputs[static_cast<size_t>(elseSlot)] = *beforeValue;
+                joinType                                     = valueType;
+                mergeVariable                                = variable;
+            }
+        }
+    }
     std::vector<draft_node_ref_t> joinCtrlInputs(
         ctrlInputsOf(joinNode).begin(),
         ctrlInputsOf(joinNode).end());
@@ -2836,6 +2903,21 @@ node_handle_t Builder::buildBranch(
     // wrote. It begins at BRCH and is complete at JOIN.
     std::vector<node_handle_t> capturedWrites;
     mergeArmVariables(armList, joinNode, capturedWrites);
+    if (mergeVariable != nullptr) {
+        // The join is this variable's version, not only the node its write was recorded through.
+        // mergeArmVariables records the write through the callee path, which leaves the variable's
+        // modifier alone, so a read written after the branch would still ask for the cell and take
+        // the value the cell was made with (`[DBG-I] var=3 read=13 at-read-time=3` while
+        // `[DBG-H] var=3 recorded=4` says the join was recorded). The join carries the value now,
+        // so it is the version, and what the read takes is what the branch gives.
+        setModifier(mergeVariable, joinNode);
+        // The write is what marked this variable as escaping (requireMutableArgument: the first
+        // parameter of `__assn__` is a `var` parameter). Here the write is the branch's own value and
+        // the cell never leaves the graph, so the mark is taken back for this one variable -- not
+        // for assignments in general, which is what broke a write inside a loop (carried state, the
+        // third item of the schedule).
+        escapingVariables_.erase(mergeVariable);
+    }
     const auto originOf = [&](node_handle_t variable) {
         const auto origin = captureOriginOf_.find(variable);
         return origin != captureOriginOf_.end() ? origin->second : variable;
