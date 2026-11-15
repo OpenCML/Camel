@@ -61,6 +61,11 @@
             "plans": ["feat/opt/adb67e081.plan.toml", "feat/compile/fold_arms.plan.toml"]
         },
         {
+            "comment": "The writing-freedom comparator: its case is the tool itself, so a change there selects the plan that runs it. The plan is fast, so the rule carries no layer. The tool also has a --group spelling reading, quoted in examples/case-study/README.md and not gated: it compares the case study's program with three writings of it that change no meaning, and two of the three differ today, which is a defect to report and not a red to keep.",
+            "paths": ["test/tools/writing-freedom.mjs"],
+            "plans": ["feat/compile/var.plan.toml"]
+        },
+        {
             "comment": "The corpus sweep tool: its case is the tool itself, so a change there selects the plan that runs it (a slow plan, so an ordinary change filters it out under --tier fast).",
             "paths": ["test/tools/cml-sweep.mjs"],
             "plans": ["feat/trans/cml_sweep.plan.toml"]
