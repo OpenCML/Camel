@@ -8,22 +8,26 @@
 # handed, which is how `byref` and the `stream` packer work.
 #
 # The other half of the ruling (a closure may not assign an outer name, and a captured `var` may not be
-# assigned between the making of the closure and its last use) is NOT REPORTED today: see the choice
-# recorded in `docs/handover/questions/q-2026-11-16-can-tee-capture-by-reference.cn.md`, where applying
-# by-value capture everywhere makes `tee`'s five cases fail with `Runtime graph 'side0' breaks its edge
-# invariants`. So the shapes on which that rule would fire keep their cell and produce no diagnostic.
+# assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
+# written: see the choice recorded in
+# `docs/handover/questions/q-2026-11-16-can-tee-capture-by-reference.cn.md`, where applying by-value
+# capture everywhere makes `tee`'s five cases fail with `Runtime graph 'side0' breaks its edge
+# invariants`. The paragraph records that state; `lane-closurediag` (2026-11-16) is the step that reports
+# it. The three `err.*` entries at the end of this plan are the three ways that write is written, and the
+# `transitional.*` entries are the same programs accepted -- they are red until the step that removes the
+# by-reference capture deletes them (the `tee` migration, the decision's step 2 to 3).
 #
 # The entries are of three kinds, and each says which it is:
 #   - `ok.*` -- legal under the rule as it stands (the regression guards; six of them came from the
 #     retired `hold/varclo` branch and pass on the main line unchanged);
-#   - `transitional.*` -- accepted TODAY because the capture is by reference; the ruling's answer would be
-#     a refusal, and the entry names the step that would turn it into one. None of these may be read as
-#     the design;
-#   - `err.*` -- refused today by a rule that does not depend on the capture's kind: an assignment to a
-#     `let` captured from the graph around it has no cell to write even in the by-reference world, which
-#     is the general assignment rule and not this rule's. Its code is `ImmutablePassedToVarParam`
-#     (`0x0300001D`) because `ClosureAssignsCapturedName` (`0x03000214`) was retired on the main line --
-#     `git grep` finds neither the name nor the code in `HEAD`.
+#   - `transitional.*` -- accepted BEFORE the reporting and refused after it; the entry names the step
+#     that removes it. None of these may be read as the design;
+#   - `err.*` -- refused. The first one is refused by a rule that does not depend on the capture's kind:
+#     an assignment to a `let` captured from the graph around it has no cell to write even in the
+#     by-reference world, which is the general assignment rule (`ImmutablePassedToVarParam`,
+#     `0x0300001D`). `ClosureAssignsCapturedName` was retired on the main line and came back with this
+#     branch under a new number (`0x03000213`), which is why the `0x03000214` the retired one carried now
+#     belongs to `CapturedVarWrittenAfterTheClosure`.
 
 [[tests]]
 name = "ok.update_reads_a_captured_var"
@@ -81,7 +85,7 @@ expect_stdout_exact = "5\n2\n"
 
 [[tests]]
 name = "err.assignment_to_a_captured_let_is_refused"
-desc = "A closure assigns a `let` bound outside it, and the program is refused -- by the general assignment rule, not by the closure rule: the write goes through `__assn__`'s `var` parameter, and a `let` has no cell to be written through, in a closure or outside one. The code pinned here is `ImmutablePassedToVarParam` (`0x0300001D`); the closure rule's own code, `ClosureAssignsCapturedName` (`0x03000214`), was retired with the by-value capture work and `git grep` finds it nowhere in `HEAD`. `desc` says "refused at the assignment" for the reason that still holds: the refusal is about the write, not about the capture."
+desc = "A closure assigns a `let` bound outside it, and the program is refused -- by the general assignment rule, not by the closure rule: the write goes through `__assn__`'s `var` parameter, and a `let` has no cell to be written through, in a closure or outside one. The code pinned here is `ImmutablePassedToVarParam` (`0x0300001D`); the closure rule's own code is `ClosureAssignsCapturedName` (`0x03000213`), which does not fire here because the write is refused before the capture is asked about. `desc` says "refused at the assignment" for the reason that still holds: the refusal is about the write, not about the capture."
 kind = "negative"
 case = "../../../cases/compile/var_closure/err_closure_assigns_let.cml"
 args = ["${case}"]
@@ -89,3 +93,44 @@ expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::ImmutablePassedToVarParam"
 expect_diagnostic_code = "0x0300001D"
 expect_output_contains = ["'k' is immutable and cannot be passed to a var parameter"]
+# ---- The rule's other half, asked from 2026-11-16 --------------------------------------------
+# Design principles 3.5 (197, 198) is reported from here on: a closure may not write a name it
+# captured, and a `var` a closure mentions may not be assigned from the making of the closure to its
+# last use. The three entries below are the three ways that write is written. The `transitional.*`
+# entries above are two of the same programs accepted, and they go red with this change: the step that
+# removes the by-reference capture (the `tee` migration) deletes them, it does not change them.
+#
+# What is NOT reported, and why: a closure written at a call's argument position is used by that call
+# (3.5, 198), and a closure the program puts into another value is used to the end of the scope. Neither
+# end is a source offset this build can prove, so neither shape is refused here -- under-reporting
+# leaves a program to the next step; over-reporting refuses one the design allows.
+
+[[tests]]
+name = "err.a_closure_assigns_a_captured_var"
+desc = "A function written inside a body assigns a `var` of that body. The closure holds the value the name had when it was made, so the write has nowhere to go (design principles 3.5, 197). The report names the closure and the name, and its help gives the three ways out: return the new value, write the state as a loop's carried state or a `fold`, or hold it in a `Ref`."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_closure_assigns_captured.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+
+[[tests]]
+name = "err.a_captured_var_assigned_after_the_closure"
+desc = "A closure is bound to a name, the `var` it read is assigned, and the closure is used again after that write: the write lands between the making of the closure and its last use (design principles 3.5, 198). `g()` would read 1 and not 2, which is the surprise the rule refuses to leave silent."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_captured_var_written_after_the_closure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
+
+[[tests]]
+name = "err.a_captured_var_handed_to_a_var_parameter"
+desc = "The same window, with the write written by a callee: a `var` parameter is the caller's cell and its write-back is the assignment written at the call (design principles 3.5, 192). `ok.update_reads_a_captured_var` above is the other side of this line -- there the closure is written at the call's argument position, so its last use is that call and the write-back counts after it."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarHandedToVarParameter"
+expect_diagnostic_code = "0x03000215"
