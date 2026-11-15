@@ -47,11 +47,11 @@ For the detailed rules see "Programs whose `main` takes parameters or returns a 
 
 Evaluation is driven by dependencies, and there is no fixed order of execution: an expression is evaluated if and only if its result is needed, that is, it reaches the function's return through data edges or control edges. Expressions that do not depend on each other have no order between them and may run out of order or in parallel.
 
-**A call with side effects that is outside a sync block and whose result is not used does not execute.** This is a natural consequence of evaluation by dependency; it is legal, not an error. The compiler gives the warning `SemanticDiag::EffectNotExecuted`, so that a forgotten `sync` does not go unnoticed:
+**Reads on demand, writes with their region.** A read -- of a variable or of an outside resource -- executes if and only if its result is needed. A **write to a resource outside the program is used by the region it is written in** (design principles 3.1): when the region runs, its writes to outside resources run, whether or not anything uses their results, and no `sync` is needed. A function body is a region, so a bare `println(x)` in a body that is not `sync` still runs:
 
 ```cml
 func greet(): int {
-    println('hello from greet')     // result unused and not in a sync block: not executed
+    println('hello from greet')     // a write in the body region: it runs, used result or not
     return 1
 }
 
@@ -62,17 +62,11 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'println' has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> greet.cml:2:5
-   |
- 2 |     println('hello from greet')     // result unused and not in a sync block: not executed
-   |     ^^^^^^^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the
-      variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync
-      block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
-
+hello from greet
 1
 ```
+
+What is dropped for lack of a reader is a **read**: an external read whose result nobody uses does not run, and the compiler reports `SemanticDiag::EffectNotExecuted` for it, so that a forgotten dependency does not go unnoticed. A write inside a region that does not run -- an arm that is not taken, a loop body nothing needs -- goes with that region.
 
 The warning goes to standard error and the program runs as usual. Turn it off with `-Wno-effect-not-executed`; treat warnings as errors with `-Werror` (see "Diagnostics" in [cli.md](../../cli.md)).
 
@@ -105,11 +99,11 @@ func greet(): int sync {
 
 ### 4.3.2 A function's behaviour is decided by the function itself
 
-A function is compiled into its own subgraph. A call only places this subgraph node into a larger graph and does not change its structure. So when a function whose body is not a sync block is called from a sync block, evaluation inside the function body is still by dependency:
+A function is compiled into its own subgraph. A call only places this subgraph node into a larger graph and does not change its structure. So when a function whose body is not a sync block is called from a sync block, the body is still **a region**, and the writes in it run:
 
 ```cml
 func log(x: int): int {
-    println(x)          // result unused, and the function body is not a sync block: not executed
+    println(x)          // the result is wanted by nobody, but it is a write: the body region runs it
     return x + 1
 }
 
@@ -122,10 +116,12 @@ func main(): int sync {
 ```
 
 ```text
+1
+2
 3
 ```
 
-(There is also a `SemanticDiag::EffectNotExecuted` warning pointing at `println(x)`.) The body of `main` is a sync block, and the two calls of `log` execute in order; but `println(x)` belongs to `log`'s own function body. To print, write `log` as `func log(x: int): int sync { ... }`.
+The body of `main` is a sync block, and the two calls of `log` execute in order, each printing its argument first (`1`, `2`); then `main` prints `3`. `println(x)` belongs to `log`'s own function body, and that body is a region, so it runs -- no `sync`, and no warning (4.2: reads on demand, writes with their region).
 
 ### 4.3.3 `sync` on a function body (function modifier)
 
@@ -133,12 +129,12 @@ func main(): int sync {
 
 ```cml
 func f(): int {
-    println('f')        // not executed: the function body is not a sync block
+    println('f')        // runs: the body is a region
     return 1
 }
 
 func g(): int sync {
-    println('g')        // executed: the function body is a sync block
+    println('g')        // runs, and in order with its neighbours
     return 2
 }
 
@@ -149,9 +145,12 @@ func main(): int sync {
 ```
 
 ```text
+f
 g
 3
 ```
+
+Both `f` and `g` print: a body without `sync` means only that the statements in it have no order from `sync`, not that its writes do not run.
 
 To make a function body execute in order, write the `sync` in the function body position; the body of a lambda is a block, and the `sync` is written before it: `(x: int) => sync { ... }`. A lambda head has no modifier (`sync (x: int) => ...` is a syntax error), and neither has a function type: `sync` is a property of a block, not of a type.
 

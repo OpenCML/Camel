@@ -2,13 +2,13 @@
 // Run: camel docs/tutorial/examples/06_callee_decides.cml
 
 func log(x: int): int {
-    println(x)          // result unused, body is not a sync block: not executed
+    println(x)          // a write in the body region: it runs, unused result or not
     return x + 1
 }
 
 func main(): int sync {
     let a = log(1)
     let b = log(a)
-    println(b)          // prints 3, and nothing else
+    println(b)          // prints 3
     return 0
 }
