@@ -217,6 +217,32 @@ struct EffectContainment {
     std::vector<std::string> beyond;
 };
 
+/// What the check looked at and what it declined to judge. A decline is not a verdict: it is the
+/// analysis saying it cannot name the resource, and the count is here so that "I looked and it is
+/// fine" and "I refused to look" cannot read the same in a log -- a checker that grows its declines
+/// to stay green has to make a number grow first.
+struct EffectContainmentReport {
+    /// Call sites whose footprint was compared with the type at the site.
+    size_t checked = 0;
+    /// Readings of unknown class (GraphFootprint::anyOf, or an access of class Unknown): the
+    /// analysis cannot name the resource, so a type that cannot spell it is not proved against it.
+    size_t anyUnknown = 0;
+    size_t anyObject = 0;
+    size_t anyHandle = 0;
+    /// A cell of a variable: not something a `uses` clause can spell (design effects plan 5.1).
+    size_t variableCell = 0;
+    /// A call site whose callee the graph does not resolve -- `__root__`'s indirect call of the
+    /// entry, today. This one is a gap in the analysis rather than a limit of the language: the type
+    /// at that call site is written, the checker just does not find the body behind the value. It
+    /// has its own count for that reason, and it is a to-do, not a silence.
+    size_t unresolved = 0;
+    /// Readings declined for a reason the counts above do not name.
+    size_t other = 0;
+    size_t declined() const {
+        return anyUnknown + anyObject + anyHandle + variableCell + unresolved + other;
+    }
+};
+
 /// The first call site of `graph` -- FUNC and CALL nodes, by node order -- whose callee does more
 /// than the type there says, or nullopt when every call site is covered. A type that carries no
 /// clause (Generic) promises nothing and `covers` says it covers anything: it is not a violation.
@@ -224,12 +250,12 @@ struct EffectContainment {
 ///
 /// Only what a type can state is judged: an external resource by name, and a handle a parameter
 /// names. The conservative half of a footprint -- the classes it "cannot name"
-/// (GraphFootprint::anyOf, so 134 of the false readings the first version produced), a cell of a
-/// variable (whose mutability is declared where the variable is, design effects plan 5.1, not in a
-/// `uses` clause) -- is not an access the callee is known to make, and a type that cannot spell it
-/// does not promise against it. Writing variables is what the order check asks about.
-std::optional<EffectContainment>
-effectContainmentViolation(const Program &program, const GCGraph &graph);
+/// (GraphFootprint::anyOf), a cell of a variable (whose mutability is declared where the variable
+/// is, design effects plan 5.1, not in a `uses` clause) -- is not an access the callee is known to
+/// make, and a type that cannot spell it does not promise against it. Writing variables is what the
+/// order check asks about. `report`, when given, counts what was judged and what was declined.
+std::optional<EffectContainment> effectContainmentViolation(
+    const Program &program, const GCGraph &graph, EffectContainmentReport *report = nullptr);
 
 /// The text forms (core.resources, test output).
 std::string toString(const NodeAccess &access);

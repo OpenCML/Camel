@@ -1119,8 +1119,32 @@ std::string accessUseText(const sem::ResourceAccess &access) {
 /// The accesses of `footprint` that `declared` does not cover, each judged by `covers` alone: one
 /// access is beyond the declaration when a source that is that access by itself is not covered.
 std::vector<std::string> beyondCoverage(
-    const sem::ResourceSignature &declared, const GraphFootprint &footprint, size_t withCount) {
+    const sem::ResourceSignature &declared, const GraphFootprint &footprint, size_t withCount,
+    EffectContainmentReport *report) {
     std::vector<std::string> beyond;
+    // The classes the footprint cannot name, counted rather than judged: a possibility is not an
+    // access, and a count that grows is how a checker that stops looking is made to say so.
+    if (report != nullptr) {
+        for (ResourceClass cls : footprint.anyOf) {
+            switch (cls) {
+            case ResourceClass::Unknown:
+                ++report->anyUnknown;
+                break;
+            case ResourceClass::Object:
+                ++report->anyObject;
+                break;
+            case ResourceClass::Handle:
+                ++report->anyHandle;
+                break;
+            case ResourceClass::Variable:
+                ++report->variableCell;
+                break;
+            default:
+                ++report->other;
+                break;
+            }
+        }
+    }
     for (const sem::ResourceAccess &access : footprint.accesses) {
         // What a type can state: an external resource, or a handle a parameter names. A cell of a
         // variable is not in a `uses` clause (design effects plan 5.1: mutability is declared where
@@ -1128,6 +1152,10 @@ std::vector<std::string> beyondCoverage(
         // neither is something the callee is known to do past its promise.
         if (access.resource.cls == ResourceClass::Variable ||
             access.resource.cls == ResourceClass::Unknown) {
+            if (report != nullptr) {
+                ++(access.resource.cls == ResourceClass::Variable ? report->variableCell
+                                                                 : report->anyUnknown);
+            }
             continue;
         }
         GraphFootprint single;
@@ -1191,7 +1219,7 @@ CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_
 } // namespace
 
 std::optional<EffectContainment>
-effectContainmentViolation(const Program &program, const GCGraph &graph) {
+effectContainmentViolation(const Program &program, const GCGraph &graph, EffectContainmentReport *report) {
     for (gc_cnt_t i = 0; i < graph.nodeCount(); ++i) {
         const gc_node_ref_t ref = static_cast<gc_node_ref_t>(i);
         const GCNode *node      = graph.node(ref);
@@ -1203,13 +1231,20 @@ effectContainmentViolation(const Program &program, const GCGraph &graph) {
         }
         const CallSite site = declaredClauseAt(program, graph, ref);
         if (site.declared == nullptr || site.callee == nullptr) {
+            if (report != nullptr) {
+                ++report->unresolved;
+            }
             continue;
+        }
+        if (report != nullptr) {
+            ++report->checked;
         }
         if (site.declared->mode != sem::ResourceSignature::Mode::Concrete) {
             continue; // a type that promises nothing covers everything (sem::covers)
         }
         const GraphFootprint footprint = footprintOf(program, site.callee);
-        std::vector<std::string> beyond = beyondCoverage(*site.declared, footprint, site.withCount);
+        std::vector<std::string> beyond =
+            beyondCoverage(*site.declared, footprint, site.withCount, report);
         if (beyond.empty()) {
             continue;
         }

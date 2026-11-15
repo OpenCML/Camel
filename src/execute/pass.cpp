@@ -98,6 +98,7 @@
 #include <format>
 #include <iostream>
 #include <map>
+#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -2681,8 +2682,8 @@ std::string effectContainmentText(
 /// Returns true when it refused: the diagnostic is recorded, and the caller fails the run.
 bool passBoundaryViolation(
     const context_ptr_t &ctx, const std::string &spec, const camel::runtime::Program &program,
-    const ProgramEffects &effectsBefore, bool preserveEffects = false,
-    bool commitChecks = true) {
+    const ProgramEffects &effectsBefore, bool preserveEffects = false, bool commitChecks = true,
+    std::ostream *summary = nullptr) {
     const ProgramEffects effectsAfter = collectEffects(program);
     const std::vector<std::pair<size_t, size_t>> pairs =
         matchedEffects(effectsBefore, effectsAfter);
@@ -2734,17 +2735,41 @@ bool passBoundaryViolation(
         // called must not exceed what the type at the call site declares. The message names the
         // call node and the accesses beyond its type, because those two are what a reader has to
         // look at: the type is the promise a caller relies on.
+        //
+        // The check also says what it declined to judge, when a caller asks for it
+        // (CAMEL_EFFECT_CONTAINMENT_SUMMARY): a decline is the analysis saying it cannot name the
+        // resource, and a number that only ever grows is how that is told apart from a pass whose
+        // program was fine.
+        camel::runtime::EffectContainmentReport report;
+        const camel::runtime::GCGraph *refused = nullptr;
+        std::optional<camel::runtime::EffectContainment> violation;
         for (const camel::runtime::GCGraph *graph : program.graphs()) {
             if (graph == nullptr) {
                 continue;
             }
-            const auto contained = camel::runtime::effectContainmentViolation(program, *graph);
-            if (!contained.has_value()) {
-                continue;
+            auto found = camel::runtime::effectContainmentViolation(program, *graph, &report);
+            if (found.has_value() && !violation.has_value()) {
+                refused   = graph;
+                violation = std::move(found);
             }
+        }
+        if (summary != nullptr && std::getenv("CAMEL_EFFECT_CONTAINMENT_SUMMARY") != nullptr) {
+            *summary << std::format(
+                "effect containment: checked {}, declined {} (any unknown {} / any object {} / "
+                "any handle {} / variable cell {} / unresolved {} / other {})\n",
+                report.checked,
+                report.declined(),
+                report.anyUnknown,
+                report.anyObject,
+                report.anyHandle,
+                report.variableCell,
+                report.unresolved,
+                report.other);
+        }
+        if (violation.has_value()) {
             ctx->rtmDiags()
                 ->of(RuntimeDiag::PassEffectContainment)
-                .commit(spec, effectContainmentText(program, *graph, *contained));
+                .commit(spec, effectContainmentText(program, *refused, *violation));
             CAMEL_LOG_INFO_S("Pass", "run | passes | FAIL {} (effect containment)", spec);
             return true;
         }
@@ -2889,7 +2914,7 @@ PassRunResult applyRegisteredPass(
     // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
     // through here, and a graph they broke reached the next pass unchecked.
     if (ctx != nullptr && passBoundaryViolation(ctx, spec, *produced, effectsBefore, false,
-                                                !pass->rewritesThroughTheGraphModuleOnly())) {
+                                                !pass->rewritesThroughTheGraphModuleOnly(), &os)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -3399,7 +3424,7 @@ PassApplyResult applyPassesDetailed(
             // applyRegisteredPass. Resource support and matched ordering are compared only by
             // an explicitly selected checker; this function-to-function result implies neither.
             if (passBoundaryViolation(ctx, p, *program, effectsBefore, false,
-                                      !pass->rewritesThroughTheGraphModuleOnly())) {
+                                      !pass->rewritesThroughTheGraphModuleOnly(), &os)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =
