@@ -1,5 +1,9 @@
 /**
  * Heap-heavy GC diagnostic workload covering arrays, structs, strings, closures, and mutation.
+ *
+ * The two arrays are built with `map` rather than with a `foreach` whose body appends to a captured
+ * `var`: a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
+ * `map` calls the element function once per element, in order, so the arrays are the same ones.
  */
 
 type Box = {
@@ -13,20 +17,13 @@ func score(box: Box): int {
 
 with <fn: (x: int) => int>
 func map_one(xs: int[]): int[] sync {
-    var out: int[] = []
-    xs->foreach<(x: int) => sync {
-        out = out->append<fn(x)>
-        return null
-    }>
-    return out
+    return xs->map<(x: int): int => fn(x)>
 }
 
 func main(): int sync {
-    var boxes: Box[] = []
-    (0..16)->foreach<(i: int) => sync {
+    let boxes = (0..16)->map<(i: int): Box => {
         let vals = [i, i + 1, i + 2]
-        boxes = boxes->append<{ label: 'box{}'->format<i>, values: vals }>
-        return null
+        return { label: 'box{}'->format<i>, values: vals }
     }>
 
     let first = boxes[0]

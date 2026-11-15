@@ -1,10 +1,14 @@
 /**
  * foreach nested with map both ways, with allocation in the element function, repeated `reps`
  * times (--arg reps=N); about 100 repetitions fill the elder space (32 MB) more than once.
- *   collect: a foreach whose body builds a row with map and appends it to a captured variable;
- *   lasts: a map whose element function fills a captured row with a foreach.
+ *   collect: a map whose element function builds a row with map;
+ *   lasts: a map whose element function fills a row with map.
  * The innermost functions call a named function, so that every scheduler reaches a safepoint
  * while the arrays built in the element function are still in use.
+ *
+ * The rows are built with `map` rather than with a `foreach` whose body appends to a captured
+ * `var`: a closure may not assign an outer name (the ruling of 2026-11-15, design principles 3.5).
+ * `map` calls the element function once per element, in order, so the rows are the same ones.
  */
 
 type Row = int[]
@@ -14,20 +18,11 @@ func add(a: int, b: int): int {
 }
 
 func collect(n: int, k: int): Row[] sync {
-    var out: Row[] = []
-    (0..n)->foreach<(i: int) => sync {
-        out = out->append<(0..n)->map<(j: int): int => add(i + j, k)>>
-        return null
-    }>
-    return out
+    return (0..n)->map<(i: int): Row => (0..n)->map<(j: int): int => add(i + j, k)>>
 }
 
 func ends_of(n: int, i: int, k: int): int sync {
-    var row: int[] = []
-    (0..n)->foreach<(j: int) => sync {
-        row = row->append<add(i + j, k)>
-        return null
-    }>
+    let row = (0..n)->map<(j: int): int => add(i + j, k)>
     return row[0] + row[n - 1] + len(row)
 }
 
