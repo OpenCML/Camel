@@ -183,7 +183,7 @@ timeout_ms = 20000
 # documents part wherever the unit is.
 [[tests]]
 name = "var.loop_write_outside_read_is_the_let_writing"
-desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing still carries the value in a unit (`:var/new`, `:op/assn_l`, the `:var/get` after the loop, and one loop state) where the `let` writing carries it as the loop's second state; green when a unit is lowered to SSA."
+desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing still carries the value in a unit (`:var/new`, `:op/assn_l`, the `:var/get` after the loop, and one loop state) where the `let` writing carries it as the loop's second state; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says is carried state (the read is after the loop, so no written value can answer it), which is a defect, not progress."
 kind = "differential"
 case = "../../../cases/compile/var/loop_write_outside_read_let.cml"
 args = ["${case}", "std::jgir", "canonical=true"]
@@ -224,7 +224,7 @@ timeout_ms = 20000
 # holds a port and nothing else.
 [[tests]]
 name = "var.closure_read_is_the_let_writing"
-desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing's closure graph holds a `:var/get` that reads the unit through the closure's context, and its body graph holds `:var/new` and `:op/assn_l`, where the `let` writing's closure receives the value as a captured input and has no such nodes; green when a unit is lowered to SSA."
+desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing's closure graph holds a `:var/get` that reads the unit through the closure's context, and its body graph holds `:var/new` and `:op/assn_l`, where the `let` writing's closure receives the value as a captured input and has no such nodes; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says another place reads (the closure reads the cell from its own graph), which is a defect, not progress."
 kind = "differential"
 case = "../../../cases/compile/var/closure_read_let.cml"
 args = ["${case}", "std::jgir", "canonical=true"]

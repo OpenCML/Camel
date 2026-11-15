@@ -35,7 +35,7 @@ expect_output_contains = ["The values 'f' and 'wide' meet where one type is aske
 
 [[tests]]
 name = "inference.unreachable_declaration.with"
-desc = "`bump` writes the module's `counter` and nothing calls it; `apply` reads the same cell. Every reading but `bump`'s own is the one the next test asserts, byte for byte."
+desc = "`bump` writes the module's `counter` and nothing calls it; `apply` reads the same cell. Every reading but `bump`'s own is the one the next test asserts, byte for byte. `apply` reads a whole number out of a variable cell, so its result is `fresh`: the caller gets the value, and nothing it does can reach the cell through it -- a whole number has no place to keep, so reading one out is a copy by definition. It read `unknown` while the read was a `:var/get` the analysis could not classify; the fold now hands `apply` the value the write produced, and the reading follows. A reading where the caller can observe the cell change after `apply` returned would refute it: that would make the result an alias of the cell, not a fresh value."
 kind = "behavior"
 case = "../../../cases/effects/unreachable_pair/with/reading.cml"
 args = ["${case}", "test::resources"]
@@ -46,7 +46,7 @@ verify_script = """
   const kept = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint') && !l.startsWith('RESOURCES footprint bump '))
   const expected = [
     'RESOURCES footprint __root__ read ambient reading:counter; write ambient stdout; external',
-    'RESOURCES footprint apply read variable with 0 whole',
+    'RESOURCES footprint apply read variable with 0 whole; result fresh',
     'RESOURCES footprint main read ambient reading:counter; write ambient stdout; external',
   ].join('\n')
   assert(kept.join('\n') === expected, 'the readings are not the recorded ones:\n' + kept.join('\n'))
@@ -55,7 +55,7 @@ verify_script = """
 
 [[tests]]
 name = "inference.unreachable_declaration.without"
-desc = "The same program with `bump` deleted: `__root__`, `apply` and `main` read exactly as they do with it, so a declaration nothing reaches is not part of another function's set. The two files are named alike because the module's name is part of the name a top-level `var` is known by."
+desc = "The same program with `bump` deleted: `__root__`, `apply` and `main` read exactly as they do with it, so a declaration nothing reaches is not part of another function's set. The two files are named alike because the module's name is part of the name a top-level `var` is known by. `apply`'s `result fresh` is the reading of the test above, and for the same reason: a whole number read out of a cell is a copy, so the caller cannot reach the cell through it. A reading where the two programs' `apply` lines differ would refute the claim this pair makes."
 kind = "behavior"
 case = "../../../cases/effects/unreachable_pair/without/reading.cml"
 args = ["${case}", "test::resources"]
@@ -66,7 +66,7 @@ verify_script = """
   const kept = out.split('\n').filter((l) => l.startsWith('RESOURCES footprint'))
   const expected = [
     'RESOURCES footprint __root__ read ambient reading:counter; write ambient stdout; external',
-    'RESOURCES footprint apply read variable with 0 whole',
+    'RESOURCES footprint apply read variable with 0 whole; result fresh',
     'RESOURCES footprint main read ambient reading:counter; write ambient stdout; external',
   ].join('\n')
   assert(kept.join('\n') === expected, 'the readings are not the recorded ones:\n' + kept.join('\n'))

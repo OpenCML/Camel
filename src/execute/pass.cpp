@@ -25,8 +25,8 @@
 #include "camel/passes/test/arm_loop_regions.h"
 #include "camel/passes/test/bounds.h"
 #include "camel/passes/test/broken_boundary.h"
-#include "camel/passes/test/commit_checks.h"
 #include "camel/passes/test/chunks.h"
+#include "camel/passes/test/commit_checks.h"
 #include "camel/passes/test/context_lifetime.h"
 #include "camel/passes/test/contexts.h"
 #include "camel/passes/test/control.h"
@@ -37,13 +37,13 @@
 #include "camel/passes/test/exec_plan.h"
 #include "camel/passes/test/exhaust_perm_space.h"
 #include "camel/passes/test/graph_faces.h"
-#include "camel/passes/test/plan_refs.h"
 #include "camel/passes/test/graph_release.h"
 #include "camel/passes/test/inlineuse.h"
 #include "camel/passes/test/keepfn.h"
 #include "camel/passes/test/loop_collect.h"
 #include "camel/passes/test/loop_inputs.h"
 #include "camel/passes/test/loop_range.h"
+#include "camel/passes/test/plan_refs.h"
 #include "camel/passes/test/regions.h"
 #include "camel/passes/test/retype.h"
 #include "camel/passes/test/rules.h"
@@ -96,10 +96,10 @@
 
 #include <algorithm>
 #include <atomic>
+#include <cstdlib>
 #include <format>
 #include <iostream>
 #include <map>
-#include <cstdlib>
 #include <memory>
 #include <mutex>
 #include <set>
@@ -2669,7 +2669,11 @@ std::string describeNodeOf(
     }
     if (!named.empty()) {
         return std::format(
-            "node {} of graph '{}' ({}, which is '{}')", ref, graph.name(), what, named);
+            "node {} of graph '{}' ({}, which is '{}')",
+            ref,
+            graph.name(),
+            what,
+            named);
     }
     return std::format("node {} of graph '{}' ({})", ref, graph.name(), what);
 }
@@ -2695,9 +2699,9 @@ std::string effectContainmentText(
 /// only when selected: by the optimizer's internal checks or graph::check_pass_boundary.
 /// A function-to-function type does not select preservation by itself.
 ///
-/// The commit checks of docs/design/effects/analysis.cn.md 4.1 are asked when `commitChecks` is set:
-/// a pass that rewrites through the graph module alone cannot build an effectful node, so for it
-/// "no extra effect, no lost order" is a theorem and it does not pay for them (the ruling of
+/// The commit checks of docs/design/effects/analysis.cn.md 4.1 are asked when `commitChecks` is
+/// set: a pass that rewrites through the graph module alone cannot build an effectful node, so for
+/// it "no extra effect, no lost order" is a theorem and it does not pay for them (the ruling of
 /// 2026-11-15, GraphIRPass::rewritesThroughTheGraphModuleOnly). Effect containment is the item of
 /// 4.1 this commit lands; order completeness is the other one and is not here yet.
 ///
@@ -2777,8 +2781,9 @@ bool passBoundaryViolation(
         }
         if (summary != nullptr && std::getenv("CAMEL_EFFECT_CONTAINMENT_SUMMARY") != nullptr) {
             *summary << std::format(
-                "effect containment: checked {}, declined {} (any unknown {} / any object {} / "
-                "any handle {} / variable cell {} / unresolved {} / other {})\n",
+                "effect containment: checked {} call site(s), declined {} reading(s) (any unknown "
+                "{} / any "
+                "object {} / any handle {} / variable cell {} / unresolved {} / other {})\n",
                 report.checked,
                 report.declined(),
                 report.anyUnknown,
@@ -2935,8 +2940,14 @@ PassRunResult applyRegisteredPass(
     // The check every pass ends with, for a pass a pass runs by name. Before 2026-11-02 this
     // site had none: `std::opt::saturate`, `rules::simplify` and the `std::opt` rounds came
     // through here, and a graph they broke reached the next pass unchecked.
-    if (ctx != nullptr && passBoundaryViolation(ctx, spec, *produced, effectsBefore, false,
-                                                !pass->rewritesThroughTheGraphModuleOnly(), &os)) {
+    if (ctx != nullptr && passBoundaryViolation(
+                              ctx,
+                              spec,
+                              *produced,
+                              effectsBefore,
+                              false,
+                              !pass->rewritesThroughTheGraphModuleOnly(),
+                              &os)) {
         return {nullptr, true};
     }
     const bool changed = programContentChanged(program, beforeRevisions, produced);
@@ -3445,8 +3456,14 @@ PassApplyResult applyPassesDetailed(
             // Generic admission checks ports, root entry/exit and effect credentials, as does
             // applyRegisteredPass. Resource support and matched ordering are compared only by
             // an explicitly selected checker; this function-to-function result implies neither.
-            if (passBoundaryViolation(ctx, p, *program, effectsBefore, false,
-                                      !pass->rewritesThroughTheGraphModuleOnly(), &os)) {
+            if (passBoundaryViolation(
+                    ctx,
+                    p,
+                    *program,
+                    effectsBefore,
+                    false,
+                    !pass->rewritesThroughTheGraphModuleOnly(),
+                    &os)) {
                 return {nullptr, PassApplyStatus::Failed};
             }
             if (PassSnapshotHandler snapshotHandler =

@@ -57,7 +57,7 @@ verify_script = """
 const out = input.normalized.stdout
 const line = out.split('\n').find(l => l.startsWith('effect containment: checked '))
 assert(line !== undefined, `no summary line in: ${out}`)
-const m = line.match(/^effect containment: checked (\d+), declined (\d+) \(any unknown (\d+) \/ any object (\d+) \/ any handle (\d+) \/ variable cell (\d+) \/ unresolved (\d+) \/ other (\d+)\)$/)
+const m = line.match(/^effect containment: checked (\d+) call site\(s\), declined (\d+) reading\(s\) \(any unknown (\d+) \/ any object (\d+) \/ any handle (\d+) \/ variable cell (\d+) \/ unresolved (\d+) \/ other (\d+)\)$/)
 assert(m !== null, `the summary line does not parse: ${line}`)
 const n = m.slice(1).map(Number)
 const [checked, declined, unknown, object, handle, variable, unresolved, other] = n
@@ -79,3 +79,32 @@ envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
 expect_exit = 0
 timeout_ms = 20000
 expect_stdout_contains = ["effect containment: checked"]
+
+# A type that carries no clause promises nothing, so a call site that has one cannot be in breach:
+# "no promise, no breach" is not the same sentence as "a reading the checker cannot name", and the
+# two must not collapse into one branch. Here the call site is a call through a parameter whose type
+# is `(x: int) => int -- no resource clause at all -- and the body behind it prints.
+[[tests]]
+name = "commit_checks.a_type_that_promises_nothing"
+desc = "A call through a parameter of function type carries a Generic signature. The body behind the value prints, and that is not a violation: there was no promise to break."
+kind = "behavior"
+case = "../../../cases/opt/commit_checks/generic_call.cml"
+args = ["${case}", "std::opt", "std::nvm"]
+envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
+expect_exit = 3
+timeout_ms = 20000
+expect_stdout_contains = ["3", "effect containment: checked"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout
+const line = out.split('\n').find(l => l.startsWith('effect containment: checked '))
+assert(line !== undefined, `no summary line in: ${out}`)
+// The call site must be *judged* and passed, not declined: a checker that answers "I cannot look at
+// this" would be right by accident here, and would stop being right the moment a type does promise
+// something. `declined` is what separates the two answers.
+const m = line.match(/checked (\d+) call site\(s\), declined (\d+) reading\(s\)/)
+assert(m !== null, `the summary line does not parse: ${line}`)
+assert(Number(m[1]) >= 3, `checked ${m[1]}: the three call sites of this program must be compared`)
+assert(Number(m[2]) === 0, `the generic call site was declined instead of judged: ${line}`)
+}
+"""
