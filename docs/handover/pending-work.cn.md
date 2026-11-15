@@ -37,3 +37,32 @@
 写这种顺序结论时，**把「不可能早于」和「一定晚不了」分开写**：
 - 「X 在 Y 之前不可能变绿」= 必要条件；
 - 「做了 Y，X 就会绿」= 充分条件，**必须有实测才能说**。
+
+## 3. 一处提交标题说的机制，diff 里没有（2026-11-15 记）
+
+`origin/fsh-dev` 的 `f257714fe` 标题写着：
+
+> Merge develop: a read after a branch takes the JOIN's value, **an unread unit is dropped through the edit interface**
+
+而 `6f686ac40..f257714fe` 的改动文件里，**与编辑接口相关的 0 个**：
+
+```
+src/compile/gir/builder.{h,cpp}
+src/compile/gir/builder_control.cpp
+src/compile/gir/builder_expr.cpp        ← 191 行，删除实现在这里
+test/cases/compile/var/arm_var.cml
+test/plans/feat/compile/var.plan.toml
+test/plans/feat/parse/golden/ast_hashes.txt
+test/tools/writing-freedom.mjs
+```
+
+**实际做的正是本文第 1 节记的那件事**：`dropCarriedVariableUnits` 在 SSA 路上新写的一份删除。
+
+### 为什么记它
+**一个合并标题是别人读这笔改动时最先读到的东西。** 标题说「走编辑接口」，而代码没走——**两种可能，处理方式不同**：
+- 若这是一句**期望/待办**（「应当走编辑接口」）⇒ 标题误导了事实；
+- 若这是作者的**判断**（认为现有实现已经算走编辑接口）⇒ 那我第 1 节的判断错了，需要作者指认编辑接口是哪一个。
+
+**在澄清之前，任何一方都不许按标题去改代码**——否则会为了对齐一句话而造出真正的第二个删除入口。
+
+**判据**：这件事以「代码里删除从哪条路走」为准，不以标题为准。第 1 节的待改项保持原样。
