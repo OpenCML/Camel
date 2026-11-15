@@ -1,0 +1,53 @@
+# E9：`pruneBranch` 把块的源序带走，五个程序因此换了顺序
+
+合并 `b0216ba32`（车道 `66491c3c7`，8 files，`+328/−0`）。作者三件里**第 ③ 件「E9 错值」的完成体**，
+**期望值一个字没改**。
+
+## 1. 四个用例、五个程序、一个缺陷两个形状
+`rc02_seed9`、`rc04_seed251`、`rc05_seed256`、`rc07_seed140`、`rc09_seed15`。
+`pruneBranch` 拆分支时把块的**源序带走**，两条效应之间从此**一条边都没有** ⇒ 顺序互换。
+先前分头立的 A16a 与 A16e 是同源：一个缺陷从两边看。
+
+## 2. 修在 `pruneBranch`（`src/passes/opt/generic/generic.cpp`，+41 行）
+反向验证：还原旧 `generic.cpp` 重建 ⇒ **正好 2 用例 × 4 后端 = 8 条转红，其余 124 条仍绿**；
+恢复后 `132/132`。**转绿数已知**：八条，且正好是点名「被拆掉的那个分支」的那两个程序。
+
+## 3. E9 全跑（`--matrix full`，500 seeds）
+2 个生成器拒绝，498 进矩阵，**49302 cells，2540 s**：`wrong 9 / refused 14 / crashed 20`，
+cells `249 / 795 / 89`。
+
+**`killed`：24 cells / 4 programs（seeds 52 85 416 457）**；另有 `HANG` 12 cells / 2 programs、
+`CPP_COMPILE_ERROR` 53 cells / 14 programs。**这是今晚所有线里唯一把 `killed` 报清的一份。**
+
+## 4. 最容易被读成回归的那个数：`crashed 3 → 20`
+20 个里 14 个是 `std::cpp` 的 `CPP_COMPILE_ERROR`、2 个 JIT `HANG`（不过 pass）、余 4 个是
+`std::opt` CRASH。车道取 **16 个 seed，用改前/改后两个二进制各跑一遍，三数逐一相同** ⇒
+上升是**基线机器与今日宿主 C++ 工具链的差**，不是行为变化。
+**没有这个对照，这份报告会被读成「E9 崩了 17 个」。**
+
+## 5. 闸门与定向验证
+fast 层 `9469 / 9343 / fail 83 / skip 11 / known 32`；**83 条与「无此改动」的基线红表逐条相同**，
+只多它加的 40 条测试。定向：`e9.plan.toml` + `frontend.plan.toml` = **140/140/0**。
+合并后整体 `--changed`（基线 `def4f3e47`）：**4313 / 4285 / 12，killed=0**，
+`check=gpu-plans total=146 pass=131 fail=15 skip=0 red_more=0`。
+
+## 6. 那 12 条红里，两条要说清来源
+- **`frontend.ast_snapshot` 不是 e9 那五个 `.cml`** —— 它们五个的哈希都在线上。缺的是
+  `test/cases/opt/commit_checks/generic_call.cml`，**是我挑 `6aa4fb81e`（汇总单位）时带进来的一笔**，
+  已在 `bce1ca118` 补记（`4327 行，1 增 0 减`）。
+  **下一次有人看到 `ast_snapshot` 红，别先去查新加的 `.cml`——这次查完会发现它们清白，然后放弃。**
+- **`camel_passes.cse.*` 那 6 条是旧账**，正是下面那条独立待办的验收条件之一。
+
+## 7. 独立待办（**不在这一笔里**）
+「位置交接收进编辑接口」（11-15 裁定 (ii)）：改 `draft.cpp#closeChainOver` / `eraseNode` /
+`replaceNode` 与 `stdlib/graph.cml` 的 `erase` / `replace`；删 `placeLostStatements`、cse 同形补丁、
+`set_sync_predecessor`。**验收**：`rc00_seed30` 与 `fold_cast` 读数不变 + `camel_passes.cse`
+（`value_positions.cml`）那条红转绿 + E9 慢层三数不升（**"三数不升"里就包含上面那个 `crash` 的对照**）。
+
+**它量到的事实**：这两个程序的错值与位置交接**无关**（涉及的 JOIN 与臂内语句都不持链位）。
+**同一天两条裁定指向同一片代码，不等于它们是同一件事** —— 捆在一起做，这 41 行会被埋进契约级重构里。
+
+## 8. 三件进度（作者 `65f8bdafe`）
+1. `var`→SSA：第一步（捕获规则）已落地；值端口、分支的值、循环的状态未做，两条标尺按设计为红。
+2. 计数做准：锚与两个原语已落；「最后一次使用」那一列、±1 计划条目、终结器路径删除未做。
+3. **E9 错值：五个已知的全修好并钉住**；全跑余下 `wrong 9` 是别的 seed，`crash/killed/hang` 已在第 3、4 节带对照报清。
