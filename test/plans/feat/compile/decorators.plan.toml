@@ -107,14 +107,14 @@ expect_stdout_exact = "18.0\n9.0\n"
 
 [[tests]]
 name = "blocks"
-desc = "Each block is written without and with a decorator (applied as it runs, or as the program is built) and prints the same on the four back ends: the value of the block and its `return`, a `return` in the middle of a function, its scope, a decorator of the program. In a sync body a block that is not `sync` and whose value nothing takes runs none of its statements, decorated or not (design principles 3.4); a `sync` block runs them, and writes a variable of the function."
+desc = "Each block is written without and with a decorator (applied as it runs, or as the program is built) and prints the same on the four back ends: the value of the block and its `return`, a `return` in the middle of a function, its scope, a decorator of the program. A block's prints run with the region around it, decorated or not, `sync` or not (design principles 3.1: a write to a resource outside the program is used by the region it is written in), and a `sync` block also orders them and writes a variable of the function. Under, the plain blocks of `unused`, `unused_d` and `unused_m` printed only their `after` line."
 kind = "behavior"
 case = "../../../cases/compile/decorators/blocks.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout_exact = "20 20\n7 7\nplain after\ndecorated after\ngranted after\nplain a\nplain b\nplain after\ndecorated a\ndecorated b\ndecorated after\n15 15\n4\n10\n"
+expect_stdout_exact = "20 20\n7 7\nplain a\nplain b\nplain after\ndecorated a\ndecorated b\ndecorated after\ngranted a\ngranted b\ngranted after\nplain a\nplain b\nplain after\ndecorated a\ndecorated b\ndecorated after\n15 15\n4\n10\n"
 
 [[tests]]
 name = "blocks.trees"
