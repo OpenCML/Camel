@@ -42,7 +42,7 @@ timeout_ms = 60000
 
 [[tests]]
 name = "variable_reads_not_traced"
-desc = "std::profile effect_trace="<file>": a store into a var is an effect event, creating and reading the variable (:var/new, :var/get) are not, under NodeVM, FastVM and inline + NodeVM."
+desc = "std::profile effect_trace="<file>": the println is the only effect event of a `var` declared, read and assigned -- a store into the `var` is not one, because a write to one of the program's own variables is a value and not an effect (the ruling of 2026-11-15, design principles 3.1, 3.5), and creating or reading the variable (:var/new, :var/get) emits nothing either -- under NodeVM, FastVM and inline + NodeVM. This case used to require the store in the trace (`:op/assn_l` beside `:io/println`); it now asserts exactly [\":io/println\"], so a trace that lost the println, or one that has grown a store again, is red: the absence is asserted by naming what is there, not by an empty set."
 kind = "behavior"
 tool = "python"
 case = "../../../cases/trans/effect_trace/effect_trace.py"

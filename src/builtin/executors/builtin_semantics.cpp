@@ -487,6 +487,13 @@ void declareBuiltinOperatorResources(std::span<const std::string_view> names) {
         }
         const std::string uri       = ":" + std::string(name);
         const std::string_view rest = name.substr(std::string_view("op/assn").size());
+        // Writing a variable is not an effect (design principles 3.1 and 3.5, the ruling of
+        // 2026-11-15): the cell is one of the program's own variables, so an assignment is
+        // state-only -- it changes what the program keeps and nothing outside it. The access list
+        // below says the same thing one operand at a time; this is the word that keeps the reading
+        // from falling back to "an effect was declared and nothing itemized, so it reaches
+        // everything".
+        table.set(uri, {.stateOnly = true});
         ResourceSpec spec;
         if (rest.empty() || rest == "_owned" || (rest.size() == 2 && rest[0] == '_')) {
             spec = ResourceSpec{.accesses = {cell(AccessMode::Write)}, .result = cellResult()};

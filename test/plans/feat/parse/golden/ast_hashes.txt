@@ -760,10 +760,10 @@ f47dcc7937755e16 ok test/cases/compile/decorators/blocks.cml
 0bd469c83e69448b ok test/cases/compile/decorators/grants.cml
 80e0a5fc46469505 no test/cases/compile/diag_fixes/leading_zero_09.cml
 607c66d8ec771881 ok test/cases/compile/diag_json/div_zero.cml
-71ffb21affb5d2f2 ok test/cases/compile/diag_json/dropped_effects.cml
+b5e95cdb6c42ec0d ok test/cases/compile/diag_json/dropped_effects.cml
 9b56cee8303fbb61 ok test/cases/compile/diag_json/dropped_effects_forward.cml
 fbbd8856a641f9d6 ok test/cases/compile/diag_json/warning_with_error.cml
-1fd64281a7b9c856 ok test/cases/compile/diag_json/warnings_visible.cml
+924008bf123eacdb ok test/cases/compile/diag_json/warnings_visible.cml
 9555801cfd01d934 ok test/cases/compile/diag_options/many_errors.cml
 5487549a7441f6fe ok test/cases/compile/diag_options/missing_module.cml
 a07405a17dbc18d7 ok test/cases/compile/diag_options/two_faults.cml
@@ -2111,6 +2111,7 @@ faf7a471321f79c8 ok test/cases/compile/var/closure_read.cml
 dbc6384762126cc9 ok test/cases/compile/var/loop_write_outside_read_let.cml
 e4d108190a15a18f ok test/cases/compile/var/step_let.cml
 6fe22c1e60003a30 ok test/cases/compile/var/step_var.cml
+751b3a4d87c66fdd ok test/cases/compile/var/unused_assigned_value.cml
 adae243535451365 ok test/cases/compile/var/var_parameter_write_at_exit.cml
 6ee4975163840c41 ok test/cases/compile/var/write_in_branch.cml
 29f664fcceaaa7c6 ok test/cases/compile/var/write_in_loop.cml

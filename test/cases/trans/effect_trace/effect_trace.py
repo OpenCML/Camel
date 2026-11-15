@@ -11,8 +11,11 @@
           (`payload_sha1` is its SHA-1), and the long one is cut on a character boundary below
           2048 bytes with `payload_truncated` set, its hash still covering the full text.
 
-  variables a `var` declared, read and assigned: the trace has the store (`:op/assn*`) and the
-          println; creating and reading the variable (`:var/new`, `:var/get`) emit nothing.
+  variables a `var` declared, read and assigned: the trace has the println and neither the
+          store (`:op/assn*`) nor `:var/new` / `:var/get`. A write to a `var` is a value and not
+          an effect (the ruling of 2026-11-15, design principles 3.1, 3.5), so it is not an
+          effect event; a trace nothing enters would pass a test of absence and test nothing, so
+          this one names the println it still requires.
 
 Usage: python effect_trace.py order|stage|payload|variables [--camel PATH]
 """
@@ -157,9 +160,13 @@ def main() -> int:
                 code, out, lines = run(program, passes, trace)
                 uris = [l["uri"] for l in lines]
                 check(code == 0 and out == "3\n", f"{passes}: prints 3")
-                check(uris == [":op/assn_l", ":io/println"],
-                      f"{passes}: the store and the println are traced, :var/new and :var/get "
-                      f"are not (got {uris})")
+                # The store used to be first here (`:op/assn_l`), with the println after it: it was
+                # an effect event until the ruling of 2026-11-15 (design principles 3.1, 3.5) made
+                # a write to one of the program's own variables a value. What is asserted is the
+                # whole list, and it names the println this case still requires: an empty trace
+                # would satisfy "no store" and say nothing about the trace.
+                check(uris == [":io/println"],
+                      f"{passes}: the println is traced and nothing else is (got {uris})")
         else:
             raise SystemExit(f"unknown mode: {mode}")
 
