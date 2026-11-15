@@ -1,0 +1,49 @@
+# 两个新条目，与一条关于合并的推论
+
+写于 2026-11-15 夜，merge lane，`def4f3e47`。两个条目都从一次**没有合进去**的合并里来：
+`lane-varclo`（`96a85a640`）并进 `def4f3e47` 后量得 `5334/5296/16`，撤回合并（分支未动）。
+
+## 条目一：containment 检查在 `std::defunctionalize` 上抓到同一句谎
+
+```
+callback.write_through_parameter_opt.nvm/fvm/jit/prl   4 条
+[Error]: Pass 'std::defunctionalize report=false' returned a program whose call site
+         reaches past the type it declares
+```
+
+- **只在 `lane-varclo` 的改动在场时触发**。两侧单跑都不出现——这是它的出生证明，不是它的限制：
+  一次合并是第三样东西，不是两边的并集。
+- 与 `tiles::compile`（`7a70b5fad` 的 `settleDeclarations`）**同族**：pass 在调用点上做的比它类型声明的多。
+  `tiles::compile` 已修；`std::defunctionalize` 是第二个。
+- 推论：`PassEffectContainment`（`0x040001AF`）从来不是「某一条 pass 的问题」，
+  而是**一条该对所有 pass 跑一遍的检查**。修法同 `tiles`：让调用点说实话，不给它开豁免。
+
+## 条目二：同一位置多条规则都成立时，谁先答
+
+四条用例，**一起才说明不是个案**：
+
+| 用例 | 期望 | 实得 |
+|---|---|---|
+| `test/cases/compile/var_closure/err_closure_assigns_let.cml` | `ClosureAssignsCapturedName` `0x03000214` | `ImmutablePassedToVarParam`（`'k' is immutable and cannot be passed…`） |
+| `test/cases/effects/err_capture_escapes.cml` | `ClosureAssignsCapturedName` `0x03000214` | `ClosureCaptureEscapes` 的报错（`':17:1 … does not keep it'`） |
+| `test/cases/linear/byref/let_assigned.cml` | —— | `AssignmentTargetNotVariable` |
+| `test/cases/linear/byref/let_compound_assigned.cml` | —— | `AssignmentTargetNotVariable` |
+
+同族前例：`afdd0fb29`「具体拒绝先答 `let` 赋值目标」。
+
+**处置不是改期望值**。「这个位置该报哪一条」要先定规则，再改用例；在规则定下来之前，
+把实得值写进期望等于把优先级问题藏起来。**注意**：`err.*` 两条是自测用例——
+一条自测用例拿到它不声称的诊断时，合进来就会变成「已知红」，下一个人会去修产品而不是修用例。
+
+## 推论：合并是第三样东西
+
+1. 一支车道自己的绿，**不是**关于合并后那棵树的证据。谁都不许用「我这边是绿的」为合并背书。
+2. `--changed` **必须在合并结果上跑**；两侧分别跑再相加，会把「只在合并后存在」的红整类漏掉。
+3. 合并结果上的新红**优先于任何一侧的旧账**——它最新，也最无人认领。
+
+## 同一批读数的另一半
+
+`varclo` 并进基线后红从 **66 降到 16**，减少的 50 条全是「分支落后」造成的旧账
+（`path_assigned.allocs` 4、`registry.no_env_switches`、`new_values` 23、`var_read_before_write` 6、
+`camel_passes.cse` 6、`declared_type` 4 等，主干都已修）。
+**落后会把别人的旧红算到它头上，领先会把别人的新红算给它** —— 两边都要同一套计划做对照。
