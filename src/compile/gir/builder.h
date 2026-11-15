@@ -1033,6 +1033,13 @@ class Builder {
     // or a write written inside a loop, which is carried state (schedule item 3). The fold reads
     // this set, and the straight-line definition that decides the loop case is written there.
     std::unordered_set<node_handle_t> writeOnlyEscaping_;
+    /// The value a branch carries for a `var` its arms wrote: the cell, and the JOIN the branch's
+    /// value is. A write inside an arm is the branch's result (design principles 3.5, the ruling of
+    /// 2026-11-15), so a read written after the branch takes that join and no `:var/get` is made.
+    /// It is recorded here rather than inferred from the JOIN's kind: a branch that carries a value
+    /// of its own is a join too, and it is no version of any variable. A later straight-line write
+    /// of the same variable replaces it (recordWrite).
+    std::unordered_map<node_handle_t, node_handle_t> carriedVersions_;
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
     // callee's capture table that says which variables it writes, and, per call, the variable
     // each version is of and the access node of each part made so far. Part 0 is the return

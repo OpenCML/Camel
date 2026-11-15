@@ -2810,23 +2810,49 @@ node_handle_t Builder::buildBranch(
         withInputsOf(joinNode).begin(),
         withInputsOf(joinNode).end());
     // A `var` is a name for values, so a write inside a branch is the branch's result. A statement
-    // branch joins no value, but when exactly one arm writes exactly one `var` of the enclosing
-    // graph the value can still be merged: the arm that wrote gives its value, which already stands
-    // in the join's WITH slot, and the arm that did not write (an `if` without `else`) gives the
-    // value the `var` had before the branch. That is the shape the ruling names:
-    // `if c then { x = 1 }` is `x = if c then 1 else x`.
-    // Narrow on purpose, and silent where it does not fit: the WITH slots are one per arm and not
-    // one per variable, so a branch whose arms write two or more `var`s has no slot to merge them
-    // in and keeps its cells; so does a `var` that escapes through a closure or a `var` argument,
-    // and so does a `var` parameter. A write inside a loop is carried state, the third item of the
-    // schedule: this path sees a JOIN, never a LOOP.
+    // branch joins no value, but the arms' writes are still that branch's value: each arm gives
+    // what it wrote, which already stands in the join's WITH slot, and an arm that did not write
+    // (`if c then { x = 1 }`) gives the value the `var` had before the branch. That is the shape
+    // the ruling names: `if c then { x = 1 }` is `x = if c then 1 else x`, and
+    // `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else 2` (design principles 3.5,
+    // the ruling of 2026-11-15: `var` is lowered to SSA, a branch assignment is a result of the
+    // branch).
+    //
+    // The carry is one variable per branch, because the WITH slots are one per arm and not one per
+    // variable: a branch whose arms write two or more `var`s has no slot to merge them in and keeps
+    // its cells. A `var` that escapes through a closure or a `var` argument keeps its cell too, and
+    // so does a `var` parameter. A write inside a loop is carried state, the third of the places
+    // the ruling names: this path sees a JOIN, never a LOOP.
     node_handle_t mergeVariable{};
-    if (joinsNoValue && (absentElse || dropsArmValues) && joinWithInputs.size() == 2) {
+    if (joinsNoValue && joinWithInputs.size() == armList.size() && !armList.empty()) {
+        // For each distinct `var` the arms wrote: one entry per arm, holding the value that arm's
+        // last write stored. The arm's own block value is not it -- `sync { x = 5; println(..) }`
+        // writes `5` and gives the print's value -- and what the branch carries is the write.
+        struct CarriedArm {
+            bool wrote = false;
+            std::optional<draft_node_ref_t> value;
+        };
         std::vector<node_handle_t> written;
-        for (const arm_ptr_t &arm : armList) {
-            for (node_handle_t variable : arm->touchedOrder) {
-                if (arm->touched.at(variable).writerAfter.has_value()) {
+        std::unordered_map<node_handle_t, std::vector<CarriedArm>> perArm;
+        for (size_t a = 0; a < armList.size(); ++a) {
+            std::unordered_set<node_handle_t> here;
+            for (node_handle_t variable : armList[a]->touchedOrder) {
+                const auto &touched = armList[a]->touched.at(variable);
+                if (!touched.writerAfter.has_value() || !here.insert(variable).second) {
+                    continue;
+                }
+                if (!perArm.contains(variable)) {
                     written.push_back(variable);
+                    perArm[variable].assign(armList.size(), CarriedArm{});
+                }
+                CarriedArm &arm = perArm[variable][a];
+                // The last write of the arm, and the value it stored: a write's second operand.
+                std::vector<draft_node_ref_t> operands(
+                    normInputsOf(*touched.writerAfter).begin(),
+                    normInputsOf(*touched.writerAfter).end());
+                if (operands.size() >= 2) {
+                    arm.wrote = true;
+                    arm.value = operands[1];
                 }
             }
         }
@@ -2834,45 +2860,63 @@ node_handle_t Builder::buildBranch(
             nodeKindOf(written.front()) != camel::runtime::GCNodeKind::Port) {
             const node_handle_t variable = written.front();
             Type *valueType              = valueTypeOf(nodeTypeOf(variable));
+            std::vector<CarriedArm> &arms = perArm[variable];
+            size_t wroteArms = 0;
+            for (const CarriedArm &arm : arms) {
+                if (arm.wrote) {
+                    ++wroteArms;
+                }
+            }
             // The value the `var` has before the branch: the one its last write wrote, or the one
-            // the cell was made with when nothing had written it yet.
+            // the cell was made with when nothing had written it yet. Only an arm that did not
+            // write needs it.
             std::optional<draft_node_ref_t> beforeValue;
-            if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
-                std::vector<draft_node_ref_t> operands(
-                    normInputsOf(version).begin(), normInputsOf(version).end());
-                if (operands.size() >= 2) {
-                    beforeValue = operands[1];
-                }
-            } else {
-                std::vector<draft_node_ref_t> made(
-                    normInputsOf(variable).begin(), normInputsOf(variable).end());
-                if (!made.empty()) {
-                    beforeValue = made[0];
-                }
-            }
-            // The slot of the arm that wrote is the one whose value has the variable's type; the
-            // other holds what the arm that did not write gives (`null` for a missing `else`) and
-            // is where the value from before the branch goes.
-            int elseSlot = -1;
-            int armSlot  = -1;
-            for (size_t i = 0; i < joinWithInputs.size(); ++i) {
-                const node_handle_t slot = nodeDraftOf(variable)->ref(joinWithInputs[i]);
-                if (nodeTypeOf(slot) == valueType) {
-                    armSlot = static_cast<int>(i);
+            if (wroteArms != armList.size()) {
+                if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
+                    // A version that carries the value itself -- a write, or a branch that carried
+                    // an earlier write -- is the value from before this branch; one that carries
+                    // the cell is a write, and what a read wants is the value it stored.
+                    Type *versionType = nodeTypeOf(version);
+                    if (versionType != nullptr && valueTypeOf(versionType) == versionType) {
+                        beforeValue = nodeIdOf(version);
+                    } else {
+                        std::vector<draft_node_ref_t> operands(
+                            normInputsOf(version).begin(), normInputsOf(version).end());
+                        if (operands.size() >= 2) {
+                            beforeValue = operands[1];
+                        }
+                    }
                 } else {
-                    elseSlot = static_cast<int>(i);
+                    std::vector<draft_node_ref_t> made(
+                        normInputsOf(variable).begin(), normInputsOf(variable).end());
+                    if (!made.empty()) {
+                        beforeValue = made[0];
+                    }
                 }
             }
-            const Type *beforeType =
-                beforeValue.has_value()
-                    ? nodeTypeOf(nodeDraftOf(variable)->ref(*beforeValue))
-                    : nullptr;
-            // Both the arm's value and the one from before the branch must be of the variable's
-            // value type, or the join would carry two types: such a shape keeps its cell.
-            if (valueType != nullptr && beforeType == valueType && armSlot >= 0 && elseSlot >= 0) {
-                joinWithInputs[static_cast<size_t>(elseSlot)] = *beforeValue;
-                joinType                                     = valueType;
-                mergeVariable                                = variable;
+            // Each slot of the join takes the value that arm wrote, or -- for an arm that did not
+            // write (an `if` without `else`) -- the value the `var` had before the branch. Every
+            // one of them must be of the variable's value type, or the join would carry two types:
+            // such a shape keeps its cell.
+            bool carried = valueType != nullptr;
+            for (const CarriedArm &arm : arms) {
+                const std::optional<draft_node_ref_t> &value =
+                    arm.wrote ? arm.value : beforeValue;
+                if (!value.has_value() ||
+                    nodeTypeOf(nodeDraftOf(variable)->ref(*value)) != valueType) {
+                    carried = false;
+                    break;
+                }
+            }
+            if (carried) {
+                for (size_t a = 0; a < arms.size(); ++a) {
+                    joinWithInputs[a] = arms[a].wrote ? *arms[a].value : *beforeValue;
+                }
+                joinType      = valueType;
+                mergeVariable = variable;
+                // The branch is this variable's write from here on: a read written after it takes
+                // the join, and the `sync` block that used to order such a read is not needed.
+                carriedVersions_[variable] = joinNode;
             }
         }
     }

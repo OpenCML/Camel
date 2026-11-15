@@ -556,6 +556,9 @@ void Builder::setModifier(node_handle_t input, node_handle_t modifier) {
 void Builder::recordWrite(node_handle_t variable, node_handle_t exit, bool throughCallee) {
     if (!throughCallee) {
         writesOf_[variable].push_back(exit);
+        // A write written here is the variable's new version: the value a branch carried for it
+        // stands for the write of that branch only, and stops being the version past this one.
+        carriedVersions_.erase(variable);
     }
     // `A(i); modify(i); B(i)` gives A -> modify -> B (design principles log 2.6). The second half
     // follows from setModifier. The first half is the read this write meets: every read takes the
@@ -770,6 +773,15 @@ node_handle_t Builder::callValuePartOf(node_handle_t call, uint32_t part) {
 }
 
 node_handle_t Builder::valueVersionOf(node_handle_t variable) {
+    // A branch whose arms wrote the variable carries the write as its own value (design principles
+    // 3.5, the ruling of 2026-11-15: `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else
+    // 2`). That join is recorded when the branch is built, because a JOIN that carries a value is
+    // not by itself a write of this variable -- the value of `let r = if c then ...` is a join too,
+    // and it is no version of anything. A later write of the same variable on a straight line
+    // replaces it, and `recordWrite` drops the record then.
+    if (const auto carried = carriedVersions_.find(variable); carried != carriedVersions_.end()) {
+        return carried->second;
+    }
     const auto modifier = modifierOf(variable);
     if (!modifier.has_value() || !sameGraph(*modifier, currGraph_)) {
         return nullptr;
@@ -1720,6 +1732,18 @@ node_handle_t Builder::readVariableThrough(node_handle_t variable, camel::core::
     // cell as its data port and the write orders it, which a control input stands in for
     // (Builder::orderAfterLastWriter). Before any write the version is the cell :var/new made.
     node_handle_t version = valueVersionOf(variable);
+    if (version != nullptr) {
+        // A version that carries the variable's value rather than its cell -- a branch whose arms
+        // wrote it, so the JOIN is the write (design principles 3.5, the ruling of 2026-11-15) --
+        // is the read itself: there is nothing to take out of a cell, and `:var/get` would be an
+        // operator on a node that holds no cell. The data edge from the write is the whole tie the
+        // read needs, so it is the node the read stands for and the write's place orders whoever
+        // reads it.
+        Type *versionType = nodeTypeOf(version);
+        if (versionType != nullptr && valueTypeOf(versionType) == versionType) {
+            return version;
+        }
+    }
     if (version == nullptr) {
         // The conservative writer set may have counted a call of this graph as a possible writer of
         // the variable before this graph had captured it (a call through a function value writes a
