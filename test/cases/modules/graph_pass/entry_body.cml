@@ -1,0 +1,62 @@
+// A pass that reads the graph of the program's entry function, with the module's default reads
+// only (design principles 9.5, "the graph interface does not see how a program is written"): the
+// graph of the function the pipeline hands it, the call that graph makes, and the graph that call
+// goes to. Nothing here names a graph to pick one, and nothing takes an element by its place in a
+// list ordered by the number the writer's creation order gave it.
+import { Graph, Node, callee, graph_of, graphs_of, name, nodes, op, op_name } from graph
+import { is_function } from types
+
+// Whether the node names a graph: a call written by name, or a call through a function value the
+// graph holds. A parameter of function type names none -- which graph runs is decided when it
+// runs.
+func namesAGraph(n: Node): bool {
+    return callee(n) != null
+}
+
+func isMultiply(n: Node): bool {
+    return match op(n) {
+        case null => false
+        case o => op_name(o) == ':op/mul_l'
+    }
+}
+
+func isProgramGraphName(g: Graph): bool {
+    return name(g) == '__root__'
+}
+
+// The multiplies of the graph `call` goes to, or those of `fallback` when the call names none.
+func mulsReachedBy(call: Node, fallback: Graph): int {
+    let entry = match callee(call) {
+        case null => fallback
+        case g => g
+    }
+    return len(nodes(entry)->filter<isMultiply>)
+}
+
+/// Reads the entry function's graph: the graph of the program makes one call, and the graph that
+/// call goes to is the body a pass is here to rewrite. A node of the body is read where the pass
+/// found it -- the graph of the program holds no operator, the body of the entry function holds
+/// the one multiply `main` writes.
+export func body::<F>(p: F): F! when is_function::<F>() sync {
+    let programGraph = graph_of(p)
+    let calls = nodes(programGraph)->filter<namesAGraph>
+    let muls = if len(calls) == 1 then mulsReachedBy(calls[0], programGraph) else -1
+    println(len(calls))
+    println(muls)
+    return if muls >= 0
+        then p
+        else error(
+            'NoEntryCall',
+            'the graph of the program makes no call to follow to the graph of its entry function'
+        )
+}
+
+/// The root graph is still the graph `graph_of` gives a pass, and it is still reached by name: the
+/// default reading of the entry function's graph does not take the root graph away.
+export func root_still::<F>(p: F): F! when is_function::<F>() sync {
+    let programGraph = graph_of(p)
+    let named = graphs_of(p)->filter<isProgramGraphName>
+    let same = if len(named) == 1 then named[0] == programGraph else false
+    println(if same then 'ROOT_STILL_THERE' else 'ROOT_LOST')
+    return p
+}

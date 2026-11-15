@@ -104,28 +104,34 @@ inline runtime::PortRole toPortRole(LinkType type) {
 /// The draft a handle names, once the handle is known to name it. An address says where a draft
 /// lives, not which draft it is: the allocator hands a destroyed draft's memory to the next one, so
 /// a handle whose draft is gone would otherwise read that other graph's node at the same id and
-/// hand back a plausible value of the wrong graph. The epoch the handle carries says which draft it
-/// was made in, which is what makes it safe to dereference the address it holds.
+/// hand back a plausible value of the wrong graph. The registration says which draft was registered
+/// at the address and which epoch it was made with, and it is asked *instead* of the draft: a
+/// handle outlives the draft it names, so the bytes at its address are not this call's to read --
+/// not even the epoch that decides the question. A handle the registration does not name is refused
+/// here rather than answered with a draft nobody owns.
 inline runtime::GraphDraft *nodeDraftOf(node_handle_t node) {
     GUARD(node != nullptr, "Draft node is null.");
+    DraftGraphBuilder *owner = DraftGraphBuilder::fromRef(node);
     GUARD(
-        node.epoch == node.draft->epoch(),
+        owner != nullptr,
         std::format(
             "A draft node names the draft it was made in, and every draft is made with an epoch of "
-            "its own: this handle was made in epoch {} at {} and that address now holds epoch {}, "
-            "so the handle outlived its graph.",
+            "its own: this handle was made in epoch {} at {}, and no draft of that epoch is "
+            "registered at that address, so the handle outlived its graph.",
             node.epoch,
-            static_cast<const void *>(node.draft),
-            node.draft->epoch()));
-    return node.draft;
+            static_cast<const void *>(node.draft)));
+    return &owner->view();
 }
 
 /// Whether a handle still names the draft it was made in. `nodeDraftOf` guards this question and
 /// answers it by aborting; a caller that walks a table of handles the builder keeps across bodies
 /// (`variables_`, the stores a body made, the captures it took) has to ask it first, because a body
-/// a pass has measured is let go and the allocator hands its memory to the next draft.
+/// a pass has measured is let go and the allocator hands its memory to the next draft. The answer
+/// comes from the registration, which wrote the address and the epoch down while the draft was
+/// alive: asking the draft whether it is the one the handle names would read the very memory whose
+/// ownership is the question, and a released draft's leftover bytes answer "yes".
 inline bool nodeIsCurrent(node_handle_t node) {
-    return node != nullptr && node.draft != nullptr && node.epoch == node.draft->epoch();
+    return node != nullptr && node.draft != nullptr && DraftGraphBuilder::fromRef(node) != nullptr;
 }
 
 inline runtime::GCNodeKind nodeKindOf(node_handle_t node) {
