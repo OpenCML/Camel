@@ -1,0 +1,17 @@
+/**
+ * A write to a `var` whose value nobody reads is a value nobody uses, and that is the whole report.
+ *
+ * Assigning to a `var` is not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15):
+ * the cell is one of the program's own variables, so what a write drops when nothing reads it is a
+ * value, not an effect. `x = 1` below is exactly that -- the variable is read before the write, so
+ * the variable is used, and the value this write stores is not. The one diagnostic is the family's
+ * ("a result nobody uses"), and it says nothing about effects or a `sync` block; `IgnoredSideEffect`
+ * and `EffectNotExecuted` are the other two things and neither of them is about this.
+ */
+
+func main(): int {
+    var x = 0;
+    let y = x;
+    x = 1;
+    return println(y)
+}

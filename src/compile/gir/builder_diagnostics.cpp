@@ -176,25 +176,15 @@ void Builder::reportIgnoredCapturedWrites() {
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
     // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
-    // that names a resource means the call touches it, `pure` means it touches nothing, and a
-    // `var` parameter is a resource by itself, so a signature that leaves it out is still read as
-    // one.
+    // that names a resource means the call touches it, `pure` means it touches nothing.
+    // A `var` parameter is not an effect of the call (design principles 3.1 and 3.5, the ruling of
+    // 2026-11-15): what it writes is a value passed in and handed back, written into the caller's
+    // cell where the call stands, so the shape of a signature says nothing about anything outside
+    // the program. An assignment is that shape as well -- its first parameter is a `var` cell --
+    // and it is declared state-only for the same reason (builtin_semantics.cpp).
     const auto clauseSaysEffect = [](const FunctionType *func) {
         return func->resources().mode == sem::ResourceSignature::Mode::Concrete &&
                !func->resources().pure();
-    };
-    const auto shapeSaysEffect = [](const FunctionType *func) {
-        for (size_t i = 0; i < func->normTypesCount(); ++i) {
-            if (func->normIsVarAt(i)) {
-                return true;
-            }
-        }
-        for (size_t i = 0; i < func->withTypesCount(); ++i) {
-            if (func->withIsVarAt(i)) {
-                return true;
-            }
-        }
-        return false;
     };
     const auto calleeOf = [&](node_handle_t func) { return graph->funcTarget(func); };
     switch (nodeKindOf(node)) {
@@ -226,7 +216,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             return true;
         }
         const FunctionType *type = callee->funcType();
-        return type != nullptr && (shapeSaysEffect(type) || clauseSaysEffect(type));
+        return type != nullptr && clauseSaysEffect(type);
     }
     case runtime::GCNodeKind::Call: {
         // A call through a function value: the value's type is all there is to read at this call,
@@ -242,7 +232,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             return false;
         }
         const auto *func = tt::as_ptr<FunctionType>(type);
-        return !func->resources().pure() || shapeSaysEffect(func);
+        return !func->resources().pure();
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
@@ -675,9 +665,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         std::string subject;
         switch (nodeKindOf(node)) {
         case runtime::GCNodeKind::Oper: {
-            const std::string &name = graph->operTarget(node)->name();
-            subject = name.starts_with("__assn") ? std::string("The assignment")
-                                                 : std::format("The call of '{}'", name);
+            subject = std::format("The call of '{}'", graph->operTarget(node)->name());
         } break;
         case runtime::GCNodeKind::Func:
             subject = std::format("The call of '{}'", graph->funcTarget(node)->name());
@@ -698,7 +686,34 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::EffectNotExecuted)
             .atOrigin(origin)
-            .commit(subject, "nothing depends on it and it is not in a sync block");
+            .commit(subject, "nothing needs what it gives, so nothing runs it");
+    }
+    // A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
+    // 2026-11-15: assigning to a `var` is not an effect). What such a write drops is a value, and a
+    // dropped value is what this says: the same thing one rule says about any value nobody uses
+    // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. The write is not
+    // an effect, so EffectNotExecuted above is not the place for it: that one is about a statement
+    // that reaches outside the program and the region it is written in.
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id) || needed.contains(id)) {
+            continue;
+        }
+        if (graph == rootGraph_ && !(id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
+            continue; // another module's top-level write, reported by that module's own pass
+        }
+        node_handle_t node = draft.ref(id);
+        if (nodeKindOf(node) != runtime::GCNodeKind::Oper) {
+            continue;
+        }
+        const auto target = graph->operTarget(node);
+        if (target == nullptr || !target->name().starts_with("__assn")) {
+            continue;
+        }
+        camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+        if (origin == camel::source::kInvalidOriginId && sourceContext) {
+            origin = sourceContext->debugMap().graphOrigin(graph->graphId());
+        }
+        diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
     }
     // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
     // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no

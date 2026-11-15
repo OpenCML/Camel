@@ -1,9 +1,9 @@
 /**
  * Which effects run is decided by design principles 3.1: a write to a resource outside the program
  * is used by the region it is written in, so a bare `println` here runs (the author's ruling of
- * 2026-11-15, "区域的根"); a call, an assignment and a branch stand on a read of their value or a
- * place in a sync chain, so the ones nothing depends on do not run and each gets the warning
- * SemanticDiag::EffectNotExecuted. Nothing in a sync block does, nor does a pure expression.
+ * 2026-11-15, "区域的根"); a call and a branch stand on a read of their value or a place in a sync
+ * chain, so the ones nothing depends on do not run and each gets SemanticDiag::EffectNotExecuted.
+ * An assignment is not an effect: line 35 drops a value, reported as UnusedAssignedValue.
  * Output: `operator`, `noisy`, `4`, `kept 1`, `0 5`.
  */
 

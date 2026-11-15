@@ -79,7 +79,7 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
 assert(out === '', `the loop body does not run, so nothing is printed, got: ${out}`)
-assert(input.normalized.stderr.includes('The loop has side effects but is never executed'), `the loop is what does not run, and the warning says so: ${input.normalized.stderr}`)
+assert(input.normalized.stderr.includes('The loop reaches outside the program and is never executed'), `the loop is what does not run, and the warning says so: ${input.normalized.stderr}`)
 assert(input.diagnostics.length === 2, `the loop and the write in its body, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
 assert(input.diagnostics.every(d => d.name === 'SemanticDiag::EffectNotExecuted'), `expected only EffectNotExecuted, got ${input.diagnostics.map(d => d.name).join(', ')}`)
 }

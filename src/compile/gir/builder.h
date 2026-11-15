@@ -2577,8 +2577,10 @@ class Builder {
     // Reports the writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
-    // state-only, a call of a function that declares effects (`sync` modifier, `var`
-    // parameter) or whose exit depends on one, a branch with such an arm.
+    // state-only, a call of a function whose clause names a resource or whose exit depends on one,
+    // a branch with such an arm. A `var` parameter is not one (design principles 3.1 and 3.5, the
+    // ruling of 2026-11-15): what it writes is handed back where the call stands. An assignment is
+    // that shape and is declared state-only, for the same reason.
     bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
     // Whether a call built as `node` is a statement of the `sync` block it is written in: the chain
     // carries what has an effect or may fault, and a call is one of those by what its callee turns

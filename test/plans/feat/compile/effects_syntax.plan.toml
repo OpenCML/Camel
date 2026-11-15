@@ -387,14 +387,14 @@ expect_output_contains = ["err_pure_recursive.cml:8:", "(n: int) => int pure", "
 
 [[tests]]
 name = "err.wide_parameters"
-desc = "A use through a parameter the signature cannot number (the 257th) is not dropped: the measurement gives up on the body and records it as reaching something unknown, so a declaration whose clause cannot be shown to cover it is refused rather than passing on a use nobody recorded. The clause is a write of `fs`, which the refusing write of `q` is not part of."
+desc = "A use through a parameter the signature cannot number (the 257th) is not dropped: the measurement gives up on the body and records it as reaching something unknown, so a declaration whose clause cannot be shown to cover it is refused rather than passing on a use nobody recorded. The refusal stands at the declaration (9:1), because the use it cannot place is the unknown one; the `q += 1` in the body is no longer a second reason for it -- writing a `var` parameter is not a use of anything outside the program (design principles 3.1 and 3.5, the ruling of 2026-11-15), so that write used to be the position this refusal was reported at."
 kind = "negative"
 case = "../../../cases/effects/err_wide_parameters.cml"
 args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
 expect_diagnostic_code = "0x030001F1"
-expect_output_contains = ["err_wide_parameters.cml:10:", "does not keep its resource promise"]
+expect_output_contains = ["err_wide_parameters.cml:9:", "does not keep its resource promise"]
 
 # ---- The measurement is a fixed point, and a use it cannot place is never dropped ----
 

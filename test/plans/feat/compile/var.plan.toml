@@ -271,5 +271,45 @@ case = "../../../cases/compile/var/var_parameter_write_at_exit.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 0
 expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
+# The write a body leaves in a `var` parameter is handed back where the call stands, so not one of
+# these three writes is reported for being outside a `sync` block, and not one of them is an effect
+# that has to run (design principles 3.1 and 3.5, the ruling of 2026-11-15). Measured before it, this
+# same program's stderr held three `SemanticDiag::IgnoredSideEffect` (at 19:5, 40:5 and 57:36 --
+# `set`'s, `clear`'s and the lambda's write), each one saying the call of `<__assn__>` "is not in a
+# sync block, and it takes a var argument".
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 30000
+
+# --- A write to a `var` whose value nobody reads -----------------------------------------------
+#
+# Assigning to a `var` is not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), so
+# what such a write drops when nothing reads it is a value, and the one thing to report is that the
+# value nobody uses: `SemanticDiag::UnusedAssignedValue`, the same family as `UnusedPureResult` and
+# `UnusedFallibleValue`. Measured before the ruling, the case below reported two things about one
+# write -- `IgnoredSideEffect` (the call takes a var argument) and `EffectNotExecuted` ("The
+# assignment has side effects but is never executed"); both of those sentences are gone, and exactly
+# one is left.
+[[tests]]
+name = "var.unused_assigned_value_is_a_dropped_value"
+desc = "A write to a `var` whose value nobody reads is a dropped value and nothing else: the case reads the variable before the write (so the variable is used) and the write's value is read by nobody (`x = 1` at 15:7), so the run's stderr holds exactly one diagnostic -- `SemanticDiag::UnusedAssignedValue` -- and neither `IgnoredSideEffect` (a write outside a `sync` block) nor `EffectNotExecuted` (a statement that reaches outside the program written in a region that does not run) appears. The program still prints `0`, the value it read before the write."
+kind = "behavior"
+case = "../../../cases/compile/var/unused_assigned_value.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+# The one report, pinned by name and by the line and column it stands at.
+expect_diagnostic_name = "SemanticDiag::UnusedAssignedValue"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 7
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0', `the value read before the write is what the program prints: ${JSON.stringify(out)}`)
+assert(input.diagnostics.length === 1, `exactly one diagnostic for one dropped value, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedAssignedValue', `the dropped value is named as a value: ${input.diagnostics[0].name}`)
+assert(input.diagnostics[0].line === 15 && input.diagnostics[0].column === 7, `reported at the write, not at the declaration: ${input.diagnostics[0].line}:${input.diagnostics[0].column}`)
+}
+"""
+timeout_ms = 30000
+
