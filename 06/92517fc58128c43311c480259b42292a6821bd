@@ -1,0 +1,39 @@
+`lane-chainpure` 合并的闸门读数与归属实验（正文引用了这条 note）。
+
+合并：`0692517fc58128c43311c480259b42292a6821bd`，`--no-ff` 合入 `lane-chainpure`（`a92fc707c`
++ 同步合并 `44c945b4b`）。**无冲突**；25 文件 `+665/−136`。推：`faccf38b9..0692517fc`，
+`ls-remote` = 0692517fc58128c43311c480259b42292a6821bd。
+
+闸门（合后 `develop`，重建，`-Jobs 8`）：`feat/compile`+`feat/opt`+`feat/linear`+`feat/parse`
+→ `[SUMMARY] total: 4912, pass: 4868, fail: 24, skip: 2, known failures: 18`
+[provenance] tip 0692517fc | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+四条验收全绿：`sync.pure_call_is_arranged_freely` 280.17 ms、`sync.pure_call_has_no_edge_to_the_statement_beside_it` 332.29 ms、`sync.effect_call_stays_on_the_chain` 230.79 ms、`sync.faulting_call_stays_on_the_chain` 333.71 ms。
+无 `killed by a signal`、无 `timed out`。
+
+## 一、`chainpure` 自身零新红
+四条验收全 `[PASS]`；`--stat` 的 25 文件里没有 `known_fail`、没有别的 golden。
+
+## 二、`origin/develop` 现有 17 条红，全部来自 `faccf38b9`（`ssa2`），与 `chainpure` 无关
+三点两名单的归属实验（每点都重建，只跑 `feat/linear` + `feat/parse`）：
+
+| 树 | 读数 | 红 |
+|---|---|---|
+| `701388712`（合 `ssa2` **之前**） | `total: 997, pass: 992, fail: 1, skip: 2, known 2` | 1（`frontend.ast_snapshot`，**它本来就红**） |
+| `faccf38b9`（只有 `ssa2`） | `total: 997, pass: 976, fail: 17, skip: 2, known 2` | 17 |
+| `0692517fc`（`ssa2`+`chainpure`） | 同上 17 条，逐条同名 | 17 |
+
+**`ssa2` 带来 16 条新红**（第 17 条 `frontend.ast_snapshot` 在 `701388712` 上已红，`ast_hashes.txt` 少 5 条）。
+名单：`let_assigned`、`param_assigned`、`let_compound_assigned`、`path_assigned.allocs.{nvm,fvm,jit,prl}`、
+`var_tensor_local.{run,macro}`、`var_read_before_write.{default,nvm,fvm,jit,prl,opt_nvm}`、
+`order_edges_regions.gir`、`frontend.ast_snapshot`。
+
+其中三条是**读者看得见**的变化，不是 golden 漂移，必须逐条分类后才谈重录：
+- `var_read_before_write.default`：`expected the 8 writes outside a sync block to be reported, got 11`
+  —— 多 3 条 `SemanticDiag::IgnoredSideEffect`（`45:5`/`52:5`/`59:5`，`swap` 与 `<__assn__>`）。
+- `let_assigned`：期望 `SemanticDiag::ImmutablePassedToVarParam`（9:5），实得「The target of an
+  assignment must be a variable, or a path from one」——诊断变粗。
+- `order_edges_regions.gir`：`expected one order edge on a BRCH, got 0`。
+
+**教训（记在这里，别只记在脑子里）**：`ssa2` 的闸门只跑 `feat/compile`+`feat/opt`，这 16 条全在
+`feat/linear`/`feat/parse`，所以它的「新红 0」不覆盖它们，而我照抄了那个范围。范围由协调位给，
+但**拿到窄范围要先问「这个范围能覆盖这次改动的语义吗」**。此后本车道一律 `--changed` 全跑 + 车道的面。
