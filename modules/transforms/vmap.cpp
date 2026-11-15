@@ -77,11 +77,10 @@ Type *rowsOfType(Type *type) {
     return ArrayType::create(array->elemType(), forms, array->packName());
 }
 
-
 /// The rule `rulesets.vmap` files for `uri`, or nullptr and why not. The key -- the spelling the
 /// rule's left side is written with, and its operand count -- is read off the operator itself
-/// (`camel/core/forward.h#ruleKeyOf`): `tensor:matmul` is written `matmul(x, w)` because that is the
-/// operator's name, and the two operators that cannot be spelled that way are named, with their
+/// (`camel/core/forward.h#ruleKeyOf`): `tensor:matmul` is written `matmul(x, w)` because that is
+/// the operator's name, and the two operators that cannot be spelled that way are named, with their
 /// reasons, in `ruleKeyExceptions()`. Nothing is registered per operator.
 std::optional<camel::parse::ast::RuleMatch> ruleOfUri(const std::string &uri, std::string &why) {
     const auto answer = camel::core::vmapRuleOf(uri);
@@ -110,13 +109,13 @@ uint64_t ruleIdOf(camel::core::context::Context &context, const std::string &nam
 /// several -- the law the operands' own types pick.
 ///
 /// This family is the same choice the transpose family makes (`modules/transforms/
-/// transpose.cpp#chooseTransposedRule`) with one difference in what is compared: an instance here is
-/// made at the **element** type of the operand, because that is the type a rule of this family is
-/// generic in, and its ports are then compared with the operands' *batched* types -- `vmap_rule_idx::
-/// <T>(xs: T[], i: int)` at `T = float` takes a `float[2, 3]` batch through its `float[]` port. The
-/// relation is the call's (`Type::assignableFrom`, the port takes the operand), and among the laws
-/// that take them the narrowest wins (`narrowerPortsThan`); two that both take them with neither
-/// narrower are refused by name rather than picked by filing order.
+/// transpose.cpp#chooseTransposedRule`) with one difference in what is compared: an instance here
+/// is made at the **element** type of the operand, because that is the type a rule of this family
+/// is generic in, and its ports are then compared with the operands' *batched* types --
+/// `vmap_rule_idx:: <T>(xs: T[], i: int)` at `T = float` takes a `float[2, 3]` batch through its
+/// `float[]` port. The relation is the call's (`Type::assignableFrom`, the port takes the operand),
+/// and among the laws that take them the narrowest wins (`narrowerPortsThan`); two that both take
+/// them with neither narrower are refused by name rather than picked by filing order.
 std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
     camel::core::context::Context &context, const camel::runtime::GCGraph &function,
     gc_node_ref_t ref, const std::string &uri, std::string &why) {
@@ -129,8 +128,8 @@ std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
     const Type *operand = firstOperandTypeOf(function, ref);
     Type *elementType   = ruleElementTypeOf(
         operand != nullptr
-                ? const_cast<Type *>(operand)
-                : (function.node(ref) != nullptr ? function.node(ref)->dataType() : nullptr));
+            ? const_cast<Type *>(operand)
+            : (function.node(ref) != nullptr ? function.node(ref)->dataType() : nullptr));
     std::vector<Type *> actual;
     for (const gc_node_ref_t input : function.normInputsOf(ref)) {
         const camel::runtime::GCNode *node = function.node(input);
@@ -138,19 +137,23 @@ std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
     }
     // The ports past the data operands are the operator's own configuration -- `reshape`'s target
     // shape comes in `<>` position -- and a rule names them beside the value it batches, in port
-    // order (`transpose.cpp` says the same about the pullback's list). Without them a law that names
-    // its shape would look like a law that names more ports than the operator has.
+    // order (`transpose.cpp` says the same about the pullback's list). Without them a law that
+    // names its shape would look like a law that names more ports than the operator has.
     for (const gc_node_ref_t input : function.withInputsOf(ref)) {
         const camel::runtime::GCNode *node = function.node(input);
         actual.push_back(node != nullptr ? node->dataType() : nullptr);
     }
     // Which of the key's laws answers this batch is one question, asked in one place
-    // (`rule_expand.cpp#chooseRuleAmong`); the batching family's own part is the type an instance is
-    // made at -- the *element* of the operand, which is what makes `vmap_mul<float>` a law for a
-    // `float[]` batch -- and the operand list, which carries the `<>` configuration beside the value
-    // (so no lower bound is asked for here: `dataOperandCount` 0).
+    // (`rule_expand.cpp#chooseRuleAmong`); the batching family's own part is the type an instance
+    // is made at -- the *element* of the operand, which is what makes `vmap_mul<float>` a law for a
+    // `float[]` batch -- and the operand list, which carries the `<>` configuration beside the
+    // value (so no lower bound is asked for here: `dataOperandCount` 0).
     const RuleChoice choice = chooseRuleAmong(
-        context, candidates, std::vector<Type *>{elementType}, actual, 0,
+        context,
+        candidates,
+        std::vector<Type *>{elementType},
+        actual,
+        0,
         RuleChoiceWords{"law", "operands"});
     if (!choice.found()) {
         why = choice.why;
@@ -167,7 +170,7 @@ std::optional<camel::parse::ast::RuleMatch> chooseRuleOfUri(
 /// The name a graph is filed under, without its module qualifier and its type arguments: the leaf a
 /// declaration writes. `rulesets.vmap::vmap_mul<float>` answers `vmap_mul`.
 std::string leafNameOf(const std::string &filed) {
-    size_t start = filed.rfind("::");
+    size_t start     = filed.rfind("::");
     std::string leaf = start == std::string::npos ? filed : filed.substr(start + 2);
     const size_t cut = leaf.find_first_of("<$(");
     if (cut != std::string::npos) {
@@ -196,10 +199,10 @@ const rt::GCGraph *calleeGraphOf(
             return graph;
         }
     }
-    // A function of a module is filed under its qualified name, with the type arguments of a generic
-    // instance after its own name: `rulesets.vmap::vmap_mul<float>` is the graph the rule's right
-    // side names by `vmap_mul`. So the leaf of the filed name, without its qualifier and its type
-    // arguments, is what the rule's syntax writes.
+    // A function of a module is filed under its qualified name, with the type arguments of a
+    // generic instance after its own name: `rulesets.vmap::vmap_mul<float>` is the graph the rule's
+    // right side names by `vmap_mul`. So the leaf of the filed name, without its qualifier and its
+    // type arguments, is what the rule's syntax writes.
     for (const rt::GCGraph *graph : instance.program->graphs()) {
         if (graph != nullptr && leafNameOf(graph->name()) == name) {
             return graph;
@@ -287,22 +290,25 @@ VmapGraph buildVmapGraph(
     std::vector<std::string> usedElements;
     std::vector<gc_node_ref_t> liftOf;
     /// Whether a node's lift is the **batch of one row** `liftConstant` makes of a constant, rather
-    /// than a batch of the caller's rows. Such a value is a fine operand (every rule reads one row as
-    /// that row at every index, `rulesets/vmap.cml#at`), and it is a wrong *answer*: the caller's
-    /// batch has as many rows as it has, and nothing in this graph spreads one row over it. Asked of
-    /// the exit below, so that a body whose whole answer is a constant is refused instead of
-    /// answering a one-row array (`docs/handover/questions/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`).
+    /// than a batch of the caller's rows. Such a value is a fine operand (every rule reads one row
+    /// as that row at every index, `rulesets/vmap.cml#at`), and it is a wrong *answer*: the
+    /// caller's batch has as many rows as it has, and nothing in this graph spreads one row over
+    /// it. Asked of the exit below, so that a body whose whole answer is a constant is refused
+    /// instead of answering a one-row array
+    /// (`docs/handover/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md`).
     std::vector<char> oneRowOf;
 
     camel::runtime::GraphDraftGroup group(context, program);
     const GraphId member = group.reserve(
-        "vmap_of_" + std::string(function->name()), "vmap_of_" + std::string(function->name()));
+        "vmap_of_" + std::string(function->name()),
+        "vmap_of_" + std::string(function->name()));
     {
         auto &transaction = group.transaction(member);
         auto &draft       = transaction.edit();
         draft.setFuncType(signature);
         const gc_node_ref_t port = draft.addPortNode(
-            const_cast<Type *>(liftedParameter), draft.allocateRuntimeSlot(const_cast<Type *>(liftedParameter)));
+            const_cast<Type *>(liftedParameter),
+            draft.allocateRuntimeSlot(const_cast<Type *>(liftedParameter)));
         draft.appendNormPort(port);
 
         // The batched graph captures nothing: every capture is a constant of it (see the walk
@@ -314,14 +320,18 @@ VmapGraph buildVmapGraph(
         // and the batch is that one row -- which is what a body that multiplies by a written matrix
         // needs: `matmul(a, w)` with `w` written in the body is one row of `w` at every index.
         const auto liftConstant = [&draft](
-                                      Type *constantType, Type *liftedType, slot_t value,
+                                      Type *constantType,
+                                      Type *liftedType,
+                                      slot_t value,
                                       std::string &why) -> gc_node_ref_t {
             if (liftedType == nullptr || liftedType->code() != TypeCode::Array) {
                 why = "the lifted type of a constant is not an array";
                 return rt::kInvalidNodeRef;
             }
             auto *one = Array::create(
-                mm::autoSpace(), tt::as_ptr<ArrayType>(liftedType), static_cast<size_t>(1));
+                mm::autoSpace(),
+                tt::as_ptr<ArrayType>(liftedType),
+                static_cast<size_t>(1));
             if (one == nullptr) {
                 why = "no array for the lifted constant";
                 return rt::kInvalidNodeRef;
@@ -340,7 +350,8 @@ VmapGraph buildVmapGraph(
                 extents.push_back(1);
                 extents.insert(extents.end(), source->shape(), source->shape() + source->rank());
                 auto *batch = Array::create(
-                    mm::autoSpace(), tt::as_ptr<ArrayType>(liftedType),
+                    mm::autoSpace(),
+                    tt::as_ptr<ArrayType>(liftedType),
                     std::span<const int64_t>(extents));
                 if (batch == nullptr || batch->byteSize() != source->byteSize()) {
                     why = "no array for the lifted constant";
@@ -348,7 +359,9 @@ VmapGraph buildVmapGraph(
                 }
                 std::memcpy(batch->rawData(), source->rawData(), source->byteSize());
                 return draft.materializeStaticValue(
-                    toSlot<Array *>(batch), liftedType, rt::kGCNodeFlagConstant);
+                    toSlot<Array *>(batch),
+                    liftedType,
+                    rt::kGCNodeFlagConstant);
             }
             switch (constantType->code()) {
             case TypeCode::Float64:
@@ -371,18 +384,21 @@ VmapGraph buildVmapGraph(
                 return rt::kInvalidNodeRef;
             }
             return draft.materializeStaticValue(
-                toSlot<Array *>(one), liftedType, rt::kGCNodeFlagConstant);
+                toSlot<Array *>(one),
+                liftedType,
+                rt::kGCNodeFlagConstant);
         };
 
         // A node the family answered for: the rule's right side names the function that does the
         // batched work, and the transform calls it with the batches of this node's operands. The
         // caller has already asked (and counted the ask); what is left is the instance, at the
-        // primitive's element type -- the type a rule of this family is generic in, whatever rank the
-        // value itself has.
+        // primitive's element type -- the type a rule of this family is generic in, whatever rank
+        // the value itself has.
         std::vector<gc_node_ref_t> copyOf(function->nodeCount(), rt::kInvalidNodeRef);
-        const auto batchThroughRule = [&](gc_node_ref_t ref, const std::string &uri,
-                                          const camel::parse::ast::RuleMatch &match)
-            -> gc_node_ref_t {
+        const auto batchThroughRule =
+            [&](gc_node_ref_t ref,
+                const std::string &uri,
+                const camel::parse::ast::RuleMatch &match) -> gc_node_ref_t {
             // The instance is made at the element type the primitive works on, because that is the
             // type the rule is generic in -- read from an operand, not from the node, whose type is
             // what the primitive answers.
@@ -401,18 +417,23 @@ VmapGraph buildVmapGraph(
             }
             const uint64_t ruleId = ruleIdOf(*context, match.rule);
             if (ruleId == 0) {
-                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedUri    = uri;
-                refused.refusedWhy    = "the rule is named in the index but not registered";
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri = uri;
+                refused.refusedWhy = "the rule is named in the index but not registered";
                 return rt::kInvalidNodeRef;
             }
             const size_t at = camel::compile::gir::genericRuleInstance(
-                *context, ruleId, std::vector<Type *>{elementType}, {});
+                *context,
+                ruleId,
+                std::vector<Type *>{elementType},
+                {});
             const auto *entry = camel::compile::gir::genericRuleEntry(*context, ruleId);
             if (entry == nullptr || at >= entry->instances.size() || !entry->instances[at].made) {
-                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedUri    = uri;
-                refused.refusedWhy    = entry != nullptr && at < entry->instances.size() &&
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri = uri;
+                refused.refusedWhy = entry != nullptr && at < entry->instances.size() &&
                                              !entry->instances[at].why.empty()
                                          ? entry->instances[at].why
                                          : "no instance of the rule at this type";
@@ -420,25 +441,32 @@ VmapGraph buildVmapGraph(
             }
             std::string calleeWhy;
             const rt::GCGraph *callee = calleeGraphOf(
-                entry->instances[at], camel::parse::ast::rhsCalleeOf(kFamily, match.rule),
+                entry->instances[at],
+                camel::parse::ast::rhsCalleeOf(kFamily, match.rule),
                 calleeWhy);
             if (callee == nullptr || entry->instances[at].program == nullptr) {
-                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedUri    = uri;
-                refused.refusedWhy    = calleeWhy;
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri = uri;
+                refused.refusedWhy = calleeWhy;
                 return rt::kInvalidNodeRef;
             }
             const auto *closureType = camel::core::type::TupleType::create(std::vector<Type *>{});
             auto *functionValue     = ::Function::create(
-                entry->instances[at].program, callee->id(), closureType, mm::autoSpace());
+                entry->instances[at].program,
+                callee->id(),
+                closureType,
+                mm::autoSpace());
             if (functionValue == nullptr) {
-                refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                refused.refusedUri    = uri;
-                refused.refusedWhy    = "the rule's function is not a graph a value can name";
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedUri = uri;
+                refused.refusedWhy = "the rule's function is not a graph a value can name";
                 return rt::kInvalidNodeRef;
             }
             const gc_node_ref_t named = draft.materializeStaticValue(
-                toSlot<::Function *>(functionValue), const_cast<FunctionType *>(callee->funcType()));
+                toSlot<::Function *>(functionValue),
+                const_cast<FunctionType *>(callee->funcType()));
             // The arguments are the node's ports in port order: the normal ones, then the context
             // (`with`) ones -- `dataPortsOf` is that one list and `portRoleOf` says where the role
             // changes (camel/runtime/draft.h), and an operator that writes `withAfterNorm` declares
@@ -452,23 +480,25 @@ VmapGraph buildVmapGraph(
             std::vector<gc_node_ref_t> arguments;
             for (gc_node_ref_t input : function->normInputsOf(ref)) {
                 if (input >= function->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = "an operand was not lifted";
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri = uri;
+                    refused.refusedWhy = "an operand was not lifted";
                     return rt::kInvalidNodeRef;
                 }
                 arguments.push_back(copyOf[input]);
             }
             for (gc_node_ref_t input : function->withInputsOf(ref)) {
                 if (input >= function->nodeCount() || copyOf[input] == rt::kInvalidNodeRef) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = "a `with` argument was not lifted";
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri = uri;
+                    refused.refusedWhy = "a `with` argument was not lifted";
                     return rt::kInvalidNodeRef;
                 }
                 arguments.push_back(copyOf[input]);
             }
-            Type *resultType = rowsOfType(function->node(ref)->dataType());
+            Type *resultType         = rowsOfType(function->node(ref)->dataType());
             const gc_node_ref_t call = draft.addCallNode(resultType);
             draft.setNormInputs(call, arguments);
             draft.setWithInputs(call, std::span<const gc_node_ref_t>(&named, 1));
@@ -483,8 +513,8 @@ VmapGraph buildVmapGraph(
         // rewrite appends what it writes after the readers it repoints and leaves the places of the
         // nodes it removed `Dead` (node_order.h). Reading `0 .. nodeCount()` here refused two
         // bodies `std::opt` had rewritten -- `asked=1 found=1` on `x*2.0 + x/2.0 - 1.0`, where the
-        // walk met a `Dead` place, and `asked=0 found=0` on `width(r) = dim<1>(r)`, whose whole body
-        // the pass folds to a constant and whose operators are then `Dead` places.
+        // walk met a `Dead` place, and `asked=0 found=0` on `width(r) = dim<1>(r)`, whose whole
+        // body the pass folds to a constant and whose operators are then `Dead` places.
         const std::vector<gc_node_ref_t> order = dependencyOrderOf(*function);
         for (gc_node_ref_t ref : order) {
             if (!complete) {
@@ -511,30 +541,37 @@ VmapGraph buildVmapGraph(
                 if (captureSlot[ref] != static_cast<size_t>(-1)) {
                     const size_t at = captureSlot[ref];
                     if (captured == nullptr || at >= captured->size()) {
-                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                        refused.refusedUri    = "a capture";
-                        refused.refusedWhy    = "the function value does not carry the value it captures";
-                        complete              = false;
+                        refused.refusedOrigin =
+                            static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                        refused.refusedUri = "a capture";
+                        refused.refusedWhy =
+                            "the function value does not carry the value it captures";
+                        complete = false;
                         break;
                     }
-                    copyOf[ref] =
-                        liftConstant(node->dataType(), rowsOfType(node->dataType()),
-                                     captured->get<slot_t>(at), why);
+                    copyOf[ref] = liftConstant(
+                        node->dataType(),
+                        rowsOfType(node->dataType()),
+                        captured->get<slot_t>(at),
+                        why);
                     if (copyOf[ref] == rt::kInvalidNodeRef) {
-                        refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                        refused.refusedUri    = "a capture";
-                        refused.refusedWhy    = why;
-                        complete              = false;
+                        refused.refusedOrigin =
+                            static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                        refused.refusedUri = "a capture";
+                        refused.refusedWhy = why;
+                        complete           = false;
                         break;
                     }
-                    // A capture enters as the batch of one row: it is a constant of the batched body.
+                    // A capture enters as the batch of one row: it is a constant of the batched
+                    // body.
                     oneRowOf[ref] = 1;
                     ++copiedKinds;
                     break;
                 }
                 if (std::find(sourceParameters.begin(), sourceParameters.end(), ref) ==
                     sourceParameters.end()) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedConstruct = "a port";
                     refused.refusedUri       = "a port";
                     refused.refusedWhy =
@@ -557,20 +594,24 @@ VmapGraph buildVmapGraph(
                 const std::ptrdiff_t index          = -static_cast<std::ptrdiff_t>(node->dataIndex);
                 if (node->dataIndex >= 0 || index < 0 ||
                     static_cast<size_t>(index) >= slots.size()) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = "a constant";
-                    refused.refusedWhy    = "the slot of the constant is not readable";
-                    complete              = false;
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri = "a constant";
+                    refused.refusedWhy = "the slot of the constant is not readable";
+                    complete           = false;
                     break;
                 }
                 copyOf[ref] = liftConstant(
-                    node->dataType(), rowsOfType(node->dataType()),
-                    slots[static_cast<size_t>(index)], why);
+                    node->dataType(),
+                    rowsOfType(node->dataType()),
+                    slots[static_cast<size_t>(index)],
+                    why);
                 if (copyOf[ref] == rt::kInvalidNodeRef) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = "a constant";
-                    refused.refusedWhy    = why;
-                    complete              = false;
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri = "a constant";
+                    refused.refusedWhy = why;
+                    complete           = false;
                     break;
                 }
                 // A constant is the batch of one row; a rule broadcasts it over the batch it meets.
@@ -579,21 +620,22 @@ VmapGraph buildVmapGraph(
                 break;
             }
             case rt::GCNodeKind::Oper: {
-                const auto *body   = function->nodeBodyAs<rt::GCOperBody>(ref);
+                const auto *body = function->nodeBodyAs<rt::GCOperBody>(ref);
                 const std::string uri(body->uri());
                 ++refused.asked;
                 const auto match = chooseRuleOfUri(*context, *function, ref, uri, why);
                 if (!match.has_value() || match->status != camel::parse::ast::RuleLookup::Found) {
-                    refused.refusedOrigin = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
-                    refused.refusedUri    = uri;
-                    refused.refusedWhy    = !match.has_value()
-                                                ? why
-                                                : (match->status ==
-                                                           camel::parse::ast::RuleLookup::NoSuchFamily
-                                                       ? "no ruleset module of that name is loaded"
-                                                       : "the ruleset holds no rule for this "
-                                                         "operator and operand count");
-                    complete              = false;
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedUri = uri;
+                    refused.refusedWhy =
+                        !match.has_value()
+                            ? why
+                            : (match->status == camel::parse::ast::RuleLookup::NoSuchFamily
+                                   ? "no ruleset module of that name is loaded"
+                                   : "the ruleset holds no rule for this "
+                                     "operator and operand count");
+                    complete = false;
                     break;
                 }
                 ++refused.found;
@@ -607,50 +649,51 @@ VmapGraph buildVmapGraph(
                 break;
             }
             case rt::GCNodeKind::Func: {
-                // A `Func` node is one of two things, and its value type says which. A *direct call*
-                // names its callee's graph, carries the arguments as its norm inputs, and its value
-                // is the callee's result (`f(x)` is one node, not a value plus a call). A *function
-                // value* is a function type, and carries nothing into a batched graph: the node that
-                // reads it is the one that names a use.
+                // A `Func` node is one of two things, and its value type says which. A *direct
+                // call* names its callee's graph, carries the arguments as its norm inputs, and its
+                // value is the callee's result (`f(x)` is one node, not a value plus a call). A
+                // *function value* is a function type, and carries nothing into a batched graph:
+                // the node that reads it is the one that names a use.
                 Type *valueType = function->node(ref)->dataType();
                 if (valueType != nullptr && valueType->code() == TypeCode::Function) {
                     ++copiedKinds;
                     break;
                 }
                 // A call is asked about like a primitive, by the key the family files a function
-                // under: the callee's name and how many arguments the call passes. A family may hold
-                // a rule for a function -- the function's own name is a head like any other -- and
-                // then the rule says which function does the batched work, exactly as it does for an
-                // operator. What is never done is walking past a call unasked: a body whose callee
-                // the family has no rule for stops here, with the ask counted (`asked=1 found=0`),
-                // because "there is no rule for this call" is an answer and "nothing was asked" is
-                // not (design principles 9.9).
+                // under: the callee's name and how many arguments the call passes. A family may
+                // hold a rule for a function -- the function's own name is a head like any other --
+                // and then the rule says which function does the batched work, exactly as it does
+                // for an operator. What is never done is walking past a call unasked: a body whose
+                // callee the family has no rule for stops here, with the ask counted (`asked=1
+                // found=0`), because "there is no rule for this call" is an answer and "nothing was
+                // asked" is not (design principles 9.9).
                 const rt::GCGraph *callee = program->calleeOf(*function, ref);
                 const std::string name =
                     callee != nullptr ? leafNameOf(callee->name()) : std::string();
                 const size_t operands = function->normInputsOf(ref).size();
                 ++refused.asked;
                 if (name.empty()) {
-                    refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedConstruct = "a call";
                     refused.refusedUri       = "a call";
                     refused.refusedWhy       = "the call names no graph of the program";
                     complete                 = false;
                     break;
                 }
-                const auto match = camel::parse::ast::lookupRule(
-                    kFamily, name, static_cast<uint32_t>(operands));
+                const auto match =
+                    camel::parse::ast::lookupRule(kFamily, name, static_cast<uint32_t>(operands));
                 if (match.status != camel::parse::ast::RuleLookup::Found) {
-                    refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                    refused.refusedOrigin =
+                        static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                     refused.refusedConstruct = "a call";
                     refused.refusedUri       = name;
-                    refused.refusedWhy =
-                        match.status == camel::parse::ast::RuleLookup::NoSuchFamily
-                            ? "no ruleset module of that name is loaded"
-                            : "the ruleset holds no rule for a call to `" + name + "` with " +
-                                  std::to_string(operands) +
-                                  (operands == 1 ? " argument" : " arguments");
-                    complete = false;
+                    refused.refusedWhy = match.status == camel::parse::ast::RuleLookup::NoSuchFamily
+                                             ? "no ruleset module of that name is loaded"
+                                             : "the ruleset holds no rule for a call to `" + name +
+                                                   "` with " + std::to_string(operands) +
+                                                   (operands == 1 ? " argument" : " arguments");
+                    complete           = false;
                     break;
                 }
                 ++refused.found;
@@ -665,28 +708,32 @@ VmapGraph buildVmapGraph(
                 break;
             }
             case rt::GCNodeKind::Call: {
-                // An indirect call: the callee is a *value* the graph computed, so there is no name to
-                // ask a family about, and a rule is filed under a name. Counting it as asked is not a
-                // fiction: the family is the thing that would have to answer, and it cannot be asked
+                // An indirect call: the callee is a *value* the graph computed, so there is no name
+                // to ask a family about, and a rule is filed under a name. Counting it as asked is
+                // not a fiction: the family is the thing that would have to answer, and it cannot
+                // be asked
                 // -- which is a hole in the body, reported like any other (asked=1 found=0).
                 ++refused.asked;
-                refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                 refused.refusedConstruct = "a call";
                 refused.refusedUri       = "a call through a value";
-                refused.refusedWhy       = "the callee is a value, not a name: no rule can be filed "
-                                           "under it";
-                complete                 = false;
+                refused.refusedWhy = "the callee is a value, not a name: no rule can be filed "
+                                     "under it";
+                complete           = false;
                 break;
             }
             case rt::GCNodeKind::Brch:
             case rt::GCNodeKind::Join:
-                refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                 refused.refusedConstruct = "a branch";
                 refused.refusedWhy       = "the elementwise tier batches straight-line bodies";
                 complete                 = false;
                 break;
             case rt::GCNodeKind::Loop:
-                refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                 refused.refusedConstruct = "a loop";
                 refused.refusedWhy       = "the elementwise tier batches straight-line bodies";
                 complete                 = false;
@@ -697,28 +744,28 @@ VmapGraph buildVmapGraph(
                 // looking at the places of the graph, not at the graph.
                 break;
             default:
-                refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
+                refused.refusedOrigin =
+                    static_cast<camel::source::origin_id_t>(function->nodeOrigin(ref));
                 refused.refusedConstruct = "a node of another kind";
-                refused.refusedWhy =
-                    std::string("node kind ") + std::to_string(static_cast<int>(node->kind)) +
-                    " has no reading in the elementwise tier";
-                complete = false;
+                refused.refusedWhy       = std::string("node kind ") +
+                                           std::to_string(static_cast<int>(node->kind)) +
+                                           " has no reading in the elementwise tier";
+                complete                 = false;
                 break;
             }
         }
         if (!complete) {
             // The reading of a refusal: which construct (or primitive) stopped the walk, and what
-            // the ruleset answered up to there. `asked=0 found=0` is a body the walk never reached a
-            // primitive in, and `asked=3 found=2` is a ruleset with a hole in it.
+            // the ruleset answered up to there. `asked=0 found=0` is a body the walk never reached
+            // a primitive in, and `asked=3 found=2` is a ruleset with a hole in it.
             os << "REINTERP vmap function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::Body) << " construct="
                << (refused.refusedConstruct.empty() ? "-" : refused.refusedConstruct)
                << " uri=" << (refused.refusedUri.empty() ? "-" : refused.refusedUri)
                << askedFoundMissing(refused) << '\n';
-            noteRefusal(
-                RefusalReading("vmap", function->name(), RefusalCause::Body)
-                    .atUri(refused.refusedUri)
-                    .atConstruct(refused.refusedConstruct));
+            noteRefusal(RefusalReading("vmap", function->name(), RefusalCause::Body)
+                            .atUri(refused.refusedUri)
+                            .atConstruct(refused.refusedConstruct));
             return refused;
         }
         // The value the lifted chain produces: the node the exit names, followed through the gates
@@ -738,39 +785,42 @@ VmapGraph buildVmapGraph(
             out             = with.empty() ? rt::kInvalidNodeRef : with.back();
         }
         if (out >= function->nodeCount() || copyOf[out] == rt::kInvalidNodeRef) {
-            refused.refusedOrigin = out < function->nodeCount() ? static_cast<camel::source::origin_id_t>(function->nodeOrigin(out))
-                                                                : camel::source::kInvalidOriginId;
+            refused.refusedOrigin =
+                out < function->nodeCount()
+                    ? static_cast<camel::source::origin_id_t>(function->nodeOrigin(out))
+                    : camel::source::kInvalidOriginId;
             refused.refusedConstruct = "the exit";
             refused.refusedWhy       = "the value of the body was not lifted";
             os << "REINTERP vmap function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::Exit) << '\n';
-            noteRefusal(
-                RefusalReading("vmap", function->name(), RefusalCause::Exit)
-                    .atConstruct("the exit"));
+            noteRefusal(RefusalReading("vmap", function->name(), RefusalCause::Exit)
+                            .atConstruct("the exit"));
             return refused;
         }
         const gc_node_ref_t liftedValue = copyOf[out];
         if (oneRowOf[out] != 0) {
             // The body's whole answer is a constant, so its batch is the one row `liftConstant`
             // wrote and not the batch the caller has: `vmap((x: float) => 3.0)` over a `float[4]`
-            // answered `[3.0]`, silently, with the pass and without it. A constant is a fine operand
+            // answered `[3.0]`, silently, with the pass and without it. A constant is a fine
+            // operand
             // -- every rule reads one row as that row at every index -- but as an answer it is a
             // length the caller did not ask for, and everything downstream (`len`, `sum`, an index)
-            // is then off by the batch's extent. Refused by name instead, which is design principles
-            // 9.9's rule and the rule the port above already states; what the answer *should* be is
-            // the author's (docs/handover/questions/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md).
-            refused.refusedOrigin    = static_cast<camel::source::origin_id_t>(function->nodeOrigin(out));
+            // is then off by the batch's extent. Refused by name instead, which is design
+            // principles 9.9's rule and the rule the port above already states; what the answer
+            // *should* be is the author's
+            // (docs/handover/reviews/2026-11-14-a-vmap-of-a-constant-body-answers-one-line.cn.md).
+            refused.refusedOrigin =
+                static_cast<camel::source::origin_id_t>(function->nodeOrigin(out));
             refused.refusedConstruct = "an answer of one row";
-            refused.refusedWhy =
-                "the body's answer is a constant, whose batch is one row, and the batched graph has "
-                "no node that spreads one row over the caller's batch";
+            refused.refusedWhy = "the body's answer is a constant, whose batch is one row, and the "
+                                 "batched graph has "
+                                 "no node that spreads one row over the caller's batch";
             os << "REINTERP vmap function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::Body)
                << " construct=" << refused.refusedConstruct << " uri=the exit"
                << askedFoundMissing(refused) << '\n';
-            noteRefusal(
-                RefusalReading("vmap", function->name(), RefusalCause::Body)
-                    .atConstruct(refused.refusedConstruct));
+            noteRefusal(RefusalReading("vmap", function->name(), RefusalCause::Body)
+                            .atConstruct(refused.refusedConstruct));
             return refused;
         }
         const rt::DraftNodeHeader *header = draft.header(liftedValue);
@@ -779,9 +829,8 @@ VmapGraph buildVmapGraph(
             refused.refusedWhy       = "the lifted value has no type";
             os << "REINTERP vmap function=" << function->name()
                << " skip=" << refusalCauseName(RefusalCause::ExitType) << '\n';
-            noteRefusal(
-                RefusalReading("vmap", function->name(), RefusalCause::ExitType)
-                    .atConstruct("the exit"));
+            noteRefusal(RefusalReading("vmap", function->name(), RefusalCause::ExitType)
+                            .atConstruct("the exit"));
             return refused;
         }
         draft.setExitNode(liftedValue);
@@ -801,9 +850,8 @@ VmapGraph buildVmapGraph(
     }
     os << "REINTERP vmap function=" << function->name() << " graph=" << rt::toValue(member)
        << " type=" << (madeType != nullptr ? madeType->toString() : std::string("-"))
-       << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds
-       << " " << askedFoundMissing(refused)
-       << " rules=" << (rules.empty() ? "-" : rules)
+       << " nodes=" << function->nodeCount() << " kinds=" << copiedKinds << '/' << seenKinds << " "
+       << askedFoundMissing(refused) << " rules=" << (rules.empty() ? "-" : rules)
        << " elements=" << (elements.empty() ? "-" : elements) << '\n';
     VmapGraph built = std::move(refused);
     built.program   = camel::runtime::ProgramHold(*context, group.program());
