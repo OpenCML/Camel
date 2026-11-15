@@ -57,7 +57,7 @@
         },
         {
             "comment": "The plan-refs sweep: its case is the tool itself, so a change there selects the plan that runs it -- the same shape as the other tool cases in this list. The sweep is a plan of its own because its bound (1200000 ms, four times the CPU it spends starting one `camel` per case) would make any plan that also names it slow-cost, and a named plan file runs in full whatever `--tier` says.",
-            "paths": ["scripts/check-plan-refs.mjs"],
+            "paths": ["scripts/check-plan-refs.mjs", "scripts/check-plan-refs-anchor.mjs"],
             "plans": ["feat/tools/plan_refs_sweep.plan.toml"]
         },
         {
