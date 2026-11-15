@@ -1,0 +1,2 @@
+﻿run	start	secs	load_before	load_after	pass	fail	ten_fail_backends	count_lines
+1	14:45:54	3.1	34.6	17	46	1	ref.boxes_made_per_call_ten.prl	FOREIGN_RESOURCES created=11 released=5 live=6 disposed=6 finalized=5

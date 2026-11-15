@@ -18,6 +18,7 @@
 #include "camel/core/type/composite/array.h"
 #include "camel/core/type/composite/struct.h"
 #include "camel/core/type/composite/tuple.h"
+#include "camel/core/type/text.h"
 #include "camel/utils/type.h"
 
 #include <algorithm>
@@ -130,6 +131,21 @@ ResourceSignature uniteReach(const ResourceSignature &a, const ResourceSignature
 /// builder_helpers.h, which the state rule (`Builder::reportCellEscapes`) reads the same way -- a
 /// body whose result can hold a function can hand a closure it made to its caller, and that is what
 /// makes the cell the closure captured outlive the call.
+
+/// The ordering key of an access through a handle the body received (design principles 3.3, handle
+/// types, 负责人 2026-11-15): the handle's type when the type is a handle type, and the name the
+/// body gave the value otherwise. A handle is a run-time value, so two names may be one handle, and
+/// nothing in the body tells two same-typed names apart -- the accesses through them are one
+/// resource's and keep the order they are written in. Two handle types are two handles, a
+/// difference the compiler can prove, so they keep no order. A handle the body made itself is keyed
+/// by its node instead (Builder::handleKeyOf): two `ref` calls are two boxes, which is another
+/// difference the compiler can prove.
+std::string handleOrderKeyOf(const Type *type, std::string otherwise) {
+    if (!sem::isHandleType(type)) {
+        return otherwise;
+    }
+    return "H" + camel::core::type::typeMangle(type);
+}
 
 } // namespace
 
@@ -518,12 +534,14 @@ bool Builder::handleKeyOf(
     // copy, and a result the operator says is the operand it was handed -- until it lands on a
     // parameter of this body, on one of its captures, or on a node that made the handle itself.
     // Two uses with one key reach one box; two uses with two keys are two references, whose
-    // operations keep no order between them.
+    // operations keep no order between them. A key a body received is the handle's type rather
+    // than its position (handleOrderKeyOf): two same-typed names may name one box, and the body
+    // cannot prove they do not.
     const auto &draft = transaction.graph();
     std::unordered_set<draft_node_ref_t> seen;
     while (draft.alive(value) && seen.insert(value).second) {
         if (const auto port = walk.ports.find(value); port != walk.ports.end()) {
-            key = std::format("p{}", port->second);
+            key = handleOrderKeyOf(nodeTypeOf(draft.ref(value)), std::format("p{}", port->second));
             return true;
         }
         if (walk.captured.contains(value)) {
@@ -531,7 +549,9 @@ bool Builder::handleKeyOf(
             if (at == walk.capturePositions.end()) {
                 return false;
             }
-            key = std::format("c{}", static_cast<unsigned>(at->second));
+            key = handleOrderKeyOf(
+                nodeTypeOf(draft.ref(value)),
+                std::format("c{}", static_cast<unsigned>(at->second)));
             return true;
         }
         const node_handle_t node = draft.ref(value);
@@ -543,7 +563,8 @@ bool Builder::handleKeyOf(
             if (!at.has_value()) {
                 return false;
             }
-            key = std::format("c{}", static_cast<unsigned>(*at));
+            key =
+                handleOrderKeyOf(nodeTypeOf(port), std::format("c{}", static_cast<unsigned>(*at)));
             return true;
         }
         const auto kind = nodeKindOf(node);
