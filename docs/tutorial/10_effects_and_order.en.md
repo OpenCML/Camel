@@ -182,8 +182,10 @@ Two rules, one `2` each:
 - `latest`: `let before = c` **reads the most recent write before it**, the version written by `c = 2`; the later
   `c = 3` cannot reach back to it. So `before` is `2`, whatever `c` becomes afterwards.
 
-The third rule is its other side: **a write that nothing reads afterwards does not run**. The same cell, two function
-bodies, the same output, different warnings
+The third rule is its other side: **a write that nothing reads afterwards leaves a value nobody uses**. The same cell,
+two function bodies, the same output, and what is reported is not the same thing -- assigning to a `var` is not an
+effect ([design principles 3.1](../design-principles.cn.md#31-按依赖求值), 3.3), so what is reported is "this value is
+never read", not "this assignment has side effects"
 ([`examples/10_write_nobody_reads.cml`](examples/10_write_nobody_reads.cml)):
 
 ```cml
@@ -218,38 +220,57 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 ```
 
 ```text
-warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int) => int' is not in a sync block, and it takes a var argument.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:5
-    |
- 9 |     c = 5
-    |     ^^^^^
-help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
-
-warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
    --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
     |
  9 |     c = 5
     |       ^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
 
 1
 1
 ```
 
 Both functions print `1`: the read takes the version from before the write, and the write is read by nobody. The
-difference is the guarantee -- the write inside the sync block **certainly happens**, and after the reads written before
-it; for the write outside one, the compiler can only tell you that nothing runs it
-(`SemanticDiag::IgnoredSideEffect`), and since nothing reads the variable afterwards, the whole write does not run
-(`SemanticDiag::EffectNotExecuted`).
+difference is the guarantee -- the write inside the sync block **certainly happens** (the statements written directly in
+a block run with the block), so nothing is reported for it; for the write outside one, nobody wants its value, so the
+whole write does not run, and the compiler reports `SemanticDiag::UnusedAssignedValue`. That sentence is about the
+**value nobody uses**: remove the assignment, or read the variable after it -- either is a fix.
+
+A real effect -- one that reaches outside the program -- is reported the other way when nobody wants it: it does not run,
+and it is `SemanticDiag::EffectNotExecuted`. The read below is wanted by nobody, so it does not run; `println` is a
+**write** to standard output, used by the region it is written in, so it runs:
+
+```cml
+import { get_env } from env
+
+func main(): int {
+    get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
+    println(7)
+    return 0
+}
+```
+
+```text
+warning[SemanticDiag::EffectNotExecuted]: The call of 'get_env' reaches outside the program and is never executed: nothing needs what it gives, so nothing runs it.
+  --> <file>:4:5
+   |
+ 4 |     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
+   |     ^^^^^^^
+help: This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
+
+7
+```
 
 One sentence to take away: **correct output is not the same as a correct program**. Write `sync` where order matters,
 and the compiler may no longer move it.
 
 ## Effects on one resource order themselves
 
-What an effect acts on is called a **resource**: standard output is one, the file system is one, a `var` is one.
-**Two effects on the same resource that both execute happen in the order written, and need no sync block**
-([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)). In
+What an effect acts on is called a **resource**: standard output is one, the file system is one; a `var` is not one --
+assigning to a variable of the program is not an effect, it is a value under another name
+([design principles 3.3](../design-principles.en.md#33-resources-uses-and-pure)). **Two effects on the same resource
+that both execute happen in the order written, and need no sync block**. In
 [`examples/10_same_resource.cml`](examples/10_same_resource.cml) both prints go to standard output and both results are
 used (`println` returns its argument), so they happen in the order written with no warning at all:
 
@@ -608,8 +629,8 @@ camel docs/tutorial/examples/10_exercise.cml
 2. `apply(square, 5)` is `25`; with `println` it is `SemanticDiag::NoMatchingFunction`, and the error lists the required
    `(x: int) => int pure`.
 3. The output is still `1`: the read still takes the version from before the write. What changes is the **guarantee** --
-   the write is no longer ordered (one more `SemanticDiag::IgnoredSideEffect`), and since nothing reads the variable
-   after it, the whole write does not run (`SemanticDiag::EffectNotExecuted`).
+   the write is no longer inside a sync block, and since nothing reads the variable after it, the value it stores is used
+   by nobody, so the whole write does not run and `SemanticDiag::UnusedAssignedValue` is reported.
 
 ## Reference
 

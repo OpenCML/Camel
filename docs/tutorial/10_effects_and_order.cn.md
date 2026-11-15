@@ -164,8 +164,10 @@ camel docs/tutorial/examples/10_var_order.cml
 - `latest`：`let before = c` **读到的是它前面最近一次写的值**，也就是 `c = 2` 写下的那个版本；后面那句
   `c = 3` 在它之后，改不到它。所以 `before` 是 `2`，与最后的 `c` 无关。
 
-第三条规则在反面上：**写之后没有任何地方再读这个变量，这次写不执行**。同一个格子、两种函数体，输出一样，
-警告不一样（[`examples/10_write_nobody_reads.cml`](examples/10_write_nobody_reads.cml)）：
+第三条规则在反面上：**写之后没有任何地方再读这个变量，写进去的值就没人用**。同一个格子、两种函数体，输出一样，
+报出来的东西不一样——给 `var` 赋值不是效应（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)、3.3），
+所以这里报的是"这个值没人用"，不是"这次赋值有副作用"
+（[`examples/10_write_nobody_reads.cml`](examples/10_write_nobody_reads.cml)）：
 
 ```cml
 // A write nobody reads is not executed, and outside a sync block nothing orders it after the
@@ -199,34 +201,52 @@ camel docs/tutorial/examples/10_write_nobody_reads.cml
 ```
 
 ```text
-warning[SemanticDiag::IgnoredSideEffect]: The call of '<__assn__>: (var int, int) => int' is not in a sync block, and it takes a var argument.
-   --> docs/tutorial/examples/10_write_nobody_reads.cml:9:5
-    |
- 9 |     c = 5
-    |     ^^^^^
-help: Put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'): the block runs whether or not anything needs it, so the write runs with it. A write outside one is ordered after the reads written before it all the same, but it runs only if something reads the variable afterwards.
-
-warning[SemanticDiag::EffectNotExecuted]: The assignment has side effects but is never executed: nothing depends on it and it is not in a sync block.
+warning[SemanticDiag::UnusedAssignedValue]: The value this assignment stores is never read.
    --> docs/tutorial/examples/10_write_nobody_reads.cml:9:7
     |
  9 |     c = 5
     |       ^
-help: Evaluation is driven by dependencies: outside a sync block an expression whose result (or the variable it writes) nothing needs does not run. This is legal. To run it, put it in a sync block ('sync { ... }', or a function body 'func f(): T sync { ... }'), or use its result.
+help: An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
 
 1
 1
 ```
 
-两个函数都打印 `1`：读到的是写之前的版本，写又没人读。区别在保证——同步块里的那次写**一定发生**，并且排在
-它前面的读之后；不在同步块里的那次写，编译器只能告诉你它不一定执行（`SemanticDiag::IgnoredSideEffect`），
-而且因为没有地方再读它，整条写入不执行（`SemanticDiag::EffectNotExecuted`）。
+两个函数都打印 `1`：读到的是写之前的版本，写又没人读。区别在保证——同步块里的那次写**一定发生**（块里直接
+写着的语句随块运行），所以它不报；不在同步块里的那次写，值没人要，于是整条写不执行，编译器报
+`SemanticDiag::UnusedAssignedValue`。这句话说的是**值没人用**：删掉这次赋值，或者之后读一下这个变量，都由你决定。
+
+真正的效应——写到程序外面去的那种——没人要时才走另一条路：它不执行，报 `SemanticDiag::EffectNotExecuted`。
+下面这个读没人要，所以不运行；`println` 是**写**标准输出，由写它的那块区域用到，所以照常执行：
+
+```cml
+import { get_env } from env
+
+func main(): int {
+    get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
+    println(7)
+    return 0
+}
+```
+
+```text
+warning[SemanticDiag::EffectNotExecuted]: The call of 'get_env' reaches outside the program and is never executed: nothing needs what it gives, so nothing runs it.
+  --> <file>:4:5
+   |
+ 4 |     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
+   |     ^^^^^^^
+help: This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
+
+7
+```
 
 一句话：**输出对不等于程序对**。要顺序的地方写 `sync`，编译器就不能再挪它了。
 
 ## 同一个资源的效应自己有序
 
-效应作用的对象叫**资源**：标准输出是一个，文件系统是一个，某个 `var` 也是一个。**同一个资源上两个都会执行的
-效应，按书写顺序发生，不需要同步块**（[设计原则 3.3](../design-principles.cn.md#33-资源uses-与-pure)）。
+效应作用的对象叫**资源**：标准输出是一个，文件系统是一个；`var` 不是——给自己的变量赋值不是效应，只是一个
+值换了个名字（[设计原则 3.3](../design-principles.cn.md#33-资源uses-与-pure)）。**同一个资源上两个都会执行的
+效应，按书写顺序发生，不需要同步块**。
 [`examples/10_same_resource.cml`](examples/10_same_resource.cml) 里两个打印都写向标准输出，两个的结果都被用到
 （`println` 返回它的参数），于是它们按书写顺序发生，一条警告都没有：
 
@@ -560,9 +580,8 @@ camel docs/tutorial/examples/10_exercise.cml
    外层的 `sync` 管不到它。
 2. `apply(square, 5)` 是 `25`；换成 `println` 就是 `SemanticDiag::NoMatchingFunction`，错误里列出要求的
    `(x: int) => int pure`。
-3. 输出还是 `1`：读的仍然是写之前的版本。变的是**保证**——那次写不再有序（多一条
-   `SemanticDiag::IgnoredSideEffect`），而且因为它之后没人读这个变量，整条写不执行
-   （`SemanticDiag::EffectNotExecuted`）。
+3. 输出还是 `1`：读的仍然是写之前的版本。变的是**保证**——那次写不再在同步块里，而且它之后没人读这个
+   变量，写进去的值没人用，于是整条写不执行，报 `SemanticDiag::UnusedAssignedValue`。
 
 ## 参考
 
