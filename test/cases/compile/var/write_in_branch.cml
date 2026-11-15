@@ -1,0 +1,21 @@
+/**
+ * A `var` written inside an arm of an `if`, and read after the branch.
+ *
+ * The read is not the value `:var/new` made: the arm wrote `1` before it, so `1` is what the read
+ * must see (`x = 1` and the same step written with a `let` inside the arm are one graph; design
+ * principles 3.5). The `var` is not captured and not handed to a user function, so nothing makes it
+ * a resource -- it is a straight-line write the fold has to stand for.
+ *
+ * The arm's write is a write of the branch's JOIN as much as the value the arm computed, which is
+ * why this case is here: `Builder::recordWrite` records an arm's write through the JOIN
+ * (`throughCallee`), and a fold that reads only the writes recorded as a statement of the body
+ * would answer the value `:var/new` made.
+ *
+ * Run: camel test/cases/compile/var/write_in_branch.cml
+ */
+func main(): int sync {
+    var x = 0
+    if true then sync { x = 1 }
+    println(x)
+    return 0
+}
