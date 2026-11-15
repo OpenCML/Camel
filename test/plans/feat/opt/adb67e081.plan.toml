@@ -116,47 +116,46 @@ timeout_ms = 20000
 #      written in feat/opt/inline_cycle. Making the ring observable again is work on a branch that
 #      reverts `a1723fbb9`, not a new seed.
 #
-# The live half used to be the inlining the two entries below read: `direct_calls` 2 with no pass and
-# 0 under the pass. It stopped being live on 2026-11-16: `rc04_seed72_within_call.cml` writes a `var`
-# its own closure captured, and the rule that used to let that shape stand -- `ClosureCaptureEscapes`,
-# withdrawn when a closure was ruled to hold a value (design principles 3.5) -- is gone, so the write
-# itself is refused now (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213) before any pass runs.
-# Both entries pin that refusal; a seed regenerated under the rule is what would bring the inlining
-# reading back.
+# The live half is the inlining the two entries below read: `direct_calls` 2 with no pass and 0
+# under the pass.
 [[tests]]
 name = "adb67e081.rc04_seed72_within_call_no_pass"
-desc = "The within-call half of `rc04_seed72` as the closure rule leaves it: refused before any pass runs -- `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) at the assignment inside the closure. It read 2 direct calls and an empty output until 2026-11-16; that reading is gone because the shape it stood on was `ClosureCaptureEscapes`' (a `var` captured by a closure called inside the call that declares it carries nothing out), and that rule was withdrawn when a closure was ruled to hold a value (design principles 3.5). The seed stays in the corpus unedited, the same choice the two entries above make."
-kind = "negative"
+desc = "The legal half of `rc04_seed72` with no pass: the program runs and says nothing, and `std::stats` reads 2 direct calls -- the number the entry below must move. This is the reading still alive in this shape; the place decision `a1723fbb9` added is not on this program's path (see the note above). What made this half legal had to change with the rule: the closure used to write `v16`, which the withdrawn state rule allowed and `ClosureAssignsCapturedName` (0x03000213) refuses, so the write is now the line before the closure is made and the closure only reads `v16`. The value is the same (`0 / -2` is 0) and so is this reading."
+kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
-expect_diagnostic_code = "0x03000213"
+args = ["${case}", "std::stats", "${run_nvm}"]
+expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
-assert(text.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + text)
-assert(text.includes('a `Ref`'), 'and it names the ways out: ' + text)
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 2, 'no pass: 2 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 0, 'the program says nothing, read ' + JSON.stringify(lines))
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "adb67e081.rc04_seed72_within_call_inline"
-desc = "The same refusal as its twin: the seed is refused before any pass runs, so `std::opt::inline` never sees it and the inlining this pair used to read (`direct_calls` 2 -> 0) is not measured any more. It was the reading still alive in this shape until 2026-11-16, when the shape it stood on -- `ClosureCaptureEscapes` -- was withdrawn (design principles 3.5). Kept rather than deleted: the entry is where the inlining has to come back from once a legal seed is generated for it."
-kind = "negative"
+desc = "The same program under `std::opt::inline`: 0 direct calls remain (from 2), so the inlining this shape still exercises really happened, and the program still says nothing. A pass that stops inlining leaves 2 here and turns the entry red. Same carrier as the entry above: the closure reads `v16` and the write that used to be inside it is one line up."
+kind = "behavior"
 case = "../../../cases/opt/adb67e081/rc04_seed72_within_call.cml"
-args = ["${case}"]
-expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
-expect_diagnostic_code = "0x03000213"
+args = ["${case}", "std::opt::inline", "std::stats", "${run_nvm}"]
+expect_exit = 0
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
-const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
-assert(text.includes('is assigned inside a closure'), 'the closure rule refuses the write: ' + text)
-assert(text.includes('a `Ref`'), 'and it names the ways out: ' + text)
+    const out = input.normalized.stdout || ''
+    const m = out.match(/GRAPH_STATS (\{[^}]*\})/)
+    assert(m, 'the stats line is printed: ' + out)
+    const stats = JSON.parse(m[1])
+    assert(stats.direct_calls === 0, 'inline: 0 direct calls read, got ' + stats.direct_calls)
+    const lines = out.split('\n').filter((l) => l.length && !l.startsWith('GRAPH_STATS'))
+    assert(lines.length === 0, 'the program says nothing after the pass too, read ' + JSON.stringify(lines))
 }
 """
 timeout_ms = 20000

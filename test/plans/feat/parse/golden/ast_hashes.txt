@@ -3855,7 +3855,7 @@ cb91620861178c37 ok test/cases/modules/types/user_type_functions.cml
 7c5dc5bad471b781 ok test/cases/opt/adb67e081/rc00_seed27.cml
 fc5dd9b72523c060 ok test/cases/opt/adb67e081/rc03_seed30.cml
 2b621abdfd198a5b ok test/cases/opt/adb67e081/rc04_seed72.cml
-19053ef7a8c95bbd ok test/cases/opt/adb67e081/rc04_seed72_within_call.cml
+a79c3c374d3faa3e ok test/cases/opt/adb67e081/rc04_seed72_within_call.cml
 2711932a9621a154 ok test/cases/opt/adb67e081/rc05_seed104.cml
 bdd870b6f7a7c27e ok test/cases/opt/algebra_rules/agreement.cml
 c1a092942caf4b56 ok test/cases/opt/algebra_rules/divergence.cml
@@ -3992,7 +3992,7 @@ bf16d062630f489c ok test/cases/opt/inline/specialized_arg_keeps_order.cml
 ab4c6a929c879d8f ok test/cases/opt/inline/strategy_small_non_arm.cml
 6d44505d3ae85ccd ok test/cases/opt/inline/value_ctrl_gate_anchor.cml
 84fbbd82e01d23e9 ok test/cases/opt/inline_cycle/seed23_fold_inline.cml
-c6564e811813f9b0 ok test/cases/opt/inline_cycle/seed23_fold_inline_within_call.cml
+6d3e4f5791aef24b ok test/cases/opt/inline_cycle/seed23_fold_inline_within_call.cml
 e307907dfde19d93 ok test/cases/opt/never_exit/exit_last.cml
 55fd64dcfafce9f0 ok test/cases/opt/never_exit/fail_last.cml
 52c544cbda8f4ffd ok test/cases/opt/pass_params/plain.cml

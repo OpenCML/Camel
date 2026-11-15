@@ -193,6 +193,44 @@ struct RequiredOrdering {
 /// through references outside a sync block).
 std::vector<RequiredOrdering> requiredOrderings(const Program &program, const GCGraph &graph);
 
+// ---- Which port of a graph an access came through -------------------------------------------------
+//
+// A resource use that reaches its graph through a port is written down by the port's number in the
+// graph's own numbering (sem::ResourceSignature: `with` parameters first, then ordinary ones, and a
+// capture by its position). Two readers need that number, and they must not spell it themselves:
+// this analysis binds an access to the port it came through, and the GIR printer says which port a
+// drawn node is. The last group is the one that bit -- a graph that a direct call already runs
+// holds the values it captured as further `with` ports after the ones it declares
+// (`Builder::captureInto`), and numbering those by their `with` index names a slot no clause ever
+// wrote. `Builder::numberBodyPorts` numbers them by their capture position, so this does too.
+
+/// Which of a graph's three port groups a port belongs to.
+enum class PortGroup : uint8_t {
+    None = 0,
+    Norm,
+    With,
+    Capture,
+};
+
+/// A port, in the group whose numbering names it.
+struct PortPlacement {
+    PortGroup group = PortGroup::None;
+    /// The index the group's own numbering gives this port: the norm port's position, the declared
+    /// `with` port's position, or the capture's position in the graph's capture table.
+    size_t index = 0;
+};
+
+/// How many `with` ports `graph` declares, as opposed to the ones that carry its captures. A
+/// capture is appended after every declared `with` port (`Builder::captureInto`), so the declared
+/// ones are the list's length less the capture table's -- and the whole list when the graph holds
+/// its captures as closure ports instead, or when the table is longer than the list (which no
+/// built graph is, and which must not underflow a count either).
+size_t declaredWithPorts(const GCGraph &graph);
+
+/// Which group `ref` is a port of, and where it stands there. A node of no group is
+/// `PortGroup::None` -- no built graph has one, and a reader that meets one has no number to give.
+PortPlacement portPlacement(const GCGraph &graph, gc_node_ref_t ref);
+
 // ---- Effect containment, the first commit check of the effect analysis --------------------------
 //
 // docs/design/effects/analysis.cn.md 4.1: "at each call site, the footprint of the function value
@@ -231,10 +269,12 @@ struct EffectContainmentReport {
     size_t anyHandle  = 0;
     /// A cell of a variable: not something a `uses` clause can spell (design effects plan 5.1).
     size_t variableCell = 0;
-    /// A call site whose callee the graph does not resolve -- `__root__`'s indirect call of the
-    /// entry, today. This one is a gap in the analysis rather than a limit of the language: the
-    /// type at that call site is written, the checker just does not find the body behind the value.
-    /// It has its own count for that reason, and it is a to-do, not a silence.
+    /// A call site the check could not read at all, counted rather than passed: no function value
+    /// at its first `with` input, or one whose body the graph does not name -- a `Fill` closure
+    /// value, a parameter of function type, a value an operator made. It is a gap in the analysis
+    /// and not a limit of the language: there is a body behind the value, the checker just cannot
+    /// find it from the graph. It has its own count for that reason, and it is a to-do, not a
+    /// silence.
     size_t unresolved = 0;
     /// Readings declined for a reason the counts above do not name.
     size_t other = 0;
