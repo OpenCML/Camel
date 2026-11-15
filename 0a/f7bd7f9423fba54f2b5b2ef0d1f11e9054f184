@@ -1,0 +1,39 @@
+`lane-streamred` 合并的闸门读数（正文引用了这条 note）。
+
+合并：`0af7bd7f9423fba54f2b5b2ef0d1f11e9054f184`，`--no-ff` 合入 `lane-streamred`（`5afb6b387`
++ 同步合并 `679420bce`）。**无冲突**；净改动 **1 文件 `+66`**，`src/`/`include/`/`test/`/`stdlib/`
+命中 **0**（纯 docs）。推：`b96cc93e1..0af7bd7f9`，`ls-remote` =
+0af7bd7f9423fba54f2b5b2ef0d1f11e9054f184。
+
+闸门（合后 `develop`，`-Jobs 8`，主机 88）：
+    `test/plans/feat/docs_links.plan.toml` → `[SUMMARY] total: 21, pass: 21, fail: 0`
+        `[PASS] docs.snippets_compile 7.38 s`
+    `--changed`（`$env:CAMEL_TEST_BASE='b96cc93e1'`）→ `[SUMMARY] total: 33, pass: 33, fail: 0`
+    `check-doc-links --citations` → exit 0
+    [provenance] tip 0af7bd7f9 | tier fast | jobs 8 | tree /home/zjwei/camel-work/Camel
+无 `killed by a signal`、无 `timed out`、**无红**。
+
+**一次选择错误（不是测试失败）**：第一次用 `-Plan test/plans/feat/docs_links`（目录，不存在）跑，
+主机回 `[PLAN ERROR] … holds no *.plan.toml` / `RUN_EXIT=2`；**没有跑任何用例**。改用
+`test/plans/feat/docs_links.plan.toml` 后为 `21/21/0`。记在这里是因为 `RUN_EXIT=2` 与测试红长得很像。
+
+## 车道的三条判定，在代码里复核过（不是照抄它的数）
+1. **甲（有缺陷）的代码依据成立**：`src/compile/gir/builder_diagnostics.cpp:1189–1198`，
+   `for (node_handle_t read : syncedReads_)` 的注释写着「…handed over when its body is complete and
+   **released with its builder**」，随后 `auto *owner = DraftGraphBuilder::fromRef(read);
+   if (owner == nullptr) { continue; }` —— 跳过是活的、注释在、`git grep 'released with its builder'`
+   命中 `:1191`。若「建图器必然活过句柄」成立，这段跳过与注释都是死代码，而它们不是。
+2. **`(125)`/`(151)` 是源码行号**：页里明写「同一句 GUARD：v0.2.40 的树在 `builder_support.h` 第 125 行、
+   `df057ee8a` 上第 151 行（epoch 修复把 `nodeDraftOf` 写长 26 行）—— 一个位置，行号移动」，
+   并说明 `Location` 取自 `std::source_location::line()`。`include/camel/utils/assert.h` 复核：
+   `GUARD` 在 95–100 行**无 NDEBUG 分支**，`#ifdef NDEBUG`（102 行）只包住 `ASSERT`。
+3. **`ref` 那条红写的是「未定」**：页里原话「该计划单跑 `-Jobs 8` 0 红 / 10 轮 —— 两个样本分不开，
+   不足以判它被谁污染，故未做二分；它注释里的 `p` 量自另一份二进制 `50fdda557c`，搬不过来」。
+   **没有**出现「被污染」「base rate」这类定论。
+
+## 清理
+`worktree remove` 首次 **exit 255 `Permission denied`**（目录被占用）；但登记已移除
+（`git worktree list` 不再列出它），随后 `worktree remove` 报 `is not a working tree`（128）。
+`branch -d` **exit 0**（was `679420bce`）。残余：`D:\Projects\Camel-wt\streamred` 这个**空目录**
+（`entries=0`、无 `.git`、未登记）删不掉（仍被锁）；`Remove-Item` 无效但**没有**用 `-Recurse`/`-Force`
+去硬删。它不在 `git worktree list` 里，不影响任何车道或读数。
