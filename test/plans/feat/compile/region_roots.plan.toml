@@ -1,0 +1,105 @@
+id = "compile.region_roots"
+order = 1012
+tier = "fast"
+tags = ["feat", "compile", "effects", "regions"]
+desc = "The roots a region has (design principles 3.1): a write to a resource outside the program runs because the region it is written in runs."
+
+# Design principles 3.1, "区域的根" (docs/design/effects/analysis.cn.md 3.4, `regionRoot`): a write to a
+# resource outside the program is used by the region it is written in, so a running region runs it
+# although nothing reads what it produces. The author's ruling of 2026-11-15 names this case first
+# ("非同步函数里的打印不执行"): with `main` not written `sync`, its three prints printed nothing and
+# reported one `SemanticDiag::EffectNotExecuted` per line.
+#
+# The rule is read from the resource a write names and never from the operator's name, so the second
+# case writes `rng` through `seed` rather than the console. The two remaining cases are the boundary:
+# the warning is not silenced -- it names what really does not run (a region whose owner runs
+# nothing, and a read nothing needs).
+
+[[tests]]
+name = "region_roots.plain_body"
+desc = "A body that is not a sync block holds three bare prints: a running region runs the writes it holds, so all three run in the order they are written and nothing is reported. The four back ends print the same bytes."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/plain_body.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "alpha\nbeta\ngamma\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.plain_body.default"
+desc = "A body that is not a sync block holds three bare prints: a running region runs the writes it holds, so all three run in the order they are written and nothing is reported. Pipeline: default (interpreter)."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/plain_body.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+expect_stdout_exact = "alpha\nbeta\ngamma\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.resource_write"
+desc = "The rule is by resource, not by operator name: `seed` writes the generator `rng` and is a bare statement of a body that is not a sync block, and the key the body draws from it is the one the seed gave."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/resource_write.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "keys agree\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.dead_loop"
+desc = "The boundary of the rule: a write is a root of its region and a region runs because its owner runs, so the print in a loop whose value nobody takes does not run, and SemanticDiag::EffectNotExecuted still names the loop and the write."
+kind = "negative"
+case = "../../../cases/compile/region_roots/dead_loop.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `the loop body does not run, so nothing is printed, got: ${out}`)
+assert(input.normalized.stderr.includes('The loop has side effects but is never executed'), `the loop is what does not run, and the warning says so: ${input.normalized.stderr}`)
+assert(input.diagnostics.length === 2, `the loop and the write in its body, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(input.diagnostics.every(d => d.name === 'SemanticDiag::EffectNotExecuted'), `expected only EffectNotExecuted, got ${input.diagnostics.map(d => d.name).join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.read_only"
+desc = "The boundary of the rule, and why the predicate is a write and not an effect: a read of an outside resource is a dependency like a read of a variable, so `get_env` with nobody needing its value does not run and is still reported."
+kind = "negative"
+case = "../../../cases/compile/region_roots/read_only.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `nothing needs the value, so nothing is printed, got: ${out}`)
+assert(input.diagnostics.length === 1, `expected exactly one diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(input.diagnostics[0].name === 'SemanticDiag::EffectNotExecuted', `expected EffectNotExecuted, got ${input.diagnostics[0].name}`)
+}
+"""
+timeout_ms = 20000

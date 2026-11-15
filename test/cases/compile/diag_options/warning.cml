@@ -1,9 +1,17 @@
 /**
- * One warning (EffectNotExecuted: `main`'s body is not a sync block, so the println nothing depends
- * on does not run) and no error. Used to test the command-line switches for warnings.
+ * One warning (EffectNotExecuted: `main`'s body is not a sync block, and the value of an external
+ * read nothing depends on is not needed, so the read does not run) and no error. Used to test the
+ * command-line switches for warnings.
+ *
+ * It used to hold `println('never printed')`. A write to a resource outside the program is used by
+ * the region it is written in (design principles 3.1, the author's ruling of 2026-11-15), so that
+ * line runs now and reports nothing; a read stays demand-driven, which is what this case needs:
+ * exactly one warning of the same code, and no output.
  */
 
+import { get_env } from env
+
 func main(): int {
-    println('never printed')
+    get_env("CAMEL_DIAG_OPTIONS_NO_SUCH_VARIABLE")
     return 0
 }

@@ -121,10 +121,9 @@ golden = "golden/tutorial_examples/05_map_order.txt"
 
 [[tests]]
 name = "tutorial.examples.06_callee_decides"
-desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a callee that writes to its var parameter decides what runs and in what order; main only asks for the result. The print in the callee's body runs with the body (design principles 3.1, the author's ruling of 2026-11-15), so what the page shows is what the file prints and there is no warning left to hide."
 case = "../../../docs/tutorial/examples/06_callee_decides.cml"
 golden = "golden/tutorial_examples/06_callee_decides.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_sync_block"
@@ -134,20 +133,18 @@ golden = "golden/tutorial_examples/06_sync_block.txt"
 
 [[tests]]
 name = "tutorial.examples.06_sync_body"
-desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. The dropped println is reported as a warning on standard error, which the page does not show."
+desc = "Chapter 10: a function body marked sync -- the call inside it is ordered, and only the value it returns is used outside. Its print runs whether or not the body is `sync`: `sync` orders it, it does not enable it, so the page shows the whole output."
 case = "../../../docs/tutorial/examples/06_sync_body.cml"
 golden = "golden/tutorial_examples/06_sync_body.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 # The lesson of the file is the warning: the call to println has an effect nothing depends on, so it is
 # not executed. The warning is the compiler's and it must keep being reported (the chapter's page shows
 # it in the block after the command).
 [[tests]]
 name = "tutorial.examples.06_unused_effect"
-desc = "Chapter 10: an effect that nothing depends on does not run -- the warning on standard error names the call that is dropped, and only the used value is printed."
+desc = "Chapter 10: a write is not demanded by a reader -- the body is a region and the write to `stdout` is a root of it (design principles 3.1, the author's ruling of 2026-11-15), so the print runs although nothing uses its result. The page used to show the call dropped and a warning."
 case = "../../../docs/tutorial/examples/06_unused_effect.cml"
 golden = "golden/tutorial_examples/06_unused_effect.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.06_var_order"
@@ -530,10 +527,9 @@ golden = "golden/tutorial_examples/09_exercise.txt"
 # it, so each of those entries asserts the diagnostic name rather than only the golden.
 [[tests]]
 name = "tutorial.examples.10_unused_effect"
-desc = "An effect whose result nothing needs: `greet`'s body is not a sync block, so its `println` does not run, and the warning names the call that is dropped."
+desc = "A write whose result nothing needs still runs: `greet`'s body is a region, so its `println` runs although the body is not a sync block, and nothing is reported."
 case = "../../../docs/tutorial/examples/10_unused_effect.cml"
 golden = "golden/tutorial_examples/10_unused_effect.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.10_sync_body"
@@ -543,10 +539,9 @@ golden = "golden/tutorial_examples/10_sync_body.txt"
 
 [[tests]]
 name = "tutorial.examples.10_sync_block"
-desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains. The warning names the effect nobody needs."
+desc = "A sync function body orders its own statements, and a `sync` block inside it orders what it contains; the print outside the block runs too, because its region runs. Nothing is reported."
 case = "../../../docs/tutorial/examples/10_sync_block.cml"
 golden = "golden/tutorial_examples/10_sync_block.txt"
-expect_output_contains = ["SemanticDiag::EffectNotExecuted"]
 
 [[tests]]
 name = "tutorial.examples.10_var_order"

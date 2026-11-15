@@ -1,9 +1,11 @@
 // The graph's edges are data, sync and order (docs/design/effects/edges.cn.md; design
-// principles 3.1). An order edge only orders: it does not make either end execute. So an
-// effect whose value nothing uses does not run, even when another effect on the same
-// resource is written after it (formal F2, item 7).
+// principles 3.1). An order edge only orders: it does not make either end execute. What makes a
+// write of `println` run is the region it is written in (the author's ruling of 2026-11-15), not a
+// later write on the same resource (formal F2, item 7).
 
-// `println(x)` returns `x`, so `b`'s effect is used by `return b` and `a`'s is not.
+// `println(x)` returns `x`, so `b`'s effect is used by `return b`. `a`'s is needed by nobody, and it
+// runs anyway: this body is a region, and a write to stdout is a root of it. The name is what the
+// case used to measure -- the first write was dropped.
 func first_dropped(): int {
     let a = println(1)
     let b = println(2)

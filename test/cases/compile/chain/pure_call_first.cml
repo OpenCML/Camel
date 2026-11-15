@@ -1,0 +1,24 @@
+/**
+ * A `sync` block of two statements: a call of a pure function that cannot fault, and a print.
+ * The call's value is read by the block's last statement and by nothing between the two, so the
+ * call has no order to keep: it is "freely arranged" (design principles 3.4), and the block's
+ * chain must not carry it. `pure_call_second.cml` writes the same two statements the other way
+ * round, and the two writings must have one canonical graph -- byte for byte under
+ * `std::jgir canonical=true`, which is what "the order of these two statements is unobservable"
+ * means. Read red today: `twice` is a call, so the builder puts it on the chain and the two
+ * writings differ by that edge.
+ *
+ * The callee is not recursive, reaches no resource and holds no operation that may fault, so
+ * there is nothing in it for the chain to keep.
+ *
+ * Run: camel test/cases/compile/chain/pure_call_first.cml
+ */
+func twice(x: int): int {
+    return x * 2
+}
+
+func main(): int sync {
+    let a = twice(3)
+    println(1)
+    return a
+}
