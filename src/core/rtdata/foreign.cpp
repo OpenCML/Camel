@@ -20,6 +20,7 @@ namespace {
 
 struct ForeignResourceCounters {
     std::atomic<uint64_t> createdControlBlocks{0};
+    std::atomic<uint64_t> createdCountedBlocks{0};
     std::atomic<uint64_t> disposedResources{0};
     std::atomic<uint64_t> finalizedWrappers{0};
     std::atomic<uint64_t> releasedControlBlocks{0};
@@ -53,6 +54,12 @@ uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
 }
 
+/// The kind the reference type gives its handle (`RefType::resourceHandleName()`): the blocks with
+/// this kind are the boxes a count reclaims, and the anchor compares their creations with the plan's
+/// producing rows. A string compare per block, and blocks are made rarely; anything else would need
+/// the descriptor to carry a flag into code that does not know the reference type.
+std::string_view countedKind() { return "state::Ref"; }
+
 // The collector's deferred-release queue (mm/deferred.h) calls this after the collection.
 void releaseControlBlockAfterCollection(void *context) noexcept {
     static_cast<ForeignResourceControlBlock *>(context)->releaseFromWrapperFinalizer();
@@ -65,6 +72,9 @@ ForeignResourceControlBlock::ForeignResourceControlBlock(
     : descriptor_(std::move(descriptor)), resource_(resource),
       debugId_(counters().nextDebugId.fetch_add(1, std::memory_order_acq_rel)) {
     counters().createdControlBlocks.fetch_add(1, std::memory_order_acq_rel);
+    if (descriptor_.kind == countedKind()) {
+        counters().createdCountedBlocks.fetch_add(1, std::memory_order_acq_rel);
+    }
     counters().liveControlBlocks.fetch_add(1, std::memory_order_acq_rel);
     auto &live = liveControlBlocks();
     std::lock_guard<std::mutex> lock(live.mutex);
@@ -246,6 +256,35 @@ bool giveBackCountNow(Object *value) noexcept {
     return control->releaseCountNow();
 }
 
+namespace {
+
+CountedCreationAnchor &anchorCounters() {
+    static CountedCreationAnchor value;
+    return value;
+}
+
+} // namespace
+
+void recordCountedCreation(bool namedByThePlan) noexcept {
+    CountedCreationAnchor &anchor = anchorCounters();
+    anchor.creations += 1;
+    if (namedByThePlan) {
+        anchor.found += 1;
+    } else {
+        anchor.missing += 1;
+    }
+}
+
+void recordPlanRows(uint64_t rows, uint64_t rowsSeen) noexcept {
+    CountedCreationAnchor &anchor = anchorCounters();
+    anchor.rows += rows;
+    anchor.rowsSeen += rowsSeen;
+}
+
+CountedCreationAnchor countedCreationAnchor() noexcept { return anchorCounters(); }
+
+void resetCountedCreationAnchorForTests() noexcept { anchorCounters() = CountedCreationAnchor{}; }
+
 void *ForeignResourceObject::resource() {
     if (!control_) {
         throw std::runtime_error("foreign resource wrapper has no control block");
@@ -350,6 +389,7 @@ ForeignResourceStats foreignResourceStats() {
     auto &c = counters();
     return ForeignResourceStats{
         .createdControlBlocks  = loadCounter(c.createdControlBlocks),
+        .createdCountedBlocks  = loadCounter(c.createdCountedBlocks),
         .disposedResources     = loadCounter(c.disposedResources),
         .finalizedWrappers     = loadCounter(c.finalizedWrappers),
         .releasedControlBlocks = loadCounter(c.releasedControlBlocks),
@@ -364,6 +404,7 @@ ForeignResourceStats foreignResourceStats() {
 void resetForeignResourceStatsForTests() {
     auto &c = counters();
     c.createdControlBlocks.store(0, std::memory_order_release);
+    c.createdCountedBlocks.store(0, std::memory_order_release);
     c.disposedResources.store(0, std::memory_order_release);
     c.finalizedWrappers.store(0, std::memory_order_release);
     c.releasedControlBlocks.store(0, std::memory_order_release);

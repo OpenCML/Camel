@@ -23,6 +23,10 @@ namespace camel::core::rtdata {
 
 struct ForeignResourceStats {
     uint64_t createdControlBlocks  = 0;
+    /// The blocks whose kind is the core's reference handle (`RefType::resourceHandleName()`): the
+    /// boxes a count reclaims. `createdControlBlocks` counts every foreign block, a python object
+    /// and a file handle included, so it cannot be compared against a plan's count of values.
+    uint64_t createdCountedBlocks  = 0;
     uint64_t disposedResources     = 0;
     uint64_t finalizedWrappers     = 0;
     uint64_t releasedControlBlocks = 0;
@@ -158,6 +162,34 @@ class ForeignResourceObject final : public Object {
 // `Array::set` for aggregates), so they are added here first and wired one back end at a time.
 bool retainCountNow(Object *value) noexcept;
 bool giveBackCountNow(Object *value) noexcept;
+
+/// ---- The anchor: a box that was made has to be a value the plan counts -----------------------
+//
+// The balance the plan prints is an identity between columns one walk produced, so a reference
+// missed on both sides at once leaves it balanced. The anchor asks the question the walk cannot:
+// at the moment a box is made, does the plan name the node that is running as one that makes a
+// value? An executor answers it with the pair below, once per node whose execution made boxes --
+// `execPlan().refProducedAt` is the plan's answer, and it is read by the executor because that is
+// the only place that has both the plan and the node.
+//
+// A row of the plan can be made many times (a node in a loop makes a box per round), so the counts
+// are not expected to line up one to one. What must hold is `missing == 0`: every creation is
+// explained. The third reading is the other direction -- a row that no creation ever exercised,
+// which would be a producing value the table promises and the program never makes.
+struct CountedCreationAnchor {
+    uint64_t creations = 0;
+    uint64_t found     = 0;
+    uint64_t missing   = 0;
+    /// How many of the plan's producing rows were exercised at least once, summed over the graphs
+    /// that ran, and how many rows the plans had. `unseen` is the second minus the first.
+    uint64_t rowsSeen = 0;
+    uint64_t rows     = 0;
+};
+void recordCountedCreation(bool namedByThePlan) noexcept;
+/// The plan's rows: one call per graph that a run executes, with its count of producing positions.
+void recordPlanRows(uint64_t rows, uint64_t rowsSeen) noexcept;
+CountedCreationAnchor countedCreationAnchor() noexcept;
+void resetCountedCreationAnchorForTests() noexcept;
 
 ForeignResourceStats foreignResourceStats();
 /// Releases every external resource that is still held, newest first, and returns how many were
