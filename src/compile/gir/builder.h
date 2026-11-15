@@ -1053,6 +1053,14 @@ class Builder {
     };
     std::unordered_map<node_handle_t, CallValue> callValues_;
     void collapseNonEscapingVariableReads();
+    /// The unit of a `var` whose write a branch carried as its own value (carriedVersions_) and
+    /// that nothing reads any more: its stores, the `:var/new` cell and the value the cell was made
+    /// with. Each node goes only when it has no user left of any kind -- the stores are read by the
+    /// JOIN that carried them and by each other through their order edges, the cell by its stores,
+    /// and the value the cell was made with by the cell -- so the walk repeats until nothing more
+    /// loses its last user. A cell that is still a resource (captured, a `var` parameter, handed to
+    /// a call, still read) keeps its unit.
+    void dropCarriedVariableUnits();
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
     // operator result that its argument types fix (its type folder), e.g. the shape

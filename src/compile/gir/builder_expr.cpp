@@ -2155,6 +2155,196 @@ void Builder::collapseNonEscapingVariableReads() {
         }
     }
 }
+
+void Builder::dropCarriedVariableUnits() {
+    if (carriedVersions_.empty() || currGraph_ == nullptr) {
+        return;
+    }
+    auto &draft = currGraph_->transaction().edit();
+    // The users of a node, of every kind. They are read from the draft and not from a record this
+    // builder keeps: a capture, a `var` argument, a region result and a chain all name a node
+    // through the draft, and an edge is the only thing an erasure can take away.
+    const auto usersOf = [&](camel::runtime::gc_node_ref_t id, std::vector<camel::runtime::gc_node_ref_t> *out) {
+        bool any = false;
+        for (auto users : {draft.normUsersOf(id),
+                           draft.withUsersOf(id),
+                           draft.ctrlUsersOf(id),
+                           draft.syncUsersOf(id),
+                           draft.orderUsersOf(id)}) {
+            any = any || !users.empty();
+            if (out != nullptr) {
+                out->insert(out->end(), users.begin(), users.end());
+            }
+        }
+        return any;
+    };
+    const auto isRoot = [&](camel::runtime::gc_node_ref_t id) {
+        return id == draft.exitNode() || id == draft.outputNode() || id == draft.returnNode();
+    };
+    // A node a region hands out is a result of that region: an arm's value or a body's value is
+    // named there, and erasing it would leave the region naming a node the graph does not hold.
+    const auto isRegionResult = [&](camel::runtime::gc_node_ref_t id) {
+        for (size_t r = 0; r < draft.regionCount(); ++r) {
+            if (draft.region(static_cast<uint32_t>(r)).result == id) {
+                return true;
+            }
+        }
+        return false;
+    };
+    for (const auto &[cell, carried] : carriedVersions_) {
+        if (!draft.isNamedBy(cell) || !draft.isNamedBy(carried)) {
+            continue;
+        }
+        // The cell is a cell of this graph that is not a resource any more. A captured cell, a
+        // `var` parameter and one handed to a call as a `var` argument are `escapingVariables_`;
+        // a read still recorded for it is the fold's business and is not folded here, so such a
+        // cell keeps its unit.
+        if (nodeKindOf(cell) != camel::runtime::GCNodeKind::Oper ||
+            escapingVariables_.contains(cell) || captureOriginOf_.contains(cell)) {
+            continue;
+        }
+        const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
+        if (draft.header(cellId) == nullptr || !draft.alive(cellId)) {
+            continue;
+        }
+        // Its stores are the only users it has: a read, a capture, a `var` argument or anything
+        // else the builder did not record there keeps the cell (and its unit) as it is.
+        const auto writes = writesOf_.find(cell);
+        if (writes == writesOf_.end() || writes->second.empty()) {
+            continue;
+        }
+        std::unordered_set<camel::runtime::gc_node_ref_t> stores;
+        bool onlyStores = true;
+        for (node_handle_t write : writes->second) {
+            if (!draft.isNamedBy(write)) {
+                onlyStores = false;
+                break;
+            }
+            stores.insert(nodeIdOf(write));
+        }
+        if (onlyStores) {
+            std::vector<camel::runtime::gc_node_ref_t> users;
+            usersOf(cellId, &users);
+            for (camel::runtime::gc_node_ref_t user : users) {
+                if (!stores.contains(user)) {
+                    onlyStores = false;
+                }
+            }
+        }
+        if (!onlyStores) {
+            continue;
+        }
+        // The block's own GATEs go with the store. The arm of a `sync` block hands its value out
+        // through GATEs that wait for the statement before them, and now that the branch takes the
+        // value the write wrote, nothing reads those GATEs. They are collected as a set: a GATE that
+        // only waits on what is already in the set, or on nothing at all, is part of the unit, and a
+        // GATE may wait on the store while the store waits on it.Only a GATE or a COPY in the region
+        // of a store is taken this way: an operator or a call stands for a statement the program
+        // wrote, and a node a region hands out is that region's result and is not a unit's part.
+        std::unordered_set<camel::runtime::gc_node_ref_t> doomed = stores;
+        for (bool changed = true; changed;) {
+            changed = false;
+            for (camel::runtime::gc_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+                if (!draft.alive(id) || doomed.contains(id) || isRoot(id) || isRegionResult(id)) {
+                    continue;
+                }
+                const camel::runtime::DraftNodeHeader *header = draft.header(id);
+                if (header == nullptr || (header->kind != camel::runtime::GCNodeKind::Gate &&
+                                          header->kind != camel::runtime::GCNodeKind::Copy)) {
+                    continue;
+                }
+                bool inStoreRegion = false;
+                for (camel::runtime::gc_node_ref_t store : stores) {
+                    inStoreRegion = inStoreRegion || draft.nodeRegion(store) == draft.nodeRegion(id);
+                }
+                if (!inStoreRegion) {
+                    continue;
+                }
+                std::vector<camel::runtime::gc_node_ref_t> users;
+                usersOf(id, &users);
+                bool onlyDoomed = true;
+                for (camel::runtime::gc_node_ref_t user : users) {
+                    if (doomed.contains(user)) {
+                        continue;
+                    }
+                    const camel::runtime::DraftNodeHeader *userHeader = draft.header(user);
+                    if (userHeader == nullptr || !draft.alive(user)) {
+                        continue;
+                    }
+                    onlyDoomed = false;
+                }
+                if (onlyDoomed) {
+                    doomed.insert(id);
+                    changed = true;
+                }
+            }
+        }
+        // Each store is now read by the JOIN that carried it and by no one else: the JOIN's control
+        // input from it goes with the store, because the slot of the JOIN holds the value the store
+        // wrote, which is what the store stood for.
+        bool storedOnly = true;
+        for (camel::runtime::gc_node_ref_t store : stores) {
+            std::vector<camel::runtime::gc_node_ref_t> users;
+            usersOf(store, &users);
+            for (camel::runtime::gc_node_ref_t user : users) {
+                if (doomed.contains(user)) {
+                    continue;
+                }
+                if (nodeKindOf(nodeDraftOf(cell)->ref(user)) != camel::runtime::GCNodeKind::Join) {
+                    storedOnly = false;
+                }
+            }
+            if (store == draft.exitNode() || store == draft.outputNode() ||
+                store == draft.returnNode()) {
+                storedOnly = false;
+            }
+        }
+        if (!storedOnly) {
+            continue;
+        }
+        for (const camel::runtime::gc_node_ref_t node : doomed) {
+            chainedNodes_.erase(nodeDraftOf(cell)->ref(node));
+            draft.eraseNode(node);
+        }
+        writesOf_.erase(cell);
+        knownCellUsers_.erase(cell);
+        // The cell is not a variable of this body any more: what is left of it is erased below,
+        // and a registry that still names it would ask the draft about a node it no longer holds
+        // (cellsOfBody walks `variables_` and asks each one's kind).
+        variables_.erase(cell);
+        if (const auto modifiers = nodeModifierMaps_.find(currGraph_.get());
+            modifiers != nodeModifierMaps_.end()) {
+            modifiers->second.erase(nodeIdOf(cell));
+        }
+        // What is left of the unit loses its last user one node at a time: the cell, then the value
+        // it was made with, then that value's own source. Only a value of this unit is taken -- a
+        // data node or a copy -- so nothing that can do something on its own is dropped here.
+        for (camel::runtime::gc_node_ref_t node = cellId;;) {
+            if (draft.header(node) == nullptr || !draft.alive(node) || usersOf(node, nullptr) ||
+                isRoot(node)) {
+                break;
+            }
+            camel::runtime::gc_node_ref_t below = 0;
+            const auto inputs                   = draft.normInputsOf(node);
+            if (inputs.size() == 1) {
+                below = inputs[0];
+            }
+            if (node != cellId) {
+                const camel::runtime::DraftNodeHeader *header = draft.header(node);
+                if (header == nullptr ||
+                    (header->kind != camel::runtime::GCNodeKind::Data &&
+                     header->kind != camel::runtime::GCNodeKind::Copy)) {
+                    break;
+                }
+            }
+            draft.eraseNode(node);
+            if (below == 0) {
+                break;
+            }
+            node = below;
+        }
+    }
+}
 std::optional<std::string> Builder::immutableNameOf(const GCT::node_ptr_t &expr) {
     GCT::node_ptr_t root = expr;
     while (root && root->type() == GCT::NodeKind::ACCS) {
@@ -2578,3 +2768,4 @@ std::string Builder::bindTemporary(node_handle_t node) {
 }
 
 } // namespace camel::compile::gir
+

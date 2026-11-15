@@ -607,6 +607,10 @@ void Builder::leaveScope() {
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).
     collapseNonEscapingVariableReads();
+    // A `var` whose write a branch carried as its own value leaves a unit nothing reads
+    // (`:var/new`, its stores and the value it was made with). The cell is not a resource any
+    // more, so the unit goes with it.
+    dropCarriedVariableUnits();
     nodeScope_      = nodeScope_->leave();
     graphScope_     = graphScope_->leave();
     decoratedScope_ = decoratedScope_->leave();

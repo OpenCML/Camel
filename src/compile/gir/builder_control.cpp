@@ -2909,8 +2909,44 @@ node_handle_t Builder::buildBranch(
                 }
             }
             if (carried) {
+                auto &mergeDraft = currGraph_->transaction().edit();
                 for (size_t a = 0; a < arms.size(); ++a) {
                     joinWithInputs[a] = arms[a].wrote ? *arms[a].value : *beforeValue;
+                    // The arm's result is the value it wrote: an arm that hands the branch no value
+                    // of its own (`sync { x = 1 }`, a statement branch, whose result is the GATE
+                    // handing out the statement's value) now hands out that value, and an arm with
+                    // no result takes one. An arm that already has a value of its own -- a `return`,
+                    // a block whose value is the branch's value -- keeps it.
+                    const node_handle_t value = nodeDraftOf(variable)->ref(joinWithInputs[a]);
+                    const draft_node_ref_t result = mergeDraft.region(armList[a]->region).result;
+                    const bool holdsOnlyTheWrite =
+                        result != 0 && arms[a].wrote && [&] {
+                            // What the arm hands out, with the GATEs it hands it out through taken
+                            // away: a GATE computes nothing and passes its value on, so when the
+                            // arm's value unwraps to the value the write wrote, that value is the
+                            // arm's result and the GATEs that only carried it are left with no
+                            // reader. A branch value of the arm's own (`if c then a else b` in the
+                            // arm) does not unwrap to it, and the arm keeps what it had.
+                            camel::runtime::gc_node_ref_t node = result;
+                            for (int steps = 0; steps < 64; ++steps) {
+                                const camel::runtime::DraftNodeHeader *header =
+                                    mergeDraft.header(node);
+                                if (header == nullptr ||
+                                    header->kind != camel::runtime::GCNodeKind::Gate) {
+                                    break;
+                                }
+                                const auto inputs = mergeDraft.normInputsOf(node);
+                                if (inputs.empty()) {
+                                    break;
+                                }
+                                node = inputs[0];
+                            }
+                            return node ==
+                                   nodeIdOf(nodeDraftOf(variable)->ref(*arms[a].value));
+                        }();
+                    if (result == 0 || holdsOnlyTheWrite) {
+                        mergeDraft.setRegionResult(armList[a]->region, nodeIdOf(value));
+                    }
                 }
                 joinType      = valueType;
                 mergeVariable = variable;

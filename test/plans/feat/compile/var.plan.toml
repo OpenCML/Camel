@@ -114,7 +114,7 @@ timeout_ms = 120000
 # still builds a unit. Not `known_fail`, for the same reason.
 [[tests]]
 name = "var.an_arm_assignment_is_the_branch_result"
-desc = "`var x = 0` written in each arm of an `if` and the same choice written as the branch's value have one canonical graph: `std::jgir canonical=true` prints the same bytes. Red today because an arm's write keeps its `:var/get`/`:var/new` while the `let` writing is the branch's own result."
+desc = "`var x = 0` written in each arm of an `if` and the same choice written as the branch's value have one canonical graph: `std::jgir canonical=true` prints the same bytes. It was red because an arm's write kept its `:var/get`/`:var/new` while the `let` writing was the branch's own result. It is green because the branch carries the write as its own value (the read after it takes the JOIN, so no `:var/get`, and the arm's result is the value it wrote) and the unit the carry left unread -- `:var/new`, its stores, the GATEs that handed the statement's value out and the value the cell was made with -- is dropped at the end of the graph (dropCarriedVariableUnits, each node only when it has no user of any kind). Both writings now print the same bytes."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -312,4 +312,5 @@ assert(input.diagnostics[0].line === 15 && input.diagnostics[0].column === 7, `r
 }
 """
 timeout_ms = 30000
+
 
