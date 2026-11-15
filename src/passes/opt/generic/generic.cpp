@@ -1041,11 +1041,45 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         }
     }
 
+    // The statements the branch ordered, read before the join goes: what follows it in the block.
+    const std::vector<gc_node_ref_t> branchOrdered(
+        draft.orderUsersOf(join).begin(),
+        draft.orderUsersOf(join).end());
     draft.eraseNode(join);
     draft.eraseNode(brch);
     for (gc_node_ref_t n = 0; n < draft.nodeSlotCount(); ++n) {
         if (removed(n) && draft.header(n)) {
             draft.eraseNode(n);
+        }
+    }
+    // What the branch ordered is ordered by what stands in its place (`edges.cn.md` 4: an ordering
+    // is not lost when the node that carried it goes). The branch held one place in its block's
+    // source order -- what was written before it, then the arm it took, then what was written after
+    // it -- and the edge that said so is the join's ORDER edge. The arm's code can be a value
+    // computed outside the region (the effect a `let` before the branch produced), which no data
+    // edge orders against the statements written after the branch, so dissolving the branch left
+    // two effects of one block free to run in either order (`test/cases/opt/e9/rc02_seed9.cml`,
+    // `rc09_seed15.cml`). The place goes to what stands in it: `stood` when it is a statement the
+    // branch's place keeps alive, and the effects below that only the dropped arm used.
+    //
+    // The edge is written after the erases above: by then the arm's region is no longer an arm, and
+    // an ordering between two statements of one block is what 4.6 allows (one that entered a live
+    // arm is refused at commit).
+    const auto *stoodHeader = stood == kInvalidNodeRef ? nullptr : draft.header(stood);
+    if (stoodHeader != nullptr && stoodHeader->kind != GCNodeKind::Data &&
+        stoodHeader->kind != GCNodeKind::Port) {
+        for (gc_node_ref_t user : branchOrdered) {
+            if (!draft.alive(user) || removed(user) || user == stood) {
+                continue;
+            }
+            // Only between two nodes that are neither ahead of the other: a statement the place
+            // already runs after needs nothing, and one the place runs after would close a cycle of
+            // inputs.
+            if (isComputedAfter(transaction, user, stood) ||
+                isComputedAfter(transaction, stood, user)) {
+                continue;
+            }
+            camel::runtime::appendControlDependency(transaction, stood, user);
         }
     }
     // An effect among those reads that only the dropped arm used runs where the branch stood,
@@ -1093,6 +1127,13 @@ bool pruneBranch(camel::runtime::GraphTransaction &transaction, gc_node_ref_t br
         addTarget(result);
         for (gc_node_ref_t user : joinValueUsers) {
             addTarget(user);
+        }
+        // The code written after the branch is what its place hands on to: an effect the branch ran
+        // (or kept alive for the arm it did not take) is before it, not after it.
+        for (gc_node_ref_t user : branchOrdered) {
+            if (draft.alive(user) && !removed(user)) {
+                addTarget(user);
+            }
         }
         if (targets.empty()) {
             // Nothing after the branch carries an order (a branch folded to a constant nothing

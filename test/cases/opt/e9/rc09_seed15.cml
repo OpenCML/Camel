@@ -1,0 +1,10 @@
+func q42(a43: int, a44: bool): bool sync {
+    println('');
+    return false;
+}
+
+func main(): int sync {
+    if 2.0 > 1.0 then println('L4 {} {}'->format<0, ''>);
+    let n61 = q42(4, true);
+    return 0;
+}
