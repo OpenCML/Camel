@@ -1197,11 +1197,19 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
 std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 
 /// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its payload.
-/// The members themselves are the frame slots the payload names, not the aggregate's inputs, so this
-/// number and the input count are two different things -- which is why the verdict below refuses.
+/// The members themselves are the components of the object it builds -- the entries of the payload's
+/// `slots` table, which its `with` inputs fill position by position -- not the aggregate's inputs, so
+/// this number and the input count are two different things.
 uint32_t aggregateArity(const GraphDraft &draft, gc_node_ref_t ref);
 
+/// The aggregate judgement of `camel/runtime/graph.h`, asked of a draft: the same kernel, the other
+/// face (`aggregateTailInputIndex` and `AggregateTailVerdict` are declared there, with the reading the
+/// judgement rests on). The pass that stops filling a member asks it here, the plan reading asks it of
+/// the frozen graph, and both answer from one implementation.
 AggregateTailVerdict aggregateTailVerdict(const GraphDraft &draft, gc_node_ref_t ref);
+
+/// `aggregateTailInputIndex` of the frozen face (`camel/runtime/graph.h`), asked of a draft.
+uint32_t aggregateTailInputIndex(const GraphDraft &draft, gc_node_ref_t ref);
 /// The value a chain of gates passes on: a GATE orders the value it reads after other nodes -- an
 /// inlined call gates its arguments after what the call waited for -- and changes nothing else
 /// (docs/design/effects/edges.cn.md 4.6 and 5.3). A question about that value is a question about
