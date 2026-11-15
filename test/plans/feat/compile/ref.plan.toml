@@ -346,8 +346,19 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('499500\n20000\n41\n'),
+  // `--gc-check foreign` prints the plan's counted sites while the graph is compiled, so on a back
+  // end that compiles the program's lines are not at the head of stdout: they are found as lines
+  // of their own, and the dump is asserted to be there and to come first. std::nvm compiles
+  // nothing and starts with the program, so there the absence is asserted -- which also catches a
+  // dump that leaked onto a back end without a compiler. Both halves are needed: finding nothing
+  // has to be distinguishable from never having looked.
+  const lines = out.split('\n')
+  const first = lines.indexOf('499500')
+  assert(first >= 0 && lines.slice(first, first + 3).join('\n') === '499500\n20000\n41',
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
   const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -374,9 +385,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('10 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('10 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
@@ -401,9 +419,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('1000 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('1000 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
@@ -432,9 +457,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('10 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('10 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
@@ -460,9 +492,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('1000 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('1000 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))

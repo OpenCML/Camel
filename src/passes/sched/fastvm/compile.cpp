@@ -2,6 +2,9 @@
 // SPDX-License-Identifier: MIT
 
 #include "compile.h"
+#include "camel/core/mm.h"
+#include <iostream>
+#include <algorithm>
 #include "camel/runtime/exec_plan.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
@@ -118,13 +121,23 @@ const std::unordered_map<camel::core::OperId, OpCode> &getSupportedInlineOperato
 static bytecode_vec_t compileRuntimeGraph(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
     GUARD(graph != nullptr, "FastVM compile requires a non-null runtime graph.");
     GUARD(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
     const auto &plan              = graph->execPlan();
+    // The position-to-node side table: while --gc-check asks for the counted blocks, one row per
+    // instruction that belongs to a node is written here, with what the plan says that node does to
+    // the count, and the table is kept with the plan it describes -- the run reads it after this
+    // compile is over, at the moment a box is made, and a local table would be gone by then. A
+    // compile that is not asked for it writes nothing and allocates nothing for it.
+    const bool anchorSitesWanted = camel::core::mm::allocatorChecks().printForeignResources;
+    if (anchorSitesWanted) {
+        localPcNodes = &plan.countedSites.nodeAtPc;
+    }
     const auto &topoSortedIndices = plan.topo;
     const auto returnNodeRef      = graph->returnNodeRef();
     const auto *returnNode        = graph->returnNode();
@@ -417,6 +430,9 @@ static bytecode_vec_t compileRuntimeGraph(
             if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
                 (*localPcOrigins)[currIdx] = nodeOrigin;
             }
+            if (localPcNodes) {
+                (*localPcNodes)[currIdx] = runtimeNodeIndex;
+            }
 
             continue;
         }
@@ -605,6 +621,9 @@ static bytecode_vec_t compileRuntimeGraph(
         if (localPcOrigins && nodeOrigin != camel::source::kInvalidOriginId) {
             (*localPcOrigins)[currIdx] = nodeOrigin;
         }
+        if (localPcNodes) {
+            (*localPcNodes)[currIdx] = runtimeNodeIndex;
+        }
 
         if (bytecodes.size() > bytecodeStart) {
             valueProducerMap[runtimeNodeIndex] = currIdx;
@@ -650,14 +669,40 @@ static bytecode_vec_t compileRuntimeGraph(
     BytecodeOptimizer optimizer(opt.optimizationStrategies);
     optimizer.optimize(bytecodes, 0, localPcOrigins);
 
+    if (anchorSitesWanted) {
+        // Read back out of the table the run will read: what is printed here and what the anchor
+        // asks about later are one table, not a copy of one.
+        std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(
+            plan.countedSites.nodeAtPc.begin(), plan.countedSites.nodeAtPc.end());
+        std::sort(sites.begin(), sites.end());
+        for (const auto &[pc, ref] : sites) {
+            const size_t position =
+                ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
+            const uint32_t taken =
+                position < plan.refCopiesAt.size() ? plan.refCopiesAt[position] : 0;
+            const uint32_t given =
+                position < plan.refGiveBackAt.size() ? plan.refGiveBackAt[position] : 0;
+            const bool produces =
+                position < plan.refProducedAt.size() && plan.refProducedAt[position] != 0;
+            if (taken == 0 && given == 0 && !produces) {
+                continue;
+            }
+            std::cout << "PLAN_REF_SITES " << graph->name() << " at " << pc << " node " << ref
+                      << " +" << taken << " -" << given << (produces ? " produces" : " no-row")
+                      << "\n";
+        }
+        std::cout.flush();
+    }
+
     return bytecodes;
 }
 
 bytecode_vec_t compile(
     const context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt,
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins) {
-    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins);
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes) {
+    return compileRuntimeGraph(ctx, program, graph, opt, localPcOrigins, localPcNodes);
 }
 
 LinkedBytecodeResult compileAndLink(
@@ -725,6 +770,14 @@ LinkedBytecodeResult compileAndLinkGraphs(
 
         offsetMap[runtimeGraph] = start;
         graphs.push_back({start, codes.size(), runtimeGraph});
+
+        // Where the table's own pc numbering starts in the image this run executes. Set from the
+        // table rather than from the flag, so the two cannot describe different things: a graph
+        // the compile was not asked to lay out keeps an empty table and no entry pc at all.
+        auto &countedSites = runtimeGraph->execPlan().countedSites;
+        if (!countedSites.nodeAtPc.empty()) {
+            countedSites.entryPc = start;
+        }
 
         linked.insert(linked.end(), codes.begin(), codes.end());
         if (auto sourceContext = registerOrigins && ctx ? ctx->sourceContext() : nullptr) {

@@ -1,0 +1,119 @@
+id = "tools.plan_refs"
+order = 918
+tier = "fast"
+tags = ["feat", "tools", "plan_refs"]
+desc = "The references the execution plan says come back, printed (test::plan_refs). The table is route 4's plan half: nothing executes it yet, so this is how a change to it is read."
+
+# The plan's per-position table of references that come back (camel/runtime/exec_plan.h, "The
+# references that come back") is a description with no reader in the back ends. A table nothing
+# executes is still worth having only if it can be read, compared and pinned, so the pass prints it
+# and these entries pin what it printed. The two programs are the counted-box case the red is
+# measured on and the closure case that holds one reference in two places: the two shapes a holder
+# can take that the plan has to name.
+#
+# The entries live under `tools` and not under `compile` on purpose: adding a test to `feat/compile`
+# or `feat/opt` would move those plans' summaries, and "the table was added and no reading moved" is
+# exactly what is being claimed. A reading added on top is this file's job.
+
+[[tests]]
+name = "plan_refs.counted_box"
+desc = "The counted-box program, read through `test::plan_refs` twice in one pipeline: every graph balances (`produced + copies = give-backs + kept`), every reference that comes back belongs to a value the table counts, the two prints are the same bytes, and the program still prints what it printed."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_boxes_made_per_call_ten.cml"
+args = ["${case}", "test::plan_refs", "test::plan_refs"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'the program ran: exit=' + input.exit_code + ' ' + said)
+  const lines = out.split('\n').filter(l => l.startsWith('PLAN_REFS '))
+  assert(lines.length > 0, 'the pass printed the table: ' + said)
+  const summaries = lines.filter(l => l.includes(' produced ') && l.includes(' balanced '))
+  assert(summaries.length > 0, 'a graph has a summary line: ' + said)
+  const unbalanced = summaries.filter(l => !l.endsWith(' balanced yes'))
+  assert(unbalanced.length === 0,
+    'every graph balances: ' + (unbalanced.join(' | ') || 'none'))
+  const produced = new Set()
+  for (const l of lines) {
+    const m = l.match(/ at \d+ value (\d+) kind /)
+    if (m) produced.add(Number(m[1]))
+  }
+  const orphan = lines.filter(l => {
+    const m = l.match(/ at \d+ (?:give|packed) (\d+) x\d+/)
+    return m !== null && !produced.has(Number(m[1]))
+  })
+  assert(orphan.length === 0,
+    'every reference comes back from a value the table counts: ' + (orphan.join(' | ') || 'none'))
+  assert(lines.length % 2 === 0 && lines.length > 0, 'the pass ran twice: ' + said)
+  const half = lines.length / 2
+  const twice = lines.slice(0, half).join('\n') === lines.slice(half).join('\n')
+  assert(twice, 'the table is the same bytes when the pass runs twice in one pipeline')
+  assert(out.lastIndexOf('10 41') > out.lastIndexOf('PLAN_REFS '),
+    'the program still prints what it printed, after the table: ' + said)
+  // Every graph of the program is read, and the main one is among them: the table is per graph, a
+  // program is several graphs, and a summary line naming no graph would be one table for all.
+  assert(summaries.every(l => / produced \d+ copies \d+ give-backs \d+ kept \d+ packed \d+ tail (none|\d+ tail-kind -?\d+) balanced yes$/
+      .test(l)), 'every summary line has its shape: ' + summaries.join(' | '))
+  const main = summaries.find(l => l.startsWith('PLAN_REFS main '))
+  assert(main !== undefined, 'the main graph is read: ' + summaries.join(' | '))
+  // The reading this entry pins: six values the plan counts, none of them read twice (`copies` 0),
+  // six references that come back when their use ends, none packed into another value, and nothing
+  // kept -- the program's result is a constant (`tail 11 tail-kind 0`), so no counted value of
+  // `main` outlives the graph. A change to the rule, to the walk, or to how many times a value is
+  // read moves one of these numbers.
+  assert(/ produced 6 copies 0 give-backs 6 kept 0 packed 0 /.test(main),
+    'the main graph counts six values, each read once or not at all: ' + main)
+  const rootLine = summaries.find(l => l.startsWith('PLAN_REFS __root__ '))
+  assert(rootLine !== undefined && / produced 1 copies 0 give-backs 0 kept 1 packed 0 /.test(rootLine),
+    'the root graph keeps what it makes: ' + (rootLine || 'none'))
+}
+'''
+
+[[tests]]
+name = "plan_refs.closure_holder"
+desc = "One reference held by a closure and by the call that made it: the table names the value the closure carries and says where its reference comes back, which is the shape the plan has to describe before any count can follow the holders."
+kind = "behavior"
+case = "../../../cases/consistency/values/ref_one_cell_two_holders.cml"
+args = ["${case}", "test::plan_refs"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'the program ran: exit=' + input.exit_code + ' ' + said)
+  const lines = out.split('\n').filter(l => l.startsWith('PLAN_REFS '))
+  assert(lines.length > 0, 'the pass printed the table: ' + said)
+  const summaries = lines.filter(l => l.includes(' produced ') && l.includes(' balanced '))
+  assert(summaries.length > 0, 'a graph has a summary line: ' + said)
+  assert(summaries.every(l => l.endsWith(' balanced yes')),
+    'every graph balances: ' + summaries.join(' | '))
+  const main = summaries.find(l => l.startsWith('PLAN_REFS main '))
+  assert(main !== undefined, 'the main graph is read: ' + summaries.join(' | '))
+  // The reading this entry pins, and the reason the entry exists: a value read three times takes two
+  // more references than the one it is born with, and one of those three reads is the closure
+  // capture -- so that reference is not given back where the closure was made, it is given back
+  // where the closure dies (`packed 1`, and the `packed` row is at the closure's last use, not at
+  // the FILL that captured it). Eleven values, four copies, fourteen references back when their use
+  // ends, one packed into the closure, nothing kept.
+  assert(/ produced 11 copies 4 give-backs 14 kept 0 packed 1 /.test(main),
+    'the main graph counts eleven values, four of them read more than once, one packed: ' + main)
+  // The packed row is where the closure dies, which is after the FILL: the capture's reference comes
+  // back at the closure's last use and nowhere else on `main`.
+  const packedRows = lines.filter(l => / at \d+ packed \d+ x\d+/.test(l))
+  assert(packedRows.length > 0, 'the capture is a row of its own: ' + said)
+  const captureRow = packedRows.find(l => l.includes(' packed 1 x1'))
+  assert(captureRow !== undefined, 'the captured value comes back as a packed row: ' +
+    packedRows.join(' | '))
+  const captureAt = Number(captureRow.match(/ at (\d+) packed /)[1])
+  const fillAt = Number([...lines].find(l => l.includes(' value ' + 3 + ' kind 4 '))?.match(/ at (\d+) /)?.[1])
+  assert(Number.isFinite(fillAt) && captureAt > fillAt,
+    'the capture comes back after the value that packed it, not at the FILL: packed at ' + captureAt +
+      ', the FILL at ' + fillAt)
+  // A graph that keeps its result and reads it once: one value, one copy, one reference back.
+  const keepsItsResult = summaries.filter(l => / produced 1 copies 1 give-backs 1 kept 1 /.test(l))
+  assert(keepsItsResult.length >= 1,
+    'a graph whose result is one of its values takes a reference for the use and keeps one: ' +
+      summaries.join(' | '))
+}
+'''

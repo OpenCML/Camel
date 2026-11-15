@@ -23,6 +23,10 @@ namespace camel::core::rtdata {
 
 struct ForeignResourceStats {
     uint64_t createdControlBlocks  = 0;
+    /// The blocks whose kind is the core's reference handle (`RefType::resourceHandleName()`): the
+    /// boxes a count reclaims. `createdControlBlocks` counts every foreign block, a python object
+    /// and a file handle included, so it cannot be compared against a plan's count of values.
+    uint64_t createdCountedBlocks  = 0;
     uint64_t disposedResources     = 0;
     uint64_t finalizedWrappers     = 0;
     uint64_t releasedControlBlocks = 0;
@@ -61,6 +65,10 @@ class ForeignResourceControlBlock final {
     void retain() noexcept;
     void releaseReference() noexcept;
     void releaseFromWrapperFinalizer() noexcept;
+    /// Gives one reference back and says whether it was the last, so a caller that holds a value
+    /// learns the count reached zero at that moment (design principles 10.5) instead of learning it
+    /// from a later collection. `releaseReference` is the same call without the answer.
+    bool releaseCountNow() noexcept;
     void dispose() noexcept;
 
     void *resource();
@@ -79,7 +87,7 @@ class ForeignResourceControlBlock final {
   private:
     ~ForeignResourceControlBlock() = default;
 
-    void release() noexcept;
+    bool release() noexcept;
 
     ForeignResourceDescriptor descriptor_;
     void *resource_   = nullptr;
@@ -128,6 +136,87 @@ class ForeignResourceObject final : public Object {
 
     ForeignResourceControlBlock *control_ = nullptr;
 };
+
+/// ---- The count a counted value is held by ------------------------------------------------
+//
+// Design principles 10.5: an immutable value is freed by counting alone, the count is the number of
+// its holders, and the count comes from one last-use analysis on the execution plan that every back
+// end follows. These two functions are the whole runtime surface for that count -- the author's
+// ruling of 2026-11-15 is that the compiler emits the duplicate and the drop and the runtime
+// provides nothing else (docs/handover/reviews/
+// 2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) -- and where they are
+// called is the plan's business (camel::runtime::ExecPlan::refGiveBacksAt names the positions and
+// the references).
+//
+// A `Ref` handle is an ordinary traced wrapper whose control block is the box, and the slot's type
+// is what says a slot holds one (`TypeCode::Ref`), so a write path pays a comparison it already
+// makes and not a cast per value. `retainCountNow` takes one reference for a new holder and answers
+// false for a value that is not a counted block (every other foreign resource keeps its present
+// lifetime: released by its wrapper's finalizer). `giveBackCountNow` gives one back and answers
+// true when the count reached zero, so the caller is the one that knows the box was released at
+// that moment -- which is the point of the count, and the reason the answer is returned rather than
+// inferred from a collection later.
+//
+// Neither is called anywhere yet: the writes that will call them are one entry point shared by all
+// four back ends (`camel::core::context::Frame::set` for slots, `Tuple::set` / `Struct::set` /
+// `Array::set` for aggregates), so they are added here first and wired one back end at a time.
+bool retainCountNow(Object *value) noexcept;
+bool giveBackCountNow(Object *value) noexcept;
+
+/// ---- The anchor: a box that was made has to be a value the plan counts -----------------------
+//
+// The balance the plan prints is an identity between columns one walk produced, so a reference
+// missed on both sides at once leaves it balanced. The anchor asks the question the walk cannot:
+// at the moment a box is made, does the plan name the node that is running as one that makes a
+// value? An executor answers it with the pair below, once per node whose execution made boxes --
+// `execPlan().refProducedAt` is the plan's answer, and it is read by the executor because that is
+// the only place that has both the plan and the node.
+//
+// A row of the plan can be made many times (a node in a loop makes a box per round), so the counts
+// are not expected to line up one to one. What must hold is `missing == 0`: every creation is
+// explained. The third reading is the other direction -- a row that no creation ever exercised,
+// which would be a producing value the table promises and the program never makes.
+//
+// The two sides are measured independently on purpose. `checks` is what the hook asked about, and
+// `creations` is what the allocator made; a hook that quietly stopped being called, or that a back
+// end never reached, reads as `checks < creations` instead of agreeing with itself.
+struct CountedCreationAnchor {
+    /// The boxes that were made, counted by the allocator that made them (`createdCountedBlocks`),
+    /// and not by the hook that asks about them: the anchor is worth something only while its two
+    /// sides are measured independently, so this number is read from the allocator every time the
+    /// anchor is reported (`countedCreationAnchor`, `countedBlocksMade`).
+    uint64_t creations = 0;
+    /// The boxes the anchor asked about: one question per box made, asked by the executor at the
+    /// site that made it. `checks < creations` is a site the hook never reached, and
+    /// `checks > creations` is one it reached twice.
+    uint64_t checks   = 0;
+    uint64_t found    = 0;
+    uint64_t missing  = 0;
+    /// How many of the plan's producing rows were exercised at least once, summed over the graphs
+    /// that ran, and how many rows the plans had. `unseen` is the second minus the first.
+    uint64_t rowsSeen = 0;
+    uint64_t rows     = 0;
+};
+/// The answer for `boxes` boxes that one node execution made, reported once per creation: whether
+/// the plan names the node that is running as one that produces a value. Reports only -- the caller
+/// has already run the node, and nothing here can refuse, undo or reorder anything.
+void recordCountedCreation(bool namedByThePlan, uint64_t boxes = 1) noexcept;
+/// The boxes a count reclaims that exist so far. The creation side of the anchor: an executor site
+/// reads it before and after the operator it runs and hands the difference to the anchor.
+uint64_t countedBlocksMade() noexcept;
+/// The same for the boxes this thread made. What an executor site brackets an operator call with
+/// on a scheduler that runs nodes on several threads, where the program-wide difference would also
+/// hold a neighbour's box and read a node as having made more than it did.
+uint64_t countedBlocksMadeOnThisThread() noexcept;
+/// How many boxes the anchor has already been told about on this thread. A site subtracts the
+/// growth of this from the growth of the count above: an operator that runs a graph (map, foreach,
+/// a loop body) is bracketed too, and its callee's boxes are reported by the callee's own sites,
+/// which are inside that bracket.
+uint64_t countedCreationsReportedOnThisThread() noexcept;
+/// The plan's rows: one call per graph that a run executes, with its count of producing positions.
+void recordPlanRows(uint64_t rows, uint64_t rowsSeen) noexcept;
+CountedCreationAnchor countedCreationAnchor() noexcept;
+void resetCountedCreationAnchorForTests() noexcept;
 
 ForeignResourceStats foreignResourceStats();
 /// Releases every external resource that is still held, newest first, and returns how many were

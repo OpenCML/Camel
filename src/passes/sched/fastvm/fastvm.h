@@ -388,8 +388,10 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
 #endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
 
-    // Shared by interpreted and JIT native-operator paths.
-    slot_t invokeNativeOperator(const Bytecode &bc, ctx::Frame &frame);
+    // Shared by interpreted and JIT native-operator paths. `pc` is the instruction this operator
+    // is, in the image the caller executes: the anchor names the node it belongs to through it
+    // (native_call.cpp), so it is stated rather than found.
+    slot_t invokeNativeOperator(const Bytecode &bc, ctx::Frame &frame, size_t pc);
 
     // ---- Hosted interpreters (hosted.cpp) --------------------------------------------------
     //
