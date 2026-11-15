@@ -18,13 +18,14 @@
 | 日期 | 谁 | 兑现了什么 | 读数 |
 |---|---|---|---|
 | 2026-11-16 | `lane-byref`（`24ffae0d6`） | **`feat.linear` 那四族 98 行**（`var_reference` 67、`captured_writes` 24、`toplevel_var` 6、`recursion_and_calls` 1） | **`feat.linear` 850 / 846 / fail 0**（882−32=850，走掉的是重复不是读数） |
+| 2026-11-16 | `lane-contextdiag` | **`feat.consistency.partial_application` 那两族 8 条**（`var_parameter` 4、`var_parameter_effect` 4）：拒绝从闭包那条规则的「下一张图」移到绑定点，消息里的 `'$tagged0'` 换成程序写的名字 | `feat/opt`+`feat/consistency` 合跑 **2743 / 2664 / fail 79 → 2723 / 2668 / fail 55**；走掉的 24 行是本表的 8 条加 `feat.opt.splice_place` 的 16 条（那 16 条不在本账内）。4+4 条行为断言各换成 1 条拒绝断言（`VarContextParameterCannotBeBound`），另加 1 条模块级单元的新用例 |
 
 **同一批量到的两行**（`feat.mm`，`lane-byref` 说「可能也绿了，我没跑」——**现在跑了**）：
 `poison:linear.captured_writes:captured_write_order.default` 与
 `poison:linear.var_reference:var_tensor.default`，在合并 tip 上**均已转绿**，因为它们的底层程序已经改了。
 `poison:modules.resources:core` 仍红，**是既有红，不在基线内**。
 
-**基线剩余**：`174 − 98 = 76`（`feat.compile` 30、`feat.consistency` 36、`feat.trans` 5、
+**基线剩余**：`174 − 98 − 8 = 68`（`feat.compile` 30、`feat.consistency` 28、`feat.trans` 5、
 `feat.docs_links` 1、`feat.mm` 4），四舍五入到下表逐行。
 
 ## 计数规则：按「程序 + 断言」，不按后端行数

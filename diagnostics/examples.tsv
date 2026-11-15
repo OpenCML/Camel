@@ -275,6 +275,7 @@ SemanticDiag::UnusedFallibleValue	test/cases/compile/unused_values/fallible_sync
 SemanticDiag::UnusedPureResult	test/cases/compile/native/para_unordered_pure_result.cml
 SemanticDiag::UsesPromiseViolated	test/cases/effects/err_promise_through_parameter.cml
 SemanticDiag::VarArgumentTypeMismatch	test/cases/linear/byref/var_argument_shape.cml
+SemanticDiag::VarContextParameterCannotBeBound	test/cases/consistency/partial_application/var_parameter.cml
 SemanticDiag::VariableInUses	test/cases/effects/err_variable_in_clause.cml
 SemanticDiag::WhenConditionNotBool	test/cases/compile/when/non_bool.cml
 SemanticDiag::WhenConditionNotConstant	test/cases/compile/when/generic_decl_site.cml

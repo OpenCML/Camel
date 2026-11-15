@@ -1,8 +1,17 @@
 /**
- * A `with` parameter declared `var` is a variable the function writes, and binding one with
- * `f<w>` is an ordinary partial application (graph model Q9, `partial-application-var`): the
- * function value captures the cell, and every call of it writes through the capture, so the
- * accumulator after three calls is what the three calls added.
+ * A `with` parameter declared `var` is a variable the function writes: the call passes it in,
+ * the body writes it, and the call hands the new value back. The function value a partial
+ * application makes has no call of its own to write it back to, so `f<w>` cannot bind one
+ * (design principles 3.5, the author's ruling of 2026-11-15) -- refused at each binding here,
+ * `let g = add<t>` and `let direct = add<t>`.
+ *
+ * This program used to be the pinned example of the opposite reading (graph model Q9,
+ * `partial-application-var`): the value captured the cell and the calls accumulated to `1 3 6 6`
+ * and `16 16`. That reading is retired; the source stays as the refusal's own example.
+ *
+ * The report names `t`, the name written here. It used to be `ClosureAssignsCapturedName`, the
+ * closure rule, which the binding borrowed -- the help it printed offers three ways out, all of
+ * which keep the partial application.
  */
 
 with <var total: int>

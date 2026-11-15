@@ -1,13 +1,12 @@
 /**
- * The function value a `var` context parameter makes writes the cell it captured: `g(1)` is
- * recorded as a write of `t`, so a read of `t` written after the call sees the write (design
- * principles 3.5 and F3), and the call runs where a sync block orders it.
+ * The second source of the family: both helpers bind a `var` context parameter with `add<t>`, and
+ * a partial application cannot bind one (design principles 3.5, the author's ruling of
+ * 2026-11-15) -- the function value has no call of its own to write the value back to. Refused at
+ * each binding, `guarded`'s and `ignored`'s.
  *
- * Outside a sync block the call of the value is not needed and does not run, so the read still
- * sees the value `t` had, and the call is reported as `EffectNotExecuted`: what carries its
- * effect is the resource set its type infers (it writes the cell it captured), not a flag on the
- * type. The value is an effect either way; what a sync block adds is that the effects written in
- * it happen.
+ * This source used to pin what a value that captured the cell did: `g(1)` recorded as a write of
+ * `t`, the call running inside a sync block, `EffectNotExecuted` outside one. That reading is
+ * retired with the binding it needed; the source stays as the refusal's second example.
  */
 
 with <var total: int>
