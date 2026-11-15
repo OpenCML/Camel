@@ -578,13 +578,14 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return; // the body did not build (an error was reported)
     }
     reach();
-    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h): a write to a
-    // resource outside the program is used by the region it is written in, so it runs although
-    // nothing reads what it produces. This is the same seed the liveness walk of a graph and the
-    // execution order make; it is made here too because this walk answers the warning and must
-    // agree with them, and it is written the same way so that the two cannot drift: the body's
-    // writes run with the graph, a region's writes run with the region, and a region runs only once
-    // its owner is live.
+    // The roots a region adds (design principles 3.1 and 3.3; camel/runtime/region_roots.h): a write
+    // a running region owes is used by the region it is written in, so it runs although nothing reads
+    // what it produces -- an outside write (3.1) and a write to a handle (3.3: the reader of a box
+    // may stand in a graph this one cannot see) alike. This is the same seed the liveness walk of a
+    // graph and the execution order make; it is made here too because this walk answers the warning
+    // and must agree with them, and it is written the same way so that the two cannot drift: the
+    // body's writes run with the graph, a region's writes run with the region, and a region runs only
+    // once its owner is live.
     const std::vector<runtime::RegionRootCandidate> regionRoots =
         runtime::regionRootCandidatesOfDraft(draft);
     for (const runtime::RegionRootCandidate &candidate : regionRoots) {
