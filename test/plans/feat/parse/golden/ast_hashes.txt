@@ -2840,6 +2840,7 @@ b2ee49df4a724876 ok test/cases/loops/iterate_empty.cml
 26353fee71d39644 ok test/cases/loops/iterate_map.cml
 287f9829ee34046d ok test/cases/loops/iterate_string.cml
 0da05c05bd4274ec ok test/cases/loops/iterate_tensor.cml
+30627cc11fb39326 ok test/cases/loops/let_loop_then_statement.cml
 aa8dd77afd5af2e1 ok test/cases/loops/loop_collect_multi.cml
 1dfa1d5dadda088e ok test/cases/loops/macro.cml
 8cad913f72b8887c ok test/cases/loops/native_callback.cml
@@ -2849,6 +2850,7 @@ aa8dd77afd5af2e1 ok test/cases/loops/loop_collect_multi.cml
 aa325fc1d3e90f1e ok test/cases/loops/open_rank_round_rank1.cml
 08dee17e644c7271 ok test/cases/loops/open_rank_round_rank2.cml
 fd3af0ba8eeffe66 ok test/cases/loops/open_rank_round_scalar_read.cml
+bc71528b400338de ok test/cases/loops/outer_ref.cml
 b84a48ce1f203de3 ok test/cases/loops/recursion.cml
 8ce34823e0577616 ok test/cases/loops/reduce_view.cml
 10c1d5f4ad817fed ok test/cases/loops/refuse_loop_no_channel.cml
