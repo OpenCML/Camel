@@ -18,6 +18,7 @@
 #include "camel/core/rtdata/view_selftest.h"
 #include "camel/core/source/manager.h"
 #include "camel/core/tags.h"
+#include "camel/core/trace.h"
 #include "camel/core/type/array_type_selftest.h"
 #include "camel/core/type/type_identity_selftest.h"
 #include "camel/execute/entry_args.h"
@@ -2788,19 +2789,22 @@ bool passBoundaryViolation(
                 violation = std::move(found);
             }
         }
-        CAMEL_LOG_INFO_S(
-            "Pass",
-            "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
-            "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
-            "other {})",
-            report.checked,
-            report.declined(),
-            report.anyUnknown,
-            report.anyObject,
-            report.anyHandle,
-            report.variableCell,
-            report.unresolved,
-            report.other);
+            // A reading of the effect-containment summary, on the run's tracing channel
+            // (`--trace effects`) and not on a log scope: one kind of reading, one way to ask for it.
+            // The text is unchanged, down to the newline the log used to add.
+            camel::core::trace(camel::core::TraceArea::Effects)
+                << std::format(
+                       "run | passes | effect containment: checked {} call site(s), declined {} reading(s) "
+                       "(any unknown {} / any object {} / any handle {} / variable cell {} / unresolved {} / "
+                       "other {})\n",
+                       report.checked,
+                       report.declined(),
+                       report.anyUnknown,
+                       report.anyObject,
+                       report.anyHandle,
+                       report.variableCell,
+                       report.unresolved,
+                       report.other);
         if (violation.has_value()) {
             ctx->rtmDiags()
                 ->of(RuntimeDiag::PassEffectContainment)
