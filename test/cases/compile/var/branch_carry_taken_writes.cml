@@ -1,0 +1,12 @@
+/**
+ * A `var` written in the arm a branch takes, read after the branch: it is built as a value (no
+ * cell, no `:var/new`), and the join is where the value comes from. The write is inside a region,
+ * which before stage S2 made the name a cell for the rest of its life.
+ */
+func main(): int {
+    var x = 7;
+    let c = 1;
+    if c > 0 then { x = 1 } else { }
+    let shown = println(x);
+    return 0
+}
