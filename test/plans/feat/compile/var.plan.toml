@@ -378,4 +378,118 @@ assert(other.length === 0, `nothing else is reported: ${other.map((d) => d.name)
 """
 timeout_ms = 30000
 
+# --- A `var` written inside one arm of a statement branch ----------------------------------------
+#
+# Stage S2 builds such a `var` as a value: the branch's JOIN carries it, and every read after the
+# branch takes the join. Before S2 any write outside the declaring region made the name a cell for
+# the rest of its life. The corpus contains no case of this shape -- measured, not assumed: after
+# S2 the capture census reads `var_new=228`, `list_sha=ffab8200...` and `ok=2694 refused=1162`, all
+# three byte-identical to the run before it, so no case in `test/cases/**` changed. These five
+# programs are therefore the only thing that holds S2 up, and each one pins one number:
+#
+#   taken_writes            1   the arm that runs wrote it
+#   untaken_keeps_initialiser 7  the arm that runs wrote nothing: the value from before the branch
+#   both_arms_then          1   each direction reads its own arm
+#   both_arms_else          2     ... and the pair is what says the join is not wired to one arm
+#   value_written_before    9   the pre-branch value is the last write before the branch, not the
+#                               declaration
+#
+# The 7 is the whole of the phi's correctness. If it reads 1, the join is carrying the value of an
+# arm that did not run; if it reads 0 or anything else, the pre-branch value was lost. Neither is a
+# cosmetic difference and neither would be caught by anything else in this tree.
+[[tests]]
+name = "var.branch_carry_taken_arm_writes"
+desc = "A `var` written in the arm a branch takes, read after it, prints the value the arm wrote (1): the write is inside a region and the name is still built as a value, carried by the join."
+kind = "behavior"
+case = "../../../cases/compile/var/branch_carry_taken_writes.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `the arm that ran wrote 1 and the read after the branch takes it: ${out}`)
+}
+"""
+timeout_ms = 30000
 
+[[tests]]
+name = "var.branch_carry_untaken_arm_keeps_the_value_from_before"
+desc = "A `var` written in the arm a branch does not take, read after it, prints the value it had before the branch -- the initialiser 7 -- and not the write of the arm that did not run. The phi carries one value and hands the arm that wrote nothing the pre-branch value; 1 here would mean the join carried an arm that did not run."
+kind = "behavior"
+case = "../../../cases/compile/var/branch_carry_untaken_keeps_initialiser.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '7', `the arm that ran wrote nothing, so the read takes the initialiser 7, not the other arm's 1 and not 0: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.branch_carry_both_arms_then"
+desc = "Both arms write the name and the then arm runs: the read after the branch takes that arm's value (1). Half of the pair that says the join takes the arm that ran rather than the arm built last."
+kind = "behavior"
+case = "../../../cases/compile/var/branch_carry_both_arms_then.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '1', `the then arm wrote 1 and the read after the branch takes it: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.branch_carry_both_arms_else"
+desc = "The same program with the other arm taken: the read after the branch takes 2. Read with the entry above, the two directions pin both sides of the join."
+kind = "behavior"
+case = "../../../cases/compile/var/branch_carry_both_arms_else.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '2', `the else arm wrote 2 and the read after the branch takes it: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.branch_carry_value_written_before_the_branch"
+desc = "The name is written before the branch and the arm that runs writes nothing: the read takes the value from before the branch (9), not the initialiser (7) and not the other arm's write (1). The phi's pre-branch input is the last value written before the branch."
+kind = "behavior"
+case = "../../../cases/compile/var/branch_carry_value_written_before.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '9', `the arm that ran wrote nothing and 9 was written before the branch, so the read takes 9: ${out}`)
+}
+"""
+timeout_ms = 30000
+
+[[tests]]
+name = "var.branch_carry_is_a_value_not_a_cell"
+desc = "The taken-writes program under `std::jgir` holds no `:var/new`: the name written inside the arm is built as a value, which is what makes the five pins above pins of the phi rather than pins of a cell."
+kind = "behavior"
+case = "../../../cases/compile/var/branch_carry_taken_writes.cml"
+args = ["${case}", "std::jgir"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const text = input.normalized.stdout
+assert(!text.includes(':var/new'), `the name written inside the arm is a value, so the graph holds no :var/new: ${text.slice(0, 400)}`)
+assert(!text.includes(':var/get'), `and no read of a cell either: ${text.slice(0, 400)}`)
+}
+"""
+timeout_ms = 30000

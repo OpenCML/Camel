@@ -1,0 +1,12 @@
+/**
+ * Both arms write the name: each direction reads the value its own arm wrote. The pair with
+ * `branch_carry_both_arms_else.cml` is what says the join takes the arm that ran and not the one
+ * that was built last.
+ */
+func main(): int {
+    var x = 7;
+    let c = 1;
+    if c > 0 then { x = 1 } else { x = 2 }
+    let shown = println(x);
+    return 0
+}
