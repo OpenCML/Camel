@@ -23,8 +23,6 @@ using namespace camel::core::rtdata;
 using namespace camel::jit;
 #endif
 
-#if ENABLE_FASTVM_COMPUTED_GOTO
-
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /* Clang Win64: wrapper in trampoline.cpp. Use a fixed-size per-thread stack so nested direct JIT
  * calls do not overwrite the caller's saved pc/bc, while keeping the hot path allocation-free. */
@@ -1007,5 +1005,3 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         throw;
     }
 }
-
-#endif // ENABLE_FASTVM_COMPUTED_GOTO

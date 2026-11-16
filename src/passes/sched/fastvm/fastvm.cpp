@@ -1078,8 +1078,7 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     if (bc->opcode == OpCode::SCHD) {
                         // A marked operator reached from compiled code: the count's rows at its
                         // position are the hook's (camel/execute/operator_call.h), the same way the
-                        // interpreters run them at gotovm.cpp's `label_SCHD` and casevm.cpp's
-                        // `OpCode::SCHD`.
+                        // interpreter runs them at gotovm.cpp's `label_SCHD`.
                         camel::execute::callOperator(
                             camel::execute::siteOfSlot(*cur, bc->result),
                             [&] {
@@ -1406,7 +1405,6 @@ Bytecode *FastVMSchedPass::materializeCallTarget(size_t pc, Bytecode *bc) {
 
 // The four functions below are the interpreter's own: a build without the JIT needs them too.
 slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
-#if ENABLE_FASTVM_COMPUTED_GOTO
     // With an execution observer (a debugger) installed, the activation is reported and runs
     // on the loop that has the observer's hooks (inspectvm.cpp). One load of a pointer per
     // nested activation otherwise; the loop of a normal run has no hook at all.
@@ -1417,7 +1415,6 @@ slot_t FastVMSchedPass::call(size_t pc, Frame *rootFrame) {
             framePool_.release(inspected.rootFrame);
         return inspected.result;
     }
-#endif
     CallResult result = callBorrowed(pc, rootFrame);
 #if ENABLE_FASTVM_JIT
     if (result.tailFn != nullptr) {

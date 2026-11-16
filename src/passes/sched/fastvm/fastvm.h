@@ -381,11 +381,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
-#if ENABLE_FASTVM_COMPUTED_GOTO
-    /// The same loop compiled a second time with the hooks of the execution observer
+/// The same loop compiled a second time with the hooks of the execution observer
     /// (inspectvm.cpp): what a program runs on while an observer is installed.
     CallResult callBorrowedInspected(size_t pc, ctx::Frame *rootFrame);
-#endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
 
     // Shared by interpreted and JIT native-operator paths. `pc` is the instruction this operator

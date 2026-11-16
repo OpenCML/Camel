@@ -567,8 +567,8 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// Helpers of framed code (trampoline.h). Each does for one bytecode what the interpreters do
-// (gotovm.cpp / casevm.cpp), on the pool frame of the activation.
+// Helpers of framed code (trampoline.h). Each does for one bytecode what the interpreter does
+// (gotovm.cpp), on the pool frame of the activation.
 
 extern "C++" {
 namespace {
@@ -749,8 +749,8 @@ slot_t jitHelperBranchArm(slot_t *slots, void *ctx, size_t pc) {
 }
 
 // The three events of a loop of regions. The rules of a round are the interpreter's own
-// (camel/execute/loop_frame.h), so the compiled code runs exactly what gotovm.cpp and casevm.cpp
-// run at the same bytecode: the state, the ports and the round counter live in the frame.
+// (camel/execute/loop_frame.h), so the compiled code runs exactly what gotovm.cpp
+// runs at the same bytecode: the state, the ports and the round counter live in the frame.
 slot_t jitHelperLoopBegin(slot_t *slots, void *ctx, size_t pc) {
     return runJitHelper(ctx, [&]() -> slot_t {
         auto *jc     = static_cast<JitContext *>(ctx);
@@ -778,7 +778,7 @@ slot_t jitHelperLoopEnd(slot_t *slots, void *ctx, size_t pc) {
         Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
         Frame *frame = reinterpret_cast<Frame *>(slots[0]);
         GUARD(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
-        // The round safepoint of FastVM (gotovm.cpp, casevm.cpp): a collection may run here,
+        // The round safepoint of FastVM (gotovm.cpp): a collection may run here,
         // and a loop that collects reports a memory limit at the loop (loop_frame.h).
         const bool more = camel::execute::loopEnd(
             *frame,
