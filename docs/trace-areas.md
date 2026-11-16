@@ -42,3 +42,41 @@ table then says which area each of those entries needs.
 for their area; the 12 that remain are the GPU observation's (report-only, listed in
 `internal/tools/gpu-plans.exceptions.txt`) and the `stream.generator` entries that belong to another
 lane.
+## The plans no gate runs
+
+`test/tools/gate-targets.mjs` names the directories a gate measures. Everything else is a plan file
+that exists and is never run by a gate, so no run ever reads it -- and a reading that is off by
+default cannot redden an entry nobody runs. That is where this migration's remaining gap lives: the
+entries below are wrong in exactly the way the compile layer's were, and no gate says so.
+
+Measured by the merge lane's coverage scan on `b488758d0` (394 plan files, 6644 entries in the tree;
+a gate runs 6122 of them):
+
+| Not in a gate target | Files | Entries |
+|---|---|---|
+| `test/plans/feat` (top level) | 10 | 167 |
+| `test/plans/feat/transforms` | 3 | 34 |
+| `test/plans/feat/para` | 3 | 62 |
+| `test/plans/feat/format` | 3 | 31 |
+| `test/plans/feat/runtime` | 4 | 9 |
+| `test/plans/feat/gate` | 3 | 3 |
+| `test/plans/feat/bindings` | 1 | 2 |
+| `test/plans/feat/docs` | 1 | 2 |
+| `test/plans/perf` | 22 | 69 |
+| `test/plans/probe` | 4 | 15 |
+| `test/plans/debug` | 2 | 3 |
+| `test/plans/gpu` | 6 | 125 |
+| **Total** | **62** | **522** |
+
+**522 entries -- 7.9% of the tree -- have never appeared in a red or a green we looked at.** On that
+day 27 of them were red, all in `test/plans/feat/transforms` (48 tests: 13 pass, 27 fail, 8 known):
+the same missing `--trace <area>` as the 96 in the compile layer, invisible for the same reason -- the
+directory is not in a gate target, so the switch's migration could not reach it and nothing said so.
+
+The 27 were fixed by asking for the area (20 entries in `split.plan.toml` and `floatgate.plan.toml`);
+that directory now runs 48 tests with 40 pass, 0 fail and 8 known, so what the fix showed is that the
+only thing wrong there was the expectation half. **The other 495 are still unmeasured.** Whether they
+are red is not known, and this file does not claim they are green: a plan that no gate runs is neither.
+
+This is recorded rather than repaired: putting a directory into a gate target is a decision about what
+the project measures, not a fix for one reading's migration.
