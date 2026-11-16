@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The optimizer answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, and the two a rewrite made the commit refuse with a read across a region"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, and the two a cell handle outlived by its node ended in a SIGSEGV"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -566,3 +566,63 @@ assert(lines[1] === '', `second line is ${JSON.stringify(lines[1])}, not a blank
 """
 timeout_ms = 20000
 
+# --- The crash class of the 2026-11-17 full run ------------------------------------------------
+#
+# That run put ten programs in the crash class, and they are seven shapes. A shape here is the
+# crash's own words -- the guarantee that fired, the symbol the fault is in, or the C++ compiler's
+# sentence -- and not the pipeline or the back end the program reached it through:
+#
+#   rc12_seed165, rc13_seed202  SIGSEGV in `nodeKindOf`, called from `dropCarriedVariableUnits`:
+#                               a cell handle the builder keeps across bodies named a node the
+#                               draft had already erased, and the kind question read the header
+#                               the erasure took away. The liveness question is asked first now.
+#                               Two programs.
+#   rc14_seed176                `component != nullptr` in `Builder::visitLoopNode`. One program.
+#   rc15_seed52                 `index < fieldCount_` in `Variant::get`, under `std::opt`, reading
+#                               field 0 of a Variant whose tag declares no field. Two programs.
+#   rc16_seed153                no result in 30 s under `std::jit` on every pipeline. One program.
+#   rc17_seed193                clang: "non-void function 'lambda' should return a value". Two.
+#   rc18_seed429                clang: "expected expression" at a `= ;` the C++ writer left. One.
+#   rc19_seed70                 clang: "no matching function for call to 'f1'". One program.
+#
+# The first shape is fixed, and its two programs are entries below: they used to end the process
+# in the front end with no pass at all, on all four back ends, so both arms (with and without
+# `std::opt`) are the same claim -- the program runs, says nothing, exits 0.
+#
+# The other six shapes are in `test/cases/opt/e9/` and have no entry here: an entry whose
+# expectation is the crash states the defect as the answer, and an entry whose expectation is the
+# program's output goes red until its class is fixed. Each file is the standing reproducer of its
+# class -- `camel rc14_seed176.cml std::nvm` fires the guarantee by hand -- and its entries land
+# with its fix, as this one's did.
+
+[[tests]]
+name = "rc12_seed165.without_the_pass"
+desc = "The program with no pass at all: runs, says nothing, exits 0. It used to end the process in `nodeKindOf` (`dropCarriedVariableUnits`) -- a SIGSEGV, so it printed no diagnostic and named no reason. The cell handle it asked about was one the builder's carried table still held after the draft had erased the node."
+case = "../../../cases/opt/e9/rc12_seed165.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc12_seed165.opt"
+desc = "The same program under the whole optimizer, on all four back ends. The fault was in the front end, so the pass is not what caused it and not what can avoid it: the same claim as the arm above."
+case = "../../../cases/opt/e9/rc12_seed165.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc13_seed202.without_the_pass"
+desc = "The second program of the `nodeKindOf` shape, reduced separately: a `var` a compound assignment writes before a closure captures it. It took the same SIGSEGV with no pass at all, on all four back ends."
+case = "../../../cases/opt/e9/rc13_seed202.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+
+[[tests]]
+name = "rc13_seed202.opt"
+desc = "The same program under the whole optimizer. The fix is in the graph builder and not in a pass, so the two arms move together."
+case = "../../../cases/opt/e9/rc13_seed202.cml"
+args = ["${case}", "std::opt", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
