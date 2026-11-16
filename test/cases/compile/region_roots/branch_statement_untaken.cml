@@ -1,0 +1,21 @@
+/**
+ * The reverse judgement on the rule `branch_statement.cml` is about (design principles 3.1; the
+ * author's `R2`, "没走到的臂不许被执行"): the branch of an `if` written as a statement runs, and the
+ * arm it does not take does not run with it. `if false` writes nothing here.
+ *
+ * Nothing is reported either: the branch is in the execution, its arms are regions of a branch that
+ * runs, and an arm that is not taken is a choice not taken -- not a region nothing needs. The same
+ * program with a `sync` body has always read this way (that body reached the branch through its sync
+ * chain), so the two shapes now agree. `region_roots.dead_loop` keeps the warning's real subject: a
+ * loop whose value nobody takes never runs at all, and its body's write with it.
+ */
+
+func untaken(): int {
+    if false then { println("never") }
+    return 0
+}
+
+func main(): int sync {
+    untaken()
+    return 0
+}

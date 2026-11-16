@@ -79,9 +79,102 @@ verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
 assert(out === '', `the loop body does not run, so nothing is printed, got: ${out}`)
-assert(input.normalized.stderr.includes('The loop reaches outside the program and is never executed'), `the loop is what does not run, and the warning says so: ${input.normalized.stderr}`)
+assert(input.normalized.stderr.includes('The loop is never executed: nothing needs what it gives'), `the loop is what does not run, and the warning says so: ${input.normalized.stderr}`)
 assert(input.diagnostics.length === 2, `the loop and the write in its body, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
 assert(input.diagnostics.every(d => d.name === 'SemanticDiag::EffectNotExecuted'), `expected only EffectNotExecuted, got ${input.diagnostics.map(d => d.name).join(', ')}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement"
+desc = "A branch written as a statement runs with the region it is written in (design principles 3.1, 3.7): an `if` without `else` has no value, so nothing can need it into the execution and nothing can leave it out of one, and the external writes in the arm it takes are roots of that arm. In a body that is not a `sync` block the whole branch -- the arm that is taken and the print in it -- used to be dropped from the graph and reported, while the same branches in a `sync` body ran all along. The arm the branch does not take still does not run, a `match` written as a statement runs its case, a branch written inside another one's arm waits for the outer arm, and a branch whose value is taken reads as it did."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "then\na\nb\ntwo\ndeep\n1 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(!input.normalized.stdout.includes('never'), `the arm of 'if false' does not run: ${input.normalized.stdout}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement_kinds"
+desc = "What an arm of a branch written as a statement holds, side by side (design principles 3.1, 3.3): `println` runs as a root of the arm's region, `state::set` written as the arm's value runs because the JOIN reads that value, an assignment to a `var` is not an effect and makes the variable 2 as the arm's value says (the ruling of 2026-11-15), and a pure computation runs nothing and reports nothing. The body is not a `sync` block, which is the shape the branch's running was missing."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement_kinds.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "5 2\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement_untaken"
+desc = "The reverse judgement on the same rule (design principles 3.1; the author's `R2`): the arm of `if false` is not taken, so its write does not run -- and nothing is reported either, because the branch itself runs and its arms are regions of a branch in the execution. An arm that is not taken is a choice not taken, not an effect dropped; the same program with a `sync` body has always read this way, and the two readings now agree. What the warning still names is a region that does not run at all, which `region_roots.dead_loop` and `region_roots.read_only` pin."
+kind = "negative"
+case = "../../../cases/compile/region_roots/branch_statement_untaken.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `the arm of 'if false' does not run, so nothing is printed, got: ${out}`)
+assert(input.diagnostics.length === 0, `the branch runs, so the arm it does not take is no dropped effect: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_value_dropped"
+desc = "The shape that still does not run, next to `region_roots.branch_statement`: a branch whose value is taken by nobody -- `let unused = if ...` -- is not a statement of its body, so the write in the arm it would take does not run with it and `SemanticDiag::EffectNotExecuted` names the branch (design principles 3.1, 3.7; the author's `R2`: no arm is executed by a branch that does not run). What tells it from `branch_statement.cml` is the value the branch joins: one that joins no value at all is a statement of its region and runs; one that joins a value nobody reads is not."
+kind = "negative"
+case = "../../../cases/compile/region_roots/branch_value_dropped.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '', `nothing runs: ${out}`)
+assert(input.diagnostics.length === 1, `one diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+const d = input.diagnostics[0]
+assert(d.name === 'SemanticDiag::EffectNotExecuted', `EffectNotExecuted, got ${d.name}`)
+assert(d.line === 22 && d.column === 18, `reported where the branch stands: ${JSON.stringify(d)}`)
+assert(input.normalized.stderr.includes('The branch is never executed: nothing needs what it gives'), `the branch is what is named: ${input.normalized.stderr.slice(0, 200)}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
+name = "region_roots.branch_statement_condition"
+desc = "The condition of a branch statement does not decide whether the branch is one (design principles 3.1, 3.7): a branch written as a statement is one whatever its condition holds -- a literal, a parameter, an operator or a call -- and the arm it takes runs. The mark that says `the value of this statement nobody takes` used to be cleared while the condition's own operators were built and never put back, so a branch behind `x > 0` or `positive(x)` was lowered as a branch that joins a value (its JOIN carried `string`, not `void`) and dropped from the graph again, while `if true then ...` in the same body ran. Which of the two a program got was a property of how its condition was written, and no property of the program."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement_condition.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "pos\nneg\npositive\nnot\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
