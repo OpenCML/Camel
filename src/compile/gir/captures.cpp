@@ -220,18 +220,19 @@ bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle
     if (!localCell && programWrites(name)) {
         return false;
     }
-    // A name the program hands to a call may be written by that call: a `var` parameter and a
-    // `var` `with` parameter are the caller's cell, so the write reaches this cell from a body the
-    // closure's capture does not stand for. Design principles 3.5 (198) refuses that write
-    // (`CapturedVarHandedToVarParameter`), but not in the shape where the closure is made at the
-    // argument position of the very call that hands the name over: there the closure's last use IS
-    // that call, and the write happens inside it, so the stretch the rule needs is empty and the
-    // report stays off. `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read` is
-    // that shape, and its reading is 7 (`w = 7` then `read()`): by value it would be 0. The gate
-    // stays until either that shape is reported or the case is settled the other way.
-    if (programMayWriteThroughCall(name)) {
-        return false;
-    }
+    // A name the program hands to a call is NOT a reason to keep the cell. A `var` parameter is
+    // "passed in by value, passed back by value" (design principles 3.5, 192): the callee writes
+    // its own name, and the write-back is an assignment written at the call. Where a closure is
+    // written AT the argument position of that very call, the closure's last use IS that call and
+    // the write-back counts after it, so 3.5 (198) has no stretch to report and the program is
+    // legal. `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read` is that shape:
+    // `var w = 0; write_then_read(w, (): int => w)` prints 0, because the closure captured the
+    // value `w` had when it was made and `w = 7` in the callee only changes the callee's own name
+    // until the call returns. The author's ruling of 2026-11-16 settles that reading: 0 is the new
+    // semantics, not a wrong value. The conservative gate this step used to carry -- keep the cell
+    // of every name handed to a call until 198 covered the shape -- is therefore gone, and so is
+    // the name table (`handedOver_`) that backed it.
+
     // The cell is kept where the rule above is not the one that governs the write. Design
     // principles 3.5 (197) makes a name a closure mentions unassignable, and the write a closure
     // makes of it is refused by `requireCapturedNameWritable` -- except in two shapes, which that

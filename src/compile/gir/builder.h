@@ -903,9 +903,11 @@ class Builder {
     /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
     /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
     /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level `var`
-    /// the program is not making a value of the function for, a name handed to a call (198 does not
-    /// report the shape where the closure is made at that call's argument position), the generator
-    /// machine's step function and a decorated block (there the write has to land in the cell).
+    /// the program is not making a value of the function for, the generator machine's step function
+    /// and a decorated block (there the write has to land in the cell). Handing the name to a call
+    /// is NOT one of them: a `var` parameter is passed in by value and passed back by value (3.5,
+    /// 192), and where the closure stands at that call's argument position its last use is the call,
+    /// so 3.5 (198) reports nothing and the program is legal -- the author's ruling of 2026-11-16.
     /// Decided once per cell (`captureByValueOf_`): every capture of one cell has to answer the
     /// same.
     bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin);
@@ -2615,17 +2617,6 @@ class Builder {
     // read where a value is wanted (`let k = f`) and not where a call is made (`f(1)`). A value
     // holds the values its captures had when it was made; a direct call is handed the cells.
     std::unordered_set<std::string> programValueNames_;
-    // The names the program hands to a call as an argument, which that call may write: a `var`
-    // parameter and a `var` `with` parameter bound by `f<t>` are the caller's cell. A name here
-    // keeps its cell (captureByValue): the write reaches it through the call, which a value port
-    // cannot carry, and the rule that would refuse it (3.5, 198) does not report the shape where the
-    // closure is made AT the argument position of the very call that hands the name over -- see
-    // `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read`, whose reading is 7.
-    std::unordered_set<std::string> handedOver_;
-    // Whether a call may write the variable `name` is written with.
-    bool programMayWriteThroughCall(const std::string &name) const {
-        return handedOver_.contains(name);
-    }
     // Fills `programWriters_` out of every module's construction tree. Runs before the bodies
     // are built: a function its module has not built yet still writes what its body says.
     void scanProgramWriters();
