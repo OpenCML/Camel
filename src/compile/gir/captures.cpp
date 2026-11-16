@@ -283,6 +283,17 @@ void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &call
     captureSites_.push_back(std::move(site));
 }
 
+bool Builder::heldByCaptureSite(node_handle_t value) const {
+    for (const CaptureSite &site : captureSites_) {
+        for (size_t k = site.linked; k < site.values.size(); ++k) {
+            if (site.values[k] == value) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void Builder::linkCaptureSites() {
     // Least fixpoint: passing a capture the callee made late may give the caller a capture
     // port of its own, which the calls of the caller then pass in turn.
