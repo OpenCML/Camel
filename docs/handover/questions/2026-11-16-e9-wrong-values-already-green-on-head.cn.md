@@ -182,18 +182,36 @@ this run   seeds 1..500  273 generator rejects  227 in the matrix  22,473 cells
 **同一个 `seeds 1..500`，进矩阵的程序从 320 个掉到 227 个**，因为生成器在这中间变了
 （`0ddbb92af test(progen): write only programs the front end accepts, and agree about them` 及之后几笔
 改的就是「哪些种子算废品」）。`baseline.json` 的守卫只比 `matrix` 和 `seeds`，**不比进矩阵的程序数**，
-所以它照样给出了判定 —— 这是那只棘轮自己的一个洞，不是本车道这一跑的口径问题。
+所以它照样给出了判定 —— **这是那只棘轮自己的一个洞**，不是本车道这一跑的口径问题。
 
 按每程序的比例看，两边的差就更清楚：错值 `8/227 = 3.5%` 对 `10/320 = 3.1%`（**略差**），
 拒绝 `3/227 = 1.3%` 对 `17/320 = 5.3%`（**明显好**），崩溃 `10/227 = 4.4%` 对 `3/320 = 0.94%`
 （**是涨的**）。另外 `RUN_ERROR 198 格`在基线里是 **0** —— 那一类（程序自己非零退出）在基线的
 `cell_outcomes` 里根本没有出现过。
 
-**结论**：这次的三个数是 **8 / 3 / 10**，可以交给任何人在同一棵树上重跑；它与 `10 / 17 / 3` 的
-对比**不能被读成一个数字的升降**，因为分子分母都换了。要让这只棘轮真的能比，得先做两件事之一：
-把基线在**当前生成器**上重录一次（`--update-baseline`，full 档才允许），或者让 `baseline.json` 的
-守卫把「进矩阵的程序数」也记进比较键里。**这两件都不在本车道这一轮的范围内**，而且第二件改的是
-`test/tools/*`。
+**7.3.1 洞补上了（`17186a71d`）**，两件事一起做：
+
+- **比较键加了人口**：`programs_in_matrix` 与 `generator_rejects` 两侧都读，任一不同 ⇒
+  **`not compared`**，只报旧值、新值、和「为什么不可比」，**不给 below/above、不给一个能引用的数**。
+  写于这次改动之前的基线没有这两项 ⇒ 同样判成不可比（并请人重录），因为那种比较根本做不成。
+  这与「两套 harness、两个 pin 不能相减」是同一条：**测量不同时，唯一正确的输出是「不可比」，不是「一个数」。**
+- **三类分开判**：错值 / 拒绝 / 崩溃各给自己的两行数和一个 verdict，**任一类变坏都是红**，
+  所以没有任何一类能躲在另一类的改进里（「3 项降、3 项升」这句话本身会被读成抵消，而崩溃这一类的升
+  是不能抵消的 —— 错值和拒绝说的是「答不对」，崩溃说的是「没有答案」）。
+
+**7.3.2 基线在当前生成器上重录了（`13097d4e6`）**，游走的那一跑自己说清了它替换掉的是什么：
+
+```
+[E9] wrong 8  refused 3  crashed 10   (cells: wrong 360, refused 135, crashed 56)
+[E9] baseline written: .../test/tools/e9diff/baseline.json
+[E9] recorded as the new zero; the baseline it replaced was not comparable -- the program
+     population changed: programs_in_matrix 320->227, generator_rejects 180->273
+```
+
+`baseline.json` 现在是 `8 / 3 / 10`、`recorded_on 2026-11-16`、并带一行 `note`：**此基线是在
+`RUN_ERROR` 这一类首次出现之后录的（那天 500 种子里 198 格），population 也换过（180→273 废品、
+320→227 进矩阵），崩溃那一类是涨到 10 / 56 之后才有的新零点；不要拿它与 10/17/3 相减。**
+重录本身不掩盖这次崩溃潮 —— **只有「不写 note 的重录」才会**。
 
 **7.4 入口自己的验证**
 
@@ -212,6 +230,8 @@ this run   seeds 1..500  273 generator rejects  227 in the matrix  22,473 cells
 - 另两个（`camel-for-ai`、`gate-static`）**不是本车道的**：`camel-for-ai` 说
   `docs/reference/camel-for-ai-diagnostics.md` 与生成器不一致（322 条），而本树与 `origin/develop`
   在这个文件上**零差异**（它上一次被写是 `54be326ee`，今天另一条车道的合并），`gate-static` 挂在同一处。
+  **它已经单独成一页并有自己的提交**：`questions/2026-11-16-camel-for-ai-diagnostics-doc-stale-on-develop.cn.md`，
+  补的是 `d3814543b` 加了 `IntervalHasNoOpenForm` 却没重生成文档（`f6d05103e`，2 行）。
 
 ## 若作者另有裁定
 
@@ -223,4 +243,4 @@ this run   seeds 1..500  273 generator rejects  227 in the matrix  22,473 cells
 
 - **A16 程序的期望输出一个字节没动**（判据本身）。
 - `captures.cpp` / `decideCaptureByValue`（`lane-captedge`）、`test/cases/linear/byref/*` 与 `consistency/new_values/*`（`lane-rewrite`）、`test/tools/*` 一律没碰。
-- 工作树 `D:\Projects\Camel-wt\e9fix`，分支 `lane-e9fix`，三步：`0f23e31fa`（本页）、`adb270709`（入口）、`c46affda7`（`headers` 要求的那两行）。
+- 工作树 `D:\Projects\Camel-wt\e9fix`，分支 `lane-e9fix`：`0f23e31fa`（本页）、`adb270709`（入口）、`c46affda7`（`headers` 那两行）、`17186a71d`（棘轮的洞 + 三类分开判）、`d6b2fff1f` + `13097d4e6`（重录基线并把它带回本树）、`f6d05103e` + `d2ad27dc7`（`camel-for-ai` 那一页与它的重生成）。
