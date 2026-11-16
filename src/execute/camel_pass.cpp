@@ -310,6 +310,11 @@ class CamelPass final : public GraphIRPass {
     /// node that carries an access, splice a body in or change what a node is, so the two commit
     /// checks of the effect analysis are theorems for it, and the ruling of 2026-11-15 is that they
     /// are not asked of it (docs/design/effects/analysis.cn.md 4.1).
+    ///
+    /// This is the fact, and it holds in every build. Which builds act on it is not this answer's
+    /// to give: the caller asks `camelPassCommitChecksEnabled` as well, so a shipped build reads the
+    /// theorem, and a debug or test build checks it (the ruling of 2026-11-16). A pass whose
+    /// rewriting interface widens has to answer false here; nothing about the build changes that.
     bool rewritesThroughTheGraphModuleOnly() const override { return true; }
 
   private:

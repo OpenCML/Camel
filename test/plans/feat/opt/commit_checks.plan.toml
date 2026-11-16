@@ -39,25 +39,59 @@ args = ["${case}", "test::fold_function_type", "std::nvm"]
 expect_exit = 0
 expect_stdout_contains = ["fold_function_type: no two functions of one shape to fold", "3"]
 
+# The exemption every pass written in Camel carries, read as the ruling of 2026-11-16 has it: the
+# check is a theorem for such a pass, so a shipped build (`NDEBUG`) does not ask it -- and a build
+# that has the suite asks anyway, which is how anyone knows the theorem still holds. One run prints
+# both answers, at one program and one pass, the request being the only difference between them:
+#
+#   CAMEL_CHECKS build asks=0                    the shipped build's answer
+#   CAMEL_CHECKS accepted, asked=0               the pass ran and was not checked
+#   CAMEL_CHECKS released: ...                   and the run went on, so nothing was checked
+#   CAMEL_CHECKS asked=1 -> ...                  the same program, the same pass, asked
+#   error[RuntimeDiag::PassEffectContainment]:   ...and refused
+#
+# The refusal ends the run at its own diagnostic, which is why the expectation is announced before
+# the second run and not confirmed after it: a check that has stopped refusing leaves
+# `CAMEL_CHECKS asked=1 -> accepted` instead, and that line is not in this list.
+#
+# The refusal is the diagnostic of the case above, on a pass (`opt::cse`, stdlib/opt.cml) whose
+# rewriting interface is the graph module's alone. That this plan runs on a Release install is what
+# makes the first line the shipped build's answer; the debug build answers `asked=1` by itself, and
+# `debug/camel_pass_commit_checks` is the plan that reads it there.
+[[tests]]
+name = "commit_checks.camel_pass_is_asked_when_the_build_asks"
+desc = "A pass written in Camel is not asked for the commit checks in a shipped build, and is refused by them the moment they are asked: the same program the fold made, handed to `opt::cse` twice in one run."
+kind = "negative"
+case = "../../../cases/opt/commit_checks/fold_function_type.cml"
+args = ["${case}", "test::camel_commit_checks", "std::nvm"]
+expect_exit = 1
+timeout_ms = 20000
+expect_diagnostic_name = "RuntimeDiag::PassEffectContainment"
+expect_output_contains = ["fold_function_type: graph 'announced' now publishes", "CAMEL_CHECKS build asks=0", "CAMEL_CHECKS accepted, asked=0", "CAMEL_CHECKS released: the run continued past opt::cse with the checks off", "CAMEL_CHECKS asked=1 -> the same program, the same pass", "Pass 'opt::cse' returned a program whose call site reaches past the type it declares", "write stdout"]
+
 # What the check declined to judge, so that "I looked and it is fine" and "I refused to look" do not
 # read the same in a log. Both numbers are pinned: a checker that stays green by declining more has
 # to raise `declined` first, and one that judges nothing has to keep `checked` above zero.
+#
+# The reading is a diagnostic line on the `Pass` scope, not an environment switch: a run's behaviour
+# is decided by the program, the command line and the build options (design principles 9.3), so a
+# count that is only ever printed is asked for the way every other per-pass reading is -- `-vv` with
+# the scope narrowed to `Pass` (the ruling of 2026-11-16 moved it off the environment).
 [[tests]]
 name = "commit_checks.counts_what_it_declines"
-desc = "With CAMEL_EFFECT_CONTAINMENT_SUMMARY set, the check says what it compared and what it declined, and the two counts are pinned so that silence has to show up as a number."
+desc = "With the Pass scope at info, the check says what it compared and what it declined, and the two counts are pinned so that silence has to show up as a number."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["${case}", "std::opt", "std::nvm"]
-envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
+args = ["-vv", "--log-include", "Pass", "${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 timeout_ms = 60000
-expect_stdout_contains = ["effect containment: checked"]
+expect_stderr_contains = ["effect containment: checked"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const line = out.split('\n').find(l => l.startsWith('effect containment: checked '))
+const out = input.normalized.stderr
+const line = out.split('\n').find(l => l.includes('effect containment: checked '))
 assert(line !== undefined, `no summary line in: ${out}`)
-const m = line.match(/^effect containment: checked (\d+) call site\(s\), declined (\d+) reading\(s\) \(any unknown (\d+) \/ any object (\d+) \/ any handle (\d+) \/ variable cell (\d+) \/ unresolved (\d+) \/ other (\d+)\)$/)
+const m = line.match(/effect containment: checked (\d+) call site\(s\), declined (\d+) reading\(s\) \(any unknown (\d+) \/ any object (\d+) \/ any handle (\d+) \/ variable cell (\d+) \/ unresolved (\d+) \/ other (\d+)\)$/)
 assert(m !== null, `the summary line does not parse: ${line}`)
 const n = m.slice(1).map(Number)
 const [checked, declined, unknown, object, handle, variable, unresolved, other] = n
@@ -74,11 +108,10 @@ name = "commit_checks.declines_add_up"
 desc = "The components of the summary are counted apart, so a gap in the analysis -- a call site the graph does not resolve -- cannot hide inside the conservative readings of the resource classes."
 kind = "behavior"
 case = "../../../cases/compile/pass_guard/plain.cml"
-args = ["${case}", "test::fold_function_type", "std::nvm"]
-envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
+args = ["-vv", "--log-include", "Pass", "${case}", "test::fold_function_type", "std::nvm"]
 expect_exit = 0
 timeout_ms = 20000
-expect_stdout_contains = ["effect containment: checked"]
+expect_stderr_contains = ["effect containment: checked"]
 
 # A type that carries no clause promises nothing, so a call site that has one cannot be in breach:
 # "no promise, no breach" is not the same sentence as "a reading the checker cannot name", and the
@@ -89,15 +122,15 @@ name = "commit_checks.a_type_that_promises_nothing"
 desc = "A call through a parameter of function type carries a Generic signature. The body behind the value prints, and that is not a violation: there was no promise to break."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/generic_call.cml"
-args = ["${case}", "std::opt", "std::nvm"]
-envs = ["CAMEL_EFFECT_CONTAINMENT_SUMMARY=1"]
+args = ["-vv", "--log-include", "Pass", "${case}", "std::opt", "std::nvm"]
 expect_exit = 3
 timeout_ms = 20000
-expect_stdout_contains = ["3", "effect containment: checked"]
+expect_stdout_contains = ["3"]
+expect_stderr_contains = ["effect containment: checked"]
 verify_script = """
 ({ input, assert }) => {
-const out = input.normalized.stdout
-const line = out.split('\n').find(l => l.startsWith('effect containment: checked '))
+const out = input.normalized.stderr
+const line = out.split('\n').find(l => l.includes('effect containment: checked '))
 assert(line !== undefined, `no summary line in: ${out}`)
 // The call site must be *judged* and passed, not declined: a checker that answers "I cannot look at
 // this" would be right by accident here, and would stop being right the moment a type does promise

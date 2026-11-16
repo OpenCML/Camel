@@ -58,9 +58,15 @@ class GraphIRPass {
     // `add_constant` and the rest of stdlib/graph.cml, which is every handle a pass written in Camel
     // has on a graph. Such a pass cannot make a node that carries an access, cannot splice a body in
     // and cannot change what a node is, so for it "no access appears and no order is lost" is a
-    // theorem and the two commit checks of the effect analysis are not asked of it
-    // (docs/design/effects/analysis.cn.md 4.1; the ruling of 2026-11-15: the checks are for the C++
-    // passes, whose interface is wider, and E9's swapped and dropped prints came out of them).
+    // theorem (docs/design/effects/analysis.cn.md 4.1; the ruling of 2026-11-15: the checks are for
+    // the C++ passes, whose interface is wider, and E9's swapped and dropped prints came out of
+    // them).
+    //
+    // This answers a fact about the pass, not the question of whether the two commit checks are
+    // asked of it. That question is the caller's, because it depends on the build: a shipped build
+    // reads the theorem and does not pay for the check, a debug or test build asks anyway
+    // (`camelPassCommitChecksEnabled`), which is the ruling of 2026-11-16 -- a theorem nobody reads
+    // is a guess.
     virtual bool rewritesThroughTheGraphModuleOnly() const { return false; }
 
   private:
@@ -243,3 +249,23 @@ PassRunResult applyRegisteredPass(
 bool checkPassBoundary(
     const camel::core::context::context_ptr_t &ctx, const std::string &spec,
     const camel::runtime::Program &before, const camel::runtime::Program &after);
+
+/// Whether the two commit checks of the effect analysis (docs/design/effects/analysis.cn.md 4.1)
+/// are asked of a pass whose rewriting interface is the graph module alone -- the exemption of
+/// `GraphIRPass::rewritesThroughTheGraphModuleOnly`, which every pass written in Camel answers with
+/// yes (src/execute/camel_pass.cpp).
+///
+/// The ruling of 2026-11-15 stopped asking, because such a pass cannot build the defect the checks
+/// look for. The ruling of 2026-11-16 keeps the saving where it is paid for and reads the theorem
+/// everywhere else: **a shipped build (`NDEBUG`) does not ask, a debug build asks, and a test asks
+/// through `setCamelPassCommitChecksEnabled`** -- a theorem nobody reads is a guess, and a suite
+/// that never runs the check cannot say whether the theorem still holds.
+///
+/// It is a build option and a test's own request, never an environment variable: what a run does is
+/// decided by the program, the command line and the build options, and the same rule is written for
+/// pass settings ("pass parameters, not environment variables", AGENTS.md).
+bool camelPassCommitChecksEnabled();
+
+/// Asks for the checks (or not) for the rest of the process. A release build is the only one whose
+/// default is "no", so a test that reads the Camel-pass path in a release build is what calls this.
+void setCamelPassCommitChecksEnabled(bool enabled);
