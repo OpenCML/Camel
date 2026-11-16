@@ -2956,6 +2956,46 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             const bool isCall = node->type() == GCT::NodeKind::LINK ||
                                 node->type() == GCT::NodeKind::WITH ||
                                 node->type() == GCT::NodeKind::TAPP;
+            // A `var` an in-place operator rewrites keeps its cell (S1's scope, ahead of S3b): the
+            // update takes the value's storage and hands it back by rebinding the name, which needs
+            // a cell to write. Two shapes, both read off the GCT:
+            //   LINK(__assn__, <path>, e)                  `v[i] = e`, `v.f = e`
+            //   LINK(__assn__, v, LINK(method, v, ...))    `v = v->append(x)`, `v = append(v, x)`
+            // The operator form `v = v + 1` (a `__`-prefixed callee) builds a new value and is not
+            // one of these, so it stays a value. A shape this misses only keeps a cell, which is the
+            // cheap direction; the other way round drops an in-place update, which `--copies` sees.
+            if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
+                node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
+                node->at(0)->name() == "__assn__") {
+                const GCT::Node *target = node->at(1);
+                const GCT::Node *value  = node->at(2);
+                const bool plainTarget =
+                    target != nullptr && target->type() == GCT::NodeKind::DREF;
+                if (!plainTarget) {
+                    std::function<void(const GCT::Node *)> keepCell = [&](const GCT::Node *place) {
+                        if (place == nullptr) {
+                            return;
+                        }
+                        if (place->type() == GCT::NodeKind::DREF) {
+                            if (const GCT::Node *decl = lookup(place->name())) {
+                                eligible[decl] = false;
+                            }
+                        }
+                        for (size_t i = 0; i < place->size(); ++i) {
+                            keepCell(place->at(i));
+                        }
+                    };
+                    keepCell(target);
+                }
+                // A self-referential write through a method (`v = v->append(x)`) is deliberately
+                // NOT excluded here, and that is measured, not an omission: making such a name a
+                // cell lets the in-place form change its storage *and* the assignment hand out a
+                // value, so the append happens twice -- `new_values.macro_append.{nvm,fvm,macro}`
+                // printed `[0, 1, 25, 3]` where the program says `[0, 1, 25, 2]`. Keeping the cell
+                // is not "putting it back where it was"; it is a change of semantics. So the name
+                // stays a value and its update is copied (`--copies` says so at
+                // `element_assigned_append`); making that append in-place again is S3b's work.
+            }
             for (size_t i = 0; i < node->size(); ++i) {
                 if (isCall) {
                     walk(node->at(i), inner, node, i, childStatement);
