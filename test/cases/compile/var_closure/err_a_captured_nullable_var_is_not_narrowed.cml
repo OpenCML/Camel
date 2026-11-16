@@ -1,0 +1,20 @@
+/**
+ * A closure tests a `var` it captured against null and reads it in the arm that excludes null.
+ * Narrowing applies to a binding a write cannot reach (design principles 3.8), and a name a
+ * closure captured is exactly that once design principles 3.5 (197, 198) refuses every write of
+ * it -- so the test ought to narrow here, and it does not.
+ *
+ * This is the one site of the four that changes nothing when the cell gate goes: the capture of
+ * `o` becomes a value (3.5, 197), and the answer is still "not narrowed". It is pinned as a
+ * refusal so that the day it starts narrowing is visible, and it is pinned by name, code and
+ * place only, because the reason the message gives is stale: it still says a `var` may be
+ * rewritten between the test and the use, and a capture port cannot be rewritten at all. The
+ * wording is reported apart and is not this case's business.
+ */
+
+func main(): int sync {
+    var o: int? = 1
+    let f = () => if o != null then o + 1 else 0
+    println(f())
+    return 0
+}

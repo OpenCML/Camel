@@ -1,0 +1,20 @@
+/**
+ * A closure drops the result of a pure operation on a name it captured: `len(xs)` on a line of its
+ * own. Nothing can change `xs` here -- the closure holds its value -- but the value is still a
+ * value the program asked for and threw away, so the report is `UnusedPureResult`.
+ *
+ * What this case pins is the half of that report that names the way out: the name `xs` stands for a
+ * variable the program declared, and the report says to bind that variable to the result. A capture
+ * port that is a value instead of a cell makes the report fall back to the generic sentence ("use
+ * the result or drop it on purpose"), which names nothing the reader can act on.
+ */
+
+func main(): int sync {
+    var xs = [1, 2, 3]
+    let f = () => sync {
+        len(xs)
+        len(xs)
+    }
+    println(f())
+    return 0
+}

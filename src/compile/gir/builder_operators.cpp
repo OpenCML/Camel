@@ -1321,7 +1321,15 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     const node_handle_t variable = resolveNodeByRef(name);
-    Type *arrayType              = valueTypeOf(nodeTypeOf(variable));
+    // The name a closure captured is a PORT and not a variable once the capture is by value
+    // (design principles 3.5, 197): the rewrite below writes it, and a value has nowhere to write.
+    // The capture's rule answers that write, and it has to answer it HERE, before the rewrite is
+    // chosen: a rewrite that declines to run leaves the call as written, and the report becomes
+    // `NoMatchingFunction` -- about the operator, naming neither the write nor the way out.
+    if (variable != nullptr && (isVariable(variable) || capturePortOfAVariable(variable))) {
+        requireCapturedNameWritable(variable, name, false, target->origin());
+    }
+    Type *arrayType = valueTypeOf(nodeTypeOf(variable));
     if (!isVariable(variable) || arrayType == nullptr || arrayType->code() != TypeCode::Array) {
         return nullptr;
     }
