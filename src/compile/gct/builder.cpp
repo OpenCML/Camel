@@ -5930,13 +5930,23 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         *link << tree_->makeDRef("__eq__") << readCell(name) << intLiteral(value);
         return link;
     };
+    // The step function's signature once it carries the generator's state: the work planned in
+    // `docs/handover/reports/2026-11-16-the-generator-state-travels-by-value.cn.md`. The parameter
+    // is a placeholder `int` for now -- this round only makes the signature and the call agree on
+    // a shape, so that the round handing the real state over changes one thing and not two. The
+    // stream's own type stays `stepType`, which is what the program reads (`for x in s`), and the
+    // graph's port nodes are made from the signature (`src/compile/gir/builder_helpers.h`, the
+    // `withTypesCount` loop), so naming the parameter here is all it takes.
+    Type *statePlaceholderType = intLiteral(0)->data()->type();
+    FunctionType *stepTypeWithState =
+        FunctionType::create({}, {{statePlaceholderType, false}}, stepType->exitType());
     // The stream value of one pull: a closure over the step function.
     const auto streamValue = [&]() {
         node_ptr_t lambda = tree_->makeFunc(std::string());
         *lambda << tree_->makeType(stepType);
         node_ptr_t body = makeExec(synced);
         node_ptr_t call = tree_->makeLink(0);
-        *call << tree_->makeDRef(stepName);
+        *call << tree_->makeDRef(stepName) << intLiteral(0);
         node_ptr_t ret = tree_->makeExit(ExitType::Return);
         *ret << call;
         *body << ret;
@@ -6790,7 +6800,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     *stepBody << loopNode;
     node_ptr_t stepFunc = tree_->makeFunc(stepName);
     mark(stepFunc, funcAst, "gct.generator.step");
-    *stepFunc << tree_->makeType(stepType) << stepBody;
+    *stepFunc << tree_->makeType(stepTypeWithState) << stepBody;
     *outer << stepFunc;
     node_ptr_t ret = tree_->makeExit(ExitType::Return);
     *ret << streamValue();
