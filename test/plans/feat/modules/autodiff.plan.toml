@@ -454,13 +454,29 @@ timeout_ms = 6000
 
 [[tests]]
 name = "second_order_refused_vjp"
-desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, stdlib/vjp.cml#vjp's split(jvp(f))<...ws>(...xs): the forward half `split` answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. The verdict is by content -- 'the function is computed at run time' -- and no longer by provenance: the sentence used to read 'the function is the result of \\'transforms:split\\'', naming the operator that computed the value (engine change of 2026-11-04 04:20, modules/autodiff/pullback.cpp#Backward::whyNotEvident). The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2). The same number is produced by the same second derivative written through the nest (second_order_nest.nvm)."
+desc = "The second derivative of a function whose body applies vjp is refused at the library's own line, stdlib/vjp.cml#vjp's split(jvp(f))<...ws>(...xs): the forward half `split` answers does not exist as a graph until the program runs (modules/transforms/split_operator.cpp#splitKernel reads function->graph()), so the derivative that call needs cannot be planned before it runs. This entry is the reading where the caller is handed an operator's answer -- 'the function is computed at run time', the tail modules/autodiff/pullback.cpp#Backward::whyNotEvident writes for a GCNodeKind::Oper that is not a variable read. It is marked known_fail because the value's kind moved on this tree, not because the verdict or this sentence is wrong: stdlib/vjp.cml#vjp carries `#macro` (author's ruling of 2026-11-15, 4ae2c0179), and a call of a tagged function is compiled as a call whose answer is a graph, so the same program reads the Func sentence the next entry pins. Both readings stay written and both are pinned: the mark carries the tail it does see, so a third wording turns the run red, and it comes off the day a shape reaches the `Oper` node again (measured both ways on one build: with the tag removed this sentence is what the case prints). The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2), the same number the nest produces (second_order_nest.nvm)."
 kind = "negative"
 case = "../../../cases/modules/autodiff/second_order_refused_vjp.cml"
 args = ["${case}", "${run_nvm}"]
 expect_exit = 1
 expect_output_contains = ["cannot differentiate through this call of a function value", "which function it calls is not evident where it is called: the function is computed at run time"]
-expect_output_not_contains = ["the function is the result of"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 6000
+known_fail = true
+known_fail_owner = "lane-holdmerge (hold/vjpgrad): the `#macro` tag on `stdlib/vjp.cml#vjp` moved this shape's callee from an `Oper` node to a `Func` node, so the tail is written by the other arm of `Backward::whyNotEvident`; this sentence is the pre-tag answer of the same program, measured on one build with the tag off"
+known_fail_msg = "is not a function that is named or built in it"
+known_fail_reason = "同一个程序在标签在场时读的是另一句：`#macro` 落在 `stdlib/vjp.cml#vjp` 上之后，调用点拿到的是「一次具名调用交回的图」，`whyNotEvident` 于是走 `GCNodeKind::Func` 那一支。拒绝、位置、前半句都没变，只有尾巴按值的种类换。这一条钉 `Oper` 那种值的措辞，今天不出现；`second_order_refused_vjp_func` 钉另一种。"
+known_fail_note = "Two facts, two entries, one case file: the tail is decided by what the value is, so an operator's answer and a tagged call's answer are pinned apart instead of one of them being dropped from the record. The mark is not a wall -- it is the second fact, and it fires in both directions: `known_fail_msg` pins what the run does say today (a third wording turns the run red), and the day a shape reaches the `Oper` node again this entry passes and the mark has to come off. Where the `Oper` node went: `#macro` makes a call of a declaration hand back a graph, which is what a macro is, so nothing in this tree computes that value with an operator any more."
+
+[[tests]]
+name = "second_order_refused_vjp_func"
+desc = "The same program as second_order_refused_vjp, read as what it is on this tree: stdlib/vjp.cml#vjp carries `#macro` (author's ruling of 2026-11-15, 4ae2c0179), so the call site of `vjp(cube)` is handed a graph a named call returned, and modules/autodiff/pullback.cpp#Backward::whyNotEvident answers from the GCNodeKind::Func arm -- 'the function is the result of a call of 'vjp', and what that returns is not a function that is named or built in it'. The verdict, the place and the first half of the sentence are the ones the other entry pins; only the tail names the kind, and the two entries exist so that neither reading can change without the run saying so. The callee the arm names is not pinned: the arm is the fact, the name is a detail of which transform built the value (`split`, `jvp`, or the call of `vjp` itself), and a pin on it would fail for a reason that says nothing about the refusal. The answer it would have given is 12 (f(x)=x^3, f''(x)=6x at 2)."
+kind = "negative"
+case = "../../../cases/modules/autodiff/second_order_refused_vjp.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 1
+expect_output_contains = ["cannot differentiate through this call of a function value", "which function it calls is not evident where it is called: the function is the result of a call of", "is not a function that is named or built in it"]
+expect_output_not_contains = ["the function is computed at run time"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 6000
 

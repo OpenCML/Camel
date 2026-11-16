@@ -12,13 +12,9 @@
  * branch, moved the program counter of the loop from a register to the stack and made
  * call-bound programs 13-19% slower without a debugger (docs/technical/35_debugger.md, 9).
  * FastVMSchedPass::call chooses the loop per activation.
- *
- * Only with computed goto (the default): the switch interpreter has no observer hooks.
  */
 
 #include "fastvm.h"
-
-#if ENABLE_FASTVM_COMPUTED_GOTO
 
 #define CAMEL_FVM_INSPECTED_LOOP 1
 // Every use of the name in gotovm.cpp is the definition of the loop; fastvm.h is already read.
@@ -32,5 +28,3 @@
 #define OBSERVE_RUNTIME_FAULT(fault) observeFault(fault)
 
 #include "gotovm.cpp" // NOLINT(bugprone-suspicious-include)
-
-#endif // ENABLE_FASTVM_COMPUTED_GOTO

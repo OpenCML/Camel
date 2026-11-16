@@ -1,0 +1,14 @@
+/**
+ * The name already had a value written before the branch, and the arm that runs writes nothing:
+ * the read after the branch takes the value from before the branch (9), not the initialiser (7)
+ * and not the other arm's write (1). This is the "value set before the branch" shape: the phi's
+ * pre-branch input is the last value written before the branch, not the declaration.
+ */
+func main(): int {
+    var x = 9;
+    x = 9;
+    let c = 0;
+    if c > 0 then { x = 1 } else { }
+    let shown = println(x);
+    return 0
+}

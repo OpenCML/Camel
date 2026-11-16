@@ -13,12 +13,12 @@
 #include "camel/runtime/graph.h"
 #include "compile.h"
 #include <array>
+#include <cstdlib>
 #include <functional>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
-#include <cstdlib>
-#include <memory>
 #include <string_view>
 #include <vector>
 
@@ -372,7 +372,7 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
           enableJitTraceMir_(config.enableJitTraceMir)
 #endif
     {
-        statsPath_  = config.statsPath;
+        statsPath_ = config.statsPath;
         framePool_.registerGcTracer();
     }
     virtual ~FastVMSchedPass();
@@ -381,11 +381,9 @@ class FastVMSchedPass : public RuntimeGraphSchedulePass {
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 
     CallResult callBorrowed(size_t pc, ctx::Frame *rootFrame);
-#if ENABLE_FASTVM_COMPUTED_GOTO
     /// The same loop compiled a second time with the hooks of the execution observer
     /// (inspectvm.cpp): what a program runs on while an observer is installed.
     CallResult callBorrowedInspected(size_t pc, ctx::Frame *rootFrame);
-#endif
     slot_t call(size_t pc, ctx::Frame *rootFrame);
 
     // Shared by interpreted and JIT native-operator paths. `pc` is the instruction this operator
