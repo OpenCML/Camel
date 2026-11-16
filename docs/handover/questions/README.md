@@ -5,11 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：3 页
+## 现在在等作者：5 页
 
 | 页 | 问什么 |
 | --- | --- |
+| [`2026-11-16-camel-for-ai-diagnostics-doc-stale-on-develop`](2026-11-16-camel-for-ai-diagnostics-doc-stale-on-develop.cn.md) | `camel-for-ai` 在 develop 上就是红的：这份生成物该由谁重生成、要不要每车道各修一遍？ |
 | [`2026-11-16-casevm-does-not-compile-in-any-configuration`](2026-11-16-casevm-does-not-compile-in-any-configuration.cn.md) | `casevm.cpp` 在任何配置下都编不出来：删掉还是连 20 处一起修？ |
+| [`2026-11-16-e9-wrong-values-already-green-on-head`](2026-11-16-e9-wrong-values-already-green-on-head.cn.md) | E9 的错值在 HEAD 上已经全绿：那条催办的「第一个真正修好的错值」应该怎么算？ |
 | [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ |
 | [`2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad`](2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad.cn.md) | 案例一旦改用库的 `grad`，`break_rate` 那个重写该怎么钉？ |
 
