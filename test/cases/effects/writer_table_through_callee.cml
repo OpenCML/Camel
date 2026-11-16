@@ -1,19 +1,25 @@
 /**
  * The writer table's third credential, on the one shape that needs it: a value written by a call
  * through a function value, and a read written after that call. The call is the write -- the
- * callback's captured `var` is written by it (`recordWrite(..., throughCallee=true)`) -- so the read
- * written after the call takes 41 and the read written before it keeps 0, and the call runs because
- * that read needs it (design principles 3.1, 3.3).
+ * handle the callback captured is written by it (`recordWrite(..., throughCallee=true)`) -- so the
+ * read written after the call takes 41 and the read written before it keeps 0, and the call runs
+ * because that read needs it (design principles 3.1, 3.3).
+ *
+ * The state is a `Ref` and not a `var` of `main`: a closure captures a value, so it cannot assign
+ * a name of the call that made it (design principles 3.5, 197; the author's ruling of 2026-11-16).
+ * A handle is a value, so the callback may write what it points at, and the reading this case pins
+ * is unchanged.
  */
+import state
 
 func apply(f: (x: int) => void, v: int) {
     f(v)
 }
 
 func main(): int sync {
-    var counter = 0
-    println(counter)
-    apply((x: int) => { counter = x }, 41)
-    println(counter)
+    let counter = state::ref(0)
+    println(state::get(counter))
+    apply((x: int) => { state::set(counter, x) }, 41)
+    println(state::get(counter))
     return 0
 }

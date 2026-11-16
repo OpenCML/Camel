@@ -271,12 +271,12 @@ prints one entry.
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
-| `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
 | `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
 | `0x03000213` | [SemanticDiag::ClosureAssignsCapturedName](#closureassignscapturedname) | Error | no |
 | `0x03000214` | [SemanticDiag::CapturedVarWrittenAfterTheClosure](#capturedvarwrittenaftertheclosure) | Error | no |
 | `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
+| `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -8959,44 +8959,6 @@ func main(): int sync {
 }
 ```
 
-### ClosureCaptureEscapes
-
-`0x03000210` · Error · `SemanticDiag::ClosureCaptureEscapes`
-
-**Fix**
-
-None: choice: capture the value the cell holds, or pass the state as a value, and which of the two is the writer's
-
-**Message**
-
-```text
-'{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out.
-```
-
-**Help**
-
-```text
-A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/reviews/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
-```
-
-**Example** (`test/cases/compile/state_escape/err_escape_return.cml`, run as `camel test/cases/compile/state_escape/err_escape_return.cml`)
-
-```camel
-func make(): (x: int) => int {
-    var acc = 0
-    return (x: int): int => sync {
-        acc = acc + x
-        acc
-    }
-}
-
-func main(): int sync {
-    let g = make()
-    println(g(1))
-    return 0
-}
-```
-
 ### RefContentHoldsRef
 
 `0x03000211` · Error · `SemanticDiag::RefContentHoldsRef`
@@ -9189,6 +9151,44 @@ func main(): int sync {
 }
 ```
 
+### VarContextParameterCannotBeBound
+
+`0x03000216` · Error · `SemanticDiag::VarContextParameterCannotBeBound`
+
+**Fix**
+
+None: choice: the two ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.
+```
+
+**Help**
+
+```text
+A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.
+```
+
+**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
+
+```camel
+var total: int = 0
+
+with <var acc: int>
+func add(x: int): int sync {
+    acc = acc + x
+    return acc
+}
+
+func main(): int sync {
+    let g = add<total>
+    println(g(1), total)
+    return 0
+}
+```
+
 ### IgnoredSideEffect
 
 `0x03100002` · Warn · `SemanticDiag::IgnoredSideEffect`
@@ -9235,18 +9235,18 @@ func main(): int {
 
 **Fix**
 
-None: context: a statement that reaches outside the program is reachable only from a region that never runs; the repair moves it or removes it, and where belongs to the design
+None: context: the statement is reachable only from a region that never runs; the repair moves it, removes it, or takes its value, and which of those belongs to the design
 
 **Message**
 
 ```text
-{0} reaches outside the program and is never executed: {1}.
+{0} is never executed: {1}.
 ```
 
 **Help**
 
 ```text
-This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
+This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)

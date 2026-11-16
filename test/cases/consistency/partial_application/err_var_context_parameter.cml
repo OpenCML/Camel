@@ -1,0 +1,23 @@
+/**
+ * A partial application may not bind a `var` context parameter (design principles 3.5, the
+ * author's ruling of 2026-11-15): a `with <var t: T>` parameter is passed in and written back by
+ * the call, and the function value `f<w>` makes has no call of its own to write it back to.
+ *
+ * The cell bound here is a module `var`, which is the shape whose name in the report used to be
+ * one the compiler made (`'$tagged0'`): the refusal was the closure rule's, borrowed through the
+ * forwarder graph's body, so the message named a temporary instead of the binding the program
+ * wrote. The name it prints must be `total`, the name in the source.
+ */
+var total: int = 0
+
+with <var acc: int>
+func add(x: int): int sync {
+    acc = acc + x
+    return acc
+}
+
+func main(): int sync {
+    let g = add<total>
+    println(g(1), total)
+    return 0
+}

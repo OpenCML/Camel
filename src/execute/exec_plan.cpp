@@ -1018,6 +1018,40 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
     }
 }
 
+/// Whether the plan runs the position `at` more than once while the value made at `produced` is
+/// held from outside that repetition: a loop's round runs its range again, and this value's
+/// production is not in the range that repeats here.
+///
+/// The count is one last use on the execution order (design principles 10.5; the author's ruling of
+/// 2026-11-15: the analysis is the plan's, once, and every back end follows it), and the execution
+/// order of a loop is not linear -- its round's range [begin, position] is run again. That changes
+/// nothing for a value the round itself makes: its holds and its give-backs are both inside the
+/// range, so they balance per round. It changes everything for a value the range reads from
+/// outside: the plan takes its holds once, before the loop, while the use recurs every round, so a
+/// give-back placed at that use releases the value at the end of the first round and the second
+/// round reads a value the count already said was dead. With a `Ref` handle that is
+/// `state::get` on a disposed box, "the value is not a reference", on the second round of a loop
+/// that read it correctly on the first.
+///
+/// The answer for such a use is not another position: the loop's frame is one of the value's
+/// holders until the loop ends, and no position of the plan runs once at that moment -- the LOOP
+/// node's own position is run every round, and the count is applied at operator sites, where a
+/// LOOP node is not one. So the reference stays held (`refKeptAt`'s other reason), which is the
+/// conservative direction the count takes whenever it cannot name the last use, and the balance
+/// still holds: the holds the plan takes are exactly the references it gives back.
+bool repeatsWithoutMakingIt(const ExecPlan &plan, size_t produced, size_t at) {
+    for (const ExecLoop &loop : plan.loops) {
+        if (at < loop.begin || at > loop.position) {
+            continue;
+        }
+        if (produced >= loop.begin && produced <= loop.position) {
+            continue; // the value is one of the round's own: hold and give-back are per round
+        }
+        return true;
+    }
+    return false;
+}
+
 /// The references that come back and the holds they are balanced by, as rows of the plan. The rule
 /// is written out in the header; the placement of the rows is what the last-use column is for: a
 /// reference packed into another value comes back where that value's own last use is, so the column
@@ -1043,34 +1077,50 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         if (value >= nodeCount || carried[value].empty() || carried[value].front() != value) {
             continue; // a forwarder, a port, a constant, or a node the plan does not run
         }
-        const uint32_t uses     = static_cast<uint32_t>(usesAt[value].size());
-        const bool kept         = keptByProgram[value] != 0;
+        // Where the reference of one use comes back: the use's own position, or -- when the user
+        // packs its inputs -- where the value it made is last read, which is later than the use.
+        // The loop rule is asked about that position, because that is the one the row runs at.
+        const auto landingOf = [&](uint32_t usePosition) {
+            const gc_node_ref_t user = plan.topo[usePosition];
+            if (!packsItsInputs(graph, user)) {
+                return std::pair<uint32_t, bool>{usePosition, false};
+            }
+            const size_t packerPos =
+                user < plan.topoIndexByRef.size() ? plan.topoIndexByRef[user] : count;
+            uint32_t end = packerPos < plan.lastUseAt.size() ? plan.lastUseAt[packerPos]
+                                                             : ExecPlan::kNoLastUse;
+            if (end == ExecPlan::kNoLastUse || end >= count) {
+                end = static_cast<uint32_t>(std::min<size_t>(packerPos, count - 1));
+            }
+            return std::pair<uint32_t, bool>{end, true};
+        };
+        const uint32_t uses = static_cast<uint32_t>(usesAt[value].size());
+        // The uses whose reference cannot come back where it is written: the row would run inside a
+        // loop's round for a value that loop does not make (`repeatsWithoutMakingIt`).
+        uint32_t heldByRounds = 0;
+        for (const uint32_t usePosition : usesAt[value]) {
+            if (repeatsWithoutMakingIt(plan, idx, landingOf(usePosition).first)) {
+                ++heldByRounds;
+            }
+        }
+        const bool kept = keptByProgram[value] != 0 || heldByRounds != 0;
         plan.refProducedAt[idx] = 1;
         plan.refKeptAt[idx]     = kept ? 1 : 0;
-        plan.refCopiesAt[idx]   = kept ? uses : (uses == 0 ? 0 : uses - 1);
+        // A kept value takes one hold per reference the plan still gives back, so the gives cannot
+        // take the count below the graph's own hold. A value no loop holds keeps its old answer.
+        plan.refCopiesAt[idx] =
+            kept ? uses - heldByRounds : (uses == 0 ? 0 : uses - 1);
         for (const uint32_t usePosition : usesAt[value]) {
-            const gc_node_ref_t user = plan.topo[usePosition];
-            if (packsItsInputs(graph, user)) {
-                // The value is packed into the value `user` makes: the reference comes back where
-                // that value's own last use is -- the column, not a second answer computed here --
-                // and where nothing reads the packing value, where it is made.
-                const size_t packerPos =
-                    user < plan.topoIndexByRef.size() ? plan.topoIndexByRef[user] : count;
-                uint32_t end = packerPos < plan.lastUseAt.size() ? plan.lastUseAt[packerPos]
-                                                                 : ExecPlan::kNoLastUse;
-                if (end == ExecPlan::kNoLastUse || end >= count) {
-                    end = static_cast<uint32_t>(std::min<size_t>(packerPos, count - 1));
-                }
-                rows[end].push_back(
-                    ExecPlan::RefGiveBack{
-                        .value  = value,
-                        .at     = plan.topo[end],
-                        .count  = 1,
-                        .packed = true});
+            const auto [landing, packed] = landingOf(usePosition);
+            if (repeatsWithoutMakingIt(plan, idx, landing)) {
                 continue;
             }
-            rows[usePosition].push_back(
-                ExecPlan::RefGiveBack{.value = value, .at = user, .count = 1});
+            rows[landing].push_back(
+                ExecPlan::RefGiveBack{
+                    .value  = value,
+                    .at     = plan.topo[landing],
+                    .count  = 1,
+                    .packed = packed});
         }
         if (uses == 0 && !kept) {
             // Born with a reference nothing reads: it comes back as soon as the value exists.

@@ -187,13 +187,14 @@ func main(): int sync {
 
 - When a write is not in a sync block and nothing reads the variable afterwards, the modification does not execute (evaluation by dependency).
 - A write that is not in a sync block is still ordered after the reads written before it (a read sees the value of the write written before it), but it is not guaranteed to run: with nothing reading the variable afterwards it does not run, and the compiler gives the warning `SemanticDiag::IgnoredSideEffect`.
-- Tracking of modifications covers captures: when a function writes a `var` through a capture, the call site is recorded as a write to that variable. A call through a function value is no exception as long as the call site can see the body of the value it calls: a lambda bound to a name in the same function is such a value, and `f()` in the example below is a write of the captured `c`, exactly as the call of a named function is. Only a function value whose body the call site cannot see can be recognised by its type alone (`var` parameters): a value passed as an argument, a value obtained as a return value, and a value stored in a container or in a structure and taken out again.
+- Tracking of modifications covers what a function writes through a call: when a function writes a `var`, the call site is recorded as a write to that variable. A call through a function value is no exception as long as the call site can see the body of the value it calls: a lambda bound to a name in the same function is such a value, and `f()` in the example below is a write of `c`, exactly as the call of a named function is. Only a function value whose body the call site cannot see can be recognised by its type alone (`var` parameters): a value passed as an argument, a value obtained as a return value, and a value stored in a container or in a structure and taken out again. What such a body may write is the module's `var` or the content of a `Ref`: a closure captures a value, not a place, so an assignment to a name of the call that made it is refused where it is written (`SemanticDiag::ClosureAssignsCapturedName`, [design principles](../../design-principles.en.md) 3.5), and the state that really has to be shared is a `Ref`.
 
 ```cml
+var c = 0
+
 func read(): int {
-    var c = 0
-    let f = (): void => sync { c += 1 }
-    f()                 // recorded as a write of the captured `c`
+    let f = (): void => sync { c = c + 1 }
+    f()                 // recorded as a write of `c`
     return c            // this read is what runs that write
 }
 
@@ -210,13 +211,14 @@ func main(): int sync {
 With nothing reading `c` afterwards, the write does not run, and the call is reported as one that is never executed. The body prints `c` after writing it, so a body that ran would print `1`; the program prints only the `0` of `main`:
 
 ```cml
+var c = 0
+
 func drop(): int {
-    var c = 0
     let f = (): void => sync {
-        c += 1
+        c = c + 1
         println(c)      // would print 1 if the write ran
     }
-    f()                 // nothing reads `c` afterwards: the write does not run
+    f()                 // nothing reads `c` afterwards: the call does not run
     return 0
 }
 
@@ -227,12 +229,12 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call has side effects but is never executed: nothing depends on it and it is not in a sync block.
-  --> drop.cml:7:5
+warning[SemanticDiag::EffectNotExecuted]: The call is never executed: nothing needs what it gives, so nothing runs it.
+  --> drop.cml:8:5
    |
- 7 |     f()                 // nothing reads `c` afterwards: the write does not run
+ 8 |     f()                 // nothing reads `c` afterwards: the call does not run
    |     ^^^
-help: Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
+help: This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
 
 0
 ```

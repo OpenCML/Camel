@@ -153,8 +153,9 @@ Measured on 2026-11-15, for the two departures such a note had recorded against 
   Under `generate.VERSION` 7 -- the program the seed wrote from 2026-11-02 until `0ddbb92af`, and
   byte-identical at `5ec45c70f` = `4fae172f2^`, the last compiler that accepts it -- all eleven
   pipelines of the slow matrix, `std::opt::dce` alone and `std::opt` all equal the model's eight
-  lines exactly, exit 0. Under `generate.VERSION` 6 the same holds. Today's front end refuses that
-  version-7 program with `SemanticDiag::ClosureCaptureEscapes` (rule of `4fae172f2`), so the seed
+  lines exactly, exit 0. Under `generate.VERSION` 6 the same holds. The front end of that tree refused that
+  version-7 program with `SemanticDiag::ClosureCaptureEscapes` (rule of `4fae172f2`; the rule was
+  withdrawn on 2026-11-16 and what refuses the write now is `ClosureAssignsCapturedName`), so the seed
   cannot reach a pass at all any more; "unreachable" would be the wrong thing to write down, but
   so would "fixed" -- what the readings support is that no program this seed can name ever
   miscompiled under `std::opt::dce`, in any tree that still accepted it.

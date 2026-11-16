@@ -1,10 +1,16 @@
 /**
- * What a `pure` parameter asks for is the empty set, and a value that writes a cell is not in it:
- * `add<t>` carries the write in its type, so the call is refused where the two meet (design
- * principles 3.3). The refusal is the ordinary one for a call that no signature accepts.
+ * What a `pure` parameter asks for is the empty set, and a value that writes a resource is not in
+ * it: `add` writes the module's `total` and carries that write in its type, so the call is refused
+ * where the two meet (design principles 3.3). The refusal is the ordinary one for a call that no
+ * signature accepts.
+ *
+ * The state is a module `var`: a `var` `with` parameter handed to a value would be a cell that
+ * value carries, and a closure cannot assign the name it captured (design principles 3.5, 197; the
+ * author's ruling of 2026-11-16). The resource the type spells is the same either way.
  */
 
-with <var total: int>
+var total = 0
+
 func add(x: int): int sync {
     total = total + x
     return total
@@ -15,8 +21,7 @@ func usePure(f: (x: int) => int pure): int {
 }
 
 func main(): int sync {
-    var t = 0
-    let g = add<t>
+    let g: (x: int) => int = add
     println(usePure(g))
     return 0
 }

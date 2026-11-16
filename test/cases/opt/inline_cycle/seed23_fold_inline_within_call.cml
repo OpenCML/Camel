@@ -1,8 +1,16 @@
 /**
- * The legal half of `seed23_fold_inline`: `k35` declares `var v37`, a closure captures it by
- * reference, and the closure is called inside `k35` -- so the cell never leaves the call that
- * declares it, which is the one thing the state rule of 2026-11-14 allows (design principles
- * 3.5, rule two). The rest of the program is progen seed 23 verbatim.
+ * The legal half of `seed23_fold_inline`: `k35` declares `var v37`, a closure captures it and
+ * reads it, and the closure is called inside `k35`. The rest of the program is progen seed 23
+ * verbatim.
+ *
+ * The closure used to WRITE `v37` (`v37 = f17('ab', 1.5) % 1000` inside it), and that was legal
+ * because the state rule of 2026-11-14 let a closure write a captured cell while the cell stayed
+ * inside the call that declared it. That premise went on 2026-11-16 (design principles 3.5: a
+ * closure captures a value, so it cannot assign the name it captured), and the write is refused
+ * where it stands -- `SemanticDiag::ClosureAssignsCapturedName`, 0x03000213 -- so the write moved
+ * out of the closure, to the line before it is made. The value is the same one: `v37` is
+ * `f17('ab', 1.5) % 1000` either way, so the sixteen lines the program prints and the
+ * `direct_calls` reading these entries guard are the same readings.
  *
  * What this entry guards, and what it does not (measured 2026-11-15 on 6c64f2042):
  *
@@ -109,8 +117,8 @@ func w32(a33: int, var c34: int): int sync {
 
 func k35(a36: int): int sync {
     var v37 = f17('', 2.0);
+    v37 = f17('ab', 1.5) % 1000;
     let f38 = (p38: int): int => sync {
-        v37 = f17('ab', 1.5) % 1000;
         return v37 + p38;
     };
     let n39 = f38(a36);

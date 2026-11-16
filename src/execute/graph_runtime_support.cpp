@@ -236,8 +236,23 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         // The nodes are laid out by the walk at the end of this function, which visits every node
         // `live` holds, and the members of a control region are laid out as that region's piece
         // whatever brought them in, so seeding here is all a write needs.
-        const std::vector<camel::runtime::RegionRootCandidate> regionRoots =
+        std::vector<camel::runtime::RegionRootCandidate> regionRoots =
             camel::runtime::regionRootCandidatesOf(*graph);
+        // A branch that joins no value is a root of the same kind (design principles 3.1, 3.7): it
+        // is a statement of the region it is written in, and that region running is its running.
+        // Seeded under the same owner-live condition below, so a branch inside an arm nothing takes
+        // still waits for that arm. A loop is not this case (its value is the state it leaves).
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (!camel::runtime::branchJoinsNoValue(*graph, ref)) {
+                continue;
+            }
+            // The branch and the JOIN that closes it go in together: the arm's value reaches the
+            // JOIN by a `with` edge, and the plan wants both ends of the piece whenever it has one.
+            for (gc_node_ref_t half :
+                 {ref, camel::runtime::branchJoinOf(*graph, ref)}) {
+                regionRoots.push_back({half, camel::runtime::decidingRegionOf(*graph, half)});
+            }
+        }
         for (const camel::runtime::RegionRootCandidate &candidate : regionRoots) {
             if (candidate.region != 0) {
                 continue;
@@ -634,6 +649,42 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
     // above because a region that runs makes its value; its members are not, and seeding them here
     // is what used to make a control edge from the branch the only reason an arm's statements were
     // laid out.
+    //
+    // This sweep is the walk's last resort: it is what lays a node out when nothing the exit
+    // depends on leads to it, and the case that makes it load-bearing is the effect nothing reads,
+    // kept in the execution by the write it makes to a resource outside the program (3.1's other
+    // root of a region, camel/runtime/region_roots.h; `println` in a function that is not `sync`,
+    // whose exit is the value it returns and which therefore orders no statement after any other).
+    //
+    // Node order is all this sweep has, and it says nothing about regions: a member of a control
+    // region laid out here lands wherever its node id puts it. That is not the order a round runs
+    // the region in, and for a loop it is not one range at all -- `let n = loop k = 0 while k < 2 do
+    // { k + 1 }` followed by a statement has the condition's port and its `lt` in the regions and
+    // the literal `2` it compares against in none, so node order interleaves `[port, 2, lt]` and
+    // `[port, 1, add]`, and ExecPlan's loop tables refuse the plan ("The nodes
+    // of a loop are not one range in the execution order"). The owner lays its region out as one
+    // range (the BRCH and LOOP cases above), so a member waits for it: the owner is in `live`
+    // whenever the seed reached the value the effect reads, and it is right here that the walk would
+    // otherwise get ahead of it.
+    for (gc_node_ref_t n = 0; n < live.size(); ++n) {
+        if (!live[n] || state[n] == 2) {
+            continue;
+        }
+        const uint32_t control = seedRegions.controlOf(n);
+        if (control != 0) {
+            const camel::runtime::GCRegion *region = graph->region(control);
+            const gc_node_ref_t owner =
+                region != nullptr ? region->owner : camel::runtime::kInvalidNodeRef;
+            if (owner != camel::runtime::kInvalidNodeRef && owner < live.size() &&
+                live[owner] != 0 && state[owner] != 2) {
+                continue;
+            }
+        }
+        visit(n);
+    }
+    // A member the owner's visit did not reach -- an owner the execution does not hold, or a region
+    // whose membership the piece did not cover -- is still laid out rather than dropped: a node the
+    // walk holds runs, and losing it would silently drop the work it does.
     for (gc_node_ref_t n = 0; n < live.size(); ++n) {
         if (live[n] && state[n] != 2) {
             visit(n);

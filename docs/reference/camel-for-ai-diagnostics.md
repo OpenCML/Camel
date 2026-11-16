@@ -57,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 229
+**Semantic — errors** (`SemanticDiag`) — 232
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -285,14 +285,17 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
 | `ExtentOfNeedsStatedShape` | `extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}. |
-| `ClosureCaptureEscapes` | '{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out. |
 | `RefContentHoldsRef` | '{0}' cannot be the content of a reference: {1}. |
 | `ResourceInferenceConflict` | The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'. |
+| `ClosureAssignsCapturedName` | '{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name. |
+| `CapturedVarWrittenAfterTheClosure` | '{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read. |
+| `CapturedVarHandedToVarParameter` | '{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure. |
+| `VarContextParameterCannotBeBound` | '{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to. |
 
 **Semantic — warnings** (`SemanticDiag`) — 16
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
-| `EffectNotExecuted` | {0} reaches outside the program and is never executed: {1}. |
+| `EffectNotExecuted` | {0} is never executed: {1}. |
 | `ExitInUnusedBranch` | This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function. |
 | `UnusedFallibleValue` | This value has type '{0}' and nothing uses it: an error it holds is lost{1}. |
 | `NullTestNeverNull` | {0} has type '{1}', which is never null: this test is always {2}. |

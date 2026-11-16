@@ -2016,6 +2016,20 @@ node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
 }
 
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
+    /// Clears the "the statement being built has a value nobody takes" mark for the length of a
+    /// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
+    /// an argument written inside one is not a statement of its own.
+    struct UnusedStatementScope {
+        const GCT::Node *&slot;
+        const GCT::Node *saved;
+        UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value)
+            : slot(slot), saved(slot) {
+            slot = value;
+        }
+        ~UnusedStatementScope() { slot = saved; }
+        UnusedStatementScope(const UnusedStatementScope &)            = delete;
+        UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
+    };
     // A call written in an extent of a signature is run by this build (foldExtentCall).
     struct ExtentCallScope {
         camel::core::type::ExtentCallEvaluator previous;
@@ -2040,7 +2054,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ExpectedValueScope callScope(expectedValueType_, nullptr);
     // Whether this call is a statement whose value nothing takes; the calls inside it are not.
     const bool unusedStatement = gct == unusedStatement_;
-    unusedStatement_           = nullptr;
+    // The mark says which *statement* the block is building, and it belongs to that statement, not
+    // to this call: it is cleared for the calls inside and put back on the way out. Clearing it for
+    // good lost the mark of a statement whose own condition or scrutinee holds an operator or a
+    // call -- `if f(x) > 0 then ... else ...` as a statement was built as a branch whose value is
+    // joined, which is what tells a branch written as a statement from a branch whose value is
+    // taken (Builder::branchTakesNoValue), and on that reading the walks that ask what a region
+    // runs decide whether the branch runs at all.
+    const UnusedStatementScope unusedScope(unusedStatement_, nullptr);
     if (gct->at(0)->type() == GCT::NodeKind::FUNC && gct->at(0)->decoratedBlock()) {
         node_handle_t result = visitDecoratedBlock(gct, unusedStatement);
         LEAVE("LINK");
