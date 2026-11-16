@@ -2,15 +2,33 @@
 // SPDX-License-Identifier: MIT
 
 /*
- * The roots a region has (docs/design-principles.cn.md 3.1; docs/design/effects/analysis.cn.md
+ * The roots a region has (docs/design-principles.cn.md 3.1, 3.3; docs/design/effects/analysis.cn.md
  * 3.4, `regionRoot`): the nodes a running region runs although no value of theirs is read.
  *
- * 3.1 decides it: "对外部资源的写由所在区域用到 ... 一个区域运行时，区域里对外部资源的写都被用到".
- * A read of an outside resource is a dependency like a read of a variable and stays as it was --
- * it runs when something needs its value -- so the predicate here is a **write**, not "has an
+ * 3.1 decides the first half: "对外部资源的写由所在区域用到 ... 一个区域运行时，区域里对外部资源的写都
+ * 被用到". 3.3 asked for the same of a handle -- "对 `Ref` 的写由之后的读者用到（3.1）" -- and the
+ * author's ruling of 2026-11-16 made it one rule, "对外部资源与句柄的写由所在区域用到". A
+ * `Ref` is a handle the program owns, so writing it reaches nothing outside the program -- and the
+ * region owes that write just the same, because **the reader of a handle may stand where this graph
+ * cannot see it**: in another graph (the callee that writes and the caller that reads a box which
+ * escaped through `return`), in a value a closure carried away and reads on a later call, or behind
+ * a second name of the same handle. "There is no reader in this graph" proves nothing about whether
+ * there is a reader, so the write runs with its region. The cost is accepted and named with the
+ * rule: a write with no reader anywhere runs once instead of being deleted. It is unobservable, and
+ * it moves debugger line coverage and timing; keeping a write only where this graph has a reader is
+ * not the alternative, because the readers of a handle are mostly not in this graph.
+ *
+ * A read stays as it was: a read of an outside resource is a dependency like a read of a variable
+ * and runs when something needs its value, so the predicate here is a **write**, not "has an
  * effect". That is also why this file is apart from the effect summary of a graph
  * (`camel/runtime/effects.h`): that one asks whether anything outside is touched, and a read of
- * the console touches it too.
+ * the console touches it too. The two questions are deliberately not the same one -- reading
+ * `console` or `env` is the first without being the second, and writing a `Ref` is the second
+ * without being the first.
+ *
+ * A `Variable` is not one of them (the ruling of 2026-11-15: assigning to a `var` is not an effect;
+ * what it writes is a value handed in and handed back where the call stands), and neither is an
+ * `Object`.
  *
  * Which region a node's write belongs to: the innermost arm or loop region it sits in. A region
  * runs because its owner (the BRCH or the LOOP) runs -- the rule the plan already uses to seed a
@@ -22,7 +40,9 @@
  * What is *not* here: the wires. 3.1 keeps "the region uses them" out of the graph -- "图上不加边"
  * (analysis.cn.md 3.4) -- so the walks that ask what a region runs (the liveness walk of a graph,
  * the encode that keeps only what the roots reach, and the execution order) seed these nodes as
- * roots instead of finding an edge to them.
+ * roots instead of finding an edge to them. A real edge from a reader to a write of a handle would
+ * need a version operand on `get` and `update`, which handles do not have today: that is a semantic
+ * rewrite, not the fix this root is.
  *
  * Two shapes ask the same three questions: a frozen `GCGraph` and the editable draft a builder
  * holds, and both are answered from the region table each already carries. The draft side is a
@@ -45,8 +65,8 @@
 
 namespace camel::runtime {
 
-/// A node of a graph that writes a resource outside the program, and the region whose running
-/// decides whether it runs (`decidingRegionOf`).
+/// A node of a graph that makes a write a running region owes, and the region whose running decides
+/// whether it runs (`decidingRegionOf`).
 struct RegionRootCandidate {
     gc_node_ref_t node = kInvalidNodeRef;
     uint32_t region    = 0;
@@ -54,13 +74,15 @@ struct RegionRootCandidate {
     bool operator==(const RegionRootCandidate &) const = default;
 };
 
-/// Whether running a node of `kind` whose operator is `oper` writes a resource outside the
-/// program. Read from the operator's declaration and never from the operator's name (design
-/// principles 3.3): an access list with a write of a resource whose class reaches outside, or the
+/// Whether running a node of `kind` whose operator is `oper` makes a write the region that runs it
+/// owes. Read from the operator's declaration and never from the operator's name (design principles
+/// 3.3): an access list with a write of a resource that reaches outside the program **or of a
+/// handle** (a `Ref` the program owns: its reader may be in a graph this one cannot see), or the
 /// conservative reading of an operator that itemized none -- "写全局资源", which is a write. A
-/// node that is not an operator writes nothing by itself: what a call does is its callee's, and a
-/// branch or a loop is its regions'.
-bool writesOutsideResource(GCNodeKind kind, camel::core::OperId oper);
+/// `var` is not one of them: assigning to it is not an effect (the ruling of 2026-11-15). A node
+/// that is not an operator writes nothing by itself: what a call does is its callee's, and a branch
+/// or a loop is its regions'.
+bool writesForTheRegion(GCNodeKind kind, camel::core::OperId oper);
 
 namespace detail {
 
@@ -107,7 +129,7 @@ uint32_t decideOf(uint32_t regionCount, const RegionAt &regionAt, uint32_t at) {
     return 0;
 }
 
-/// Every operator node of `nodeCount` slots that writes outside the program, with the region that
+/// Every operator node of `nodeCount` slots that makes a write its region owes, with the region that
 /// decides whether it runs. `kindOf` answers `GCNodeKind::Dead` for a slot no node occupies.
 template <typename KindOf, typename RegionOfNode, typename OperOf>
 std::vector<RegionRootCandidate> candidatesWith(
@@ -119,12 +141,12 @@ std::vector<RegionRootCandidate> candidatesWith(
         if (kind == GCNodeKind::Dead) {
             continue; // no node in this slot (a draft slot a rewrite emptied)
         }
-        // Only an operator writes by itself (`writesOutsideResource` answers the same), and the test
+        // Only an operator writes by itself (`writesForTheRegion` answers the same), and the test
         // is here as well so that the operator of a node that has none is never read.
         if (kind != GCNodeKind::Oper) {
             continue;
         }
-        if (!writesOutsideResource(kind, operOf(ref))) {
+        if (!writesForTheRegion(kind, operOf(ref))) {
             continue;
         }
         candidates.push_back(RegionRootCandidate{ref, regionOfNode(ref)});
@@ -144,8 +166,8 @@ uint32_t decidingRegionOf(const GCGraph &graph, gc_node_ref_t ref);
 /// does.
 gc_node_ref_t decidingOwnerOf(const GCGraph &graph, uint32_t region);
 
-/// Every node of `graph` that writes outside the program, in node order, each with the region that
-/// decides whether it runs. The nodes of the body are the ones with `region == 0`.
+/// Every node of `graph` that makes a write its region owes, in node order, each with the region
+/// that decides whether it runs. The nodes of the body are the ones with `region == 0`.
 std::vector<RegionRootCandidate> regionRootCandidatesOf(const GCGraph &graph);
 
 /// The same three questions answered by a draft still being built: `DraftLike` is the type a

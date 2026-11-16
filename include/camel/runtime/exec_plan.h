@@ -303,7 +303,12 @@ class ExecPlan {
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
     /// reads this, and the sum over the plan is `refGiveBacksTotal()`.
     std::vector<uint32_t> refGiveBackAt;
-    /// By topo index: the program keeps the node's value (it is the graph's result).
+    /// By topo index: the node's producing reference does not come back inside this graph. Two
+    /// reasons, and they are the same fact about the count: the program keeps the value (it is the
+    /// graph's result), or a loop reads it again after the round that read it, so the round's
+    /// give-back cannot be placed at that use (exec_plan.cpp, `repeatsWithoutMakingIt`). Either way
+    /// the graph is still one of the value's holders when the plan ends, and `refCopiesAt` takes one
+    /// hold per reference the plan does give back, so the balance is meant to end here.
     std::vector<uint8_t> refKeptAt;
     /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
     /// once the node at that position has run, in the order the producing values are laid out.

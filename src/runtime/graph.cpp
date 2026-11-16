@@ -2201,13 +2201,14 @@ template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &fa
     };
     reach();
 
-    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h). A write to a
-    // resource outside the program is used by the region it is written in, so the region's running
-    // runs it although nothing reads what it produces. 3.1 keeps that out of the graph -- "图上不
-    // 加边" -- so it is seeded here, and the seed repeats because a region is seeded only once its
-    // owner (the BRCH or the LOOP) is itself live: a write in an arm nothing takes, or in a loop
-    // nothing needs, is not part of the execution, and the warning for it belongs to the branch or
-    // the loop (`SemanticDiag::EffectNotExecuted`).
+// The roots a region adds (design principles 3.1 and 3.3; camel/runtime/region_roots.h). A write
+    // a running region owes is used by the region it is written in, so the region's running runs it
+    // although nothing reads what it produces -- an outside write (3.1) and a write to a handle
+    // (3.3: the reader of a box may stand in a graph this one cannot see) alike. 3.1 keeps that out
+    // of the graph -- "图上不加边" -- so it is seeded here, and the seed repeats because a region is
+    // seeded only once its owner (the BRCH or the LOOP) is itself live: a write in an arm nothing
+    // takes, or in a loop nothing needs, is not part of the execution, and the warning for it
+    // belongs to the branch or the loop (`SemanticDiag::EffectNotExecuted`).
     //
     // A branch that joins no value is a seed of the same kind (design principles 3.1, 3.7): an `if`
     // written as a statement has no value of its own, so nothing can need it into the execution and
