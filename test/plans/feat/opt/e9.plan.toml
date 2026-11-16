@@ -349,6 +349,23 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 # of 2026-11-12 the campaign reduced them with); their entries stay, because a reduction of this
 # campaign that is not in the plan is a defect that can come back unseen.
 #
+# Where each one first goes wrong, measured on `29ea0a011` -- the build the campaign reduced them
+# on -- by adding the ladder's passes one at a time (`std::macro`, then devirtualize, specialize,
+# inline, fold, cse, algebra, dce, order, then `std::opt` as a whole) under `--gc generational
+# std::nvm`, and comparing the bytes with the same program and no pass:
+#
+#   rc02_seed9   +std::opt::fold    `q36 10` then `q36 0`
+#   rc04_seed251 +std::opt::inline  two blank lines where the program prints one
+#   rc05_seed256 std::opt           nothing at all; no earlier prefix of the ladder is wrong
+#   rc07_seed140 +std::opt::dce     one blank line of the two
+#   rc09_seed15  +std::opt::fold    the blank line first, then `L4 0 `
+#
+# A16e's row in the campaign table names `std::opt::order`, and that is not where the reading
+# first goes wrong: `+dce`, the step before `+order`, already reads the program's lines in the
+# program's order again, so `+order` cannot be the first wrong step. What `+fold` breaks on
+# `rc09_seed15` is the place `+fold` breaks on `rc02_seed9`. On `8cdd0e64e` -- the baseline these
+# entries run on -- every one of the five reads correctly at every step of the ladder.
+#
 # A16a and A16e are one defect and one case: `std::opt::fold`'s `pruneBranch` dissolves the branch
 # and takes the place of the block with it. The `JOIN` was the only node that carried the block's
 # source order -- what was written before the branch, the arm it took, what was written after -- so
@@ -362,7 +379,7 @@ expect_output_not_contains = ["enters region", "PassInternalError", "internal er
 
 [[tests]]
 name = "rc02_seed9.without_the_pass"
-desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it."
+desc = "`rc02_seed9` (A16a) with no pass at all: the reading the optimized run is held to. Two lines, in this order -- `q36 0` from the call before the branch, `q36 10` from the one after it. First wrong pass: this program first goes wrong in `std::opt::fold` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc02_seed9.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -381,7 +398,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc02_seed9.specialize_inline_fold"
-desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over."
+desc = "`rc02_seed9` (A16a) under the reduced pipeline the campaign found it with: the same two lines in the same order. The branch the fold dissolves stood between the two calls, so the printed lines used to come out swapped -- the blank line of A16e and this one are one defect, one place `pruneBranch` now hands over. First wrong pass: this program first goes wrong in `std::opt::fold` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc02_seed9.cml"
 args = ["${case}", "--gc", "generational", "std::opt::specialize", "std::opt::inline", "std::opt::fold", "${backend}"]
@@ -401,7 +418,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc04_seed251.without_the_pass"
-desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body."
+desc = "`rc04_seed251` (A16b) with no pass at all: exactly one blank line. The count is the reading: the defect printed a blank line per element of the `loop` inside the inlined body. First wrong pass: this program first goes wrong in `std::opt::inline` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc04_seed251.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -419,7 +436,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc04_seed251.inline"
-desc = "`rc04_seed251` (A16b) under `std::opt::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all."
+desc = "`rc04_seed251` (A16b) under `std::opt::inline`, the pass that printed the blank line once per element of the loop's array. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt::inline` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc04_seed251.cml"
 args = ["${case}", "--gc", "generational", "std::opt::inline", "${backend}"]
@@ -438,7 +455,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc05_seed256.without_the_pass"
-desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line."
+desc = "`rc05_seed256` (A16c) with no pass at all: exactly one blank line. First wrong pass: this program first goes wrong in `std::opt` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc05_seed256.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -456,7 +473,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc05_seed256.opt"
-desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all."
+desc = "`rc05_seed256` (A16c) under `std::opt`, which printed nothing at all. One blank line, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc05_seed256.cml"
 args = ["${case}", "--gc", "generational", "std::opt", "${backend}"]
@@ -475,7 +492,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc07_seed140.without_the_pass"
-desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines."
+desc = "`rc07_seed140` (A16d) with no pass at all: exactly two blank lines. First wrong pass: this program first goes wrong in `std::opt::dce` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc07_seed140.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -493,7 +510,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc07_seed140.inline_dce"
-desc = "`rc07_seed140` (A16d) under `std::opt::inline std::opt::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all."
+desc = "`rc07_seed140` (A16d) under `std::opt::inline std::opt::dce`, which printed one blank line of the two. Two blank lines, as with no pass at all. First wrong pass: this program first goes wrong in `std::opt::dce` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc07_seed140.cml"
 args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::dce", "${backend}"]
@@ -512,7 +529,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc09_seed15.without_the_pass"
-desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries."
+desc = "`rc09_seed15` (A16e) with no pass at all: `L4 0 ` -- with the space that is part of the line -- and then a blank line. The trailing space is the reading, so `trim_trailing_space` is not a normalizer of these two entries. First wrong pass: this program first goes wrong in `std::opt::fold` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc09_seed15.cml"
 args = ["${case}", "--gc", "generational", "${backend}"]
@@ -531,7 +548,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "rc09_seed15.inline_fold"
-desc = "`rc09_seed15` (A16e) under `std::opt::inline std::opt::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix."
+desc = "`rc09_seed15` (A16e) under `std::opt::inline std::opt::fold`: the same two lines in the same order. The fold dissolves the branch the taken arm was, and that arm's print is the statement whose place the block's order was held by -- the shape of A16a's defect and the same fix. First wrong pass: this program first goes wrong in `std::opt::fold` (measured on `29ea0a011`; correct on this baseline)."
 kind = "behavior"
 case = "../../../cases/opt/e9/rc09_seed15.cml"
 args = ["${case}", "--gc", "generational", "std::opt::inline", "std::opt::fold", "${backend}"]
