@@ -73,16 +73,16 @@ expect_output_contains = ["fold_function_type: graph 'announced' now publishes",
 # read the same in a log. Both numbers are pinned: a checker that stays green by declining more has
 # to raise `declined` first, and one that judges nothing has to keep `checked` above zero.
 #
-# The reading is a diagnostic line on the `Pass` scope, not an environment switch: a run's behaviour
-# is decided by the program, the command line and the build options (design principles 9.3), so a
-# count that is only ever printed is asked for the way every other per-pass reading is -- `-vv` with
-# the scope narrowed to `Pass` (the ruling of 2026-11-16 moved it off the environment).
+# The reading is a run reading on the `effects` area of the tracing channel, not an environment switch
+# and no longer a log scope: a run's behaviour is decided by the program, the command line and the build
+# options (design principles 9.3), and one kind of reading has one way to ask for it -- `--trace effects`
+# (the ruling of 2026-11-16 moved it off the environment and off the `Pass` scope).
 [[tests]]
 name = "commit_checks.counts_what_it_declines"
 desc = "With the Pass scope at info, the check says what it compared and what it declined, and the two counts are pinned so that silence has to show up as a number."
 kind = "behavior"
 case = "../../../cases/compile/generics/pipelines.cml"
-args = ["-vv", "--log-include", "Pass", "${case}", "std::opt", "std::nvm"]
+args = ["-vv", "--log-include", "Pass", "--trace", "effects", "${case}", "std::opt", "std::nvm"]
 expect_exit = 0
 timeout_ms = 60000
 expect_stderr_contains = ["effect containment: checked"]
@@ -108,7 +108,7 @@ name = "commit_checks.declines_add_up"
 desc = "The components of the summary are counted apart, so a gap in the analysis -- a call site the graph does not resolve -- cannot hide inside the conservative readings of the resource classes."
 kind = "behavior"
 case = "../../../cases/compile/pass_guard/plain.cml"
-args = ["-vv", "--log-include", "Pass", "${case}", "test::fold_function_type", "std::nvm"]
+args = ["-vv", "--log-include", "Pass", "--trace", "effects", "${case}", "test::fold_function_type", "std::nvm"]
 expect_exit = 0
 timeout_ms = 20000
 expect_stderr_contains = ["effect containment: checked"]
@@ -122,7 +122,7 @@ name = "commit_checks.a_type_that_promises_nothing"
 desc = "A call through a parameter of function type carries a Generic signature. The body behind the value prints, and that is not a violation: there was no promise to break."
 kind = "behavior"
 case = "../../../cases/opt/commit_checks/generic_call.cml"
-args = ["-vv", "--log-include", "Pass", "${case}", "std::opt", "std::nvm"]
+args = ["-vv", "--log-include", "Pass", "--trace", "effects", "${case}", "std::opt", "std::nvm"]
 expect_exit = 3
 timeout_ms = 20000
 expect_stdout_contains = ["3"]
