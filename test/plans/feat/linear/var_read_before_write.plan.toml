@@ -22,10 +22,19 @@ tags = ["feat", "linear", "var", "effects"]
 # Each function below is written outside a sync block; `main` is a `sync` block so that they run.
 # Every value is asserted on both sides: the read before the write keeps the old value, and the
 # read after it takes the new one.
+#
+# The entries also asserted, until this lane, that three writes here -- 52:7, 85:7 and 87:7 -- have
+# values nobody reads. They do not: each of the three is read by the `let` written right after it.
+# The expectation was true of the diagnostic's implementation and false of its text: the warning
+# asked whether the write's own node had a consumer, and a read of a `var` in a body that is not a
+# `sync` block takes the value the write stores and not the write (the builder folds such a read to
+# the write's second operand), so the three writes were reported while their values were being read.
+# That made `camel -Werror` refuse this file, which is why the expectation is withdrawn here rather
+# than kept: it locked a false report in place, and the report is what changed.
 
 [[tests]]
 name = "var_read_before_write.default"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: default (interpreter)."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: default (interpreter)."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}"]
@@ -47,22 +56,24 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 // here is the retired reading coming back.
 const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
 assert(ignored.length === 0, `no write outside a sync block is reported for a var: ${ignored.join(', ')}: ${input.normalized.stderr}`)
-// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
-// the fold handed these assignments' values straight to their readers, so nothing needs the
-// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
-// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
-// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
-// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
-// 59:7 is not one of them: a read of a value that can be kept is never folded.
+// A write is reported by SemanticDiag::UnusedAssignedValue only when the value it stores is read by
+// nobody, and every write in this file is read: the three the case used to name -- 52:7, 85:7 and
+// 87:7 -- are each read by the `let` written right after them, the `x = v` of `swap` by the caller
+// that reads the `var` back, and the write in the loop body by the read after the loop. Asserted as
+// none, and it is the assertion this case got wrong: it named those three as "writes whose value
+// nobody reads" and so locked a false report in place. What the diagnostic asked then was whether
+// the write's own node had a consumer; what it asks now is whether the value has a reader, and the
+// two answers are opposite for the ordinary `a = a + 1` of a counter. With the old answer this file
+// did not compile under `-Werror`.
 const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
+assert(unused.length === 0, `every write in this file has its value read, so none is reported: ${unused.join(', ')}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.nvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::nvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_nvm}"]
@@ -84,22 +95,24 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 // here is the retired reading coming back.
 const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
 assert(ignored.length === 0, `no write outside a sync block is reported for a var: ${ignored.join(', ')}: ${input.normalized.stderr}`)
-// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
-// the fold handed these assignments' values straight to their readers, so nothing needs the
-// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
-// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
-// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
-// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
-// 59:7 is not one of them: a read of a value that can be kept is never folded.
+// A write is reported by SemanticDiag::UnusedAssignedValue only when the value it stores is read by
+// nobody, and every write in this file is read: the three the case used to name -- 52:7, 85:7 and
+// 87:7 -- are each read by the `let` written right after them, the `x = v` of `swap` by the caller
+// that reads the `var` back, and the write in the loop body by the read after the loop. Asserted as
+// none, and it is the assertion this case got wrong: it named those three as "writes whose value
+// nobody reads" and so locked a false report in place. What the diagnostic asked then was whether
+// the write's own node had a consumer; what it asks now is whether the value has a reader, and the
+// two answers are opposite for the ordinary `a = a + 1` of a counter. With the old answer this file
+// did not compile under `-Werror`.
 const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
+assert(unused.length === 0, `every write in this file has its value read, so none is reported: ${unused.join(', ')}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.fvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::fvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_fvm}"]
@@ -121,22 +134,24 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 // here is the retired reading coming back.
 const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
 assert(ignored.length === 0, `no write outside a sync block is reported for a var: ${ignored.join(', ')}: ${input.normalized.stderr}`)
-// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
-// the fold handed these assignments' values straight to their readers, so nothing needs the
-// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
-// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
-// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
-// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
-// 59:7 is not one of them: a read of a value that can be kept is never folded.
+// A write is reported by SemanticDiag::UnusedAssignedValue only when the value it stores is read by
+// nobody, and every write in this file is read: the three the case used to name -- 52:7, 85:7 and
+// 87:7 -- are each read by the `let` written right after them, the `x = v` of `swap` by the caller
+// that reads the `var` back, and the write in the loop body by the read after the loop. Asserted as
+// none, and it is the assertion this case got wrong: it named those three as "writes whose value
+// nobody reads" and so locked a false report in place. What the diagnostic asked then was whether
+// the write's own node had a consumer; what it asks now is whether the value has a reader, and the
+// two answers are opposite for the ordinary `a = a + 1` of a counter. With the old answer this file
+// did not compile under `-Werror`.
 const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
+assert(unused.length === 0, `every write in this file has its value read, so none is reported: ${unused.join(', ')}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.jit"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::jit."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_jit}"]
@@ -158,22 +173,24 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 // here is the retired reading coming back.
 const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
 assert(ignored.length === 0, `no write outside a sync block is reported for a var: ${ignored.join(', ')}: ${input.normalized.stderr}`)
-// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
-// the fold handed these assignments' values straight to their readers, so nothing needs the
-// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
-// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
-// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
-// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
-// 59:7 is not one of them: a read of a value that can be kept is never folded.
+// A write is reported by SemanticDiag::UnusedAssignedValue only when the value it stores is read by
+// nobody, and every write in this file is read: the three the case used to name -- 52:7, 85:7 and
+// 87:7 -- are each read by the `let` written right after them, the `x = v` of `swap` by the caller
+// that reads the `var` back, and the write in the loop body by the read after the loop. Asserted as
+// none, and it is the assertion this case got wrong: it named those three as "writes whose value
+// nobody reads" and so locked a false report in place. What the diagnostic asked then was whether
+// the write's own node had a consumer; what it asks now is whether the value has a reader, and the
+// two answers are opposite for the ordinary `a = a + 1` of a counter. With the old answer this file
+// did not compile under `-Werror`.
 const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
+assert(unused.length === 0, `every write in this file has its value read, so none is reported: ${unused.join(', ')}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.prl"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. Pipeline: std::prl."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. Pipeline: std::prl."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "${run_prl}"]
@@ -195,22 +212,49 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 // here is the retired reading coming back.
 const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
 assert(ignored.length === 0, `no write outside a sync block is reported for a var: ${ignored.join(', ')}: ${input.normalized.stderr}`)
-// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
-// the fold handed these assignments' values straight to their readers, so nothing needs the
-// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
-// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
-// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
-// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
-// 59:7 is not one of them: a read of a value that can be kept is never folded.
+// A write is reported by SemanticDiag::UnusedAssignedValue only when the value it stores is read by
+// nobody, and every write in this file is read: the three the case used to name -- 52:7, 85:7 and
+// 87:7 -- are each read by the `let` written right after them, the `x = v` of `swap` by the caller
+// that reads the `var` back, and the write in the loop body by the read after the loop. Asserted as
+// none, and it is the assertion this case got wrong: it named those three as "writes whose value
+// nobody reads" and so locked a false report in place. What the diagnostic asked then was whether
+// the write's own node had a consumer; what it asks now is whether the value has a reader, and the
+// two answers are opposite for the ordinary `a = a + 1` of a counter. With the old answer this file
+// did not compile under `-Werror`.
 const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
+assert(unused.length === 0, `every write in this file has its value read, so none is reported: ${unused.join(', ')}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+# The reason this file was changed, as a run rather than as a sentence: under `-Werror` the case
+# compiles and runs. Before the criterion was fixed the same command exited 1 with three
+# UnusedAssignedValue errors on the writes at 52:7, 85:7 and 87:7 -- each of them a write whose
+# value the `let` below it reads -- and the program never ran. A warning that is true here is still
+# an error (`camel -Werror` means that, and this entry does not change it); what it pins is that no
+# true one is left in this file to refuse it.
+[[tests]]
+name = "var_read_before_write.werror"
+desc = "The counter-and-read shapes this case is made of are legal programs, so `camel -Werror` compiles and runs it: exit 0, the same seven lines of output, and no `SemanticDiag::UnusedAssignedValue` in the report -- before the criterion was fixed the same command exited 1 on the three writes at 52:7, 85:7 and 87:7, whose values the `let` under each of them reads, and the program did not run at all. Pipeline: default (interpreter), with `-Werror`."
+kind = "behavior"
+case = "../../../cases/linear/runtime/var_read_before_write.cml"
+args = ["-Werror", "${case}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const want = ['int 2 1', 'int 2 1', 'array [7, 7] [1, 1]', 'arm 0 5 1', 'loop 0 2', 'steps 2 3', 'after 2 2']
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(want), `the program runs under -Werror and prints what it printed without it: ${out.join(' | ')}`)
+const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
+assert(unused.length === 0, `no write here has an unread value, so -Werror has nothing to refuse: ${unused.join(', ')}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_read_before_write.opt_nvm"
-desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7. The order edges survive std::opt. Pipeline: std::opt, then std::nvm."
+desc = "In a body that is not a sync block, a read of a `var` made before a write (a var argument, an assignment, a branch arm, a loop body) is the value the variable had at that point, and a read made after the write takes the new one. Eight SemanticDiag::IgnoredSideEffect were expected for the writes outside a sync block; the ruling of 2026-11-15 (design principles 3.1 and 3.5) makes a write to a `var` a value and not an effect, so a `var` argument and an assignment are no longer reported by it, and neither is the arm at 66:13 or the loop body at 76:5 -- the 2026-11-16 ruling retires both remaining `var` branches -- with the three writes whose value nobody reads reported as SemanticDiag::UnusedAssignedValue at 52:7, 85:7 and 87:7 -- and no SemanticDiag::UnusedAssignedValue at all now: those three writes each have their value read by the `let` written right after them, so naming them as writes whose value nobody reads was a false report, and the diagnostic asks the question its own text asks (whether any read takes the value this write stores) instead of whether the write's own node has a consumer. The order edges survive std::opt. Pipeline: std::opt, then std::nvm."
 kind = "behavior"
 case = "../../../cases/linear/runtime/var_read_before_write.cml"
 args = ["${case}", "std::opt", "std::nvm"]
@@ -232,15 +276,17 @@ assert(JSON.stringify(out) === JSON.stringify(want), `unexpected output: ${out.j
 // here is the retired reading coming back.
 const ignored = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::IgnoredSideEffect')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
 assert(ignored.length === 0, `no write outside a sync block is reported for a var: ${ignored.join(', ')}: ${input.normalized.stderr}`)
-// A write whose value nobody reads is reported as a value now, in the family of UnusedPureResult:
-// the fold handed these assignments' values straight to their readers, so nothing needs the
-// assignment itself. Asserted by position -- three writes, no more and no fewer -- so that a
-// vanished one or a stray fourth is red. EffectNotExecuted named two of them, 52:7 and 87:7, and
-// said so once per dropped chain; a value nobody uses is reported per write, so the chain of
-// `between_two_writes` now names both of its writes, 85:7 beside 87:7. The `int[]` assignment at
-// 59:7 is not one of them: a read of a value that can be kept is never folded.
+// A write is reported by SemanticDiag::UnusedAssignedValue only when the value it stores is read by
+// nobody, and every write in this file is read: the three the case used to name -- 52:7, 85:7 and
+// 87:7 -- are each read by the `let` written right after them, the `x = v` of `swap` by the caller
+// that reads the `var` back, and the write in the loop body by the read after the loop. Asserted as
+// none, and it is the assertion this case got wrong: it named those three as "writes whose value
+// nobody reads" and so locked a false report in place. What the diagnostic asked then was whether
+// the write's own node had a consumer; what it asks now is whether the value has a reader, and the
+// two answers are opposite for the ordinary `a = a + 1` of a counter. With the old answer this file
+// did not compile under `-Werror`.
 const unused = input.normalized.stderr.split('\n').filter((l) => l.includes('name=SemanticDiag::UnusedAssignedValue')).map((l) => (l.match(/cml:(\d+:\d+):/) || [])[1])
-assert(JSON.stringify(unused.slice().sort()) === JSON.stringify(['52:7', '85:7', '87:7']), `the three assignments whose value nobody reads: ${unused.join(', ')}`)
+assert(unused.length === 0, `every write in this file has its value read, so none is reported: ${unused.join(', ')}: ${input.normalized.stderr}`)
 }
 """
 timeout_ms = 20000
