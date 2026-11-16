@@ -1517,6 +1517,10 @@ d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml
 d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
 7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
+81663c1c95e20537 ok test/cases/compile/region_roots/branch_statement.cml
+9d869d0b281097a0 ok test/cases/compile/region_roots/branch_statement_kinds.cml
+d97afa11ab4ed9b8 ok test/cases/compile/region_roots/branch_statement_untaken.cml
+86ba2d47250741aa ok test/cases/compile/region_roots/branch_value_dropped.cml
 9af1d6ae045c57d6 ok test/cases/compile/region_roots/dead_loop.cml
 e05e0949c1dff0cf ok test/cases/compile/region_roots/plain_body.cml
 deee7e3304b108d7 ok test/cases/compile/region_roots/read_only.cml
