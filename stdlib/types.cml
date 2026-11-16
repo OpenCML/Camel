@@ -204,26 +204,32 @@ export type Gradient<F> =
 /// copies the body -- and its gradient is a function of the weight first, then `F`'s parameters:
 /// `grad(weighted)(3.0, 2.0)` for `<x: float> (y: float) => float`.
 ///
-/// Written out where `Gradient<F>` writes its own shape, out of the same pieces: `HeadOf<WithOf<F>>`
-/// is the weight's type and `Tangent` of it is what a gradient of it is. Both names exist because the
-/// two answers are two types: a `with` argument is written in the angle brackets of a call, an
-/// ordinary one in its parentheses, and neither spelling reaches the other.
+/// Written out where `Gradient<F>` writes its own shape, out of the same pieces: the case binds the
+/// weight's type and `Tangent` of it is what a gradient of it is. Both names exist because the two
+/// answers are two types: a `with` argument is written in the angle brackets of a call, an ordinary
+/// one in its parentheses, and only one of the two spellings reaches each.
 ///
-/// **One `with` parameter, and the rest of the list is not written out**: `GradientOf<F>` answers a
-/// function whose whole `with` list is empty, so it is the type of `grad(f)` for a function with one
-/// `with` parameter and refuses a second one at the call. The reason it is not `...RestOf<WithOf<F>>`
-/// is a limit of the layer under this one and not a choice about the shape: a `with` list written as
-/// the expansion of a primitive applied to a pack comes through a generic function's body
-/// unexpanded (`<RestOf<float>>`, measured 2026-11-05 on the first spelling of this alias).
+/// **The rest of the `with` list stays**, and that is the one thing this alias says that
+/// `Gradient<F>` does not: a function with a second `with` value -- the data `y` beside the weight
+/// in `examples/case-study/train.cml`, which is the port the derivative is *not* taken of -- is
+/// still called with it, `grad(loss)<y>(layer, X)`. So the remaining ports are spliced back as the
+/// derivative's own `with` list, the way `FirstWithAsParam<F>` splices them
+/// (`stdlib/signatures/transforms.cml`): the case binds `W` and `Rest`, the weight becomes the first
+/// ordinary parameter, and `Rest` is written where `F` wrote it.
 ///
-/// The head is the primitive `HeadOf` and not the `match type` a program writes (`FirstOf<P>`): a
-/// `match type` written into this alias leaves the two names it binds as type variables of every
-/// call that reads the alias, and no argument binds them -- `grad(weighted)` was refused with "the
-/// type variable(s) W, Rest cannot be determined" (measured 2026-11-05). A primitive is evaluated
-/// with the pack in hand.
+/// This alias used to be `(w: HeadOf<WithOf<F>>, ...ParamsOf<F>) => Tangent<HeadOf<WithOf<F>>>` --
+/// an empty `with` list, with `HeadOf` the primitive -- and then a second `with` value had nowhere
+/// to go: `grad` handed `(...xs)` to a reading declared `<...ws> (...xs)`, and a program with one
+/// more `with` value was refused at that call with `ArgumentsMismatch` (measured 2026-11-15, on the
+/// case study's loss). The spelling that was measured and *could not* carry the list is
+/// `...RestOf<WithOf<F>>` inside the angle brackets: a primitive applied to a pack comes through a
+/// generic function's body unexpanded (`<RestOf<float>>`, measured 2026-11-05). A `match type` is
+/// not that spelling -- its case binds the pack, which is how `FirstOf<P>` and `FirstWithAsParam<F>`
+/// are written -- so the two names it binds are not left for a caller to fill.
 /// @example is_same::<GradientOf<<w: f32[2]> (x: float) => float>, (w: f32[2], x: float) => f32[2]>()    // true
+/// @example is_same::<GradientOf<<w: f32[2], y: f32[1]> (x: float) => float>, <y: f32[1]> (w: f32[2], x: float) => f32[2]>()    // true
 export type GradientOf<F> =
-    (w: HeadOf<WithOf<F>>, ...ParamsOf<F>) => Tangent<HeadOf<WithOf<F>>>
+    match type WithOf<F> { case (W, ...Rest) => <...Rest> (w: W, ...ParamsOf<F>) => Tangent<W> }
 
 /// The turn of a forward transform into a reverse one, as a function's own type: `vjp(f)` is a
 /// function of `f`'s parameters that answers the value and the pullback, and it takes `f`'s `with`
