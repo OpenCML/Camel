@@ -1605,6 +1605,11 @@ f3ee7fc7143321cb ok test/cases/compile/semantic/type_contains_itself.cml
 801a605477c50cd1 ok test/cases/compile/state_escape/err_escape_return.cml
 3a4b6e07a9bbb856 ok test/cases/compile/state_escape/err_escape_stored_by_callee.cml
 00184aa542adefc8 ok test/cases/compile/state_escape/ok_capture_within.cml
+b6e312af20589e29 ok test/cases/compile/state_escape/ok_read_escape_array.cml
+c74cdf8dbb6f554d ok test/cases/compile/state_escape/ok_read_escape_field.cml
+f2b90ac2125fc9b6 ok test/cases/compile/state_escape/ok_read_escape_into_closure.cml
+8fde422b9e322d0b ok test/cases/compile/state_escape/ok_read_escape_return.cml
+18c9cfa9c8be3ed7 ok test/cases/compile/state_escape/ok_read_escape_stored_by_callee.cml
 794e40cb47b22c73 ok test/cases/compile/state_escape/ok_top_level_value.cml
 fa56acf80774ec26 ok test/cases/compile/static_expansion/comprehension_field_order.cml
 a8d417a3bae14fb1 ok test/cases/compile/static_expansion/comprehension_value_type.cml
