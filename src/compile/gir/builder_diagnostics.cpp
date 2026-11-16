@@ -1671,9 +1671,17 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     // it, as `xs->append<5>` did before 11.3: the fix is to bind the variable to the result.
     std::string fix;
     const std::string text = sourceTextOf(call);
+    // The name a closure captured is a PORT and not a variable once the capture is by value
+    // (design principles 3.5, 197), but it is still the name of a variable of the body the closure
+    // stands in: the sentence below is about what the program meant to do, and the capture rule is
+    // the one that answers whether the write is allowed. Asking only for a variable made the report
+    // fall back to the generic sentence, which names nothing the reader can act on.
+    node_handle_t target = nullptr;
     if (call->size() >= 2 && call->at(1)->type() == GCT::NodeKind::DREF &&
-        nodeAt(call->at(1)->name()).has_value() &&
-        isVariable(resolveNodeByRef(call->at(1)->name()))) {
+        nodeAt(call->at(1)->name()).has_value()) {
+        target = resolveNodeByRef(call->at(1)->name());
+    }
+    if (target != nullptr && (isVariable(target) || capturePortOfAVariable(target))) {
         const std::string variable = call->at(1)->name();
         fix = text.empty() ? std::format(
                                  "; to change the variable '{0}', bind it to the result: "

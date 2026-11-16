@@ -929,6 +929,15 @@ class Builder {
     void
     requireCapturedNameWritable(node_handle_t cell, const std::string &name, bool throughCall,
                                 camel::source::origin_id_t at);
+    /// Whether `node` is a capture port whose captured name is a `var` of the graph around it
+    /// (`captureOriginOf_`). A capture port carries the value the name had where the closure was
+    /// made (design principles 3.5, 197), so it is not a variable of the graph that reads it --
+    /// and every rule that answers "this name cannot be written" has to keep asking about the
+    /// name the port stands for, or it stops being asked at all where the capture is by value.
+    bool capturePortOfAVariable(node_handle_t node) const {
+        const auto port = captureOriginOf_.find(node);
+        return port != captureOriginOf_.end() && isVariable(port->second);
+    }
     /// Records that the port `port`, made by a machine for a region of a loop, stands for the
     /// value `origin` the machine was handed (the sequence it iterates, the state it starts
     /// from). Written where a capture origin is written, so one table says what value a port is
