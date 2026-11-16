@@ -680,6 +680,26 @@ class GraphDraft {
     gc_node_ref_t addDrefNode(camel::core::type::Type *type = nullptr, gc_slot_idx_t dataIndex = 0);
 
     void eraseNode(gc_node_ref_t id);
+    /// Erases a set of nodes that nothing outside the set reads -- a unit of the graph with no
+    /// reader left -- and hands the place each one held in its block's chain to the statement
+    /// written after it, the way `eraseNode` does (`closeChainOver`, `spliceOrderEdgesOver`).
+    ///
+    /// The question "may these go" is asked **here**, not by the caller, and asked before anything
+    /// is erased: a node that the graph names (`namesNode`: the exit, the output, the returned
+    /// value, the entry, a port, a capture, a region's result or a control region's port), a node
+    /// that is not alive, a node given twice, or a node whose value a **normal or `with` port of a
+    /// node outside the set** reads, makes the answer `false` and leaves the graph as it was found.
+    /// The set is what makes the question answerable at once: the nodes of a unit read each other
+    /// (a store reads the cell, the GATE that hands the statement's value out reads the store), so
+    /// asking one node at a time would call the unit's own nodes readers.
+    ///
+    /// Sequencing edges -- the chain of a `sync` block, a control edge, an ordering -- are not
+    /// reads (docs/design/effects/edges.cn.md 1.5, 5.3): a node nobody reads can still be what a
+    /// block's chain or a branch's control runs after, and that is exactly the case the place
+    /// handover exists for. The unit's own readers are erased before what they read, so a producer
+    /// never goes while the node that reads it is still there; `true` says every node of the set is
+    /// gone.
+    bool eraseUnreadNodes(std::span<const gc_node_ref_t> nodes);
     /// Whether the graph names `id` by something other than a read, so that a policy which erases a
     /// node nobody reads -- dead-code removal, a rules driver, extraction -- must leave it alone:
     /// the entry, the exit, the node whose value it returns, its ports, its captures, the result of
@@ -1195,6 +1215,17 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
 /// One implementation: `camel::compile::gir::liveDraftNodes` is this function, and every caller
 /// that needs the set asks it here rather than walking the graph again.
 std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
+
+/// The JOIN that closes the branch `brch`, read from the draft (`kInvalidNodeRef` for a node that
+/// is not a branch). The frozen graph's answer is `branchJoinOf(const GCGraph &, gc_node_ref_t)`.
+gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
+
+/// Whether `brch` is a branch that joins no value, read from the draft: the JOIN it closes carries
+/// `void` -- the type the build gives a branch written as a statement whose value nobody takes, and
+/// one at a position that takes no value at all (design principles 3.1, 3.7). The frozen graph's
+/// answer is `branchJoinsNoValue(const GCGraph &, gc_node_ref_t)`, and the two are one rule read
+/// from two spellings of the same payload.
+bool branchJoinsNoValue(const GraphDraft &draft, gc_node_ref_t brch);
 
 /// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its
 /// payload. The members themselves are the frame slots the payload names, not the aggregate's

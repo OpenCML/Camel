@@ -1,8 +1,8 @@
 /**
- * A program that compiles without an error and has two warnings. They are printed on
- * stderr before the program runs; stdout carries only what the program prints (11).
- *   line 17: IgnoredSideEffect         a call with a var argument, outside a sync block
- *   line 18: IgnoredSideEffect         a branch whose arm writes the captured `c`
+ * A program that used to have one warning and now has none: a branch arm writes the captured
+ * `c`, and a write to a `var` is a value the branch hands on, not an effect (design principles
+ * 3.1, 3.5; the ruling of 2026-11-16). stdout carries only what the program prints (11), and
+ * the value the arm wrote still reaches it: the plan asserts both, and that stderr is empty.
  */
 
 // Line numbers below are asserted by the plan.

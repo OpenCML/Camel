@@ -19,6 +19,20 @@
  *                     declarations swapped, one independent computation moved past a print. None of
  *                     the three depends on the `var`-to-SSA work.
  *
+ *   --group loop      The same accumulation written two ways: a `var` written inside a loop body
+ *                     (`loop_var.cml`) and the loop's own carried value (`loop_let.cml`). Red today
+ *                     and red only because a write inside a loop body keeps its unit.
+ *
+ *   --group arm       The same choice written two ways: a `var` written inside an arm of an `if`
+ *                     (`arm_var.cml`) and the branch's own value (`arm_let.cml`). It was red only
+ *                     because an arm's write kept its unit; it is green since the branch carries the
+ *                     write as its own value and the unit nothing reads is dropped.
+ *
+ * The `loop` and `arm` groups are the two halves the `var` group cannot see: on a straight line the
+ * whole variable folds away, so that group is green whether or not a unit is lowered; a write inside
+ * a loop or an arm kept its `:var/get`, so those two pairs still separate the two writings. The arm
+ * pair is now one writing, and the loop pair is the half still to be lowered.
+ *
  *   --group chainpure        `sync` blocks and what the chain carries (design principles 3.4). One
  *                            program shape, two writings of it (a call of a pure function that
  *                            cannot fault, then a print; and the two statements swapped). The call
@@ -132,6 +146,25 @@ const GROUPS = {
         cases: [
             ['var', 'test/cases/compile/var/step_var.cml'],
             ['let', 'test/cases/compile/var/step_let.cml'],
+        ],
+    },
+    // The same accumulation written two ways: a `var` written inside a loop body, and the loop's
+    // own carried value. The second writing has no unit at all, so this pair says whether a loop
+    // assignment became the loop's state (the third of the three places a unit is lowered).
+    loop: {
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['var', 'test/cases/compile/var/loop_var.cml'],
+            ['let', 'test/cases/compile/var/loop_let.cml'],
+        ],
+    },
+    // The same choice written two ways: a `var` written inside an arm of an `if`, and the branch's
+    // own value. Says whether a branch assignment became the branch's result (the second place).
+    arm: {
+        phases: [['graph', ['std::jgir', 'canonical=true']]],
+        cases: [
+            ['var', 'test/cases/compile/var/arm_var.cml'],
+            ['let', 'test/cases/compile/var/arm_let.cml'],
         ],
     },
     // The training program of the case study, and three writings of it that change no meaning.

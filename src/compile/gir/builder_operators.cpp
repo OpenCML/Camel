@@ -1321,7 +1321,15 @@ node_handle_t Builder::inPlaceRebindingOf(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     const node_handle_t variable = resolveNodeByRef(name);
-    Type *arrayType              = valueTypeOf(nodeTypeOf(variable));
+    // The name a closure captured is a PORT and not a variable once the capture is by value
+    // (design principles 3.5, 197): the rewrite below writes it, and a value has nowhere to write.
+    // The capture's rule answers that write, and it has to answer it HERE, before the rewrite is
+    // chosen: a rewrite that declines to run leaves the call as written, and the report becomes
+    // `NoMatchingFunction` -- about the operator, naming neither the write nor the way out.
+    if (variable != nullptr && (isVariable(variable) || capturePortOfAVariable(variable))) {
+        requireCapturedNameWritable(variable, name, false, target->origin());
+    }
+    Type *arrayType = valueTypeOf(nodeTypeOf(variable));
     if (!isVariable(variable) || arrayType == nullptr || arrayType->code() != TypeCode::Array) {
         return nullptr;
     }
@@ -1961,7 +1969,75 @@ void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
     }
 }
 
+node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
+    // `x = e` where `x` is a `var` the loop around this body carries as a state (visitLoopNode).
+    // The body's `x` is a port of its region, and the value `e` gives is the next state of the
+    // `var`: nothing is stored anywhere, because the cell is not a cell the body can reach -- the
+    // LOOP hands the value on from one round to the next. This is the third of the three places a
+    // write is lowered (design principles 3.5: "a write to an outer `var` in a loop body becomes
+    // the loop's carried state"), and it is why the `var` writing and the `let` writing are one
+    // graph.
+    if (loopStatePorts_.empty() || gct->size() != 3 || gct->at(0) == nullptr ||
+        gct->at(0)->type() != GCT::NodeKind::DREF || gct->at(0)->name() != "__assn__") {
+        return nullptr;
+    }
+    const auto &target = gct->at(1);
+    if (target == nullptr || target->type() != GCT::NodeKind::DREF) {
+        // A path (`v.f = e`, `v[i] = e`) was rewritten into the whole variable's rebinding by
+        // pathAssignmentOf above, or is left to the call as written: either way it is not this.
+        return nullptr;
+    }
+    const auto resolved = nodeAt(moduleLevelName(target->name()));
+    if (!resolved.has_value()) {
+        return nullptr;
+    }
+    const node_handle_t port = resolved.value();
+    if (!loopStatePorts_.contains(port)) {
+        return nullptr; // a `var` of the body itself, or one the loop does not carry
+    }
+    // The value written stands at the state's own place: what the round goes on with has the type
+    // of what it started from, and a value that enters that type implicitly is converted there.
+    Type *stateValueType = valueTypeOf(nodeTypeOf(port));
+    node_handle_t value{};
+    {
+        ExpectedValueScope writeScope(expectedValueType_, stateValueType);
+        value = valueNodeOf(visit(gct->at(2)));
+    }
+    if (value == nullptr) {
+        return nullptr;
+    }
+    if (stateValueType != nullptr) {
+        Type *written = valueTypeOf(nodeTypeOf(value));
+        if (written != nullptr && written != stateValueType &&
+            entersImplicitly(stateValueType, written)) {
+            if (node_handle_t converted = coerceTo(value, stateValueType, gct->at(2));
+                converted != nullptr) {
+                value = converted;
+            }
+        }
+    }
+    // The round's next state of this `var`, and the value a read written after this write in the
+    // same round takes (valueOf). A second write in the round replaces the first: what the round
+    // hands on is the last value it wrote, as a cell would hold.
+    loopStateWrites_[port] = value;
+    return value;
+}
+
 node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
+    /// Clears the "the statement being built has a value nobody takes" mark for the length of a
+    /// scope and puts it back afterwards. The mark names the statement, and a call, an operator or
+    /// an argument written inside one is not a statement of its own.
+    struct UnusedStatementScope {
+        const GCT::Node *&slot;
+        const GCT::Node *saved;
+        UnusedStatementScope(const GCT::Node *&slot, const GCT::Node *value)
+            : slot(slot), saved(slot) {
+            slot = value;
+        }
+        ~UnusedStatementScope() { slot = saved; }
+        UnusedStatementScope(const UnusedStatementScope &)            = delete;
+        UnusedStatementScope &operator=(const UnusedStatementScope &) = delete;
+    };
     // A call written in an extent of a signature is run by this build (foldExtentCall).
     struct ExtentCallScope {
         camel::core::type::ExtentCallEvaluator previous;
@@ -1986,7 +2062,14 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     ExpectedValueScope callScope(expectedValueType_, nullptr);
     // Whether this call is a statement whose value nothing takes; the calls inside it are not.
     const bool unusedStatement = gct == unusedStatement_;
-    unusedStatement_           = nullptr;
+    // The mark says which *statement* the block is building, and it belongs to that statement, not
+    // to this call: it is cleared for the calls inside and put back on the way out. Clearing it for
+    // good lost the mark of a statement whose own condition or scrutinee holds an operator or a
+    // call -- `if f(x) > 0 then ... else ...` as a statement was built as a branch whose value is
+    // joined, which is what tells a branch written as a statement from a branch whose value is
+    // taken (Builder::branchTakesNoValue), and on that reading the walks that ask what a region
+    // runs decide whether the branch runs at all.
+    const UnusedStatementScope unusedScope(unusedStatement_, nullptr);
     if (gct->at(0)->type() == GCT::NodeKind::FUNC && gct->at(0)->decoratedBlock()) {
         node_handle_t result = visitDecoratedBlock(gct, unusedStatement);
         LEAVE("LINK");
@@ -1997,6 +2080,20 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (node_handle_t rebound = pathAssignmentOf(gct)) {
         LEAVE("LINK");
         return rebound;
+    }
+    // A write to a `var` the loop this body belongs to carries as its own state (visitLoopNode;
+    // design principles 3.5, the third of the three places a write is lowered): `x = e` in the body
+    // is the round's next value of `x`, and there is no cell to store it in -- the cell is the
+    // loop's state, and the LOOP hands the value on. The statement is worth the value `e` gave.
+    if (node_handle_t written = loopStateAssignmentOf(gct)) {
+        if (unusedStatement) {
+            // What this statement is worth is the loop's next state, not a value the position
+            // drops: the unused-pure-value rule (rejectUnusedPureResult) is about a value nobody
+            // wants, and this one the loop wants.
+            discardedValues_.insert(written);
+        }
+        LEAVE("LINK");
+        return written;
     }
     if (unusedStatement) {
         if (node_handle_t rebound = inPlaceRebindingOf(gct)) {
@@ -4315,6 +4412,19 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                     node_handle_t{},
                     LinkType::Norm};
             }
+            // A name bound by `let` is refused with the reason that names it, and it is refused here
+            // -- before the write path below decides how to remember the argument, and before the
+            // shape check -- because the specific reason must answer for a position where the
+            // generic one could also apply. `let k = 0; k = 5` used to be answered with
+            // `ImmutablePassedToVarParam` ("'k' is immutable ..."), and `AssignmentTargetNotVariable`
+            // ("the target must be a variable") replaced it when the write path stopped asking this
+            // question; a diagnostic that does not say what to change is not the one to keep.
+            if (const auto immutable = immutableNameOf(arg.expr)) {
+                diags_->of(SemanticDiag::ImmutablePassedToVarParam)
+                    .atOrigin(arg.expr->origin())
+                    .commit(*immutable, calleeLabel);
+                throw BuildAbortException();
+            }
             // A write is a `var` argument like any other, but the assignment operator is the write
             // itself: it does not exist after the call, so it cannot carry the cell away. It is
             // remembered apart from the real escapes (a closure capturing the variable, a user
@@ -4326,7 +4436,22 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
                     if (const std::string name = moduleLevelName(arg.expr->name());
                         nodeAt(name).has_value()) {
-                        if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                        node_handle_t node = resolveNodeByRef(name);
+                        // The name a closure captured is a PORT and not a variable once the capture
+                        // is by value (design principles 3.5, 197): a value has nowhere to write, so
+                        // the rule that answers the write is the capture's, and the general
+                        // "the target must be a variable" would name neither the rule nor the way
+                        // out. `requireCapturedNameWritable` answers it for a cell and a port alike
+                        // (`captureOriginOf_`), and stays silent where the general rule governs.
+                        if (node != nullptr && captureOriginOf_.contains(node)) {
+                            requireCapturedNameWritable(node, name, false, arg.expr->origin());
+                        }
+                        if (isVariable(node)) {
+                            // The assignment is the write itself (design principles 3.5, 192): a
+                            // closure's own body may not write a name it captured (197), and the
+                            // body that declares the name may not write one a closure of that body
+                            // already holds the value of (198).
+                            requireCapturedNameWritable(node, name, false, arg.expr->origin());
                             writeOnlyEscaping_.insert(node);
                         }
                     }
@@ -4387,13 +4512,13 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 // that read takes is the version the variable's nearest write made, not the cell
                 // the first write made: the port carries that version as a data edge, and the
                 // control input the writer used to stand in for it is gone with it
-                // (linkCaptureSites links a capture the same way; Builder::valueVersionOf says what
-                // a version is). The version is the cell the write stored into -- `:op/assn` gives
-                // that cell back as its own value -- so the callee still writes the variable's one
-                // cell, and the write the callee does is recorded where the call is built
-                // (recordWrite). The `var` position of an assignment or of a variable operator is
-                // the write itself rather than a read of the cell, so it keeps the cell
-                // (docs/design/effects/edges.cn.md 5.6).
+                // (a capture of a cell is linked the same way, Builder::captureValueOf;
+                // Builder::valueVersionOf says what a version is). The version is the cell the write
+                // stored into -- `:op/assn` gives that cell back as its own value -- so the callee
+                // still writes the variable's one cell, and the write the callee does is recorded
+                // where the call is built (recordWrite). The `var` position of an assignment or of a
+                // variable operator is the write itself rather than a read of the cell, so it keeps
+                // the cell (docs/design/effects/edges.cn.md 5.6).
                 if (named && targetOperator == nullptr) {
                     if (node_handle_t version = valueVersionOf(variable);
                         version != nullptr && inSameRegion(version, targetNode)) {
@@ -4411,7 +4536,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     // All arguments are read before the call is recorded as a writer: a variable passed both
     // by value and to a `var` parameter (`f(c, c)`) is read before the call, not after it.
     std::vector<Passed> passed;
-    bool hasVarArgument = false;
     // What a `var` position says about the argument: the parameter's type, and the name the
     // signature gives it, which the diagnostic uses (`with` parameters first, as written).
     const auto argLabel = [&](bool with, size_t index) {
@@ -4442,7 +4566,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         Passed arg       = passArgument(withInputs[i], isVar, param.first, param.second);
         arg.link         = LinkType::With;
         passed.push_back(arg);
-        hasVarArgument |= isVar;
     }
     for (size_t i = 0; i < normInputs.size(); i++) {
         bool isVar       = i < targetFuncType->normTypesCount() && targetFuncType->normIsVarAt(i);
@@ -4450,7 +4573,6 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
         Passed arg       = passArgument(normInputs[i], isVar, param.first, param.second);
         arg.link         = LinkType::Norm;
         passed.push_back(arg);
-        hasVarArgument |= isVar;
     }
     for (const Passed &arg : passed) {
         tryRemoveCtrlLink(arg.node, targetNode);
@@ -4575,31 +4697,30 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
             capturedWrites.push_back(use.origin);
         }
     }
-    if (!synced_) {
+    if (!synced_ && !capturedWrites.empty()) {
+        // A `var` argument is a value passed in and handed back: the write it takes is written back
+        // where the call stands (design principles 3.1 and 3.5, the ruling of 2026-11-15), so a
+        // call that takes one is not reported for that reason -- `sync` has nothing to do with it,
+        // and an assignment (`__assn__`, whose first parameter is a `var`) is that same shape.
+        // What stays reported here is a write to a variable the callee captured: that write is not
+        // handed back at the call, so where the call stands still decides whether it runs.
         const std::string subject =
             std::format("The call of '{}: {}'", targetName, targetFuncType->toString());
-        if (hasVarArgument) {
-            diags_->of(SemanticDiag::IgnoredSideEffect)
-                .atOrigin(gct->origin())
-                .commit(subject, "it takes a var argument");
-        } else if (!capturedWrites.empty()) {
-            // The graphs whose writes count here: the callee's, and the one of each function value
-            // the call hands to a parameter whose resources are the value's.
-            std::vector<DraftGraphBuilder *> writingGraphs;
-            if (targetGraph) {
-                writingGraphs.push_back(targetGraph.get());
-            }
-            for (const compile_graph_ptr_t &value : argumentFunctions) {
-                writingGraphs.push_back(value.get());
-            }
-            unit_->pendingIgnoredWrites.push_back(
-                {std::move(writingGraphs),
-                 capturedWrites,
-                 {},
-                 gct->origin(),
-                 subject,
-                 "it writes"});
+        // The graphs whose writes count here: the callee's, and the one of each function value
+        // the call hands to a parameter whose resources are the value's.
+        std::vector<DraftGraphBuilder *> writingGraphs;
+        if (targetGraph) {
+            writingGraphs.push_back(targetGraph.get());
         }
+        for (const compile_graph_ptr_t &value : argumentFunctions) {
+            writingGraphs.push_back(value.get());
+        }
+        unit_->pendingIgnoredWrites.push_back(
+            {std::move(writingGraphs),
+             capturedWrites,
+             gct->origin(),
+             subject,
+             "it writes"});
     }
     for (const Passed &arg : passed) {
         if (arg.written != nullptr) {

@@ -117,7 +117,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_tensor.default"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: default (no pass)."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}"]
@@ -133,7 +133,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.fvm"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::fvm"]
@@ -149,7 +149,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::jit"]
@@ -165,7 +165,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::tf"]
@@ -181,7 +181,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline"]
@@ -197,7 +197,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.specialize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::specialize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::specialize"]
@@ -213,7 +213,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.devirtualize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::devirtualize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::devirtualize"]
@@ -229,7 +229,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.fold"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::fold."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::fold."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::fold"]
@@ -245,7 +245,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.cse"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::cse."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::cse."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::cse"]
@@ -261,7 +261,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.dce"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::dce"]
@@ -277,7 +277,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt"]
@@ -293,7 +293,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.simplify"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt"]
@@ -309,7 +309,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro"]
@@ -325,7 +325,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_inline"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::inline."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -341,7 +341,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_specialize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::specialize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
@@ -357,7 +357,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_devirtualize"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::devirtualize."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
@@ -373,7 +373,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_fold"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::fold."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
@@ -389,7 +389,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_cse"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::cse."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
@@ -405,7 +405,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_dce"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
@@ -421,7 +421,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_opt"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -437,7 +437,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_simplify"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -453,7 +453,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.all_6"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
@@ -469,7 +469,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.all_macro_9"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
@@ -485,7 +485,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt_fvm"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -501,7 +501,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -517,7 +517,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.opt_tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -533,7 +533,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_fvm"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::fvm."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -549,7 +549,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
@@ -565,7 +565,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.inline_tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::inline std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
@@ -581,7 +581,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.specialize_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt::specialize std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
@@ -597,7 +597,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.simplify_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::opt std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -613,7 +613,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_opt_jit"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt std::jit."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -629,7 +629,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_tensor.macro_opt_tf"
-desc = "A tensor variable passed to a var parameter and captured by a lambda is one object. Pipeline: std::macro std::opt std::tf."
+desc = "A tensor variable passed to a `var` parameter is one object: the callee replaces the tensor the caller's variable holds, and a closure that mentions the variable holds its value and returns the new tensor, which the caller binds. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/modules/tensor/var_tensor_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
@@ -1307,6 +1307,7 @@ timeout_ms = 10000
 # answers is what the plan would have answered had it seen the name.
 # `element_assigned_copy` and `path_assigned.allocs` show the copy that follows a read, counted
 # with `std::mem::blocks()`.
+
 [[tests]]
 name = "element_assigned.in_place_form"
 desc = "The lowering of `arr[0] = 9` on a `var` array is the in-place rebinding: :op/set_index_in_place takes its array from :var/take of the cell, and :op/assn_owned stores the result in that cell. The copying form :op/set_index is not in the graph."
@@ -1342,6 +1343,7 @@ assert(take && labels.get(take.source) === ':var/new', 'take reads the variable 
 # in-place operator, store it back -- with `:struct/append_arr_in_place` where `arr[0] = 9` has
 # `:op/set_index_in_place`. The criterion is the same in both: the cell's "not shared" mark decides
 # whether the array is copied, and neither program copies.
+
 [[tests]]
 name = "element_assigned_append.in_place_form"
 desc = "`v = v->append<4>` on a `var` array is the in-place rebinding: the graph takes the array out of the cell (`:var/take` of `:var/new`), appends through `:struct/append_arr_in_place`, and `:op/assn_owned` stores the result into that same cell -- the cell is its first operand, the appended array its second, and the take is ordered before it. The copying form `:struct/append_arr` is not in the graph, and the cell is not read (`:var/peek`) first."
@@ -1396,6 +1398,7 @@ timeout_ms = 10000
 # numeric array block counters (the pattern of `loops.state_in_place`), so the writes can be
 # asked what they allocate. The array is 40 ints — past the 256 bytes an array may keep in its
 # value — so a copy really does take a block.
+
 [[tests]]
 name = "path_assigned.allocs"
 desc = "A path assignment on an unshared `var` array does not copy: 30 writes in a loop allocate nothing (the delta of `std::mem::blocks().allocs`), while the control of 10 rounds that read the variable in between allocates 10 (one copy each). The first write after `var v = [...]` allocates one, since `:var/new` does not mark the cell as owning its array; after `let kept = v` a write allocates one and `kept` is unchanged."
@@ -1444,7 +1447,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_param.default"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: default (no pass)."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}"]
@@ -1453,14 +1456,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.fvm"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::fvm"]
@@ -1469,14 +1472,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::jit"]
@@ -1485,14 +1488,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::tf"]
@@ -1501,14 +1504,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline"]
@@ -1517,14 +1520,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.specialize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::specialize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::specialize"]
@@ -1533,14 +1536,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.devirtualize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::devirtualize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::devirtualize"]
@@ -1549,14 +1552,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.fold"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::fold."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::fold"]
@@ -1565,14 +1568,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.cse"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::cse."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::cse"]
@@ -1581,14 +1584,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.dce"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::dce"]
@@ -1597,14 +1600,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt"]
@@ -1613,14 +1616,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.simplify"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt"]
@@ -1629,14 +1632,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro"]
@@ -1645,14 +1648,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_inline"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::inline."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -1661,14 +1664,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_specialize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::specialize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
@@ -1677,14 +1680,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_devirtualize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::devirtualize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
@@ -1693,14 +1696,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_fold"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::fold."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
@@ -1709,14 +1712,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_cse"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::cse."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
@@ -1725,14 +1728,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_dce"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
@@ -1741,14 +1744,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_opt"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -1757,14 +1760,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_simplify"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -1773,14 +1776,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.all_6"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
@@ -1789,14 +1792,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.all_macro_9"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
@@ -1805,14 +1808,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt_fvm"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -1821,14 +1824,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1837,14 +1840,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt_tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -1853,14 +1856,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_fvm"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -1869,14 +1872,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
@@ -1885,14 +1888,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
@@ -1901,14 +1904,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.specialize_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::specialize std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
@@ -1917,14 +1920,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.simplify_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1933,14 +1936,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_opt_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -1949,14 +1952,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_opt_tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
@@ -1965,7 +1968,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
@@ -2500,530 +2503,16 @@ timeout_ms = 20000
 
 [[tests]]
 name = "var_capture.default"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: default (no pass)."
-kind = "behavior"
+desc = "A closure that assigns a name of the body around it is refused: the counter-example of SemanticDiag::ClosureAssignsCapturedName (0x03000213, design principles 3.5). A nested `func`, a lambda writing a `var` parameter of the function around it, and a `foreach` element function are each reported. One entry, no back-end variants: the refusal is made before any scheduling pass runs, so every back end meets the same one, and the 32 entries this replaces were not 32 rules -- they were the same rejection restated once per back end. That was right while the case pinned runtime readings, which do depend on the back end (`12 12`, `6`, `21`), and stopped being right when the case became a refusal. Nothing is dropped from what is covered: what went is a repetition, not a reading. Pipeline: default (no pass)."
+kind = "negative"
 case = "../../../cases/linear/byref/var_capture_reference.cml"
 args = ["${case}"]
-expect_exit = 0
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_line = 34
+expect_diagnostic_column = 9
+expect_output_contains = ["'v' is assigned inside a closure", "'out' is assigned inside a closure", "'total' is assigned inside a closure"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::fvm."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::fvm"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::jit."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::jit"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::tf."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::tf"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.inline"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::inline"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.specialize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::specialize."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::specialize"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.devirtualize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::devirtualize."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::devirtualize"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.fold"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::fold."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::fold"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.cse"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::cse."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::cse"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.dce"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::dce."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::dce"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.opt"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.simplify"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_inline"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::inline"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_specialize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::specialize."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::specialize"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_devirtualize"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::devirtualize."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::devirtualize"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_fold"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::fold."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::fold"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_cse"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::cse."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::cse"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_dce"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::dce."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::dce"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_opt"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_simplify"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.all_6"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.all_macro_9"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.opt_fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::fvm."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt", "std::fvm"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.opt_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt", "std::jit"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.opt_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::tf."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt", "std::tf"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.inline_fvm"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::fvm."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::inline", "std::fvm"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.inline_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::jit."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::inline", "std::jit"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.inline_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::inline std::tf."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::inline", "std::tf"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.specialize_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt::specialize std::jit."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt::specialize", "std::jit"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.simplify_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::opt std::jit."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::opt", "std::jit"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_opt_jit"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::jit."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt", "std::jit"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
-timeout_ms = 20000
-
-[[tests]]
-name = "var_capture.macro_opt_tf"
-desc = "A variable captured by an if arm or a lambda is captured by reference: arm, lambda called later, foreach, map, a nested function, a captured var parameter. Pipeline: std::macro std::opt std::tf."
-kind = "behavior"
-case = "../../../cases/linear/byref/var_capture_reference.cml"
-args = ["${case}", "std::macro", "std::opt", "std::tf"]
-expect_exit = 0
-normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
-verify_script = """
-({ input, assert }) => {
-const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '5 1 | 0 0 | 1 1 | 12 12 | 6 | [11, 12, 13] | 8 | 21', `unexpected output: ${out}`)
-}
-"""
 timeout_ms = 20000
 
 [[tests]]
@@ -3958,6 +3447,7 @@ timeout_ms = 8000
 # a value -- a store into a `var` cell, a read that lets the value out of a variable -- makes the
 # storage counted, and a write through any of the names then needs the only one and copies
 # (docs/design-principles.cn.md 3.5, 6.11; docs/technical/18_sync_control_semantics.md).
+
 [[tests]]
 name = "var_alias_through_param"
 desc = "`var v = big` gives the array `big` is a second name, in the cell of `v`. A write through a `var` parameter of a callee (`xs[0] = 9`) reaches the cell of `v`, and the array's count sees the two names, so the write copies: `big` keeps the value it was read as."
@@ -3971,12 +3461,12 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_alias_captured"
-desc = "A closure that reads the cell of `v`, and a `let` name of the same array: the closure reads whatever the cell holds at the call, and the write to `v[0]` copies because the cell is a second name of the array `big` is, so `big` keeps its value while the closure sees the write."
+desc = "A closure over the value `v` held when it was made, and a `let` name of the same array: the closure holds that value, so `f()` reads what the name held then, and the write to `v[0]` copies because the cell of `v` is a second name of the array `big` is, so `big` keeps its value. The closure names `v0`, the `let` binding of the value (a closure may not name a `var` assigned after it is made, design principles 3.5)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_alias_captured.cml"
 args = ["${case}"]
 expect_exit = 0
-expect_stdout = "big[0] = 1  v[0] = 9  f() = 9\n"
+expect_stdout = "big[0] = 1  v[0] = 9  f() = 1\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 10000
 

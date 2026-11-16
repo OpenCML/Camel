@@ -36,6 +36,7 @@
 #include <functional>
 #include <map>
 #include <numeric>
+#include <set>
 #include <stdexcept>
 #define DEBUG_LEVEL -1
 
@@ -2174,6 +2175,12 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
         const bool follows =
             test.direct && conjunct && (test.nonNullWhenTrue || conjuncts.size() == 1);
         const bool mutableName = isVariable(*bound);
+        // A name a closure captured is not a variable any more once the capture is by value
+        // (design principles 3.5, 197): the port is the value the name had where the closure was
+        // made, and every write of the name is refused from then on (197, 198), so nothing can
+        // rewrite it between the test and the use. Narrowing it is therefore sound -- BENIGN on
+        // purpose: the arm is kept, and the message below is the one a `var` that really can be
+        // rewritten still gets. `ok_narrowing_a_captured_nullable_var` pins it.
         if (follows && !mutableName) {
             if (std::ranges::find(arm.opened, test.name, &Opened::name) == arm.opened.end()) {
                 arm.opened.push_back({test.name, test.subject, {}});
@@ -2809,23 +2816,49 @@ node_handle_t Builder::buildBranch(
         withInputsOf(joinNode).begin(),
         withInputsOf(joinNode).end());
     // A `var` is a name for values, so a write inside a branch is the branch's result. A statement
-    // branch joins no value, but when exactly one arm writes exactly one `var` of the enclosing
-    // graph the value can still be merged: the arm that wrote gives its value, which already stands
-    // in the join's WITH slot, and the arm that did not write (an `if` without `else`) gives the
-    // value the `var` had before the branch. That is the shape the ruling names:
-    // `if c then { x = 1 }` is `x = if c then 1 else x`.
-    // Narrow on purpose, and silent where it does not fit: the WITH slots are one per arm and not
-    // one per variable, so a branch whose arms write two or more `var`s has no slot to merge them
-    // in and keeps its cells; so does a `var` that escapes through a closure or a `var` argument,
-    // and so does a `var` parameter. A write inside a loop is carried state, the third item of the
-    // schedule: this path sees a JOIN, never a LOOP.
+    // branch joins no value, but the arms' writes are still that branch's value: each arm gives
+    // what it wrote, which already stands in the join's WITH slot, and an arm that did not write
+    // (`if c then { x = 1 }`) gives the value the `var` had before the branch. That is the shape
+    // the ruling names: `if c then { x = 1 }` is `x = if c then 1 else x`, and
+    // `if c then { x = 1 } else { x = 2 }` is `x = if c then 1 else 2` (design principles 3.5,
+    // the ruling of 2026-11-15: `var` is lowered to SSA, a branch assignment is a result of the
+    // branch).
+    //
+    // The carry is one variable per branch, because the WITH slots are one per arm and not one per
+    // variable: a branch whose arms write two or more `var`s has no slot to merge them in and keeps
+    // its cells. A `var` that escapes through a closure or a `var` argument keeps its cell too, and
+    // so does a `var` parameter. A write inside a loop is carried state, the third of the places
+    // the ruling names: this path sees a JOIN, never a LOOP.
     node_handle_t mergeVariable{};
-    if (joinsNoValue && (absentElse || dropsArmValues) && joinWithInputs.size() == 2) {
+    if (joinsNoValue && joinWithInputs.size() == armList.size() && !armList.empty()) {
+        // For each distinct `var` the arms wrote: one entry per arm, holding the value that arm's
+        // last write stored. The arm's own block value is not it -- `sync { x = 5; println(..) }`
+        // writes `5` and gives the print's value -- and what the branch carries is the write.
+        struct CarriedArm {
+            bool wrote = false;
+            std::optional<draft_node_ref_t> value;
+        };
         std::vector<node_handle_t> written;
-        for (const arm_ptr_t &arm : armList) {
-            for (node_handle_t variable : arm->touchedOrder) {
-                if (arm->touched.at(variable).writerAfter.has_value()) {
+        std::unordered_map<node_handle_t, std::vector<CarriedArm>> perArm;
+        for (size_t a = 0; a < armList.size(); ++a) {
+            std::unordered_set<node_handle_t> here;
+            for (node_handle_t variable : armList[a]->touchedOrder) {
+                const auto &touched = armList[a]->touched.at(variable);
+                if (!touched.writerAfter.has_value() || !here.insert(variable).second) {
+                    continue;
+                }
+                if (!perArm.contains(variable)) {
                     written.push_back(variable);
+                    perArm[variable].assign(armList.size(), CarriedArm{});
+                }
+                CarriedArm &arm = perArm[variable][a];
+                // The last write of the arm, and the value it stored: a write's second operand.
+                std::vector<draft_node_ref_t> operands(
+                    normInputsOf(*touched.writerAfter).begin(),
+                    normInputsOf(*touched.writerAfter).end());
+                if (operands.size() >= 2) {
+                    arm.wrote = true;
+                    arm.value = operands[1];
                 }
             }
         }
@@ -2833,45 +2866,99 @@ node_handle_t Builder::buildBranch(
             nodeKindOf(written.front()) != camel::runtime::GCNodeKind::Port) {
             const node_handle_t variable = written.front();
             Type *valueType              = valueTypeOf(nodeTypeOf(variable));
+            std::vector<CarriedArm> &arms = perArm[variable];
+            size_t wroteArms = 0;
+            for (const CarriedArm &arm : arms) {
+                if (arm.wrote) {
+                    ++wroteArms;
+                }
+            }
             // The value the `var` has before the branch: the one its last write wrote, or the one
-            // the cell was made with when nothing had written it yet.
+            // the cell was made with when nothing had written it yet. Only an arm that did not
+            // write needs it.
             std::optional<draft_node_ref_t> beforeValue;
-            if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
-                std::vector<draft_node_ref_t> operands(
-                    normInputsOf(version).begin(), normInputsOf(version).end());
-                if (operands.size() >= 2) {
-                    beforeValue = operands[1];
-                }
-            } else {
-                std::vector<draft_node_ref_t> made(
-                    normInputsOf(variable).begin(), normInputsOf(variable).end());
-                if (!made.empty()) {
-                    beforeValue = made[0];
-                }
-            }
-            // The slot of the arm that wrote is the one whose value has the variable's type; the
-            // other holds what the arm that did not write gives (`null` for a missing `else`) and
-            // is where the value from before the branch goes.
-            int elseSlot = -1;
-            int armSlot  = -1;
-            for (size_t i = 0; i < joinWithInputs.size(); ++i) {
-                const node_handle_t slot = nodeDraftOf(variable)->ref(joinWithInputs[i]);
-                if (nodeTypeOf(slot) == valueType) {
-                    armSlot = static_cast<int>(i);
+            if (wroteArms != armList.size()) {
+                if (node_handle_t version = valueVersionOf(variable); version != nullptr) {
+                    // A version that carries the value itself -- a write, or a branch that carried
+                    // an earlier write -- is the value from before this branch; one that carries
+                    // the cell is a write, and what a read wants is the value it stored.
+                    Type *versionType = nodeTypeOf(version);
+                    if (versionType != nullptr && valueTypeOf(versionType) == versionType) {
+                        beforeValue = nodeIdOf(version);
+                    } else {
+                        std::vector<draft_node_ref_t> operands(
+                            normInputsOf(version).begin(), normInputsOf(version).end());
+                        if (operands.size() >= 2) {
+                            beforeValue = operands[1];
+                        }
+                    }
                 } else {
-                    elseSlot = static_cast<int>(i);
+                    std::vector<draft_node_ref_t> made(
+                        normInputsOf(variable).begin(), normInputsOf(variable).end());
+                    if (!made.empty()) {
+                        beforeValue = made[0];
+                    }
                 }
             }
-            const Type *beforeType =
-                beforeValue.has_value()
-                    ? nodeTypeOf(nodeDraftOf(variable)->ref(*beforeValue))
-                    : nullptr;
-            // Both the arm's value and the one from before the branch must be of the variable's
-            // value type, or the join would carry two types: such a shape keeps its cell.
-            if (valueType != nullptr && beforeType == valueType && armSlot >= 0 && elseSlot >= 0) {
-                joinWithInputs[static_cast<size_t>(elseSlot)] = *beforeValue;
-                joinType                                     = valueType;
-                mergeVariable                                = variable;
+            // Each slot of the join takes the value that arm wrote, or -- for an arm that did not
+            // write (an `if` without `else`) -- the value the `var` had before the branch. Every
+            // one of them must be of the variable's value type, or the join would carry two types:
+            // such a shape keeps its cell.
+            bool carried = valueType != nullptr;
+            for (const CarriedArm &arm : arms) {
+                const std::optional<draft_node_ref_t> &value =
+                    arm.wrote ? arm.value : beforeValue;
+                if (!value.has_value() ||
+                    nodeTypeOf(nodeDraftOf(variable)->ref(*value)) != valueType) {
+                    carried = false;
+                    break;
+                }
+            }
+            if (carried) {
+                auto &mergeDraft = currGraph_->transaction().edit();
+                for (size_t a = 0; a < arms.size(); ++a) {
+                    joinWithInputs[a] = arms[a].wrote ? *arms[a].value : *beforeValue;
+                    // The arm's result is the value it wrote: an arm that hands the branch no value
+                    // of its own (`sync { x = 1 }`, a statement branch, whose result is the GATE
+                    // handing out the statement's value) now hands out that value, and an arm with
+                    // no result takes one. An arm that already has a value of its own -- a `return`,
+                    // a block whose value is the branch's value -- keeps it.
+                    const node_handle_t value = nodeDraftOf(variable)->ref(joinWithInputs[a]);
+                    const draft_node_ref_t result = mergeDraft.region(armList[a]->region).result;
+                    const bool holdsOnlyTheWrite =
+                        result != 0 && arms[a].wrote && [&] {
+                            // What the arm hands out, with the GATEs it hands it out through taken
+                            // away: a GATE computes nothing and passes its value on, so when the
+                            // arm's value unwraps to the value the write wrote, that value is the
+                            // arm's result and the GATEs that only carried it are left with no
+                            // reader. A branch value of the arm's own (`if c then a else b` in the
+                            // arm) does not unwrap to it, and the arm keeps what it had.
+                            camel::runtime::gc_node_ref_t node = result;
+                            for (int steps = 0; steps < 64; ++steps) {
+                                const camel::runtime::DraftNodeHeader *header =
+                                    mergeDraft.header(node);
+                                if (header == nullptr ||
+                                    header->kind != camel::runtime::GCNodeKind::Gate) {
+                                    break;
+                                }
+                                const auto inputs = mergeDraft.normInputsOf(node);
+                                if (inputs.empty()) {
+                                    break;
+                                }
+                                node = inputs[0];
+                            }
+                            return node ==
+                                   nodeIdOf(nodeDraftOf(variable)->ref(*arms[a].value));
+                        }();
+                    if (result == 0 || holdsOnlyTheWrite) {
+                        mergeDraft.setRegionResult(armList[a]->region, nodeIdOf(value));
+                    }
+                }
+                joinType      = valueType;
+                mergeVariable = variable;
+                // The branch is this variable's write from here on: a read written after it takes
+                // the join, and the `sync` block that used to order such a read is not needed.
+                carriedVersions_[variable] = joinNode;
             }
         }
     }
@@ -2923,27 +3010,24 @@ node_handle_t Builder::buildBranch(
         return origin != captureOriginOf_.end() ? origin->second : variable;
     };
     std::vector<DraftGraphBuilder *> armCallees;
-    std::set<node_handle_t> directWrites;
     for (const arm_ptr_t &arm : armList) {
         armCallees.insert(armCallees.end(), arm->callees.begin(), arm->callees.end());
-        for (node_handle_t variable : arm->directWrites) {
-            directWrites.insert(originOf(variable));
-        }
     }
     if (ArmBuild *outer = activeArm()) {
         // The arms of this branch are part of the arm it is in.
         outer->callees.insert(outer->callees.end(), armCallees.begin(), armCallees.end());
-        for (const arm_ptr_t &arm : armList) {
-            outer->directWrites.insert(arm->directWrites.begin(), arm->directWrites.end());
-        }
     }
+    // A `var` an arm writes is the branch's value, not an effect (design principles 3.1): a write
+    // to a `var` is a value, so the arm does not report one. What is reported here is a write by a
+    // callee an arm calls to a variable that callee captured -- that write is not handed back where
+    // the call stands (reportIgnoredCapturedWrites).
     if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {armCallees, origins, directWrites, gct->origin(), "The branch", "an arm writes"});
+            {armCallees, origins, gct->origin(), "The branch", "an arm writes"});
     }
 
     if (synced_) {
@@ -3172,6 +3256,118 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         initial.push_back(node);
         stateTypes.push_back(type);
     }
+    // The `var`s the body writes are states of the loop (design principles 3.5: "a write to an
+    // outer `var` in a loop body becomes the loop's carried state"). They are found here, before
+    // anything of the body is built, because a state is a port of the loop's regions and the ports
+    // are declared before the body's names are resolved: `x = e` in the body then writes the port.
+    //
+    // What is claimed is a statement of the body's own block that assigns a whole `var` of this
+    // graph (`x = e`, and nothing else): a compound assignment, a path (`x.f = e`), a `var`
+    // parameter of the graph (whose cell is the caller's), a cell a closure captured or a call was
+    // handed, and a name the body writes anywhere deeper than its own block are left to the
+    // lowering that carries a branch's or a call's write, which is what they need.
+    const size_t declaredStates = k;
+    struct LoopCarriedState {
+        node_handle_t cell  = nullptr;
+        node_handle_t start = nullptr;
+        std::string name;
+        node_handle_t port = nullptr;
+    };
+    std::vector<LoopCarriedState> carried;
+    {
+        // The names assigned by a statement of the body's block, in the order they are written,
+        // and the names assigned anywhere below it.
+        std::vector<std::string> directWrites;
+        std::unordered_set<std::string> seenWrites;
+        std::unordered_set<std::string> nestedWrites;
+        const std::function<void(const GCT::node_ptr_t &, bool)> scan =
+            [&](const GCT::node_ptr_t &node, bool direct) {
+                if (node == nullptr) {
+                    return;
+                }
+                if (node->type() == GCT::NodeKind::LINK && node->size() == 3 &&
+                    node->at(0) != nullptr && node->at(0)->type() == GCT::NodeKind::DREF &&
+                    node->at(0)->name() == "__assn__" && node->at(1) != nullptr &&
+                    node->at(1)->type() == GCT::NodeKind::DREF) {
+                    const std::string written = moduleLevelName(node->at(1)->name());
+                    if (!direct) {
+                        nestedWrites.insert(written);
+                    } else if (seenWrites.insert(written).second) {
+                        directWrites.push_back(written);
+                    }
+                }
+                for (size_t i = 0; i < node->size(); ++i) {
+                    scan(node->at(i), false);
+                }
+            };
+        const GCT::node_ptr_t body = gct->loopBody();
+        if (body != nullptr) {
+            if (body->type() == GCT::NodeKind::EXEC) {
+                for (size_t i = 0; i < body->size(); ++i) {
+                    scan(body->at(i), true);
+                }
+            } else {
+                scan(body, true);
+            }
+        }
+        for (const std::string &name : directWrites) {
+            if (nestedWrites.contains(name)) {
+                continue; // written in a block of its own: that write is not this block's
+            }
+            const auto resolved = nodeAt(name);
+            if (!resolved.has_value()) {
+                continue;
+            }
+            const node_handle_t cell = resolved.value();
+            if (!sameGraph(cell, currGraph_) || !isVariable(cell) ||
+                nodeKindOf(cell) == runtime::GCNodeKind::Port) {
+                continue; // not a cell of this graph, or a `var` parameter's (the caller's)
+            }
+            if (escapingVariables_.contains(cell) || captureOriginOf_.contains(cell)) {
+                continue; // a closure or a call holds the cell: it stays a resource
+            }
+            Type *stored = valueTypeOf(nodeTypeOf(cell));
+            if (stored == nullptr || stored->code() == TypeCode::Void) {
+                continue;
+            }
+            // Where the loop starts: the version the `var` has where the loop stands -- the value
+            // the cell was made with when nothing wrote it yet. That value is the one under the
+            // copy the cell was made over (`:var/new` reads a copy of the literal), which is what
+            // the `let` writing puts in the same place.
+            node_handle_t start = nullptr;
+            if (const auto version = carriedVersions_.find(cell);
+                version != carriedVersions_.end()) {
+                start = version->second;
+            } else {
+                const auto ins = normInputsOf(cell);
+                if (ins.size() != 1) {
+                    continue;
+                }
+                start = nodeDraftOf(cell)->ref(ins.front());
+                for (size_t depth = 0; start != nullptr && depth < 16; ++depth) {
+                    if (!nodeIsKind(start, runtime::GCNodeKind::Copy)) {
+                        break;
+                    }
+                    const auto below = normInputsOf(start);
+                    if (below.size() != 1) {
+                        break;
+                    }
+                    const node_handle_t next = nodeDraftOf(start)->ref(below.front());
+                    if (next == nullptr) {
+                        break;
+                    }
+                    start = next;
+                }
+            }
+            if (start == nullptr) {
+                continue;
+            }
+            carried.push_back(LoopCarriedState{cell, start, name, nullptr});
+            stateTypes.push_back(stored);
+            initial.push_back(start);
+            emptyInitial.push_back(false);
+        }
+    }
     node_handle_t sequence = nullptr;
     Type *elementType      = nullptr;
     bool intervalIterates  = false;
@@ -3276,15 +3472,20 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         }
         elementType = iterableElementType(sequence, expr);
     }
+    // The states the loop carries: the ones its head declares, and the `var`s its body writes.
+    const size_t stateCount = stateTypes.size();
     Type *stateType =
-        k == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
+        stateCount == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(stateTypes));
 
     // The names of the state's components. They are the state's one name until splits a
     // struct state into its parts; then they are the paths of those parts (`s.inner.x`), which
     // is what the graph shows and the diagnostics name.
-    std::vector<std::string> stateNames(k);
-    for (size_t j = 0; j < k; ++j) {
+    std::vector<std::string> stateNames(stateCount);
+    for (size_t j = 0; j < declaredStates; ++j) {
         stateNames[j] = gct->loopStateName(j);
+    }
+    for (size_t j = 0; j < carried.size(); ++j) {
+        stateNames[declaredStates + j] = carried[j].name;
     }
 
     // The condition and the body are regions of the current graph, built where they are
@@ -3320,7 +3521,7 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (withElement) {
             add(gct->loopElementName(), elementType);
         }
-        for (size_t j = 0; j < k; ++j) {
+        for (size_t j = 0; j < stateCount; ++j) {
             node_handle_t port = add(stateNames[j], stateTypes[j]);
             // The value a state's port stands for: what the round starts from, which is the state's
             // initial value. A loop that carries a stream is the loop that reads it, so the port
@@ -3333,6 +3534,18 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
     };
     arm_ptr_t condPart;
     arm_ptr_t bodyPart;
+    // The body's own names of the `var`s it carries are ports of its region, and a write to one of
+    // them is the round's next value (loopStateAssignmentOf). Both tables are this loop's, and are
+    // put back as they were when it is built: a loop written in a body of its own has its own.
+    struct LoopCarriedScope {
+        Builder &self;
+        decltype(loopStatePorts_) outerPorts;
+        decltype(loopStateWrites_) outerWrites;
+        ~LoopCarriedScope() {
+            self.loopStatePorts_  = std::move(outerPorts);
+            self.loopStateWrites_ = std::move(outerWrites);
+        }
+    } carriedScope{*this, loopStatePorts_, loopStateWrites_};
     {
         ExpectedValueScope partScope(expectedValueType_, nullptr);
         if (camel::core::loopHasCondition(kind)) {
@@ -3352,6 +3565,15 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         bodyPart =
             buildArm(gct->loopBody(), {}, runtime::GCRegionKind::LoopBody, [&](ArmBuild &part) {
                 declarePorts(part, hasIterable, gct->loopBody());
+                // The name of a carried `var` is the port the body reads and writes.
+                const size_t base = hasIterable ? 1 : 0;
+                for (size_t j = 0; j < carried.size(); ++j) {
+                    const size_t at = base + declaredStates + j;
+                    if (at < part.ports.size()) {
+                        carried[j].port             = part.ports[at];
+                        loopStatePorts_[part.ports[at]] = carried[j].cell;
+                    }
+                }
             });
     }
     if (deferredEmpty) {
@@ -3370,6 +3592,101 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         if (condPart) {
             refreshPorts(*condPart, false);
         }
+    }
+    // The next state the body hands on: the declared states' next values followed by the value
+    // each carried `var` was written with this round (design principles 3.5). A `var` the body did
+    // not write this round -- its write is the write of a block of its own, or the name was
+    // declared again in the body -- goes on as the value the round started from, which is the port.
+    if (!carried.empty()) {
+        auto &bodyDraft = currGraph_->transaction().edit();
+        std::vector<node_handle_t> components(stateCount, nullptr);
+        node_handle_t returned = loopStateValueOf(bodyPart->value);
+        if (declaredStates == 1) {
+            components[0] = returned;
+        } else if (declaredStates > 1) {
+            // The declared states' next values are the tuple the body gave: a FILL whose payload
+            // says which component each value fills (a constant component has no value node).
+            bool fromFill = false;
+            if (returned != nullptr && nodeIsKind(returned, runtime::GCNodeKind::Fill)) {
+                const auto withIns = withInputsOf(returned);
+                const auto payload = nodeDraftOf(returned)->payloadOf(nodeIdOf(returned));
+                if (payload.size() >= sizeof(runtime::GCFillBody)) {
+                    const auto *fill =
+                        reinterpret_cast<const runtime::GCFillBody *>(payload.data());
+                    const auto slots = fill->slots();
+                    if (fill->fillKind == runtime::GCFillKind::Tuple &&
+                        slots.size() == withIns.size()) {
+                        fromFill = true;
+                        for (size_t i = 0; i < slots.size(); ++i) {
+                            const size_t slot = static_cast<size_t>(slots[i]);
+                            if (slot >= declaredStates) {
+                                fromFill = false;
+                                break;
+                            }
+                            components[slot] = nodeDraftOf(returned)->ref(withIns[i]);
+                        }
+                    }
+                }
+            }
+            if (!fromFill) {
+                // A body that gives its states as something else than a tuple written there: each
+                // state's next value is read out of what it gave.
+                for (size_t j = 0; j < declaredStates; ++j) {
+                    if (returned == nullptr) {
+                        const size_t at = j + (camel::core::loopHasIterable(kind) ? 1 : 0);
+                        components[j] = at < bodyPart->ports.size() ? bodyPart->ports[at] : nullptr;
+                        continue;
+                    }
+                    node_handle_t part = currGraph_->addAccsNode(
+                        stateTypes[j], static_cast<uint32_t>(j));
+                    linkNodes(LinkType::Norm, returned, part);
+                    registerNodeOrigin(context_, part, gct->loopBody(), "gir.loop.state");
+                    components[j] = part;
+                }
+            }
+        }
+        for (size_t j = 0; j < carried.size(); ++j) {
+            node_handle_t next = carried[j].port;
+            if (const auto written = loopStateWrites_.find(carried[j].port);
+                written != loopStateWrites_.end()) {
+                next = written->second;
+            }
+            components[declaredStates + j] = next;
+        }
+        node_handle_t result = components.empty() ? nullptr : components.front();
+        Type *nextType       = stateCount == 1 ? stateTypes.front() : nullptr;
+        if (stateCount > 1) {
+            nextType = TupleType::create(stateTypes);
+            std::vector<size_t> slots(stateCount);
+            std::iota(slots.begin(), slots.end(), size_t{0});
+            const uint32_t outerRegion = bodyDraft.insertRegion();
+            bodyDraft.setInsertRegion(bodyPart->region);
+            result = currGraph_->addFillNode(
+                nextType, runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
+            const slot_t empty = camel::core::rtdata::toSlot(
+                ::Tuple::create(stateCount, camel::core::mm::autoSpace()));
+            node_handle_t source = bodyDraft.ref(bodyDraft.materializeStaticValue(empty, nextType));
+            linkNodes(LinkType::Norm, source, result);
+            for (node_handle_t component : components) {
+                GUARD(
+                    component != nullptr,
+                    "A loop state's next value is missing from the body's value.");
+                linkNodes(LinkType::With, component, result);
+            }
+            bodyDraft.setInsertRegion(outerRegion);
+            registerNodeOrigin(context_, result, gct->loopBody(), "gir.loop.state");
+        }
+        GUARD(result != nullptr, "A loop state's next value is missing from the body's value.");
+        if (bodyPart->output != nullptr && bodyPart->output != bodyPart->value) {
+            // A `sync` body's effects are ordered by the gate around the old value; the state the
+            // round ends with comes after them (the same reading splitStructState takes).
+            writeControlLink(bodyPart->output, result);
+        }
+        bodyPart->output = result;
+        bodyPart->value  = result;
+        bodyPart->type   = nextType;
+        bodyDraft.setRegionResult(bodyPart->region, nodeIdOf(result));
+        stateType = nextType;
     }
     // The body gives the next state: of the state's type, or a value that enters it (an
     // `int` where the state is an `int?`, design principles 3.8).
@@ -3760,27 +4077,24 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         return origin != captureOriginOf_.end() ? origin->second : variable;
     };
     std::vector<DraftGraphBuilder *> callees;
-    std::set<node_handle_t> directWrites;
     for (const arm_ptr_t &part : parts) {
         callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-        for (node_handle_t variable : part->directWrites) {
-            directWrites.insert(originOf(variable));
-        }
     }
     if (ArmBuild *outer = activeArm()) {
         // The parts of this loop are part of the arm it is in.
         outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-        for (const arm_ptr_t &part : parts) {
-            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
-        }
     }
+    // What the loop's parts write is not an effect: a write to a `var` is a value (design
+    // principles 3.1), and the body's writes are the states the LOOP hands on. What is left to
+    // report here is a write by a callee the parts call to a variable that callee captured: that
+    // write is not handed back where the call stands (reportIgnoredCapturedWrites).
     if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+            {callees, origins, gct->origin(), "The loop", "its body writes"});
     }
 
     if (synced_) {
@@ -3791,27 +4105,32 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
         lastSyncedNode_ = loopNode;
         chainedNodes_.insert(loopNode);
     }
-    // The program sees the states, not the collection slots beside them. One state is its own
-    // value; several are a tuple, whose FILL reads the state components and leaves the
-    // collections to autodiff and the exporter.
+    // The program sees the states its head declares: not the collection slots beside them, and not
+    // the `var`s the body wrote, which are the loop's own state and no value of the program's (a
+    // `loop i = 0 while …` whose body writes an outer `var` is still worth its `i`). One state is
+    // its own value; several are a tuple, whose FILL reads the state components and leaves the
+    // rest to autodiff and the exporter.
+    std::vector<Type *> visibleStateTypes(stateTypes.begin(), stateTypes.begin() + declaredStates);
+    Type *visibleStateType =
+        declaredStates == 1 ? stateTypes.front() : static_cast<Type *>(TupleType::create(visibleStateTypes));
     node_handle_t loopValue = loopNode;
-    if (!collected.empty()) {
-        if (stateTypes.size() == 1) {
-            loopValue = currGraph_->addAccsNode(stateType, 0);
+    if (!collected.empty() || !carried.empty()) {
+        if (declaredStates == 1) {
+            loopValue = currGraph_->addAccsNode(visibleStateType, 0);
             linkNodes(LinkType::Norm, loopNode, loopValue);
             registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
         } else {
-            std::vector<size_t> slots(stateTypes.size());
+            std::vector<size_t> slots(declaredStates);
             std::iota(slots.begin(), slots.end(), size_t{0});
             loopValue = currGraph_->addFillNode(
-                stateType,
+                visibleStateType,
                 runtime::makeFillPayload(runtime::GCFillKind::Tuple, slots));
             const slot_t empty = camel::core::rtdata::toSlot(
-                ::Tuple::create(stateTypes.size(), camel::core::mm::autoSpace()));
-            node_handle_t source =
-                currGraph_->view().ref(currGraph_->edit().materializeStaticValue(empty, stateType));
+                ::Tuple::create(declaredStates, camel::core::mm::autoSpace()));
+            node_handle_t source = currGraph_->view().ref(
+                currGraph_->edit().materializeStaticValue(empty, visibleStateType));
             linkNodes(LinkType::Norm, source, loopValue);
-            for (size_t j = 0; j < stateTypes.size(); ++j) {
+            for (size_t j = 0; j < declaredStates; ++j) {
                 node_handle_t component =
                     currGraph_->addAccsNode(stateTypes[j], static_cast<uint32_t>(j));
                 linkNodes(LinkType::Norm, loopNode, component);
@@ -3819,6 +4138,20 @@ node_handle_t Builder::visitLoopNode(const GCT::node_ptr_t &gct) {
             }
             registerNodeOrigin(context_, loopValue, gct, "gir.loop.value");
         }
+    }
+    // A `var` the body wrote is a state of the loop, so a read written after the loop reads the
+    // state the loop hands out: the ACCS of the loop's value, which is what the `let` writing's
+    // destructuring is. No `:var/get` is made, and nothing of the `var`'s unit is left to read
+    // (dropCarriedVariableUnits).
+    for (size_t j = 0; j < carried.size(); ++j) {
+        const size_t index  = declaredStates + j;
+        node_handle_t value = loopNode;
+        if (stateCount > 1) {
+            value = currGraph_->addAccsNode(stateTypes[index], static_cast<uint32_t>(index));
+            linkNodes(LinkType::Norm, loopNode, value);
+            registerNodeOrigin(context_, value, gct, "gir.loop.value");
+        }
+        carriedVersions_[carried[j].cell] = value;
     }
     if (splitApplied) {
         // The programme sees the struct, not its parts: it is rebuilt from the loop's value,
@@ -4167,26 +4500,22 @@ node_handle_t Builder::buildStreamLoop(
         return origin != captureOriginOf_.end() ? origin->second : variable;
     };
     std::vector<DraftGraphBuilder *> callees;
-    std::set<node_handle_t> directWrites;
     for (const arm_ptr_t &part : parts) {
         callees.insert(callees.end(), part->callees.begin(), part->callees.end());
-        for (node_handle_t variable : part->directWrites) {
-            directWrites.insert(originOf(variable));
-        }
     }
     if (ArmBuild *outer = activeArm()) {
         outer->callees.insert(outer->callees.end(), callees.begin(), callees.end());
-        for (const arm_ptr_t &part : parts) {
-            outer->directWrites.insert(part->directWrites.begin(), part->directWrites.end());
-        }
     }
+    // What the loop's parts write is not an effect (design principles 3.1): a write to a `var` is
+    // a value, so only a write by a callee the parts call to a variable that callee captured is
+    // reported here (reportIgnoredCapturedWrites).
     if (!capturedWrites.empty() && !synced_) {
         std::vector<node_handle_t> origins;
         for (node_handle_t variable : capturedWrites) {
             origins.push_back(originOf(variable));
         }
         unit_->pendingIgnoredWrites.push_back(
-            {callees, origins, directWrites, gct->origin(), "The loop", "its body writes"});
+            {callees, origins, gct->origin(), "The loop", "its body writes"});
     }
     if (synced_) {
         // The loop is a statement of the block, like a call: the statement written before it
@@ -4363,6 +4692,10 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
     } else {
         checkDeclaredReturn(currGraph_, nodeTypeOf(resNode), gct->origin(), gct->at(0));
         if (!droppedGraphs_.contains(camel::runtime::toValue(currGraph_->graphId()))) {
+            // The write the body leaves in a `var` parameter is used here, where the body leaves:
+            // the cell is the caller's, and what the body last wrote into it is what the caller
+            // finds there afterwards (design principles 3.1).
+            outputAnchor = exitUsesVariableParameterWrites(currGraph_, outputAnchor);
             setGraphReturnFromResult(
                 currGraph_,
                 nodeIdOf(outputAnchor),
@@ -4761,13 +5094,98 @@ void Builder::markLoopStateInPlaceOne(
     }
 }
 
+node_handle_t
+Builder::exitUsesVariableParameterWrites(const compile_graph_ptr_t &graph, node_handle_t anchor) {
+    const FunctionType *funcType = graph != nullptr ? graph->funcType() : nullptr;
+    if (funcType == nullptr || anchor == nullptr) {
+        return anchor;
+    }
+    // A `var` parameter is a cell the caller made: what the body leaves in it is what the caller
+    // reads afterwards, so the write outlives the call and is a result of the function beside the
+    // returned value (design principles 3.1). The write the body leaves is the one `recordWrite`
+    // recorded last on the port -- the same node a read of the parameter takes as its version
+    // (Builder::valueVersionOf) -- and a parameter the body never wrote has none.
+    node_vec_t writers;
+    const auto collect = [&](const auto &ports, const bool with) {
+        const size_t count = with ? funcType->withTypesCount() : funcType->normTypesCount();
+        for (size_t i = 0; i < ports.size() && i < count; ++i) {
+            if (!(with ? funcType->withIsVarAt(i) : funcType->normIsVarAt(i))) {
+                continue;
+            }
+            const node_handle_t port = graph->view().ref(ports[i]);
+            if (port == nullptr) {
+                continue;
+            }
+            if (const auto writer = modifierOf(port);
+                writer.has_value() && sameGraph(*writer, graph)) {
+                writers.push_back(*writer);
+            }
+        }
+    };
+    collect(graph->view().withPorts(), true);
+    collect(graph->view().normPorts(), false);
+    if (writers.empty()) {
+        return anchor;
+    }
+    // What the exit already uses, reached back the way the run time lays the graph out: data ports,
+    // sync edges and the control edges it waits on. Inside a `sync` block the chain carries the
+    // write to the exit already, so nothing is added there and the two bodies build one shape --
+    // the same `:op/assn_l` node, used by the same exit, whether the write is written in a block or
+    // not.
+    const auto *draft = nodeDraftOf(anchor);
+    std::set<draft_node_ref_t> reached{nodeIdOf(anchor)};
+    std::vector<draft_node_ref_t> work{nodeIdOf(anchor)};
+    while (!work.empty()) {
+        const draft_node_ref_t id = work.back();
+        work.pop_back();
+        for (const auto inputs :
+             {draft->normInputsOf(id), draft->withInputsOf(id), draft->ctrlInputsOf(id)}) {
+            for (const draft_node_ref_t input : inputs) {
+                if (reached.insert(input).second) {
+                    work.push_back(input);
+                }
+            }
+        }
+        for (const draft_node_ref_t input : draft->syncInputsOf(id)) {
+            if (reached.insert(input).second) {
+                work.push_back(input);
+            }
+        }
+    }
+    node_handle_t gate = nullptr;
+    for (node_handle_t writer : writers) {
+        if (reached.contains(nodeIdOf(writer))) {
+            continue;
+        }
+        if (gate == nullptr) {
+            if (nodeIsKind(anchor, runtime::GCNodeKind::Gate)) {
+                // The exit's own GATE, made for the chain tail: the wait goes on it.
+                gate = anchor;
+            } else {
+                gate = graph->addGateNode(nodeTypeOf(anchor));
+                linkNodes(LinkType::Norm, anchor, gate);
+            }
+        }
+        if (linkCheek(writer, gate) && !runtime::hasControlDependency(
+                                           *nodeTransactionOf(gate), nodeIdOf(writer),
+                                           nodeIdOf(gate))) {
+            // The control edge is what makes the write run where the value it wrote has no reader
+            // of its own in the body (docs/design/effects/edges.cn.md 1; design principles 3.5,
+            // F3): the exit waits on it, and the wait is why it runs at all.
+            writeControlLink(writer, gate);
+        }
+    }
+    return gate != nullptr ? gate : anchor;
+}
+
 void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result) {
     if (graph->view().exitNode() != runtime::kInvalidNodeRef) {
         return;
     }
     if (result == nullptr) {
-        result = graph->addStaticDataNode(Data::null());
-        setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(result), Type::Void());
+        result               = graph->addStaticDataNode(Data::null());
+        node_handle_t anchor = exitUsesVariableParameterWrites(graph, result);
+        setGraphReturnFromResult(graph, nodeIdOf(anchor), nodeIdOf(result), Type::Void());
         return;
     }
     // A sync block that ends in a value hands it back behind a GATE (see visitExecNode): the
@@ -4777,7 +5195,9 @@ void Builder::setBodyResult(const compile_graph_ptr_t &graph, node_handle_t resu
         value = nodeDraftOf(result)->ref(normInputsOf(result).front());
     }
     checkDeclaredReturn(graph, nodeTypeOf(value), 0);
-    setGraphReturnFromResult(graph, nodeIdOf(result), nodeIdOf(value), nodeTypeOf(value));
+    setGraphReturnFromResult(
+        graph, nodeIdOf(exitUsesVariableParameterWrites(graph, result)), nodeIdOf(value),
+        nodeTypeOf(value));
 }
 
 } // namespace camel::compile::gir

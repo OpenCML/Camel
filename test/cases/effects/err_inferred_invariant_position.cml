@@ -1,0 +1,38 @@
+/**
+ * A type variable is one type, and the resources a function writes are part of its type: two values
+ * given for one `T` must write the same resources. The two here are the branch `if b then f else g`
+ * (neither arm writes anything) and `wide` (it prints), and none of the three declarations wrote a
+ * clause -- so each set is what its own body was measured to reach, and the place they meet may not
+ * take one of them for the other's (the ruling of 2026-11-15, design principles 3.3).
+ *
+ * The answer is a type error at the declaration that writes no clause, and the repair it names is a
+ * resource clause there. `same` is written before the functions it is given, so the position is
+ * read after the declarations it uses: the answer does not depend on that order.
+ */
+
+func same::<T>(a: T, b: T): T {
+    return a
+}
+
+func pick(b: bool): (x: int) => int {
+    return same(if b then f else g, wide)
+}
+
+func f(x: int): int {
+    return x + 1
+}
+
+func g(x: int): int {
+    return x + 2
+}
+
+func wide(x: int): int sync {
+    println(x)
+    return x + 3
+}
+
+func main(): int sync {
+    let h = pick(true)
+    println(h(1))
+    return 0
+}

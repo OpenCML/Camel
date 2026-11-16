@@ -36,7 +36,8 @@ struct LinkedBytecodeResult {
 bytecode_vec_t compile(
     const ctx::context_ptr_t &ctx, const camel::runtime::Program &program,
     camel::runtime::GCGraph *graph, const CompileStrategy &opt = {},
-    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr);
+    std::unordered_map<size_t, camel::source::origin_id_t> *localPcOrigins = nullptr,
+    std::unordered_map<size_t, camel::runtime::gc_node_ref_t> *localPcNodes = nullptr);
 
 LinkedBytecodeResult compileAndLink(
     ctx::context_ptr_t ctx, const camel::runtime::Program &program, camel::runtime::GCGraph *entry,

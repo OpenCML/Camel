@@ -5,6 +5,7 @@
 #include "camel/core/global_config.h"
 #include "camel/core/module/module.h"
 #include "camel/core/operator.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/function_call.h"
@@ -20,6 +21,7 @@
 #include "camel/utils/log.h"
 
 #include "camel/core/context/frame.h"
+#include "camel/core/mm.h"
 #include "camel/core/effect_trace.h"
 #include "camel/core/error/runtime.h"
 
@@ -747,6 +749,14 @@ slot_t NodeVMSchedPass::call(
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
                             evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);
+                            // This node's output was written by the marked evaluator itself, so
+                            // the count's rows at this position are run from the slot it left.
+                            camel::runtime::applyRefEntriesForNode(
+                                *currPlan,
+                                currFrame,
+                                nodeRef,
+                                n->dataIndex == 0 ? slot_t{0}
+                                                  : currFrame->get<slot_t>(n->dataIndex));
                             break;
                         }
                         throwRuntimeFault(
@@ -756,10 +766,31 @@ slot_t NodeVMSchedPass::call(
                     }
                 }
 
+                // The anchor's site, in the node form: a `Ref` box made while this operator ran has
+                // to be a value the plan names this very node as producing. Asked only while
+                // --gc-check wants the counted blocks -- the flag that already pays for the
+                // counters, so a program that does not pass it reads nothing here and takes the
+                // same path as before -- and the answer is only reported: it cannot refuse the
+                // value, change the frame, or move this node to another order.
+                const bool anchorWanted =
+                    camel::core::mm::allocatorChecks().printForeignResources;
+                camel::runtime::CountedBoxesBracket boxes;
+                if (anchorWanted) {
+                    boxes.begin();
+                }
                 slot_t result =
                     evalNativeOperator(currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
+                if (anchorWanted) {
+                    camel::runtime::noteCountedCreationForNode(
+                        currRuntimeGraph, nodeRef, boxes.sinceBegin());
+                }
 
                 currFrame->set(n->dataIndex, result);
+                // The count's rows at this position: the holds this node's output takes and the
+                // references that come back once it has run. Run whether or not the anchor above
+                // was asked for -- counting is what releases a box (design principles 10.5) and the
+                // flag only says whether the process reports what it released.
+                camel::runtime::applyRefEntriesForNode(*currPlan, currFrame, nodeRef, result);
             } break;
 
             case GCNodeKind::Loop:

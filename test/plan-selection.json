@@ -51,6 +51,16 @@
     ],
     "rules": [
         {
+            "comment": "The two programs the plan-refs plan reads, one from the counted-box table of the compile plans and one from the closure cases. The plan sits in test/plans/feat/tools, which no directory under test/plans/feat mirrors from a test/cases path, so the walk from test/cases reaches nothing here and this rule is the one the self-test asks for: every plan under test/plans must be selected by a case path it names. It comes before the general rules in this list because the first matching file rule applies to a file. Naming the two files adds this plan beside the one the directory rule selects (feat/compile, feat/consistency/values), and the plan is fast, so the rule carries no layer.",
+            "paths": ["test/cases/compile/ref/ref_boxes_made_per_call_ten.cml", "test/cases/consistency/values/ref_one_cell_two_holders.cml"],
+            "plans": ["feat/tools/plan_refs.plan.toml"]
+        },
+        {
+            "comment": "The plan-refs sweep: its case is the tool itself, so a change there selects the plan that runs it -- the same shape as the other tool cases in this list. The sweep is a plan of its own because its bound (1200000 ms, four times the CPU it spends starting one `camel` per case) would make any plan that also names it slow-cost, and a named plan file runs in full whatever `--tier` says.",
+            "paths": ["scripts/check-plan-refs.mjs", "scripts/check-plan-refs-anchor.mjs"],
+            "plans": ["feat/tools/plan_refs_sweep.plan.toml"]
+        },
+        {
             "comment": "The progen seed 23 program of the splice defect `a1723fbb9` fixed (test/cases/opt/inline_cycle): one program, one plan. It is a file rule and not a directory rule for the reason the adb67e081 rule below is one -- the directory rule for test/cases mirrors the segments below test/cases and would look for `test/plans/feat/opt/inline_cycle`, which is a plan file, so nothing would reach it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/cases/opt/inline_cycle/"],
             "plans": ["feat/opt/inline_cycle.plan.toml"]
@@ -83,15 +93,20 @@
             "comment": "The plan-normaliser guard: its case is the tool itself, so a change there selects the plan that runs it. Its two fixture trees under test/tools/selftest/plan-normalizers are read by that plan as well, which is why the selftest rule below names it too. The plan is fast, so the rule carries no layer.",
             "paths": ["test/tools/check-plan-normalizers.mjs"],
             "plans": ["feat/tools/plan_normalizers.plan.toml"]
+        },
+        {
+            "comment": "The plan-field guard and the count it ratchets against: both are read by `feat/tools/plan_fields` alone, and the baseline is a tracked file, so naming it here is also what keeps it out of the rule-less class the self-test refuses. The plan is fast, so the rule carries no layer.",
+            "paths": ["test/tools/check-plan-fields.mjs", "test/tools/plan-fields-baseline.json"],
+            "plans": ["feat/tools/plan_fields.plan.toml"]
         },        {
             "comment": "The parse-check harness, the selftest fixtures and the load-class guard: a change here runs smoke, the runner plan, the load-class plan (its cases are the selftest fixtures) and the front-end plan (layered so its slow fuzz test is filtered under --tier fast).",
             "paths": ["test/tools/parsecheck/", "test/tools/jitcov/workloads.cml", "test/tools/selftest/", "test/tools/check-load-class.mjs"],
             "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/load_class.plan.toml", "feat/tools/plan_normalizers.plan.toml", { "plan": "feat/parse/frontend.plan.toml", "layer": true }]
         },
         {
-            "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set.",
+            "comment": "The runner itself and the self-test: the plans that exercise the runner and the smoke set. `feat/tools/plan_fields` is here too, because its second entry reads `test/tools/run-tests.mjs` itself: a field that moves out of a kind-gated block, or a fourth gated kind, is a red there, and a change to the runner is the only thing that can cause it.",
             "paths": ["test/tools/run-tests.mjs", "test/tools/selftest/", "test/tools/toml-lite.mjs", "test/tools/gir-dot.mjs", "test/plan-selection.json", "test/runner.mjs", "test/vars.toml", "scripts/test.js", "package.json"],
-            "plans": ["smoke", "feat/consistency/runner.plan.toml"]
+            "plans": ["smoke", "feat/consistency/runner.plan.toml", "feat/tools/plan_fields.plan.toml"]
         },
         {
             "comment": "The diagnostic-form checker reads the tools that parse a diagnostic out of a run: a change to it, or to a tool it names, re-runs the plan that holds its reading.",
@@ -559,9 +574,9 @@
             "plans": ["smoke"]
         },
         {
-            "comment": "The resource-surface cases (`resource`/`unordered`, `#resource` on a nominal type, `uses`/`pure` on a declaration or a function type): they are front-end/compile cases, and their plan is a file under feat/compile with no `test/plans/feat/effects` directory to mirror the case directory, so the generic test/cases directory rule resolves them to nothing. Name the one plan that reads them. The runtime plans (feat/modules, feat/tools, feat/trans) do not read these cases, so they are not added.",
+            "comment": "The resource-surface cases (`resource`/`unordered`, `#resource` on a nominal type, `uses`/`pure` on a declaration or a function type): they are front-end/compile cases, and both plans that read them are files under feat/compile. The generic test/cases directory rule mirrors this directory only as far as `test/plans/feat/effects` (the masking-transition plan, which is not one of them), so both are named here. `effects_syntax` reads 50 of the directory's 55 programs and is named for the whole directory; `feat/compile/inferred_resources` reads three of them (`err_inferred_invariant_position.cml` and the two `unreachable_pair` readings), and it is named by ownership (`ownCases`) the way `feat/showcase_s2` above and `feat/mm/capacity` name a plan that reads one or a few programs of a directory -- without `ownCases` an edit to any other program here would drag a plan that does not read it into the run. A plan named for this directory is a plan `--changed` can reach: before the second entry, `inferred_resources` was selected by no case path at all, and the runner self-test said so. The runtime plans (feat/modules, feat/tools, feat/trans) do not read these cases, so they are not added.",
             "paths": ["test/cases/effects/"],
-            "plans": ["feat/compile/effects_syntax.plan.toml"]
+            "plans": ["feat/compile/effects_syntax.plan.toml", { "plan": "feat/compile/inferred_resources.plan.toml", "ownCases": true }]
         },
         {
             "comment": "A case directory with no plan directory of its own: the loop cases are tested by the linear loop plans. loops.plan.toml is not the only one: hof_declared (higher-order declarations), loops_in_arms and loop_collect each name cases in this directory, and a change to those cases has no other rule to select them.",

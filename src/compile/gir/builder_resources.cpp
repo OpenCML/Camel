@@ -314,11 +314,11 @@ bool Builder::placeCalleeCapture(
     BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
     const compile_graph_ptr_t &callee, size_t position, draft_node_ref_t value) const {
     // One capture of a callee, as this body sees it. A direct call hands its callee's captures in
-    // after the declared `with` arguments (linkCaptureSites), so the caller's node is known; a call
-    // through a value does not list them among its inputs, and the value was made in the graph that
-    // captured them, so the origin is read from there. The origin then answers the same question a
-    // direct use of a capture answers (placeCapturedUse), except that a cell of an enclosing graph
-    // is this body's capture of it.
+    // after the declared `with` arguments (addCaptureSite links them, linkCaptureSites places them
+    // there), so the caller's node is known; a call through a value does not list them among its
+    // inputs, and the value was made in the graph that captured them, so the origin is read from
+    // there. The origin then answers the same question a direct use of a capture answers
+    // (placeCapturedUse), except that a cell of an enclosing graph is this body's capture of it.
     const auto classify = [&](node_handle_t at) -> bool {
         if (at == nullptr) {
             return false;
@@ -779,8 +779,7 @@ void Builder::addVarParameters(BodyReach &walk, const FunctionType &type) const 
     }
 }
 
-std::optional<camel::core::sem::ResourceSignature>
-Builder::footprintOf(
+std::optional<camel::core::sem::ResourceSignature> Builder::footprintOf(
     DraftGraphBuilder *graph, std::optional<draft_node_ref_t> only,
     std::vector<std::string> *valueKeys) const {
     FunctionType *type = graph->funcType();
@@ -867,6 +866,52 @@ Builder::footprintOf(
         std::unique(walk.reach.captures.begin(), walk.reach.captures.end()),
         walk.reach.captures.end());
     return walk.reach;
+}
+
+namespace {
+
+// The resources a type publishes, when the type is one function's signature: the two sides of a
+// conflict are function types, recorded where two values had to have the same resources
+// (resource_conflict.h).
+const camel::core::sem::ResourceSignature *signatureOf(const camel::core::type::Type *type) {
+    if (type == nullptr || type->code() != camel::core::type::TypeCode::Function) {
+        return nullptr;
+    }
+    return &static_cast<const camel::core::type::FunctionType *>(type)->resources();
+}
+
+} // namespace
+
+bool Builder::recordResourceConflict(
+    const camel::core::type::Type &left, const camel::core::type::Type &right) {
+    if (!declaredFuncTypes_.contains(&left) && !declaredFuncTypes_.contains(&right)) {
+        // Neither side is a declaration of this build: no body here decides their resources, so
+        // there is nothing that settles -- the type layer keeps the reading it had.
+        return false;
+    }
+    for (const ResourceConflict &recorded : resourceConflicts_) {
+        const bool sameOrder = recorded.left == &left && recorded.right == &right;
+        const bool swapped   = recorded.left == &right && recorded.right == &left;
+        if (sameOrder || swapped) {
+            return true;
+        }
+    }
+    const camel::core::sem::ResourceSignature *leftSignature  = signatureOf(&left);
+    const camel::core::sem::ResourceSignature *rightSignature = signatureOf(&right);
+    ResourceConflict conflict;
+    conflict.left  = &left;
+    conflict.right = &right;
+    // Which side wrote no clause is read here, before the measurement is written onto both: after
+    // that a settled set and a written clause print the same, and the repair is the side that wrote
+    // none.
+    conflict.leftUnwritten =
+        leftSignature != nullptr &&
+        leftSignature->mode == camel::core::sem::ResourceSignature::Mode::Generic;
+    conflict.rightUnwritten =
+        rightSignature != nullptr &&
+        rightSignature->mode == camel::core::sem::ResourceSignature::Mode::Generic;
+    resourceConflicts_.push_back(conflict);
+    return true;
 }
 
 void Builder::measureInferredResources() {
@@ -1151,6 +1196,49 @@ void Builder::checkInferredResources() {
             promised,
             measured->second,
             firstUnpromisedEffectOrigin(graph, promised));
+    }
+    // A place where one type variable was asked for two function types that write different
+    // resources (recordResourceConflict). Every body has settled by now, so the question has one
+    // answer, whichever order the two bodies were built in -- and it is not the place that decides:
+    // the two sets are what the two bodies were measured to reach, and a position that asks for one
+    // type does not take one of them for the other's.
+    const auto ownerOf = [&](const camel::core::type::Type *type) -> DraftGraphBuilder * {
+        const auto found = declaredFuncTypes_.find(type);
+        return found == declaredFuncTypes_.end() ? nullptr : found->second;
+    };
+    const auto isHere = [&](DraftGraphBuilder *graph) {
+        return graph != nullptr &&
+               std::any_of(
+                   unit_->builtBodies.begin(),
+                   unit_->builtBodies.end(),
+                   [&](const compile_graph_ptr_t &body) { return body.get() == graph; });
+    };
+    for (size_t index = 0; index < resourceConflicts_.size(); ++index) {
+        if (reportedResourceConflicts_.contains(index)) {
+            continue;
+        }
+        const ResourceConflict &conflict = resourceConflicts_[index];
+        DraftGraphBuilder *leftOwner     = ownerOf(conflict.left);
+        DraftGraphBuilder *rightOwner    = ownerOf(conflict.right);
+        if (!isHere(leftOwner) && !isHere(rightOwner)) {
+            continue; // reported with the module of the declaration it is about
+        }
+        reportedResourceConflicts_.insert(index);
+        const auto *leftSignature  = signatureOf(conflict.left);
+        const auto *rightSignature = signatureOf(conflict.right);
+        if (leftSignature == nullptr || rightSignature == nullptr) {
+            continue;
+        }
+        // A set that could not be written as a clause (`anyOf`), and a declaration whose body was
+        // never built, are not this build's to judge: a call through them is read conservatively.
+        if (leftSignature->mode != ResourceSignature::Mode::Concrete ||
+            rightSignature->mode != ResourceSignature::Mode::Concrete) {
+            continue;
+        }
+        if (*leftSignature == *rightSignature) {
+            continue; // the two agree: the variable is one type after all
+        }
+        reportResourceConflict(conflict, leftOwner, rightOwner);
     }
 }
 

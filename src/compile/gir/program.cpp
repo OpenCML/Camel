@@ -16,8 +16,9 @@
  *    buildTopLevelValue). So the top level of a module does not depend on the order it is
  *    written in, and a function's return type and captures are known where it is used. A
  *    value needed while it is being built depends on itself: ModuleValueCycle.
- * 3. Link: the captures of every direct call (linkCaptureSites, a least fixpoint), the call of
- *    the entry module's `main`, the summaries of effects (another fixpoint) and the warnings
+ * 3. Link: the captures a call is still owed (linkCaptureSites, a least fixpoint; the ones the
+ *    call was built with are already its `with` inputs), the call of the entry module's `main`,
+ *    the summaries of effects (another fixpoint) and the warnings
  *    that need them, per module.
  *
  * A library (buildLibrary) is built the same way by a builder of its own, from the library
@@ -248,6 +249,10 @@ void Builder::declareModule(const module_ptr_t &module, GCT::Tree &tree, diagnos
     // whose guard decides it (`func f(x: ShapeOf<string>)`): the predicate has to be answerable
     // here too, or the type would look like one no case selects.
     GuardScope guardScope(*this);
+    // And it records the pairs of function types one type variable is asked for, which are judged
+    // once every body is measured: a type in a top-level declaration is read here too
+    // (resource_conflict.h).
+    ResourceConflictScope conflictScope(*this);
     ensureRootGraph();
     recorder_  = context_ ? context_->semanticRecorder() : nullptr;
     auto &slot = units_[module.get()];
@@ -618,8 +623,25 @@ bool Builder::buildLibraryEntry(
     return buildFrom(*it->second, true);
 }
 
+size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
+    auto sourceContext = context_ != nullptr ? context_->sourceContext() : nullptr;
+    if (sourceContext == nullptr || origin == camel::source::kInvalidOriginId) {
+        return kNoSourceOffset;
+    }
+    const camel::source::OriginRecord *record = sourceContext->origin(origin);
+    if (record == nullptr) {
+        return kNoSourceOffset;
+    }
+    const camel::source::SourceSpan *span = sourceContext->span(record->primarySpan);
+    if (span == nullptr) {
+        return kNoSourceOffset;
+    }
+    return span->startOffset;
+}
+
 void Builder::scanProgramWriters() {
     programWriters_.clear();
+    programValueNames_.clear();
     // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
     // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
     // principles 4.3). The variable it writes is the base of its target: the variable itself
@@ -751,8 +773,25 @@ void Builder::scanProgramWriters() {
                 }
             }
         }
+        // A name read where a call is not made is a value the program wants: `let k = f` makes a
+        // value of `f`, and `f(1)` calls it. A `LINK` (and a `WITH` or `TAPP` that binds one) puts
+        // its callee first; every other node reads every child. The value is what a capture of a
+        // closure is about (a function value holds the values its captures had when it was made),
+        // so the two are told apart here, before any body is built.
+        const bool calleeFirst = node->type() == GCT::NodeKind::LINK ||
+                                 node->type() == GCT::NodeKind::WITH ||
+                                 node->type() == GCT::NodeKind::TAPP;
         for (size_t i = 0; i < node->size(); ++i) {
-            pending.push_back({node->at(i), function});
+            const GCT::node_ptr_t child = node->at(i);
+            if (child != nullptr && !(calleeFirst && i == 0) &&
+                (child->type() == GCT::NodeKind::DREF || child->type() == GCT::NodeKind::NREF)) {
+                // The callee of a `LINK`, a `WITH` and a `TAPP` is the first child and is skipped
+                // above: `f(1)` calls `f`, and a name read anywhere else is a value the program
+                // wants. An assignment's target is a name this scan already counted as a write of
+                // `programWriters_`, and being read as a value here changes nothing.
+                programValueNames_.insert(child->name());
+            }
+            pending.push_back({child, function});
         }
     }
     // A function's write of a name it declared is dropped: the cell is the function's own, and only
@@ -777,17 +816,183 @@ void Builder::scanProgramWriters() {
     }
 }
 
+void Builder::scanClosureLastUses() {
+    closureUseOf_.clear();
+    // A closure the program binds to a name (`let g = () => x`) is used where the block that binds it
+    // names `g`: design principles 3.5 (198) takes that name's last use for the closure's. Two other
+    // shapes are left out on purpose, because this scan cannot end their stretch and a stretch cut
+    // wide is a legal program refused: a closure written at a call's argument position is used by
+    // that call, and one the program puts into another value is used to the end of the scope.
+    struct Binding {
+        const GCT::Node *closure = nullptr;
+        const GCT::Node *block   = nullptr;
+        std::string name;
+        size_t at = kNoSourceOffset;
+    };
+    // The names each block writes, with the last offset it writes them at. The block is the key and
+    // not the function: a name bound again in a block inside it is another name, and the closure the
+    // outer block bound is not used by it -- which is also why a use written in a nested block is
+    // not counted for the binding outside it (the stretch is cut short, never long).
+    std::unordered_map<const GCT::Node *, std::unordered_map<std::string, size_t>> usesOfBlock;
+    std::vector<Binding> bindings;
+    struct Pending {
+        GCT::node_ptr_t node = nullptr;
+        // The innermost block (an EXEC) the node stands in, and the innermost function around it.
+        const GCT::Node *block    = nullptr;
+        const GCT::Node *function = nullptr;
+    };
+    std::vector<Pending> pending;
+    for (const auto &[module, unit] : units_) {
+        if (unit->tree != nullptr && unit->tree->root() != nullptr) {
+            pending.push_back({unit->tree->root(), nullptr, nullptr});
+        }
+    }
+    // The closure a binding's value is, if it is one: `let g = () => ...` is the reference `g` over
+    // the function node, and `var g = () => ...` puts that reference inside the cell's declaration.
+    // A VARI carries no name of its own (gct/node.h), so the name is read from the reference it
+    // declares -- reading one off the cell is not a question the node answers.
+    struct ClosureBinding {
+        const GCT::Node *closure = nullptr;
+        std::string name;
+    };
+    const auto closureOf = [](const GCT::node_ptr_t &node) -> ClosureBinding {
+        const auto functionValue = [](const GCT::node_ptr_t &value) -> const GCT::Node * {
+            return value != nullptr && value->type() == GCT::NodeKind::FUNC ? value : nullptr;
+        };
+        if (node == nullptr) {
+            return {};
+        }
+        if (node->type() == GCT::NodeKind::NREF) {
+            for (size_t i = 0; i < node->size(); ++i) {
+                if (const GCT::Node *found = functionValue(node->at(i)); found != nullptr) {
+                    return {found, node->name()};
+                }
+            }
+            return {};
+        }
+        if (node->type() == GCT::NodeKind::VARI) {
+            for (size_t i = 0; i < node->size(); ++i) {
+                const GCT::node_ptr_t declared = node->at(i);
+                if (declared == nullptr || declared->type() != GCT::NodeKind::NREF) {
+                    continue;
+                }
+                for (size_t k = 0; k < declared->size(); ++k) {
+                    if (const GCT::Node *found = functionValue(declared->at(k)); found != nullptr) {
+                        return {found, declared->name()};
+                    }
+                }
+            }
+        }
+        return {};
+    };
+    while (!pending.empty()) {
+        const Pending current = pending.back();
+        pending.pop_back();
+        const GCT::node_ptr_t node = current.node;
+        if (node == nullptr) {
+            continue;
+        }
+        const GCT::Node *block    = current.block;
+        const GCT::Node *function = current.function;
+        if (node->type() == GCT::NodeKind::FUNC) {
+            // A function's own body binds and uses its own names: nothing of it is this block's.
+            function = node;
+            block    = nullptr;
+        } else if (node->type() == GCT::NodeKind::EXEC) {
+            block = node;
+        }
+        // A binding in this block whose value is a closure.
+        if (node->type() == GCT::NodeKind::NREF || node->type() == GCT::NodeKind::VARI) {
+            if (const ClosureBinding binding = closureOf(node); binding.closure != nullptr) {
+                bindings.push_back(
+                    {binding.closure, block, binding.name, sourceOffsetOf(node->origin())});
+            }
+        }
+        // A use of a name in this block: a reference the program writes (`g()`, `g`, `g.f`). A cell
+        // carries no name, so only the two reference kinds are read here.
+        if ((node->type() == GCT::NodeKind::NREF || node->type() == GCT::NodeKind::DREF) &&
+            !node->name().empty() && block != nullptr) {
+            // The binding's own reference is not a use of it: the closure is made there.
+            const bool bindingHere =
+                node->type() == GCT::NodeKind::NREF && closureOf(node).closure != nullptr;
+            if (!bindingHere) {
+                const size_t at = sourceOffsetOf(node->origin());
+                if (at != kNoSourceOffset) {
+                    size_t &last = usesOfBlock[block][node->name()];
+                    if (last < at) {
+                        last = at;
+                    }
+                }
+            }
+        }
+        for (size_t i = 0; i < node->size(); ++i) {
+            pending.push_back({node->at(i), block, function});
+        }
+    }
+    for (const Binding &binding : bindings) {
+        if (binding.closure == nullptr) {
+            continue;
+        }
+        size_t lastUse = binding.at;
+        if (binding.block != nullptr) {
+            const auto uses = usesOfBlock.find(binding.block);
+            if (uses != usesOfBlock.end()) {
+                const auto named = uses->second.find(binding.name);
+                if (named != uses->second.end()) {
+                    lastUse = named->second;
+                }
+            }
+        }
+        if (binding.at != kNoSourceOffset && lastUse > binding.at) {
+            closureUseOf_[binding.closure] = {lastUse, false, binding.name};
+        } else if (binding.at != kNoSourceOffset) {
+            // The block never names the closure again after the binding. Two shapes reach here and
+            // the graph does not tell them apart: a closure the program put into another value (a
+            // tuple, a struct, an array, a `Ref`, a return) -- whose construction may have dropped
+            // the value from the datum it built, so no reference to the closure is left to walk --
+            // and one the program never used at all. Design principles 3.5 (198) gives the first
+            // shape an end: "the closure's value put into another value runs to the rest of the
+            // scope". A stretch cut that far covers every write after the making, which is what the
+            // report reads; the shape the design keeps legal, a name assigned after the closure is
+            // done with, still shows as a use after the write and keeps its own offset above.
+            //
+            // Known over-wide, and not resolved here. The second shape -- a closure bound to a name
+            // that the block never uses again, with no placement behind it -- has no stretch under
+            // 3.5 and is legal, and this branch reports a write after it anyway:
+            //
+            //     let h = (): int => c     // never used
+            //     c = 41                   // reported, though the stretch is empty
+            //
+            // The two shapes are not separable in the graph: making the closure's value part of
+            // another value folds it out of the construction that built it, so the walk meets the
+            // closure node exactly once (its own binding) and no node carries the name. The way to
+            // narrow it is to read the placement off the source -- the tuple, struct, array, `Ref`
+            // or return the value is put into -- and not to keep counting names in the graph. The
+            // measured pair that makes this visible: `let h = (): int => c; let first = h(); c = c + 1`
+            // prints 0 and is legal (the last use is the call), while the shape above is refused.
+            closureUseOf_[binding.closure] = {binding.at, true, binding.name};
+        }
+    }
+}
+
 bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
     // From here on this builder answers the `match type` cases whose guards decide them: the type
     // layer asks for a predicate's answer while it selects a case, and only a build can read one
     // (typevar.h `typeCaseGuardEvaluator`, design principles 5.5).
     GuardScope guardScope(*this);
+    // And it records the pairs of function types one type variable is asked for, judged once every
+    // body is measured (resource_conflict.h).
+    ResourceConflictScope conflictScope(*this);
 
     // The conservative writer set, made before any body is built (design principles 3.1, 3.5):
     // which variables the program writes is in the construction trees, and a function whose module
     // has not been built yet still has its body there. A call through a function value, whose
     // callee this layer does not know, is a possible write of those variables (visitLinkNode).
     scanProgramWriters();
+    // And the last use of every closure the program binds to a name, from the same trees and for the
+    // same reason: design principles 3.5 (198) makes a name unassignable from the making of a
+    // closure to that use, and the end of that stretch is in the source, not in a body.
+    scanClosureLastUses();
 
     // The modules in the order of their imports: a module after those it imports, except
     // around a cycle of imports, where one of them comes first (its uses of the others build
@@ -953,10 +1158,6 @@ bool Builder::buildFrom(ModuleUnit &entry, bool callEntry) {
                 reportEffectfulConditions();
                 // Before the bodies are let go, like reportDroppedEffectsOfBodies below.
                 checkInferredResources();
-                // The state rule (design principles 3.5, rule two): a closure may not carry a `var`
-                // capture out of the evaluation that declared it. Also before the bodies are let
-                // go.
-                checkCellEscapes();
                 // The content rule of `Ref<T>` (the author's ruling of 2026-11-14): a reference
                 // may hold any type but one that holds a reference, because the boxes are
                 // reclaimed by counting the handles that point at them. Also before the bodies are

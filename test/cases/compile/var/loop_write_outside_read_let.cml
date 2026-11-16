@@ -1,0 +1,15 @@
+/**
+ * The same program as `loop_write_outside_read.cml`, written without `var`: the accumulated value
+ * is the loop's second carried state, and the read after the loop takes it from there.
+ *
+ * This is the reference writing for the canonical-graph comparison in
+ * `test/plans/feat/compile/var.plan.toml`: the two writings must have one canonical graph
+ * (`std::jgir canonical=true`, byte for byte). It prints `21`, the same as the `var` writing.
+ *
+ * Run: camel test/cases/compile/var/loop_write_outside_read_let.cml std::nvm
+ */
+func main(): int sync {
+    let (i, total) = loop i = 0, total = 0 while i < 3 do (i + 1, total + i * 7)
+    println(total)
+    return 0
+}

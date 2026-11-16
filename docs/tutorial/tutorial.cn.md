@@ -516,6 +516,7 @@ func main(): int sync {
 [`examples/07_closures.cml`](examples/07_closures.cml)：
 
 ```cml
+import state
 
 func inc(x: int): int { return x + 1 }
 func dbl(x: int): int { return x * 2 }
@@ -538,9 +539,9 @@ func main(): int sync {
     let ops = [inc, dbl]                     // functions in an array
     println(ops->map<(f: (x: int) => int): int => f(10)>)
 
-    var total = 0                            // captured by reference
-    [1, 2, 3]->foreach<(x) => sync { total = total + x }>
-    println(total)
+    let total = state::ref(0)                // shared state: a handle a closure may capture
+    [1, 2, 3]->foreach<(x) => sync { state::set(total, state::get(total) + x) }>
+    println(state::get(total))
     return 0
 }
 ```
@@ -553,7 +554,7 @@ func main(): int sync {
 ```
 
 - 函数是值：可以赋给名字、作实参、作返回值、放进数组。函数类型写作 `(x: int) => int`。
-- lambda 捕获外层的变量，捕获是引用。最后一个 lambda 写入了被捕获的 `total`，所以它前面有函数修饰符 `sync`（声明有副作用），函数体又是同步块（`=> sync { ... }`）。
+- lambda 捕获外层的变量，捕获的是**值**：拿到的是创建那一刻的值，不是名字（设计原则 3.5）。所以 lambda 不能给捕获到的名字赋值，累加要写在外层（`total = total + x` 是编译错误 `SemanticDiag::ClosureAssignsCapturedName`），或者把状态放进 `Ref`：最后一个 lambda 写的是句柄 `total` 指向的盒子，所以它前面有函数修饰符 `sync`（声明有副作用），函数体又是同步块（`=> sync { ... }`）。
 - 同名而形参类型不同的函数是重载；代表一组重载的名字只有在期望的函数类型能选出其中一个的位置上才能当值用（传给形参类型写明的函数），其他位置写一个 lambda 包一层。只有一个签名的库算子（如 `trim`）可以直接当值：`xs->map<trim>`。
 
 ## 8. 泛型

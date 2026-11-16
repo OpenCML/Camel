@@ -1,0 +1,107 @@
+# Design principles 3.1 and 3.3, as the author ruled them on 2026-11-16 (the ruling superseded the
+# sentence 3.3 carried since 11-15, "对 `Ref` 的写由之后的读者用到"): a write of a handle runs because
+# the region it is written in runs, exactly like a write of an external resource.
+#
+# A `Ref` is a handle type: one resource per value, and the program owns it. Its write is therefore
+# not a write to something outside the program (`OperatorSemantics::external` is false for it, and
+# rightly so), and yet it is a write all the same -- and the condition on external writes did not
+# cover it. Until `writesForTheRegion` was widened, a `state::set` written as a statement (its value
+# nobody wants) was dropped: the write node never entered the execution, the box kept the value it
+# started with, and the `ORDER` edge joining the write to the read of the same box decided nothing,
+# because the liveness walk (`src/runtime/graph.cpp#liveNodesWith`) and the dead-write rule
+# (`src/runtime/draft_writes.cpp#deadWriteWith`) read data, control and sync edges and never order.
+#
+# Why the root and not an edge from the reader: `region_roots.h` keeps "the region uses them" out of
+# the graph on purpose ("图上不加边"), and a real data edge would need a version operand on `get` and
+# `update`, which handles do not have today -- that is a semantic rewrite, not a fix.
+#
+# The cost the author accepted: a write that truly has no reader anywhere now runs once instead of
+# being deleted. It is unobservable, and it moves debugger line coverage and timing -- accepted, and
+# not a reason to go back to "keep it only when this graph has a reader", because the readers of
+# `r5`..`r8` below are in other graphs and cannot be seen from the one that writes.
+#
+# This lane does NOT merge to develop: `R3` (a write in a loop body) is blocked on `lane-portbind`,
+# and `R1` (a write in the arm of an `if` statement nobody takes a value from) is blocked on the
+# branch-statement semantics that another lane owns. Both are written up in `refwrite_shapes.cml`,
+# and neither is pinned here -- a case pins what a rule requires, not what a defect answers.
+#
+# `refwrite_shapes` is every acceptance shape that runs today; `refwrite_dead_arm` is the criterion
+# that decides whether the root was placed by the region or by the file: a write in an arm that is
+# not taken must not run.
+
+id = "compile.refwrite"
+order = 1013
+tier = "fast"
+tags = ["feat", "compile", "effects", "state", "ref", "regions"]
+desc = "A write to a reference is a root of the region it is written in (design principles 3.1 and 3.3): it runs although nothing reads the value it answers, whether its reader is later in this graph, in an arm whose value is taken, in a callee, in a caller of a box that escaped, or in a later call of a closure that carries the box. Two acceptance shapes are not here and are blocked, not passed: a write in the arm of an `if` whose value nobody takes (a `println` there does not run either), and a write in a loop body (blocked on `lane-portbind`: a read of an outer `Ref` inside a loop body already faults on the tree this lane started from)."
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 20000
+
+[[tests]]
+name = "refwrite.shapes"
+desc = "Every acceptance shape that runs today answers without a diagnostic: a write in an arm whose value is taken (8), a write whose reader is the callee (4), a write whose reader is the caller of a box that escaped through `return` (3), a write whose reader is a later call of a closure that carries the box (2), a write through one of two same-typed handle names read through the other (6), and the reported shape, a bare `set` and then a read of the same body (1). The four back ends print the same bytes."
+kind = "behavior"
+case = "../../../cases/compile/ref/refwrite_shapes.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  const want = 'r1b=8 r5=4 r6=3 r7=2 r8=6 p=1\n'
+  assert(out === want,
+    'every write with a reader somewhere runs: want ' + JSON.stringify(want) +
+    ' got ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  assert(input.diagnostics.length === 0,
+    'nothing is dropped, so nothing is reported: ' +
+    input.diagnostics.map(d => d.name + '@' + (d.data && d.data.line)).join(', ') + ' ' +
+    input.normalized.stderr)
+}
+'''
+
+[[tests]]
+name = "refwrite.shapes.default"
+desc = "The same program through the default pipeline (the interpreter): every shape answers what `refwrite.shapes` pins, so the reading is not one back end's."
+kind = "behavior"
+case = "../../../cases/compile/ref/refwrite_shapes.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  const want = 'r1b=8 r5=4 r6=3 r7=2 r8=6 p=1\n'
+  assert(out === want,
+    'every write with a reader somewhere runs: want ' + JSON.stringify(want) +
+    ' got ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  assert(input.diagnostics.length === 0,
+    'nothing is dropped, so nothing is reported: ' +
+    input.diagnostics.map(d => d.name).join(', ') + ' ' + input.normalized.stderr)
+}
+'''
+
+[[tests]]
+name = "refwrite.dead_arm"
+desc = "The reverse criterion, and the one that says where the root was placed: a write in an arm that is not taken does not run. `if false then { set(c, 1) }` then a read answers 0, and the same branch on a parameter called with `false` -- which cannot be folded away -- answers 0 too. A root recorded for the whole body, or for a node regardless of its region, would answer 1 and 9 here; that is the shape this entry exists to catch."
+kind = "negative"
+case = "../../../cases/compile/ref/refwrite_dead_arm.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === 'r2=0 r2b=0\n',
+    'an arm that is not taken writes nothing: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+  const names = input.diagnostics.map(d => d.name)
+  assert(names.every(n => n === 'SemanticDiag::EffectNotExecuted'),
+    'the only report an untaken arm may carry is the one that names it: ' + names.join(', '))
+}
+'''

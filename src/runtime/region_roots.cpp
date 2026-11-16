@@ -12,7 +12,7 @@
 
 namespace camel::runtime {
 
-bool writesOutsideResource(GCNodeKind kind, camel::core::OperId oper) {
+bool writesForTheRegion(GCNodeKind kind, camel::core::OperId oper) {
     if (kind != GCNodeKind::Oper) {
         // A FUNC or a CALL runs a graph, and what that graph writes is written in the graph's own
         // body, where it is a root already (design principles 3.2: a function's behaviour is its
@@ -23,7 +23,7 @@ bool writesOutsideResource(GCNodeKind kind, camel::core::OperId oper) {
     if (oper == camel::core::kNoOper) {
         return false;
     }
-    return camel::core::OperatorTable::instance().writesOutside(oper);
+    return camel::core::OperatorTable::instance().writesForTheRegion(oper);
 }
 
 uint32_t decidingRegionOf(const GCGraph &graph, gc_node_ref_t ref) {

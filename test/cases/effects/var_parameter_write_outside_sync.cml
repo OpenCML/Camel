@@ -1,0 +1,35 @@
+/**
+ * A `var` parameter is passed in by value and passed back by value (design principles 3.5): the
+ * body writes its own name, and the write lands in the caller's name when the call returns. That
+ * write is a result of the function beside the returned value, so the body's exit uses it (design
+ * principles 3.1), with a `sync` body and without one alike.
+ *
+ * The first line is 0 and not 1: `store` reads `x`, and a closure reads the value the name had
+ * where the closure was made (3.5, 197) -- the write-back of `y` counts after the call, so `x` is
+ * still 0 inside the body, and the line after it is 1, the write-back. While the by-reference
+ * capture stood, the two names were one cell and the first line read 1.
+ *
+ * Before the rule about the body's exit was written, a body that was not a `sync` block dropped
+ * the write ("nothing depends on it"), and the first two lines printed `0 0`.
+ */
+
+func bump(var v: int): void {
+    v = v + 1
+}
+
+func main(): int sync {
+    var x = 0
+    // `y` is this body's own name: `y = 1` is written back to `x` when the call returns, and the
+    // `x` the body reads is the value `x` had where the closure was made, which is 0.
+    let store = (var y: int): int => { y = 1; return x }
+    println(store(x))
+    println(x)
+    // The same write with a `sync` body: this body always ran it, and it is the reading the body
+    // without `sync` has to agree with.
+    let storeSync = (var z: int): int => sync { z = 2; return z }
+    println(storeSync(x))
+    println(x)
+    bump(x)
+    println(x)
+    return 0
+}

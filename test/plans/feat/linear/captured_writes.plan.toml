@@ -6,7 +6,7 @@ tags = ["feat", "linear", "var", "capture", "wait"]
 
 [[tests]]
 name = "captured_write_order.default"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: default (no pass)."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}"]
@@ -22,7 +22,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.fvm"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::fvm."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::fvm"]
@@ -38,7 +38,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.jit"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::jit."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::jit"]
@@ -54,7 +54,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.tf"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::tf."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::tf"]
@@ -70,7 +70,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.inline"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt::inline."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::opt::inline"]
@@ -86,7 +86,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.opt"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::opt"]
@@ -102,7 +102,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.simplify"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::opt"]
@@ -118,7 +118,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro"]
@@ -134,7 +134,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_fvm"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::fvm."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::fvm"]
@@ -150,7 +150,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_jit"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::jit."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::jit"]
@@ -166,7 +166,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_tf"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::tf."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::tf"]
@@ -182,7 +182,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_inline"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt::inline."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -198,7 +198,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_opt"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -214,7 +214,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_simplify"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -230,7 +230,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.inline_fvm"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt::inline std::fvm."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -246,7 +246,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.simplify_tf"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::opt std::tf."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -262,7 +262,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "captured_write_order.macro_opt_jit"
-desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. Pipeline: std::macro std::opt std::jit."
+desc = "A call of a function, or a branch, that writes a captured variable is a write of it: reads written after it see the new value, a waited one comes after the earlier uses. The one sub-case whose state a nested function writes holds it in a `Ref` (`nested_then_read`), because a closure cannot assign a name of the body around it (design principles 3.5); the handle is handed to the nested function as an argument. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_order.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -627,7 +627,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "captured_write_graph.warnings"
-desc = "IgnoredSideEffect for captured writes: reported for the call of a function that writes a captured variable outside a sync block and for such a branch outside one; not for a call written inside a sync body, and not for a recursive function that only reads the variable it captured (inside its open body its writes are an upper bound, the warning is decided once all bodies are built). The same function is not reported as an undeclared writer either."
+desc = "IgnoredSideEffect for captured writes: reported for the call of a function that writes a captured variable outside a sync block (39:20), and not for the arm at 58:13 that writes its local `c` directly -- a write to a `var` is a value and the branch hands it on (design principles 3.1, 3.5; the ruling of 2026-11-16), so that branch is no longer reported. Also not reported: a call written inside a sync body, and a recursive function that only reads the variable it captured (inside its open body its writes are an upper bound, the warning is decided once all bodies are built). The same function is not reported as an undeclared writer either."
 kind = "behavior"
 case = "../../../cases/linear/byref/captured_write_graph.cml"
 args = ["--output-format", "json", "${case}"]
@@ -638,9 +638,11 @@ verify_script = """
 const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const ignored = diags.filter(d => d.data.name === 'SemanticDiag::IgnoredSideEffect').map(d => at(d) + ' ' + d.message)
+// The call's write is the one that is still not handed back at the call; the arm's direct write is
+// the value the branch hands on. Asserted as the whole list, in order, so a warning that comes back
+// or a second one that appears is red.
 const want = [
     "39:20 The call of 'write_a: () => int uses var captured_write_graph::a' is not in a sync block, and it writes the captured variable 'a'.",
-    "58:13 The branch is not in a sync block, and an arm writes the captured variable 'c'.",
 ]
 assert(JSON.stringify(ignored) === JSON.stringify(want), 'IgnoredSideEffect: ' + ignored.join(' | '))
 assert(!diags.some(d => d.message.includes("'look'") || d.message.includes("'limit'")), 'the read-only recursive function is not reported')
@@ -828,7 +830,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "lambda_capture_write.default"
-desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: default (no pass)."
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the `Ref` `c` the lambda captured as a handle, its `sync` body runs with the call, and the read written after it prints 1. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_write.cml"
 args = ["${case}"]
@@ -844,7 +846,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_write.fvm"
-desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: std::fvm."
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the `Ref` `c` the lambda captured as a handle, its `sync` body runs with the call, and the read written after it prints 1. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_write.cml"
 args = ["${case}", "std::fvm"]
@@ -860,7 +862,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_write.jit"
-desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: std::jit."
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the `Ref` `c` the lambda captured as a handle, its `sync` body runs with the call, and the read written after it prints 1. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_write.cml"
 args = ["${case}", "std::jit"]
@@ -876,7 +878,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_write.tf"
-desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the captured `c`, the read written after it runs the write, and the program prints 1. Pipeline: std::tf."
+desc = "A lambda bound to a name in the same function has a body the call site can see: `f()` is a write of the `Ref` `c` the lambda captured as a handle, its `sync` body runs with the call, and the read written after it prints 1. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_write.cml"
 args = ["${case}", "std::tf"]
@@ -892,7 +894,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.default"
-desc = "The same lambda with nothing reading `c` after the call: the write does not execute. Its body prints `c` after writing it, so a body that ran would print 1; the program prints only the 0 of `main`, which is the proof and not an absence of a report. Pipeline: default (no pass)."
+desc = "The same lambda with nothing reading the `Ref` after the call: the write does not execute. Its body prints the content after writing it, so a body that ran would print 1; the program prints only the 0 of `main`, which is the proof and not an absence of a report. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["${case}"]
@@ -908,7 +910,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.fvm"
-desc = "The same lambda with nothing reading `c` after the call: the write does not execute. Its body prints `c` after writing it, so a body that ran would print 1; the program prints only the 0 of `main`. Pipeline: std::fvm."
+desc = "The same lambda with nothing reading the `Ref` after the call: the write does not execute. Its body prints the content after writing it, so a body that ran would print 1; the program prints only the 0 of `main`. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["${case}", "std::fvm"]
@@ -924,7 +926,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "lambda_capture_ignored.warning"
-desc = "The call through a `let`-bound lambda that nothing follows is reported once, at the call: today the warning is `SemanticDiag::EffectNotExecuted` (the call is never executed, nothing depends on it), not `IgnoredSideEffect`; the write it would make is dropped with it (proved by the output of the test above)."
+desc = "The call through a `let`-bound lambda that nothing follows is reported once, at the call: today the warning is `SemanticDiag::EffectNotExecuted` (the call is never executed, nothing depends on it), not `IgnoredSideEffect`; the write it would make is dropped with it (proved by the output of the test above). The lambda writes a `Ref` it captured as a handle (design principles 3.5: a closure cannot assign a name of the body around it)."
 kind = "behavior"
 case = "../../../cases/linear/byref/lambda_capture_ignored.cml"
 args = ["--output-format", "json", "${case}"]
@@ -935,8 +937,8 @@ verify_script = """
 const diags = JSON.parse(input.stderr)
 const at = d => (d.range.start.line + 1) + ':' + (d.range.start.character + 1)
 const seen = diags.map(d => d.data.name + ' at ' + at(d))
-assert(seen.join(' | ') === 'SemanticDiag::EffectNotExecuted at 16:5', 'diagnostics: ' + seen.join(' | '))
-assert(diags[0].message === 'The call has side effects but is never executed: nothing depends on it and it is not in a sync block.',
+assert(seen.join(' | ') === 'SemanticDiag::EffectNotExecuted at 22:5', 'diagnostics: ' + seen.join(' | '))
+assert(diags[0].message === 'The call is never executed: nothing needs what it gives, so nothing runs it.',
     'message: ' + diags[0].message)
 }
 """

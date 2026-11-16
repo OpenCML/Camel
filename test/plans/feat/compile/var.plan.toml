@@ -28,6 +28,15 @@
 # Both are the one reason -- a `var` is still a unit -- so the entry goes green with item 1 and must
 # not be added to `known_fail`: a red here is the statement that the work is not done.
 #
+# Measured again 2026-11-15 in the evening on f4bb08f241: the entry now **passes**, and the reading
+# above is why it can pass while the work is not done. The step it names has a `var` chain that
+# folds entirely into values, so `:var/new` is left with no user and is pruned; two documents with
+# no unit in either are the same bytes whether or not a unit is ever lowered. A green there is not
+# evidence. The entries at the end of this file are the ones that carry a `var` a fold cannot
+# take out -- one written in a loop and read after it, one read by a closure -- and they are red,
+# for the reason the pair above is red on an older tree. Its assertions are left exactly as they
+# were: they are a real reading again once the pair it names keeps a unit.
+#
 # The comparison is on the canonical document only, so nothing here fixes the *format* of that
 # document; a change to `canonical=true` is a change to what equivalence means and is not this
 # plan's business.
@@ -39,7 +48,7 @@ tags = ["feat", "compile", "var", "gir", "autodiff"]
 
 [[tests]]
 name = "var.assignment_and_let_chain_are_one_graph"
-desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA."
+desc = "An assignment to a `var` and the equivalent `let` chain have one canonical graph: `std::jgir canonical=true` prints the same bytes for the two writings of one gradient step, and so does the canonical output of the derivative (`std::macro std::jgir canonical=true`). Red on 96a27e435 because the `var` writing still builds a unit (:var/new, three :var/get and :var/assn_d in its graph) and `grad` refuses it outright; green when a unit is lowered to SSA. **It is green on f4bb08f241 for the opposite of that reason**: the whole `var` chain folds, `:var/new` is pruned, and a document with no unit in it proves nothing about lowering one. Read the six entries below for the discriminating half."
 kind = "behavior"
 tool = "node"
 case = "../../../../test/tools/writing-freedom.mjs"
@@ -78,3 +87,264 @@ expect_stdout_contains = ["3"]
 expect_stdout_not_contains = ["0"]
 normalizers = ["normalize_newlines"]
 timeout_ms = 20000
+# A loop body that writes an outer `var`, and the same accumulation written as the loop's carried
+# value: one program in two writings, so the canonical documents must be the same bytes. Red today,
+# and a red here is the statement that queue item 1 is not done -- specifically, the third of the
+# author's three places: a loop assignment must become the loop's state. A write inside a loop body
+# keeps its `:var/get` (the value the previous turn carried is not any node's input), so the `var`
+# writing still builds a unit while the `let` writing has none. Do not add this entry to
+# `known_fail`: it must stay red until the lowering exists, and it is meant to be the acceptance that
+# can tell "the unit was lowered" from "the unit was folded away".
+[[tests]]
+name = "var.a_loop_assignment_is_the_loops_state"
+desc = "`var total = 0` written in a loop body and the same accumulation written as the loop's carried value have one canonical graph: `std::jgir canonical=true` prints the same bytes. Red today because the write in a loop body keeps its `:var/get`/`:var/new` while the `let` writing is the LOOP's state."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "loop"]
+expect_exit = 0
+expect_stdout_contains = ["[graph] let identical"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# The same question for an arm of an `if`: `var x = 0; if c then { x = 1 } else { x = 2 }` against
+# `let x = if c then 1 else 2`. Red today, and a red here is the statement that the second of the
+# author's three places is not done either: a branch assignment must become the branch's result.
+# The arm's write reaches the cell through the JOIN, so its `:var/get` stays and the `var` writing
+# still builds a unit. Not `known_fail`, for the same reason.
+[[tests]]
+name = "var.an_arm_assignment_is_the_branch_result"
+desc = "`var x = 0` written in each arm of an `if` and the same choice written as the branch's value have one canonical graph: `std::jgir canonical=true` prints the same bytes. It was red because an arm's write kept its `:var/get`/`:var/new` while the `let` writing was the branch's own result. It is green because the branch carries the write as its own value (the read after it takes the JOIN, so no `:var/get`, and the arm's result is the value it wrote) and the unit the carry left unread -- `:var/new`, its stores, the GATEs that handed the statement's value out and the value the cell was made with -- is dropped at the end of the graph (dropCarriedVariableUnits, each node only when it has no user of any kind). Both writings now print the same bytes."
+kind = "behavior"
+tool = "node"
+case = "../../../../test/tools/writing-freedom.mjs"
+args = ["${case}", "--group", "arm"]
+expect_exit = 0
+expect_stdout_contains = ["[graph] let identical"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 120000
+
+# --- the discriminating half: a `var` a fold cannot take out of the program --------------------
+#
+# The entry at the top compares two writings of one gradient step, and that step's `var` chain folds
+# away, so both documents are the same bytes with no unit in either and the entry says nothing
+# about lowering one. The two programs below are the author's counterexample shape (2026-11-15 in
+# the evening): the `var` is written in a loop and read outside it, or read by a closure. A read in
+# another place cannot be answered by the value alone, so `:var/new` keeps a user, a unit is built,
+# and the two writings of the same program do not print the same document until a unit is lowered
+# to SSA.
+#
+# Each shape is three entries and has two halves:
+#   * the program's own behavior -- it runs under `std::nvm` and prints the value the write wrote
+#     (`21` from the loop, `2` from the closure), never the value the `var` started with;
+#   * the pair's canonical graph -- the `var` writing and the `let` writing, both under
+#     `std::jgir canonical=true`, compared byte for byte by a `differential` entry
+#     (`compare_fields = ["stdout_normalized"]`), which is the shape the first entry uses and the
+#     shape the author asked for: one canonical graph for two writings.
+#
+# Red today, and red only because a unit is still built: the `var` writing's document carries
+# `:var/new`, the `:var/get` the read runs (and, in the closure, a `:var/get` inside the closure's
+# own graph instead of the value arriving there), and `:op/assn_l` for the write, while the `let`
+# writing carries none of them. The entries go green with the SSA lowering and must not be added to
+# `known_fail`: a red here is the statement that the work is not done.
+
+# The loop writing: `total` is written on every round and read after the loop, so the write is
+# carried state the fold cannot put where the read is. Three rounds add `i * 7`, so the read must
+# see `21`.
+[[tests]]
+name = "var.loop_write_outside_read_is_the_accumulated_value"
+desc = "`var total = 0; loop i = 0 while i < 3 do { total = total + i * 7 }` then read `total` prints `21`. The write is loop-carried state and the read is after the loop, so no fold can answer it with the value `var` started from (`0`) or with one round's `i * 7`."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_write_outside_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["21"]
+expect_stdout_not_contains = ["0"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The `var` writing's canonical document, which the next entry is compared against. Its own
+# assertion is that the document is produced (`exit 0`): what it must equal is the other writing's,
+# not a stored shape, and a shape stored here would freeze the dump instead of the equivalence.
+[[tests]]
+name = "var.loop_write_outside_read_graph"
+desc = "The canonical graph (`std::jgir canonical=true`) of the `var` writing of the loop program. The reference document for `var.loop_write_outside_read_is_the_let_writing`; it is not asserted against a stored shape, because the reading this plan takes is that the two writings agree, not that either has a particular shape."
+kind = "behavior"
+case = "../../../cases/compile/var/loop_write_outside_read.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The same program without `var`: the accumulated value is the loop's second carried state. Red
+# today: the `var` writing carries the value in a unit (one loop state plus `:var/new`,
+# `:op/assn_l` and the `:var/get` after the loop), the `let` writing carries it as a loop state
+# (two states, the body's tuple, and the extraction of the value after the loop), so the two
+# documents part wherever the unit is.
+[[tests]]
+name = "var.loop_write_outside_read_is_the_let_writing"
+desc = "`loop_write_outside_read.cml` and `loop_write_outside_read_let.cml` are one program written with a `var` and with a loop whose state carries the value instead; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing still carries the value in a unit (`:var/new`, `:op/assn_l`, the `:var/get` after the loop, and one loop state) where the `let` writing carries it as the loop's second state; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says is carried state (the read is after the loop, so no written value can answer it), which is a defect, not progress."
+kind = "differential"
+case = "../../../cases/compile/var/loop_write_outside_read_let.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+compare_to = "var.loop_write_outside_read_graph"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The closure writing: the `var` is written before the closure is made and read inside it, which
+# design principles 3.5 allows and which no fold can put where the read is.
+[[tests]]
+name = "var.closure_read_is_the_value_the_assignment_wrote"
+desc = "`var x = 1; x = 2; let read = () => x` then call `read()` prints `2`, the value the assignment wrote -- not the `1` the `var` started with. The read is in the closure's own graph, so answering `1` means the fold answered the initial binding instead of the write."
+kind = "behavior"
+case = "../../../cases/compile/var/closure_read.cml"
+args = ["${case}", "std::nvm"]
+expect_exit = 0
+expect_stdout_contains = ["2"]
+expect_stdout_not_contains = ["1"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The `var` writing's canonical document, the reference for the differential entry below (same
+# reason for asserting only `exit 0`).
+[[tests]]
+name = "var.closure_read_graph"
+desc = "The canonical graph (`std::jgir canonical=true`) of the `var` writing of the closure program. The reference document for `var.closure_read_is_the_let_writing`; asserted only to be produced, because the reading is the agreement of the two writings, not a stored shape."
+kind = "behavior"
+case = "../../../cases/compile/var/closure_read.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+expect_exit = 0
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# Same program, the value captured instead of a cell. Red today: the `var` writing keeps the unit
+# (`:var/new`, `:op/assn_l`, a `:var/get` inside the closure's graph, which reads the cell through
+# the closure's context), while the `let` writing hands the value to the closure and its graph
+# holds a port and nothing else.
+[[tests]]
+name = "var.closure_read_is_the_let_writing"
+desc = "`closure_read.cml` and `closure_read_let.cml` are one program written with a `var` read by a closure and with a `let` binding the closure captures; `std::jgir canonical=true` must print the same bytes for the two. Red today: the `var` writing's closure graph holds a `:var/get` that reads the unit through the closure's context, and its body graph holds `:var/new` and `:op/assn_l`, where the `let` writing's closure receives the value as a captured input and has no such nodes; green when a unit is lowered to SSA. This entry must stay red until step a of the `var`-to-SSA work lands, and it is meant to be red: a green here means the fold took a chain out of the program that the design says another place reads (the closure reads the cell from its own graph), which is a defect, not progress."
+kind = "differential"
+case = "../../../cases/compile/var/closure_read_let.cml"
+args = ["${case}", "std::jgir", "canonical=true"]
+compare_to = "var.closure_read_graph"
+compare_fields = ["exit_code", "stdout_normalized"]
+normalizers = ["normalize_newlines"]
+timeout_ms = 20000
+
+# The value capture port. This case exists because the port once crashed on exactly this program:
+# the closure's capture port is a value (`int`, not `var int`), and the call site of a direct call
+# of that function recorded a `:var/get` of the cell as what the call was worth; the fold at the
+# end of the caller's body erased the read, and `linkCaptureSites` linked a node that was gone, so
+# the builder aborted (`nodeTypeOf`, "Draft node is null", through `settleStreamLinearity`).
+[[tests]]
+name = "var.capture_value_port"
+desc = "The minimal trigger of the value capture port (`var c = 5`, a function reading `c`, one direct call of it and one value made of it): a closure that reads a variable of the module's top level is handed its value, so `read_c`'s capture port is `int` and its graph holds no `:var/get`, and a direct call of that function is handed the node the capture table holds rather than one read off the cell at the link step. It is here because the value port used to crash on this program: the read the call site recorded was erased by the fold, and the link step then linked a node that was gone (nodeTypeOf, the guarantee `node != nullptr`, through `settleStreamLinearity`). Both writings of the call must print 6."
+kind = "behavior"
+case = "../../../cases/compile/var/capture_value_port.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "6\n6\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# --- Step b of the `var`-to-SSA work: the write a body leaves on a `var` parameter ---------------
+#
+# A `var` parameter is a cell the caller made. The cell outlives the call, so the write the body
+# leaves in it is a result of the function beside the returned value (design principles 3.1), and
+# the caller reads that write afterwards. The entry below pins it, and it was red before the exit
+# used the write: outside a `sync` block the write was ordered after the reads written before it
+# and then dropped as an effect nothing ran, so `set(a)` left `a` at `0`.
+#
+# Both positions are in the one case file, because the reading this entry takes is that they agree,
+# not that one of them has a particular shape: `set` writes in a body that is not a sync block,
+# `in_block` writes inside a `sync { ... }` block of a body that is not sync, and the lambda adds
+# the unnamed-body position -- those three were red. `set_sync` (the whole body a sync block) and
+# `clear` (a body that returns `void`) are the controls: measured with the write-back off, they
+# already read correctly, so they are what must not move, not what this entry proves.
+[[tests]]
+name = "var.parameter_write_is_the_callers_value"
+desc = "The write a function body leaves in a `var` parameter is what the caller reads afterwards: `set(a)` (a body that is not a sync block), `in_block(c)` (a `sync { ... }` block inside a body that is not sync) and a lambda leave `41`, `9` and `5` in the caller's cells, and the caller reads those values after each call; `set_sync(b)` (the whole body a sync block) and `clear(d)` (a `void` body) are the controls, correct before this change and unchanged by it. Measured with the write-back off, the three read `0 0`, `0 0`, `0 0` -- the caller's cell kept the value it started with -- while the controls read `0 42` and `0`; with the write-back on all five read what the body wrote. Red before the function's exit used the write: outside a `sync` block the write was ordered after the reads written before it and then dropped (`SemanticDiag::EffectNotExecuted`)."
+kind = "behavior"
+case = "../../../cases/compile/var/var_parameter_write_at_exit.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+expect_stdout_exact = "0 41\n0 42\n0 9\n0\n0 5\n"
+# The write a body leaves in a `var` parameter is handed back where the call stands, so not one of
+# these three writes is reported for being outside a `sync` block, and not one of them is an effect
+# that has to run (design principles 3.1 and 3.5, the ruling of 2026-11-15). Measured before it, this
+# same program's stderr held three `SemanticDiag::IgnoredSideEffect` (at 19:5, 40:5 and 57:36 --
+# `set`'s, `clear`'s and the lambda's write), each one saying the call of `<__assn__>` "is not in a
+# sync block, and it takes a var argument".
+expect_output_not_contains = ["SemanticDiag::IgnoredSideEffect", "SemanticDiag::EffectNotExecuted"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 30000
+
+# --- A write to a `var` whose value nobody reads -----------------------------------------------
+#
+# Assigning to a `var` is not an effect (design principles 3.1 and 3.5, the ruling of 2026-11-15), so
+# what such a write drops when nothing reads it is a value, and the one thing to report is that the
+# value nobody uses: `SemanticDiag::UnusedAssignedValue`, the same family as `UnusedPureResult` and
+# `UnusedFallibleValue`. Measured before the ruling, the case below reported two things about one
+# write -- `IgnoredSideEffect` (the call takes a var argument) and `EffectNotExecuted` ("The
+# assignment has side effects but is never executed"); both of those sentences are gone, and exactly
+# one is left.
+[[tests]]
+name = "var.unused_assigned_value_is_a_dropped_value"
+desc = "A write to a `var` whose value nobody reads is a dropped value and nothing else: the case reads the variable before the write (so the variable is used) and the write's value is read by nobody (`x = 1` at 15:7), so the run's stderr holds exactly one diagnostic -- `SemanticDiag::UnusedAssignedValue` -- and neither `IgnoredSideEffect` (a write outside a `sync` block) nor `EffectNotExecuted` (a statement nothing needs, written in a region that does not run) appears. The program still prints `0`, the value it read before the write."
+kind = "behavior"
+case = "../../../cases/compile/var/unused_assigned_value.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+# The one report, pinned by name and by the line and column it stands at.
+expect_diagnostic_name = "SemanticDiag::UnusedAssignedValue"
+expect_diagnostic_line = 15
+expect_diagnostic_column = 7
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0', `the value read before the write is what the program prints: ${JSON.stringify(out)}`)
+assert(input.diagnostics.length === 1, `exactly one diagnostic for one dropped value, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedAssignedValue', `the dropped value is named as a value: ${input.diagnostics[0].name}`)
+assert(input.diagnostics[0].line === 15 && input.diagnostics[0].column === 7, `reported at the write, not at the declaration: ${input.diagnostics[0].line}:${input.diagnostics[0].column}`)
+}
+"""
+timeout_ms = 30000
+
+# --- The same write, in a `sync` body and outside one -------------------------------------------
+#
+# The report is about the value, not about the body. A `sync` body is where a write whose value
+# nobody reads still runs -- it is a statement of the chain -- and running is the other question
+# (SemanticDiag::EffectNotExecuted). Both columns are pinned below: the writes at 17:7 and 24:7
+# store a value nothing reads and are reported in a body that is not a `sync` block and in one that
+# is, and the writes at 30:7 and 37:7 store the value their `return` reads and are reported in
+# neither. The silent half is as important as the loud half: it is the pin that the warning was not
+# switched off to make the loud half go away, and the value it restores is what `camel -Werror`
+# refused before (a read of a `var` in a body that is not a `sync` block takes the value the write
+# stores, not the write's node, so asking the node reported a value that was being read).
+[[tests]]
+name = "var.unused_assigned_value_both_bodies"
+desc = "A write whose value nobody reads is reported in a body that is not a `sync` block (17:7) and in one that is (24:7), and a write whose value the `return` reads is reported in neither (30:7, 37:7): the case holds one of each shape in each body, so the two columns of the rule are read off one run, and the program prints `a`, `b`, `c`, `d` and `1 1`."
+kind = "behavior"
+case = "../../../cases/compile/var/unused_assigned_value_both_bodies.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(['a', 'b', 'c', 'd', '1 1']), `unexpected output: ${out.join(' | ')}`)
+// The loud half: one write per body, each storing a value no read takes.
+const unused = input.diagnostics.filter((d) => d.name === 'SemanticDiag::UnusedAssignedValue').map((d) => `${d.line}:${d.column}`)
+assert(JSON.stringify(unused.sort()) === JSON.stringify(['17:7', '24:7']), `the two writes whose value nobody reads, in a sync body and outside one: ${unused.join(', ')}: ${input.normalized.stderr}`)
+// And nothing else: the write that runs is not an effect that failed to run, and no other warning
+// stands in for the two that are gone.
+const other = input.diagnostics.filter((d) => d.name !== 'SemanticDiag::UnusedAssignedValue')
+assert(other.length === 0, `nothing else is reported: ${other.map((d) => d.name).join(', ')}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 30000
+
+

@@ -1,0 +1,37 @@
+/**
+ * The reverse criterion of the `Ref` write rule (design principles 3.1): a write is a root of the
+ * REGION it is written in, so a region that does not run runs none of its writes. This is what
+ * tells a root placed by the region from a root placed by the file, or from "a handle write is
+ * always live": either of those would answer 1 and 9 here.
+ *
+ * `in_the_untaken_arm` writes in the arm of `if false`, and `arm(false)` writes in the arm of a
+ * condition only the run knows. Both answer 0, and both arms are still reported -- nothing will ever
+ * run them, which is exactly what `EffectNotExecuted` says.
+ *
+ * Not pinned here: `arm(true)`, the arm of a branch that IS taken, in a body that is not a `sync`
+ * block. It answers 0 on the tree of 2026-11-16 too, because the value of an `if` statement nobody
+ * takes is not run at all -- a `println` in that position does not print either. That is the second
+ * leg `R1` is blocked on (see `refwrite_shapes.cml`), and the shape belongs in that file, not in a
+ * case that pins what the rule forbids.
+ */
+
+import state
+
+func in_the_untaken_arm(): int {
+    let c = state::ref(0)
+    if false then { state::set(c, 1) }
+    return state::get(c)
+}
+
+func arm(flag: bool): int {
+    let c = state::ref(0)
+    if flag then { state::set(c, 9) }
+    return state::get(c)
+}
+
+func main(): int sync {
+    let r2 = in_the_untaken_arm()
+    let r2b = arm(false)
+    println(`r2=${r2} r2b=${r2b}`)
+    return 0
+}

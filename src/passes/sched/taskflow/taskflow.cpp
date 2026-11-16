@@ -12,6 +12,7 @@
 #include "camel/core/mm/root_handle.h"
 #include "camel/core/operator.h"
 #include "camel/core/rtdata/array.h"
+#include "camel/core/rtdata/foreign.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
@@ -1921,11 +1922,19 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     // On the calling thread: an operator decides itself whether its elements are worth
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
+    //
+    // The count's rows are run at both exits, because a marked operator is an operator node like
+    // any other: the rows of the values it uses come due when it has run. Its own value is a
+    // collection, so its own holds are filtered out by the type -- the same answer the other back
+    // ends give.
     if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
+        camel::runtime::applyRefEntriesForNode(graph->execPlan(), frame, nodeRef, *value);
         return *value;
     }
-    const auto *node = requireNode(graph, nodeRef);
-    return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    const auto *node   = requireNode(graph, nodeRef);
+    const slot_t result = node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    camel::runtime::applyRefEntriesForNode(graph->execPlan(), frame, nodeRef, result);
+    return result;
 }
 
 slot_t TaskflowExecSchedPass::executeLinearNode(
@@ -2174,9 +2183,29 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
     auto invoke = [&](operator_t function, ArgsView &with, ArgsView &normal) {
         with.setResultType(graph->node(nodeRef)->dataType());
         normal.setResultType(with.resultType());
+        // The anchor's site, in the node form -- the same one NodeVM uses, because this scheduler
+        // runs nodes too and this is where its operator runs. Bracketed per thread: this scheduler
+        // runs nodes of one graph on several threads, and the program-wide counter's difference
+        // around one call would also hold a neighbour's box.
+        const bool anchorWanted = camel::core::mm::allocatorChecks().printForeignResources;
+        camel::runtime::CountedBoxesBracket boxes;
+        if (anchorWanted) {
+            boxes.begin();
+        }
         const slot_t result = function(with, normal, *context_);
+        if (anchorWanted) {
+            camel::runtime::noteCountedCreationForNode(graph, nodeRef, boxes.sinceBegin());
+        }
         // Publish before this region is released, including on the task-graph path.
         frame->set(dataIndexOf(graph, nodeRef), result);
+        // The count's rows at this node's position -- the same site the anchor above is asked at.
+        // Run whether or not --gc-check was asked for: what a run releases is the program's
+        // behaviour (design principles 10.5) and the flag only says whether it is reported.
+        camel::runtime::applyRefEntriesForNode(
+            plan != nullptr && plan->shared != nullptr ? *plan->shared : graph->execPlan(),
+            frame,
+            nodeRef,
+            result);
         return result;
     };
 

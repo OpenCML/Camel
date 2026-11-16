@@ -234,8 +234,9 @@ node_handle_t Builder::createFuncDataNode(
     if (allowParameterization && (graph->parameterized() || !hasClosure || !valueMade)) {
         // A direct call: a FUNC node. At the first one the callee's capture ports become
         // with-ports after its declared ones (it is "parameterized"); every direct call then
-        // passes its captures as With inputs after the declared `with` arguments, linked by
-        // the link step (addCaptureSite, linkCaptureSites).
+        // passes its captures as With inputs after the declared `with` arguments: linked as edges
+        // where the call is built (addCaptureSite) and placed there by the link step
+        // (linkCaptureSites).
         if (!graph->parameterized()) {
             const std::vector<draft_node_ref_t> closureNodes(
                 graph->view().closureNodes().begin(),
@@ -282,15 +283,26 @@ node_handle_t Builder::createFuncDataNode(
         node_vec_t refNodes;
         const std::vector<CapturedValue> captured = capturedValues_[graph.get()];
         for (const CapturedValue &value : captured) {
-            node_handle_t ref = captureInto(currGraph_, value.origin, value.name);
+            node_handle_t ref      = captureInto(currGraph_, value.origin, value.name);
+            // The port the closure holds says whether this capture is a value or a cell: a value
+            // port is not a variable, a by-reference port is (`captureInto`). Asked of the port
+            // rather than worked out again from the origin, so that what is handed over here is
+            // the node the capture table holds, not one derived from the origin a second time.
+            const bool byValue = !isVariable(value.port);
             // A call written before this value in the same graph may be a writer of the variable
             // the value captures (the conservative writer set), and the closure reads it when it
             // runs: what it captures is the variable as it stands after that call, not the cell
             // from before it. The claim is the same one readVariableThrough takes, met here
             // because the read is inside the value rather than in this graph.
             if (const node_handle_t claim = claimedWriterOf(currGraph_.get(), value.origin);
-                claim != nullptr && sameGraph(claim, currGraph_) && ref != nullptr) {
+                claim != nullptr && sameGraph(claim, currGraph_) && ref != nullptr &&
+                isVariable(ref)) {
                 ref = variableAfterCall(ref, claim);
+            }
+            if (byValue && isVariable(ref)) {
+                // A value port is handed the value the variable holds where the closure is made,
+                // never the cell (design principles 3.5).
+                ref = readVariable(ref);
             }
             refNodes.push_back(ref);
         }
@@ -482,14 +494,56 @@ node_handle_t Builder::partialApplicationOf(
     if (calleeType == nullptr) {
         return nullptr;
     }
-    // A `with` parameter declared `var` is a variable the function writes, and binding one here
-    // is ordinary: the value the partial application captures is the cell, the body the new graph
-    // makes writes it through the call, and the graph's own signature says so -- the captured cell
-    // is one of its captures (graph model Q9, `partial-application-var`: "a `Forwarder` graph that
-    // captured the cell of `t`, its effect summary has the captured-variable bit set, its function
-    // type carries `sync`"). Design principles 3.5 writes the format of a right-hand side, not a
-    // restriction on what a context argument may be.
+    // A `with` parameter declared `var` is a variable the function writes: the call passes it in,
+    // the body writes it, and the call hands the new value back (design principles 3.5). The
+    // function value a partial application makes has no call of its own to write it back to, so
+    // binding one here is a compile error (design principles 3.5, the author's ruling of
+    // 2026-11-15: a partial application cannot bind a `var` context parameter).
     //
+    // It is refused here, at the binding, because the binding is what the rule is about. Until
+    // this check existed the rule had no report of its own and the closure rule refused the
+    // program second-hand, one graph later: the forwarder body hands the bound cell to a `var`
+    // parameter, so `Builder::requireCapturedNameWritable` met a captured name and reported
+    // `ClosureAssignsCapturedName` -- a rule about what a closure may assign, whose help names
+    // three repairs that all keep the partial application. The name in that report came from
+    // `Builder::originNames_`, which keeps the first name recorded for a value: a local cell keeps
+    // the name its `var` declaration gave it, while the value this body captured for a cell of an
+    // enclosing scope has only the synthetic `$taggedN` `Builder::bindTemporary` gave the bound
+    // argument, so a module cell was reported by a name the program never wrote.
+    //
+    // The report names the argument as the program wrote it: what can be found in the source at
+    // the binding, and the parameter it was handed to.
+    for (size_t i = 0; i < bound.size(); ++i) {
+        if (!calleeType->withIsVarAt(i)) {
+            continue;
+        }
+        // The argument as the program wrote it, not the name the graph made for it: the binding is
+        // what the reader has to find in the source (`let g = add<t>` names `t`).
+        std::string shown = bound[i].expr != nullptr ? sourceTextOf(bound[i].expr) : std::string{};
+        if (shown.empty() && bound[i].node != nullptr) {
+            const auto known = originNames_.find(bound[i].node);
+            if (known != originNames_.end()) {
+                shown = known->second;
+            }
+        }
+        if (shown.empty()) {
+            shown = "the argument";
+        }
+        // The parameter the function declared (`with <var total: int>`). A `var` parameter is
+        // named -- its body writes it -- so the guard is for the type alone, which may carry
+        // unnamed ones.
+        std::string declared;
+        if (i < calleeType->argNamesCount()) {
+            declared = calleeType->argNameAt(i);
+        }
+        if (declared.empty()) {
+            declared = std::format("__w{}", i);
+        }
+        diags_->of(SemanticDiag::VarContextParameterCannotBeBound)
+            .atOrigin(at)
+            .commit(shown, declared);
+        throw BuildAbortException();
+    }
     // A literal bound as a context argument takes the type of its `with` parameter here, now
     // that the callee is known, exactly as a literal argument does at a call (design principles
     // 5.1): the captured value is of the parameter's type, so the call the partial application
@@ -813,7 +867,8 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         bodyStates_[graph.get()] = BodyState::Open;
         graph->addDependencyGraph(target);
         // The call the target's direct callers make: the arguments, then the target's
-        // captures, which become captures of this graph (passed by the link step).
+        // captures, which become captures of this graph: linked here as the call's `with` inputs
+        // (addCaptureSite), after the ports above.
         node_handle_t call = addCallNodeOf(target);
         if (isMacroGraph(target)) {
             setNodeMacro(call, true);
@@ -823,6 +878,14 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         }
         for (draft_node_ref_t port : graph->view().normPorts()) {
             linkNodes(LinkType::Norm, graph->view().ref(port), call);
+        }
+        // A target whose captures are values is called with values: this graph holds them, so its
+        // own captures of the same variables are values as well (`captureByValue`).
+        for (const CapturedValue &value : capturedValues_[target.get()]) {
+            if (!isVariable(value.port)) {
+                valuePortGraphs_.insert(graph.get());
+                break;
+            }
         }
         addCaptureSite(call, target);
         bindGraphScopedFuncNodeDebug(sourceContext, targetOrigin, target, call);
@@ -929,7 +992,21 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
     // its cell and is never made SSA, wherever the callee is written.
     if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
         if (const std::string name = moduleLevelName(arg.expr->name()); nodeAt(name).has_value()) {
-            if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+            node_handle_t node = resolveNodeByRef(name);
+            // The name a closure captured is a PORT and not a variable once the capture is by value
+            // (design principles 3.5, 197): the port is the value the name had where the closure
+            // was made, so there is nothing for the callee's write-back to write, and the rule that
+            // answers that write is the capture's. It is asked for a port and a cell alike
+            // (`requireCapturedNameWritable`); without this the general rule for a name that is not
+            // a variable answers, naming neither the rule nor the way out.
+            if (node != nullptr && (isVariable(node) || capturePortOfAVariable(node))) {
+                // A `var` parameter is the caller's cell, and the callee's write-back is the
+                // assignment written at the call (design principles 3.5, 192): where the name is one
+                // a closure of this body already holds the value of, the write-back is the write
+                // 3.5 (198) refuses.
+                requireCapturedNameWritable(node, name, true, arg.expr->origin());
+            }
+            if (isVariable(node)) {
                 escapingVariables_.insert(node);
             }
         }

@@ -445,7 +445,7 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                     }
                 }
                 try {
-                    result = invokeNativeOperator(bc, *currFrame);
+                    result = invokeNativeOperator(bc, *currFrame, pc);
                 } catch (const RuntimeFault &fault) {
                     throw reportRuntimeFault(
                         *context_,

@@ -16,6 +16,14 @@
 # `ref.holds_ref_closure_unreadable` are the two halves of that: a reference three layers down, and
 # a capture whose graph is the caller's, both of which used to compile and run with no report.
 #
+# The same is true wherever the closure sits: a record's field, a tuple's part, an array's element,
+# and any nesting of those hold the closure instead of the box holding it directly, and the type
+# walk says only that a function is in there. Those three are the members of one `FILL` node, so
+# the walk reads them the same way and reaches the closure wherever it is; a container it cannot
+# read and cannot show to hold no function is refused too. `ref.holds_ref_closure_in_struct`,
+# `ref.holds_ref_closure_in_collection` and `ref.holds_ref_closure_in_struct_unreadable` are the
+# three containers, again with a control beside them.
+#
 # Two references made in one body are two resources: no order edge joins the operations on one to
 # the operations on the other, while two operations on one reference keep the order they are
 # written in. One entry runs the program (the read of `same` answers 22 only if the order is
@@ -214,6 +222,96 @@ verify_script = '''
 }
 '''
 
+# ---- the content: a container that holds a closure ----
+#
+# All three used to compile and run with no report, and the control beside them answers 42, 42 and
+# 1 on all four backends, so a refusal here cannot be green for the wrong reason.
+
+[[tests]]
+name = "ref.closure_in_container_control"
+desc = "The control of the three container refusals: a record, a tuple and an array, each holding a closure whose chain of captures ends at an integer. All three boxes are legal and the program answers 42, 42 and 1, so the refusals are about the reference inside those closures and not about a container, and not about a walk that refuses what it cannot follow."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_closure_in_container_control.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(out === '42\n42\n1\n',
+    'a record, a tuple and an array of closures are legal contents: ' + JSON.stringify(out) +
+    ' exit=' + input.exit_code + ' output=' + said)
+}
+'''
+
+[[tests]]
+name = "ref.holds_ref_closure_in_struct"
+desc = "A record holds a record whose field holds a closure, and the closure captured a reference: the box holds a reference at a position the type walk cannot see, because a closure's captures are not in its type. This program used to compile and run with no report at all, which is one box that can never be freed. The report names the field the closure sits in and the value it captured."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref_closure_in_struct.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
+  assert(text.includes('it holds a Ref'), 'the reason is a Ref inside the content: ' + text)
+  assert(text.includes("'n'"),
+    'the report names the value the reference is reached through: ' + text)
+  assert(text.includes("in field 'cb'"),
+    'the report names the field the closure sits in: ' + text)
+  assert(text.includes("field 'inner'"),
+    'the report names the outer field the walk went through: ' + text)
+}
+'''
+
+[[tests]]
+name = "ref.holds_ref_closure_in_collection"
+desc = "A tuple and an array, each holding a closure that captured a reference: both boxes hold a reference through a capture the type walk cannot see, so both are refused, one report each. The report names the part or the element the closure sits in."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref_closure_in_collection.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  const reports = (text.match(/cannot be the content of a reference/g) || []).length
+  assert(reports === 2, 'one report per box, so two places: ' + reports + ' in ' + text)
+  assert(text.includes("in part 0"),
+    'one report names the part of the tuple the closure sits in: ' + text)
+  assert(text.includes("in element 0"),
+    'the other names the element of the array the closure sits in: ' + text)
+  assert(text.includes("'n'"), 'both name the value the reference is reached through: ' + text)
+}
+'''
+
+[[tests]]
+name = "ref.holds_ref_closure_in_struct_unreadable"
+desc = "A record holds a closure, and the closure captured a function value whose graph is the caller's (`f` is a parameter). Reaching the closure is not enough: the walk has to be able to read what it captured, and here it cannot, so the box is refused rather than passed. This program used to compile and run (exit 42, no report)."
+kind = "negative"
+case = "../../../cases/compile/ref/err_holds_ref_closure_in_struct_unread.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::RefContentHoldsRef"
+expect_diagnostic_code = "0x03000211"
+verify_script = '''
+({ input, assert }) => {
+  const text = ((input.output || '') + ' ' + (input.stderr || '')).replace(/\s+/g, ' ')
+  assert(text.includes("cannot be the content of a reference"), 'the report states the rule: ' + text)
+  assert(text.includes('captures cannot be read'),
+    'the report says the capture could not be read, not that a Ref was found: ' + text)
+  assert(text.includes("in field 'cb'"),
+    'the report names the field the closure sits in: ' + text)
+  assert(text.includes("'f'"), 'the report names the value it could not read: ' + text)
+}
+'''
+
 # ---- two references are two resources ----
 
 [[tests]]
@@ -248,8 +346,19 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('499500\n20000\n41\n'),
+  // `--gc-check foreign` prints the plan's counted sites while the graph is compiled, so on a back
+  // end that compiles the program's lines are not at the head of stdout: they are found as lines
+  // of their own, and the dump is asserted to be there and to come first. std::nvm compiles
+  // nothing and starts with the program, so there the absence is asserted -- which also catches a
+  // dump that leaked onto a back end without a compiler. Both halves are needed: finding nothing
+  // has to be distinguishable from never having looked.
+  const lines = out.split('\n')
+  const first = lines.indexOf('499500')
+  assert(first >= 0 && lines.slice(first, first + 3).join('\n') === '499500\n20000\n41',
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
   const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
@@ -276,9 +385,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('10 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('10 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
@@ -303,9 +419,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('1000 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('1000 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
@@ -334,9 +457,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('10 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('10 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
@@ -362,9 +492,16 @@ verify_script = '''
 ({ input, assert }) => {
   const out = input.normalized.stdout
   const said = input.normalized.output.replace(/\n/g, ' | ')
-  assert(out.startsWith('1000 41\n'),
+  // The counted sites are printed while the graph is compiled, before the program's own lines (see
+  // `ref.boxes_are_counted`): found as lines of their own, with the dump asserted beside them.
+  const lines = out.split('\n')
+  const first = lines.indexOf('1000 41')
+  assert(first >= 0,
     'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
-  const line = out.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  const sites = lines.findIndex(l => l.startsWith('PLAN_REF_SITES '))
+  assert(input.command.includes('std::nvm') ? sites < 0 : (sites >= 0 && sites < first),
+    'the counted sites are printed while the graph compiles, before the program: ' + said)
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
   assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
   const counts = Object.fromEntries(
     line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))

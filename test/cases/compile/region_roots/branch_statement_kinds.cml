@@ -1,0 +1,37 @@
+/**
+ * What an arm of a branch written as a statement holds, when the branch runs and the arm is taken
+ * (design principles 3.1, 3.3). Four kinds of statement, one program, so the readings sit side by
+ * side:
+ *
+ *   `println`        an external write: it runs, because a write of a resource outside the program
+ *                    is a root of the region it is written in.
+ *   `state::set`     a write of a handle written as the arm's value: it runs too, and not by the
+ *                    rule above -- the value the arm gives is read by the JOIN, so it is reached as
+ *                    any value is. The box holds 5 afterwards.
+ *   `v = 2`          an assignment to a `var`: not an effect (design principles 3.1 and 3.5, the
+ *                    author's ruling of 2026-11-15). The arm's value is what the variable becomes,
+ *                    so `v` reads 2 in the statement after the branch.
+ *   `1 + 2`          pure computation: nothing runs and nothing is reported.
+ *
+ * Every arm here is taken, and the body is not a `sync` block: this is the case the branch's
+ * running had to be fixed for. Nothing is printed by the computation and nothing is reported.
+ *
+ * Output: `5 2`.
+ */
+
+import state
+
+func kinds(): int {
+    let cell = state::ref(0)
+    if true then { state::set(cell, 5) }
+    var v = 1
+    if true then { v = 2 }
+    if true then { 1 + 2 }
+    println(state::get(cell), v)
+    return 0
+}
+
+func main(): int sync {
+    kinds()
+    return 0
+}

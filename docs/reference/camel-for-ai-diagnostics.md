@@ -57,7 +57,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 
 | `ComparisonAcrossLines` | This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one. |
 
-**Semantic — errors** (`SemanticDiag`) — 228
+**Semantic — errors** (`SemanticDiag`) — 232
 
 | `Redeclaration` | Redeclaration of reference: '{0}'. |
 | `ModuleNotFound` | Module '{0}' not found. {1} |
@@ -285,13 +285,17 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `DuplicateRuleForOperator` | The rule '{0}' and the rule '{1}' both have '{2}' with {3} operand(s) as the head of their left side and write the same parameter types, and one ruleset holds one rule per operator and parameter-type list. |
 | `RuleRightUsesOuterVariable` | The rule '{0}' reads '{1}' on its right side, and '{1}' is a name its left side binds: in this ruleset the right side names the function the transform calls, and the pattern's names are never bound. |
 | `ExtentOfNeedsStatedShape` | `extent_of::<A>()` answers the extents the type `A` writes down, and this call's type writes none: {0}. |
-| `ClosureCaptureEscapes` | '{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out. |
 | `RefContentHoldsRef` | '{0}' cannot be the content of a reference: {1}. |
+| `ResourceInferenceConflict` | The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'. |
+| `ClosureAssignsCapturedName` | '{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name. |
+| `CapturedVarWrittenAfterTheClosure` | '{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read. |
+| `CapturedVarHandedToVarParameter` | '{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure. |
+| `VarContextParameterCannotBeBound` | '{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to. |
 
-**Semantic — warnings** (`SemanticDiag`) — 15
+**Semantic — warnings** (`SemanticDiag`) — 16
 
 | `IgnoredSideEffect` | {0} is not in a sync block, and {1}. |
-| `EffectNotExecuted` | {0} has side effects but is never executed: {1}. |
+| `EffectNotExecuted` | {0} is never executed: {1}. |
 | `ExitInUnusedBranch` | This '{0}' gives the value of the '{1}' it is in, and nothing uses that value: it does not leave the function. |
 | `UnusedFallibleValue` | This value has type '{0}' and nothing uses it: an error it holds is lost{1}. |
 | `NullTestNeverNull` | {0} has type '{1}', which is never null: this test is always {2}. |
@@ -305,8 +309,9 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `NeverArgumentCall` | This call never runs: {0} has type 'never', and an argument is evaluated before the call it is written in. |
 | `FailNotExecuted` | This 'fail' is not executed: {0}. |
 | `StatementAfterFail` | This statement cannot run: the 'fail' written before it never returns. |
+| `UnusedAssignedValue` | The value this assignment stores is never read. |
 
-**Run time and passes — errors** (`RuntimeDiag`) — 40
+**Run time and passes — errors** (`RuntimeDiag`) — 41
 
 | `RuntimeError` | An error has occurred: {0}. |
 | `DivisionByZero` | Attempted division by zero. |
@@ -321,6 +326,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `PassBoundaryNodes` | Pass '{0}' returned a program whose {1} has no {2}. |
 | `ExitTypeMismatch` | The value the graph '{0}' hands on has type '{1}', and the graph declares '{2}'; the value is {3}. |
 | `PassBoundaryPorts` | Pass '{0}' returned a program whose operator node {1} no longer matches its declaration: {2}. |
+| `PassEffectContainment` | Pass '{0}' returned a program whose call site reaches past the type it declares: {1} |
 | `MacroEvaluationFailed` | '{0}' could not be evaluated by std::macro: {1}. |
 | `EntryArgumentMissing` | No value was given for the {0} {1} of 'main'. |
 | `EntryArgumentInvalid` | Cannot bind the argument '{0}' of 'main': {1}. |

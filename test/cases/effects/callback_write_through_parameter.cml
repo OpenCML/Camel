@@ -1,14 +1,20 @@
 /**
- * A callback writes a `var` it captured, and the call that runs it is a statement of the block that
- * writes it: the call counts as a write of that variable there, so a read written before the call
- * keeps the value from before it and a read written after it takes the value the call made
- * (design principles 3.3, 3.5).
+ * A callback writes state its caller can read, and the call that runs it is a statement of the
+ * block that writes it: the call counts as a write there, so a read written before the call keeps
+ * the value from before it and a read written after it takes the value the call made (design
+ * principles 3.3, 3.5).
+ *
+ * The state a closure may write is a handle or a module `var`. A closure captures a value, so it
+ * cannot assign a `var` of the call that made it (design principles 3.5, 197; the author's ruling
+ * of 2026-11-16), and that is the shape this case was written with. `local` is a `Ref` now -- a
+ * handle is a value, so writing what it points at is legal -- and `counter` is a module `var`,
+ * which another rule owns.
  *
  * The variable is reached only through a parameter of function type that writes no resource clause:
  * the resources of that parameter are the ones of the value handed to it at this instantiation, so
- * the write has to be recorded where the value is given. A local variable and a variable of the
- * module are both here, the second one read through the capture the body makes of it.
+ * the write has to be recorded where the value is given.
  */
+import state
 
 var counter = 7;
 
@@ -17,12 +23,12 @@ func apply(f: (x: int) => void, v: int) {
 }
 
 func main(): int sync {
-    var local = 1
-    let localBefore = local
+    let local = state::ref(1)
+    let localBefore = state::get(local)
     let counterBefore = counter
-    apply((x: int) => { local = x * 10 }, 4)
+    apply((x: int) => { state::set(local, x * 10) }, 4)
     apply((x: int) => { counter = x * 10 }, 5)
-    println(localBefore, local)
+    println(localBefore, state::get(local))
     println(counterBefore, counter)
     return 0
 }

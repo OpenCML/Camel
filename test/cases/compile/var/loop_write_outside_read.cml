@@ -1,0 +1,25 @@
+/**
+ * A `var` written inside a loop body and read after the loop: the write and the read are in two
+ * different places, so the read cannot take the value without the write.
+ *
+ * The loop adds `i * 7` on rounds `i = 0, 1, 2`, so the read after it must see `21`. The write is
+ * loop-carried state -- design principles 3.5: "a write to an outer `var` in a loop body becomes
+ * the loop's carried state" -- and it is a write no fold can put where the read is, because the
+ * number of rounds is not known until the loop runs.
+ *
+ * The same program written without `var` is `loop_write_outside_read_let.cml`: the carried value is
+ * the second state of the loop. The two writings must have one canonical graph
+ * (`std::jgir canonical=true`), which is what `test/plans/feat/compile/var.plan.toml` measures;
+ * `test/tools/writing-freedom.mjs` is the same comparison for the gradient-step pair.
+ *
+ * Run: camel test/cases/compile/var/loop_write_outside_read.cml std::nvm
+ */
+func main(): int sync {
+    var total = 0
+    let _ = loop i = 0 while i < 3 do sync {
+        total = total + i * 7
+        i + 1
+    }
+    println(total)
+    return 0
+}

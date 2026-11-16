@@ -90,6 +90,20 @@ const FAMILY = [
 
 const CORPUS_DIRS = ['effects', 'defun']
 
+/// The programs the sweep cannot measure, with the reason each is out. A refused program has no graph
+/// after `std::opt`, so it has no operators to count: measuring it would say "this case stopped
+/// holding `:enum/tag`", which is not what happened. The list is per corpus and the reason is written
+/// where the file is, so a reader who asks why the corpus is one shorter finds the answer here.
+const REFUSED = {
+    effects: {
+        // `h` is put into the tuple `(1, h)` and `c` is written after it:
+        // `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198, the author's ruling of
+        // 2026-11-16). The shape it used to hold is read on `dead_write_held_by_program.cml`.
+        'dead_write_dropped_closure.cml':
+            'refused: a captured name is written after the closure that holds it is put into a tuple'
+    }
+}
+
 /// Every `:oper` label of one program's graph after `std::opt`, once per program.
 const histogram = (file) => {
     const run = spawnSync(CAMEL, [file, 'std::opt', 'std::jgir'], { env, encoding: 'utf8' })
@@ -105,9 +119,11 @@ const histogram = (file) => {
 
 /// The measured map for one corpus: `{ 'case.cml': { ':enum/tag': 1, ... } }`.
 const sweep = (corpus) => {
+    const out = REFUSED[corpus] || {}
     const files = fs
         .readdirSync(path.join(CASES, corpus))
         .filter((name) => name.endsWith('.cml'))
+        .filter((name) => !(name in out))
         .sort()
     const measured = {}
     for (const name of files) {

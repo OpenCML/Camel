@@ -1821,19 +1821,51 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
-            SemanticDiag::ClosureCaptureEscapes,
-            {
-                "ClosureCaptureEscapes",
-                "'{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out.",
-                "A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.",
-            },
-        },
-        {
             SemanticDiag::RefContentHoldsRef,
             {
                 "RefContentHoldsRef",
                 "'{0}' cannot be the content of a reference: {1}.",
                 "A reference is a box reclaimed by counting the handles that point at it: the last handle to go frees it (design principles 3.3). A box that holds a reference -- directly, or through a field, an element, a variant's payload, what a function takes or returns, or a value a closure captures -- keeps that other box's count above zero for ever, so neither is freed and the program holds values it can no longer reach. The content is any other type. When the value to store already holds a reference, read what it holds out first and make the box of that value, or keep the one reference instead of making a second box.",
+            },
+        },
+        {
+            SemanticDiag::ResourceInferenceConflict,
+            {
+                "ResourceInferenceConflict",
+                "The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.",
+                "A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.",
+            },
+        },
+        {
+            SemanticDiag::ClosureAssignsCapturedName,
+            {
+                "ClosureAssignsCapturedName",
+                "'{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name.",
+                "A closure holds a value, not a place, so an assignment to a name outside it would write nothing the closure can see. Three ways out: return the new value as the closure's result and let the caller bind it; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`, so every round hands the next one a value; or hold the state in a `Ref` (`let r = ref(0)`, `get(r)`, `set(r, v)`), which a closure may capture because a handle is a value.",
+            },
+        },
+        {
+            SemanticDiag::CapturedVarWrittenAfterTheClosure,
+            {
+                "CapturedVarWrittenAfterTheClosure",
+                "'{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read.",
+                "The closure holds the value `{0}` had when it was made, so this assignment cannot reach it. Three ways out: return the new value as the closure's result; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on assigning a name of its own, bind it first (`let x0 = x`) and let the closure mention `x0`.",
+            },
+        },
+        {
+            SemanticDiag::CapturedVarHandedToVarParameter,
+            {
+                "CapturedVarHandedToVarParameter",
+                "'{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure.",
+                "The write stands in the callee and is handed back to `{0}` where the call is, so it changes a name the closure already holds the value of. Three ways out: return the new value instead of writing it back; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on handing the name to a call, bind it first (`let x0 = x`) and hand `x0` on.",
+            },
+        },
+        {
+            SemanticDiag::VarContextParameterCannotBeBound,
+            {
+                "VarContextParameterCannotBeBound",
+                "'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.",
+                "A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.",
             },
         },
         {
@@ -1848,8 +1880,8 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             SemanticDiag::EffectNotExecuted,
             {
                 "EffectNotExecuted",
-                "{0} has side effects but is never executed: {1}.",
-                "Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync {{ ... }}'; in an arm of an 'if', write 'then sync {{ ... }}' or 'else sync {{ ... }}'; in a function body, declare the body 'func f(): T sync {{ ... }}', or use the effect's result. A bare 'sync {{ ... }}' written as a statement of a body that is not a sync block is not run either.",
+                "{0} is never executed: {1}.",
+                "This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync {{ ... }}', 'do sync {{ ... }}', 'then sync {{ ... }}'), or write the statement on the path the data takes.",
             },
         },
         {
@@ -1954,6 +1986,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
                 "StatementAfterFail",
                 "This statement cannot run: the 'fail' written before it never returns.",
                 "A 'fail' raises its fault and gives no value, so the statements written after it in the same block are never reached. Move them before the 'fail', or delete them.",
+            },
+        },
+        {
+            SemanticDiag::UnusedAssignedValue,
+            {
+                "UnusedAssignedValue",
+                "The value this assignment stores is never read.",
+                "An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.",
             },
         },
     };

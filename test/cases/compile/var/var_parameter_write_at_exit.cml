@@ -1,0 +1,61 @@
+/**
+ * The write a body leaves in a `var` parameter is what the caller finds there afterwards.
+ *
+ * A `var` parameter is a cell the caller made: it outlives the call, and the write the body leaves
+ * in it is a result of the function beside the returned value (design principles 3.1). So the
+ * caller reads the value the body wrote -- `41`, `42`, `9`, `0` and `5` below -- and never the
+ * value the cell held before the call.
+ *
+ * Measured before this entry, with the write-back off: `set`, `in_block` and the lambda left the
+ * caller's cell at the value it started with (`0 0` where the file now reads `0 41`, `0 9` and
+ * `0 5`), because outside a `sync` block the write was ordered after the reads written before it
+ * and then dropped as an effect nothing ran -- the caller's cell never saw it. `set_sync` and
+ * `clear` are the controls that already read correctly and must not move: the whole body a sync
+ * block, and a body that returns `void`.
+ */
+
+/// Not a sync body: the write is the effect the exit has to use.
+func set(var y: int): int {
+    y = 41;
+    return 0
+}
+
+/// The control: the same write, the whole body a sync block.
+func set_sync(var y: int): int sync {
+    y = 42;
+    return 0
+}
+
+/// The same write inside a `sync` block of a body that is not sync itself.
+func in_block(var y: int): int {
+    sync {
+        y = 9
+    }
+    return 0
+}
+
+/// A body that returns `void`: the exit has no value of its own to carry, and the write is still
+/// the caller's result.
+func clear(var y: int): void {
+    y = 0
+}
+
+func main(): int sync {
+    var a = 0;
+    let ra = set(a);
+    println(ra, a);
+    var b = 0;
+    let rb = set_sync(b);
+    println(rb, b);
+    var c = 0;
+    let rc = in_block(c);
+    println(rc, c);
+    var d = 7;
+    clear(d);
+    println(d);
+    var e = 0;
+    let h = (var y: int): int => { y = 5; return 0 };
+    let rh = h(e);
+    println(rh, e);
+    return 0
+}

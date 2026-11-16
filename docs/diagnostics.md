@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-315 diagnostics: 293 errors, 22 warnings. 15 carry a machine-applicable edit, 300 say why they carry none.
+322 diagnostics: 299 errors, 23 warnings. 15 carry a machine-applicable edit, 307 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -44,6 +44,7 @@ prints one entry.
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
+| `0x02000015` | [SyntaxDiag::IntervalHasNoOpenForm](#intervalhasnoopenform) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
@@ -271,8 +272,12 @@ prints one entry.
 | `0x0300020A` | [SemanticDiag::WithPackArgumentType](#withpackargumenttype) | Error | no |
 | `0x0300020B` | [SemanticDiag::ExtentOfNeedsStatedShape](#extentofneedsstatedshape) | Error | no |
 | `0x0300020D` | [SemanticDiag::VariableInUses](#variableinuses) | Error | no |
-| `0x03000210` | [SemanticDiag::ClosureCaptureEscapes](#closurecaptureescapes) | Error | no |
 | `0x03000211` | [SemanticDiag::RefContentHoldsRef](#refcontentholdsref) | Error | no |
+| `0x03000212` | [SemanticDiag::ResourceInferenceConflict](#resourceinferenceconflict) | Error | no |
+| `0x03000213` | [SemanticDiag::ClosureAssignsCapturedName](#closureassignscapturedname) | Error | no |
+| `0x03000214` | [SemanticDiag::CapturedVarWrittenAfterTheClosure](#capturedvarwrittenaftertheclosure) | Error | no |
+| `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
+| `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -288,6 +293,7 @@ prints one entry.
 | `0x031001C0` | [SemanticDiag::NeverArgumentCall](#neverargumentcall) | Warn | no |
 | `0x031001C1` | [SemanticDiag::FailNotExecuted](#failnotexecuted) | Warn | no |
 | `0x031001C2` | [SemanticDiag::StatementAfterFail](#statementafterfail) | Warn | no |
+| `0x031001C3` | [SemanticDiag::UnusedAssignedValue](#unusedassignedvalue) | Warn | no |
 | `0x04000000` | [RuntimeDiag::RuntimeError](#runtimeerror) | Error | no |
 | `0x04000001` | [RuntimeDiag::DivisionByZero](#divisionbyzero) | Error | no |
 | `0x04000002` | [RuntimeDiag::IndexOutOfRange](#indexoutofrange) | Error | no |
@@ -328,6 +334,7 @@ prints one entry.
 | `0x040001AC` | [RuntimeDiag::ProgramFault](#programfault) | Error | no |
 | `0x040001AD` | [RuntimeDiag::TransposeNeedsParameterShape](#transposeneedsparametershape) | Error | no |
 | `0x040001AE` | [RuntimeDiag::ExitTypeMismatch](#exittypemismatch) | Error | no |
+| `0x040001AF` | [RuntimeDiag::PassEffectContainment](#passeffectcontainment) | Error | no |
 | `0x0410000F` | [RuntimeDiag::PassesNeverRun](#passesneverrun) | Warn | no |
 | `0x04100015` | [RuntimeDiag::ConstantExpressionFaults](#constantexpressionfaults) | Warn | no |
 | `0x04100016` | [RuntimeDiag::TranslationLinksRuntime](#translationlinksruntime) | Warn | no |
@@ -1143,6 +1150,40 @@ func g(x: float, y: float): float sync { return x + y }
 func main(): int sync {
     let f: (float, float) => float = g
     return 0
+}
+```
+
+### IntervalHasNoOpenForm
+
+`0x02000015` · Error · `SyntaxDiag::IntervalHasNoOpenForm`
+
+**Fix**
+
+None: choice: the replacement is another construct the writer chooses -- an interval with both ends, a counting 'while' loop, or 'range(a, b, step)'
+
+**Message**
+
+```text
+An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side.
+```
+
+**Help**
+
+```text
+A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.
+```
+
+**Example** (`test/cases/parse/rulings/open_range.cml`, run as `camel test/cases/parse/rulings/open_range.cml`)
+
+```camel
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int {
+    let bounded = 1..4
+    let composed = inc..dbl
+    let open = 1..
+    return len(open)
 }
 ```
 
@@ -8953,44 +8994,6 @@ func main(): int sync {
 }
 ```
 
-### ClosureCaptureEscapes
-
-`0x03000210` · Error · `SemanticDiag::ClosureCaptureEscapes`
-
-**Fix**
-
-None: choice: capture the value the cell holds, or pass the state as a value, and which of the two is the writer's
-
-**Message**
-
-```text
-'{0}' cannot leave the call that declares it: a closure captures it by reference, and this value is carried out.
-```
-
-**Help**
-
-```text
-A `var` local lives in the call that declares it, and a `var` parameter is the caller's cell lent to the call that received it, so a closure may capture a `var` by reference only while it stays inside that call (design principles 3.5, rule two). A closure that leaves -- as a result, stored where this call does not own the cell, or handed to a function that keeps it -- would read a cell nobody owns. There are two ways out, and neither of them changes what the closure means: capture the value the cell holds at this point instead of the cell (`let x = acc; (k) => x + k`), or pass the state as a value, in as a parameter and back as the result (design principles 3.5, rule one; docs/design/state/README.cn.md section 4). The capture is not quietly made by value: that would answer a different question than the one the program asks. A callee whose signature says nothing about what it does with a function it is given -- no `uses` clause and no measured set -- is not refused (docs/handover/questions/2026-11-14-what-a-closure-may-be-handed-when-the-callee-says-nothing.cn.md): that is the boundary of this rule, not a hole in it.
-```
-
-**Example** (`test/cases/compile/state_escape/err_escape_return.cml`, run as `camel test/cases/compile/state_escape/err_escape_return.cml`)
-
-```camel
-func make(): (x: int) => int {
-    var acc = 0
-    return (x: int): int => sync {
-        acc = acc + x
-        acc
-    }
-}
-
-func main(): int sync {
-    let g = make()
-    println(g(1))
-    return 0
-}
-```
-
 ### RefContentHoldsRef
 
 `0x03000211` · Error · `SemanticDiag::RefContentHoldsRef`
@@ -9021,6 +9024,202 @@ func main(): int sync {
     let outer = state::ref(inner)
     let back = state::get(outer)
     println(state::get(back))
+    return 0
+}
+```
+
+### ResourceInferenceConflict
+
+`0x03000212` · Error · `SemanticDiag::ResourceInferenceConflict`
+
+**Fix**
+
+None: choice: the repair is a decision only the writer can make
+
+**Message**
+
+```text
+The values '{0}' and '{1}' meet where one type is asked for, and the resources they write differ: '{2}' against '{3}'.
+```
+
+**Help**
+
+```text
+A function's resources are part of its type, so two values given for one type variable must write the same resources (design principles 3.3). Neither set is decided by the place they meet: a declaration that writes no clause has its resources measured from its own body alone, and taking one value's set for the other's would let the place a value is used decide what a function reaches (the ruling of 2026-11-15). Write a resource clause on the callee that writes none ('uses var stdout', or 'pure' where it touches nothing) naming the resources both write, so that one written signature stands at the position, or keep the two values out of one position.
+```
+
+**Example** (`test/cases/effects/err_inferred_invariant_position.cml`, run as `camel test/cases/effects/err_inferred_invariant_position.cml`)
+
+```camel
+func same::<T>(a: T, b: T): T {
+    return a
+}
+
+func pick(b: bool): (x: int) => int {
+    return same(if b then f else g, wide)
+}
+
+func f(x: int): int {
+    return x + 1
+}
+
+func g(x: int): int {
+    return x + 2
+}
+
+func wide(x: int): int sync {
+    println(x)
+    return x + 3
+}
+
+func main(): int sync {
+    let h = pick(true)
+    println(h(1))
+    return 0
+}
+```
+
+### ClosureAssignsCapturedName
+
+`0x03000213` · Error · `SemanticDiag::ClosureAssignsCapturedName`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is assigned inside a closure, and a closure holds the value the name had when it was made, not the name.
+```
+
+**Help**
+
+```text
+A closure holds a value, not a place, so an assignment to a name outside it would write nothing the closure can see. Three ways out: return the new value as the closure's result and let the caller bind it; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`, so every round hands the next one a value; or hold the state in a `Ref` (`let r = ref(0)`, `get(r)`, `set(r, v)`), which a closure may capture because a handle is a value.
+```
+
+**Example** (`test/cases/compile/var_closure/err_closure_assigns_captured.cml`, run as `camel test/cases/compile/var_closure/err_closure_assigns_captured.cml`)
+
+```camel
+func make(x: int): int {
+    var total = 0
+    func add(k: int): int {
+        total = total + k
+        return total
+    }
+    let a = add(x)
+    a
+}
+
+func main(): int sync {
+    println(make(3))
+    return 0
+}
+```
+
+### CapturedVarWrittenAfterTheClosure
+
+`0x03000214` · Error · `SemanticDiag::CapturedVarWrittenAfterTheClosure`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is assigned after the closure '{1}' was made from it, and the closure goes on holding the value it read.
+```
+
+**Help**
+
+```text
+The closure holds the value `{0}` had when it was made, so this assignment cannot reach it. Three ways out: return the new value as the closure's result; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on assigning a name of its own, bind it first (`let x0 = x`) and let the closure mention `x0`.
+```
+
+**Example** (`test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_written_after_the_closure.cml`)
+
+```camel
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    x = 2
+    println(g())
+    return 0
+}
+```
+
+### CapturedVarHandedToVarParameter
+
+`0x03000215` · Error · `SemanticDiag::CapturedVarHandedToVarParameter`
+
+**Fix**
+
+None: choice: the three ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' is handed to a `var` parameter of a call after the closure '{1}' was made from it, and the write the call hands back does not reach the closure.
+```
+
+**Help**
+
+```text
+The write stands in the callee and is handed back to `{0}` where the call is, so it changes a name the closure already holds the value of. Three ways out: return the new value instead of writing it back; write the state as a loop's carried state (`loop state = init while ... do step(state, ...)`) or a `fold`; or hold it in a `Ref` (`ref`, `get`, `set`), which the closure captures as a handle. To keep the value the closure saw and go on handing the name to a call, bind it first (`let x0 = x`) and hand `x0` on.
+```
+
+**Example** (`test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`, run as `camel test/cases/compile/var_closure/err_captured_var_handed_to_var_parameter.cml`)
+
+```camel
+func bump(var p: int): void {
+    p = p + 10
+}
+
+func main(): int sync {
+    var x = 1
+    let g = () => x
+    bump(x)
+    println(g())
+    return 0
+}
+```
+
+### VarContextParameterCannotBeBound
+
+`0x03000216` · Error · `SemanticDiag::VarContextParameterCannotBeBound`
+
+**Fix**
+
+None: choice: the two ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.
+```
+
+**Help**
+
+```text
+A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.
+```
+
+**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
+
+```camel
+var total: int = 0
+
+with <var acc: int>
+func add(x: int): int sync {
+    acc = acc + x
+    return acc
+}
+
+func main(): int sync {
+    let g = add<total>
+    println(g(1), total)
     return 0
 }
 ```
@@ -9071,18 +9270,18 @@ func main(): int {
 
 **Fix**
 
-None: context: an effect reachable only from a branch that never runs; the repair moves or removes the call, and where belongs to the design
+None: context: the statement is reachable only from a region that never runs; the repair moves it, removes it, or takes its value, and which of those belongs to the design
 
 **Message**
 
 ```text
-{0} has side effects but is never executed: {1}.
+{0} is never executed: {1}.
 ```
 
 **Help**
 
 ```text
-Evaluation is driven by dependencies: an expression whose result (or the variable it writes) nothing needs does not run, and a sync block nothing needs does not run either, so the effects written directly in it do not run with it. This is legal, and where the effect is written decides the writing that runs it: in a loop body, make the body a sync block with 'do sync { ... }'; in an arm of an 'if', write 'then sync { ... }' or 'else sync { ... }'; in a function body, declare the body 'func f(): T sync { ... }', or use the effect's result. A bare 'sync { ... }' written as a statement of a body that is not a sync block is not run either.
+This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
 ```
 
 **Example** (`test/cases/compile/diag_json/dropped_effects_forward.cml`, run as `camel --output-format json test/cases/compile/diag_json/dropped_effects_forward.cml`)
@@ -9570,6 +9769,37 @@ func main(): int sync {
     fail<'NoPremise'>('the premise of this program does not hold')
     println('after')
     return 0
+}
+```
+
+### UnusedAssignedValue
+
+`0x031001C3` · Warn · `SemanticDiag::UnusedAssignedValue`
+
+**Fix**
+
+None: choice: a stored value no reader takes can be removed or read, and which one is the intent
+
+**Message**
+
+```text
+The value this assignment stores is never read.
+```
+
+**Help**
+
+```text
+An assignment stores a value for whatever reads the variable afterwards, and nothing reads this one: the value the assignment computes is dead. Remove the assignment, or read the variable after it.
+```
+
+**Example** (`test/cases/compile/var/unused_assigned_value.cml`, run as `camel test/cases/compile/var/unused_assigned_value.cml std::nvm`)
+
+```camel
+func main(): int {
+    var x = 0;
+    let y = x;
+    x = 1;
+    return println(y)
 }
 ```
 
@@ -11140,6 +11370,50 @@ func main(): int sync {
     let g     = target->rewrite<rules> !! target
     print(g(7.0))
     return 0
+}
+```
+
+### PassEffectContainment
+
+`0x040001AF` · Error · `RuntimeDiag::PassEffectContainment`
+
+**Fix**
+
+None: runtime: the fault is raised while the program runs, and the repair is in the program's logic
+
+**Message**
+
+```text
+Pass '{0}' returned a program whose call site reaches past the type it declares: {1}
+```
+
+**Help**
+
+```text
+A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.
+```
+
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::fold_function_type std::nvm`)
+
+```camel
+// Two functions of the same shape -- same argument type, same result type, same value -- that differ
+// in one thing: one of them prints. Giving the printing one the type of the pure one is how a fold
+// that decides two bodies are one function leaves a printing body under a `pure` type, which is the
+// defect `test::fold_function_type` writes on purpose.
+
+func doubled(x: int): int {
+    return x * 2
+}
+
+func announced(x: int): int sync {
+    println(x)
+    return x * 2
+}
+
+func main(): int {
+    let quiet = doubled(21)
+    let noisy = announced(3)
+    return quiet + noisy
 }
 ```
 

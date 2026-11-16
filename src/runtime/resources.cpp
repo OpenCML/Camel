@@ -40,6 +40,47 @@ using sem::AccessMode;
 using sem::ResourceClass;
 using sem::ResultAlias;
 
+// ---- Which port of a graph an access came through -------------------------------------------------
+
+size_t declaredWithPorts(const GCGraph &graph) {
+    const auto with     = graph.withPorts();
+    const auto captured = graph.captureNames();
+    // A graph whose captures are closure ports holds none of them among its `with` ports, and a
+    // table longer than the list is not a graph the builder makes -- and must not underflow a
+    // count either. Both read as "every `with` port is declared".
+    if (!graph.closureNodes().empty() || captured.size() > with.size()) {
+        return with.size();
+    }
+    return with.size() - captured.size();
+}
+
+PortPlacement portPlacement(const GCGraph &graph, gc_node_ref_t ref) {
+    const auto closure = graph.closureNodes();
+    for (size_t i = 0; i < closure.size(); ++i) {
+        if (closure[i] == ref) {
+            return {PortGroup::Capture, i};
+        }
+    }
+    const auto with       = graph.withPorts();
+    const size_t declared = declaredWithPorts(graph);
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (with[i] != ref) {
+            continue;
+        }
+        // Past the declared ones, a `with` port is a capture, and its number is its position in
+        // the capture table -- not its index among the `with` ports.
+        return i < declared ? PortPlacement{PortGroup::With, i}
+                            : PortPlacement{PortGroup::Capture, i - declared};
+    }
+    const auto norm = graph.normPorts();
+    for (size_t i = 0; i < norm.size(); ++i) {
+        if (norm[i] == ref) {
+            return {PortGroup::Norm, i};
+        }
+    }
+    return {};
+}
+
 namespace {
 
 // ---- Small helpers ----------------------------------------------------------------------------
@@ -53,10 +94,6 @@ gc_node_ref_t throughGates(const GCGraph &graph, gc_node_ref_t ref) {
         ref = graph.normInputsOf(ref).back();
     }
     return ref;
-}
-
-bool contains(std::span<const gc_node_ref_t> refs, gc_node_ref_t ref) {
-    return std::find(refs.begin(), refs.end(), ref) != refs.end();
 }
 
 /// The union of two modes of access to one resource.
@@ -276,17 +313,31 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
                 addAny(fp, access.resource.cls);
                 continue;
             }
-            // A port: which one.
-            const auto indexIn = [&](std::span<const gc_node_ref_t> ports) {
-                return static_cast<uint8_t>(std::find(ports.begin(), ports.end(), origin.node) - ports.begin());
-            };
+            // A port: which one, and how the graph's own numbering names it. `portPlacement` is the
+            // one reading of that question: a `with` port past the declared ones is a capture, and
+            // its number is the capture's position -- not the port's index among the `with` ports,
+            // which is what a declared clause never says (`Builder::numberBodyPorts`).
+            const camel::runtime::PortPlacement placement =
+                camel::runtime::portPlacement(*graph, origin.node);
             sem::ResourceBinding binding;
-            if (contains(graph->normPorts(), origin.node)) {
-                binding = {sem::ResourceBinding::Kind::Norm, indexIn(graph->normPorts())};
-            } else if (contains(graph->withPorts(), origin.node)) {
-                binding = {sem::ResourceBinding::Kind::With, indexIn(graph->withPorts())};
-            } else {
-                binding = {sem::ResourceBinding::Kind::Capture, indexIn(graph->closureNodes())};
+            switch (placement.group) {
+            case camel::runtime::PortGroup::Norm:
+                binding = {sem::ResourceBinding::Kind::Norm, static_cast<uint8_t>(placement.index)};
+                break;
+            case camel::runtime::PortGroup::With:
+                binding = {sem::ResourceBinding::Kind::With, static_cast<uint8_t>(placement.index)};
+                break;
+            case camel::runtime::PortGroup::Capture:
+                binding = {
+                    sem::ResourceBinding::Kind::Capture, static_cast<uint8_t>(placement.index)};
+                break;
+            case camel::runtime::PortGroup::None:
+                // A port of no group: the graph does not number it, so no clause can name it. That
+                // is an access of no nameable resource, not a capture whose number might match one
+                // a clause wrote, so it is read as unknown of its class -- the reading a declared
+                // clause can only cover through `any`.
+                addAny(fp, access.resource.cls);
+                continue;
             }
             addAccess(
                 fp,
@@ -377,17 +428,28 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
                 ref);
         }
         const auto with = graph.withInputsOf(ref);
+        // A direct call hands its callee's captures in as `with` inputs after the declared `with`
+        // arguments (`Builder::linkCaptureSites`), so a capture names a value this node does hold,
+        // at the position the callee's own port numbering puts it in. Reading it as unknown instead
+        // makes the caller carry an `any` of the capture's class -- a resource the call does not
+        // reach, held for a value the caller is holding (design principles 3.3, effect masking).
+        const size_t declared = callee != nullptr ? camel::runtime::declaredWithPorts(*callee) : 0;
         return fromFootprint(
             footprint_(callee),
             norm.size(),
             [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
-                if (b.kind == sem::ResourceBinding::Kind::Norm && b.index < norm.size()) {
-                    return norm[b.index];
+                switch (b.kind) {
+                case sem::ResourceBinding::Kind::Norm:
+                    return b.index < norm.size() ? norm[b.index] : kInvalidNodeRef;
+                case sem::ResourceBinding::Kind::With:
+                    return b.index < with.size() ? with[b.index] : kInvalidNodeRef;
+                case sem::ResourceBinding::Kind::Capture: {
+                    const size_t at = declared + size_t(b.index);
+                    return at < with.size() ? with[at] : kInvalidNodeRef;
                 }
-                if (b.kind == sem::ResourceBinding::Kind::With && b.index < with.size()) {
-                    return with[b.index];
+                default:
+                    return kInvalidNodeRef;
                 }
-                return kInvalidNodeRef; // a capture of a directly called graph: not an input
             });
     }
     case GCNodeKind::Call:
@@ -1042,6 +1104,295 @@ std::string toString(const GraphFootprint &fp) {
         part("conservative");
     }
     return out.empty() ? "none" : out;
+}
+
+// ---- Effect containment (analysis 4.1, the second half of the query section above) --------------
+
+namespace {
+
+/// The footprint as a signature, so that `covers` can answer whether a declaration covers it: the
+/// same mapping the resolver uses to read a declared clause back onto a call site's operands, run
+/// the other way. `withCount` is the callee's, so that a With binding keeps its own numbering.
+sem::ResourceSignature signatureOfFootprint(const GraphFootprint &footprint, size_t withCount) {
+    sem::ResourceSignature signature;
+    signature.mode     = sem::ResourceSignature::Mode::Concrete;
+    signature.result   = footprint.result;
+    signature.anyOf    = footprint.anyOf;
+    signature.external = footprint.external;
+    for (const sem::ResourceAccess &access : footprint.accesses) {
+        if (access.resource.cls == ResourceClass::Ambient ||
+            access.binding.kind == sem::ResourceBinding::Kind::Ambient) {
+            const auto same = std::find_if(
+                signature.ambient.begin(),
+                signature.ambient.end(),
+                [&](const sem::ResourceSignature::AmbientUse &other) { return other.name == access.resource.name; });
+            if (same == signature.ambient.end()) {
+                sem::ResourceSignature::AmbientUse use{.name = access.resource.name, .mode = access.mode};
+                use.unordered = access.unordered;
+                signature.ambient.push_back(use);
+            } else {
+                same->mode      = sem::uniteAccess(same->mode, access.mode);
+                same->unordered = same->unordered || access.unordered;
+            }
+            continue;
+        }
+        if (access.binding.kind == sem::ResourceBinding::Kind::Capture) {
+            // A capture: the position in the closure is all a declaration can name.
+            if (std::find(signature.captures.begin(),
+                          signature.captures.end(),
+                          access.binding.index) == signature.captures.end()) {
+                signature.captures.push_back(access.binding.index);
+            }
+            continue;
+        }
+        // A With parameter keeps its own numbering; an ordinary one follows the with parameters.
+        const size_t index = access.binding.kind == sem::ResourceBinding::Kind::With
+                                 ? size_t(access.binding.index)
+                                 : withCount + access.binding.index;
+        const sem::ResourceSignature::ParamUse use{
+            .index = static_cast<uint8_t>(index),
+            .cls   = access.resource.cls,
+            .name  = access.resource.name,
+            .mode  = access.mode,
+        };
+        const auto same = std::find_if(
+            signature.params.begin(),
+            signature.params.end(),
+            [&](const sem::ResourceSignature::ParamUse &other) { return other.index == use.index; });
+        if (same == signature.params.end()) {
+            signature.params.push_back(use);
+        } else {
+            same->mode = sem::uniteAccess(same->mode, use.mode);
+        }
+    }
+    std::sort(signature.params.begin(), signature.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    return signature;
+}
+
+std::string accessUseText(const sem::ResourceAccess &access) {
+    const std::string name = !access.resource.name.empty()
+                                 ? sem::resourceDisplayName(access.resource.name)
+                                 : std::string(sem::resourceClassName(access.resource.cls));
+    return std::format("{} {}", access.mode == sem::AccessMode::Read ? "read" : "write", name);
+}
+
+/// The accesses of `footprint` that `declared` does not cover, each judged by `covers` alone: one
+/// access is beyond the declaration when a source that is that access by itself is not covered.
+std::vector<std::string> beyondCoverage(
+    const sem::ResourceSignature &declared, const GraphFootprint &footprint, size_t withCount,
+    EffectContainmentReport *report) {
+    std::vector<std::string> beyond;
+    // The classes the footprint cannot name, counted rather than judged: a possibility is not an
+    // access, and a count that grows is how a checker that stops looking is made to say so.
+    if (report != nullptr) {
+        for (ResourceClass cls : footprint.anyOf) {
+            switch (cls) {
+            case ResourceClass::Unknown:
+                ++report->anyUnknown;
+                break;
+            case ResourceClass::Object:
+                ++report->anyObject;
+                break;
+            case ResourceClass::Handle:
+                ++report->anyHandle;
+                break;
+            case ResourceClass::Variable:
+                ++report->variableCell;
+                break;
+            default:
+                ++report->other;
+                break;
+            }
+        }
+    }
+    for (const sem::ResourceAccess &access : footprint.accesses) {
+        // What a type can state: an external resource, or a handle a parameter names. A cell of a
+        // variable is not in a `uses` clause (design effects plan 5.1: mutability is declared where
+        // the variable is), and an access of unknown class is the analysis saying it cannot tell;
+        // neither is something the callee is known to do past its promise.
+        if (access.resource.cls == ResourceClass::Variable ||
+            access.resource.cls == ResourceClass::Unknown) {
+            if (report != nullptr) {
+                ++(access.resource.cls == ResourceClass::Variable ? report->variableCell
+                                                                 : report->anyUnknown);
+            }
+            continue;
+        }
+        GraphFootprint single;
+        single.accesses.push_back(access);
+        if (!sem::covers(declared, signatureOfFootprint(single, withCount))) {
+            beyond.push_back(accessUseText(access));
+        }
+    }
+    // An effect outside the program that names no resource: a concrete reading only, because an
+    // undeclared operator's "may have an external effect" is a possibility, not a fact.
+    if (footprint.declared && footprint.external && !declared.external) {
+        beyond.push_back("an effect outside the program");
+    }
+    std::sort(beyond.begin(), beyond.end());
+    beyond.erase(std::unique(beyond.begin(), beyond.end()), beyond.end());
+    return beyond;
+}
+
+/// The declared clause of a call site and the graph it runs, or nullopt when the site declares
+/// nothing to compare (`nullptr` out-params) -- a call through a value the graph does not resolve.
+struct CallSite {
+    const sem::ResourceSignature *declared = nullptr;
+    const GCGraph *callee                  = nullptr;
+    size_t withCount                       = 0;
+};
+
+CallSite declaredClauseAt(const Program &program, const GCGraph &graph, gc_node_ref_t ref) {
+    CallSite site;
+    const GCNodeKind kind = graph.node(ref)->kind;
+    if (kind == GCNodeKind::Func) {
+        site.callee = program.calleeOf(graph, ref);
+        if (site.callee == nullptr || site.callee->funcType() == nullptr) {
+            return {};
+        }
+        site.declared  = &site.callee->funcType()->resources();
+        site.withCount = site.callee->funcType()->withTypesCount();
+        return site;
+    }
+    // A call: the type of the function value in `with` 0 is what the call site declares.
+    const auto with = graph.withInputsOf(ref);
+    if (with.empty()) {
+        return {};
+    }
+    const gc_node_ref_t value = throughGates(graph, with[0]);
+    const GCNode *node        = graph.node(value);
+    if (node == nullptr || node->dataType() == nullptr ||
+        node->dataType()->code() != core::type::TypeCode::Function) {
+        return {};
+    }
+    const auto *type = static_cast<const core::type::FunctionType *>(node->dataType());
+    site.declared    = &type->resources();
+    site.withCount   = type->withTypesCount();
+    // The body behind it, when the value names a function statically: without it there is no
+    // footprint to compare, and the type promises nothing it is known to break.
+    if (const ::Function *fn = staticFunctionOf(graph, value)) {
+        site.callee = fn->graph();
+    }
+    return site;
+}
+
+} // namespace
+
+std::optional<EffectContainment>
+effectContainmentViolation(const Program &program, const GCGraph &graph, EffectContainmentReport *report) {
+    for (gc_cnt_t i = 0; i < graph.nodeCount(); ++i) {
+        const gc_node_ref_t ref = static_cast<gc_node_ref_t>(i);
+        const GCNode *node      = graph.node(ref);
+        if (node == nullptr) {
+            continue;
+        }
+        if (node->kind != GCNodeKind::Func && node->kind != GCNodeKind::Call) {
+            continue;
+        }
+        const CallSite site = declaredClauseAt(program, graph, ref);
+        if (site.declared == nullptr || site.callee == nullptr) {
+            if (report != nullptr) {
+                ++report->unresolved;
+            }
+            continue;
+        }
+        if (report != nullptr) {
+            ++report->checked;
+        }
+        if (site.declared->mode != sem::ResourceSignature::Mode::Concrete) {
+            continue; // a type that promises nothing covers everything (sem::covers)
+        }
+        const GraphFootprint footprint = footprintOf(program, site.callee);
+        std::vector<std::string> beyond =
+            beyondCoverage(*site.declared, footprint, site.withCount, report);
+        if (beyond.empty()) {
+            continue;
+        }
+        return EffectContainment{
+            .call     = ref,
+            .declared = sem::toString(*site.declared),
+            .beyond   = std::move(beyond),
+        };
+    }
+    return std::nullopt;
+}
+
+// ---- The declaration over a body a pass rewrote ------------------------------------------------
+
+sem::ResourceSignature bodySignature(const Program &program, const GCGraph &graph) {
+    // The graph's own numbering is its type's: a parameter use is the parameter, with the `with`
+    // ones first. A graph without a type has none to number against, and a footprint measured that
+    // way is a clause no caller could read; the caller compares it against something else anyway.
+    const size_t withCount =
+        graph.funcType() != nullptr ? graph.funcType()->withTypesCount() : size_t(0);
+    return signatureOfFootprint(footprintOf(program, &graph), withCount);
+}
+
+sem::ResourceSignature widened(
+    const sem::ResourceSignature &declared, const sem::ResourceSignature &body) {
+    if (declared.mode == sem::ResourceSignature::Mode::Generic) {
+        // A type that promises nothing already covers everything: there is no clause to widen.
+        return declared;
+    }
+    if (body.mode == sem::ResourceSignature::Mode::Generic) {
+        return declared;
+    }
+    sem::ResourceSignature wider = declared;
+    for (const auto &use : body.params) {
+        const auto same = std::find_if(
+            wider.params.begin(),
+            wider.params.end(),
+            [&](const sem::ResourceSignature::ParamUse &t) { return t.index == use.index; });
+        if (same == wider.params.end()) {
+            wider.params.push_back(use);
+        } else {
+            same->mode = sem::uniteAccess(same->mode, use.mode);
+        }
+    }
+    std::sort(wider.params.begin(), wider.params.end(), [](const auto &a, const auto &b) {
+        return a.index < b.index;
+    });
+    for (const auto &use : body.ambient) {
+        const auto same = std::find_if(
+            wider.ambient.begin(),
+            wider.ambient.end(),
+            [&](const sem::ResourceSignature::AmbientUse &t) { return t.name == use.name; });
+        if (same == wider.ambient.end()) {
+            wider.ambient.push_back(use);
+        } else {
+            same->mode      = sem::uniteAccess(same->mode, use.mode);
+            same->unordered = same->unordered || use.unordered;
+        }
+    }
+    std::sort(wider.ambient.begin(), wider.ambient.end(), [](const auto &a, const auto &b) {
+        return a.name < b.name;
+    });
+    for (uint8_t capture : body.captures) {
+        if (std::find(wider.captures.begin(), wider.captures.end(), capture) ==
+            wider.captures.end()) {
+            wider.captures.push_back(capture);
+        }
+    }
+    std::sort(wider.captures.begin(), wider.captures.end());
+    for (ResourceClass cls : body.anyOf) {
+        if (std::find(wider.anyOf.begin(), wider.anyOf.end(), cls) == wider.anyOf.end()) {
+            wider.anyOf.push_back(cls);
+        }
+    }
+    if (!wider.allocates) {
+        wider.allocates = body.allocates;
+    }
+    if (wider.result.kind == sem::ResultAlias::Kind::Unknown) {
+        wider.result = body.result;
+    }
+    wider.external = wider.external || body.external;
+    // A clause that names an ambient resource carries the effect that comes with it, the same way
+    // a written one does (`ambientCarriesExternal`): the two agree, so a widened clause is not
+    // weaker than the body it was built from.
+    sem::ambientCarriesExternal(wider);
+    return wider;
 }
 
 } // namespace camel::runtime

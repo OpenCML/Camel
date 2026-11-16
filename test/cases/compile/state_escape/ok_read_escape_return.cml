@@ -1,0 +1,32 @@
+/**
+ * Route one, as a result, with a closure that only reads (design principles 3.5, 197): `make` binds
+ * `acc`, a `var` of its own call, to `base * 3`, and then makes a closure that reads `acc` and
+ * returns it. Carrying the value out is not a fault: a closure captures the value the name had
+ * where it was made (the author's ruling of 2026-11-16, which withdrew the state rule of
+ * 2026-11-14), so what leaves the call is a value nobody has to own. Nothing is reported, and the
+ * program prints 21 + 1 = 22.
+ *
+ * What this pins, and what it does not: the program is legal and runs, which is the half the
+ * withdrawn rule refused, and the number printed is the value the name had when the closure was
+ * made. It does NOT separate a value port from a shared cell, because the name is bound once, and
+ * neither reading can differ. The shape that WOULD separate them -- bind `acc` to 0 first, then to
+ * `base * 3`, then make the closure -- is legal under 197/198 too, and on this tree it prints 1:
+ * the capture port takes the name's FIRST binding, so the write made before the closure is not
+ * ordered before it. That reading is recorded in the plan's header; the repair belongs to the
+ * capture port, which is another lane's step and not this case's to make. When it lands, this case
+ * takes the two-binding form and 22 stays 22.
+ *
+ * `ok_read_escape_field` / `_array` / `_stored_by_callee` / `_into_closure` are the other four
+ * routes to the same reading.
+ */
+
+func make(base: int): (x: int) => int {
+    var acc = base * 3
+    return (x: int): int => acc + x
+}
+
+func main(): int sync {
+    let g = make(7)
+    println(g(1))
+    return 0
+}

@@ -1997,6 +1997,58 @@ void GraphDraft::eraseNode(gc_node_ref_t id) {
     }
 }
 
+bool GraphDraft::eraseUnreadNodes(std::span<const gc_node_ref_t> nodes) {
+    requireOneWriting("eraseUnreadNodes");
+    if (nodes.empty()) {
+        return true;
+    }
+    const auto inSet = [nodes](gc_node_ref_t id) {
+        return std::ranges::find(nodes, id) != nodes.end();
+    };
+    // The permission first, and over the whole set: a refused set leaves the graph as it was found,
+    // and an erasure cannot be taken back. A normal or a `with` port of a node outside the set is a
+    // reader (a chain, a control edge and an ordering are not: docs/design/effects/edges.cn.md 1.5,
+    // 5.3), and a node the graph names is not a unit's part whatever reads it (namesNode).
+    for (const gc_node_ref_t id : nodes) {
+        if (id == kInvalidNodeRef || header(id) == nullptr || !alive(id) || namesNode(id) ||
+            std::ranges::count(nodes, id) > 1) {
+            return false;
+        }
+        for (const auto users : {normUsersOf(id), withUsersOf(id)}) {
+            for (const gc_node_ref_t user : users) {
+                if (!inSet(user)) {
+                    return false;
+                }
+            }
+        }
+    }
+    // The set's own readers go before what they read: the two orders are one, found by asking again
+    // after each erasure. Nothing outside the set reads these nodes, so every node ends up with no
+    // reader and the loop reaches the empty set. A value cycle would be a graph the seal refuses,
+    // and a caller that hands one over gets the guard rather than a half-erased unit.
+    std::vector<gc_node_ref_t> pending(nodes.begin(), nodes.end());
+    while (!pending.empty()) {
+        bool erased = false;
+        for (auto item = pending.begin(); item != pending.end();) {
+            if (!normUsersOf(*item).empty() || !withUsersOf(*item).empty()) {
+                ++item;
+                continue;
+            }
+            eraseNode(*item);
+            item   = pending.erase(item);
+            erased = true;
+        }
+        GUARD(
+            erased,
+            std::format(
+                "eraseUnreadNodes: {} node(s) of the set read one another in a cycle and none of "
+                "them has no reader, so the unit cannot be taken apart; a value cycle is a graph "
+                "the seal refuses",
+                pending.size()));
+    }
+    return true;
+}
+
 void GraphDraft::setNormInputs(gc_node_ref_t id, std::span<const gc_node_ref_t> inputs) {
     requireOneWriting("setNormInputs");
     ++mutations_;

@@ -31,6 +31,7 @@
 #include "camel/core/tags.h"
 #include "camel/core/type/enum.h"
 #include "camel/core/type/resolver.h"
+#include "camel/core/type/resource_conflict.h"
 #include "camel/core/type/typevar.h"
 
 namespace camel::compile::gir {
@@ -779,18 +780,72 @@ class Builder {
     // The origin of each capture port, and the name each origin was first captured by (a
     // variable is named by it in diagnostics).
     std::unordered_map<node_handle_t, node_handle_t> captureOriginOf_;
+    // The cells a closure captured by value (design principles 3.5, 197). Their unit is the one
+    // thing a body has left to drop once every read of the cell took the value
+    // (dropCarriedVariableUnits): no other user names the cell, so nothing is left for it to be.
+    std::unordered_set<node_handle_t> valueCapturedCells_;
+    // Where each `var` was first captured by a closure of the program, in source offset, and the
+    // closure that did it, by the name the closure is shown with. Design principles 3.5 (198) makes
+    // the name unassignable from the making of the closure to its last use; the report of a write
+    // that lands in that stretch names the closure whose value the write does not reach, so the
+    // place and the name are kept together. A capture whose offset is unknown is not kept here: a
+    // report needs both ends of the stretch to say what it is about.
+    struct CapturedVar {
+        size_t capturedAt = 0;
+        // The source offset of the closure's last use, or `kNoSourceOffset` where the scan could not
+        // answer it. Nothing is reported over a stretch whose end is unknown: a report that guessed
+        // the end would refuse a program the design allows (3.5, 198 -- the rule runs from the
+        // making of the closure to its last use, and not one byte further).
+        size_t lastUse = 0;
+        // The one end the design names without an offset: a closure the program put into another
+        // value -- a tuple, a struct, an array, a `Ref`, a return -- runs to the rest of the scope
+        // (design principles 3.5, 198, third case). Every write that stands after the making is then
+        // inside the stretch.
+        bool stretchToEnd = false;
+        std::string closure;
+    };
+    std::unordered_map<node_handle_t, CapturedVar> capturedVarOf_;
+    // The last use of a closure the program binds to a name, by the FUNC node the closure is written
+    // as, with the name it is bound to. A closure written at a call's argument position is used by
+    // that call (3.5, 198) and is not a binding, so it is not here; one the program puts into
+    // another value is used to the end of the scope, which no offset here stands for, and is carried
+    // as `stretchToEnd` instead.
+    struct ClosureUse {
+        size_t lastUse = 0;
+        bool stretchToEnd = false;
+        // The name the program binds the closure to (`let g = () => ...` gives `g`), which is how a
+        // report shows it: the graph's own name of an anonymous function is one the compiler made.
+        std::string boundName;
+    };
+    std::unordered_map<const GCT::Node *, ClosureUse> closureUseOf_;
+    // The construction node of each graph (the FUNC node it was written as), so that a capture can
+    // ask the scan above what the closure's last use is.
+    std::unordered_map<DraftGraphBuilder *, const GCT::Node *> graphGctOf_;
+    /// Fills `closureUseOf_` out of every module's construction tree: for each closure the program
+    /// binds to a name, the offset of the last place the block that binds it names it.
+    void scanClosureLastUses();
+    // Whether the graph's name is one the compiler made for a body of its own (the generator
+    // machine's step function, `__gen_step__`): the rule of design principles 3.5 is about a
+    // closure the PROGRAM writes, and the compiler's own closures are not asked about (the case
+    // `ok_generator_body_is_not_a_program_closure` keeps that mark visible).
+    static bool compilerMadeClosure(const std::string &graphName);
+    // Whether this graph is a block the program decorated rather than a closure it wrote: a decorated
+    // block is the block as a function of no parameters, passed to its decorators and called where it
+    // is written (language reference 7.6), so the write inside it is the block's own write and not a
+    // write to a value the closure took. Which of the two a decorator makes it is a question the
+    // design does not answer, and this rule does not answer it either: it leaves the shape unreported.
+    bool decoratedBlockGraph(const compile_graph_ptr_t &graph) const;
+    // Whether a capture of each cell is a capture of its value, decided once per cell
+    // (captureByValue): a port's type is the cell's or the value's, and every capture of the same
+    // cell has to agree -- the direct call's with-port, the closure the body of the same function
+    // becomes, and the graph that forwards one to the other are three places that ask, and two
+    // answers for one cell is a graph that passes a value where the callee reads a cell.
+    std::unordered_map<node_handle_t, bool> captureByValueOf_;
     std::unordered_map<node_handle_t, std::string> originNames_;
     // The cell of each `var` at the top level of a module, and the resource it is (the module and
     // the name, `counter::cnt`): a body that reads or writes the cell through a capture touches
     // that resource (builder_resources.cpp).
     std::unordered_map<node_handle_t, std::string> moduleVariableResources_;
-    // The stores each body wrote, as (cell, node that stores into it), recorded by `recordWrite`
-    // where the write is not the callee's: the cell is where the value goes, and a body that stores
-    // a value which can carry a closure into a cell it does not own has put that closure where the
-    // call does not own it either (the state rule, builder_state.cpp). A write through a callee is
-    // the call's own use and is read there, from the callee's signature.
-    std::unordered_map<DraftGraphBuilder *, std::vector<std::pair<node_handle_t, node_handle_t>>>
-        storeSites_;
     // The `with` arguments written after the explicit type arguments being applied
     // (`f::<int><n: 2>`): their count and names choose among generic overloads that differ in their
     // `with` parameters, exactly as they choose among the others (visitTypeApplication). A type
@@ -821,24 +876,36 @@ class Builder {
     // with its captures). The value holds the captures the graph had then, so the graph
     // cannot take one more.
     std::unordered_set<DraftGraphBuilder *> valueUsedGraphs_;
+    // The graphs made to forward a call of a function whose captures are values (a function the
+    // program also makes a value of, `forwardingGraphOf`): they hold those values, so their own
+    // captures of the same variables are values too.
+    std::unordered_set<DraftGraphBuilder *> valuePortGraphs_;
     // The captures refused so (CaptureAfterRecursiveCall), each reported once.
     std::set<std::pair<DraftGraphBuilder *, node_handle_t>> lateCaptures_;
     // A direct call of a graph (a FUNC node): its captures are passed as With inputs after
-    // the declared `with` arguments, in the order of the callee's capture ports, by the link
-    // step (linkCaptureSites) once the module is built. `values` are the callee's captures as
-    // the caller saw them when the call was built; a capture the callee makes later (a
-    // recursive function that calls itself before it uses a value) is looked up then.
+    // the declared `with` arguments, in the order of the callee's capture ports. Each one is an
+    // edge of the call from the moment it is made (`addCaptureSite`): the value a call is handed
+    // is the call's `with` input, and not a node a table remembers, so the fold and the erasure
+    // rewrite it like any other edge and nothing here has to keep a node alive.
+    //
+    // What the table still says is a question about the call, not about a value: which call is
+    // still owed captures, and how many of its `with` inputs are captures. The captures a callee
+    // makes after the call was built -- a recursive function that calls itself before it uses a
+    // value -- are linked by the link step (`linkCaptureSites`) once the module is built, and the
+    // captures made while the call was built are moved behind the call's declared `with` arguments
+    // there, which its own arguments write after the callee is visited.
     struct CaptureSite {
         compile_graph_ptr_t caller;
         node_handle_t call;
         compile_graph_ptr_t callee;
-        std::vector<node_handle_t> values;
-        // The new version each capture has as of the call, when its last write produced one of
-        // its own valueVersionOf; null otherwise. A variable capture is always in `values` (a
-        // late one is refused), so the version a call hands on is the one recorded here.
-        std::vector<node_handle_t> versions;
-        // How many of the callee's captures are linked already.
+        // How many of the call's `with` inputs are its captures: the last that many, once the
+        // link step has placed them (`placed`).
         size_t linked = 0;
+        // How many `with` inputs the call had when the captures were appended, so the link step
+        // knows which ones to move behind the declared `with` arguments.
+        size_t firstCapture = 0;
+        // Whether the link step has placed those captures already.
+        bool placed = false;
     };
     std::vector<CaptureSite> captureSites_;
     /// The value of `origin` as `graph` sees it: `origin` when it is a node of `graph`;
@@ -847,19 +914,63 @@ class Builder {
     /// the new ports are shown with.
     node_handle_t
     captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
+    /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
+    /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
+    /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level `var`
+    /// the program is not making a value of the function for, the generator machine's step function
+    /// and a decorated block (there the write has to land in the cell). Handing the name to a call
+    /// is NOT one of them: a `var` parameter is passed in by value and passed back by value (3.5,
+    /// 192), and where the closure stands at that call's argument position its last use is the call,
+    /// so 3.5 (198) reports nothing and the program is legal -- the author's ruling of 2026-11-16.
+    /// Decided once per cell (`captureByValueOf_`): every capture of one cell has to answer the
+    /// same.
+    bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin);
+    /// The answer `captureByValue` records for a cell, worked out once: whether a capture of it is
+    /// a capture of the value it holds rather than of its cell (design principles 3.5, 197).
+    bool decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle_t origin) const;
     /// The name a capture of `origin` is shown with: the qualified name of a top-level value
     /// (with its module when it is not the current module's), `fallback` otherwise.
     std::string captureNameOf(node_handle_t origin, const std::string &fallback) const;
+    /// Design principles 3.5 (197, 198): a closure holds the VALUE a name had when it was made,
+    /// not a place, so the name may not be written from then until the closure's last use. Three
+    /// ways a write is written, and three reports, all made here:
+    ///   - the closure's own body writes the name (`throughCall` false, the cell is one of the
+    ///     graph's capture ports);
+    ///   - the body that declares the name assigns it again (`throughCall` false, the cell is the
+    ///     declared one and a closure captured it earlier);
+    ///   - the body hands the name to a call whose `var` parameter writes it back (`throughCall`
+    ///     true: design principles 3.5, 192 -- the write-back is an assignment written at the call).
+    /// A name of the top level of a module is left alone: its rule is the module `var`'s, not this
+    /// one. Throws BuildAbortException after reporting.
+    void
+    requireCapturedNameWritable(node_handle_t cell, const std::string &name, bool throughCall,
+                                camel::source::origin_id_t at);
+    /// Whether `node` is a capture port whose captured name is a `var` of the graph around it
+    /// (`captureOriginOf_`). A capture port carries the value the name had where the closure was
+    /// made (design principles 3.5, 197), so it is not a variable of the graph that reads it --
+    /// and every rule that answers "this name cannot be written" has to keep asking about the
+    /// name the port stands for, or it stops being asked at all where the capture is by value.
+    bool capturePortOfAVariable(node_handle_t node) const {
+        const auto port = captureOriginOf_.find(node);
+        return port != captureOriginOf_.end() && isVariable(port->second);
+    }
     /// Records that the port `port`, made by a machine for a region of a loop, stands for the
     /// value `origin` the machine was handed (the sequence it iterates, the state it starts
     /// from). Written where a capture origin is written, so one table says what value a port is
     /// (`machinePortOrigin_`).
     void noteMachinePortOrigin(node_handle_t port, node_handle_t origin);
-    /// Registers the direct call `call` of `callee` in the current graph: its captures, as
-    /// the current graph sees them now, to be linked by linkCaptureSites.
+    /// Registers the direct call `call` of `callee` in the current graph: each capture the callee
+    /// has now is linked as one of the call's `with` inputs straight away (`captureValueOf`), so
+    /// the value a call is handed is an edge of the graph from the start. The site that is kept is
+    /// a question about the call -- which capture still has to be linked -- and names no value.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
-    /// The link step for captures: passes to every direct call the captures of its callee,
-    /// including the ones the callee made after the call was built, until nothing changes.
+    /// The value the call is handed for one capture of the callee, as the current graph sees it: a
+    /// capture of a cell is that cell's nearest write (`valueVersionOf`), and a capture of a value is
+    /// a read of the variable where the call stands, never the cell (design principles 3.5, 197).
+    node_handle_t captureValueOf(const CapturedValue &captured);
+    /// The link step for captures: puts the captures a call was given while it was built behind its
+    /// declared `with` arguments (the callee's with-ports in order), then passes every direct call
+    /// the captures its callee made after the call was built, until nothing changes.
     void linkCaptureSites();
     // The decorated form of each function declared with decorators, by its own graph.
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
@@ -1011,19 +1122,38 @@ class Builder {
     std::unordered_map<node_handle_t, VariableRead> variableReadSource_;
     std::unordered_set<node_handle_t> knownCellUsers_;
     /// The exits a cell was written at, in the order the writes were recorded, for the writes that
-    /// are not a call's (recordWrite's `throughCallee` false): a straight-line write of the body. The
-    /// fold asks which of them stands before a read, because that is the value the read sees; a
+    /// are not a call's (recordWrite's `throughCallee` false): a straight-line write of the body.
+    /// The fold asks which of them stands before a read, because that is the value the read sees; a
     /// write only a call made is not a statement of this body and is not ordered here.
     std::unordered_map<node_handle_t, std::vector<node_handle_t>> writesOf_;
     std::unordered_set<node_handle_t> escapingVariables_;
     // Variables whose only reason for standing in `escapingVariables_` is that a write handed them
-    // to `__assn__` as a `var` argument (requireMutableArgument records that, because the operator's
-    // first parameter is two-way). A write is not an escape: the assignment does not exist after the
-    // call, so it cannot hold the cell. They stay out of SSA only while something else keeps them a
-    // resource -- a closure capturing them, a `var` argument to a user function, or a write written
-    // inside a loop, which is carried state (schedule item 3). The fold reads this set, and the
-    // straight-line definition that decides the loop case is written there.
+    // to `__assn__` as a `var` argument (requireMutableArgument records that, because the
+    // operator's first parameter is two-way). A write is not an escape: the assignment does not
+    // exist after the call, so it cannot hold the cell. They stay out of SSA only while something
+    // else keeps them a resource -- a closure capturing them, a `var` argument to a user function,
+    // or a write written inside a loop, which is carried state (schedule item 3). The fold reads
+    // this set, and the straight-line definition that decides the loop case is written there.
     std::unordered_set<node_handle_t> writeOnlyEscaping_;
+    /// The value a branch carries for a `var` its arms wrote: the cell, and the JOIN the branch's
+    /// value is. A write inside an arm is the branch's result (design principles 3.5, the ruling of
+    /// 2026-11-15), so a read written after the branch takes that join and no `:var/get` is made.
+    /// It is recorded here rather than inferred from the JOIN's kind: a branch that carries a value
+    /// of its own is a join too, and it is no version of any variable. A later straight-line write
+    /// of the same variable replaces it (recordWrite).
+    std::unordered_map<node_handle_t, node_handle_t> carriedVersions_;
+    /// The `var`s a loop body wrote, which the loop carries as states of its own (visitLoopNode;
+    /// design principles 3.5: "a write to an outer `var` in a loop body becomes the loop's carried
+    /// state"). While the body is built, the name of such a `var` is a port of the body's region,
+    /// and a write to it is the round's next value, not a store: `loopStatePorts_` says which cell
+    /// a body port stands for, `loopStateWrites_` holds the value the body wrote to the port in
+    /// this round (a read after that write takes it, as it takes a straight-line write's value).
+    std::unordered_map<node_handle_t, node_handle_t> loopStatePorts_;
+    std::unordered_map<node_handle_t, node_handle_t> loopStateWrites_;
+    /// `LINK(DREF __assn__, DREF <name>, value)` where `<name>` is one of those ports: the value
+    /// written is the loop's next state for that `var`, so the statement makes no store and the
+    /// call of the assignment operator is not built at all. Null for everything else.
+    node_handle_t loopStateAssignmentOf(const GCT::node_ptr_t &gct);
     // What each direct call hands on beside its return value (callValueTypeOf): the mask of the
     // callee's capture table that says which variables it writes, and, per call, the variable
     // each version is of and the access node of each part made so far. Part 0 is the return
@@ -1037,6 +1167,14 @@ class Builder {
     };
     std::unordered_map<node_handle_t, CallValue> callValues_;
     void collapseNonEscapingVariableReads();
+    /// The unit of a `var` whose write a branch carried as its own value (carriedVersions_) and
+    /// that nothing reads any more: its stores, the `:var/new` cell and the value the cell was made
+    /// with. Each node goes only when it has no user left of any kind -- the stores are read by the
+    /// JOIN that carried them and by each other through their order edges, the cell by its stores,
+    /// and the value the cell was made with by the cell -- so the walk repeats until nothing more
+    /// loses its last user. A cell that is still a resource (captured, a `var` parameter, handed to
+    /// a call, still read) keeps its unit.
+    void dropCarriedVariableUnits();
     // What the compiler knows about a node's value beyond static data, for operators whose
     // result type follows constant arguments (StaticArg). `typeFoldedValues_`: the value of an
     // operator result that its argument types fix (its type folder), e.g. the shape
@@ -1142,9 +1280,9 @@ class Builder {
         /// The ports of the region (a loop's condition or body), in order: the element, then the
         /// values of the state.
         std::vector<node_handle_t> ports;
-        /// The variables the arm stores into itself, and the functions it calls: what else it
-        /// writes is what those write (capturedWritesOf), known once every body is built.
-        std::set<node_handle_t> directWrites;
+        /// The functions the arm calls: what it writes is what those write (capturedWritesOf),
+        /// known once every body is built. A store the arm makes itself is a value of the
+        /// program's own, not an effect (design principles 3.1), so it is not part of this set.
         std::vector<DraftGraphBuilder *> callees;
         camel::core::type::Type *exitType() const { return type; }
     };
@@ -1343,8 +1481,6 @@ class Builder {
     struct PendingIgnoredWrite {
         std::vector<DraftGraphBuilder *> graphs;
         std::vector<node_handle_t> variables;
-        /// Variables known to be written (by the arms of a branch), besides what `graphs` write.
-        std::set<node_handle_t> written;
         camel::source::origin_id_t origin;
         std::string subject;
         std::string verb;
@@ -1358,9 +1494,9 @@ class Builder {
     // The bodies a `sync` block's chain already answered for, and whether it may pass them by
     // (`calleeIsFreelyArranged`): a body is walked once for the whole build, not once per call.
     std::unordered_map<DraftGraphBuilder *, bool> freelyArrangedGraphs_;
-    // The bodies the walk of `calleeIsFreelyArranged` is inside right now: a callee that reaches one
-    // of them reaches itself, and that is a recursion. A body that is still being written is not
-    // walked at all (`bodyStates_`), so the recursive call written inside its own body answers
+    // The bodies the walk of `calleeIsFreelyArranged` is inside right now: a callee that reaches
+    // one of them reaches itself, and that is a recursion. A body that is still being written is
+    // not walked at all (`bodyStates_`), so the recursive call written inside its own body answers
     // before it ever gets here.
     std::unordered_set<DraftGraphBuilder *> freelyArrangedActive_;
     // The function bodies and arms of a module, in the order they were built, are in
@@ -1379,6 +1515,25 @@ class Builder {
     // wrote `uses`/`pure` keeps the clause (its contract with its callers), and one that wrote no
     // clause carries what its body was measured to reach (design principles 3.3).
     std::unordered_set<DraftGraphBuilder *> inferredSignatures_;
+    // The signature a declared function's values are made from, by the graph whose body was
+    // declared for it: the one place a conflict between two occurrences of a type variable is
+    // resolved back to a declaration, to report it there and to read the settled set from
+    // (recordResourceConflict, checkInferredResources).
+    std::unordered_map<const camel::core::type::Type *, DraftGraphBuilder *> declaredFuncTypes_;
+    // The pairs of types one occurrence of a type variable bound to different resources
+    // (resource_conflict.h): recorded where they meet, judged once every body is measured, so that
+    // the answer does not depend on which of the two bodies was built first. `unwritten` says the
+    // side wrote no resource clause when the two met, which is where the repair is written.
+    struct ResourceConflict {
+        const camel::core::type::Type *left  = nullptr;
+        const camel::core::type::Type *right = nullptr;
+        bool leftUnwritten                   = false;
+        bool rightUnwritten                  = false;
+    };
+    std::vector<ResourceConflict> resourceConflicts_;
+    // The pairs already reported, by index in `resourceConflicts_`: the check runs once per module
+    // unit, and a pair is one diagnostic.
+    std::unordered_set<size_t> reportedResourceConflicts_;
     node_handle_t lastSyncedNode_{};
     size_t syntheticRefIndex_ = 0;
 
@@ -2479,11 +2634,22 @@ class Builder {
     // stands after the call. The functions are kept with the set until a function type carries
     // what it writes, which is when the set can be narrowed.
     std::unordered_map<std::string, std::set<const GCT::Node *>> programWriters_;
+    // The names the program makes a value of, by the name each is written with: a function name
+    // read where a value is wanted (`let k = f`) and not where a call is made (`f(1)`). A value
+    // holds the values its captures had when it was made; a direct call is handed the cells.
+    std::unordered_set<std::string> programValueNames_;
     // Fills `programWriters_` out of every module's construction tree. Runs before the bodies
     // are built: a function its module has not built yet still writes what its body says.
     void scanProgramWriters();
+    // Whether the program makes a value of the function `name` writes.
+    bool programMakesValueOf(const std::string &name) const {
+        return programValueNames_.contains(name);
+    }
     // Whether some function of the program writes a variable that `name` is written with.
     bool programWrites(const std::string &name) const { return programWriters_.contains(name); }
+    static constexpr size_t kNoSourceOffset = static_cast<size_t>(-1);
+    // The byte offset `origin`'s source span starts at, or `kNoSourceOffset` when it has none.
+    size_t sourceOffsetOf(camel::source::origin_id_t origin) const;
     // The variables visible where the builder stands, by the name the source writes each with and
     // its cell: the innermost binding of each name, and only a binding that is a variable
     // (`isVariable`: a `let`, a parameter or a constant is no write of anybody).
@@ -2541,8 +2707,10 @@ class Builder {
     // Reports the writes of captured variables that turned out to be real.
     void reportIgnoredCapturedWrites();
     // Whether running `node` of `graph` is an effect: an operator that is neither pure nor
-    // state-only, a call of a function that declares effects (`sync` modifier, `var`
-    // parameter) or whose exit depends on one, a branch with such an arm.
+    // state-only, a call of a function whose clause names a resource or whose exit depends on one,
+    // a branch with such an arm. A `var` parameter is not one (design principles 3.1 and 3.5, the
+    // ruling of 2026-11-15): what it writes is handed back where the call stands. An assignment is
+    // that shape and is declared state-only, for the same reason.
     bool isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const;
     // Whether a call built as `node` is a statement of the `sync` block it is written in: the chain
     // carries what has an effect or may fault, and a call is one of those by what its callee turns
@@ -2550,14 +2718,14 @@ class Builder {
     // computation able to fault, or that is recursive, is a call that may fault). The clause on the
     // declaration is read first and is the whole truth a call site has (3.3): a call a clause says
     // reaches a resource is a statement whatever its body does. Everything else here -- an operator
-    // that is not pure, a cast that may fail, a branch or loop with a region -- is asked of the node
-    // itself by `runtime::isChainStatement`.
+    // that is not pure, a cast that may fail, a branch or loop with a region -- is asked of the
+    // node itself by `runtime::isChainStatement`.
     bool callIsChainStatement(node_handle_t node);
     // Whether a `sync` block's chain may pass a call of `callee` by: the body holds nothing a chain
-    // carries -- no effect, nothing that may fault, no call that is itself not free -- and it is not
-    // recursive, because a recursion may go deeper than the depth limit and so counts as able to
-    // fault (design principles 3.4). Such a callee is one of "the computations the compiler arranges
-    // freely", and a call of it is arranged freely too.
+    // carries -- no effect, nothing that may fault, no call that is itself not free -- and it is
+    // not recursive, because a recursion may go deeper than the depth limit and so counts as able
+    // to fault (design principles 3.4). Such a callee is one of "the computations the compiler
+    // arranges freely", and a call of it is arranged freely too.
     bool calleeIsFreelyArranged(DraftGraphBuilder *callee);
     // The walk behind `calleeIsFreelyArranged`: one body's nodes, a direct call followed into the
     // body it names, and nothing else looked at.
@@ -2687,15 +2855,32 @@ class Builder {
     // UsesPromiseViolated at the declaration. Reported with the other per-module diagnostics,
     // while the bodies are still in hand.
     void checkInferredResources();
-    // Then holds each body to the state rule (design principles 3.5, rule two; the author's ruling
-    // of 2026-11-14): a `var` local lives in the call that declares it and a `var` parameter is the
-    // caller's cell lent to the call that received it, so a closure may capture one by reference
-    // only while it stays inside that evaluation. A body that makes such a closure and then lets it
-    // leave
-    // -- as its result, into a place it does not own, or into a function that keeps it -- is a
-    // ClosureCaptureEscapes at the cell. Reported with the other per-module diagnostics, while the
-    // bodies are still in hand (builder_state.cpp).
-    void checkCellEscapes();
+    // Records one place where two occurrences of a type variable asked for one type and the two
+    // types differed in their resources alone (resource_conflict.h): the type layer asks, while the
+    // bodies are being built, and the pair is judged once every body is measured, so that the
+    // answer does not depend on which of the two bodies happened to be built first. Answers false
+    // when neither side is a declaration this build measured, which leaves the type layer the
+    // reading it had.
+    bool recordResourceConflict(
+        const camel::core::type::Type &left, const camel::core::type::Type &right);
+    // Makes this builder the one the type layer records such pairs with, and puts the previous one
+    // back when it goes out of scope.
+    class ResourceConflictScope {
+      public:
+        explicit ResourceConflictScope(Builder &self)
+            : previous_(camel::core::type::resourceConflictSink()) {
+            camel::core::type::resourceConflictSink() =
+                [&self](const camel::core::type::Type &left, const camel::core::type::Type &right) {
+                    return self.recordResourceConflict(left, right);
+                };
+        }
+        ~ResourceConflictScope() { camel::core::type::resourceConflictSink() = previous_; }
+        ResourceConflictScope(const ResourceConflictScope &)            = delete;
+        ResourceConflictScope &operator=(const ResourceConflictScope &) = delete;
+
+      private:
+        camel::core::type::ResourceConflictSink previous_;
+    };
     // Then holds every reference in the module to the content rule of `Ref<T>` (the author's
     // ruling of 2026-11-14): a reference may hold any type but one that holds a reference, because
     // the boxes are reclaimed by counting the handles that point at them. The walk goes one layer
@@ -2703,33 +2888,13 @@ class Builder {
     // returns, and the values a closure captured -- and the report is a RefContentHoldsRef at the
     // place the box is made (builder_refs.cpp).
     void checkRefContents();
-    // The place a reference is reached at through the values `call` hands to a box of `content`,
-    // when `content` is a function type: a closure's captures are a fact about its graph, and its
-    // type does not spell them.
+    // The place a reference is reached at through the values `call` hands to a box of `content`:
+    // a closure's captures are a fact about its graph and its type does not spell them, so the
+    // walk follows the content into the value the call hands in -- a record's field, a tuple's
+    // part, an array's element, however many layers down -- and opens the closures it finds there,
+    // for as long as the graphs hold values it has not opened yet.
     std::optional<std::string>
-    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content, int depth = 0)
-        const;
-    // One layer of that walk: the place a reference is reached at through what the closure `value`
-    // captured, `through` naming the closures already walked to reach it and `depth` how many
-    // layers down this is. A layer that cannot be read -- or one past `kRefCaptureDepth` -- is
-    // answered as holding one, because a capture the walk cannot see may be the one that does.
-    std::optional<std::string> refInsideClosureCaptures(
-        node_handle_t value, const std::vector<std::string> &through, int depth) const;
-    // The cells of `body` the state rule speaks of: the mutable cells the body itself made, and its
-    // `var` parameters, which its caller made and lent to it.
-    std::unordered_set<node_handle_t> cellsOfBody(DraftGraphBuilder *body) const;
-    // Where a closure of `body` over one of `cells` leaves the call, or nothing when it stays
-    // inside it. The three ways out in the order the rule names them.
-    std::optional<std::pair<node_handle_t, std::string>>
-    carryOutOf(DraftGraphBuilder *body, const std::unordered_set<node_handle_t> &cells) const;
-    // Whether a call node may carry a function value it is handed out of this evaluation, and the
-    // words the report says it in: its result can carry a function or it writes a `var` parameter
-    // of one (a call that keeps what it is given), or it is an operator that writes an external
-    // resource (a reader the program does not own). A signature that says nothing may do anything.
-    std::optional<std::string> carriedOffAt(DraftGraphBuilder *body, draft_node_ref_t id) const;
-    // One cell, reported: where it is declared, and where the closure over it gets out.
-    void reportCellEscape(
-        DraftGraphBuilder *body, node_handle_t cell, node_handle_t at, const std::string &where);
+    refInsideACapturedValue(node_handle_t call, camel::core::type::Type *content) const;
     // The first node of `graph` whose own reach the clause does not cover: the use where the body
     // stopped matching it, which is what the report points at. 0 when no such node is found.
     camel::source::origin_id_t firstUnpromisedEffectOrigin(
@@ -2740,6 +2905,12 @@ class Builder {
     void reportResourceViolation(
         const compile_graph_ptr_t &graph, const camel::core::sem::ResourceSignature &promised,
         const camel::core::sem::ResourceSignature &measured, camel::source::origin_id_t noteOrigin);
+    // The report of one place where one type variable was asked for two function types that write
+    // different resources (recordResourceConflict): anchored at the declaration of the side the
+    // position may repair, naming both signatures. Reported with the other per-module diagnostics.
+    void reportResourceConflict(
+        const ResourceConflict &conflict, DraftGraphBuilder *leftOwner,
+        DraftGraphBuilder *rightOwner);
     // Then warns for each body of the current module.
     void reportDroppedEffectsOfBodies();
     // Reports EffectInRuleCondition: a rule's condition may not have an effect. The condition is
@@ -2835,7 +3006,20 @@ class Builder {
     node_handle_t peekVariable(node_handle_t variable);
     // `node` as a value: read when it is a variable, itself otherwise.
     node_handle_t valueOf(node_handle_t node) {
-        return isVariable(node) ? readVariable(node) : node;
+        if (isVariable(node)) {
+            return readVariable(node);
+        }
+        // A state of the loop being built is no variable of this graph: the round's value is the
+        // port itself, or the value the round wrote to it before this read (`x = e` in a loop body,
+        // visitLoopNode). A read written before any write takes the value the round started from,
+        // which is what the port is.
+        if (!loopStateWrites_.empty()) {
+            const auto written = loopStateWrites_.find(node);
+            if (written != loopStateWrites_.end()) {
+                return written->second;
+            }
+        }
+        return node;
     }
     // An operand of a call. A variable named directly stays a variable: whether the callee
     // takes the variable or its value is only known once the callee is resolved.
@@ -3663,6 +3847,14 @@ class Builder {
     node_handle_t visitBodyNode(const GCT::node_ptr_t &gct);
     // Makes `result` the result of `graph` when its body set none with `return`.
     void setBodyResult(const compile_graph_ptr_t &graph, node_handle_t result);
+    /// The exit's anchor, made to use the write the body leaves in each `var` parameter: the cell is
+    /// the caller's and outlives the call, so the last write into it is a result of the function
+    /// beside the returned value (design principles 3.1). Inside a `sync` block the chain already
+    /// carries that write to the exit, and the walk here finds it there and adds nothing; outside
+    /// one this edge is what keeps it, and what makes it run (3.5, F3: an effect does not vanish in
+    /// silence). Returns `anchor` when there is nothing to add.
+    node_handle_t
+    exitUsesVariableParameterWrites(const compile_graph_ptr_t &graph, node_handle_t anchor);
     /// Reports SemanticDiag::ArgumentNeedsConversion (and aborts) when the arguments of `call`
     /// fit exactly one of `candidates` but for types that leave open what a parameter fixes,
     /// i.e. when writing `as` at those arguments makes the call compile. Returns otherwise.

@@ -193,6 +193,43 @@ Immediately before `[SUMMARY]`, every run states the artifact its numbers belong
   `unknown` rather than an empty field. `out/latest/build-info.json` carries the build's own stamp for
   anyone who needs to know which tree produced the binary -- the two answer different questions.
 
+The line after `[SUMMARY]` says whether the run left anything in the tree it tested:
+
+```
+[TREE] clean: nothing appeared under the checkout during this run (git status --porcelain -u normal: 0 before, 0 after, 2392 directories watched)
+```
+
+- **The verdict is `git status --porcelain --untracked-files=normal` read twice**, once before the
+  first test and once after the last, and the failure is the difference: a path that appeared during
+  the run and is not ignored. Ignored is decided by `.gitignore`, not by this check, so
+  `test/results` and `tmp/test` -- the two trees a run owns -- need no exception, and there is no
+  list of paths that are allowed to be dirty.
+- **A path the run left behind fails the run.** It is not advice: a red gate whose only defect is a
+  file in the checkout is a red gate, because a tree the run made dirty is what makes the next
+  `[provenance]` read `(dirty: N files)` and stop naming a commit. `camel-remote.ps1` also carries
+  the untracked files to the host on every run, and `--changed` counts them as changed files.
+- **Each path is printed with the tests that were running when it appeared**, which is the only part
+  of the line a watcher supplies: a path the watcher did not see still fails (the attribution is a
+  diagnosis, never the verdict). `--update-golden` rewrites tracked files on purpose and prints
+  `[TREE] not judged: ...` rather than a green line; a `git status` that cannot be read is a failure,
+  not a clean tree.
+- **Paths already uncommitted when the run started are printed and are not this run's.** A lane that
+  edits and then runs `--changed` before committing would otherwise red every run it makes; the line
+  is printed anyway, because a file left by the run before this one has to be visible somewhere.
+- **Only the outermost run judges.** A test may start a run of this runner -- `feat/tools` does: the
+  layer-accounting and provenance cases drive two or three nested runs each -- and the nested window
+  lies inside the outer one's, which read the tree before its first test and after its last. A nested
+  run therefore reads no tree and starts no watcher; its own line reads
+  `[TREE] nested: tree guard deferred to the outer run`. Judging twice gave one phenomenon two
+  verdicts, and they disagreed: `test/.provenance-probe-*.tmp`, written and removed by a sibling
+  test, was still there when the nested window closed (`1 path appeared ...`, red) and gone when the
+  outer window closed (`appeared in the checkout and were gone again`, an annotation) -- same gate,
+  one line apart. The runner marks every process it starts with `CAMEL_TREE_GUARD=nested`; an unset
+  or unrecognised value means the outer run, because the failure mode of the wrong default here is a
+  gate that is off and still prints.
+- Where a test may write, and the fourteen files that made this line exist:
+  [Test Scratch](#test-scratch).
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.
@@ -699,6 +736,12 @@ Every `[[tests]]` entry may use these common fields:
   test whose own CPU time exceeds its wall clock is multi-threaded work: the reading sums its
   threads, so a bound on its total work belongs in `cpu_budget_ms` (measured over the whole fast
   layer on 2026-10-24: 21 tests, all ONNX-runtime, dlpack and fuzz cases).
+  Every test's `meta.json` records the reading, the line it was judged against and the room left
+  under it — `cpu_ms`, `cpu_limit_ms` and `cpu_margin_x` (`cpu_limit_ms / cpu_ms`, 1.0 at the line),
+  with `cpu_margin_basis` naming the rule the line belongs to — so a green run says how far from red
+  each test is, not only that none reached it. A green whose room nobody can read is a green nobody
+  looked at, and on 2026-11-16 two cases were read as unstable for three rounds because the record
+  held `cpu_ms: null` for them and nothing could show they were 0.1–4.2% past the line.
 - `cpu_budget_ms`
   Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
@@ -1146,9 +1189,16 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
-- `input.cpu_ms`, `input.cpu_budget_ms` — the test's own CPU time (user + system) and the budget it
-  was judged against for a test that declared `cpu_budget_ms`, and `null` for every other test: the
-  payload of a test whose bound is CPU carries the numbers its verdict came from.
+- `input.cpu_ms`, `input.cpu_budget_ms`, `input.cpu_limit_ms`, `input.cpu_margin_x`,
+  `input.cpu_margin_basis` — the test's own CPU time (user + system; `null` where this host reports
+  none), the `cpu_budget_ms` it declares (`null` for a test that declares none), the line its cost
+  verdict was read against, how many times the reading fits under that line, and which rule that line
+  belongs to: `cpu_budget_ms` for a test that declares a budget, `timeout_margin` for one judged by
+  the timeout rule (whose line is `timeout_ms / 4`). `cpu_margin_x` is `cpu_limit_ms / cpu_ms`, so
+  1.0 is the line itself and 39 is a reading with thirty-nine times the room it needs; it is `null`
+  where there is no reading, and where the reading is 0 ms (below the kernel's tick, so the ratio is
+  not a number) the line and the reading are still there. The same five fields are in the test's
+  `meta.json`.
 - `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
   the plan's directory, which is what the tool was invoked with. The output may repeat it (a
   graph dump names its source file), and it is absolute, so it differs between two checkouts of
@@ -1571,7 +1621,7 @@ entry starts demanding a diagnostic it never wanted (`match.complete` in
 `consistency/match.plan.toml` was red that way when the line was deleted). Read it as "this entry
 inherits nothing here", and write the absence as `expect_no_diagnostics = true` -- the reasoning and
 the readings are in
-[`docs/handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/questions/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
+[`docs/handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md`](handover/reviews/2026-11-14-how-does-a-plan-say-no-diagnostic-at-all.cn.md).
 
 `test/tools/check-plan-fields.mjs` reads the plan tree against that table and reports every entry
 that writes a field its kind does not evaluate, naming the plan, the line and the entry:
@@ -1608,6 +1658,15 @@ what a false green costs.
 The table above is copied into that script, so `--verify-runner` fails by name when `validateTest`'s
 gated blocks change: a guard whose table outlives the code it describes is the defect it exists to
 catch, one level up.
+
+**It is also a plan**: `feat/tools/plan_fields.plan.toml` (`tools.plan_fields`, fast) runs the
+ratcheted tree reading as `plan_fields.tree` and `--verify-runner` as `plan_fields.table`. `-Check
+all` was the only door before that plan existed, and a door somebody has to remember to ask for is
+not a wall: the count moved from 331 to 333 inside one lane's merge and every gate stayed green.
+The plan is the door `npm run test` opens on its own. What it must not become is a check that
+rewrites its own baseline -- `--update-baseline` stays a separate command a lane runs and commits
+with the fix, so the ratchet can only move down, and a red means the tree moved and nobody
+accepted it.
 
 ## Performance Measurement
 
@@ -1778,6 +1837,28 @@ instances run at the same time without seeing each other's files. A case run out
 `CAMEL_TEST_TMPDIR` is unset; the examples and mnist cases take it through
 `get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
 `onnx::export out="${test_tmp}/..."` path.
+
+**A test's own program runs from the checkout root, and a program that starts other programs must
+give them a directory of their own.** That is the rule this section is about, stated twice because
+the two halves are what a defect of 2026-11-16 got wrong. `${test_tmp}` is a *repository-relative*
+path, so a program the runner starts anywhere but here resolves it one level too deep: measured with
+the child's cwd set to its scratch directory, `feat/modules` went from 3 failures to 98, and every
+one of the 95 new ones was `ENOENT .../tmp/test/run-<pid>/<plan>/<test>/<file>` -- the file had been
+written under `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
+So the runner keeps `cwd: REPO_ROOT` (`runOneTest`), and the second half carries the weight: one gate
+of the whole `feat` tree left fourteen files in the repository root -- twelve models from
+`test/cases/modules/onnx/ort_*.cml` (`export_model<out: 'affine.onnx'>`) and `子 目录/嵌套 文件.txt`
+and `数据 文件 🐫.txt` from `env_paths.cml`, which writes beside `get_cwd()` -- because
+`test/plans/feat/tools/plan_refs_sweep.plan.toml` starts one `camel` per case in the tree
+(`scripts/check-plan-refs.mjs`) and those 3,844 case programs were executed from the checkout root.
+That script now runs each case in a directory of its own under `CAMEL_TEST_TMPDIR`, removed with the
+case: what a case writes lands where the test's other output goes and goes with it. Any other harness
+that runs case programs owes the same.
+
+What a *user* sees is unchanged: `camel x.cml` with `onnx::export out=model.onnx` still writes to
+the directory the user ran it in. Nothing here changes how the exporter resolves a path, only where a
+test's programs are started. A `skip_unless` precondition also runs from the repository root -- it is
+a command a plan writes against the checkout, not a test's own program.
 
 ## Field Constraints And Style
 

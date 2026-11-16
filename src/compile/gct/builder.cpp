@@ -5855,16 +5855,20 @@ The machine is the one docs/design/io-concurrency-streams/plan.cn.md slice E des
 state kept the way this language can keep it:
   - the `pc` cell says which point of the body the next pull starts from, and the `halt` cell
     says the pull in hand is done;
-  - every local that lives across a `yield` is a cell of the function's own body (`var` is a
-    resource and a closure captures it by reference: the same cell across pulls, so a closure
-    the body made before a `yield` reads what a later pull wrote);
+  - every local that lives across a `yield` is a cell of the function's own body. That is the
+    machine's own bookkeeping and not the meaning of `var`: `var` is a name that may be bound
+    again, and a closure captures the value the name held where the closure is written (design
+    principles 3.5). A closure the body makes never gets the cell through a capture port, and a
+    write of the name after the closure is made and before its last use is refused where it stands
+    (`SemanticDiag::CapturedVarWrittenAfterTheClosure`, 198);
   - `step` is one function: a `loop` while `halt == 0` around a branch on `pc`. A stretch with
     no `yield` runs inside one round of that loop, so a `yield` is the only thing that leaves;
     the value of a round is the answer of the pull -- the element and the rest of the stream at a
     `yield`, the state it has had since the last one anywhere else -- and the value of the loop
     is the answer the pull hands out;
   - a cell is a node identity and not a type (a value taken out of a struct is not a variable),
-    so the state is not one struct: it is the cells, and the closures hold the handles.
+    so the state is not one struct: it is the cells, and the machine's own arms hold the handles.
+    No capture port carries one of them: a closure the body makes captures a value (3.5).
 */
 node_ptr_t
 Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *funcType) {

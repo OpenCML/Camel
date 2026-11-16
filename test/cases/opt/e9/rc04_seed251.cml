@@ -1,0 +1,14 @@
+func k30(a31: int): (a0: int) => int sync {
+    var v32 = loop s33 = 3 for q34 in ['x', 'k9'] do 0;
+    return (p35: int): int => sync {
+        return -7;
+    };
+}
+
+func main(): int sync {
+    ['']->foreach<(p71: string) => sync {
+        println('');
+    }>;
+    let n72 = k30(5);
+    return 0;
+}

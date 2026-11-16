@@ -1122,19 +1122,19 @@ struct PairCall {
 ///
 /// It used to be the node ids, descending, on the promise the walk's comment stated -- ids are
 /// creation order, so a node only reads ids below its own. That promise holds for the graph the
-/// front end built and does *not* survive a rewrite: `GraphDraft::addNode` numbers by position and a
-/// frozen graph keeps the ids of the version it came from (`GCNodeKind::Dead` is the record a
-/// removed node leaves), so a pass that replaces a node with a rule's right side appends the nodes it
-/// makes *after* the ones already reading them. Swept by descending id, such a graph visits the new
-/// node before the node that feeds it, the cotangent is not there yet, and the walk drops it without
-/// a word: `(x * 2.0 + x * 3.0) * 4.0` folded to `(x * 5.0) * 4.0` by `std::opt::algebra` made
-/// `transpose` of it answer 0.0 where the unoptimized program answers 20.0
+/// front end built and does *not* survive a rewrite: `GraphDraft::addNode` numbers by position and
+/// a frozen graph keeps the ids of the version it came from (`GCNodeKind::Dead` is the record a
+/// removed node leaves), so a pass that replaces a node with a rule's right side appends the nodes
+/// it makes *after* the ones already reading them. Swept by descending id, such a graph visits the
+/// new node before the node that feeds it, the cotangent is not there yet, and the walk drops it
+/// without a word: `(x * 2.0 + x * 3.0) * 4.0` folded to `(x * 5.0) * 4.0` by `std::opt::algebra`
+/// made `transpose` of it answer 0.0 where the unoptimized program answers 20.0
 /// (`test/cases/compile/transforms/transpose_after_algebra.cml`).
 ///
 /// The order itself is `node_order.h#reverseDependencyOrderOf` -- the one answer in the tree to
 /// "what order does this graph's own edges impose", shared with the copy walks that read a body
-/// forwards (`vmap.cpp`, `modules/transforms/node_order.h`). Keeping a second Kahn walk here, with a
-/// tie rule of its own, was a way for the two readings to drift apart for no reason; a walk that
+/// forwards (`vmap.cpp`, `modules/transforms/node_order.h`). Keeping a second Kahn walk here, with
+/// a tie rule of its own, was a way for the two readings to drift apart for no reason; a walk that
 /// needs a node before its readers needs the forward order reversed, and that is what it asks for.
 /// On a graph the front end built the two agree id for id (the forward order is the id order, so
 /// reversing it is the descending sweep this walk used to do), which is why nothing a plan pins
@@ -2103,7 +2103,7 @@ bool buildTransposeMember(
             // a statement about the type alone: the slot of a `T[..]` position holds the rank-zero
             // array that *is* the element. Without it the body has no rank to read, and where the
             // body asks `numel(ct)` a number is read as a pointer -- a SIGSEGV inside the numel
-            // kernel (`docs/handover/questions/
+            // kernel (`docs/handover/reviews/
             // 2026-11-04-a-rank-zero-cotangent-is-read-as-a-pointer.cn.md`). The conversion is made
             // wherever a value's type goes from `T` to `T[..]` (`Builder::coerceTo`, whose reason
             // is stated in `ArrayType::castSlotFrom`: the run gets a value with a rank to read),
@@ -3245,9 +3245,10 @@ bool buildTransposeMember(
         };
 
         // The walk runs the graph backwards in the graph's own order: every node after the nodes
-        // that read it (`cotangentWalkOrder`), which is the order the ids give for a graph the front
-        // end built and is not what the ids give for a graph a rewrite has changed. A branch's arms
-        // are regions, not ids, so they are walked by `runArm` when the branch is reached.
+        // that read it (`cotangentWalkOrder`), which is the order the ids give for a graph the
+        // front end built and is not what the ids give for a graph a rewrite has changed. A
+        // branch's arms are regions, not ids, so they are walked by `runArm` when the branch is
+        // reached.
         for (const gc_node_ref_t ref : walkOrder) {
             const camel::runtime::GCNode *node = function->node(ref);
             if (node == nullptr || !hasCotangent[ref]) {
@@ -5487,7 +5488,7 @@ bool buildTransposeMember(
                     // elements there: the zero of that type is empty, because it has no element to
                     // be anything else. A later reader that needs the parameter's own shape meets
                     // an empty array and says so, instead of meeting a number of the wrong extent
-                    // (`docs/handover/questions/
+                    // (`docs/handover/reviews/
                     // 2026-11-04-is-an-open-rank-zeros-answer-an-empty-array-or-a-refusal.cn.md`).
                     zero = zeroOfType(portType, space.space);
                 }

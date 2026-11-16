@@ -607,6 +607,10 @@ void Builder::leaveScope() {
     // that no closure captured, no call was handed and that is not its own parameter becomes SSA
     // here (collapseNonEscapingVariableReads).
     collapseNonEscapingVariableReads();
+    // A `var` whose write a branch carried as its own value leaves a unit nothing reads
+    // (`:var/new`, its stores and the value it was made with). The cell is not a resource any
+    // more, so the unit goes with it.
+    dropCarriedVariableUnits();
     nodeScope_      = nodeScope_->leave();
     graphScope_     = graphScope_->leave();
     decoratedScope_ = decoratedScope_->leave();
@@ -745,8 +749,8 @@ node_handle_t Builder::capturedCellIn(DraftGraphBuilder *graph, node_handle_t or
     return nullptr;
 }
 
-std::optional<uint8_t> Builder::capturePositionOf(DraftGraphBuilder *graph,
-                                                 node_handle_t port) const {
+std::optional<uint8_t>
+Builder::capturePositionOf(DraftGraphBuilder *graph, node_handle_t port) const {
     const auto table = capturedValues_.find(graph);
     if (table == capturedValues_.end()) {
         return std::nullopt;
@@ -986,6 +990,13 @@ void_ptr_t Builder::visitDeclNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(gct->name(), funcType, gct);
     compile_graph_ptr_t graph =
         enterScope(funcType, gct->name(), parameterPortOrigins(context_, gct));
+    // The signature this declaration's values are made from, so that a place where they meet at one
+    // type variable is reported at the declaration (resource_conflict.h). The open signature is the
+    // one place a function's resources are written, and no other function shares it; the interned
+    // type the DECL carries is shared by every declaration with that shape, so it is not recorded.
+    if (graph != nullptr && graph->funcType() != nullptr) {
+        declaredFuncTypes_[graph->funcType()] = graph.get();
+    }
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The declaration's condition, kept while the declarations of one name are read: the
         // next declaration of the name is compared with this one before either body is built
@@ -1118,6 +1129,9 @@ compile_graph_ptr_t Builder::visitFuncNode(const GCT::node_ptr_t &gct) {
     rejectOperatorConflict(name, funcType, gct);
     staticGrantsOf(gct); // its decorators are resolved here, where they are written
     compile_graph_ptr_t graph = enterScope(funcType, name, parameterPortOrigins(context_, gct));
+    // The construction node this graph is written as, so that a capture made inside the body can ask
+    // the scan of the program's closures what this closure's last use is (3.5, 198).
+    graphGctOf_[graph.get()] = gct;
     if (const auto *when = GCT::Tree::of(gct)->whenOf(gct)) {
         // The condition belongs to the function, not to its instance: it is evaluated when
         // this graph is selected by a call, where the types and the `with` arguments of the
@@ -1895,6 +1909,21 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
+    // A function declaration is a statement but not a value (below): it leaves the block's value
+    // where it was. A block whose value is a branch and which then declares a function is
+    // therefore not a block that drops the branch -- the branch stands at the value of the block.
+    const auto declarationAt = [&](size_t index) {
+        const auto &node = gct->at(index);
+        return node->type() == GCT::NodeKind::FUNC && !node->name().empty();
+    };
+    const auto hasValueAfter = [&](size_t index) {
+        for (size_t j = index + 1; j < gct->size(); ++j) {
+            if (!declarationAt(j)) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
         try {
@@ -1913,7 +1942,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             // too when the block's value is dropped. The scopes the lowering introduced
             // (operands of a literal, the names of a declaration) have no statements; a sync
             // block inside a sync block continues the chain but has statements of its own.
-            const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
+            const bool unused = !gct->operands() && (valueDropped || hasValueAfter(i));
             unusedStatement_  = unused ? child : nullptr;
             any result;
             // The body's value, in the position of the body (see visitBodyNode): the same
@@ -1921,7 +1950,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             // literal or empty array there (design principles 5.1).
             // A function declaration is a statement, not a value: it leaves the block's value
             // as it was (an empty-named FUNC is a lambda written in place, and is a value).
-            const bool declaration = child->type() == GCT::NodeKind::FUNC && !child->name().empty();
+            const bool declaration = declarationAt(i);
             const bool tailPosition =
                 tailExpected != nullptr && !gct->operands() && i + 1 == gct->size() && !declaration;
             if (tailPosition) {

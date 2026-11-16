@@ -147,7 +147,10 @@ std::vector<Builder::CapturedUse> Builder::capturedUsesOf(const compile_graph_pt
 
 void Builder::reportIgnoredCapturedWrites() {
     for (const PendingIgnoredWrite &pending : unit_->pendingIgnoredWrites) {
-        std::set<node_handle_t> written = pending.written;
+        // A write to a variable the callee captured and did not hand back at the call. A `var`
+        // write is not an effect (design principles 3.1), so `pending.variables` names a variable
+        // only when one of the bodies this statement runs writes it.
+        std::set<node_handle_t> written;
         for (DraftGraphBuilder *graph : pending.graphs) {
             written.merge(capturedWritesOf(graph));
         }
@@ -176,25 +179,15 @@ void Builder::reportIgnoredCapturedWrites() {
 bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
     // What a call touches is in the resources of the value's type, not in a flag on it: `sync` is
     // a property of a body block, not of a type (design principles 3.3, effects plan 5). A clause
-    // that names a resource means the call touches it, `pure` means it touches nothing, and a
-    // `var` parameter is a resource by itself, so a signature that leaves it out is still read as
-    // one.
+    // that names a resource means the call touches it, `pure` means it touches nothing.
+    // A `var` parameter is not an effect of the call (design principles 3.1 and 3.5, the ruling of
+    // 2026-11-15): what it writes is a value passed in and handed back, written into the caller's
+    // cell where the call stands, so the shape of a signature says nothing about anything outside
+    // the program. An assignment is that shape as well -- its first parameter is a `var` cell --
+    // and it is declared state-only for the same reason (builtin_semantics.cpp).
     const auto clauseSaysEffect = [](const FunctionType *func) {
         return func->resources().mode == sem::ResourceSignature::Mode::Concrete &&
                !func->resources().pure();
-    };
-    const auto shapeSaysEffect = [](const FunctionType *func) {
-        for (size_t i = 0; i < func->normTypesCount(); ++i) {
-            if (func->normIsVarAt(i)) {
-                return true;
-            }
-        }
-        for (size_t i = 0; i < func->withTypesCount(); ++i) {
-            if (func->withIsVarAt(i)) {
-                return true;
-            }
-        }
-        return false;
     };
     const auto calleeOf = [&](node_handle_t func) { return graph->funcTarget(func); };
     switch (nodeKindOf(node)) {
@@ -226,7 +219,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             return true;
         }
         const FunctionType *type = callee->funcType();
-        return type != nullptr && (shapeSaysEffect(type) || clauseSaysEffect(type));
+        return type != nullptr && clauseSaysEffect(type);
     }
     case runtime::GCNodeKind::Call: {
         // A call through a function value: the value's type is all there is to read at this call,
@@ -242,7 +235,7 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
             return false;
         }
         const auto *func = tt::as_ptr<FunctionType>(type);
-        return !func->resources().pure() || shapeSaysEffect(func);
+        return !func->resources().pure();
     }
     case runtime::GCNodeKind::Loop: {
         // Each round runs the condition and the body, regions of the graph.
@@ -309,8 +302,8 @@ bool Builder::isEffectNode(DraftGraphBuilder *graph, node_handle_t node) const {
 bool Builder::callIsChainStatement(node_handle_t node) {
     // What a `sync` block's chain carries is decided by what a call runs (design principles 3.4:
     // "调用按被调函数推出的事实判：函数体含可能出故障的计算、或函数是递归的（递归可能超过深度上限）
-    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that is
-    // not pure, a cast that may fail, a branch or a loop that carries a region.
+    // 就算可能出故障"). Everything but a direct call is asked of the node itself: an operator that
+    // is not pure, a cast that may fail, a branch or a loop that carries a region.
     if (!runtime::isChainStatement(*nodeDraftOf(node), nodeIdOf(node))) {
         return false;
     }
@@ -321,11 +314,11 @@ bool Builder::callIsChainStatement(node_handle_t node) {
         return true;
     }
     if (isEffectNode(currGraph_.get(), node)) {
-        // The declaration is the whole truth a call site reads (design principles 3.3): a clause that
-        // names a resource, or a `var` parameter, says that a call of this reaches something which is
-        // not the graph -- and the body may well touch nothing, which is the promise the clause makes
-        // to its callers. `test/cases/effects/declared.cml` is that shape: `consume` writes the
-        // handle its clause names and its body only returns 0.
+        // The declaration is the whole truth a call site reads (design principles 3.3): a clause
+        // that names a resource, or a `var` parameter, says that a call of this reaches something
+        // which is not the graph -- and the body may well touch nothing, which is the promise the
+        // clause makes to its callers. `test/cases/effects/declared.cml` is that shape: `consume`
+        // writes the handle its clause names and its body only returns 0.
         return true;
     }
     const compile_graph_ptr_t callee = nodeGraphOf(node)->funcTarget(node);
@@ -342,8 +335,8 @@ bool Builder::calleeIsFreelyArranged(DraftGraphBuilder *callee) {
         return state != bodyStates_.end() && state->second == BodyState::Built;
     };
     // A body that is not finished holds code this walk cannot see yet, so nothing is claimed about
-    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches a
-    // second time is one that reaches itself: that is a recursion, which may go deeper than the
+    // it (this is the recursive call, seen from inside the body it calls). A body the walk reaches
+    // a second time is one that reaches itself: that is a recursion, which may go deeper than the
     // depth limit, so it is a call that may fault (design principles 3.4). Neither answer is
     // memoized -- the first is about a body that is not finished, and the second is about this walk
     // and not about the graph it names.
@@ -497,6 +490,48 @@ void Builder::reportResourceViolation(
             : strutil::join(unnamed, ", ", [](const std::string &name) { return name; }));
 }
 
+void Builder::reportResourceConflict(
+    const ResourceConflict &conflict, DraftGraphBuilder *leftOwner, DraftGraphBuilder *rightOwner) {
+    // Anchored at the declaration that wrote no clause when the two met: the position cannot repair
+    // the one that already says what it writes, and a clause is the repair this asks for. Both are
+    // named, because what the position needs is for the two to agree.
+    DraftGraphBuilder *leftUnwritten  = conflict.leftUnwritten ? leftOwner : nullptr;
+    DraftGraphBuilder *rightUnwritten = conflict.rightUnwritten ? rightOwner : nullptr;
+    DraftGraphBuilder *anchor         = leftUnwritten != nullptr ? leftUnwritten : rightUnwritten;
+    if (anchor == nullptr) {
+        anchor = leftOwner != nullptr ? leftOwner : rightOwner;
+    }
+    if (anchor == nullptr) {
+        return;
+    }
+    const auto nameOf = [](DraftGraphBuilder *graph, const camel::core::type::Type *type) {
+        return graph != nullptr ? graph->name() : camel::core::type::typeToString(type);
+    };
+    DiagnosticBuilder builder = diags_->of(SemanticDiag::ResourceInferenceConflict);
+    const auto sourceContext  = context_ ? context_->sourceContext() : nullptr;
+    const auto originOf       = [&](DraftGraphBuilder *graph) {
+        return sourceContext != nullptr && graph != nullptr
+                   ? sourceContext->debugMap().graphOrigin(graph->graphId())
+                   : camel::source::kInvalidOriginId;
+    };
+    const auto origin = originOf(anchor);
+    if (origin != camel::source::kInvalidOriginId) {
+        builder.atOrigin(origin);
+    }
+    DraftGraphBuilder *other = anchor == leftOwner ? rightOwner : leftOwner;
+    const auto otherOrigin   = originOf(other);
+    if (otherOrigin != camel::source::kInvalidOriginId) {
+        builder.relatedOrigin(
+            otherOrigin,
+            "the other value this position is given: the two have to write the same resources");
+    }
+    builder.commit(
+        nameOf(leftOwner, conflict.left),
+        nameOf(rightOwner, conflict.right),
+        camel::core::type::typeToString(conflict.left),
+        camel::core::type::typeToString(conflict.right));
+}
+
 void Builder::reportDroppedEffectsOfBodies() {
     for (const compile_graph_ptr_t &graph : unit_->builtBodies) {
         reportDroppedEffects(graph, true);
@@ -543,15 +578,34 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return; // the body did not build (an error was reported)
     }
     reach();
-    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h): a write to a
-    // resource outside the program is used by the region it is written in, so it runs although
-    // nothing reads what it produces. This is the same seed the liveness walk of a graph and the
-    // execution order make; it is made here too because this walk answers the warning and must
-    // agree with them, and it is written the same way so that the two cannot drift: the body's
-    // writes run with the graph, a region's writes run with the region, and a region runs only once
-    // its owner is live.
-    const std::vector<runtime::RegionRootCandidate> regionRoots =
+// The roots a region adds (design principles 3.1 and 3.3; camel/runtime/region_roots.h): a write
+    // a running region owes is used by the region it is written in, so it runs although nothing reads
+    // what it produces -- an outside write (3.1) and a write to a handle (3.3: the reader of a box
+    // may stand in a graph this one cannot see) alike. This is the same seed the liveness walk of a
+    // graph and the execution order make; it is made here too because this walk answers the warning
+    // and must agree with them, and it is written the same way so that the two cannot drift: the
+    // body's writes run with the graph, a region's writes run with the region, and a region runs only
+    // once its owner is live.
+    //
+    // A branch that joins no value is a seed of the same kind (design principles 3.1, 3.7), and for
+    // the same reason as the liveness walk's: a branch written as a statement has no value of its
+    // own, so it is a statement of the region it is written in and runs with that region. It is
+    // seeded with the region that decides it, so the arms' own writes still wait for the arm's
+    // owner -- which is now this branch. A loop is not this case (its value is the state it leaves,
+    // and a loop nobody needs is a computation nobody wants).
+    std::vector<runtime::RegionRootCandidate> regionRoots =
         runtime::regionRootCandidatesOfDraft(draft);
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!runtime::branchJoinsNoValue(draft, id)) {
+            continue;
+        }
+        // The branch and the JOIN that closes it, together: `reach` below follows data, control and
+        // sync edges, and the edge from a BRCH to its JOIN is none of the three -- it is read
+        // through the payload -- so seeding one half alone would keep one half and report the other.
+        for (draft_node_ref_t half : {id, runtime::branchJoinOf(draft, id)}) {
+            regionRoots.push_back({half, runtime::decidingRegionOfDraft(draft, half)});
+        }
+    }
     for (const runtime::RegionRootCandidate &candidate : regionRoots) {
         if (candidate.region == 0 && needed.insert(candidate.node).second) {
             work.push_back(candidate.node);
@@ -633,9 +687,7 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         std::string subject;
         switch (nodeKindOf(node)) {
         case runtime::GCNodeKind::Oper: {
-            const std::string &name = graph->operTarget(node)->name();
-            subject = name.starts_with("__assn") ? std::string("The assignment")
-                                                 : std::format("The call of '{}'", name);
+            subject = std::format("The call of '{}'", graph->operTarget(node)->name());
         } break;
         case runtime::GCNodeKind::Func:
             subject = std::format("The call of '{}'", graph->funcTarget(node)->name());
@@ -656,7 +708,148 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::EffectNotExecuted)
             .atOrigin(origin)
-            .commit(subject, "nothing depends on it and it is not in a sync block");
+            .commit(subject, "nothing needs what it gives, so nothing runs it");
+    }
+    // A write to a variable whose value nothing reads (design principles 3.1 and 3.5, the ruling of
+    // 2026-11-15: assigning to a `var` is not an effect). What such a write drops is a value, and a
+    // dropped value is what this says: the same thing one rule says about any value nobody uses
+    // (UnusedPureResult, UnusedFallibleValue), and never a word about an effect. The write is not
+    // an effect, so EffectNotExecuted above is not the place for it: that one is about a statement
+    // nothing needs, and the region it is written in -- a fact about the value, not about how far
+    // the statement reaches (design principles 3.1 and 3.3, the ruling of 2026-11-16: a write of a
+    // handle is used by the region it is written into, by the same rule as an outside write).
+    //
+    // What makes such a write's value dead is that no read takes it, and the walk above does not
+    // answer that: it answers whether a read goes *through the write's own node*. There are two
+    // ways a read takes the value and leaves that node with no user of its own.
+    //
+    // The first is the fold (Builder::collapseNonEscapingVariableReads): a read of a `var` the
+    // builder could keep out of a cell takes the value the write stores and not the write -- the
+    // read is handed the write's second operand -- so the write's node ends up with no consumer
+    // while the value it stored is read by everything after it. Asking the walk alone reported
+    // exactly those writes (`t = t + 1` followed by a read of `t`, the ordinary way a counter is
+    // written), which made the warning contradict its own text and `-Werror` refuse a legal
+    // program.
+    //
+    // The second is a variable that kept its cell: there the read is a `:var/get` of the cell and
+    // the edge runs from the write to that read, because the store's result is the cell's new
+    // state. `needed` cannot answer this one either -- a `sync` body chains every statement into
+    // the next one's CTRL and SYNC inputs, so the walk holds a store whose result nobody reads.
+    //
+    // So the value is read when any of these holds: the node computing the stored value has a user
+    // other than the write; the write has a user that takes its result as a value; or the stored
+    // value is a root the walk started from (the result of a body is a node and not an edge to one
+    // -- `setGraphReturnFromResult` names `returnNode` as the value itself -- so a returned value
+    // has no user to be found). A compound assignment (`__assn_add__`, `__assn_sub__`, ...) computes
+    // the value it stores itself, so it has no operand to ask about and the walk is its whole
+    // answer.
+    const auto storedValueIsRead = [&](draft_node_ref_t writeId, const std::string &name) {
+        if (name != "__assn__" && name != "__assn_owned__") {
+            return false;
+        }
+        const auto operands = draft.normInputsOf(writeId);
+        if (operands.size() < 2) {
+            return false;
+        }
+        // The stored value itself, taken by anything that is not this write.
+        for (auto users : {draft.normUsersOf(operands[1]), draft.withUsersOf(operands[1])}) {
+            for (draft_node_ref_t user : users) {
+                if (user != writeId && draft.alive(user)) {
+                    return true;
+                }
+            }
+        }
+        // The write's result, taken as a value: the `:var/get` of a variable that kept its cell,
+        // and every read standing after it. Another store of the same variable is not a read --
+        // `t = 1; t = 2` hands the cell's state on and reads neither value -- so a store is skipped.
+        for (auto users : {draft.normUsersOf(writeId), draft.withUsersOf(writeId)}) {
+            for (draft_node_ref_t user : users) {
+                if (!draft.alive(user)) {
+                    continue;
+                }
+                node_handle_t userNode = draft.ref(user);
+                if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
+                    return true;
+                }
+                const auto userTarget = graph->operTarget(userNode);
+                if (userTarget == nullptr || !userTarget->name().starts_with("__assn")) {
+                    return true;
+                }
+            }
+        }
+        // The stored value as a root of the walk, asked only of a write the walk does not hold: a
+        // write it does hold hands its own operand into the set, and that says nothing about a read.
+        return !needed.contains(writeId) && needed.contains(operands[1]);
+    };
+    // Whether this graph is the whole story of the cell a write stores into: a cell of this graph,
+    // not a `var` parameter (a `Port`, whose value the caller reads after the call: `func swap(var
+    // x: int, v: int)` stores `v` for its caller and nothing in its own body reads it), and used by
+    // no one but the writes of this body. Any other user -- a read of the cell, a closure that
+    // captured it, a call it was handed to as a `var` argument -- is a way for the value to be read
+    // that this graph cannot see, and then nothing here can say the value is read by nobody.
+    const auto cellIsThisGraphsAlone = [&](draft_node_ref_t writeId) {
+        const auto operands = draft.normInputsOf(writeId);
+        if (operands.empty()) {
+            return false;
+        }
+        const draft_node_ref_t cell = operands[0];
+        if (!draft.isNamedBy(draft.ref(cell)) || !draft.alive(cell)) {
+            return false;
+        }
+        if (nodeKindOf(draft.ref(cell)) == runtime::GCNodeKind::Port) {
+            return false;
+        }
+        for (auto users :
+             {draft.normUsersOf(cell), draft.withUsersOf(cell), draft.ctrlUsersOf(cell)}) {
+            for (draft_node_ref_t user : users) {
+                if (!draft.alive(user)) {
+                    continue;
+                }
+                node_handle_t userNode = draft.ref(user);
+                if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
+                    return false;
+                }
+                const auto userTarget = graph->operTarget(userNode);
+                if (userTarget == nullptr || !userTarget->name().starts_with("__assn")) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!draft.alive(id)) {
+            continue;
+        }
+        if (graph == rootGraph_ && !(id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
+            continue; // another module's top-level write, reported by that module's own pass
+        }
+        node_handle_t node = draft.ref(id);
+        if (nodeKindOf(node) != runtime::GCNodeKind::Oper) {
+            continue;
+        }
+        const auto target = graph->operTarget(node);
+        if (target == nullptr || !target->name().starts_with("__assn")) {
+            continue;
+        }
+        if (storedValueIsRead(id, target->name())) {
+            continue;
+        }
+        // A write that does not run cannot have a reader: nothing it would store is ever there, so
+        // the report stands wherever the cell lives. A write that runs is another matter. Then,
+        // when its cell leaves this graph -- a `var` parameter a caller reads after the call, a
+        // module-level `var` another body reads -- some read this graph cannot see may take the
+        // value, and nothing here can say it is read by nobody. A `sync` block is where a write
+        // whose value nobody reads still runs, because it is a statement of the chain; that is why
+        // this is asked of the write that runs and not of the walk above, which holds it there.
+        if (needed.contains(id) && !cellIsThisGraphsAlone(id)) {
+            continue;
+        }
+        camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
+        if (origin == camel::source::kInvalidOriginId && sourceContext) {
+            origin = sourceContext->debugMap().graphOrigin(graph->graphId());
+        }
+        diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
     }
     // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
     // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no
@@ -1478,9 +1671,17 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
     // it, as `xs->append<5>` did before 11.3: the fix is to bind the variable to the result.
     std::string fix;
     const std::string text = sourceTextOf(call);
+    // The name a closure captured is a PORT and not a variable once the capture is by value
+    // (design principles 3.5, 197), but it is still the name of a variable of the body the closure
+    // stands in: the sentence below is about what the program meant to do, and the capture rule is
+    // the one that answers whether the write is allowed. Asking only for a variable made the report
+    // fall back to the generic sentence, which names nothing the reader can act on.
+    node_handle_t target = nullptr;
     if (call->size() >= 2 && call->at(1)->type() == GCT::NodeKind::DREF &&
-        nodeAt(call->at(1)->name()).has_value() &&
-        isVariable(resolveNodeByRef(call->at(1)->name()))) {
+        nodeAt(call->at(1)->name()).has_value()) {
+        target = resolveNodeByRef(call->at(1)->name());
+    }
+    if (target != nullptr && (isVariable(target) || capturePortOfAVariable(target))) {
         const std::string variable = call->at(1)->name();
         fix = text.empty() ? std::format(
                                  "; to change the variable '{0}', bind it to the result: "

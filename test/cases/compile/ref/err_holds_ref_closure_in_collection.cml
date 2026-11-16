@@ -1,0 +1,20 @@
+/**
+ * The same rule for the other two shapes a value can hold: a tuple and an array. Each of them holds
+ * a closure that captured a reference, so each box is a box that holds a reference at a position the
+ * type walk cannot see -- the capture is not in the type. Two boxes, so the program is told about
+ * two places.
+ */
+
+import state
+
+func main(): int sync {
+    let n = state::ref(0)
+    let h = (): int => state::get(n)
+    let pair = (h, 1)
+    let many = [h, (): int => 1]
+    let box_pair = state::ref(pair)
+    let box_many = state::ref(many)
+    println(pair.0())
+    println(many[0]())
+    return 0
+}

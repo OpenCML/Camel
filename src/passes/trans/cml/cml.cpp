@@ -465,6 +465,14 @@ class CmlPrinter {
     std::unordered_map<gc_node_ref_t, std::string> params_;
     std::unordered_map<gc_node_ref_t, std::string> declared_;
     std::unordered_map<gc_node_ref_t, std::string> cells_;
+    /// The value each `var` was created with, by the cell it starts: a read that stands before any
+    /// write of the same variable is folded by the builder to that value, so one node is both the
+    /// `:var/new` operand and the read, and only the variable's name says that. See `expression`.
+    std::unordered_map<gc_node_ref_t, gc_node_ref_t> cellOfValue_;
+    /// The cells the text has already written. The name of a variable means "the version the text
+    /// has written so far" (`materialiseRead` says the same for a read the text has not reached),
+    /// so after a write to the cell the value it was created with is no longer what the name reads.
+    std::unordered_set<gc_node_ref_t> writtenCells_;
     std::unordered_set<std::string> usedNames_;
     std::vector<std::string> lines_;
     /// The modules the printed program names (see `collectImports`): every operator the printer
@@ -997,6 +1005,8 @@ class CmlPrinter {
         params_.clear();
         declared_.clear();
         cells_.clear();
+        cellOfValue_.clear();
+        writtenCells_.clear();
         usedNames_.clear();
         lines_.clear();
         if (resetNames) {
@@ -2641,6 +2651,13 @@ class CmlPrinter {
                 break;
             }
             if (uri.starts_with(":var/")) {
+                // A write through a call leaves a new version of the cell without a statement of
+                // its own (`:var/after`), so from here on the variable's name no longer means the
+                // value the cell was created with (see `cellOfValue_`).
+                const auto inputs = graph_->normInputsOf(ref);
+                if (!inputs.empty()) {
+                    writtenCells_.insert(cellOf(inputs.front()));
+                }
                 return;
             }
             if (uri.starts_with(":op/assn")) {
@@ -2840,6 +2857,14 @@ class CmlPrinter {
         const Expr initial = expression(inputs.front());
         cells_[ref]        = name;
         declared_[ref]     = name;
+        // The cell has a name now, so a read the builder folded to the value it was created with
+        // can be written as this variable (see `expression`). One value that starts two cells says
+        // nothing about which name a read of it meant, and then it keeps the value spelling.
+        if (!cellOfValue_.contains(inputs.front())) {
+            cellOfValue_[inputs.front()] = ref;
+        } else if (cellOfValue_.at(inputs.front()) != ref) {
+            cellOfValue_.erase(inputs.front());
+        }
         emit(std::format("{}var {}{} = {}", indent_, name, annotationOf(valueType), initial.text));
     }
 
@@ -2921,6 +2946,9 @@ class CmlPrinter {
         // garbage while the value's text and the operator were intact.
         const std::string cellName  = cell->second;
         const std::string valueText = expression(inputs.back()).text;
+        // From here on the variable's name means the version this write leaves, not the value the
+        // cell was created with (see `cellOfValue_`).
+        writtenCells_.insert(cellOf(inputs.front()));
         emit(indent_ + std::format("{} {} {}", cellName, assignmentOperator(uri), valueText));
     }
 
@@ -3035,6 +3063,26 @@ class CmlPrinter {
         auto declared = declared_.find(ref);
         if (declared != declared_.end()) {
             return {declared->second, 100};
+        }
+        // A read of the value a `var` was created with *is* the variable. The builder folds a read
+        // that stands before any write of the same variable to the value the cell was made with:
+        // `var bonus = 1 ... bonus + score` gives one node that is both the `:var/new` operand and
+        // the read, and no other node in the graph is that read. Writing the value again instead
+        // (`1 + score`) is a *second* literal, so the printed program comes back one `DATA` short
+        // of the original and the shared node is gone -- `trans/cml/linear.cml` printed
+        // `1 + score` for `bonus + score`, and `trans/cml.plan.toml#print_and_recompile` was red on
+        // exactly that (`print_and_recompile` reads `linear.cml`, and the difference the checker
+        // reports first is whichever class its tie-break lands on). Naming the variable is the one
+        // spelling that builds the same graph: measured, `let cml1 = bonus + score` recompiles to
+        // the original's `DATA 1 -> COPY -> {:var/new, :op/add_l}`.
+        //
+        // The name is only used where the text can read it: the declaration has been written
+        // (`cells_` holds the name) and no write to that cell stands between it and this read.
+        if (auto value = cellOfValue_.find(ref);
+            value != cellOfValue_.end() && !writtenCells_.contains(value->second)) {
+            if (auto cell = cells_.find(value->second); cell != cells_.end()) {
+                return {cell->second, 100};
+            }
         }
         const camel::runtime::GCNode *node = graph_->node(ref);
         if (node == nullptr) {
