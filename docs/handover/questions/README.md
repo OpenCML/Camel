@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：127 行（页已不在 `questions/` 里）
+## 生成器不会删的行：128 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -120,6 +120,7 @@
 | [`2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with`](../reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) | 产出处的那一个减一由谁发：编译器，还是运行时？ | 在 `reviews/` |
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](../reviews/2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ | 在 `reviews/` |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
+| [`2026-11-16-a-stream-values-type-does-not-mention-its-captures`](../reviews/2026-11-16-a-stream-values-type-does-not-mention-its-captures.cn.md) | 流值的类型说「我不捕获」，它的端口说「我捕获了三个」 | 在 `reviews/` |
 | [`2026-11-16-camel-for-ai-diagnostics-doc-stale-on-develop`](../reviews/2026-11-16-camel-for-ai-diagnostics-doc-stale-on-develop.cn.md) | `camel-for-ai` 在 develop 上就是红的：这份生成物该由谁重生成、要不要每车道各修一遍？ | 在 `reviews/` |
 | [`2026-11-16-casevm-does-not-compile-in-any-configuration`](../reviews/2026-11-16-casevm-does-not-compile-in-any-configuration.cn.md) | `casevm.cpp` 在任何配置下都编不出来：删掉还是连 20 处一起修？ | 在 `reviews/` |
 | [`2026-11-16-develop-carries-21-known-reds-that-its-own-commit-forbade-merging`](../reviews/2026-11-16-develop-carries-21-known-reds-that-its-own-commit-forbade-merging.cn.md) | develop 上有 21 条红，而带它们进来的那笔提交自己写着「先别合」 | 在 `reviews/` |
