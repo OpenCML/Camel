@@ -39,12 +39,27 @@ for (const key of [
     'benchmark',
     'cpu_ms',
     'cpu_budget_ms',
+    'cpu_limit_ms',
+    'cpu_margin_x',
+    'cpu_margin_basis',
 ]) {
     assert.ok(Object.hasOwn(input, key), `payload lacks ${key}`)
 }
 assert.ok(Array.isArray(input.diagnostics))
 assert.equal(input.benchmark, null)
-// This plan declares no CPU budget, so the two cost fields are present and null: a script can tell
-// "this test is judged on its own CPU time" from the value, not from the key's absence.
-assert.equal(input.cpu_ms, null)
+// This plan declares no CPU budget, so the budget is null and the line is the timeout margin's own:
+// the runner records the reading, the line it was read against and the room under it for every
+// test, so a script can tell which rule judged this test by `cpu_margin_basis`, not by a missing
+// key. `cpu_ms` is the host's to give: a host without `/proc/self/stat` reports no figure at all,
+// and then the ratio is null while the line is still recorded.
 assert.equal(input.cpu_budget_ms, null)
+assert.equal(input.cpu_margin_basis, 'timeout_margin')
+// The line and the ratio are one statement, and the payload has to carry both: the ratio is the
+// line divided by the reading, so a script that reads either can check the other. The line itself
+// is the test's `timeout_ms / 4` here (this plan declares no timeout, so the runner's 10 s default),
+// and it is not asserted as a literal because `CAMEL_TEST_TIMEOUT_SCALE` moves it deliberately.
+if (input.cpu_ms !== null && input.cpu_ms > 0) {
+    assert.equal(input.cpu_margin_x, Math.round((input.cpu_limit_ms / input.cpu_ms) * 1000) / 1000)
+} else {
+    assert.equal(input.cpu_margin_x, null)
+}

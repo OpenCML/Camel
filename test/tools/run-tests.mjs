@@ -596,6 +596,42 @@ export function timeoutMarginVerdict({ cpuMs, cpuReason, wallMs, timeoutMs, canR
 }
 
 /**
+ * The three numbers that answer "how far from the line did this test run": the CPU time the kernel
+ * charged its own process tree, the line its cost verdict was read against, and how many times that
+ * reading fits under that line. They are recorded for **every** test, not only for the ones that
+ * declare a bound: the timeout-margin rule above is judged on this same figure, and a passing test
+ * used to be recorded as `cpu_ms: null` -- "ran, did not go red, and nobody can say by how much",
+ * which is the third shape of a green nobody looked at (beside the green of a test that never ran
+ * and the green of an assertion that asserted nothing). The reading itself costs nothing more than
+ * it already did: the wrapper runs for every test on a host whose kernel reports CPU time, and the
+ * figure was computed and then discarded.
+ *
+ * The line is **not decided here**. It is the number the verdicts below were made from, and this
+ * function records it; a record that moved it to make a margin read bigger would erase the very
+ * measurement it exists for.
+ *
+ *   * `cpu_budget_ms`, when the test declares one: the test is judged on that figure, and
+ *     `timeout_ms` is only its liveness bound;
+ *   * otherwise `timeout_ms / TIMEOUT_MARGIN`: the figure `timeoutMarginVerdict` compares the
+ *     reading against, since that rule fails a test whose own CPU time used more than a quarter of
+ *     its timeout.
+ *
+ * `marginX` is `line / reading`: 1.0 is the line itself, 39 is a reading with thirty-nine times the
+ * room it needs, and 0.99 is one percent from red. It is null when there is no reading (a host
+ * without `/proc/self/stat`, or a wrapper that reported nothing) and when the reading is 0 ms --
+ * below the kernel's 10 ms tick, so the ratio is not a number. The line and the reading are
+ * recorded in both cases, so the room is still there to be read even when it cannot be divided.
+ */
+function costRecord({ cpuMs, timeoutMs, cpuBudgetMs }) {
+    const basis = cpuBudgetMs === null ? 'timeout_margin' : 'cpu_budget_ms'
+    const lineMs = cpuBudgetMs === null ? timeoutMs / TIMEOUT_MARGIN : cpuBudgetMs
+    const marginX = Number.isFinite(cpuMs) && cpuMs > 0
+        ? Math.round((lineMs / cpuMs) * 1000) / 1000
+        : null
+    return { cpuLimitMs: Math.round(lineMs * 1000) / 1000, cpuMarginX: marginX, cpuMarginBasis: basis }
+}
+
+/**
  * A counting semaphore with FIFO order. A normal test holds one slot; a test marked
  * `parallel = false` asks for every slot, so it starts only when no other test is running and
  * no other test starts while it runs. FIFO keeps a queued serial test ahead of tests queued
@@ -1756,10 +1792,17 @@ async function runVerification(test, result) {
         normalized: result.normalized,
         diagnostics: result.diagnostics,
         benchmark: result.benchmark,
-        // The CPU cost judgement, when the test declared one: the figure read on the test's own
-        // process tree and the budget it was judged against (`null` for every other test).
+        // The CPU cost reading, for every test: the figure the test's own process tree was charged,
+        // the declared budget if it has one, the line its cost verdict was read against, and the
+        // room left under that line. `cpu_ms` used to be the budget's figure only (`null` for every
+        // other test), so a script could not see the margin of a test judged by the timeout rule
+        // even though the runner had measured it; the three fields beside it are the same ones
+        // meta.json records (see `costRecord`).
         cpu_ms: result.cpuMs ?? null,
         cpu_budget_ms: result.cpuBudgetMs ?? null,
+        cpu_limit_ms: result.cpuLimitMs ?? null,
+        cpu_margin_x: result.cpuMarginX ?? null,
+        cpu_margin_basis: result.cpuMarginBasis ?? null,
         test_tmp: result.testTmp,
         test_tmp_relative: result.testTmpRelative,
     }
@@ -2324,6 +2367,8 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         output: applyNormalizers(raw.output, test.normalizers),
     }
 
+    const costFields = costRecord({ cpuMs: cpuReading.cpuMs, timeoutMs, cpuBudgetMs })
+
     const result = {
         ...raw,
         normalized,
@@ -2336,12 +2381,15 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         // Set before validation: the verify script payload carries this as `case_path`, and the
         // script that normalizes a source path out of its output needs it.
         casePath,
-        // The CPU cost judgement, if this test declared one: the figure the wrapper reported and
-        // the budget it is read against, both recorded on the result (meta.json, the verify
-        // payload, the status line) so a reader sees the numbers the verdict came from.
+        // The CPU cost reading, for every test: the figure the wrapper reported (null where this
+        // host reports none), the declared budget if there is one, the line the cost verdict was
+        // read against and the room left under it (see `costRecord`). meta.json and the verify
+        // payload carry all four, so "how far from red" is in the record and not only inferable
+        // from a bound somebody has to know to divide by four.
         cpuBudgetMs,
-        cpuMs: cpuBudgetMs === null ? null : cpuReading.cpuMs,
-        cpuReason: cpuBudgetMs === null ? null : cpuReading.reason,
+        cpuMs: cpuReading.cpuMs,
+        cpuReason: cpuReading.reason,
+        ...costFields,
         // The card the runner chose for this test, if it chose one: which card a GPU test ran on
         // is what makes its result readable later, and it is not derivable from the output.
         cudaDevice: test.__cudaDevice || null,
@@ -2517,10 +2565,21 @@ function writeLogFiles(plan, test, result, status, logDir) {
                     : null,
                 wall_ms: result.wallMs,
                 timeout_ms: result.timeoutMs ?? null,
-                // A test whose bound is its own CPU time records the figure and the budget beside
-                // the wall clock, which is provenance for it and not the bound.
+                // The CPU reading every test records: the figure the kernel charged its own process
+                // tree, and the budget it declares if it declares one. The wall clock above is
+                // provenance, not the bound.
                 cpu_ms: result.cpuMs ?? null,
                 cpu_budget_ms: result.cpuBudgetMs ?? null,
+                // The same reading every test now records, with the line it was judged against and
+                // how many times it fits under that line: `cpu_limit_ms` is the test's
+                // `cpu_budget_ms` when it declares one and `timeout_ms / 4` otherwise (the timeout
+                // margin's line), `cpu_margin_basis` says which of the two it is, and
+                // `cpu_margin_x` is `cpu_limit_ms / cpu_ms` (1.0 is the line, null where there is
+                // no reading or the reading is 0 ms). Read together they answer "how far from red"
+                // for a green test, which is what the record could not answer before.
+                cpu_limit_ms: result.cpuLimitMs ?? null,
+                cpu_margin_x: result.cpuMarginX ?? null,
+                cpu_margin_basis: result.cpuMarginBasis ?? null,
                 // Set where this host reports no CPU time: the test's timeout margin was not judged
                 // at all, and this says why (NO_CPU_TIME_SKIP) instead of leaving a pass that looks
                 // like a judged one.
@@ -3106,6 +3165,11 @@ function runnerErrorResult(casePath, message) {
         cpuBudgetMs: null,
         cpuMs: null,
         cpuReason: null,
+        // Nothing ran, so there is no reading and no line to read it against; the keys are present
+        // rather than absent, for the reason the verify payload keeps its null fields.
+        cpuLimitMs: null,
+        cpuMarginX: null,
+        cpuMarginBasis: null,
         failures: [`runner error: ${message}`],
         status: 'fail',
         casePath,
