@@ -975,6 +975,21 @@ void Builder::scanClosureLastUses() {
             // scope". A stretch cut that far covers every write after the making, which is what the
             // report reads; the shape the design keeps legal, a name assigned after the closure is
             // done with, still shows as a use after the write and keeps its own offset above.
+            //
+            // Known over-wide, and not resolved here. The second shape -- a closure bound to a name
+            // that the block never uses again, with no placement behind it -- has no stretch under
+            // 3.5 and is legal, and this branch reports a write after it anyway:
+            //
+            //     let h = (): int => c     // never used
+            //     c = 41                   // reported, though the stretch is empty
+            //
+            // The two shapes are not separable in the graph: making the closure's value part of
+            // another value folds it out of the construction that built it, so the walk meets the
+            // closure node exactly once (its own binding) and no node carries the name. The way to
+            // narrow it is to read the placement off the source -- the tuple, struct, array, `Ref`
+            // or return the value is put into -- and not to keep counting names in the graph. The
+            // measured pair that makes this visible: `let h = (): int => c; let first = h(); c = c + 1`
+            // prints 0 and is legal (the last use is the call), while the shape above is refused.
             closureUseOf_[binding.closure] = {binding.at, true, binding.name};
         }
     }
