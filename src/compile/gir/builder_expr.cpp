@@ -2845,6 +2845,8 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
     // callee writes the caller's cell back, and a value has nowhere to write).
     std::unordered_map<const GCT::Node *, bool> eligible;
     std::unordered_map<const GCT::Node *, size_t> declaredIn;
+    std::set<size_t> armDepths;
+    std::map<size_t, std::set<const GCT::Node *>> branchWrites;
     std::vector<std::unordered_map<std::string, const GCT::Node *>> scopes(1);
     const auto lookup = [&](const std::string &name) -> const GCT::Node * {
         for (size_t i = scopes.size(); i-- > 0;) {
@@ -2858,14 +2860,25 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
     const auto use = [&](const GCT::Node *decl, size_t depth, const GCT::Node *call, size_t index) {
         bool &answer = eligible[decl];
         if (declaredIn[decl] != depth) {
-            answer = false; // across a region: the value has to be carried into it
+            // Across a region the value has to be carried into it. One shape is carried without a
+            // new mechanism: a write inside the arm of a statement branch of the declaration's own
+            // region, where the branch's JOIN carries the value (stage S2). A join carries one
+            // value, so a branch whose arms write two names carries neither -- settled after the
+            // walk, and the build side carries exactly what this allows.
+            const bool armOfStatementBranch =
+                depth == declaredIn[decl] + 1 && armDepths.count(depth) != 0;
+            if (!armOfStatementBranch) {
+                answer = false;
+            } else {
+                branchWrites[depth].insert(decl);
+            }
         }
         if (call != nullptr && argumentMayWriteBack(call, index, scopes)) {
             answer = false; // written by the callee through its `var` parameter
         }
     };
-    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t)> walk =
-        [&](const GCT::Node *node, size_t depth, const GCT::Node *call, size_t index) {
+    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t, bool)> walk =
+        [&](const GCT::Node *node, size_t depth, const GCT::Node *call, size_t index, bool statement) {
             if (node == nullptr || node->type() == GCT::NodeKind::TYPE) {
                 return;
             }
@@ -2881,8 +2894,19 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
             // the arm's depth and a use of it in an enclosing block is across a region.
             const bool region = node != body && opensRegion(node->type());
             const size_t inner = declares ? depth : (region ? depth + 1 : depth);
+            // The arms of a statement branch are the one depth whose writes are carried (S2). A
+            // branch whose value is used fills the join's only value slot with its own value, so its
+            // arms are not carried -- the red line, settled before any carry is written.
+            const bool statementBranch =
+                statement && (node->type() == GCT::NodeKind::CASE ||
+                              node->type() == GCT::NodeKind::TCASE);
+            // Anything written directly in a region body is a statement of that body.
+            const bool childStatement = region || node == body;
             if (region) {
                 scopes.emplace_back();
+                if (statementBranch) {
+                    armDepths.insert(inner);
+                }
             }
             if (declares) {
                 // `var x = e` is a `VARI` over the one name it declares. Any other shape (the names
@@ -2895,7 +2919,7 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                      node->at(0)->type() == GCT::NodeKind::NREF);
                 if (!single) {
                     for (size_t i = 0; i < node->size(); ++i) {
-                        walk(node->at(i), inner, nullptr, 0);
+                        walk(node->at(i), inner, nullptr, 0, childStatement);
                     }
                     if (region) {
                         scopes.pop_back();
@@ -2913,7 +2937,7 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                 const bool typed =
                     initializer != nullptr && initializer->type() == GCT::NodeKind::TYPE;
                 if (!typed && initializer != nullptr) {
-                    walk(initializer, depth, nullptr, 0);
+                    walk(initializer, depth, nullptr, 0, false);
                 }
                 if (node->type() == GCT::NodeKind::VARI && !typed) {
                     eligible[nameNode] = true;
@@ -2923,6 +2947,9 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                     node->type() == GCT::NodeKind::VARI && !typed ? nameNode : nullptr;
                 if (region) {
                     scopes.pop_back();
+                    if (statementBranch) {
+                        armDepths.erase(inner);
+                    }
                 }
                 return;
             }
@@ -2931,16 +2958,26 @@ std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::N
                                 node->type() == GCT::NodeKind::TAPP;
             for (size_t i = 0; i < node->size(); ++i) {
                 if (isCall) {
-                    walk(node->at(i), inner, node, i);
+                    walk(node->at(i), inner, node, i, childStatement);
                 } else {
-                    walk(node->at(i), inner, nullptr, 0);
+                    walk(node->at(i), inner, nullptr, 0, childStatement);
                 }
             }
             if (region) {
                 scopes.pop_back();
             }
         };
-    walk(body, 0, nullptr, 0);
+    walk(body, 0, nullptr, 0, false);
+    // A branch that writes two declarations carries neither: its JOIN has one value slot. The census
+    // over the corpus found that shape only in a generator's carried state, which a capture keeps a
+    // cell anyway; if a plain branch ever writes two names, S2 has to grow the tuple form.
+    for (const auto &[depth, names] : branchWrites) {
+        if (names.size() >= 2) {
+            for (const GCT::Node *decl : names) {
+                eligible[decl] = false;
+            }
+        }
+    }
     return eligible;
 }
 
@@ -3063,7 +3100,22 @@ bool Builder::nameIsSsa(const std::string &name) const { return ssaBindingOf(nam
 void Builder::rebindSsa(const std::string &name, node_handle_t value) {
     SsaValue *binding = mutableSsaBindingOf(name);
     GUARD(binding != nullptr, "An SSA `var` is written where its declaration is in scope.");
+    // The value the name had before this branch, taken as the first arm writes it: the assignment
+    // below overwrites the binding, so afterwards the join could not tell it from the last arm's.
+    if (gatheringBranchValues_) {
+        branchBeforeValues_.emplace(name, binding->value);
+    }
     binding->value = value;
+    // A write inside an arm is what the branch's JOIN carries: the arm remembers the value it ends
+    // with, and the join is where the name goes on from there (stage S2).
+    if (!armStack_.empty() && armStack_.back() != nullptr) {
+        ArmBuild *arm = armStack_.back();
+        if (arm->ssaWrites.emplace(name, value).second) {
+            arm->ssaWriteOrder.push_back(name);
+        } else {
+            arm->ssaWrites[name] = value;
+        }
+    }
     // The binding the reads take. A write inside a nested statement list rebinds the entry of the
     // scope that declared the name, which is the one the reads of that region look up.
     for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {

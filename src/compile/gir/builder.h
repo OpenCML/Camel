@@ -1134,6 +1134,12 @@ class Builder {
     /// Set while the link a compound assignment rebuilds (`a = a op b`) is being written, so that
     /// the write it performs is not reported as a value nobody reads.
     bool inCompoundAssignment_ = false;
+    /// Set while a branch's arms are being built. `rebindSsa` changes the binding where it stands,
+    /// so the value a name had before the branch has to be taken as the first arm writes it: by the
+    /// time the join is built the binding holds the last arm's value. Without it the join carries
+    /// the wrong value into the arm that wrote nothing, which is a wrong program, not a red test.
+    bool gatheringBranchValues_ = false;
+    std::unordered_map<std::string, node_handle_t> branchBeforeValues_;
     /// The declarations that decide eligibility, once, at the declaration: a `var` is SSA exactly
     /// when every read and every write of its name lies in the region that declared it (no join,
     /// no loop head, no arm), no path of it is written, and the name is never handed to a `var`
@@ -1335,6 +1341,10 @@ class Builder {
         };
         std::unordered_map<node_handle_t, Touched> touched;
         std::vector<node_handle_t> touchedOrder; // in the order they were first changed
+        /// The `var` names the arm built as values, and the value each ended with, in the order
+        /// they were first written there: what the branch's JOIN carries (stage S2, one per join).
+        std::unordered_map<std::string, node_handle_t> ssaWrites;
+        std::vector<std::string> ssaWriteOrder;
         /// The ports of the region (a loop's condition or body), in order: the element, then the
         /// values of the state.
         std::vector<node_handle_t> ports;
