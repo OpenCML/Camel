@@ -43,6 +43,16 @@ enum class SyntaxDiag : uint32_t {
     // naming the parentheses is what keeps the program from being told only that a token did not fit.
     LambdaParametersNeedParentheses = 0x000012,
 
+    // A range has only a bounded form (design principles 4.2; the author's ruling of 2026-11-16): there
+    // is no open `a..` that counts on forever, counting until a condition holds is a counting `while`
+    // loop, and no syntax is added for one. `..` is an operator, so `1..` makes the parser read the token
+    // that follows as its missing right operand and stop on it -- usually the keyword that starts the
+    // next line, which is the one token in the file that is not wrong. Naming the range is what keeps
+    // the program from being told that a token on the following line did not fit. The readings of `..`
+    // that have two operands are untouched: `a..b` is the interval, `f..g` is the composition, and `T..`
+    // is the stream mark of a type.
+    IntervalHasNoOpenForm = 0x000015,
+
     // Warnings (severity bits = Warn).
     ComparisonAcrossLines = 0x100001,
 };

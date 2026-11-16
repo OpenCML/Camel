@@ -1,12 +1,13 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// A write the rewrite leaves behind: `h` captured `c` and reaches nothing the program keeps --
-// `p.0` reads the tuple's first member alone -- and `w * 0` is the write's only reader, so folding
-// it leaves a write no root holds and no port reads: a dead write, which a rule may drop
-// (design principles 9.7). The rewrite policy here is the library's own `policy::direct`, so what
-// this case reads is the engine deleting it, not only the pass boundary accepting the graph.
-// `main` prints 1 whether or not the write ran, which is what "the behaviour is unchanged" means.
+// Refused since 2026-11-16 (design principles 3.5, 198, the author's ruling of that day): `h` is put
+// into the tuple `(1, h)` and `c` is written after it, so the stretch of the captured name runs to
+// the rest of the scope and the write is `CapturedVarWrittenAfterTheClosure`. The program used to be
+// the shape this plan read a dead write on: `w * 0` is the write's only reader, so folding it left a
+// write no root holds and no port reads, and `main` printed 1 whether or not the write ran. The plan
+// entries that name this case read the refusal now; `dead_write_held.cml` is the shape the judgement
+// is read on.
 
 func probe(): int sync {
     var c = 0
