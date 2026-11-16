@@ -4,7 +4,15 @@
 > 分母（不要重测）：`:var/new` **348**（census `list_sha=ac8288b4…`，files=3853 counted=2688），
 > A 生成器控制槽 0／B 闭包捕获 117（机器 64 + 程序 53）／C 普通局部 81／D `var` 形参 79／E 其他 71。
 > 直接构造之后 **270 消失**（C81 + D79 + E67 + B 只读程序捕获 43），**剩 78**（64 机器 + 10 模块级 + 4 判不了）。
-> 分类明细在 `docs/technical/63_what_the_348_units_are.md`（尚未合入本树；本页只用上面这几个数）。
+> 分类明细在 `docs/technical/63_what_the_348_units_are.md`（已合入本树；本页只用上面这几个数）。
+
+> **本页末尾有作者 2026-11-16 的批复，其中四条改变了下表，读表之前先读它：**
+> 1. S6 里「`FUNC` 上加生成器体标记」**不做**（建图器用自己的状态栈知道）；
+>    「留格子」只指生成器自己跨 `yield` 的 64 个机器单元，生成器体里程序写的闭包照常按值捕获。
+> 2. S3 之后加 **S3b**（就地更新，判据 `camel inspect --copies` 报「原地」）；S3b 不过，第一件不算完成。
+> 3. S5 里 4 个「判不了」按**函数值的类型**判，不留「判不了」。
+> 4. 模块级 10 个 `var` 不进 `Ref<T>`，作为 **S8**（原则 3.5：顶层 `var` 是编译错误）；
+>    **第一件终值 64，不是 78。**
 
 ## 1. 终局形状
 
@@ -34,7 +42,7 @@
 | **S4a** | 加**被调侧**：`var` 形参的新值随返回值打包输出，格子仍在、读数不变（纯准备段） | **267（本段不改变这个数）** | `G`，且 `var_new` 严格等于 267（用这条钉住「本段没有顺手改语义」） |
 | **S4b** | 删 `var` 形参的单元；加调用处重绑，写回不再经过格子 | **188**（−79） | `G`，`var_new` 188；`feat/linear/byref` 正例全绿；另钉一条 `f(a, a)`（同一次调用里同一个名字坐两个 `var` 位）的写回顺序 |
 | **S5** | E 的其余 67 个形状：按 63 的分类逐个往同一套判据上搬；**4 个判不了的留着** | **121**（−67） | `G`，`var_new` 121；若 63 把 E 拆成两种以上形状，就按形状再切，每段数从 63 取，合计仍是 67 |
-| **S6** | 删 `captures.cpp#decideCaptureByValue` 的 `programMayWriteThroughCall` 门与 `captureByValueOf_`；`__gen_` 前缀换成 `FUNC` 上的生成器体标记；B 的只读程序捕获按值 | **78**（−43） | `G`，`var_new` 78；`feat/linear/byref`、`feat/compile/function_values` 绿；`var_param_reference.cml#write_then_read` 的期望按问题页改（第 4 节） |
+| **S6** | 删 `captures.cpp#decideCaptureByValue` 的 `programMayWriteThroughCall` 门与 `captureByValueOf_`；`__gen_` 前缀换成 `FUNC` 上的生成器体标记（**作者 2026-11-16 批复第 1 条：不做，见页末**）；B 的只读程序捕获按值 | **78**（−43） | `G`，`var_new` 78；`feat/linear/byref`、`feat/compile/function_values` 绿；`var_param_reference.cml#write_then_read` 的期望按问题页改（第 4 节） |
 | **S7** | 纯删：`collapseNonEscapingVariableReads`、`variableReadSource_`、`knownCellUsers_`、`writesOf_`、`writeOnlyEscaping_`、`carriedVersions_`、`dropCarriedVariableUnits`、`kVarFoldDebug` 与 `[DBG-FOLD]`/`[DBG-W]` 打印 | **78（本段不改变这个数）** | `G`，且 `var_new`/总节点数/红集**逐字节不变**（纯删段唯一可接受的读数就是「什么都没变」） |
 
 工作量：S1、S2、S3、S4a、S6 各 ≤250 行、一次构建；**S4b 是唯一可能吃两次构建的一段**（协议换了，调用点与返回打包要对齐），
@@ -46,7 +54,7 @@
 - 门一，`nodeKindOf(origin) != Oper`（`var` 形参不是捕获候选）：**随 S4b 消失**——形参不再是格子。
 - 门二，`!localCell && programWrites(name)`：**留着**，只剩模块级那 10 个的用途；随模块 `var`/`Ref<T>` 线走。
 - 门三，`programMayWriteThroughCall(name)`：**随 S6 消失**，被「调用处重绑 + 被调者静态未知的名字留格子」取代。
-- `__gen_` 前缀豁免（`captures.cpp#compilerMadeClosure`）：**前缀判据删掉**，换成 `gct/node.h` 的 `FUNC` 上一个生成器体标记（`visitGeneratorBody` 处打上）；**「生成器体捕获留格子」这条规则留着**，所以 64 不动。
+- `__gen_` 前缀豁免（`captures.cpp#compilerMadeClosure`）：**前缀判据删掉**，换成 `gct/node.h` 的 `FUNC` 上一个生成器体标记（`visitGeneratorBody` 处打上）（**作者 2026-11-16 批复第 1 条：这个标记不做，建图器用自己的状态栈知道，见页末**）；**「生成器体捕获留格子」这条规则留着**，所以 64 不动。
 - `markNonRetainingReads`：**留着**，只剩 78 里那些格子的读；随模块 `var` 线走。
 - `kVarFoldDebug`：**随 S7 删除**（含两处 `fprintf`）。
 - `handedOver_` / `programWriters_`：**留着**。S4b 之后 `handedOver_` 的消费者只剩 `builder_operators.cpp` 里那段「被调者静态未知的保守写集」，随 10 + 4 那条线走。

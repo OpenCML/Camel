@@ -169,4 +169,4 @@ GIR 里「值没人用」和「读者已被折叠到写出的值上」同形。`
 ## 这一页不做的
 
 不提议、不实施任何代码改动。判不了的部分（4 个 E 的 CALL、`:var/take` 的原地用途、CAST 逃逸）写在
-`docs/handover/questions/2026-11-16-how-many-units-does-a-direct-ssa-build-remove.cn.md`，一页一问。
+`docs/handover/reviews/2026-11-16-how-many-units-does-a-direct-ssa-build-remove.cn.md`，一页一问。

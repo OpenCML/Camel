@@ -769,9 +769,19 @@ function readDeclarations(file, module, options = {}) {
             } else if (/^#impl\(/.test(trimmed)) {
                 // `#impl(kernel)`: a Camel definition that carries a native kernel for speed. The
                 // definition is what the page documents; the kernel is private to the module.
+            } else if (/^#macro\b/.test(trimmed)) {
+                // `#macro` is a tag the language defines on a function declaration, not a marker
+                // this page owns, so a signature file may carry it beside `#op(...)`: the standard
+                // library's transforms are macro functions, which is what lets `std::macro`
+                // evaluate a transform ahead of the run (the author's ruling of 2026-11-15 night,
+                // 4ae2c0179). A C++ module's transforms -- `jvp`, `split`, `transpose`, `vmap`,
+                // `first_with_as_param` -- have no other declaration to carry it, because the
+                // file's declarations are the only place a program reads them (`stdlib/
+                // signatures/<module>.cml`, beside `#op('module:function')`). The page does not
+                // render the tag; what it records is the declaration and its doc comment.
             } else if (module.kind === 'cpp') {
-                // A signature file writes `#op(...)` and nothing else: another tag there is a typo,
-                // not a declaration.
+                // A signature file writes `#op(...)` or the language's `#macro` and nothing else:
+                // another tag there is a typo, not a declaration.
                 throw new Error(`${path.basename(file)}:${i + 1}: unknown tag on a declaration`)
             }
             continue
