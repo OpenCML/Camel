@@ -77,6 +77,8 @@ const char *verdictOf(StorageReuse decision) {
         return "in-place";
     case StorageReuse::ByArrayCount:
         return "by-count";
+    case StorageReuse::Declared:
+        return "declared";
     case StorageReuse::Copy:
         return "copied";
     case StorageReuse::None:
@@ -104,6 +106,7 @@ void dumpStorageReuse(
         const ExecPlan &plan = graph->execPlan();
         size_t inPlace       = 0;
         size_t byCount       = 0;
+        size_t declared      = 0;
         size_t copied        = 0;
         for (size_t index = 0; index < plan.topo.size(); ++index) {
             const gc_node_ref_t ref = plan.topo[index];
@@ -136,10 +139,15 @@ void dumpStorageReuse(
             // way -- and no in-place form can say it: the value is a *tree* the operator walks
             // leaf by leaf, not the one array `setInPlaceForm` names. The declaration is the
             // operator's own promise that the write asks the array's count at the leaf (design
-            // principles 10.5), so the node is an update and its answer is `by-count`; without it
-            // the node was left out and a training step read `updates 0` -- silence about the one
-            // update such a program makes.
+            // principles 10.5), so the node is an update; without it the node was left out and a
+            // training step read `updates 0` -- silence about the one update such a program makes.
             const bool declaredReuse = table.reusesOperand(uri);
+            // Only a node whose only claim is the declaration reads `declared`. An in-place form
+            // that also declares reuse (the sorts, `:op/set_index_in_place`) keeps the answer its
+            // form and the plan give it: that answer was measured, and a measured answer outranks
+            // a claimed one.
+            const bool declaredOnly =
+                declaredReuse && !plain.has_value() && !loopStateAppend && !copyingForm;
             if (!plain.has_value() && !loopStateAppend && !copyingForm && !declaredReuse) {
                 continue;
             }
@@ -153,17 +161,27 @@ void dumpStorageReuse(
             // an operator that declared it reuses an operand: the plan has no cell to read a
             // decision for a tree it never sees as one value, so `decided` is `None` for both. The
             // copying form allocates by construction, which is `copied`.
+            // `declared` is the fourth answer and it is not the third: `by-count` is measured (the
+            // leaf's count answered), `declared` is only claimed (the operator says it reuses, and
+            // whether this run allocated cannot be told from here). Printing one word for both
+            // would put a promise and a measurement in the same column, and the column is the one
+            // the S3b criterion is read with.
             const StorageReuse read = copyingForm
                                           ? StorageReuse::Copy
-                                          : (!plain.has_value() || decided == StorageReuse::None
-                                                 ? StorageReuse::ByArrayCount
-                                                 : decided);
+                                          : (declaredOnly ? StorageReuse::Declared
+                                                          : (!plain.has_value() ||
+                                                                     decided == StorageReuse::None
+                                                                 ? StorageReuse::ByArrayCount
+                                                                 : decided));
             switch (read) {
             case StorageReuse::Input:
                 ++inPlace;
                 break;
             case StorageReuse::ByArrayCount:
                 ++byCount;
+                break;
+            case StorageReuse::Declared:
+                ++declared;
                 break;
             default:
                 ++copied;
@@ -172,8 +190,9 @@ void dumpStorageReuse(
             os << "COPIES " << placeOf(*graph, ref, sources) << " "
                << updateName(plain.has_value() ? *plain : uri) << " " << verdictOf(read) << "\n";
         }
-        os << "COPIES " << graph->name() << " updates " << (inPlace + byCount + copied)
-           << " in-place " << inPlace << " by-count " << byCount << " copied " << copied << "\n";
+        os << "COPIES " << graph->name() << " updates " << (inPlace + byCount + declared + copied)
+           << " in-place " << inPlace << " by-count " << byCount << " declared " << declared
+           << " copied " << copied << "\n";
     }
 }
 

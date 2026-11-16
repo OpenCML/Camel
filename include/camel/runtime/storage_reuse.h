@@ -34,6 +34,13 @@ class Program;
  * work in place, and it would fail them over a wording -- see
  * docs/handover/questions/2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md.
  *
+ * A fourth word, `declared`, is neither of the two: an operator that declares it reuses an operand
+ * (see below) has been given the criterion's answer by its own claim, before anything asked a
+ * count. It is printed so the claim is visible and is not read as the measurement: a row that says
+ * `declared` does not satisfy a criterion written as "`in-place` or `by-count`", and the tool has
+ * no way to make it -- what a run allocates is decided in the kernels and in the memory plan, not
+ * here.
+ *
  * One line per update node, in the plan's own order:
  *
  *   COPIES <file>:<line>:<column> <update> <verdict>
@@ -48,9 +55,10 @@ class Program;
  * `sgd(params, g, lr)` answers a parameter tree whose storage is the one it was handed, and no
  * in-place form can say that, because the value is a tree the operator walks leaf by leaf rather
  * than one array. It is reported the same way, by the name the program writes (`sgd`), and its
- * answer is `by-count`: the plan has no cell to prove anything from, so the leaf's own count
- * answers (design principles 10.5) -- which is why a program whose only update is a training
- * step's `sgd` reads one row and not `updates 0`. `<verdict>` is the plan's answer:
+ * answer is `declared`, a fourth word: the plan decided nothing (there is no cell holding one
+ * value it could prove something about), so what the row states is the operator's claim that it
+ * reuses, and not a count anyone took. Which is why a program whose only update is a training
+ * step's `sgd` reads one row and not `updates 0`. `<verdict>` is the answer:
  *
  *   in-place  the plan proved the old value has no other holder and hands its storage to the
  *             update (StorageReuse::Input);
@@ -61,9 +69,13 @@ class Program;
  *             nothing about is read the same way, because that is what the back end runs
  *             (ExecPlan::operatorUriFor names the in-place form, which asks the array); so is the
  *             loop-state append (`:struct/append_arr_owned`), which has no cell to read a decision
- *             from and asks Array::writableInPlace by construction; and so is an operator that
- *             declared it reuses an operand (`nn:sgd`, `nn:adam`), which asks the same question at
- *             each leaf of the tree it was handed;
+ *             from and asks Array::writableInPlace by construction;
+ *   declared  the operator declares it reuses an operand and has no in-place form
+ *             (`OperatorTable::declareReusesOperand`: `nn:sgd`, `nn:adam`, whose value is a tree
+ *             walked leaf by leaf). Nothing here proves the write is in place: the row records the
+ *             claim, and whether the run really allocated is not answered by this tool. Kept apart
+ *             from `by-count` on purpose -- one word for both would make a claim and a measurement
+ *             indistinguishable in the column the S3b criterion is read with (StorageReuse::Declared);
  *   copied    the plan proved the old value has a holder the update must leave alone
  *             (StorageReuse::Copy), or the node is the copying form of an operator that has an
  *             in-place form -- `v = v->append(x)` on an array the compiler did not hand over, where
@@ -76,7 +88,7 @@ class Program;
  *
  * Then one line per graph, which is the count, and what makes a zero visible instead of silence:
  *
- *   COPIES <graph> updates <n> in-place <n> by-count <n> copied <n>
+ *   COPIES <graph> updates <n> in-place <n> by-count <n> declared <n> copied <n>
  *
  * A graph with no update node prints that line with `updates 0`: "this program has no update to
  * reuse storage for" is a reading, and a missing line would not be. A graph there is nothing to
