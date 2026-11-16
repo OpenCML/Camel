@@ -8,6 +8,14 @@
  * The probe writes the plans it needs (a bad one and a good one) into its own scratch directory and
  * runs the runner against them, so the property is held without changing any plan of the tree.
  *
+ * Two runs, not one per shape. Every start of the runner pays a price before it starts anything --
+ * it prunes test/results and reads the summary of every run directory there
+ * (test/tools/runner-output.mjs#pruneRunnerOutput) -- and on a host whose tree is large that price
+ * is what the probe's own CPU time is made of. The shapes a plan may name are eight independent
+ * entries, so they share one plan and one run, and each still reports its own verdict line. Only the
+ * bad plan has to stand alone: its claim is that *nothing* started, which is read off a run that
+ * holds no other plan to print a `[PASS]` into.
+ *
  * Red when: the load accepts a value the CLI refuses; the message stops naming the file and line or
  * the legal values; the run turns the plan error into a `[FAIL]`; or a legal compound value
  * (`alloc=3,safepoint=1,kind=major`, `poison,verify=both`, `--gc mark-sweep`) or a pass parameter
@@ -59,6 +67,30 @@ function writePlan(name, args) {
     return { planPath, text }
 }
 
+// One plan of one entry per accepted shape. Each entry is judged on its own status line, so a shape
+// that stopped being accepted is still red by name; the run's exit code is the only reading the
+// entries share.
+function writeShapePlan(name, entries) {
+    const lines = [`id = "probe.${name}"`, 'tier = "fast"', '']
+    for (const entry of entries) {
+        lines.push(
+            '[[tests]]',
+            `name = "probe.${name}.${entry.name}"`,
+            'kind = "behavior"',
+            'tool = "node"',
+            `case = "${CASE.replace(/\\/g, '/')}"`,
+            `args = ${JSON.stringify(['${case}', ...entry.args])}`,
+            'expect_exit = 0',
+            'expect_stdout_contains = ["ok"]',
+            'timeout_ms = 30000',
+            '',
+        )
+    }
+    const planPath = path.join(SCRATCH, `${name}.plan.toml`)
+    fs.writeFileSync(planPath, lines.join('\n'))
+    return { planPath }
+}
+
 function runPlans(plans) {
     const result = spawnSync(process.execPath, [RUNNER, ...plans, '--jobs', '1', '--tier', 'fast'], {
         cwd: REPO_ROOT,
@@ -102,25 +134,28 @@ const goodShapes = [
     ['--gc', 'gen'],
     ['--gc-check', 'poison'],
 ]
-for (const args of goodShapes) {
-    const good = writePlan('good', ['${case}', ...args])
-    const goodRun = runPlans([good.planPath])
+// 3. A pass parameter is not an option of the run: `std::opt safe_fp=true` is the compiler's
+// business, and a check that guessed at it would refuse a plan that works. It is the eighth entry of
+// the same plan: it asks the same question as the seven above (`argProblems` leaves it alone), and
+// its own status line still says whether it ran.
+const good = writeShapePlan('good', [
+    ...goodShapes.map((args, index) => ({ name: `shape${index}`, args })),
+    { name: 'pass_parameter', args: ['--gc-check', 'poison', 'std::opt safe_fp=true'] },
+])
+const goodRun = runPlans([good.planPath])
+for (const [index, args] of goodShapes.entries()) {
     check(
         `a plan naming ${JSON.stringify(args)} runs (exit 0)`,
-        goodRun.status === 0 && !/\[PLAN ERROR\]/.test(goodRun.output),
+        goodRun.status === 0 &&
+            !/\[PLAN ERROR\]/.test(goodRun.output) &&
+            goodRun.output.includes(`[PASS] probe.good.shape${index}`),
         `status ${goodRun.status}\n${goodRun.output}`,
     )
 }
-
-// 3. A pass parameter is not an option of the run: `std::opt safe_fp=true` and a pass argument with
-// a space in it are the compiler's business, and a check that guessed at them would refuse a plan
-// that works.
-const passPlan = writePlan('passparam', ['${case}', '--gc-check', 'poison', 'std::opt safe_fp=true'])
-const passRun = runPlans([passPlan.planPath])
 check(
     'a plan naming a pass parameter after the case still loads (no plan error)',
-    !/\[PLAN ERROR\]/.test(passRun.output),
-    passRun.output,
+    !/\[PLAN ERROR\]/.test(goodRun.output) && goodRun.output.includes('[PASS] probe.good.pass_parameter'),
+    goodRun.output,
 )
 
 console.log(failed ? 'FAIL' : 'PASS')

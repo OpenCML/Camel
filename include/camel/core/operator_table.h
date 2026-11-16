@@ -399,13 +399,16 @@ class OperatorTable {
     bool hasExternalEffect(OperId id) const;
     bool hasExternalEffect(std::string_view uri) const;
 
-    /// True when running the operator **writes** a resource outside the program (design
-    /// principles 3.1): the region that runs it owes its running, so the write is a root of that
-    /// region (camel/runtime/region_roots.h). Reading `console` or `fs` reaches outside without
-    /// being a write, and this answers false for it. True for an undeclared operator, whose
-    /// conservative reading is a write of the global resource (design principles 3.3).
-    bool writesOutside(OperId id) const;
-    bool writesOutside(std::string_view uri) const;
+    /// True when running the operator **writes** a resource a running region owes (design
+    /// principles 3.1, 3.3): the region that runs it owes its running, so the write is a root of
+    /// that region (camel/runtime/region_roots.h). Two kinds of write answer true -- one whose
+    /// resource reaches outside the program (the console, the file system, a module's own state)
+    /// and one to a `Handle`, a `Ref` the program owns whose reader may stand in a graph this one
+    /// cannot see. Reading `console` or `fs` reaches outside without being a write, and this
+    /// answers false for it. True for an undeclared operator, whose conservative reading is a write
+    /// of the global resource (design principles 3.3).
+    bool writesForTheRegion(OperId id) const;
+    bool writesForTheRegion(std::string_view uri) const;
 
     // ---- In-place forms (design principles 11.3) --------------------------------------
     //

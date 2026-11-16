@@ -578,15 +578,34 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         return; // the body did not build (an error was reported)
     }
     reach();
-    // The roots a region adds (design principles 3.1; camel/runtime/region_roots.h): a write to a
-    // resource outside the program is used by the region it is written in, so it runs although
-    // nothing reads what it produces. This is the same seed the liveness walk of a graph and the
-    // execution order make; it is made here too because this walk answers the warning and must
-    // agree with them, and it is written the same way so that the two cannot drift: the body's
-    // writes run with the graph, a region's writes run with the region, and a region runs only once
-    // its owner is live.
-    const std::vector<runtime::RegionRootCandidate> regionRoots =
+// The roots a region adds (design principles 3.1 and 3.3; camel/runtime/region_roots.h): a write
+    // a running region owes is used by the region it is written in, so it runs although nothing reads
+    // what it produces -- an outside write (3.1) and a write to a handle (3.3: the reader of a box
+    // may stand in a graph this one cannot see) alike. This is the same seed the liveness walk of a
+    // graph and the execution order make; it is made here too because this walk answers the warning
+    // and must agree with them, and it is written the same way so that the two cannot drift: the
+    // body's writes run with the graph, a region's writes run with the region, and a region runs only
+    // once its owner is live.
+    //
+    // A branch that joins no value is a seed of the same kind (design principles 3.1, 3.7), and for
+    // the same reason as the liveness walk's: a branch written as a statement has no value of its
+    // own, so it is a statement of the region it is written in and runs with that region. It is
+    // seeded with the region that decides it, so the arms' own writes still wait for the arm's
+    // owner -- which is now this branch. A loop is not this case (its value is the state it leaves,
+    // and a loop nobody needs is a computation nobody wants).
+    std::vector<runtime::RegionRootCandidate> regionRoots =
         runtime::regionRootCandidatesOfDraft(draft);
+    for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
+        if (!runtime::branchJoinsNoValue(draft, id)) {
+            continue;
+        }
+        // The branch and the JOIN that closes it, together: `reach` below follows data, control and
+        // sync edges, and the edge from a BRCH to its JOIN is none of the three -- it is read
+        // through the payload -- so seeding one half alone would keep one half and report the other.
+        for (draft_node_ref_t half : {id, runtime::branchJoinOf(draft, id)}) {
+            regionRoots.push_back({half, runtime::decidingRegionOfDraft(draft, half)});
+        }
+    }
     for (const runtime::RegionRootCandidate &candidate : regionRoots) {
         if (candidate.region == 0 && needed.insert(candidate.node).second) {
             work.push_back(candidate.node);

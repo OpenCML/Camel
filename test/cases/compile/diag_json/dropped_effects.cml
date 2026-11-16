@@ -1,10 +1,10 @@
 /**
- * Which effects run is decided by design principles 3.1: a write to a resource outside the program
- * is used by the region it is written in, so a bare `println` here runs (the author's ruling of
- * 2026-11-15, "区域的根"); a call and a branch stand on a read of their value or a place in a sync
- * chain, so the ones nothing depends on do not run and each gets SemanticDiag::EffectNotExecuted.
- * An assignment is not an effect: line 35 drops a value, reported as UnusedAssignedValue.
- * Output: `operator`, `noisy`, `4`, `kept 1`, `0 5`.
+ * Which effects run is design principles 3.1: a write to a resource outside the program is used by
+ * the region it is written in, so a bare `println` here runs (the ruling of 2026-11-15); a call
+ * stands on a read of its value or a place in a sync chain, so the ones nothing depends on do not
+ * run and each gets SemanticDiag::EffectNotExecuted, and line 35 is UnusedAssignedValue. Line 37
+ * runs with its body (the ruling of 2026-11-16); `branch_value_dropped` still reports that branch.
+ * Output: `operator`, `noisy`, `4`, `arm`, `kept 1`, `0 5`.
  */
 
 func noisy(x: int): int sync {
@@ -34,7 +34,7 @@ func dropped(): int {
     modify(i)                        // WARNED line 34: a write nothing reads afterwards
     j = 7                            // WARNED line 35: an assignment nothing reads afterwards
     println(noisy(4))                // RUNS line 36: the write runs, and reads its argument
-    if quiet(0) > 0 then sync {      // WARNED line 37: a branch the program never needs
+    if quiet(0) > 0 then sync {      // RUNS line 37: a branch statement, and the arm it takes
         println('arm')
     } else sync {
         println('other arm')
