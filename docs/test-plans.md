@@ -725,6 +725,12 @@ Every `[[tests]]` entry may use these common fields:
   test whose own CPU time exceeds its wall clock is multi-threaded work: the reading sums its
   threads, so a bound on its total work belongs in `cpu_budget_ms` (measured over the whole fast
   layer on 2026-10-24: 21 tests, all ONNX-runtime, dlpack and fuzz cases).
+  Every test's `meta.json` records the reading, the line it was judged against and the room left
+  under it — `cpu_ms`, `cpu_limit_ms` and `cpu_margin_x` (`cpu_limit_ms / cpu_ms`, 1.0 at the line),
+  with `cpu_margin_basis` naming the rule the line belongs to — so a green run says how far from red
+  each test is, not only that none reached it. A green whose room nobody can read is a green nobody
+  looked at, and on 2026-11-16 two cases were read as unstable for three rounds because the record
+  held `cpu_ms: null` for them and nothing could show they were 0.1–4.2% past the line.
 - `cpu_budget_ms`
   Optional. The test's cost bound in milliseconds of **CPU time** (user + system) of the test's own
   process tree, read by `test/tools/child-cpu.mjs`, which the runner runs the command under. A test
@@ -1172,9 +1178,16 @@ Important payload fields:
 - `input.normalized.output`
 - `input.diagnostics`
 - `input.benchmark`
-- `input.cpu_ms`, `input.cpu_budget_ms` — the test's own CPU time (user + system) and the budget it
-  was judged against for a test that declared `cpu_budget_ms`, and `null` for every other test: the
-  payload of a test whose bound is CPU carries the numbers its verdict came from.
+- `input.cpu_ms`, `input.cpu_budget_ms`, `input.cpu_limit_ms`, `input.cpu_margin_x`,
+  `input.cpu_margin_basis` — the test's own CPU time (user + system; `null` where this host reports
+  none), the `cpu_budget_ms` it declares (`null` for a test that declares none), the line its cost
+  verdict was read against, how many times the reading fits under that line, and which rule that line
+  belongs to: `cpu_budget_ms` for a test that declares a budget, `timeout_margin` for one judged by
+  the timeout rule (whose line is `timeout_ms / 4`). `cpu_margin_x` is `cpu_limit_ms / cpu_ms`, so
+  1.0 is the line itself and 39 is a reading with thirty-nine times the room it needs; it is `null`
+  where there is no reading, and where the reading is 0 ms (below the kernel's tick, so the ratio is
+  not a number) the line and the reading are still there. The same five fields are in the test's
+  `meta.json`.
 - `input.case_path` — the resolved absolute path of the case: the plan's `case` resolved against
   the plan's directory, which is what the tool was invoked with. The output may repeat it (a
   graph dump names its source file), and it is absolute, so it differs between two checkouts of

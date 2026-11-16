@@ -313,4 +313,38 @@ assert(input.diagnostics[0].line === 15 && input.diagnostics[0].column === 7, `r
 """
 timeout_ms = 30000
 
+# --- The same write, in a `sync` body and outside one -------------------------------------------
+#
+# The report is about the value, not about the body. A `sync` body is where a write whose value
+# nobody reads still runs -- it is a statement of the chain -- and running is the other question
+# (SemanticDiag::EffectNotExecuted). Both columns are pinned below: the writes at 17:7 and 24:7
+# store a value nothing reads and are reported in a body that is not a `sync` block and in one that
+# is, and the writes at 30:7 and 37:7 store the value their `return` reads and are reported in
+# neither. The silent half is as important as the loud half: it is the pin that the warning was not
+# switched off to make the loud half go away, and the value it restores is what `camel -Werror`
+# refused before (a read of a `var` in a body that is not a `sync` block takes the value the write
+# stores, not the write's node, so asking the node reported a value that was being read).
+[[tests]]
+name = "var.unused_assigned_value_both_bodies"
+desc = "A write whose value nobody reads is reported in a body that is not a `sync` block (17:7) and in one that is (24:7), and a write whose value the `return` reads is reported in neither (30:7, 37:7): the case holds one of each shape in each body, so the two columns of the rule are read off one run, and the program prints `a`, `b`, `c`, `d` and `1 1`."
+kind = "behavior"
+case = "../../../cases/compile/var/unused_assigned_value_both_bodies.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim().split('\n')
+assert(JSON.stringify(out) === JSON.stringify(['a', 'b', 'c', 'd', '1 1']), `unexpected output: ${out.join(' | ')}`)
+// The loud half: one write per body, each storing a value no read takes.
+const unused = input.diagnostics.filter((d) => d.name === 'SemanticDiag::UnusedAssignedValue').map((d) => `${d.line}:${d.column}`)
+assert(JSON.stringify(unused.sort()) === JSON.stringify(['17:7', '24:7']), `the two writes whose value nobody reads, in a sync body and outside one: ${unused.join(', ')}: ${input.normalized.stderr}`)
+// And nothing else: the write that runs is not an effect that failed to run, and no other warning
+// stands in for the two that are gone.
+const other = input.diagnostics.filter((d) => d.name !== 'SemanticDiag::UnusedAssignedValue')
+assert(other.length === 0, `nothing else is reported: ${other.map((d) => d.name).join(', ')}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 30000
+
 
