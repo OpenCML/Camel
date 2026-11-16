@@ -2447,11 +2447,12 @@ a857ca3ede6054d9 ok test/cases/consistency/operator_overloads/specific/ns/use_ge
 7a95d0ed31d5c320 ok test/cases/consistency/partial_application/err_context_argument_out_of_range.cml
 2eade9cd3a5733d0 ok test/cases/consistency/partial_application/err_entering_ambiguous.cml
 58430c7d579439d8 ok test/cases/consistency/partial_application/err_overload_choice_name.cml
+b17073df9d10c3a9 ok test/cases/consistency/partial_application/err_var_context_parameter.cml
 4ec7bcfbaabd05f6 ok test/cases/consistency/partial_application/graph.cml
 23654daecbf0a58a ok test/cases/consistency/partial_application/overload_choice.cml
 2a307859d3b305d4 ok test/cases/consistency/partial_application/values.cml
 e4734b033845ffd2 ok test/cases/consistency/partial_application/var_parameter.cml
-4c59ea9e7fe9f315 ok test/cases/consistency/partial_application/var_parameter_effect.cml
+f14e5628468611d8 ok test/cases/consistency/partial_application/var_parameter_effect.cml
 10df48795e1a7cc6 ok test/cases/consistency/surface/lambda_call.cml
 b8a388af7a45be93 ok test/cases/consistency/surface/member_chain.cml
 8d5b9a7e826137c6 ok test/cases/consistency/surface/minus.cml
