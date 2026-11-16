@@ -466,6 +466,16 @@ $checkers = [ordered]@{
     'edge-kind-layer'       = @{ script = 'scripts/check-edge-kind-layer.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-edge-kind-layer: ([0-9]+) edge-kind call.*/\1/p' }
     'effect-facts'          = @{ script = 'scripts/check-effect-facts.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-effect-facts: ([0-9]+) effect-atom call.*/\1/p' }
     'operator-uri-literals' = @{ script = 'scripts/check-operator-uri-literals.mjs'; args = @(); compiler = $false; reportOnly = $true; findings = 's/.*check-operator-uri-literals: ([0-9]+) operator URI literal.*/\1/p' }
+    # The capture census: the two numbers the closure-capture work is accepted by -- `:var/new` nodes
+    # and capture ports bound by reference -- read out of `std::jgir` (the JSON GIR; `std::stats`
+    # carries neither an operator breakdown nor a capture table) over `test/cases/**`, with the
+    # fingerprint of the file set it counted (`list_sha`, the paths and their content hashes) printed
+    # beside them. It is a reading and not a wall: the author's target is 0/0 and there is no baseline
+    # yet, so a red here would invent the threshold it claims to hold. `findings` reduces its summary
+    # line to `capture_ports`, the number that line leads with; the script's `--enforce` is the mode
+    # this entry becomes once the reading is 0/0. The script's header states the scope, the counting
+    # rule and what the repository-wide corpus would add (`--all`).
+    'capture-census'        = @{ script = 'scripts/check-capture-census.mjs'; args = @(); compiler = $true; reportOnly = $true; findings = 's/.*check-capture-census: ([0-9]+) reference capture port.*/\1/p' }
 }
 
 # The same "a,b can arrive as one string" split as -Plan, so `-Check all` and `-Check a,b` both
