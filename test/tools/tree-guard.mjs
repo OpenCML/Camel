@@ -87,6 +87,34 @@ export function isIgnoredByWatch(relative) {
 }
 
 /**
+ * One `git status --porcelain --untracked-files=normal` output, as the map of the paths it lists.
+ *
+ * Pure, and exported for that reason: it is half of the verdict, and a fixture can hand it the
+ * shapes git writes that a plain split gets wrong -- a whole new directory (`name/`), a rename
+ * (`old -> new`), a quoted name. test/cases/tools/tree_guard.mjs pins all of them, so the parser is
+ * measured without a checkout and without a run.
+ */
+export function parseStatus(stdout) {
+    const entries = new Map()
+    for (const line of `${stdout}`.split('\n')) {
+        if (line.trim() === '') continue
+        const status = line.slice(0, 2)
+        let rel = line.slice(3)
+        // A path git still had to quote (a control character, a newline) is kept as git wrote it:
+        // unquoting it here would produce a name that `git status` could not be compared against.
+        if (rel.startsWith('"') && rel.endsWith('"') && rel.length >= 2) rel = rel.slice(1, -1)
+        // A rename is one line naming both paths; the one that exists after the run is the second.
+        const arrow = rel.indexOf(' -> ')
+        if (arrow >= 0) rel = rel.slice(arrow + 4)
+        // `-u normal` names a whole new directory as `name/`; the watcher sees it as `name`, and the
+        // trailing slash is git's way of saying it is a directory, not part of the name.
+        rel = rel.replace(/\/+$/, '')
+        if (rel !== '') entries.set(rel, status)
+    }
+    return entries
+}
+
+/**
  * One `git status`, as the map of the paths it lists.
  *
  * `core.quotepath=false` so a path with a character outside ASCII prints as itself: git quotes it as
@@ -107,23 +135,7 @@ export function readTreeState(root) {
         const detail = `${proc.stderr || ''}`.trim().split('\n')[0] || `exit ${proc.status}`
         return { ok: false, reason: `git status failed: ${detail}` }
     }
-    const entries = new Map()
-    for (const line of proc.stdout.split('\n')) {
-        if (line.trim() === '') continue
-        const status = line.slice(0, 2)
-        let rel = line.slice(3)
-        // A path git still had to quote (a control character, a newline) is kept as git wrote it:
-        // unquoting it here would produce a name that `git status` could not be compared against.
-        if (rel.startsWith('"') && rel.endsWith('"') && rel.length >= 2) rel = rel.slice(1, -1)
-        // A rename is one line naming both paths; the one that exists after the run is the second.
-        const arrow = rel.indexOf(' -> ')
-        if (arrow >= 0) rel = rel.slice(arrow + 4)
-        // `-u normal` names a whole new directory as `name/`; the watcher sees it as `name`, and the
-        // trailing slash is git's way of saying it is a directory, not part of the name.
-        rel = rel.replace(/\/+$/, '')
-        if (rel !== '') entries.set(rel, status)
-    }
-    return { ok: true, entries }
+    return { ok: true, entries: parseStatus(proc.stdout) }
 }
 
 /**
