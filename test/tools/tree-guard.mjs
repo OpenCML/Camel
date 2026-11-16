@@ -46,11 +46,61 @@
  * The ignored trees are asked from runner-output.mjs rather than listed again here, for the reason
  * that module gives for itself: a guard that has to know the name `test/results` is one more place
  * the next tree has to be added to.
+ *
+ * **One phenomenon has one owner.** A test may start a run of this runner (`feat/tools` does: the
+ * layer-accounting and provenance cases drive two or three nested runs each), and that nested run's
+ * window lies entirely inside the outer one's -- the outer run read the tree before its first test
+ * and after its last, so every moment the nested run could have written something is covered by that
+ * pair of readings. Judging it again is a second verdict on the same phenomenon, and the two
+ * criteria differ: the nested window closes while a file a *sibling* test wrote is still there (a
+ * leak, red), and that file is gone when the outer window closes (`appeared and were gone again`, an
+ * annotation). Measured on 2026-11-16: `test/.provenance-probe-3367882.tmp`, written and removed by
+ * `runner.provenance_line_names_the_artifact`, failed the nested run started by
+ * `runner.tier_declared_against_started` and was an annotation in the outer run -- one gate, one
+ * file, two verdicts. So the role travels in `CAMEL_TREE_GUARD`, which every run sets to `nested` for
+ * its children: a nested run reads no tree, starts no watcher, and says on its own line that the
+ * outer run owns the verdict. An unset or unrecognised value is the outer run, because the failure
+ * mode of the wrong default here is a gate that is silently off.
  */
 import fs from 'node:fs'
 import path from 'node:path'
 import { spawnSync } from 'node:child_process'
 import { RUNNER_OUTPUT_DIRS, isRunnerOutput } from './runner-output.mjs'
+
+/**
+ * The variable that says which run owns the verdict. The runner sets it for every process it starts,
+ * so a run started inside another run inherits it with the rest of the environment.
+ */
+export const TREE_GUARD_ROLE_ENV = 'CAMEL_TREE_GUARD'
+
+/** The one value that means "inside another run's window". */
+const NESTED_ROLE = 'nested'
+
+/**
+ * Which run judges: `outer`, unless a run above this one said otherwise.
+ *
+ * The default is the judging role on purpose. A typo in the variable, a value written by some future
+ * run, or a process started by hand must all land on "judge", never on the silence this module exists
+ * to avoid: a gate whose off-switch is reached by accident is worse than no gate, because it still
+ * prints a line.
+ */
+export function treeGuardRole(env = process.env) {
+    return env[TREE_GUARD_ROLE_ENV] === NESTED_ROLE ? NESTED_ROLE : 'outer'
+}
+
+/**
+ * Mark the processes this run starts as nested, so any runner among them defers instead of judging.
+ *
+ * Called once, on the environment every child the runner starts spreads -- the test program, a
+ * `skip_unless` probe, a verification script -- rather than at each of the places that build one: a
+ * fourth spawn site that forgot the mark would be a second verdict again, and it would look like an
+ * ordinary omission rather than a defect. Idempotent, so a nested run re-marking its own children
+ * (which are nested too) changes nothing.
+ */
+export function markChildrenNested(env) {
+    env[TREE_GUARD_ROLE_ENV] = NESTED_ROLE
+    return env
+}
 
 /**
  * The trees a build writes, which a test may start (a plan of `tool = "camel"` cases that build, a
@@ -230,8 +280,32 @@ export function startTreeWatch(root, { onPath, ignored = isIgnoredByWatch } = {}
  * whether it left something behind, and printing it as clean would be the default pass this whole
  * module exists to avoid. **A reading that could not be taken is a failure**, with `judged: false`
  * and the reason on the line: `could not ask` must never print as `there is nothing`.
+ *
+ * `role` is which run is asking: a `nested` run answers before either reading is looked at, because
+ * the outer run already owns this phenomenon and the nested verdict would only be a second opinion
+ * read against a window that closed too early. That branch comes first, ahead of `updateGolden`: a
+ * nested run that rewrote goldens is a nested writer like any other, and the reading of what it left
+ * is the outer run's.
  */
-export function judgeTree({ before, after, firstSeen = new Map(), updateGolden = false, failure = null, watched = 0 }) {
+export function judgeTree({
+    before,
+    after,
+    firstSeen = new Map(),
+    updateGolden = false,
+    failure = null,
+    watched = 0,
+    role = 'outer'
+}) {
+    if (role === NESTED_ROLE) {
+        return {
+            judged: false,
+            failed: false,
+            deferred: NESTED_ROLE,
+            reason:
+                'nested: tree guard deferred to the outer run -- this run started inside another ' +
+                "run's window, and the outer run read the whole tree before and after it"
+        }
+    }
     if (updateGolden) {
         return {
             judged: false,
