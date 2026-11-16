@@ -761,7 +761,7 @@ f47dcc7937755e16 ok test/cases/compile/decorators/blocks.cml
 0bd469c83e69448b ok test/cases/compile/decorators/grants.cml
 80e0a5fc46469505 no test/cases/compile/diag_fixes/leading_zero_09.cml
 607c66d8ec771881 ok test/cases/compile/diag_json/div_zero.cml
-b5e95cdb6c42ec0d ok test/cases/compile/diag_json/dropped_effects.cml
+81cb41a20026860f ok test/cases/compile/diag_json/dropped_effects.cml
 9b56cee8303fbb61 ok test/cases/compile/diag_json/dropped_effects_forward.cml
 fbbd8856a641f9d6 ok test/cases/compile/diag_json/warning_with_error.cml
 d7b17b300b7561ba ok test/cases/compile/diag_json/warnings_visible.cml
@@ -1517,6 +1517,11 @@ d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml
 d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
 7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
+81663c1c95e20537 ok test/cases/compile/region_roots/branch_statement.cml
+3edca146afc5d4d2 ok test/cases/compile/region_roots/branch_statement_condition.cml
+9d869d0b281097a0 ok test/cases/compile/region_roots/branch_statement_kinds.cml
+d97afa11ab4ed9b8 ok test/cases/compile/region_roots/branch_statement_untaken.cml
+86ba2d47250741aa ok test/cases/compile/region_roots/branch_value_dropped.cml
 9af1d6ae045c57d6 ok test/cases/compile/region_roots/dead_loop.cml
 e05e0949c1dff0cf ok test/cases/compile/region_roots/plain_body.cml
 deee7e3304b108d7 ok test/cases/compile/region_roots/read_only.cml
