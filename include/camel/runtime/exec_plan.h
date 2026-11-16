@@ -254,9 +254,11 @@ class ExecPlan {
     // Design principles 10.5: a value is freed by counting alone, the count equals the number of
     // its holders, and the count comes from one last-use analysis on the execution plan that every
     // back end follows. What follows is that analysis's output. It is laid out from the "position
-    // of the last use" column below, and the four back ends execute it through one function --
-    // `applyRefEntriesForNode`, called at the site where the node's operator has run -- so that the
-    // count a run keeps and the count the plan printed are one table and not two that agree.
+    // of the last use" column below, and the four back ends execute it through one call --
+    // `camel::execute::callOperator` (include/camel/execute/operator_call.h), which runs
+    // `applyRefEntriesForNode` at the site where the node's operator has run and is that function's
+    // only caller -- so that the count a run keeps and the count the plan printed are one table and
+    // not two that agree.
     // What a count releases is the *resource*: the block's memory still belongs to the wrappers
     // that name it (see the note on `ForeignResourceControlBlock::releaseCountNow`).
     //
@@ -272,6 +274,16 @@ class ExecPlan {
     // through, a port hands on what it was given) produces nothing of its own: its uses are the
     // uses of the values it carries, so the arm whose value the JOIN hands on is the one whose
     // reference comes back, whichever arm runs.
+    //
+    // A node whose value *is* a value it was given hands that value's reference on. The last use
+    // takes the producing reference over, and this node hands the take-over to its own value: the
+    // row that would have given the reference back at this node's position is not executed when the
+    // node's own value is the very object the row belongs to. `reduce` is the shape: it returns its
+    // accumulator, so a `state::Ref` as its `initial` makes the node's value the initial's box. The
+    // rows of the value the node makes are laid out like any produced value's -- it is born with
+    // one (that take-over), takes `copies`, and gives back at its own uses. Whether the node handed
+    // a given value back is what the object is, not what the plan says, so the rule is applied when
+    // the rows run (`applyRefEntriesAtPosition`), not when they are laid out.
     //
     // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
     // aggregate out of the values it is given -- does not end when the FILL has run: the packing
@@ -525,7 +537,10 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 // which rows are due from what it knows about the instruction it is running. The two things a back
 // end supplies are the node it has just run and the value that run made; a back end that holds a
 // slot and not a node asks the plan which operator makes that slot's value (`refNodeOfSlot`), and
-// that lookup is the plan's table and not a second reading of the program.
+// that lookup is the plan's table and not a second reading of the program. Its only caller is
+// `camel::execute::callOperator` (include/camel/execute/operator_call.h): every back end calls an
+// operator through that, so a place that calls an operator has no way to skip the rows and no way to
+// run them twice.
 void applyRefEntriesForNode(
     const ExecPlan &plan,
     camel::core::context::Frame *frame,

@@ -6,6 +6,7 @@
 #include "camel/core/operator_table.h"
 #include "camel/core/rtdata/foreign.h"
 #include "camel/execute/function_call.h"
+#include "camel/execute/operator_call.h"
 #include "camel/runtime/exec_plan.h"
 #include "fastvm.h"
 #include <utility>
@@ -54,23 +55,20 @@ slot_t FastVMSchedPass::invokeNativeOperator(const Bytecode &bc, ctx::Frame &fra
     if (anchorWanted) {
         boxes.begin();
     }
-    slot_t result = function(withView, normalView, *context_);
+    // The operator runs through the one hook every back end calls one through
+    // (camel/execute/operator_call.h), and the count's rows at this instruction's position are the
+    // hook's. This is the site all three bytecode paths reach -- std::fvm's two interpreter loops
+    // and std::jit's compiled code through the trampoline -- because they all reach the operator
+    // here. The site's node comes from the plan's own slot table, because bytecode has a
+    // destination slot and not a node; the value the operator makes is handed to the rows rather
+    // than read back, because the caller publishes it into the slot after this returns.
+    const slot_t result = camel::execute::callOperator(
+        camel::execute::siteOfSlot(frame, bc.result),
+        [&] { return function(withView, normalView, *context_); });
+    // The anchor reads its bracket after the rows as well as after the call: a row disposes a box
+    // and never makes one, so what it reports is what the operator made.
     if (anchorWanted) {
         camel::runtime::noteCountedCreationAt(frame.graph(), pc, boxes.sinceBegin());
-    }
-    // The count's rows at this instruction's position -- the same site the anchor above is asked at,
-    // because it is the one place all three bytecode back ends (std::fvm's two interpreter loops and
-    // std::jit's native operator call) reach the operator. Bytecode has a destination slot here and
-    // not a node, so the node comes from the plan's own slot table and the entry is the same one the
-    // other back ends call; the value the operator just made is handed over rather than read back,
-    // because the caller publishes it into the slot after this returns. Run whether or not
-    // --gc-check was asked for: counting is what releases a box (design principles 10.5).
-    if (const auto *runtimeGraph = frame.graph()) {
-        const camel::runtime::ExecPlan &plan = runtimeGraph->execPlan();
-        const camel::runtime::gc_node_ref_t node = plan.refNodeOfSlot(bc.result);
-        if (node != camel::runtime::kInvalidNodeRef) {
-            camel::runtime::applyRefEntriesForNode(plan, &frame, node, result);
-        }
     }
     return result;
 }

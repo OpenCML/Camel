@@ -14,7 +14,14 @@
  * those arguments cannot be read here and is counted as skipped, not as balanced. A case that
  * compiles and prints no table is an error: the pass must speak for every program it is given.
  *
- *   PLAN_REFS_SWEEP cases=<n> read=<n> graphs=<n> unbalanced=<n> skipped=<n>
+ *   PLAN_REFS_SWEEP cases=<n> read=<n> graphs=<n> unbalanced=<n> skipped=<n> marked=<n>
+ *   with-give=<n>
+ *
+ * `marked` is every position the tree's plans name as a marked operator, `with-give` how many of them
+ * have a reference coming back there. The two are read together and not compared: an operator over
+ * integers packs nothing to give back, so `with-give < marked` says what the programs are, not what
+ * the plan missed. What a non-zero `with-give` buys is a counted position a back end can be caught
+ * being short by, which is what the four-back-end readings of 2026-11-16 are taken on.
  *
  * followed by one `PLAN_REFS_BAD <case>` line per unbalanced graph. Exit 1 if anything is unbalanced
  * or a compiled case printed no table.
@@ -111,6 +118,25 @@ function tablesOf(stdout) {
     return { summaries, unbalanced }
 }
 
+/// The marked operators of one case: how many positions the table names, and how many of them have a
+/// reference coming back. A position with `gives 0` is not a gap -- an operator over integers packs
+/// nothing to give back -- so the two counts are read together and neither is compared with the
+/// other here. What the second count is for: a marked operator whose position carries a give row is
+/// one where a back end that does not count can be seen being short by exactly that row, which is
+/// what `PLAN_REF_MARKED` makes readable instead of inferring from a `live` that the collector can
+/// even out after the run (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
+function markedOf(stdout) {
+    let marked = 0
+    let withGive = 0
+    for (const line of stdout.split('\n')) {
+        if (!line.startsWith('PLAN_REF_MARKED ')) continue
+        if (!/ at \d+ node \d+ gives \d+$/.test(line)) continue // the per-graph summary line
+        marked += 1
+        if (!line.endsWith(' gives 0')) withGive += 1
+    }
+    return { marked, withGive }
+}
+
 async function main() {
     const binary = camelBinary()
     const files = (await casesUnder(CASES)).sort()
@@ -119,6 +145,8 @@ async function main() {
     let read = 0
     let graphs = 0
     let skipped = 0
+    let marked = 0
+    let withGive = 0
 
     let next = 0
     async function worker() {
@@ -147,6 +175,9 @@ async function main() {
             }
             read += 1
             graphs += summaries.length
+            const marks = markedOf(result.stdout)
+            marked += marks.marked
+            withGive += marks.withGive
             for (const line of unbalanced) {
                 bad.push(`${path.relative(REPO, file)}: ${line}`)
             }
@@ -159,7 +190,8 @@ async function main() {
 
     console.log(
         `PLAN_REFS_SWEEP cases=${files.length} read=${read} graphs=${graphs} ` +
-            `unbalanced=${bad.length} skipped=${skipped} silent=${silent.length}`)
+            `unbalanced=${bad.length} skipped=${skipped} silent=${silent.length} ` +
+            `marked=${marked} with-give=${withGive}`)
     for (const line of bad.slice(0, 20)) console.log(`PLAN_REFS_BAD ${line}`)
     for (const file of silent.slice(0, 20)) console.log(`PLAN_REFS_SILENT ${file}`)
     if (bad.length === 0 && silent.length === 0 && read > 0) {

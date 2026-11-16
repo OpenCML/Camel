@@ -29,6 +29,17 @@
  * their balance is `produced + retains == give-backs + kept`, recomputed here from the rows
  * themselves.
  *
+ * The marked operators are asked one question of their own, because they are the one kind of node
+ * whose elements are called by an operator rather than by the plan's own shape:
+ *   PLAN_REF_MARKED <graph> at <position> node <ref> gives <n>
+ *   PLAN_REF_MARKED <graph> marked <n> with-give <n>
+ * `gives` is how many references the plan says come back at that position, `with-give` how many of
+ * the graph's marked positions have at least one. A position with `gives 0` is an answer: an
+ * operator over integers packs nothing to give back. What the line is for is a position that *does*
+ * carry a row -- a `foreach` whose closure names a `state::Ref` -- because that is a counted
+ * reference a back end can be caught being short by
+ * (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
+ *
  * `produced` is the number of values the plan counts (ports, constants and nodes that only forward
  * a value are not among them), `copies` the references beyond each value's own, `give-backs` the
  * references that come back when a use ends, `packed` the ones that come back when the value that
@@ -49,6 +60,7 @@
 #include <unordered_map>
 
 #include "camel/runtime/exec_plan.h"
+#include "camel/core/operator_table.h"
 
 const camel::runtime::Program *
 PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os) {
@@ -141,6 +153,36 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
            << plan.refEntriesOfKind(ExecPlan::RefEntryKind::Retain) << " give-backs "
            << plan.refEntriesOfKind(ExecPlan::RefEntryKind::GiveBack) << " kept "
            << plan.refKeptTotal() << " balanced " << (plan.refEntriesBalance() ? "yes" : "no")
+           << "\n";
+        // Every marked operator of this graph, and how many references the plan says come back at
+        // its position. A marked operator calls its function once per element, and a value an
+        // element captures is held and given back at the operator's position like any other value's
+        // (a `foreach` whose closure names a `state::Ref` is the shape the readings of 2026-11-16
+        // were taken on). A position with `gives 0` is an answer and not a gap -- an operator over
+        // integers holds nothing to give back -- so the counts are printed rather than argued about,
+        // and `scripts/check-plan-refs.mjs` reads them over every case the tree has.
+        size_t marked   = 0;
+        size_t withGive = 0;
+        const auto &operators = camel::core::OperatorTable::instance();
+        for (size_t i = 0; i < plan.topo.size(); ++i) {
+            const gc_node_ref_t ref = plan.topo[i];
+            const GCNode *node      = graph->node(ref);
+            if (node == nullptr || node->kind != GCNodeKind::Oper) {
+                continue;
+            }
+            const auto *body = graph->nodeBodyAs<GCOperBody>(ref);
+            if (body == nullptr || !operators.isMarked(body->oper)) {
+                continue;
+            }
+            const uint32_t given = i < plan.refGiveBackAt.size() ? plan.refGiveBackAt[i] : 0;
+            os << "PLAN_REF_MARKED " << name << " at " << i << " node " << ref << " gives " << given
+               << "\n";
+            ++marked;
+            if (given != 0) {
+                ++withGive;
+            }
+        }
+        os << "PLAN_REF_MARKED " << name << " marked " << marked << " with-give " << withGive
            << "\n";
     }
     return program;

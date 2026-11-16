@@ -1,0 +1,31 @@
+/**
+ * The reference `r` is captured by the element function of `foreach`, so `r`'s last use is the
+ * marked operator's own position: the plan lays the reference's give-back row there, and this
+ * program makes nothing else of `r`.
+ *
+ * Read through `test::plan_refs` and `--gc-check foreign` in one pipeline, the two sides name the
+ * same place and the same number:
+ *
+ *   PLAN_REF_ENTRIES main at 6 give value 1 x1 packed   the captured handle, packed by the closure
+ *   PLAN_REF_MARKED main at 6 node 5 gives 3            the operator's position, three rows there
+ *   FOREIGN_RESOURCES created=1 counted=1 released=1 live=0 disposed=0
+ *
+ * The last line is the judgement, and it is read **without `--gc-stress`**: under stress the
+ * collector settles the account after the program has stopped, and a back end that ran no row at
+ * all reads `released=1` there too. Without it, a back end that skips the operator's rows leaves
+ * `released=0 live=1 disposed=1` -- which is what std::fvm and std::jit read for this program before
+ * the operator call became one function (include/camel/execute/operator_call.h) and the bytecode
+ * SCHD instruction was given the rows
+ * (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md).
+ *
+ * `ref_reduce_takes_its_initial.cml` is the same reading for the other shape: an accumulator that
+ * *is* the handle, where the node's own value takes the reference over instead of giving it back.
+ */
+
+import state
+
+func main(): int {
+    let r = state::ref(1)
+    [1, 2, 3]->foreach<(x: int): void => println(state::get(r) + x)>
+    return 0
+}
