@@ -470,22 +470,15 @@ enum class SemanticDiag : uint32_t {
     /// A `const` case whose constant has no type to take.
     FactConstCaseTypeRequired = 0x0001F7,
     /// A case whose pattern names no variable.
-    FactCaseBindsNoVariable    = 0x0001F8,
-    TypeFunctionNotApplicable  = 0x0001FE,
-    StatementAfterReturn       = 0x000201,
-    YieldRequiresStreamHead    = 0x000206,
-    LoopBodyNeedsNextState     = 0x000208,
-    RuleLeftIsNotAnOperator    = 0x000204,
-    DuplicateRuleForOperator   = 0x000205,
-    RuleRightUsesOuterVariable = 0x000207,
-    ExtentOfNeedsStatedShape   = 0x00020B,
-    /// The state rule (design principles 3.5, rule two; the author's ruling of 2026-11-14, origin/fsh-dev
-    /// c8af40747): a `var` local lives in the call that declares it, and a `var` parameter is the caller's
-    /// cell lent to the call that received it, so a closure may capture one by reference only while it
-    /// stays inside that evaluation. The rule names three ways out -- a result, a store into a place the
-    /// call does not own, and a hand to a function that keeps it -- and the report gives the two rewrites
-    /// the author named and no third one, because capturing by value would change what the program means
-    /// without saying so. 0x20D and up, after the extent-of codes.
+    FactCaseBindsNoVariable           = 0x0001F8,
+    TypeFunctionNotApplicable         = 0x0001FE,
+    StatementAfterReturn              = 0x000201,
+    YieldRequiresStreamHead           = 0x000206,
+    LoopBodyNeedsNextState            = 0x000208,
+    RuleLeftIsNotAnOperator           = 0x000204,
+    DuplicateRuleForOperator          = 0x000205,
+    RuleRightUsesOuterVariable        = 0x000207,
+    ExtentOfNeedsStatedShape          = 0x00020B,
     RefContentHoldsRef                = 0x000211,
     ResourceInferenceConflict         = 0x000212,
     ClosureAssignsCapturedName        = 0x000213,
