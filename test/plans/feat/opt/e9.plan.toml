@@ -2,7 +2,7 @@ id = "opt.e9"
 order = 336
 tier = "fast"
 tags = ["feat", "opt", "defunctionalize", "inline", "fold", "dce", "branches", "regions", "defects"]
-desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, and the two a cell handle outlived by its node ended in a SIGSEGV"
+desc = "The compiler answers what it cannot do with a diagnostic, not with a crash: the E9 reduced programs that used to abort a pass, the two a rewrite made the commit refuse with a read across a region, the two a cell handle outlived by its node ended in a SIGSEGV, and the two the C++ writer left without a return value"
 
 # Four programs of the E9 differential campaign (A4b-A4e, pin adb67e081; the ledger itself is the
 # author’s archive defect ledger, which is not in this repository), reduced to
@@ -586,6 +586,10 @@ timeout_ms = 20000
 #                               branch that gave it was no longer the sequence's last word. Two.
 #   rc18_seed429                clang: "expected expression" at a `= ;` the C++ writer left. One.
 #   rc19_seed70                 clang: "no matching function for call to 'f1'". One program.
+#   rc20_seed262                `binding != nullptr` in `Builder::rebindSsa`. Eight programs, and
+#                               the one shape here that is not this lane's: it arrived with the
+#                               merge (S1), and its entry is a known failure at the end of this
+#                               section.
 #
 # Two shapes are fixed, and their programs are entries below. The first pair used to end the
 # process in the front end with no pass at all, on all four back ends, so both arms (with and
@@ -599,7 +603,9 @@ timeout_ms = 20000
 # expectation is the crash states the defect as the answer, and an entry whose expectation is the
 # program's output goes red until its class is fixed. Each file is the standing reproducer of its
 # class -- `camel rc14_seed176.cml std::nvm` fires the guarantee by hand -- and its entries land
-# with its fix, as these two did.
+# with its fix, as these two did. The eighth shape is the exception in the other direction: it is
+# red today and it is entered anyway, as a known failure with its owner, because the red is the
+# measurement and a shape that only a report names is one the next person cannot reproduce.
 
 [[tests]]
 name = "rc12_seed165.without_the_pass"
@@ -649,3 +655,40 @@ case = "../../../cases/opt/e9/rc17_seed193.cml"
 args = ["${case}", "${backend}"]
 expect_exit = 0
 expect_stdout_exact = ""
+
+# --- One shape this lane did not fix: the one the merge brought -------------------------------
+#
+# `rc20_seed262` is the reduced program of the eighth shape of the 2026-11-17 full run, and the
+# only one that is not this lane's: `sync { }` as the arm of an `if`, holding a `var` that the arm
+# writes with `+=`. `camel rc20_seed262.cml std::nvm` stops in the graph builder --
+#
+#   Location   : ../src/compile/gir/builder_expr.cpp(3148)
+#   Function   : void camel::compile::gir::Builder::rebindSsa(const std::string &, node_handle_t)
+#   Guarantee  : binding != nullptr
+#   Reading    : An SSA `var` is written where its declaration is in scope.
+#
+# -- on the write, which asks for the SSA binding of a name the arm's own body did not bind. The
+# `if` is `false` and the arm never runs, so nothing about the program's own execution is at stake:
+# the builder asks the question while it is constructing the arm, and the answer is the same on all
+# four back ends (it is before any of them).
+#
+# What the entry holds is the one thing that can be held today: the compiler runs this program. It
+# does not name the output -- the program says nothing on either side of the fix -- and it does not
+# name the sentence as the expected answer, because a red that expects a guarantee is a program the
+# compiler is expected to crash on. The red is recorded as a known failure with its owner and its
+# wall, so the gate counts it instead of going quiet about it: eight programs of the run were this
+# shape (seeds 5, 85, 134, 214, 229, 262, 272, 427), it arrived with the S1 work that makes a
+# same-region local `var` a value rather than a cell, and it is not this lane's to fix.
+
+[[tests]]
+name = "rc20_seed262.without_the_pass"
+desc = "The program with no pass at all: it must run, say nothing and exit 0. Today it stops in the graph builder at `rebindSsa`'s `binding != nullptr` -- the shape the merge brought (S1), recorded here as a known failure with its owner rather than as an expected crash."
+case = "../../../cases/opt/e9/rc20_seed262.cml"
+args = ["${case}", "${backend}"]
+expect_exit = 0
+expect_stdout_exact = ""
+known_fail = ["nvm", "fvm", "jit", "prl"]
+known_fail_owner = "the S1 line that `1e8e390b6` ('gir: build a same-region local `var` as a value, not a cell') opened, taken by the E9 coordinator's lane on 2026-11-17 after this lane's full run reported the shape; the wall is the `known_fail_reason` beside this line"
+known_fail_reason = "`builder_expr.cpp(3148)` `Builder::rebindSsa`, `binding != nullptr`, 'An SSA `var` is written where its declaration is in scope.': the arm of the `if` is a `sync { }` body that declares `var v57` and writes it with `+=`, and the write asks for the SSA binding of a name that arm's own body did not bind. Before the S1 work the same write went through the cell path and the program ran; the eight programs of the E9 run that crash here (seeds 5, 85, 134, 214, 229, 262, 272, 427) are the measurement of the move, and this 8-line program is the reduction of seed 262"
+known_fail_msg = "binding != nullptr"
+known_fail_note = "The account of the baseline, so the next reader can check it: the 2026-11-17 08:02 run reported `wrong 8 / refused 3 / crashed 10` over 227 programs and 273 generator rejects. This lane's two fixes take four of those ten out of the crash class (165 and 202 are now `SemanticDiag::ClosureAssignsCapturedName`, 193 and 289 now translate and run), and the merged develop takes seven new programs in (5, 134, 214, 229, 262, 272, 427), while seed 85 stays in the class and moves from `Variant::get` to this one: 10 - 4 + 7 = 13, which is what the full run on this tree reports. The baseline is not moved to 13: a gate that is red because of a regression is the gate doing its work, and this entry is the shape's reproducer until the S1 line closes it"

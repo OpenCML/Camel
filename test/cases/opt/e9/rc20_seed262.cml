@@ -1,0 +1,8 @@
+func main(): int sync {
+    let n62 = if false then 1 else sync {
+        var v57 = 1.0;
+        v57 += 1.0;
+        return 4;
+    };
+    return 0;
+}
