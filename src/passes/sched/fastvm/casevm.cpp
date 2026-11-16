@@ -9,6 +9,7 @@
 #include "camel/core/global_config.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/loop_frame.h"
+#include "camel/execute/operator_call.h"
 #include "runtime_support.h"
 
 using namespace camel::core::error;
@@ -468,7 +469,19 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 const data_arr_t wargs = bc.wargs();
                 auto mark              = bc.extra()->mark;
                 try {
-                    evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
+                    // The same place as gotovm.cpp's `label_SCHD`: a marked operator runs through
+                    // the one hook (camel/execute/operator_call.h) so that the count's rows at this
+                    // instruction's position are run here as they are at OPER's. This body is
+                    // compiled only when ENABLE_FASTVM_COMPUTED_GOTO is off, which is not the
+                    // default; it does not build today (its own includes have rotted), so the site
+                    // is written beside its twin rather than verified by a compiler.
+                    camel::execute::callOperator(
+                        camel::execute::siteOfSlot(*currFrame, bc.result),
+                        [&] {
+                            evalMarkedOperator(mark, bc.result, nargs, wargs, *currFrame);
+                            return bc.result == 0 ? NullSlot
+                                                 : currFrame->get<slot_t>(bc.result);
+                        });
                 } catch (const camel::core::mm::MemoryExhausted &e) {
                     throw e.during(
                         std::string(),

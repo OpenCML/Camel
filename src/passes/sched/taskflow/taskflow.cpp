@@ -16,6 +16,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
+#include "camel/execute/operator_call.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -1923,18 +1924,18 @@ slot_t TaskflowExecSchedPass::executeLinearMarkedOperator(
     // tasks (runElements). A task graph per operator, as before, cost more than a `reduce`
     // over a handful of elements.
     //
-    // The count's rows are run at both exits, because a marked operator is an operator node like
-    // any other: the rows of the values it uses come due when it has run. Its own value is a
-    // collection, so its own holds are filtered out by the type -- the same answer the other back
-    // ends give.
-    if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
-        camel::runtime::applyRefEntriesForNode(graph->execPlan(), frame, nodeRef, *value);
-        return *value;
-    }
-    const auto *node   = requireNode(graph, nodeRef);
-    const slot_t result = node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
-    camel::runtime::applyRefEntriesForNode(graph->execPlan(), frame, nodeRef, result);
-    return result;
+    // A marked operator is an operator node like any other, so it runs through the one hook every
+    // back end calls an operator through (camel/execute/operator_call.h), and the count's rows are
+    // run by it rather than here: the rows of the values it uses come due when it has run, and its
+    // own value is a collection, so its own holds are filtered out by the slot's type -- the same
+    // answer the other back ends give.
+    return camel::execute::callOperator({graph->execPlan(), *frame, nodeRef}, [&] {
+        if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
+            return *value;
+        }
+        const auto *node   = requireNode(graph, nodeRef);
+        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+    });
 }
 
 slot_t TaskflowExecSchedPass::executeLinearNode(
@@ -2192,20 +2193,16 @@ slot_t TaskflowExecSchedPass::executePreparedOperator(
         if (anchorWanted) {
             boxes.begin();
         }
-        const slot_t result = function(with, normal, *context_);
+        const slot_t result = camel::execute::callOperator(
+            {plan != nullptr && plan->shared != nullptr ? *plan->shared : graph->execPlan(),
+             *frame,
+             nodeRef},
+            [&] { return function(with, normal, *context_); });
         if (anchorWanted) {
             camel::runtime::noteCountedCreationForNode(graph, nodeRef, boxes.sinceBegin());
         }
         // Publish before this region is released, including on the task-graph path.
         frame->set(dataIndexOf(graph, nodeRef), result);
-        // The count's rows at this node's position -- the same site the anchor above is asked at.
-        // Run whether or not --gc-check was asked for: what a run releases is the program's
-        // behaviour (design principles 10.5) and the flag only says whether it is reported.
-        camel::runtime::applyRefEntriesForNode(
-            plan != nullptr && plan->shared != nullptr ? *plan->shared : graph->execPlan(),
-            frame,
-            nodeRef,
-            result);
         return result;
     };
 
@@ -2467,10 +2464,12 @@ slot_t TaskflowExecSchedPass::executePreparedNode(
         if (!OperatorTable::instance().isMarked(body->oper)) {
             return executePreparedOperator(graph, nodeRef, frame);
         }
-        if (const auto value = runMarkedOperator(graph, nodeRef, frame)) {
-            return *value;
-        }
-        return node->dataIndex == 0 ? NullSlot : frame->get<slot_t>(node->dataIndex);
+        // A marked operator on the prepared path is the linear form, which runs it through the one
+        // hook (camel/execute/operator_call.h) and so counts it like every other operator call. No
+        // program reaches this branch today -- its three callers cannot reach an Oper, and the only
+        // task graph that is built is the one std::tfdump prints -- and it is written this way so
+        // that a path that did have a trigger could not reach the count by a second route.
+        return executeLinearMarkedOperator(graph, nodeRef, frame);
     }
 
     case GCNodeKind::Brch: {

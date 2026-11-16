@@ -178,8 +178,10 @@ class ForeignResourceObject final : public Object {
 //
 // Who calls them: one entry point shared by all four back ends,
 // `camel::runtime::applyRefEntriesForNode`, which reads the plan's rows for the position the node
-// has just run at (`camel/runtime/exec_plan.h`). Nothing else calls them: a count that is applied
-// in more than one place is a count whose balance no single table can be read against.
+// has just run at (`camel/runtime/exec_plan.h`); its own only caller is
+// `camel::execute::callOperator` (`camel/execute/operator_call.h`), the one place a back end calls an
+// operator. Nothing else calls them: a count that is applied in more than one place is a count whose
+// balance no single table can be read against.
 bool retainCountNow(Object *value) noexcept;
 bool giveBackCountNow(Object *value) noexcept;
 

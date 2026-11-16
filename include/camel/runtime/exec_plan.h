@@ -254,9 +254,11 @@ class ExecPlan {
     // Design principles 10.5: a value is freed by counting alone, the count equals the number of
     // its holders, and the count comes from one last-use analysis on the execution plan that every
     // back end follows. What follows is that analysis's output. It is laid out from the "position
-    // of the last use" column below, and the four back ends execute it through one function --
-    // `applyRefEntriesForNode`, called at the site where the node's operator has run -- so that the
-    // count a run keeps and the count the plan printed are one table and not two that agree.
+    // of the last use" column below, and the four back ends execute it through one call --
+    // `camel::execute::callOperator` (include/camel/execute/operator_call.h), which runs
+    // `applyRefEntriesForNode` at the site where the node's operator has run and is that function's
+    // only caller -- so that the count a run keeps and the count the plan printed are one table and
+    // not two that agree.
     // What a count releases is the *resource*: the block's memory still belongs to the wrappers
     // that name it (see the note on `ForeignResourceControlBlock::releaseCountNow`).
     //
@@ -531,7 +533,10 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 // which rows are due from what it knows about the instruction it is running. The two things a back
 // end supplies are the node it has just run and the value that run made; a back end that holds a
 // slot and not a node asks the plan which operator makes that slot's value (`refNodeOfSlot`), and
-// that lookup is the plan's table and not a second reading of the program.
+// that lookup is the plan's table and not a second reading of the program. Its only caller is
+// `camel::execute::callOperator` (include/camel/execute/operator_call.h): every back end calls an
+// operator through that, so a place that calls an operator has no way to skip the rows and no way to
+// run them twice.
 void applyRefEntriesForNode(
     const ExecPlan &plan,
     camel::core::context::Frame *frame,
