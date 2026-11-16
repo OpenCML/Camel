@@ -1,4 +1,7 @@
 #!/usr/bin/env node
+// Copyright (c) the OpenCML Organization
+// SPDX-License-Identifier: MIT
+
 // The E9 differential at the tier its ratchet is defined at, as a check `camel-remote.ps1` can
 // start by name.
 //

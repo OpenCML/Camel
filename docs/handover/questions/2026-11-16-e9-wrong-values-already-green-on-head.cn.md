@@ -139,40 +139,61 @@ bbaf8a2b2                   rc09_seed15 inline+fold              → "\nL4 0 \n"
 2. **交出定位**：用与上面第 4 条同一份读数，在 `29ea0a011` 与 HEAD 之间 bisect，把「哪一笔让这一格从 1 变回 2」定到具体提交；A16a 同样用两次读数钉住 `66491c3c7`。**定位比再改一遍更值**：催办说「没有一处修复」，而事实是「修好它的那一笔已经在了，只是没人指出来」。
 3. **三个数照口径报**，入口命令写全（见上）。
 
-## 7. E9 完整跑（500 种子）：跑法与口径先说清
+## 7. E9 完整跑（500 种子）：入口此前不存在，现已补上，并已跑出三个数
 
-**跑法（工具自带，不是计划）**：`test/tools/e9diff/e9diff.py`，三个档 fast / slow / full：
-
-```
-python test/tools/e9diff/e9diff.py run --matrix full --out /tmp/e9-full --camel <install>
-python test/tools/e9diff/e9diff.py analyze --out /tmp/e9-full
-```
-
-full = 种子 `1..500`、99 格（11 条流水线 × 4 后端 × 2 回收器 + `std::cpp`）= 31,680 格；`--jobs 4` 在
-**安静**的 32 核主机上 25 分钟；**今天主机 1 分钟负载 20~28**（其它车道在跑），实际会显著更久。
-
-**这条跑法进不了本车道的闸门入口**，这是要先说的第一件事：
-
-- `internal/tools/camel-remote.ps1` 的 `-Check` 表里**没有 e9 这一项**（表是 `diagnostics-catalog`、
-  `camel-for-ai`、`check-doc-links`、`headers`、`plan-dir-markers`、`check-grammar`、`stdlib-reference`、
-  `conformance`、`export-matrix`、`model-generators`、`rule-proofs`、`plan-debt`、`gate-static`、
-  `plan-fields`、`ast-hashes`，加 report-only 的那几个），`test/plans/` 下也没有任何计划包着它；
-- 所以一个车道要跑它，只能自己手写 ssh 命令行，而本车道的纪律与 `camel-gate.local.json` 的设计都要求
-  「闸门入口只认 `internal/tools/camel-remote.ps1`」，而且它还要占主机那道测试互斥量。
-
-**第二件事是口径**：`test/tools/e9diff/baseline.json` 里那只棘轮的读数是
+**7.1 入口（`adb270709`）**。`test/tools/e9diff/e9diff.py` 一直是三个数的 harness，但它的 full 档
+**没有计划包着，也不在 `-Check` 表里** —— 一个车道只能手写 ssh 命令去跑它，而按 `camel-gate.local.json`
+的设计，那等于不存在。补的是这一半：
 
 ```
-programs_wrong 10   programs_refused 17   programs_crashed 3
-cells_wrong   321   cells_refused   747   cells_crashed    3
-pin a8df99c13 (2026-11-14) + 提交时带进 test/ 的五个未提交文件   matrix full   seeds 1..500
-500 个程序里 180 个是生成器的废品，矩阵里 320 个
+pwsh -NoProfile -File internal/tools/camel-remote.ps1 -Path <worktree> -Check e9-full
 ```
 
-而作者要对照的 **19 / 21 / 12+2 是 CC 那套 harness 在 `29ea0a011` 上的数**（`questions-2026-10-29.md`
-「基线」）。**两套 harness、两个 pin，两个数不能并排放。** 所以「与 11-14 基线对比」这件事，退一步的
-做法是：**先跑一次 full，与 `baseline.json` 的 10 / 17 / 3 比**（这是仓库里那只棘轮的定义），并在提交
-说明里同时写「这次是哪套 harness、哪些种子、哪个 pin」，不把它和 19 / 21 / 12+2 相减。
+- `scripts/check-e9-full.mjs`：拼命令行（`--camel` 要放在子命令**前**）、跑 `run --matrix full`、
+  原样转发工具的输出、解析三个数、把工具的退出码原样交上去。**它自己不判断任何事** —— 与
+  `baseline.json` 的比较和退出码都是工具的；
+- `camel-remote.ps1`：表里加一行 `e9-full`，并加一个标记 `namedOnly` —— 它**不进 `-Check all`**，
+  理由是它慢（25 分钟到半小时），而不是 `planStage` 那种「没有读数可给」。收尾那行按两个理由分两行报，
+  所以「N run」这句话仍然不会被读成「全都跑了」。
+- `test/tools/e9diff/README.md` 里「没有自己的计划」那句**原样成立**：仍然没有计划，仍然不自动开跑。
+  那一行 `-Check e9-full` 该从工具自己的 README 里指出来，但 `test/tools/*` 不在本车道可改的范围。
+
+**7.2 三个数（`adb270709` 上，本车道自己跑出来的）**
+
+```
+harness = e9diff.py（不是 CC 那套）  seeds = 1..500  pin = adb270709（clean）  matrix = full
+[e9-full] matrix=full seeds=1..500 wrong=8 refused=3 crashed=10 seconds=1301
+[E9] wrong 8  refused 3  crashed 10     (cells: wrong 360, refused 135, crashed 56)
+[E9] beside the three numbers: {'RUN_ERROR': 198}
+[E9] 500 programs, 273 generator rejects, 227 in the matrix, 22473 cells
+```
+
+工具自己的判定行是混的，我照抄：`below the baseline: programs_wrong 10->8, programs_refused 17->3,
+cells_refused 747->135` 与 `ABOVE THE BASELINE: programs_crashed 3->10, cells_wrong 321->360,
+cells_crashed 3->56`。
+
+**7.3 这三个数与 `baseline.json` 的 `10 / 17 / 3` 不可直接比 —— 程序population 换了**
+
+```
+baseline   seeds 1..500  180 generator rejects  320 in the matrix  31,680 cells
+this run   seeds 1..500  273 generator rejects  227 in the matrix  22,473 cells
+```
+
+**同一个 `seeds 1..500`，进矩阵的程序从 320 个掉到 227 个**，因为生成器在这中间变了
+（`0ddbb92af test(progen): write only programs the front end accepts, and agree about them` 及之后几笔
+改的就是「哪些种子算废品」）。`baseline.json` 的守卫只比 `matrix` 和 `seeds`，**不比进矩阵的程序数**，
+所以它照样给出了判定 —— 这是那只棘轮自己的一个洞，不是本车道这一跑的口径问题。
+
+按每程序的比例看，两边的差就更清楚：错值 `8/227 = 3.5%` 对 `10/320 = 3.1%`（**略差**），
+拒绝 `3/227 = 1.3%` 对 `17/320 = 5.3%`（**明显好**），崩溃 `10/227 = 4.4%` 对 `3/320 = 0.94%`
+（**是涨的**）。另外 `RUN_ERROR 198 格`在基线里是 **0** —— 那一类（程序自己非零退出）在基线的
+`cell_outcomes` 里根本没有出现过。
+
+**结论**：这次的三个数是 **8 / 3 / 10**，可以交给任何人在同一棵树上重跑；它与 `10 / 17 / 3` 的
+对比**不能被读成一个数字的升降**，因为分子分母都换了。要让这只棘轮真的能比，得先做两件事之一：
+把基线在**当前生成器**上重录一次（`--update-baseline`，full 档才允许），或者让 `baseline.json` 的
+守卫把「进矩阵的程序数」也记进比较键里。**这两件都不在本车道这一轮的范围内**，而且第二件改的是
+`test/tools/*`。
 
 ## 若作者另有裁定
 
