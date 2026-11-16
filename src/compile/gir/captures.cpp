@@ -83,16 +83,11 @@ node_handle_t Builder::captureInto(
     }
 
     const std::string shown = captureNameOf(origin, name.empty() ? originNames_[origin] : name);
-    // A capture of a value, where the value is what the port holds: the capture a closure makes
-    // of a variable it reads, and nothing writes. A `var` is still a cell a closure may share
-    // (`escapingVariables_`, below), so the port is a value port only where nothing can write the
-    // name while the capturing body holds it: no function of the program writes it (the
-    // conservative writer set, scanProgramWriters), the cell is one the program declared
-    // (`:var/new`) and not a `var` parameter a caller handed in, and the graph is one the program
-    // is making a value of (its captures are closure ports, values it holds) rather than one a
-    // direct call is being built for (whose capture ports become with-ports). Where that holds the
-    // port carries the value the variable had where the capture is written, its type is that
-    // value's, and nothing that reads the port can write the variable.
+    // A `var` is a cell a closure shares only in the shapes `decideCaptureByValue` names and
+    // exempts (a module-level `var`, a `var` parameter, the generator machine's step function and a
+    // decorated block); everywhere else the port is a value port: it carries the value the variable
+    // had where the capture is written, its type is that value's, and nothing that reads the port
+    // can write the variable (design principles 3.5, 197).
     const bool byValue = captureByValue(graph, origin);
     Type *portType     = byValue ? valueTypeOf(nodeTypeOf(origin)) : nodeTypeOf(origin);
     node_handle_t port = graph->addPortNode(portType != nullptr ? portType : nodeTypeOf(origin), shown, false);
@@ -175,9 +170,15 @@ bool Builder::captureByValue(const compile_graph_ptr_t &graph, node_handle_t ori
     if (!isVariable(origin)) {
         return false;
     }
-    // One answer per cell: every capture of it has to agree (see `captureByValueOf_`). The first
-    // capture is the earliest one written, so a write written past it is a write written past all
-    // of them, which is the direction that keeps the cell.
+    // A graph whose write has to land in the cell (`decideCaptureByValue`) records its answer
+    // before the cache is read: a cell one such graph captures is a cell for every graph that
+    // captures it, and an earlier "value" from a program closure must not hand the generator's step
+    // function a value where it writes. This is the direction that keeps the cell.
+    if (compilerMadeClosure(graph->name()) || decoratedBlockGraph(graph)) {
+        captureByValueOf_[origin] = false;
+        return false;
+    }
+    // One answer per cell: every capture of it has to agree (see `captureByValueOf_`).
     if (const auto decided = captureByValueOf_.find(origin); decided != captureByValueOf_.end()) {
         return decided->second;
     }
@@ -202,45 +203,48 @@ bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle
     if (nodeKindOf(origin) != camel::runtime::GCNodeKind::Oper) {
         return false;
     }
-    // The name the graph knows the value by. A capture with no name (`originNames_` holds what
-    // `captureInto` was handed) cannot be looked up in the writer sets, so it keeps its cell.
+    // The name the graph knows the value by: what the writer sets below are looked up with.
     const auto known = originNames_.find(origin);
     const std::string name =
         known != originNames_.end() ? known->second : captureNameOf(origin, std::string{});
     if (name.empty()) {
         return false;
     }
-    // A name some function of the program writes is shared: that write would have to reach the
-    // body through the cell, and a value port cannot carry it. This is the conservative set, so a
-    // write of another binding that happens to share the name costs the capture its value port --
-    // the safe direction, because it only keeps a cell that could have been a value.
-    if (programWrites(name)) {
+    // A module-level `var` keeps its cell where some function of the program writes it: `uses var`
+    // and `pure` are judged on the resources a body reaches, and a function the program made a value
+    // of still reaches the module cell it reads, so the account rides on the cell until the module
+    // `var` work lands (`test/cases/linear/toplevel_var/err_pure_parameter.cml`: `run(bump)` asks
+    // whether `bump` uses `cnt`). A cell the body declared itself does not consult this set: the set
+    // matches by NAME, and a write another function makes of a same-named variable cannot reach a
+    // local cell, so consulting it there refused a capture the rule allows.
+    if (!localCell && programWrites(name)) {
         return false;
     }
     // A name the program hands to a call may be written by that call: a `var` parameter and a
     // `var` `with` parameter are the caller's cell, so the write reaches this cell from a body the
-    // closure's capture does not stand for. Until the scan can tell the `var` positions from the
-    // ordinary ones, every name passed as an argument keeps its cell (program.cpp, `handedOver_`).
+    // closure's capture does not stand for. Design principles 3.5 (198) refuses that write
+    // (`CapturedVarHandedToVarParameter`), but not in the shape where the closure is made at the
+    // argument position of the very call that hands the name over: there the closure's last use IS
+    // that call, and the write happens inside it, so the stretch the rule needs is empty and the
+    // report stays off. `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read` is
+    // that shape, and its reading is 7 (`w = 7` then `read()`): by value it would be 0. The gate
+    // stays until either that shape is reported or the case is settled the other way.
     if (programMayWriteThroughCall(name)) {
         return false;
     }
-    // Design principles 3.5 (197) makes a name a closure mentions unassignable from the closure's
-    // creation to its last use, and the two writes that shape allows are exactly the two cases
-    // above and below: a write from a closure (counted by `programWrites`) and a write from the
-    // body the closure is written in, past it. That second rule is not reported yet, so a name a
-    // write is written past keeps its cell: a value port would silently hand the closure the value
-    // the name had where it was captured, and the program would answer something else than it does
-    // today. Where the capture itself stands is not known, the cell is kept for the same reason.
-    const size_t captureAt = sourceOffsetOf(refOrigin_);
-    if (captureAt == kNoSourceOffset) {
+    // The cell is kept where the rule above is not the one that governs the write. Design
+    // principles 3.5 (197) makes a name a closure mentions unassignable, and the write a closure
+    // makes of it is refused by `requireCapturedNameWritable` -- except in two shapes, which that
+    // function names and exempts for the same reason: the generator machine's own step function,
+    // which writes the cells of the body it was cut from between two `yield`s (visitGeneratorBody),
+    // and a decorated block, whose write is the block's own. In both, the write has to land in the
+    // cell the closures around it share, so the capture stays a capture of the cell.
+    if (compilerMadeClosure(graph->name()) || decoratedBlockGraph(graph)) {
         return false;
     }
-    const size_t writtenAt = lastWriteOffsetOf(name);
-    if (writtenAt != kNoSourceOffset && writtenAt > captureAt) {
-        return false;
-    }
-    // Where neither write exists, the cell's value cannot change after the capture, and the capture
-    // is the value the name holds there (design principles 3.5).
+    // Where neither shape holds, the cell's value cannot change after the capture -- a write of
+    // the name is now refused, in the closure and in the body around it alike (3.5, 197 and 198) --
+    // and the capture is the value the name holds there.
     return true;
 }
 

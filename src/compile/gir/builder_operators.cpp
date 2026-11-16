@@ -4428,7 +4428,17 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
                 if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
                     if (const std::string name = moduleLevelName(arg.expr->name());
                         nodeAt(name).has_value()) {
-                        if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+                        node_handle_t node = resolveNodeByRef(name);
+                        // The name a closure captured is a PORT and not a variable once the capture
+                        // is by value (design principles 3.5, 197): a value has nowhere to write, so
+                        // the rule that answers the write is the capture's, and the general
+                        // "the target must be a variable" would name neither the rule nor the way
+                        // out. `requireCapturedNameWritable` answers it for a cell and a port alike
+                        // (`captureOriginOf_`), and stays silent where the general rule governs.
+                        if (node != nullptr && captureOriginOf_.contains(node)) {
+                            requireCapturedNameWritable(node, name, false, arg.expr->origin());
+                        }
+                        if (isVariable(node)) {
                             // The assignment is the write itself (design principles 3.5, 192): a
                             // closure's own body may not write a name it captured (197), and the
                             // body that declares the name may not write one a closure of that body

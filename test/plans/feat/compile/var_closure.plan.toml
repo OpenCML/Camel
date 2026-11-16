@@ -1,14 +1,17 @@
 # The rule of a captured value (design principles 3.5, the author's ruling of 2026-11-15): what the
 # main line pins about it after `lane-varclos` (`218f3b3f7`).
 #
-# Where the rule stands today. A closure captures a NAME BY VALUE when the name is a top-level value of
-# a module, no function writes it, and the function was used as a value (`decideCaptureByValue`); a
-# capture port is a value then, and reads inside the body are the port. Everywhere else the port is
-# still the CELL -- and there a by-reference capture's write USED TO BE legal: it landed in the cell the
-# closure was handed, which is how `byref` was written and how the `stream` packer was written. It is not
-# legal any more. `lane-closurediag` refuses that write (the three `err.*` entries at the end), which is
-# why the `byref` cases and the `stream` packer went red: the cases are the migration this plan's third
-# step owes, and the packer holds four `Ref`s since `lane-teeref`.
+# Where the rule stands today: the fourth step of "`var` becomes SSA" removed the three conservative
+# gates of `decideCaptureByValue`, so a closure of the program captures a NAME BY VALUE wherever it is
+# written. A capture port is a value, and reads inside the body are the port. The CELL is kept in four
+# shapes only, each for a reason of its own: a `var` parameter (the caller's cell), a module-level `var`
+# (until the module `var` work lands), the generator machine's own step function and a decorated block --
+# the last two because the write they make has to land in the cell
+# (`requireCapturedNameWritable` exempts both). A by-reference capture's write USED TO BE legal: it
+# landed in the cell the closure was handed, which is how `byref` was written and how the `stream`
+# packer was written. It is not legal any more. `lane-closurediag` refuses that write (the three `err.*`
+# entries at the end), which is why the `byref` cases and the `stream` packer went red: the cases are
+# the migration this plan's third step owes, and the packer holds four `Ref`s since `lane-teeref`.
 #
 # The other half of the ruling (a closure may not assign an outer name, and a captured `var` may not be
 # assigned between the making of the closure and its last use) was NOT REPORTED when this plan was
@@ -18,15 +21,14 @@
 # 'side0' breaks its edge invariants`. `tee` itself no longer keeps cells: it holds four `Ref`s
 # (`lane-teeref`), so its five
 # outputs never depended on this choice, and `lane-closurediag` (2026-11-16) is the step that reports the
-# rule. The three `err.*` entries at the end of this plan are the three ways that write is written; the
-# `transitional.*` entries are the same programs, accepted while the capture port was a cell and refused
-# once the rule reports -- they are deleted by the step that removes the by-reference capture port.
+# rule. The three `err.*` entries at the end of this plan are the three ways that write is written. The
+# three `transitional.*` entries that stood between them are GONE: they were the same programs, accepted
+# while the capture port was a cell, and they were refused from the day the rule reports -- the step that
+# removed the by-reference capture port is the one that deleted them, exactly as they said it would be.
 #
-# The entries are of three kinds, and each says which it is:
+# The entries are of two kinds, and each says which it is:
 #   - `ok.*` -- legal under the rule as it stands (the regression guards; six of them came from the
 #     retired `hold/varclo` branch and pass on the main line unchanged);
-#   - `transitional.*` -- accepted BEFORE the reporting and refused after it; the entry names the step
-#     that removes it. None of these may be read as the design;
 #   - `err.*` -- refused. The first one is refused by a rule that does not depend on the capture's kind:
 #     an assignment to a `let` captured from the graph around it has no cell to write even in the
 #     by-reference world, which is the general assignment rule (`ImmutablePassedToVarParam`,
@@ -60,33 +62,6 @@ case = "../../../cases/compile/var_closure/ok_generator_body_is_not_a_program_cl
 args = ["${case}"]
 expect_exit = 0
 expect_stdout_exact = "5\n"
-
-[[tests]]
-name = "transitional.by_reference_capture_write_is_accepted"
-desc = "A closure assigns a `var` of the function that made it. The ruling answers that with a refusal (a value has nowhere to write), and this lane cannot ask it yet: the capture port is the cell, so the write lands in the frame's variable and the program is accepted, reading 3. Read it as the state of the transition, not as the language: the entry becomes `err.*` the day the capture port is a value, and the step that removes the by-reference port deletes the case with it."
-kind = "behavior"
-case = "../../../cases/compile/var_closure/transitional_byref_write_accepted.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "3\n"
-
-[[tests]]
-name = "transitional.write_after_the_closure_is_accepted"
-desc = "A closure is made, the `var` it read is assigned, and the closure is called after that. The ruling refuses the assignment while the captured name is still used afterwards; this lane accepts it for the same reason as the entry above (the port is the cell), and the call reads the value written after it, so the reading is 2. Transitional, not design."
-kind = "behavior"
-case = "../../../cases/compile/var_closure/transitional_write_after_the_closure_accepted.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "2\n"
-
-[[tests]]
-name = "transitional.program_closure_still_seen_where_the_rule_would_ask"
-desc = "The same generator (whose body is the compiler's own closure, never asked about) beside a closure writing a `var` of its own frame. Both are accepted today -- the second because the capture is by reference -- and the readings are 5 then 2. The entry exists so the switch's other side (a program's closure is the one the rule would ask about) stays visible for the day the refusals come back."
-kind = "behavior"
-case = "../../../cases/compile/var_closure/transitional_program_closure_pin.cml"
-args = ["${case}"]
-expect_exit = 0
-expect_stdout_exact = "5\n2\n"
 
 [[tests]]
 name = "err.assignment_to_a_captured_let_is_refused"
