@@ -25,6 +25,7 @@ baa3930e27b73d91 no test/cases/parse/rules/no_context.cml
 d542042c9ffdf82b ok test/cases/parse/rules/parameters.cml
 fff780ff68187f93 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
+10aed221f795b18e ok test/cases/parse/rulings/count_until.cml
 e067b6e6bd567e4e ok test/cases/parse/rulings/doc_comment.cml
 c114c7ec0fbe2a39 ok test/cases/parse/rulings/doc_comment_blank_line.cml
 e684c7ad2f2d0a07 ok test/cases/parse/rulings/dotdot_after_cast.cml
@@ -44,6 +45,7 @@ c52fec6465c58bb2 no test/cases/parse/rulings/loop_is_keyword.cml
 1fec33b3724d526a ok test/cases/parse/rulings/minus.cml
 228ab66c3e663b16 ok test/cases/parse/rulings/not_by_precedence.cml
 ed65b02ad206de6e ok test/cases/parse/rulings/null_compare.cml
+6f43ae0e5cae32a9 no test/cases/parse/rulings/open_range.cml
 d7988111a3f83049 no test/cases/parse/rulings/optional_comp_removed.cml
 1a9eb749dfab442c ok test/cases/parse/rulings/power.cml
 f7ca2778095d9642 ok test/cases/parse/rulings/reserved_and.cml

@@ -346,3 +346,32 @@ expect_diagnostic_line = 7
 expect_output_contains = ["names its parameters", "(x: float, y: float) => float"]
 expect_output_not_contains = ["UnknownInternalError", "expected '='"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+
+[[tests]]
+name = "rulings.open_range_not_in_language"
+desc = "There is no open interval `a..` (the author's ruling of 2026-11-16): an interval has two ends and gives an array, and counting until a condition holds is a counting `while` loop. `1..` without a right-hand side is refused rather than read as a range that counts on forever -- `..` is an operator, so the parser takes the next token (`return` on the following line) as the missing operand and reports `Unexpected 'return'; expected an expression` at 8:5, and nothing is printed."
+kind = "negative"
+case = "../../../cases/parse/rulings/open_range.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SyntaxDiag::UnexpectedToken"
+expect_diagnostic_code = "0x0200000A"
+expect_diagnostic_line = 8
+expect_diagnostic_column = 5
+expect_output_contains = ["Unexpected 'return'; expected an expression"]
+expect_output_not_contains = ["UnknownInternalError"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 8000
+
+[[tests]]
+name = "rulings.count_until_by_while"
+desc = "Counting until a condition holds is the counting `while` loop, the writing the author's ruling of 2026-11-16 sends the open interval `a..` to: one counter stops at the first square that is not below 1000, and two counters stop when the running sum passes 100 (their value is the tuple of both). No range is asked for whose end is a condition, and every back end prints the same three numbers."
+kind = "behavior"
+case = "../../../cases/parse/rulings/count_until.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+expect_stdout_exact = "32 14 105\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 8000
