@@ -57,6 +57,7 @@
 | [59_typeid_keys_and_the_type_the_table_does_not_hold.md](59_typeid_keys_and_the_type_the_table_does_not_hold.md) | `TypeId` 作键时 `kNoTypeId`（0）成为通配符：`sameCanonicalType` 的相反一格、0 的两个来源（`typeIdOf` 的 debug 断言与 `canonicalId` 不检查 `holds`）、实测 30 处下游站点（8 个符号）的清单，以及"规则右值是闭包"那一批类型的源头修法（函数类型连退出分量一起入表） |
 | [60_cml_print_roundtrip_gap.md](60_cml_print_roundtrip_gap.md) | `std::cml` 往返缺口：`not_equivalent` 的十条类别与真实原因（打印文本比原程序少掉的顶点：类型拼写、字面值、编译期展开、捕获端口、函数值、`return`、被丢的臂、结构体循环状态、空臂区域、判据异常），以及 3688 个文件上的读数与接口作者「51 条」的来历 |
 | [61_capture_census.md](61_capture_census.md) | 捕获普查 `scripts/check-capture-census.mjs`：作者验收闭包捕获用的两个数（`:var/new` 节点、按引用捕获口）怎么从 `std::jgir` 数出来、`list_sha` 如何钉住分母、`test/cases` 与全仓两套读数、5912/410/621 为什么复现不出来 |
+| [62_generator_type_has_two_answers.md](62_generator_type_has_two_answers.md) | 生成器里一个闭包的两个类型：`typeof` 重建与语句处真建各算一次捕获、`captureByValueOf_` 把机器的答案粘住、五条 `stream.generator*` 今天的绿靠 gate5 按名字匹配的巧合（「绿在别处」） |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |

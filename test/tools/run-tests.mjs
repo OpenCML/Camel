@@ -19,7 +19,7 @@ import {
 } from './cuda-visibility.mjs'
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
-import { judgeTree, markChildrenNested, readTreeState, startTreeWatch, treeGuardRole } from './tree-guard.mjs'
+import { judgeTree, markChildrenNested, readTreeState, readTreeStateAsync, startTreeWatch, treeGuardRole } from './tree-guard.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
@@ -4257,8 +4257,14 @@ async function main() {
     // quietly becoming a second judge.
     const treeNested = TREE_ROLE === 'nested'
     markChildrenNested(process.env)
-    const treeBefore = treeNested ? null : readTreeState(REPO_ROOT)
+    // The pre-test window is two readings that do not depend on one another: the tree's `git status`
+    // and the watcher over it. Both are taken before the first test -- the walk is the coverage and
+    // cannot be skipped or deferred (test/tools/tree-guard.mjs#readTreeStateAsync records what was
+    // measured and rejected) -- but they are started together, so the run pays the longer of the two
+    // instead of their sum. `treeSeenAt` is the window's start for the same reason: the timestamps
+    // the attribution prints are measured from before both readings, not from between them.
     const treeSeenAt = performance.now()
+    const treeBeforeReading = treeNested ? null : readTreeStateAsync(REPO_ROOT)
     const treeSeen = new Map()
     let treeWatch = null
     if (!treeNested) {
@@ -4271,6 +4277,7 @@ async function main() {
             }
         })
     }
+    const treeBefore = treeNested ? null : await treeBeforeReading
     const outcome = await executePlans(plans, options, sharedVars, logDir)
     // Both readings before `stop()`: it closes the watchers and forgets how many there were, and
     // the number is what says the walk found the tree instead of watching nothing.

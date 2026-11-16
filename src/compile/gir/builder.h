@@ -797,16 +797,22 @@ class Builder {
         // the end would refuse a program the design allows (3.5, 198 -- the rule runs from the
         // making of the closure to its last use, and not one byte further).
         size_t lastUse = 0;
+        // The one end the design names without an offset: a closure the program put into another
+        // value -- a tuple, a struct, an array, a `Ref`, a return -- runs to the rest of the scope
+        // (design principles 3.5, 198, third case). Every write that stands after the making is then
+        // inside the stretch.
+        bool stretchToEnd = false;
         std::string closure;
     };
     std::unordered_map<node_handle_t, CapturedVar> capturedVarOf_;
     // The last use of a closure the program binds to a name, by the FUNC node the closure is written
-    // as, with the name it is bound to. Only that shape has a last use this scan can prove: a closure
-    // written at a call's argument position is used by that call (3.5, 198), and one the program puts
-    // into another value is used to the end of the scope, which no offset here stands for. Both are
-    // left unreported rather than reported wide.
+    // as, with the name it is bound to. A closure written at a call's argument position is used by
+    // that call (3.5, 198) and is not a binding, so it is not here; one the program puts into
+    // another value is used to the end of the scope, which no offset here stands for, and is carried
+    // as `stretchToEnd` instead.
     struct ClosureUse {
         size_t lastUse = 0;
+        bool stretchToEnd = false;
         // The name the program binds the closure to (`let g = () => ...` gives `g`), which is how a
         // report shows it: the graph's own name of an anonymous function is one the compiler made.
         std::string boundName;
@@ -877,21 +883,29 @@ class Builder {
     // The captures refused so (CaptureAfterRecursiveCall), each reported once.
     std::set<std::pair<DraftGraphBuilder *, node_handle_t>> lateCaptures_;
     // A direct call of a graph (a FUNC node): its captures are passed as With inputs after
-    // the declared `with` arguments, in the order of the callee's capture ports, by the link
-    // step (linkCaptureSites) once the module is built. `values` are the callee's captures as
-    // the caller saw them when the call was built; a capture the callee makes later (a
-    // recursive function that calls itself before it uses a value) is looked up then.
+    // the declared `with` arguments, in the order of the callee's capture ports. Each one is an
+    // edge of the call from the moment it is made (`addCaptureSite`): the value a call is handed
+    // is the call's `with` input, and not a node a table remembers, so the fold and the erasure
+    // rewrite it like any other edge and nothing here has to keep a node alive.
+    //
+    // What the table still says is a question about the call, not about a value: which call is
+    // still owed captures, and how many of its `with` inputs are captures. The captures a callee
+    // makes after the call was built -- a recursive function that calls itself before it uses a
+    // value -- are linked by the link step (`linkCaptureSites`) once the module is built, and the
+    // captures made while the call was built are moved behind the call's declared `with` arguments
+    // there, which its own arguments write after the callee is visited.
     struct CaptureSite {
         compile_graph_ptr_t caller;
         node_handle_t call;
         compile_graph_ptr_t callee;
-        std::vector<node_handle_t> values;
-        // The new version each capture has as of the call, when its last write produced one of
-        // its own valueVersionOf; null otherwise. A variable capture is always in `values` (a
-        // late one is refused), so the version a call hands on is the one recorded here.
-        std::vector<node_handle_t> versions;
-        // How many of the callee's captures are linked already.
+        // How many of the call's `with` inputs are its captures: the last that many, once the
+        // link step has placed them (`placed`).
         size_t linked = 0;
+        // How many `with` inputs the call had when the captures were appended, so the link step
+        // knows which ones to move behind the declared `with` arguments.
+        size_t firstCapture = 0;
+        // Whether the link step has placed those captures already.
+        bool placed = false;
     };
     std::vector<CaptureSite> captureSites_;
     /// The value of `origin` as `graph` sees it: `origin` when it is a node of `graph`;
@@ -903,9 +917,11 @@ class Builder {
     /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
     /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
     /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level `var`
-    /// the program is not making a value of the function for, a name handed to a call (198 does not
-    /// report the shape where the closure is made at that call's argument position), the generator
-    /// machine's step function and a decorated block (there the write has to land in the cell).
+    /// the program is not making a value of the function for, the generator machine's step function
+    /// and a decorated block (there the write has to land in the cell). Handing the name to a call
+    /// is NOT one of them: a `var` parameter is passed in by value and passed back by value (3.5,
+    /// 192), and where the closure stands at that call's argument position its last use is the call,
+    /// so 3.5 (198) reports nothing and the program is legal -- the author's ruling of 2026-11-16.
     /// Decided once per cell (`captureByValueOf_`): every capture of one cell has to answer the
     /// same.
     bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin);
@@ -943,15 +959,18 @@ class Builder {
     /// from). Written where a capture origin is written, so one table says what value a port is
     /// (`machinePortOrigin_`).
     void noteMachinePortOrigin(node_handle_t port, node_handle_t origin);
-    /// Registers the direct call `call` of `callee` in the current graph: its captures, as
-    /// the current graph sees them now, to be linked by linkCaptureSites.
+    /// Registers the direct call `call` of `callee` in the current graph: each capture the callee
+    /// has now is linked as one of the call's `with` inputs straight away (`captureValueOf`), so
+    /// the value a call is handed is an edge of the graph from the start. The site that is kept is
+    /// a question about the call -- which capture still has to be linked -- and names no value.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
-    /// Whether a capture site that is not linked yet names `value`: a site keeps the value it hands
-    /// a direct call in a table rather than as an edge (`addCaptureSite`, `linkCaptureSites`), so a
-    /// node it names must not be erased or folded away under it.
-    bool heldByCaptureSite(node_handle_t value) const;
-    /// The link step for captures: passes to every direct call the captures of its callee,
-    /// including the ones the callee made after the call was built, until nothing changes.
+    /// The value the call is handed for one capture of the callee, as the current graph sees it: a
+    /// capture of a cell is that cell's nearest write (`valueVersionOf`), and a capture of a value is
+    /// a read of the variable where the call stands, never the cell (design principles 3.5, 197).
+    node_handle_t captureValueOf(const CapturedValue &captured);
+    /// The link step for captures: puts the captures a call was given while it was built behind its
+    /// declared `with` arguments (the callee's with-ports in order), then passes every direct call
+    /// the captures its callee made after the call was built, until nothing changes.
     void linkCaptureSites();
     // The decorated form of each function declared with decorators, by its own graph.
     std::unordered_map<DraftGraphBuilder *, compile_graph_ptr_t> decoratedOf_;
@@ -2619,17 +2638,6 @@ class Builder {
     // read where a value is wanted (`let k = f`) and not where a call is made (`f(1)`). A value
     // holds the values its captures had when it was made; a direct call is handed the cells.
     std::unordered_set<std::string> programValueNames_;
-    // The names the program hands to a call as an argument, which that call may write: a `var`
-    // parameter and a `var` `with` parameter bound by `f<t>` are the caller's cell. A name here
-    // keeps its cell (captureByValue): the write reaches it through the call, which a value port
-    // cannot carry, and the rule that would refuse it (3.5, 198) does not report the shape where the
-    // closure is made AT the argument position of the very call that hands the name over -- see
-    // `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read`, whose reading is 7.
-    std::unordered_set<std::string> handedOver_;
-    // Whether a call may write the variable `name` is written with.
-    bool programMayWriteThroughCall(const std::string &name) const {
-        return handedOver_.contains(name);
-    }
     // Fills `programWriters_` out of every module's construction tree. Runs before the bodies
     // are built: a function its module has not built yet still writes what its body says.
     void scanProgramWriters();
@@ -3202,13 +3210,17 @@ class Builder {
         const std::vector<bool> &privateInitial = {});
     /// The per-state half of markLoopStateInPlace: rewrites state `index` when each of its next
     /// values (`nexts`: one for a body that gives the state directly, one per arm for a body that
-    /// ends in an `if` or `match`) is `state->append<v>` or the state itself, and the body uses
-    /// that state's parameter nowhere else. `initialIsPrivate`: the first value is a projection
+    /// ends in an `if` or `match`) is `state->append<v>` or the state itself, the body uses that
+    /// state's parameter nowhere else, and nothing outside the round's state keeps the value an
+    /// append hands back (`stateValues`: the values the round hands on as the next state; a reader
+    /// that is not one of them, or that assembles one out of the value, is a second holder the
+    /// runtime's reference count cannot see). `initialIsPrivate`: the first value is a projection
     /// of a value the loop does not own (a part of a struct state); it is copied once before the
     /// loop either way.
     void markLoopStateInPlaceOne(
         const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-        size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate = false);
+        size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate,
+        const std::vector<node_handle_t> &stateValues);
     /// Recognises a state that starts as an empty array and whose only use is appending one
     /// value per round, and gives the loop a collection slot for the appended values
     /// (design principles 3.10). The state itself stays: it is the value the program sees and

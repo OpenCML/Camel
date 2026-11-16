@@ -16,8 +16,9 @@
  *    buildTopLevelValue). So the top level of a module does not depend on the order it is
  *    written in, and a function's return type and captures are known where it is used. A
  *    value needed while it is being built depends on itself: ModuleValueCycle.
- * 3. Link: the captures of every direct call (linkCaptureSites, a least fixpoint), the call of
- *    the entry module's `main`, the summaries of effects (another fixpoint) and the warnings
+ * 3. Link: the captures a call is still owed (linkCaptureSites, a least fixpoint; the ones the
+ *    call was built with are already its `with` inputs), the call of the entry module's `main`,
+ *    the summaries of effects (another fixpoint) and the warnings
  *    that need them, per module.
  *
  * A library (buildLibrary) is built the same way by a builder of its own, from the library
@@ -641,7 +642,6 @@ size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
 void Builder::scanProgramWriters() {
     programWriters_.clear();
     programValueNames_.clear();
-    handedOver_.clear();
     // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
     // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
     // principles 4.3). The variable it writes is the base of its target: the variable itself
@@ -781,13 +781,6 @@ void Builder::scanProgramWriters() {
         const bool calleeFirst = node->type() == GCT::NodeKind::LINK ||
                                  node->type() == GCT::NodeKind::WITH ||
                                  node->type() == GCT::NodeKind::TAPP;
-        // An assignment's first operand is the name it writes, not an argument it hands to
-        // anybody: `__assn__(x, e)` writes `x`, and the write is counted by `programWriters_`.
-        bool targetAtOne = false;
-        if (calleeFirst && node->size() >= 2) {
-            const std::string *callee = groupOf(node->at(0));
-            targetAtOne               = callee != nullptr && isAssignment(*callee);
-        }
         for (size_t i = 0; i < node->size(); ++i) {
             const GCT::node_ptr_t child = node->at(i);
             if (child != nullptr && !(calleeFirst && i == 0) &&
@@ -797,19 +790,6 @@ void Builder::scanProgramWriters() {
                 // wants. An assignment's target is a name this scan already counted as a write of
                 // `programWriters_`, and being read as a value here changes nothing.
                 programValueNames_.insert(child->name());
-                // A name handed to a call is a name a call may write: an ordinary parameter is a
-                // copy, but a `var` one is the caller's cell, and this scan cannot tell which is
-                // which without resolving the callee. A `with` argument is the same question with
-                // the same answer (`add<t>` binds `add`'s `var` `with` parameter to `t`). So every
-                // name passed to a call counts as one a call may write, which is the direction
-                // that keeps a cell (captureByValue): resolving the positions that are `var`
-                // would only add captures, never take one away. Only a call's arguments count --
-                // a `FUNC` node's children are its type and its body, a name the body reads is
-                // not being handed to anybody, and an assignment's target is the name it writes,
-                // which `programWriters_` already counts.
-                if (calleeFirst && !(targetAtOne && i == 1)) {
-                    handedOver_.insert(child->name());
-                }
             }
             pending.push_back({child, function});
         }
@@ -964,7 +944,33 @@ void Builder::scanClosureLastUses() {
             }
         }
         if (binding.at != kNoSourceOffset && lastUse > binding.at) {
-            closureUseOf_[binding.closure] = {lastUse, binding.name};
+            closureUseOf_[binding.closure] = {lastUse, false, binding.name};
+        } else if (binding.at != kNoSourceOffset) {
+            // The block never names the closure again after the binding. Two shapes reach here and
+            // the graph does not tell them apart: a closure the program put into another value (a
+            // tuple, a struct, an array, a `Ref`, a return) -- whose construction may have dropped
+            // the value from the datum it built, so no reference to the closure is left to walk --
+            // and one the program never used at all. Design principles 3.5 (198) gives the first
+            // shape an end: "the closure's value put into another value runs to the rest of the
+            // scope". A stretch cut that far covers every write after the making, which is what the
+            // report reads; the shape the design keeps legal, a name assigned after the closure is
+            // done with, still shows as a use after the write and keeps its own offset above.
+            //
+            // Known over-wide, and not resolved here. The second shape -- a closure bound to a name
+            // that the block never uses again, with no placement behind it -- has no stretch under
+            // 3.5 and is legal, and this branch reports a write after it anyway:
+            //
+            //     let h = (): int => c     // never used
+            //     c = 41                   // reported, though the stretch is empty
+            //
+            // The two shapes are not separable in the graph: making the closure's value part of
+            // another value folds it out of the construction that built it, so the walk meets the
+            // closure node exactly once (its own binding) and no node carries the name. The way to
+            // narrow it is to read the placement off the source -- the tuple, struct, array, `Ref`
+            // or return the value is put into -- and not to keep counting names in the graph. The
+            // measured pair that makes this visible: `let h = (): int => c; let first = h(); c = c + 1`
+            // prints 0 and is legal (the last use is the call), while the shape above is refused.
+            closureUseOf_[binding.closure] = {binding.at, true, binding.name};
         }
     }
 }
