@@ -32,8 +32,11 @@
  * `produced` is the number of values the plan counts (ports, constants and nodes that only forward
  * a value are not among them), `copies` the references beyond each value's own, `give-backs` the
  * references that come back when a use ends, `packed` the ones that come back when the value that
- * packed them in dies (a closure tuple or an aggregate), `kept` the values the program itself keeps
- * (the graph's result). The columns are read in this order on purpose: the first five balance as
+ * packed them in dies (a closure tuple or an aggregate), `kept` the values whose producing reference
+ * does not come back inside the graph -- the program keeps it (the graph's result), or a loop reads
+ * it again after the round that read it, so the round's give-back cannot be placed at the use
+ * (exec_plan.cpp, `repeatsWithoutMakingIt`). The columns are read in this order on purpose: the
+ * first five balance as
  * `produced + copies == give-backs + kept + packed`, and `balanced` is that arithmetic recomputed
  * here from the numbers the plan reports, not from the plan's own answer.
  *

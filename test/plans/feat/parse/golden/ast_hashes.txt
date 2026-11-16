@@ -761,7 +761,7 @@ f47dcc7937755e16 ok test/cases/compile/decorators/blocks.cml
 0bd469c83e69448b ok test/cases/compile/decorators/grants.cml
 80e0a5fc46469505 no test/cases/compile/diag_fixes/leading_zero_09.cml
 607c66d8ec771881 ok test/cases/compile/diag_json/div_zero.cml
-b5e95cdb6c42ec0d ok test/cases/compile/diag_json/dropped_effects.cml
+81cb41a20026860f ok test/cases/compile/diag_json/dropped_effects.cml
 9b56cee8303fbb61 ok test/cases/compile/diag_json/dropped_effects_forward.cml
 fbbd8856a641f9d6 ok test/cases/compile/diag_json/warning_with_error.cml
 d7b17b300b7561ba ok test/cases/compile/diag_json/warnings_visible.cml
@@ -1517,6 +1517,11 @@ d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml
 d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
 7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
+81663c1c95e20537 ok test/cases/compile/region_roots/branch_statement.cml
+3edca146afc5d4d2 ok test/cases/compile/region_roots/branch_statement_condition.cml
+9d869d0b281097a0 ok test/cases/compile/region_roots/branch_statement_kinds.cml
+d97afa11ab4ed9b8 ok test/cases/compile/region_roots/branch_statement_untaken.cml
+86ba2d47250741aa ok test/cases/compile/region_roots/branch_value_dropped.cml
 9af1d6ae045c57d6 ok test/cases/compile/region_roots/dead_loop.cml
 e05e0949c1dff0cf ok test/cases/compile/region_roots/plain_body.cml
 deee7e3304b108d7 ok test/cases/compile/region_roots/read_only.cml
@@ -2447,11 +2452,12 @@ a857ca3ede6054d9 ok test/cases/consistency/operator_overloads/specific/ns/use_ge
 7a95d0ed31d5c320 ok test/cases/consistency/partial_application/err_context_argument_out_of_range.cml
 2eade9cd3a5733d0 ok test/cases/consistency/partial_application/err_entering_ambiguous.cml
 58430c7d579439d8 ok test/cases/consistency/partial_application/err_overload_choice_name.cml
+b17073df9d10c3a9 ok test/cases/consistency/partial_application/err_var_context_parameter.cml
 4ec7bcfbaabd05f6 ok test/cases/consistency/partial_application/graph.cml
 23654daecbf0a58a ok test/cases/consistency/partial_application/overload_choice.cml
 2a307859d3b305d4 ok test/cases/consistency/partial_application/values.cml
 e4734b033845ffd2 ok test/cases/consistency/partial_application/var_parameter.cml
-4c59ea9e7fe9f315 ok test/cases/consistency/partial_application/var_parameter_effect.cml
+f14e5628468611d8 ok test/cases/consistency/partial_application/var_parameter_effect.cml
 10df48795e1a7cc6 ok test/cases/consistency/surface/lambda_call.cml
 b8a388af7a45be93 ok test/cases/consistency/surface/member_chain.cml
 8d5b9a7e826137c6 ok test/cases/consistency/surface/minus.cml
@@ -2834,6 +2840,7 @@ b2ee49df4a724876 ok test/cases/loops/iterate_empty.cml
 26353fee71d39644 ok test/cases/loops/iterate_map.cml
 287f9829ee34046d ok test/cases/loops/iterate_string.cml
 0da05c05bd4274ec ok test/cases/loops/iterate_tensor.cml
+30627cc11fb39326 ok test/cases/loops/let_loop_then_statement.cml
 aa8dd77afd5af2e1 ok test/cases/loops/loop_collect_multi.cml
 1dfa1d5dadda088e ok test/cases/loops/macro.cml
 8cad913f72b8887c ok test/cases/loops/native_callback.cml
@@ -2843,6 +2850,7 @@ aa8dd77afd5af2e1 ok test/cases/loops/loop_collect_multi.cml
 aa325fc1d3e90f1e ok test/cases/loops/open_rank_round_rank1.cml
 08dee17e644c7271 ok test/cases/loops/open_rank_round_rank2.cml
 fd3af0ba8eeffe66 ok test/cases/loops/open_rank_round_scalar_read.cml
+bc71528b400338de ok test/cases/loops/outer_ref.cml
 b84a48ce1f203de3 ok test/cases/loops/recursion.cml
 8ce34823e0577616 ok test/cases/loops/reduce_view.cml
 10c1d5f4ad817fed ok test/cases/loops/refuse_loop_no_channel.cml

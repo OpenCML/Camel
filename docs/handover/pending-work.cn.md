@@ -408,3 +408,137 @@ tree(42bbc4ba1) = cf18ed5b…   tree(64f281e31) = cf18ed5b…   ← 逐字节相
 ```
 
 **这一条被记录下来的用意**：**被记录的瑕疵不会复现，被悄悄抹掉的会。**
+
+## 18. 「不稳定用例」是我判错了：判定稳定，越线的是成本（2026-11-16）
+
+`cli.plan_arg_domain_refused` 与 `load_class.shared_place` 两条我记成「在两次测量里给了不同答案」。**查清了，它们没有给不同答案。**
+
+### 真相
+```
+主机上留着五条真实红记录（三个 gate，jobs=8，8699–8734 用例，400–426 s）：
+  每条用例自己的判定都是 PASS、exit 0、内部检查全 ok
+  红的注记全是运行器 test/tools/run-tests.mjs#timeoutMarginVerdict 的 4 倍余量：
+  CPU 30.04 / 30.20 / 30.37 / 30.75 / 31.25 s  对线 timeout 120 s / 4 = 30.000 s
+  越线 0.1%–4.2%
+```
+- **单独跑**：`cli` 2.3–3.3 s CPU、`load_class` 9.3–9.9 s；在满负荷 gate 里同一份工作被 charge 到 30.0–31.3 s。
+- **135 次运行**（`-Jobs 1/8/16`、单跑、成对跑）**0 红**，无抖动。
+- **成本来源**：这两条用例内部分别起 **9 次 / 6 次嵌套 runner**（`#TEST_SCRATCH_RUN`）。
+- **放大器**（另一件事）：`test/results` 里「有失败的 run 目录」永久保留，主检出已积 **1984 个 run 目录 / 2.9 M 个文件**，每次嵌套 runner 启动都要扫它。
+
+### 判定：**A（环境/负载依赖）**，不是 B（共享状态），不是 C（行为不确定）
+决定性证据是「判定从未改变 + 只越 0.1%–4.2% + 单独跑 3–13 倍余量」。`-Jobs` 宽度复现不了；只有「多条车道同时压满主机」时出现。
+
+### 我错在哪
+我把「红的出现与消失」当成「行为不确定」，于是**给它起名叫不稳定，并去查 B/C**。而真正的读法是：**它的判定恒定，变的是主机的负载**。
+> **「同一用例两次不同答案」有两种可能：判定变了（行为），还是判定没变、只是被判红的门槛变了（成本）。先看五条红记录里用例自己的判定，再看越线幅度——两者都是「没变」。**
+
+### 连带后果
+1. **这两条不是基线里的红**，也不该进基线——它们是**负载敏感**，要写进「读数可信性」那一栏；
+2. **`lsp.navigation` 是真的稳定红**：`-Jobs 1` 连红 3/3（`expected 1 warning, actual 0` + `TypeError`，248–258 ms）。**它不在那 54 族里 ⇒ 基线 54 → 55。**
+3. **一次 gate 会在仓库根留下 14 个未跟踪产物**（`*.onnx`、含空格的 `子 目录/`、`数据 文件 🐫.txt`），来源如 `test/cases/modules/onnx/*.cml` 的 `export_model<out: 'affine.onnx'>`。后果有三：`[provenance]` 变 `dirty: N files`；camel-remote 的 untracked tar 会把它带到主机；`-Changed` 的文件集被污染。**这是缺陷，待修。**
+
+### 修法（方向已定，未做）
+**把 9 次 / 6 次嵌套调用各并成一次**（治因）；**不提高 `timeout_ms`**（那是挪线）。已派 `lane-runnertax`。
+
+## 19. 我删掉了一棵正在被使用的工作树（2026-11-16，08:04）
+
+**事实**：清理时我删了 `D:\Projects\Camel-wt\ifarm` 并 `branch -d lane-ifarm-parsepoint`。那一刻 `lane-ifarm` 正在用那棵树做 `feat/parse` 两点测量。它三笔都已提交，**一笔没丢**，它用 `git worktree add` 原地恢复后做完了测量。
+
+**判据错在哪**：我把 `dirty=0 且 ahead=0` 当成「空闲树」。
+> **`dirty=0 且 ahead=0` 只证明「没有未提交的工作」，不证明「没人在用」。**
+> 恰恰因为那条车道把工作全部提交干净了，它才被我的清理扫到。
+
+**闸门（不是判断；判断会被跳过）**：`worktree remove` 之前必须
+```
+① list_agents 确认没有正在跑的 agent 在那棵树上工作；
+② 树名必须属于「我派出去、且已收到收工报告」的车道；
+③ *-base-*、*point*、*tmp* 这类测量用树一律不碰 —— 那是车道自己的临时树。
+```
+
+## 20. 「两栏相等」可能是「两栏都被同一批未跟踪文件污染」
+
+`lane-ifarm` 查出自己那次「基线 47 红」是假的：`git stash`（**不带 `-u`**）留下了未跟踪的 `.cml` 用例，于是「基线」那一栏也红了，**而 `git diff` 两栏相等反而把错误掩盖住**。
+
+> **`git diff` 看不见未跟踪文件，所以它给出的是假相等。**
+> 「基线栏与改后栏相同」只有在**两栏用的是同一份文件集**时才是证据。
+
+真基线 **46 红**（改后仍 46，逐条同名）。
+
+## 21. 三个「基线」数字不是同一种东西，**不许相减**
+
+```
+46(五套)     feat/compile + feat/linear + feat/opt + feat/parse + smoke
+55(12目标)   固定闸门名单（§16 的 54，加 lsp.navigation 一条稳定红）
+174(1115)    2026-11-15 那张最全的一次
+```
+今晚已因混用快照出过三次错（`2553/2507/30` 取自 `28d47f148`、`feat/opt` 4 vs 39、`feat/compile` 30 vs 3）。**每个数字必须带它的选中集**，写成 `46(五套)` / `55(12目标)` / `174(1115全量)`。**不带选中集的数字禁止出现在对账里。**
+
+## 22. 一条诊断的判据与它的文本恰好反相关（`UnusedAssignedValue`）
+
+文本：`The value this assignment stores is never read.`
+产生处：`src/compile/gir/builder_diagnostics.cpp#Builder::reportDroppedEffects`。
+
+**实测判据**：从函数 output/exit/return 加区域根出发、只沿 NORM/WITH/CTRL/SYNC **输入**反向可达的节点收进 `needed`，凡活着的 `:op/assn_l` 节点不在其中就报 —— 即「**store 节点没有后继消费者**」，**不是**「存的值没人读」。
+
+**实测：判据与文本反相关**（同一形状，只差体是不是 `sync`）：
+| 形状 | 非 `sync` 体 | `sync` 体 | 文本为真？ |
+|---|---|---|---|
+| `t = 1`（无读者） | 报 ✅ | **不报** ❌ | 真 |
+| `t = t+1; println(t)` | **报**，stdout `1` ❌ | 不报 | **假** |
+| `t = t+1; return t` | **报**，stdout `1` ❌ | — | **假**（唯一读者就是返回值） |
+
+**机理**：`sync` 体里 `:op/assn_l` → `println` 有 CTRL+SYNC 边，所以没人读值也不报；非 `sync` 体里 `:op/assn_l` **整个消失**、`:op/add_l` 直接 NORM 喂给 `:io/println`，于是**值被读了照样报**。
+
+**后果**：`camel -Werror` 下**任何写在非 `sync` 函数体里、值之后被读的语句级 `var` 重赋值（计数器的通常写法）直接被拒**。
+
+**并且期望已经把这条误报锁住了**：`test/plans/feat/linear/var_read_before_write.plan.toml` 基线 6/6 全绿，它钉的三条正是「值被读了」的写，而 `desc` 称其为 `the three writes whose value nobody reads`。**一条错诊断 + 一条照着它写的期望 = 两处都要改。**
+
+**分界（不许揉在一起）**：
+```
+UnusedAssignedValue   →  只说「值没人读」
+被丢掉的写（写不执行） →  归 EffectNotExecuted 那一族
+```
+已派 `lane-varwarn` 改判据。**这条归作者的第一优先级（`var` 化成 SSA），因为 `assn_l` 的存废正是那一步要动的东西。**
+
+## 23. 多笔交付不许 squash（2026-11-16，`ifarm` 的代价）
+
+`lane-ifarm` 把三笔拆得很清楚（①播种 → ③声明不计值 → ②标记还原），**每笔各自绿、正文互相指认**，并写明「② 绝不能排在 ③ 前面」。合并时被**压成一笔** `d5bb220e7`。
+
+内容我一逐条验过，**完整**（③ 的 `declarationAt`、② 的 `UnusedStatementScope` 都在 origin 的源码里，正文也列了原三 sha、顺序与依赖）。**但代价是真的**：
+> **丢掉了「单独回退 ②」的能力**，而 ②③ 是一对有硬依赖的提交 —— **bisect 到这三笔之间就再也分不开了。**
+
+**规矩**：**多笔交付按原笔数 `merge --no-ff` 合入，不做 squash。** 车道已经把三笔拆开、各自跑绿、写了互相指认的正文——**squash 把那份工作抹平**。
+只有两种情况可以 squash：① 派工时写明允许；② 车道自己建议并写了理由。
+**已 squash 的，正文必须列全原笔 sha、顺序与依赖**（`d5bb220e7` 做到了，所以留下）。
+
+## 24. 新增 `.cml` 必须登记 AST 快照 —— 一条今晚踩了两次的坑
+
+`test/plans/feat/parse/frontend.plan.toml#frontend.ast_snapshot` **记录全仓库每一个 `.cml`**，未登记的文件**直接判红**（工具的提示：`N files read as recorded, M not in the snapshot yet, of T in the corpus`）。
+
+**两次**：
+```
+lane-ifarm      加 5 条 .cml 未登记 ⇒ feat/parse 红，且它自己误判成「别人弄红的」
+lane-looplayout + lane-loopref  加 2 条未登记 ⇒ 同一处红
+```
+**修法**：`python3 test/tools/parsecheck/check.py snapshot --update`（在 Linux 侧跑，保证 hash 与测试侧一致）。
+
+**规矩（已加进派工模板）**：**任何派工只要新增 `.cml`，任务书里必须写这一条**，并且**登记要与被测改动分开归属**——登记是测量设施的变化，不是车道的主张。
+> **这一条之所以值得单独立规矩：它不产生新红，它把别人的红搬到你这笔上，然后让「是不是我弄红的」这个问题变得无法回答。**
+
+## 25. 基线：`61(12目标)` 在 `9997c789a`
+
+```
+[SUMMARY] 8851 / 8756 / 61 / skip 10 / known 24 / killed 0     red_more = 0
+61(12目标) 组成：opt 族 39、consistency.new_values 31、masking_transition 4、compile.transitional 3、
+                  modules.resources 3、trans 6、docs.links 1、mm 2、lsp 1、load_class 1、cli 1、runner 1
+已转绿：本轮 0（loopref 的判据都在本来绿的那两族里）   新红：0
+```
+**`declared` 这一栏：6598 / 386 文件**（`git grep -c '^\[\[tests\]\]'`），gate `total` 8851——**`declared < started` 正常**（一条 entry 可跑多个后端）。
+
+## 26. 「绿在没看」的又一处：通过的用例读不到余量
+
+`test/tools/run-tests.mjs` 的 `meta.json` 对**没有 `cpu_budget_ms`** 的用例记 `cpu_ms: null` ⇒ **通过的用例在 gate 记录里读不到「还剩多少余量」**。
+> **跑过了、没红、但没人能回答「离红线还有多远」—— 这是「绿在没看」的第三种形态**（前两种：空集通过、检查从不运行）。
+
+连带一条登记：`test/cases/tools/cli/stdout_matches.mjs` 与刚修的两条**同一形状、15 次嵌套启动**，只因 `timeout_ms = 180000`（线 45 s）才没红（本轮 1.43–1.52 s）。**它现在绿，绿的原因是线更高，不是成本更低。**
