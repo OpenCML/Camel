@@ -2574,7 +2574,7 @@ e3a0179e2e4653b5 ok test/cases/effects/pure_parameter_takes_pure.cml
 fe1e03c7601a0566 ok test/cases/effects/two_references_write_one_object_unsynced.cml
 a5892bb3d5ebb981 ok test/cases/effects/uses_ambient_covers_body.cml
 93f2f5da8620a912 ok test/cases/effects/value_made_after_a_call_captures_its_version.cml
-27b1537029d41d6c ok test/cases/effects/var_parameter_write_outside_sync.cml
+5cd59e424f5522fe ok test/cases/effects/var_parameter_write_outside_sync.cml
 fff56c4cfac9c433 ok test/cases/effects/writer_table_through_callee.cml
 e88cbf676c43cf82 ok test/cases/effects/unreachable_pair/with/reading.cml
 022a0888a5490272 ok test/cases/effects/unreachable_pair/without/reading.cml
@@ -2707,7 +2707,7 @@ e84d2fc724034852 ok test/cases/linear/byref/var_capture_reference.cml
 3ef7e3177575e622 ok test/cases/linear/byref/var_function_as_value_function.cml
 67d2c3eb1b6d6c25 ok test/cases/linear/byref/var_function_to_operator.cml
 6459ea9ecca389d9 ok test/cases/linear/byref/var_param_jit.cml
-9a1f2c61f28415e2 ok test/cases/linear/byref/var_param_reference.cml
+c7da9492f10bc3c3 ok test/cases/linear/byref/var_param_reference.cml
 538274c380a796e5 ok test/cases/linear/byref/var_param_slot_array.cml
 6ca7267b281b582a ok test/cases/linear/byref/var_read_before_callee_write.cml
 f6004e8d888eca0c ok test/cases/linear/byref/var_rule_subpasses.cml
