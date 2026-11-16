@@ -179,6 +179,20 @@ class Node {
         flags_ |= kFlagC;
     }
 
+    /// FUNC: a function whose body writes `yield`, so it hands out a stream and its body is run by
+    /// the machine (gct/builder.cpp visitGeneratorBody). The body's locals are cells of the
+    /// function's own body and the machine writes them between two pulls, so a closure the body
+    /// made captures one of those cells by reference and not by value (design principles 3.5, 197):
+    /// the graph builder reads this mark where a capture of such a cell is decided.
+    bool generatorBody() const {
+        check(NodeKind::FUNC);
+        return (flags_ & kFlagD) != 0;
+    }
+    void setGeneratorBody() {
+        check(NodeKind::FUNC);
+        flags_ |= kFlagD;
+    }
+
     /// DECL: whether a function is declared (else a type).
     bool isFunc() const {
         check(NodeKind::DECL);
@@ -529,6 +543,7 @@ class Node {
     static constexpr uint8_t kFlagA    = 1 << 0;
     static constexpr uint8_t kFlagB    = 1 << 1;
     static constexpr uint8_t kFlagC    = 1 << 2;
+    static constexpr uint8_t kFlagD    = 1 << 3;
     static constexpr uint8_t kAttached = 1 << 7; // the node is the child of a node
 
     explicit Node(NodeKind kind) : kind_(kind) { payload_.number = 0; }

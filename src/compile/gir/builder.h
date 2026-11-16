@@ -829,6 +829,10 @@ class Builder {
     // write to a value the closure took. Which of the two a decorator makes it is a question the
     // design does not answer, and this rule does not answer it either: it leaves the shape unreported.
     bool decoratedBlockGraph(const compile_graph_ptr_t &graph) const;
+    // Whether this graph is the body of a function that hands out a stream: its locals are cells of
+    // its own body and the machine writes them between two pulls (gct/builder.cpp
+    // visitGeneratorBody), so a closure the body made captures one of them as a cell.
+    bool generatorBodyGraph(const compile_graph_ptr_t &graph) const;
     // Whether a capture of each cell is a capture of its value, decided once per cell
     // (captureByValue): a port's type is the cell's or the value's, and every capture of the same
     // cell has to agree -- the direct call's with-port, the closure the body of the same function

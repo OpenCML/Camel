@@ -5644,10 +5644,15 @@ node_ptr_t Builder::visitFuncData(const AST::node_ptr_t &ast) {
     const ValueUseScope valueUseScope(*this);
     valueUse_                      = {};
     const AST::node_ptr_t &bodyAst = ast->atAs<AST::StmtBlockLoad>(1);
-    node_ptr_t stmtsNode =
-        writesOwnYield(bodyAst) ? visitGeneratorBody(ast, funcType) : visitStmtBlock(bodyAst);
+    // A body that writes `yield` is a stream's, and the machine runs it (visitGeneratorBody): the
+    // locals become cells of the function's own body and every capture of one keeps the cell.
+    const bool generator = writesOwnYield(bodyAst);
+    node_ptr_t stmtsNode = generator ? visitGeneratorBody(ast, funcType) : visitStmtBlock(bodyAst);
     reportUnusedHead(stmtsNode, whenNode);
     node_ptr_t funcNode = tree_->makeFunc(funcData->ref().toString());
+    if (generator) {
+        funcNode->setGeneratorBody();
+    }
     tree_->setHeadTypeParams(
         funcNode,
         ast->atAs<AST::FuncTypeLoad>(0)->loadAs<AST::FuncTypeLoad>()->typeParamNames());
