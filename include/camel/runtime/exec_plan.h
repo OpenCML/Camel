@@ -273,6 +273,16 @@ class ExecPlan {
     // uses of the values it carries, so the arm whose value the JOIN hands on is the one whose
     // reference comes back, whichever arm runs.
     //
+    // A node whose value *is* a value it was given hands that value's reference on. The last use
+    // takes the producing reference over, and this node hands the take-over to its own value: the
+    // row that would have given the reference back at this node's position is not executed when the
+    // node's own value is the very object the row belongs to. `reduce` is the shape: it returns its
+    // accumulator, so a `state::Ref` as its `initial` makes the node's value the initial's box. The
+    // rows of the value the node makes are laid out like any produced value's -- it is born with
+    // one (that take-over), takes `copies`, and gives back at its own uses. Whether the node handed
+    // a given value back is what the object is, not what the plan says, so the rule is applied when
+    // the rows run (`applyRefEntriesAtPosition`), not when they are laid out.
+    //
     // A use that *packs* the value into another value -- a FILL builds a closure tuple or an
     // aggregate out of the values it is given -- does not end when the FILL has run: the packing
     // value holds that reference until it dies itself. So the reference comes back where the
