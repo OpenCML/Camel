@@ -216,6 +216,17 @@ The line after `[SUMMARY]` says whether the run left anything in the tree it tes
 - **Paths already uncommitted when the run started are printed and are not this run's.** A lane that
   edits and then runs `--changed` before committing would otherwise red every run it makes; the line
   is printed anyway, because a file left by the run before this one has to be visible somewhere.
+- **Only the outermost run judges.** A test may start a run of this runner -- `feat/tools` does: the
+  layer-accounting and provenance cases drive two or three nested runs each -- and the nested window
+  lies inside the outer one's, which read the tree before its first test and after its last. A nested
+  run therefore reads no tree and starts no watcher; its own line reads
+  `[TREE] nested: tree guard deferred to the outer run`. Judging twice gave one phenomenon two
+  verdicts, and they disagreed: `test/.provenance-probe-*.tmp`, written and removed by a sibling
+  test, was still there when the nested window closed (`1 path appeared ...`, red) and gone when the
+  outer window closed (`appeared in the checkout and were gone again`, an annotation) -- same gate,
+  one line apart. The runner marks every process it starts with `CAMEL_TREE_GUARD=nested`; an unset
+  or unrecognised value means the outer run, because the failure mode of the wrong default here is a
+  gate that is off and still prints.
 - Where a test may write, and the fourteen files that made this line exist:
   [Test Scratch](#test-scratch).
 
