@@ -73,7 +73,7 @@ timeout_ms = 20000
 
 [[tests]]
 name = "capture_local_var"
-desc = "A closure writes a `var` the body that made it owns, and the two walks agree that the body reaches nothing: `total` is `none` on both sides, and the closure's own body reaches the captured cell as `rmw variable capture 0 whole` on both. The program's `main` prints, and both read it as `external; write ambient stdout`."
+desc = "A closure reads a `var` the body that made it owns, and the two walks agree that nothing is reached: `total` is `none` on both sides, and the closure's own body is `none` on both as well -- a closure captures the value the name had when it was made, not the name, so a captured value is not a cell and neither walk carries an access through it (design principles 3.5, 197; the author's ruling of 2026-11-16). The reading this entry pinned before the ruling -- one captured cell, `rmw variable capture 0 whole` on both sides -- is the withdrawn by-reference capture; the closure cannot be written as a write of that cell either, since `ClosureAssignsCapturedName` (0x03000213) refuses it before any walk runs. The program's `main` prints, and both read it as `external; write ambient stdout`."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var.cml"
 args = ["${case}", "test::resource_transition"]
@@ -89,15 +89,18 @@ pinned('MASK total builder=none runtime=none agree=yes')
 pinned('MASK main builder=external; write ambient stdout runtime=external; write ambient stdout agree=yes')
 // The closure is an anonymous graph named after the number of graphs the compilation had reached
 // (`modules/resources` says the same of `__g_5__` and `__g_125__`), so it is named by what it says:
-// one captured cell, written, read the same way by both walks.
-const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole agree=yes$/.test(l))
-assert(capture.length === 1, "the closure's captured cell, asked of both sides: " + JSON.stringify(capture))
+// it reaches nothing, on both sides -- a captured value is not a cell, so there is no captured
+// cell to report.
+const silent = lines.filter((l) => /^MASK \S+ builder=none runtime=none agree=yes$/.test(l))
+assert(silent.length >= 1, 'the closure reaches nothing on both sides: ' + lines.join('\n'))
+const capture = lines.filter((l) => / capture \d+ /.test(l))
+assert(capture.length === 0, "a captured value is not a cell: " + JSON.stringify(capture))
 }
 """
 
 [[tests]]
 name = "capture_local_var_as_value"
-desc = "The same body read from its type: it fits a `pure` parameter, and the two walks still agree that it reaches nothing -- `total` is `none` on both sides and the closure's capture is one written cell on both."
+desc = "The same body read from its type: it fits a `pure` parameter, and the two walks still agree that nothing is reached -- `total` is `none` on both sides and the closure is `none` on both, because a captured value is not a cell (design principles 3.5, 197). The expectation moved with the ruling of 2026-11-16 and not with the program: the case reads one written cell on both sides while a closure could share the cell it captured, and the closure now only reads the value."
 kind = "behavior"
 case = "../../../cases/effects/ok_capture_local_var_as_value.cml"
 args = ["${case}", "test::resource_transition"]
@@ -111,8 +114,11 @@ assert(disagree.length === 0, 'the two sides answer differently: ' + disagree.jo
 const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
 pinned('MASK total builder=none runtime=none agree=yes')
 pinned('MASK main builder=external; write ambient stdout runtime=external; write ambient stdout agree=yes')
-const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole agree=yes$/.test(l))
-assert(capture.length === 1, "the closure's captured cell, asked of both sides: " + JSON.stringify(capture))
+// The closure reaches nothing: a captured value is not a cell, so neither side reports a capture.
+const silent = lines.filter((l) => /^MASK \S+ builder=none runtime=none agree=yes$/.test(l))
+assert(silent.length >= 1, 'the closure reaches nothing on both sides: ' + lines.join('\n'))
+const capture = lines.filter((l) => / capture \d+ /.test(l))
+assert(capture.length === 0, "a captured value is not a cell: " + JSON.stringify(capture))
 }
 """
 
@@ -192,12 +198,14 @@ assert(disagree.length === 1, 'only `bump` differs here: ' + disagree.join(' | '
 
 [[tests]]
 name = "capture_escapes"
-desc = "The closure leaves the call, so the builder reads the promise as broken where it is written and refuses the program: this is the one half of the masking rule the runtime walk does not have (a body that hands a closure out), and it is why no frozen graph is ever asked about this program -- nothing is printed by the pass."
+desc = "The counter-example of the write rule, where the entry used to pin the withdrawn escape rule: `make` returns the closure, so the closure leaves the call and the cell it captured lived longer than the call, and that was the fault (`SemanticDiag::UsesPromiseViolated`, `0x030001F1`) until the author's ruling of 2026-11-16. Leaving with a value is legal now (design principles 3.5, items 197 and 198); the closure assigns `acc`, a name of the body around it, and that is what refuses the program: `ClosureAssignsCapturedName` (`0x03000213`), at the write. The program and its name stay -- it is still the smallest shape that reads \"a closure is made here and leaves here\" -- and nothing is printed by the pass, because a refused program is never walked."
 kind = "negative"
 case = "../../../cases/effects/err_capture_escapes.cml"
 args = ["${case}", "test::resource_transition"]
 expect_exit = 1
-expect_diagnostic_name = "SemanticDiag::UsesPromiseViolated"
-expect_diagnostic_code = "0x030001F1"
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+expect_diagnostic_line = 16
+expect_diagnostic_column = 9
 expect_output_contains = ["err_capture_escapes.cml:"]
 expect_output_not_contains = ["MASK "]
