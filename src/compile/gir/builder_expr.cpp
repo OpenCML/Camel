@@ -1941,6 +1941,17 @@ void Builder::collapseNonEscapingVariableReads() {
             if (draft.header(readId) == nullptr) {
                 continue;
             }
+            // A read a capture site still holds stays a read. The site hands the value to a direct
+            // call at the link step and names it in a table rather than as an edge
+            // (`addCaptureSite`, `linkCaptureSites`), so the fold has nothing to hand the value to:
+            // it would erase the read under the table, and every erasure after it -- of the value
+            // the read was folded to, of what was left of the cell's unit -- would take one more
+            // name the table still holds. `dropCarriedVariableUnits` keeps such a cell for the same
+            // reason: a read is a user of it.
+            if (heldByCaptureSite(read)) {
+                ++foldTookNothing_;
+                continue;
+            }
             // A read of a value that can be *kept* stays a read. `markNonRetainingReads` turns a
             // read nobody keeps into `:var/peek` and lets the next append change the array in
             // place; a read that can be kept stays `:var/get` and the memory plan copies instead.
