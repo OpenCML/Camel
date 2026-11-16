@@ -43,3 +43,6 @@ if (programMayWriteThroughCall(name)) { return false; }   // 留格子
 
 计划页的 S1–S3、S4a、S4b、S7 都不依赖这条答复；只有 S6 的判据与终值（78 或 79）依赖它。
 把这条裁掉之前，S6 可以照默认先做，读数一并按默认记。
+## 决策者答复（2026-11-16）
+
+**同意默认：0。** 11-16 对"闭包交给 `var` 形参"一页已经这样答过（`reviews/2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference.cn.md`）：闭包拿到的是造出来那一刻的值，`var` 形参的写回算在调用之后。7 是格子留下的读数。计划页 S6 的终值按 78 记，`write_then_read` 改期望。
