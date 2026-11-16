@@ -10,6 +10,7 @@
 #include "camel/execute/executor.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/execute/loop_frame.h"
+#include "camel/execute/operator_call.h"
 #include "runtime_support.h"
 #include <array>
 #include <iostream>
@@ -868,7 +869,16 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         const data_arr_t wargs = bc->wargs();
         auto mark              = bc->extra()->mark;
         try {
-            evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+            // A marked operator is an operator node like any other: it runs through the one hook
+            // (camel/execute/operator_call.h), so the count's rows at this instruction's position
+            // are run here as they are at OPER's -- the missing place that made std::fvm keep a
+            // counted box that std::nvm released.
+            camel::execute::callOperator(
+                camel::execute::siteOfSlot(*currFrame, bc->result),
+                [&] {
+                    evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+                    return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+                });
         } catch (const camel::core::mm::MemoryExhausted &e) {
             throw e.during(
                 std::string(),

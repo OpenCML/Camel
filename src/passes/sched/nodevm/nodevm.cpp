@@ -14,6 +14,7 @@
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/loop_frame.h"
 #include "camel/execute/observer.h"
+#include "camel/execute/operator_call.h"
 #include "camel/profile/operators.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
@@ -748,15 +749,15 @@ slot_t NodeVMSchedPass::call(
                         currPlan->resolvedOpers[nodeRef].store(opFunc, std::memory_order_relaxed);
                     } else {
                         if (camel::core::OperatorTable::instance().isMarked(body->oper)) {
-                            evalMarkedOperator(body->oper, currRuntimeGraph, nodeRef, *currFrame);
-                            // This node's output was written by the marked evaluator itself, so
-                            // the count's rows at this position are run from the slot it left.
-                            camel::runtime::applyRefEntriesForNode(
-                                *currPlan,
-                                currFrame,
-                                nodeRef,
-                                n->dataIndex == 0 ? slot_t{0}
-                                                  : currFrame->get<slot_t>(n->dataIndex));
+                            // The marked evaluator writes this node's output itself, so the value
+                            // the count's rows get is the slot it left. The rows are the hook's
+                            // (camel/execute/operator_call.h), like every other operator call's.
+                            camel::execute::callOperator({*currPlan, *currFrame, nodeRef}, [&] {
+                                evalMarkedOperator(
+                                    body->oper, currRuntimeGraph, nodeRef, *currFrame);
+                                return n->dataIndex == 0 ? slot_t{0}
+                                                         : currFrame->get<slot_t>(n->dataIndex);
+                            });
                             break;
                         }
                         throwRuntimeFault(
@@ -778,19 +779,23 @@ slot_t NodeVMSchedPass::call(
                 if (anchorWanted) {
                     boxes.begin();
                 }
-                slot_t result =
-                    evalNativeOperator(currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
+                // The count's rows at this position are the hook's (camel/execute/operator_call.h):
+                // the holds this node's output takes and the references that come back once it has
+                // run, run whether or not the anchor above was asked for -- counting is what
+                // releases a box (design principles 10.5) and the flag only says whether the
+                // process reports what it released.
+                const slot_t result = camel::execute::callOperator(
+                    {*currPlan, *currFrame, nodeRef},
+                    [&] {
+                        return evalNativeOperator(
+                            currRuntimeGraph, en, *currPlan, *currFrame, opFunc);
+                    });
                 if (anchorWanted) {
                     camel::runtime::noteCountedCreationForNode(
                         currRuntimeGraph, nodeRef, boxes.sinceBegin());
                 }
 
                 currFrame->set(n->dataIndex, result);
-                // The count's rows at this position: the holds this node's output takes and the
-                // references that come back once it has run. Run whether or not the anchor above
-                // was asked for -- counting is what releases a box (design principles 10.5) and the
-                // flag only says whether the process reports what it released.
-                camel::runtime::applyRefEntriesForNode(*currPlan, currFrame, nodeRef, result);
             } break;
 
             case GCNodeKind::Loop:

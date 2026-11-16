@@ -1447,7 +1447,7 @@ timeout_ms = 10000
 
 [[tests]]
 name = "var_param.default"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: default (no pass)."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: default (no pass)."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}"]
@@ -1456,14 +1456,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.fvm"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::fvm"]
@@ -1472,14 +1472,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::jit"]
@@ -1488,14 +1488,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::tf"]
@@ -1504,14 +1504,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline"]
@@ -1520,14 +1520,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.specialize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::specialize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::specialize"]
@@ -1536,14 +1536,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.devirtualize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::devirtualize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::devirtualize"]
@@ -1552,14 +1552,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.fold"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::fold."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::fold"]
@@ -1568,14 +1568,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.cse"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::cse."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::cse"]
@@ -1584,14 +1584,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.dce"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::dce"]
@@ -1600,14 +1600,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt"]
@@ -1616,14 +1616,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.simplify"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt"]
@@ -1632,14 +1632,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro"]
@@ -1648,14 +1648,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_inline"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::inline."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::inline."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline"]
@@ -1664,14 +1664,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_specialize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::specialize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::specialize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::specialize"]
@@ -1680,14 +1680,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_devirtualize"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::devirtualize."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::devirtualize."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::devirtualize"]
@@ -1696,14 +1696,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_fold"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::fold."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::fold."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::fold"]
@@ -1712,14 +1712,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_cse"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::cse."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::cse."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::cse"]
@@ -1728,14 +1728,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_dce"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::dce"]
@@ -1744,14 +1744,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_opt"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -1760,14 +1760,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_simplify"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt"]
@@ -1776,14 +1776,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.all_6"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce"]
@@ -1792,14 +1792,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.all_macro_9"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt::inline std::opt::specialize std::opt::devirtualize std::opt::fold std::opt::cse std::opt::dce std::opt std::opt."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt::inline", "std::opt::specialize", "std::opt::devirtualize", "std::opt::fold", "std::opt::cse", "std::opt::dce", "std::opt", "std::opt"]
@@ -1808,14 +1808,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt_fvm"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::fvm"]
@@ -1824,14 +1824,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1840,14 +1840,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.opt_tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::tf"]
@@ -1856,14 +1856,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_fvm"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::fvm."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::fvm."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
@@ -1872,14 +1872,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::jit"]
@@ -1888,14 +1888,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.inline_tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::inline std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::inline std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::inline", "std::tf"]
@@ -1904,14 +1904,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.specialize_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt::specialize std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt::specialize std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt::specialize", "std::jit"]
@@ -1920,14 +1920,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.simplify_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::opt std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::opt", "std::jit"]
@@ -1936,14 +1936,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_opt_jit"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt std::jit."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt std::jit."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::jit"]
@@ -1952,14 +1952,14 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000
 
 [[tests]]
 name = "var_param.macro_opt_tf"
-desc = "A var parameter is a reference to the caller's variable: direct, indirect, recursive and tail-recursive calls, forwarding, aliasing, struct, array and tuple variables, a with-parameter, a variable passed by value and by reference in one call. Pipeline: std::macro std::opt std::tf."
+desc = "A var parameter is passed in by value and passed back by value (design principles 3.5): direct, indirect, recursive and tail-recursive calls, forwarding, a struct, array and tuple variable, a with-parameter, and one variable passed to a parameter without `var` and to a `var` parameter in one call. Pipeline: std::macro std::opt std::tf."
 kind = "behavior"
 case = "../../../cases/linear/byref/var_param_reference.cml"
 args = ["${case}", "std::macro", "std::opt", "std::tf"]
@@ -1968,7 +1968,7 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim().split('\n').join(' | ')
-assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 7 | 0 1', `unexpected output: ${out}`)
+assert(out === '1 | 8 | 10 | 5000 | 3 | 11 11 | 11 | 9 | [1, 2, 3, 4] 4 | 15 | 2 | 0 | 0 1', `unexpected output: ${out}`)
 }
 """
 timeout_ms = 20000

@@ -1632,7 +1632,18 @@ taken. The weight is on the ordinary list because that is the list `vjp` differe
 step before is `first_with_as_param` -- the signature reinterpretation that reclassifies that one
 port and copies the body (`stdlib/signatures/transforms.cml`), which is why nothing in the
 differentiated body reads a `with` value that would need a direction of its own.
-`GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters.
+`GradientOf<F>` (`stdlib/types.cml`) is the shape that falls out: the weight, then the parameters,
+and the `with` values `F` did not spend -- `f`'s first `with` parameter became the weight, the
+rest of that list travels on the derivative.
+
+**The rest of the `with` list is carried, not dropped.** `reading` is a `vjp` read, and a `vjp`
+reading is declared `<...ws> (...xs)` (`Vjp<F>`, `stdlib/types.cml`): it takes the `with` values
+its function takes. So the lambda this call answers writes the same pack and hands it over --
+`grad(loss)<y>(layer, X)` for a loss declared `with <layer: Linear, y: f32[?, ?]>`, whose data
+`y` is a `with` value the derivative never differentiates and cannot do without. Written
+without the pack
+(`reading(...xs)`) the call was refused at this very line with `ArgumentsMismatch`
+(measured 2026-11-15): the reading takes `<...ws>` and was given `<>`.
 
 - Written in Camel: a subgraph, pure when the functions passed to it are.
 - Example (a fragment, not compiled): `let slope = grad(f)`

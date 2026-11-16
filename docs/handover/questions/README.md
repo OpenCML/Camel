@@ -5,16 +5,14 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：4 页
+## 现在在等作者：2 页
 
 | 页 | 问什么 |
 | --- | --- |
-| [`2026-11-15-does-an-unused-external-read-report-effect-not-executed`](2026-11-15-does-an-unused-external-read-report-effect-not-executed.cn.md) | 没人用的外部读，还要报 `EffectNotExecuted` 吗？ |
-| [`2026-11-16-a-stream-values-type-does-not-mention-its-captures`](2026-11-16-a-stream-values-type-does-not-mention-its-captures.cn.md) | 流值的类型说「我不捕获」，它的端口说「我捕获了三个」 |
-| [`2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var`](2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md) | 生成器体里的闭包捕获 `var`，为什么留格子？ |
-| [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ |
+| [`2026-11-16-casevm-does-not-compile-in-any-configuration`](2026-11-16-casevm-does-not-compile-in-any-configuration.cn.md) | `casevm.cpp` 在任何配置下都编不出来：删掉还是连 20 处一起修？ |
+| [`2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad`](2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad.cn.md) | 案例一旦改用库的 `grad`，`break_rate` 那个重写该怎么钉？ |
 
-## 生成器不会删的行：115 行（页已不在 `questions/` 里）
+## 生成器不会删的行：119 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -113,6 +111,7 @@
 | [`2026-11-15-a-function-typed-slot-holds-a-tagged-variant`](../reviews/2026-11-15-a-function-typed-slot-holds-a-tagged-variant.cn.md) | 函数类型的槽里装着带 tag 的 Variant：任何一次运行中收集都会崩 | 在 `reviews/` |
 | [`2026-11-15-can-a-commit-depend-on-unrelated-writes`](../reviews/2026-11-15-can-a-commit-depend-on-unrelated-writes.cn.md) | 同一个图的提交结果，能不能取决于同一事务里有没有别的写入？ | 在 `reviews/` |
 | [`2026-11-15-does-a-returned-calls-slot-keep-a-box-alive`](../reviews/2026-11-15-does-a-returned-calls-slot-keep-a-box-alive.cn.md) | 调用返回之后，它留下的句柄槽还让盒子活着吗？ | 在 `reviews/` |
+| [`2026-11-15-does-an-unused-external-read-report-effect-not-executed`](../reviews/2026-11-15-does-an-unused-external-read-report-effect-not-executed.cn.md) | 没人用的外部读，还要报 `EffectNotExecuted` 吗？ | 在 `reviews/` |
 | [`2026-11-15-how-does-a-camel-pass-warn`](../reviews/2026-11-15-how-does-a-camel-pass-warn.cn.md) | 一个用 Camel 写的 pass，怎么报告一条不致命的诊断？ | 在 `reviews/` |
 | [`2026-11-15-is-a-handles-count-the-slots-or-the-wrappers`](../reviews/2026-11-15-is-a-handles-count-the-slots-or-the-wrappers.cn.md) | 返回边界上清掉没人命名的盒子：清理点，还是「一个槽一个 wrapper」？ | 在 `reviews/` |
 | [`2026-11-15-is-the-inline-splices-program-observable`](../reviews/2026-11-15-is-the-inline-splices-program-observable.cn.md) | 拼接进来的那段体，归属可观测吗 | 在 `reviews/` |
@@ -124,15 +123,18 @@
 | [`2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with`](../reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) | 产出处的那一个减一由谁发：编译器，还是运行时？ | 在 `reviews/` |
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](../reviews/2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ | 在 `reviews/` |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
-| `2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference` | 实参位置上递出去的闭包，要不要按引用捕获？ | 页不在（`questions/` 与 `reviews/` 都没有） |
+| [`2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference`](../reviews/2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference.cn.md) | 实参位置上递出去的闭包，要不要按引用捕获？ | 在 `reviews/` |
+| [`2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write`](../reviews/2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write.cn.md) | 在调用的实参位置造出来的闭包，该读到写之前的值还是写之后的值？ | 在 `reviews/` |
+| [`2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var`](../reviews/2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md) | 生成器体里的闭包捕获 `var`，为什么留格子？ | 在 `reviews/` |
+| [`2026-11-16-how-many-units-does-a-direct-ssa-build-remove`](../reviews/2026-11-16-how-many-units-does-a-direct-ssa-build-remove.cn.md) | 直接构造 SSA 之后，348 个单元里消失的是 270 个吗？ | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
-| `q-2026-11-15-should-the-deletion-come-before-the-carrying` | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 页不在（`questions/` 与 `reviews/` 都没有） |
+| [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |
 | [`q-2026-11-15-what-path-a-diagnostic-prints`](../reviews/q-2026-11-15-what-path-a-diagnostic-prints.cn.md) | 诊断的位置行打印哪个路径形式 | 在 `reviews/` |
-| `q-2026-11-15-what-the-side-effect-warning-says-now` | 那条「副作用没有执行」的警告，现在该怎么说话 | 页不在（`questions/` 与 `reviews/` 都没有） |
-| `q-2026-11-16-can-tee-capture-by-reference` | 闭包按值捕获落地了，`tee` 还在按引用：这条规则今天报不报？ | 页不在（`questions/` 与 `reviews/` 都没有） |
-| `q-2026-11-16-may-a-ref-write-that-nobody-reads-be-dropped` | 没人读的 `Ref` 写，可以删掉吗？ | 页不在（`questions/` 与 `reviews/` 都没有） |
-| `q-2026-11-16-who-reports-when-two-rules-are-broken-at-once` | 一个程序同时违反两条规则时，谁该报？ | 页不在（`questions/` 与 `reviews/` 都没有） |
+| [`q-2026-11-15-what-the-side-effect-warning-says-now`](../reviews/q-2026-11-15-what-the-side-effect-warning-says-now.cn.md) | 那条「副作用没有执行」的警告，现在该怎么说话 | 在 `reviews/` |
+| [`q-2026-11-16-can-tee-capture-by-reference`](../reviews/q-2026-11-16-can-tee-capture-by-reference.cn.md) | 闭包按值捕获落地了，`tee` 还在按引用：这条规则今天报不报？ | 在 `reviews/` |
+| [`q-2026-11-16-may-a-ref-write-that-nobody-reads-be-dropped`](../reviews/q-2026-11-16-may-a-ref-write-that-nobody-reads-be-dropped.cn.md) | 没人读的 `Ref` 写，可以删掉吗？ | 在 `reviews/` |
+| [`q-2026-11-16-who-reports-when-two-rules-are-broken-at-once`](../reviews/q-2026-11-16-who-reports-when-two-rules-are-broken-at-once.cn.md) | 一个程序同时违反两条规则时，谁该报？ | 在 `reviews/` |
 | [`questions-2026-10-31-does-a-version-edge-order-two-writes`](../reviews/questions-2026-10-31-does-a-version-edge-order-two-writes.md) | 版本边算不算"两次写同一资源的调用之间的排序" | 在 `reviews/` |
 | [`questions-2026-10-31-tag-import-rechecks-prelude`](../reviews/questions-2026-10-31-tag-import-rechecks-prelude.md) | 从 `prelude` 引入一个名字，会让 `prelude` 自己的 `#op` 声明在没有实现模块的上下文里求值 | 在 `reviews/` |
 | [`questions-2026-10-31-what-executes-a-value-taken-by-a-position`](../reviews/questions-2026-10-31-what-executes-a-value-taken-by-a-position.md) | 被位置取走的值，怎么拿到执行的理由（不靠 ctrl）？ | 在 `reviews/` |
