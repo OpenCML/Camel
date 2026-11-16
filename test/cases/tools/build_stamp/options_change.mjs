@@ -107,7 +107,7 @@ write(
         {
             options: [
                 { name: 'ENABLE_FASTVM_JIT', description: 'Enable JIT compilation', default: 'ON', type: 'platform' },
-                { name: 'ENABLE_FASTVM_COMPUTED_GOTO', description: 'Computed goto', default: 'ON', type: 'bool' }
+                { name: 'CAMEL_SAMPLE_SECOND', description: 'A second option', default: 'ON', type: 'bool' }
             ]
         },
         null,
@@ -140,7 +140,7 @@ check(
 )
 check(
     'the recorded option set is the one a build would pass',
-    stamp.buildOptions.cmake.ENABLE_FASTVM_JIT === 'ON' && stamp.buildOptions.cmake.ENABLE_FASTVM_COMPUTED_GOTO === 'ON',
+    stamp.buildOptions.cmake.ENABLE_FASTVM_JIT === 'ON' && stamp.buildOptions.cmake.CAMEL_SAMPLE_SECOND === 'ON',
     JSON.stringify(stamp.buildOptions.cmake)
 )
 check(

@@ -759,6 +759,18 @@ void Builder::scanProgramWriters() {
             continue;
         }
         const GCT::Node *function = node->type() == GCT::NodeKind::FUNC ? node : current.function;
+        if (node->type() == GCT::NodeKind::FUNC && !node->name().empty() && node->size() > 0 &&
+            node->at(0) != nullptr) {
+            // The `var` positions of the program's own functions, by name. A `var` argument is
+            // read and written by the callee, so a name handed to one cannot stand for a value
+            // (stage S1 of the direct-SSA plan; Builder::argumentMayWriteBack asks this table).
+            if (auto *declared = node->at(0)->dataType(); declared != nullptr) {
+                if (const auto *signature = tt::as_ptr<FunctionType>(declared);
+                    signature != nullptr) {
+                    functionSignatures_[node->name()].push_back(signature);
+                }
+            }
+        }
         if (node->type() == GCT::NodeKind::VARI) {
             declaredNamesOf(node, declaredOf[function]);
         }

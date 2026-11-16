@@ -146,7 +146,6 @@
 
 - `src/passes/sched/fastvm/compile.cpp`
 - `src/passes/sched/fastvm/gotovm.cpp`
-- `src/passes/sched/fastvm/casevm.cpp`
 - `src/passes/sched/nodevm/nodevm.cpp`
 
 当前做法是：

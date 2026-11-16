@@ -25,11 +25,6 @@ Names match the configure log (booleans are CMake `ON` / `OFF`).
 - **Note**: On non-x64 or when disabled, the log shows `OFF` (with a platform note when applicable).
 - **Implementation**: `add_platform_option` sets compile definitions such as `ENABLE_FASTVM_JIT` and `JIT_TARGET_X64`.
 
-### `ENABLE_FASTVM_COMPUTED_GOTO`
-
-- **Meaning**: Use **computed goto** (label-value dispatch) in the FastVM interpreter.
-- **Implementation**: `add_bool_option`, injecting `ENABLE_FASTVM_COMPUTED_GOTO=0|1` on `camel_options`.
-
 ### `CAMEL_ENABLE_PYTHON`
 
 - **Meaning**: Build Python embedding artifacts: `python.cmo`, `pyplot.cmo`, `py_bridge*`, etc. Requires a Python **development** layout (headers and import library; see `modules/python` probing).

@@ -124,7 +124,7 @@ assert(capture.length === 0, "a captured value is not a cell: " + JSON.stringify
 
 [[tests]]
 name = "resources_effects"
-desc = "The resource plan's program, asked of both walks: a `var` parameter, a recursion through one, a closure writing a handle it captured and an ambient set all come out the same. The one difference is pinned: `main` reads a cell it made itself, the runtime cannot place a value read from a variable and adds `rmw object (any)`, and the builder masks it."
+desc = "The resource plan's program, asked of both walks: a `var` parameter, a recursion through one, a closure writing a handle it captured and an ambient set all come out the same. One answer differs and it is pinned by name: the closure's captured handle, which the runtime calls `rmw handle state::Ref` and the builder still a variable capture port. `main` used to be the second: it read a cell it made itself, the runtime could not place a value read from a variable and added `rmw object (any)`; since a `var` holds a value that read is the value's, so the two walks agree there now."
 kind = "behavior"
 case = "../../../cases/resources/effects.cml"
 args = ["${case}", "test::resource_transition"]
@@ -151,17 +151,16 @@ assert(handle.length === 1, "the closure's handle, asked of both sides: " + JSON
 // value, not a place, so a `variable capture` answer stands on one side only.
 const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole/.test(l))
 assert(capture.length === 0, "a captured value is not a cell on both sides: " + JSON.stringify(capture))
-// Exactly two answers differ here, and both are the same kind of reading: the closure's capture
-// above, and `main`'s own cell, which the runtime cannot place and answers `rmw object (any)` for.
+// Exactly one answer differs, and it is the closure's handle pinned above: pinned by name rather
+// than by count, so that the day the closure's two answers become one this fails instead of passing
+// on some other pair. `main` used to be the second, reading a cell it made itself; since a `var`
+// holds a value that read is the value's, and the runtime has no own cell it cannot place, so it
+// adds no `rmw object (any)` and the two walks agree there.
 const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
-assert(disagree.length === 2, 'two answers differ here: ' + disagree.join(' | '))
-const line = disagree.find((l) => l.startsWith('MASK main builder='))
-assert(line !== undefined, 'the difference at `main`: ' + disagree.join(' | '))
-const [head, tail] = line.split(' runtime=')
-const builderText = head.replace(/^MASK \S+ builder=/, '')
-const runtimeText = tail.replace(/ agree=no$/, '')
-assert(!builderText.includes('rmw object (any)'), 'the builder masks the cell it made: ' + builderText)
-assert(runtimeText.includes('rmw object (any)'), 'the runtime answers any object for it: ' + runtimeText)
+assert(disagree.length === 1, 'one answer differs here: ' + disagree.join(' | '))
+assert(disagree[0] === handle[0], "the closure's handle, and nothing else: " + disagree[0])
+const main = lines.filter((l) => l.startsWith('MASK main builder='))
+assert(main.length === 1 && main[0].endsWith(' agree=yes'), 'main agrees: ' + JSON.stringify(main))
 }
 """
 
