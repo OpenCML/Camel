@@ -387,7 +387,7 @@ bfeaff779ffa282d ok docs/tutorial/examples/06_sync_block.cml
 10db2d3f44945035 ok docs/tutorial/examples/06_sync_body.cml
 44d4456643383e2f ok docs/tutorial/examples/06_unused_effect.cml
 13ef001fd53886f7 ok docs/tutorial/examples/06_var_order.cml
-acc4155e2be0f3aa ok docs/tutorial/examples/07_closures.cml
+e266858064333883 ok docs/tutorial/examples/07_closures.cml
 f9a9a49a11b337a1 ok docs/tutorial/examples/07_errors.cml
 7ce357426e4a4f3d ok docs/tutorial/examples/07_exercise.cml
 af3d023ba4bceb42 ok docs/tutorial/examples/07_fault.cml
@@ -2419,9 +2419,9 @@ c6a70733d1d83ee6 ok test/cases/consistency/new_values/dropped_nested_block.cml
 b4b098fe9da2204d ok test/cases/consistency/new_values/dropped_void_body.cml
 1628919138ced61e ok test/cases/consistency/new_values/macro_append.cml
 ff89b857cfdca4c6 ok test/cases/consistency/new_values/peek.cml
-1275aead7e6df352 ok test/cases/consistency/new_values/peek_loop.cml
-c58529c6bcd925bc ok test/cases/consistency/new_values/rebinding_loop.cml
-638ec3de9c083547 ok test/cases/consistency/new_values/sort_rebinding.cml
+e7b1889f9dc9f225 ok test/cases/consistency/new_values/peek_loop.cml
+14de043d78d2cc59 ok test/cases/consistency/new_values/rebinding_loop.cml
+70e6af9d054009a3 ok test/cases/consistency/new_values/sort_rebinding.cml
 12bfa27ee5d13b4b ok test/cases/consistency/new_values/unused_in_lambda.cml
 ed04ebc79de351df ok test/cases/consistency/new_values/unused_operator.cml
 b4512ab896fc938d ok test/cases/consistency/new_values/unused_var.cml
@@ -4125,7 +4125,7 @@ bec6cac502095424 ok test/cases/probe/dpack4_functype_ok.cml
 80e252c8464dfa2a no test/cases/probe/dpack_old_pack.cml
 8927fe1d274101df no test/cases/probe/dpack_old_rank.cml
 c8c822093e37ef6a ok test/cases/resources/conflict_per_resource.cml
-e4aacb3bd0d11025 ok test/cases/resources/effects.cml
+f757a0c455d36e73 ok test/cases/resources/effects.cml
 6c97327de4715b70 ok test/cases/resources/names.cml
 c75fdfd9be82e8ac ok test/cases/runtime/adopt_chain/grad_three_calls.cml
 cdd20b2a7df9feda ok test/cases/runtime/adopt_chain/jvp_three_calls.cml
