@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：117 行（页已不在 `questions/` 里）
+## 生成器不会删的行：119 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -121,7 +121,9 @@
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](../reviews/2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ | 在 `reviews/` |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
 | [`2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference`](../reviews/2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference.cn.md) | 实参位置上递出去的闭包，要不要按引用捕获？ | 在 `reviews/` |
+| [`2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write`](../reviews/2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write.cn.md) | 在调用的实参位置造出来的闭包，该读到写之前的值还是写之后的值？ | 在 `reviews/` |
 | [`2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var`](../reviews/2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md) | 生成器体里的闭包捕获 `var`，为什么留格子？ | 在 `reviews/` |
+| [`2026-11-16-how-many-units-does-a-direct-ssa-build-remove`](../reviews/2026-11-16-how-many-units-does-a-direct-ssa-build-remove.cn.md) | 直接构造 SSA 之后，348 个单元里消失的是 270 个吗？ | 在 `reviews/` |
 | [`cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark`](../reviews/cc-2026-11-15-can-a-flaky-cell-wear-a-known-fail-mark.cn.md) | 一格会抽签的红，能不能戴 `known_fail` 记成常驻红？ | 在 `reviews/` |
 | [`cc-2026-11-15-who-paces-the-stress-collections`](../reviews/cc-2026-11-15-who-paces-the-stress-collections.cn.md) | 压测收集要不要按墙钟配速？ | 在 `reviews/` |
 | [`q-2026-11-15-should-the-deletion-come-before-the-carrying`](../reviews/q-2026-11-15-should-the-deletion-come-before-the-carrying.cn.md) | 先删，还是先搬：`(c)` 与 `(d)` 的顺序 | 在 `reviews/` |
