@@ -447,6 +447,22 @@ $checkers = [ordered]@{
     # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
+    # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
+    # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
+    # tool `frontend.ast_snapshot` itself starts -- with the line
+    # `test/plans/feat/parse/golden/ast_hashes.txt` records for each compared with the reading the
+    # file gives now. A `.cml` whose reading moved, or a `.cml` nobody registered, is a red on the
+    # base branch that the merge position has to find and patch after the fact; that happened five
+    # times (`1dad3104f` is the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
+    # was right and the reader was late. This is the reader: one process, one line per stale file,
+    # from the lane's own worktree, before the push.
+    #
+    # `compiler = $true`: it starts the install's `camel-parsecheck`, beside the `camel` the
+    # `--camel` argument names, so it reads the install this run built and -NoBuild guarded. A
+    # `.cml` edit is in the build stamp's fingerprint (`scripts/common.js`, `sourceFingerprint`),
+    # so `-NoBuild` after one needs `-AllowStale` -- the parser's reading of a file does not depend
+    # on the tree its binary was built from, which is the one thing that stamp cannot know.
+    'ast-hashes'          = @{ script = 'scripts/check-ast-hashes.mjs'; args = @(); compiler = $true }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
