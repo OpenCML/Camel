@@ -1,0 +1,112 @@
+/**
+ * A write to a reference is a root of the region it is written in (design principles 3.1 and 3.3,
+ * as the author ruled them on 2026-11-16): it runs although nothing in its own graph reads the
+ * value it answers, because the reader of a handle may be somewhere this graph cannot see -- in the
+ * caller of a box that escaped, in a closure called later, behind another name of the same type.
+ *
+ * Every function here is a body that is not a `sync` block, and every value is taken by `main`, so
+ * what decides whether a write runs is the region-root rule and not the sync chain:
+ *
+ *   branch_value      the write is in the arm of a branch whose value IS taken ......... 8
+ *   written_here      the reader is a callee .......................................... 4
+ *   escaped_box       the box escapes through `return`, the caller reads it ............ 3
+ *   carried_box       a closure carries the box, a later call reads it ................ 2
+ *   two_names         two names of one box: the write is seen through the other ....... 6
+ *   p                 the reported shape: a bare write, then the same body reads it .... 1
+ *
+ * Two shapes of the acceptance table are NOT in this file. They are blocked, not passed, and what
+ * blocks them is not this rule:
+ *
+ *   R1  `if true then { state::set(c, 5) }; state::get(c)` in a body that is not a `sync` block
+ *       answers 0, and it answered 0 before the root was widened too. It is blocked on two legs:
+ *       (a) a handle write was not yet a root of its region -- this file is the evidence that leg
+ *       now works -- and (b) the value of an `if` statement nobody takes is never run at all, arms
+ *       included: a `println` written in exactly that position does not print either. The two
+ *       reproductions are `r1_branch_println.cml` and `r1_branch_state_set.cml` under the author's
+ *       scratch directory for this lane. Leg (b) is a defect of region semantics against 3.1 (the
+ *       owner of that region runs, so the region should), and it belongs to another lane.
+ *
+ *   R3  a write in a loop body, read after the loop, faults at run time: `RuntimeDiag::InvalidArgument`,
+ *       "the value is not a reference", from `state.set`. Blocked on `lane-portbind`: on the tree
+ *       this lane started from, a live `state::get` of a handle made OUTSIDE a loop and read inside
+ *       the body already faults the same way after two rounds, so the hole is the region port of a
+ *       loop body, not the rule about roots. Measured 2026-11-16; see the report of `lane-refwrite`.
+ */
+
+import state
+
+func reader_of(r: state::Ref<int>): int {
+    return state::get(r)
+}
+
+/// The write and the read are in one body, and nothing takes the write's value: `p`.
+func p(): int {
+    let c = state::ref(0)
+    state::set(c, 1)
+    return state::get(c)
+}
+
+/// The write is in an arm whose value IS taken, so the value it answers is the arm's value.
+func branch_value(flag: bool): int {
+    let c = state::ref(0)
+    let x = if flag then {
+        state::set(c, 7)
+        1
+    } else {
+        2
+    }
+    return x + state::get(c)
+}
+
+/// The reader is the callee, in another graph.
+func written_here(): int {
+    let c = state::ref(0)
+    state::set(c, 4)
+    return reader_of(c)
+}
+
+/// The box escapes through `return`, and the caller reads it.
+func escaped_box(): state::Ref<int> {
+    let c = state::ref(0)
+    state::set(c, 3)
+    return c
+}
+
+func read_in_the_caller(): int {
+    let c = escaped_box()
+    return state::get(c)
+}
+
+/// A closure carries the box, and a later call reads it.
+func carried_box(): () => int {
+    let c = state::ref(0)
+    state::set(c, 2)
+    return (): int => state::get(c)
+}
+
+func read_on_a_later_call(): int {
+    let f = carried_box()
+    return f()
+}
+
+/// Two names of one box: the write through one is what the other reads (3.3, the written order).
+func write_one_read_the_other(a: state::Ref<int>, b: state::Ref<int>): int {
+    state::set(a, 6)
+    return state::get(b)
+}
+
+func two_names(): int {
+    let c = state::ref(0)
+    return write_one_read_the_other(c, c)
+}
+
+func main(): int sync {
+    let r1b = branch_value(true)
+    let r5 = written_here()
+    let r6 = read_in_the_caller()
+    let r7 = read_on_a_later_call()
+    let r8 = two_names()
+    let reported = p()
+    println(`r1b=${r1b} r5=${r5} r6=${r6} r7=${r7} r8=${r8} p=${reported}`)
+    return 0
+}

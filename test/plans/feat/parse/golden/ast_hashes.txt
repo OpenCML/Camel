@@ -1517,6 +1517,8 @@ d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml
 d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
 7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
+a64c7bec3b335b0b ok test/cases/compile/ref/refwrite_dead_arm.cml
+06393bd0e7b12585 ok test/cases/compile/ref/refwrite_shapes.cml
 81663c1c95e20537 ok test/cases/compile/region_roots/branch_statement.cml
 3edca146afc5d4d2 ok test/cases/compile/region_roots/branch_statement_condition.cml
 9d869d0b281097a0 ok test/cases/compile/region_roots/branch_statement_kinds.cml

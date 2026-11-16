@@ -2009,16 +2009,18 @@ bool effectStandsOnSomething(const GCGraph &graph, camel::runtime::gc_node_ref_t
         return true;
     }
     // The third credential (design principles 3.1, the author's ruling of 2026-11-15, "区域的根"):
-    // a write to a resource outside the program is used by the region it is written in -- "一个区域
-    // 运行时，区域里对外部资源的写都被用到 ... 非同步函数体里的裸语句 println(x) 照样执行" -- so it
-    // runs with neither a reader nor a place in a chain, and the region is what stands under it.
-    // The reading itself is `camel/runtime/region_roots.h` (resource class, never an operator
-    // name); this gate asks the same predicate so that the three walks that decide what a region
-    // runs and the check on what a pass returns do not drift apart.
+    // a write a running region owes is used by the region it is written in -- "一个区域运行时，区域里
+    // 对外部资源的写都被用到 ... 非同步函数体里的裸语句 println(x) 照样执行" -- so it runs with
+    // neither a reader nor a place in a chain, and the region is what stands under it. A write to a
+    // handle is one of them (design principles 3.3: "对 `Ref` 的写由之后的读者用到", and the reader
+    // may be in a graph this one cannot see). The reading itself is `camel/runtime/region_roots.h`
+    // (resource class, never an operator name); this gate asks the same predicate so that the three
+    // walks that decide what a region runs and the check on what a pass returns do not drift apart.
     if (const camel::runtime::GCNode *node = graph.node(ref);
         node != nullptr && node->kind == camel::runtime::GCNodeKind::Oper) {
         const auto *body = graph.nodeBodyAs<camel::runtime::GCOperBody>(ref);
-        if (body != nullptr && camel::core::OperatorTable::instance().writesOutside(body->uri())) {
+        if (body != nullptr &&
+            camel::core::OperatorTable::instance().writesForTheRegion(body->uri())) {
             return true;
         }
     }
