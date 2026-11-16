@@ -104,6 +104,47 @@ std::vector<node_handle_t> loopArmResultsOf(node_handle_t node) {
     return arms;
 }
 
+/// Whether a node that reads a value can keep it after its own run: a call, a branch, a closure, a
+/// capture, and every operator that stores what it is given (an append into another array, a
+/// field, a collection slot). Only a pure computation whose result holds no reference is not such
+/// a holder, which is the answer `Builder::markNonRetainingReads` uses as its condition 3 for the
+/// reads that may keep a value. An operator of unknown purity is a holder: the safe direction.
+bool nodeKeepsItsInput(node_handle_t node) {
+    if (!nodeIsKind(node, runtime::GCNodeKind::Oper)) {
+        return true;
+    }
+    const auto op = nodeGraphOf(node)->operTarget(node);
+    if (op == nullptr || !camel::core::OperatorTable::instance().isPure(op->uri())) {
+        return true;
+    }
+    const Type *result = valueTypeOf(nodeTypeOf(node));
+    // A string is not an array: a computation that makes one cannot hand out what it read.
+    return result == nullptr ||
+           (result->code() != TypeCode::String && isGCTraced(result->code()));
+}
+
+/// The values a round hands on as the next state, on the graph: the results of the arms the body can
+/// end in and the GATEs that forward one of them to the body's value (the walk `loopStateValueOf`
+/// makes, here collected). A state's next value is such a value or a part of one, and nothing else
+/// in the round may keep it.
+std::vector<node_handle_t> loopStateValues(
+    node_handle_t bodyValue, const std::vector<node_handle_t> &arms) {
+    std::vector<node_handle_t> values = arms;
+    node_handle_t at                  = bodyValue;
+    for (size_t depth = 0; at != nullptr && depth < 16; ++depth) {
+        values.push_back(at);
+        if (!nodeIsKind(at, runtime::GCNodeKind::Gate)) {
+            break;
+        }
+        const auto inputs = normInputsOf(at);
+        if (inputs.size() != 1) {
+            break;
+        }
+        at = nodeDraftOf(at)->ref(inputs.front());
+    }
+    return values;
+}
+
 /// Gives `node` a new value type, moving it to a slot of that type. Used when the element type
 /// of an empty-array loop state is learned from the body's append after the graph was built.
 void retypeValueNode(DraftGraphBuilder *graph, node_handle_t node, Type *type) {
@@ -4943,6 +4984,7 @@ void Builder::markLoopStateInPlace(
     // component written as a constant there (`(xs->append<7>, 0)`) has no value node and no
     // rewrite of its own.
     const std::vector<node_handle_t> arms = loopArmResultsOf(returned);
+    const std::vector<node_handle_t> stateValues = loopStateValues(body->value, arms);
     if (stateCount == 1) {
         markLoopStateInPlaceOne(
             body,
@@ -4950,7 +4992,8 @@ void Builder::markLoopStateInPlace(
             initial,
             0,
             arms,
-            !privateInitial.empty() && privateInitial[0]);
+            !privateInitial.empty() && privateInitial[0],
+            stateValues);
         return;
     }
     std::vector<std::vector<node_handle_t>> nexts(stateCount);
@@ -4993,13 +5036,15 @@ void Builder::markLoopStateInPlace(
             initial,
             j,
             nexts[j],
-            !privateInitial.empty() && j < privateInitial.size() && privateInitial[j]);
+            !privateInitial.empty() && j < privateInitial.size() && privateInitial[j],
+            stateValues);
     }
 }
 
 void Builder::markLoopStateInPlaceOne(
     const arm_ptr_t &body, const GCT::node_ptr_t &loop, std::vector<node_handle_t> &initial,
-    size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate) {
+    size_t index, const std::vector<node_handle_t> &nexts, bool initialIsPrivate,
+    const std::vector<node_handle_t> &stateValues) {
     if (nexts.empty()) {
         return;
     }
@@ -5070,6 +5115,70 @@ void Builder::markLoopStateInPlaceOne(
     }
     if (appends.empty() || normUsersOf(port).size() + withUsersOf(port).size() != nexts.size()) {
         return;
+    }
+    // Nothing else in the round may hold what the state appends to. The runtime decides the write
+    // in place from the block's reference count (`block_->unique() && camelOwned()`), and that
+    // count is necessary but not sufficient: a value stored into another container's slot is the
+    // same array object, not a second name, so the count stays one while two places can observe
+    // the write. The graph knows the users and the runtime cannot, so the decision belongs here,
+    // the one place that produces `:struct/append_arr_owned` (docs/design/arrays-memory/README.cn.md
+    // 4.3.1: one rule, one place, and the loop's collecting slot among the conflicts).
+    //
+    // The append hands back the state's next value, so it may reach the state's own value and
+    // nothing else. What it may reach is what assembles that value: a tuple of states, the struct
+    // a split state came from, a GATE that forwards it -- the readers a walk towards the state's
+    // value passes through, which is the direction `loopStateValues` names. It may also be read by
+    // a computation that cannot keep it (`len(xs)`, a comparison), the answer
+    // `Builder::markNonRetainingReads` uses as its condition 3. Any other reader keeps it:
+    // `seen = seen->append<acc>` puts it in the loop's collecting slot, `f(acc)` hands it to a
+    // call, `{ v: acc }` puts it in a field. Reading the value from the state's value *downwards*
+    // instead would count the other states of the same round -- `seen`'s own append is part of the
+    // tuple -- so this walks upwards from the appended value and stops at the state. The state
+    // then keeps the copying `append`, and only the allocation differs (design principles 10.5
+    // and 11.3).
+    {
+        std::vector<node_handle_t> examined;
+        const auto heldByAnotherName = [&](node_handle_t value) {
+            std::vector<node_handle_t> work{value};
+            while (!work.empty()) {
+                node_handle_t at = work.back();
+                work.pop_back();
+                if (at == nullptr) {
+                    continue;
+                }
+                for (const auto &users : {normUsersOf(at), withUsersOf(at)}) {
+                    for (runtime::gc_node_ref_t userId : users) {
+                        node_handle_t user = nodeDraftOf(at)->ref(userId);
+                        if (user == nullptr ||
+                            std::ranges::find(stateValues, user) != stateValues.end() ||
+                            std::ranges::find(examined, user) != examined.end()) {
+                            continue; // the round's own state, or a reader already answered for
+                        }
+                        examined.push_back(user);
+                        if (nodeIsKind(user, runtime::GCNodeKind::Gate) ||
+                            nodeIsKind(user, runtime::GCNodeKind::Join) ||
+                            nodeIsKind(user, runtime::GCNodeKind::Fill) ||
+                            nodeIsKind(user, runtime::GCNodeKind::Accs)) {
+                            work.push_back(user); // assembles the value: ask its own readers
+                            continue;
+                        }
+                        if (!nodeKeepsItsInput(user)) {
+                            continue;
+                        }
+                        return true;
+                    }
+                }
+            }
+            return false;
+        };
+        for (node_handle_t next : nexts) {
+            if (next == nullptr || next == port) {
+                continue; // an arm that leaves the state as it was; its uses are the appends
+            }
+            if (heldByAnotherName(next)) {
+                return;
+            }
+        }
     }
     // The loop starts from a private copy of its first value. A literal is a constant of the
     // graph: the same array object on every evaluation of the loop's site, so appending to it
