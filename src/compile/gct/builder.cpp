@@ -4007,6 +4007,63 @@ template <typename T> inline data_ptr_t makeDataFromLiteral(const T &value) {
     return tt::as_shared<Data>(make_shared<PrimaryData<T>>(value));
 }
 
+namespace {
+/**
+ * The value a generator's state slot of this type holds before anything is written into it.
+ *
+ * A generator body's every local is a cell with a type and no value yet (`:var/new/empty`): what it
+ * holds is written where its declaration stands, which may be a later pull. The state the machine
+ * hands from one pull to the next is a value, and a value has no "nothing written yet", so the slot
+ * starts at this value instead. It is never observed: reading a local before its declaration is
+ * `SemanticDiag::UnresolvedReference`, refused at compile time, in a plain body, inside an `if` arm
+ * and in a generator body alike. The only read of an unwritten slot is the machine packing the state
+ * at a `yield`, and what it packs is never read back before the declaration writes it.
+ *
+ * `nullptr` means the type has no such value, and the slot keeps its cell instead. Those types are
+ * a function type (a closure needs a graph and a resource set, not a constant), `Ref` and a
+ * `#resource` (their value is a box a call makes), `T!` and an enum (`int!`, `Option`: a member has
+ * to be chosen, which is the program's decision and not the machine's), and a type variable. If one
+ * of them is ever to get an "unwritten" form, this is the door: one place decides, and the state
+ * tuple stops needing the cell.
+ */
+data_ptr_t zeroValueOf(Type *type) {
+    if (type == nullptr) {
+        return nullptr;
+    }
+    switch (type->code()) {
+    case TypeCode::Int32:
+        return makeDataFromLiteral<int32_t>(0);
+    case TypeCode::Int64:
+        return makeDataFromLiteral<int64_t>(0);
+    case TypeCode::Float32:
+        return makeDataFromLiteral<float>(0.0F);
+    case TypeCode::Float64:
+        return makeDataFromLiteral<double>(0.0);
+    case TypeCode::Bool:
+        return makeDataFromLiteral<bool>(false);
+    case TypeCode::String:
+        // A string is `StringData`, not `PrimaryData<std::string>`: the literal path builds it the
+        // same way (`visitLiteral`).
+        return tt::as_shared<Data>(make_shared<StringData>(std::string{}));
+    case TypeCode::Tuple: {
+        // A member without a zero makes the whole tuple one: half a value is not a value.
+        const auto *tuple = tt::as_ptr<TupleType>(type);
+        TupleDataFactory factory;
+        for (size_t i = 0; i < tuple->size(); ++i) {
+            const data_ptr_t member = zeroValueOf(tuple->typeAt(i));
+            if (member == nullptr) {
+                return nullptr;
+            }
+            factory.add(member);
+        }
+        return factory.build();
+    }
+    default:
+        return nullptr;
+    }
+}
+} // namespace
+
 /*
 Literal(Value value) ;
 enum LiteralType {
@@ -5930,23 +5987,15 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         *link << tree_->makeDRef("__eq__") << readCell(name) << intLiteral(value);
         return link;
     };
-    // The step function's signature once it carries the generator's state: the work planned in
-    // `docs/handover/reports/2026-11-16-the-generator-state-travels-by-value.cn.md`. The parameter
-    // is a placeholder `int` for now -- this round only makes the signature and the call agree on
-    // a shape, so that the round handing the real state over changes one thing and not two. The
-    // stream's own type stays `stepType`, which is what the program reads (`for x in s`), and the
-    // graph's port nodes are made from the signature (`src/compile/gir/builder_helpers.h`, the
-    // `withTypesCount` loop), so naming the parameter here is all it takes.
-    Type *statePlaceholderType = intLiteral(0)->data()->type();
-    FunctionType *stepTypeWithState =
-        FunctionType::create({}, {{statePlaceholderType, false}}, stepType->exitType());
-    // The stream value of one pull: a closure over the step function.
-    const auto streamValue = [&]() {
+    // The stream value of one pull: a closure over the step function, holding the state this pull
+    // hands to the next one. Its own type stays `stepType` -- that is what the program reads
+    // (`for x in s`) -- and the state it carries is the machine's business.
+    const auto streamValue = [&](node_ptr_t state) {
         node_ptr_t lambda = tree_->makeFunc(std::string());
         *lambda << tree_->makeType(stepType);
         node_ptr_t body = makeExec(synced);
         node_ptr_t call = tree_->makeLink(0);
-        *call << tree_->makeDRef(stepName) << intLiteral(0);
+        *call << tree_->makeDRef(stepName) << state;
         node_ptr_t ret = tree_->makeExit(ExitType::Return);
         *ret << call;
         *body << ret;
@@ -6037,6 +6086,22 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     addCell(pcName, intLiteral(0), at);
     addCell(haltName, intLiteral(0), at);
     std::vector<std::string> cellNames = {pcName, haltName};
+    // The locals whose cell can be a slot of the state the machine hands from one pull to the next:
+    // those whose type has a zero value (`zeroValueOf`). The rest keep their cell, which is why the
+    // state is built beside the cells and not out of all of them.
+    std::vector<std::string> slotNames;
+    std::vector<Type *> slotTypes;
+    const auto addSlotCell = [&](const std::string &name,
+                                 const node_ptr_t &value,
+                                 const AST::node_ptr_t &ast) {
+        Type *type = typeOfPlaceholder(value);
+        addCellOfType(name, type, ast);
+        cellNames.push_back(name);
+        if (zeroValueOf(type) != nullptr) {
+            slotNames.push_back(name);
+            slotTypes.push_back(type);
+        }
+    };
     for (size_t i = 0; i < bodyStmts->size(); ++i) {
         const auto &stmt = bodyStmts->at(i);
         if (stmt->type() != AST::LoadType::Stmt ||
@@ -6050,8 +6115,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         if (refs.size() > 1 && refs.size() == inits->size()) {
             for (size_t k = 0; k < refs.size(); ++k) {
                 const std::string name = refs[k].toString();
-                addTypedCell(name, visitData(inits->atAs<AST::DataLoad>(k)), stmt);
-                cellNames.push_back(name);
+                addSlotCell(name, visitData(inits->atAs<AST::DataLoad>(k)), stmt);
                 hoisted.push_back({stmt.get(), i, name});
             }
             continue;
@@ -6064,8 +6128,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
         const AST::node_ptr_t init = inits->at(0);
         if (refs.size() == 1) {
             const std::string name = refs[0].toString();
-            addTypedCell(name, visitData(init), stmt);
-            cellNames.push_back(name);
+            addSlotCell(name, visitData(init), stmt);
             hoisted.push_back({stmt.get(), i, name});
             continue;
         }
@@ -6081,14 +6144,57 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
             node_ptr_t element = tree_->makeAccs(k);
             *element << visitData(init);
             const std::string name = refs[k].toString();
-            addTypedCell(name, element, stmt);
-            cellNames.push_back(name);
+            addSlotCell(name, element, stmt);
             hoisted.push_back({stmt.get(), i, name});
             names.push_back(name);
         }
         destructured.push_back({stmt.get(), tupleName, names});
     }
 
+    // The state one pull hands to the next: `pc`, `halt`, and the slots a local's value travels in.
+    // It is a value, not the cells -- that is the whole of this work
+    // (`docs/handover/reports/2026-11-16-the-generator-state-travels-by-value.cn.md`). This round
+    // builds it and hands it along; the step still reads the cells, so nothing it carries is used
+    // yet, and the readings cannot move.
+    std::vector<Type *> stateTypes;
+    stateTypes.push_back(intLiteral(0)->data()->type());
+    stateTypes.push_back(intLiteral(0)->data()->type());
+    stateTypes.insert(stateTypes.end(), slotTypes.begin(), slotTypes.end());
+    Type *stateType = TupleType::create(std::move(stateTypes));
+    // The tuple of values a `(…)` of these nodes makes, the way `pairValue` builds one.
+    const auto tupleOf = [&](const std::vector<node_ptr_t> &parts) {
+        TupleDataFactory factory;
+        bool dangling       = false;
+        node_ptr_t operands = makeExec(false, true);
+        for (const node_ptr_t &part : parts) {
+            auto [data, _] = extractData(part, operands, dangling);
+            factory.add(data);
+        }
+        node_ptr_t node = tree_->makeData(factory.build());
+        if (dangling) {
+            *operands << node;
+            node = operands;
+        }
+        return node;
+    };
+    // What the next pull starts from: nothing has been written into the slots yet, so each holds the
+    // value its type starts at, and `pc`/`halt` start at zero.
+    const auto stateZero = [&]() {
+        std::vector<node_ptr_t> parts = {intLiteral(0), intLiteral(0)};
+        for (Type *type : slotTypes) {
+            parts.push_back(tree_->makeData(zeroValueOf(type)));
+        }
+        return tupleOf(parts);
+    };
+    // The state as the pull that stands here leaves it: every slot read where the machine writes it,
+    // so a `yield` packs the values this pull put there.
+    const auto stateNow = [&]() {
+        std::vector<node_ptr_t> parts = {readCell(pcName), readCell(haltName)};
+        for (const std::string &name : slotNames) {
+            parts.push_back(readCell(name));
+        }
+        return tupleOf(parts);
+    };
     // The arms: one per point of the body. Arm 0 is where a pull starts; the others are reached
     // through `pc`.
     std::vector<node_ptr_t> arms;
@@ -6200,7 +6306,7 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
                     // only in the step function's own body
                     // (docs/design/io-concurrency-streams/plan.cn.md, slice E), so the element
                     // and the rest of the stream are the arm's value.
-                    *exec << pairValue(elem, streamValue());
+                    *exec << pairValue(elem, streamValue(stateNow()));
                     popScope();
                     return;
                 }
@@ -6800,10 +6906,15 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     *stepBody << loopNode;
     node_ptr_t stepFunc = tree_->makeFunc(stepName);
     mark(stepFunc, funcAst, "gct.generator.step");
+    // The step takes the state as a normal parameter: a call's positional argument is matched
+    // against `normTypes`, never `withTypes` (which is `with <..ws>`). The port node comes from the
+    // signature itself (`src/compile/gir/builder_helpers.h`).
+    FunctionType *stepTypeWithState =
+        FunctionType::create({}, {{stateType, false}}, stepType->exitType());
     *stepFunc << tree_->makeType(stepTypeWithState) << stepBody;
     *outer << stepFunc;
     node_ptr_t ret = tree_->makeExit(ExitType::Return);
-    *ret << streamValue();
+    *ret << streamValue(stateZero());
     mark(ret, funcAst, "gct.generator.return");
     *outer << ret;
     LEAVE("GeneratorBody");
