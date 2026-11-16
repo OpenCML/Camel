@@ -1,0 +1,9 @@
+// There is no open interval `a..` (the author's ruling of 2026-11-16, design principles 4.2): an
+// interval has two ends and its result is an array, so `1..` has nothing to be read as. `..` is an
+// operator, so the missing right-hand side makes the parser take the next token as its operand:
+// the refusal is `Unexpected 'return'; expected an expression` at line 8, column 5 -- the program
+// does not run, and no value is quietly produced.
+func main(): int {
+    let xs = 1..
+    return len(xs)
+}
