@@ -223,14 +223,15 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         std::vector<gc_node_ref_t> fromExit{startRef};
         reachBack(fromExit, used);
         live = used;
-        // The second seed is 3.1's other root of a region (camel/runtime/region_roots.h): a write to
-        // a resource outside the program is used by the region it is written in, so the region's
-        // running runs it although nothing reads what it produces. Written in the body, it runs
-        // whenever the graph runs -- and a graph is planned as it is invoked, so the body's writes
-        // come in here without a condition. Written in an arm or in a loop, it runs with that region,
-        // so it is seeded below with the region's result and under the same owner-live condition: a
-        // write in an arm nothing takes, or in a loop nothing needs, is not part of the execution
-        // (`SemanticDiag::EffectNotExecuted` names the branch or the loop).
+        // The second seed is 3.1's other root of a region (camel/runtime/region_roots.h): a write
+        // a running region owes is used by the region it is written in, so the region's running runs
+        // it although nothing reads what it produces -- an outside write and a write to a handle
+        // (3.3) alike. Written in the body, it runs whenever the graph runs -- and a graph is planned
+        // as it is invoked, so the body's writes come in here without a condition. Written in an arm
+        // or in a loop, it runs with that region, so it is seeded below with the region's result and
+        // under the same owner-live condition: a write in an arm nothing takes, or in a loop nothing
+        // needs, is not part of the execution (`SemanticDiag::EffectNotExecuted` names the branch or
+        // the loop).
         //
         // The nodes are laid out by the walk at the end of this function, which visits every node
         // `live` holds, and the members of a control region are laid out as that region's piece

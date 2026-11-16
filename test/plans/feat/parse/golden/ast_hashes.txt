@@ -1517,6 +1517,8 @@ d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
 60b35f5cd4aaedc7 ok test/cases/compile/ref/ref_one_box_two_names.cml
 d55391fd913ebc11 ok test/cases/compile/ref/ref_struct.cml
 7365cb7ca955c924 ok test/cases/compile/ref/refs_unrelated.cml
+a64c7bec3b335b0b ok test/cases/compile/ref/refwrite_dead_arm.cml
+06393bd0e7b12585 ok test/cases/compile/ref/refwrite_shapes.cml
 81663c1c95e20537 ok test/cases/compile/region_roots/branch_statement.cml
 3edca146afc5d4d2 ok test/cases/compile/region_roots/branch_statement_condition.cml
 9d869d0b281097a0 ok test/cases/compile/region_roots/branch_statement_kinds.cml
@@ -4158,6 +4160,7 @@ efab554bc7d04c9f ok test/cases/tools/grammar/modules.cml
 3b974939468e927b ok test/cases/tools/lsp/fixtures/fstring.cml
 3f67a52cdb83d557 ok test/cases/tools/lsp/fixtures/main.cml
 04fef704f00dc031 ok test/cases/tools/lsp/fixtures/shapes.cml
+819f0f804565b00f ok test/cases/tools/lsp/fixtures/warned.cml
 11f616c41df7cf7f ok test/cases/trans/canon_order_run.cml
 43b6754390557202 ok test/cases/trans/canonical_opt_static_slot.cml
 a21779e66201c700 ok test/cases/trans/cml_canon_attr_a.cml

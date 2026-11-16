@@ -251,13 +251,32 @@ bool OperatorSemantics::external() const {
     return false;
 }
 
-bool OperatorSemantics::writesOutside() const {
+bool OperatorSemantics::writesForTheRegion() const {
     // The narrower half of external(): a write, not a read. An operator nobody declared is read as
     // writing the "global" resource, and so is one whose declaration says an effect exists without
     // itemizing it (design principles 3.3) -- the same conservative reading `accessList` publishes.
     // A declaration that **does** itemize its accesses is decided by them, and that is what keeps a
     // read of `env` or `console` exactly as demand-driven as it was: `get_env` is effectful and
     // reaches outside, and it writes nothing.
+    //
+    // A write of a **handle** is one of them too, and that is what design principles 3.3's
+    // "对 `Ref` 的写由之后的读者用到（3.1）" was asking for; the author's ruling of 2026-11-16 made
+    // it the rule of 3.1 itself, "对外部资源与句柄的写由所在区域用到". A reference is a box the
+    // program owns, so writing it
+    // reaches nothing outside the program and `reachesOutside` answers false -- yet a running region
+    // owes the write no less, because the reader of a box may stand somewhere this graph cannot see:
+    // another graph (a callee, or the caller a box escaped to through `return`), a value a closure
+    // carried away and reads on a later call, or a second name of the same handle. "No reader in
+    // this graph" therefore proves nothing about whether there is a reader, and the write runs with
+    // the region it is written in -- the same root a `println` has (`camel/runtime/region_roots.h`).
+    // The cost is stated where the root is: a write that truly has no reader anywhere now runs once
+    // instead of being deleted (unobservable; it moves debugger line coverage and timing).
+    //
+    // `Variable` stays out of this, and so does `Object` (the ruling of 2026-11-15: assigning to a
+    // `var` is not an effect -- what it writes is a value passed in and handed back). The two
+    // questions this file answers are asked by different readers and are deliberately not the same:
+    // "does anything outside the program see it" (`external()`, the effect summary) and "does the
+    // region that runs it owe its running" (this one, the region's roots).
     if (declaredEffect == Effect::Undeclared) {
         return true;
     }
@@ -265,7 +284,9 @@ bool OperatorSemantics::writesOutside() const {
         return declaredEffect == Effect::Effectful;
     }
     for (const ResourceAccess &access : resources->accesses) {
-        if (writes(access.mode) && reachesOutside(access.resource.cls)) {
+        if (writes(access.mode) &&
+            (reachesOutside(access.resource.cls) ||
+             access.resource.cls == ResourceClass::Handle)) {
             return true;
         }
     }

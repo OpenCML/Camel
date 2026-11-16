@@ -217,16 +217,16 @@ bool OperatorTable::hasExternalEffect(std::string_view uri) const {
     return !id || hasExternalEffect(*id);
 }
 
-bool OperatorTable::writesOutside(OperId id) const {
+bool OperatorTable::writesForTheRegion(OperId id) const {
     const sem::OperatorSemantics *facts = record(id);
     // An operator nobody declared writes the global resource (design principles 3.3), which is
     // the same reading `hasExternalEffect` gives it and the same one `accessList` publishes.
-    return facts == nullptr || facts->writesOutside();
+    return facts == nullptr || facts->writesForTheRegion();
 }
 
-bool OperatorTable::writesOutside(std::string_view uri) const {
+bool OperatorTable::writesForTheRegion(std::string_view uri) const {
     const auto id = lookup(uri);
-    return !id || writesOutside(*id);
+    return !id || writesForTheRegion(*id);
 }
 
 namespace {
