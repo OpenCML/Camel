@@ -299,16 +299,15 @@ class ExecPlan {
     /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
     /// constant, nor a node that only forwards).
     std::vector<uint8_t> refProducedAt;
-    /// By topo index: how many references the value this node makes takes beyond the producing one.
-    /// A column about the value, so it stays at the value's own position; where the hold is *taken*
-    /// is `refHoldsAt`.
-    std::vector<uint32_t> refCopiesAt;
-    /// By topo index: how many holds a back end takes when this node has run -- the holds keyed the
-    /// way an instruction is, as `refGiveBackAt` is for the references that come back, so that these
-    /// two columns are the schedule a back end reads. They agree with `refCopiesAt` in total and
-    /// differ in position for a value a CALL or a FILL makes: the node that makes such a value
-    /// writes no rows at its own position, so the holds are taken at the first operator position
-    /// that writes one of the value's rows (exec_plan.cpp, `planRefRows`).
+    /// By topo index: how many holds a back end takes when this node has run -- keyed the way an
+    /// instruction is, as `refGiveBackAt` is for the references that come back, so that these two
+    /// columns are the whole schedule a back end reads. It is also the only column of the holds
+    /// (author review 2026-11-16, item 7): a value's copies were never a position of their own, and
+    /// the second column that said otherwise -- `refCopiesAt`, which kept the same numbers at the
+    /// value's own position -- disagreed with this one exactly where the leak was, at a value a CALL
+    /// or a FILL makes, whose node writes no rows and whose hold is taken at the first operator
+    /// position that writes one of its rows (exec_plan.cpp, `planRefRows`). A reader that wants one
+    /// value's holds sums the `Retain` entries that name it (`refEntries`).
     std::vector<uint32_t> refHoldsAt;
     /// By topo index: how many references come back when this node has run. The same schedule as
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
@@ -318,7 +317,7 @@ class ExecPlan {
     /// reasons, and they are the same fact about the count: the program keeps the value (it is the
     /// graph's result), or a loop reads it again after the round that read it, so the round's
     /// give-back cannot be placed at that use (exec_plan.cpp, `repeatsWithoutMakingIt`). Either way
-    /// the graph is still one of the value's holders when the plan ends, and `refCopiesAt` takes one
+    /// the graph is still one of the value's holders when the plan ends, and `refHoldsAt` takes one
     /// hold per reference the plan does give back, so the balance is meant to end here.
     std::vector<uint8_t> refKeptAt;
     /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
@@ -365,7 +364,7 @@ class ExecPlan {
 
     /// ---- The entries: the holds and the give-backs, as one list per position -----------------
     //
-    // `refCopiesAt` and `refGiveBackAt` are the same schedule counted; this is the schedule as the
+    // `refHoldsAt` and `refGiveBackAt` are the same schedule counted; this is the schedule as the
     // entries a back end reads, one row per thing to do, so that "what the plan says" and "what the
     // count does" can be compared row by row rather than by two totals that happen to agree. A
     // `Retain` at a position is the node's output taking the holds beyond its own; a `GiveBack` is
@@ -538,12 +537,6 @@ void applyRefEntriesForNode(
     camel::core::context::Frame *frame,
     gc_node_ref_t node,
     slot_t produced) noexcept;
-
-/// The measurement switch for the wiring above: one build with it `false` is the control for "the
-/// count is what releases a box" -- with the rows not executed, the same program's `released` must
-/// move, and a reading that does not move says the count took no part in it. It is `true` here and
-/// a run never writes it; a measurement flips it by hand, rebuilds, reads, and puts it back.
-inline constexpr bool kRefEntriesWired = true;
 
 /// How many boxes the node being run made: the sites bracket the operator call with it, and hand
 /// the answer to the call above.

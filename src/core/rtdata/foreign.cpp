@@ -56,13 +56,6 @@ uint64_t loadCounter(const std::atomic<uint64_t> &value) {
     return value.load(std::memory_order_acquire);
 }
 
-/// The kind the state module gives its reference handle (`refDescriptor()` in
-/// modules/state/module.cpp): the blocks with this kind are the boxes a count reclaims, and the
-/// anchor compares their created count producing rows. A string compare per block, and blocks are
-/// made rarely; anything else would need the descriptor to carry a flag into code that does not
-/// know the reference type.
-std::string_view countedKind() { return "state.ref"; }
-
 /// The boxes that a count reclaims which this thread made. An executor reads the program-wide
 /// counter before and after the operator it runs to learn how many boxes that node execution made;
 /// on a scheduler that runs nodes on several threads (std::prl) the program-wide difference around
@@ -86,7 +79,10 @@ ForeignResourceControlBlock::ForeignResourceControlBlock(
     : descriptor_(std::move(descriptor)), resource_(resource),
       debugId_(counters().nextDebugId.fetch_add(1, std::memory_order_acq_rel)) {
     counters().createdControlBlocks.fetch_add(1, std::memory_order_acq_rel);
-    if (descriptor_.kind == countedKind()) {
+    // The type's own module said a count reclaims this kind of block (`ForeignResourceDescriptor::
+    // counted`): no name is compared here, so a module that declares it is counted the day it
+    // declares, and a module that does not is never counted because of how it is wrapped.
+    if (descriptor_.counted) {
         counters().createdCountedBlocks.fetch_add(1, std::memory_order_acq_rel);
         // The per-thread half of the same count (countedBlocksMadeOnThisThread): maintained only
         // while --gc-check asked for the counted blocks, because only the anchor reads it.
@@ -275,8 +271,11 @@ void ForeignResourceObject::dispose() noexcept {
 namespace {
 
 /// The control block of a value a slot may hold a reference to, or null. A counted value is a
-/// `Ref` handle: an ordinary traced wrapper whose control block is the box. Anything else (a python
-/// object, a file handle) answers null and keeps the lifetime it has today.
+/// handle whose module declared the count (`ForeignResourceDescriptor::counted`): the `state`
+/// module's `Ref` declares it, and a python object or a file handle -- wrapped the same way, made
+/// by a descriptor that does not declare it -- answers null here and keeps the lifetime it has
+/// today. The declaration is the whole answer: the kind string is a name for diagnostics and
+/// nothing in the count reads it (author review 2026-11-16, item 7).
 ForeignResourceControlBlock *countedBlockOf(Object *value) noexcept {
     if (value == nullptr) {
         return nullptr;
@@ -286,7 +285,10 @@ ForeignResourceControlBlock *countedBlockOf(Object *value) noexcept {
         return nullptr;
     }
     ForeignResourceControlBlock *control = wrapper->control();
-    return control != nullptr && !control->disposed() ? control : nullptr;
+    if (control == nullptr || control->disposed() || !control->descriptor().counted) {
+        return nullptr;
+    }
+    return control;
 }
 
 } // namespace

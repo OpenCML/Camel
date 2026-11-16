@@ -678,9 +678,9 @@ static bytecode_vec_t compileRuntimeGraph(
         for (const auto &[pc, ref] : sites) {
             const size_t position =
                 ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
-            // The holds are the schedule efHoldsAt keeps and not the efCopiesAt column: the
-            // two agree in total and differ in position for a value a CALL or a FILL makes, whose
-            // harness takes the hold at the first operator position that writes one of its rows.
+            // The holds are refHoldsAt, the plan's only column of them: the second column,
+            // refCopiesAt, kept the same numbers at the value's own position and disagreed for a
+            // value a CALL or a FILL makes, so it is gone (author review 2026-11-16, item 7).
             const uint32_t taken =
                 position < plan.refHoldsAt.size() ? plan.refHoldsAt[position] : 0;
             const uint32_t given =
@@ -690,11 +690,21 @@ static bytecode_vec_t compileRuntimeGraph(
             if (taken == 0 && given == 0 && !produces) {
                 continue;
             }
-            std::cout << "PLAN_REF_SITES " << graph->name() << " at " << pc << " node " << ref
-                      << " +" << taken << " -" << given << (produces ? " produces" : " no-row")
-                      << "\n";
+            // A diagnostic and not the program's output: the log's RefSites scope, written to
+            // stderr with every other log line and off unless a threshold or --log-include asks
+            // for it, so a program's stdout is the program's own (author review 2026-11-16,
+            // item 7). It was std::cout here until then, which put the compiler's dump among the
+            // program's lines and made every plan that reads a program's output skip it.
+            CAMEL_LOG_INFO_S(
+                "RefSites",
+                "PLAN_REF_SITES {} at {} node {} +{} -{} {}",
+                graph->name(),
+                pc,
+                ref,
+                taken,
+                given,
+                produces ? "produces" : "no-row");
         }
-        std::cout.flush();
     }
 
     return bytecodes;

@@ -59,6 +59,10 @@ namespace err = camel::core::error;
 ForeignResourceDescriptor refDescriptor() {
     ForeignResourceDescriptor descriptor;
     descriptor.kind    = "state.ref";
+    // This module owns the type, so this module is the one that says it: a count reclaims the box
+    // (rtdata/foreign.h, `ForeignResourceDescriptor::counted`). The kind above is the type's name
+    // for diagnostics, and nothing in the count compares it.
+    descriptor.counted = true;
     descriptor.deleter = [](void *resource) { delete static_cast<RefBox *>(resource); };
     // The content is not traced through the wrapper: a traced content is held by the box's own
     // root (ref.cpp), so the collector neither reads nor rewrites anything here.

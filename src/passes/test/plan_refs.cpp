@@ -87,13 +87,23 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                 }
             }
         }
+        // The copies of each value, read from the holds the plan takes for it: the plan has one
+        // column of the holds (`refHoldsAt`, by the position that takes them) and the entries are
+        // the same schedule as rows, so a value's copies are the `Retain` rows that name it. One
+        // table of the holds, one answer (author review 2026-11-16, item 7).
+        std::unordered_map<gc_node_ref_t, size_t> copiesOf;
+        for (const ExecPlan::RefEntry &entry : plan.refEntries) {
+            if (entry.kind == ExecPlan::RefEntryKind::Retain) {
+                copiesOf[entry.value] += entry.count;
+            }
+        }
         for (size_t i = 0; i < plan.topo.size(); ++i) {
             const gc_node_ref_t ref = plan.topo[i];
             if (i < plan.refProducedAt.size() && plan.refProducedAt[i] != 0) {
                 const GCNode *node = graph->node(ref);
                 os << "PLAN_REFS " << name << " at " << i << " value " << ref << " kind "
                    << (node == nullptr ? -1 : static_cast<int>(node->kind)) << " copies "
-                   << plan.refCopiesAt[i] << " kept " << static_cast<int>(plan.refKeptAt[i])
+                   << copiesOf[ref] << " kept " << static_cast<int>(plan.refKeptAt[i])
                    << " uses " << usesOf[ref] << "\n";
             }
             for (const ExecPlan::RefGiveBack &row : plan.refGiveBacksAt(i)) {
@@ -101,10 +111,9 @@ PlanRefsTestPass::apply(const camel::runtime::Program *program, std::ostream &os
                    << row.value << " x" << row.count << "\n";
             }
             // The same schedule keyed the way an instruction is: what a back end emitted at this
-            // position would do, one count for the holds taken and one for the ones given back. The
-            // holds are `refHoldsAt` and not `refCopiesAt` because the two differ in position for a
-            // value a CALL or a FILL makes: the node that makes it takes no hold itself, the first
-            // operator position that writes one of its rows does.
+            // position would do, one count for the holds taken and one for the ones given back.
+            // `refHoldsAt` is the plan's only column of the holds (author review 2026-11-16, item 7),
+            // so what is printed here is what a back end reads.
             const uint32_t taken = i < plan.refHoldsAt.size() ? plan.refHoldsAt[i] : 0;
             const uint32_t given = i < plan.refGiveBackAt.size() ? plan.refGiveBackAt[i] : 0;
             if (taken != 0 || given != 0) {

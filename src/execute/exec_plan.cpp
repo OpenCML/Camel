@@ -1084,7 +1084,6 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     const auto &carried       = uses.carried;
     const auto &usesAt        = uses.usesAt;
     const auto &keptByProgram = uses.keptByProgram;
-    plan.refCopiesAt.assign(count, 0);
     plan.refHoldsAt.assign(count, 0);
     plan.refProducedAt.assign(count, 0);
     plan.refKeptAt.assign(count, 0);
@@ -1205,7 +1204,6 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
         // a loop held -- and a row no position took lowers it by one, because the reference that row
         // would have given back is then one the program still holds.
         copies = held + (kept ? 1u : 0u) - 1u;
-        plan.refCopiesAt[idx] = copies;
         if (counted && copies != 0 && !rowRunsAt(static_cast<uint32_t>(idx))) {
             // The value's own position takes no hold, so they are taken at the first position that
             // writes one of the value's rows: before that row's give-back, where the value is held.
@@ -1261,30 +1259,28 @@ void planRefRows(const GCGraph &graph, ExecPlan &plan, const ValueUses &uses) {
     // a port, a GATE and a JOIN carry another node's slot and make no value of their own, so a
     // lookup that found one of them would apply a row at the wrong place. Built once with the rows,
     // so the run pays one array read and not a table search on the operator's path.
-    if constexpr (kRefEntriesWired) {
-        gc_data_idx_t widest = 0;
-        for (size_t idx = 0; idx < count; ++idx) {
-            if (plan.refProducedAt[idx] == 0) {
-                continue;
-            }
-            const GCNode *node = graph.node(plan.topo[idx]);
-            if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
-                continue;
-            }
-            widest = std::max(widest, node->dataIndex);
+    gc_data_idx_t widest = 0;
+    for (size_t idx = 0; idx < count; ++idx) {
+        if (plan.refProducedAt[idx] == 0) {
+            continue;
         }
-        plan.refOperNodeBySlot.assign(
-            static_cast<size_t>(widest) + 1, static_cast<uint32_t>(kInvalidNodeRef));
-        for (size_t idx = 0; idx < count; ++idx) {
-            if (plan.refProducedAt[idx] == 0) {
-                continue;
-            }
-            const GCNode *node = graph.node(plan.topo[idx]);
-            if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
-                continue;
-            }
-            plan.refOperNodeBySlot[static_cast<size_t>(node->dataIndex)] = plan.topo[idx];
+        const GCNode *node = graph.node(plan.topo[idx]);
+        if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
+            continue;
         }
+        widest = std::max(widest, node->dataIndex);
+    }
+    plan.refOperNodeBySlot.assign(
+        static_cast<size_t>(widest) + 1, static_cast<uint32_t>(kInvalidNodeRef));
+    for (size_t idx = 0; idx < count; ++idx) {
+        if (plan.refProducedAt[idx] == 0) {
+            continue;
+        }
+        const GCNode *node = graph.node(plan.topo[idx]);
+        if (node == nullptr || node->kind != GCNodeKind::Oper || node->dataIndex <= 0) {
+            continue;
+        }
+        plan.refOperNodeBySlot[static_cast<size_t>(node->dataIndex)] = plan.topo[idx];
     }
 }
 
@@ -1357,7 +1353,7 @@ void applyRefEntriesAtPosition(
     camel::core::context::Frame *frame,
     size_t position,
     slot_t produced) noexcept {
-    if (!kRefEntriesWired || frame == nullptr || plan.graph == nullptr) {
+    if (frame == nullptr || plan.graph == nullptr) {
         return;
     }
     const std::span<const ExecPlan::RefEntry> entries = plan.refEntriesAt(position);
@@ -1422,8 +1418,10 @@ size_t ExecPlan::refProducedTotal() const {
 }
 
 size_t ExecPlan::refCopiesTotal() const {
+    // One table of the holds (`refHoldsAt`), read as its total: the number of `Retain` rows is the
+    // same number, because a hold and the row that takes it are written together.
     return static_cast<size_t>(
-        std::accumulate(refCopiesAt.begin(), refCopiesAt.end(), uint64_t{0}));
+        std::accumulate(refHoldsAt.begin(), refHoldsAt.end(), uint64_t{0}));
 }
 
 size_t ExecPlan::refGiveBacksTotal() const {

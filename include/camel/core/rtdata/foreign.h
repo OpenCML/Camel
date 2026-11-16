@@ -53,6 +53,14 @@ struct ForeignResourceDescriptor {
     bool finalizable             = true;
     bool movable                 = true;
     bool pinned                  = false;
+    /// The module that owns the type declares that a count reclaims its resources:
+    /// `retainCountNow`/`giveBackCountNow` (below) apply to a block only when its descriptor says
+    /// so, and the anchor counts only these blocks. Declared by the type's owner and by nothing
+    /// else -- the kind string is a name for diagnostics and is not an identity the count reads
+    /// (author review 2026-11-16, item 7: the count recognized `"state.ref"` by comparing `kind`,
+    /// which made the module's own name a fact of the runtime and would have counted any other
+    /// module's handle the day it was wrapped the same way).
+    bool counted = false;
 };
 
 class ForeignResourceControlBlock final {
