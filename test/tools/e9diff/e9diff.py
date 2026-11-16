@@ -391,11 +391,76 @@ def read_baseline():
 RATCHET = ["programs_wrong", "programs_refused", "programs_crashed",
            "cells_wrong", "cells_refused", "cells_crashed"]
 
+# The three classes, each with its own two numbers. They are reported and judged apart because they
+# say different things: a wrong value and a refusal both say "this program's answer is not usable",
+# and a crash says "there is no answer" -- one class coming down does not pay for another going up,
+# and a single combined sentence ("3 below, 3 above") reads as if it did.
+CLASSES = [("wrong", "programs_wrong", "cells_wrong"),
+           ("refused", "programs_refused", "cells_refused"),
+           ("crashed", "programs_crashed", "cells_crashed")]
+
+# What decides whether two runs are the same measurement at all. The seed range is not enough: the
+# generator decides which seeds are rejects, and it changes -- on 2026-11-16 the same `seeds 1..500`
+# held 320 programs in the matrix under the 11-14 generator and 227 under the current one -- so a
+# comparison that only checked `matrix` and `seeds` compared two different populations and reported
+# the result as a trend. A run whose population moved is not compared, and says why.
+POPULATION = ["programs_in_matrix", "generator_rejects"]
+
+
+def population_break(baseline, numbers: dict) -> str:
+    """Why this run cannot be compared with that baseline over the program population, or ''."""
+    moved, unrecorded = [], []
+    for key in POPULATION:
+        old, new = baseline.get(key), numbers.get(key)
+        if old is None:
+            unrecorded.append(key)
+        elif new is not None and old != new:
+            moved.append(f"{key} {old}->{new}")
+    if unrecorded:
+        return (f"the baseline records no {', '.join(unrecorded)}, so the programs it counted cannot "
+                f"be compared with the {numbers.get('programs_in_matrix')} this run put in the "
+                f"matrix; record the baseline again (--update-baseline)")
+    if moved:
+        return (f"the program population changed: {', '.join(moved)} -- the generator decides which "
+                f"seeds are rejects, so {numbers.get('programs_in_matrix')} programs today and "
+                f"{baseline.get('programs_in_matrix')} when the baseline was taken are not one trend")
+    return ""
+
+
+def class_verdicts(baseline, numbers: dict) -> list:
+    """One (class, old, new, verdict) row per class: each class is judged on its own, so a class
+    that got worse is named even when another got better."""
+    rows = []
+    for name, pk, ck in CLASSES:
+        old = (baseline.get(pk), baseline.get(ck))
+        new = (numbers.get(pk), numbers.get(ck))
+        if None in old or None in new:
+            rows.append((name, old, new, "unrecorded"))
+            continue
+        worse = new[0] > old[0] or new[1] > old[1]
+        better = new[0] < old[0] or new[1] < old[1]
+        verdict = "worse" if worse else ("better" if better else "held")
+        rows.append((name, old, new, verdict))
+    return rows
+
+
+def format_class_rows(rows: list) -> list:
+    lines = []
+    for name, old, new, verdict in rows:
+        if verdict == "unrecorded":
+            lines.append(f"[E9] class {name:<8} not recorded by the baseline")
+            continue
+        lines.append(f"[E9] class {name:<8} programs {old[0]}->{new[0]}   cells {old[1]}->{new[1]}"
+                     f"   verdict={verdict}")
+    return lines
+
 
 def compare_to_baseline(baseline, numbers: dict, matrix: str, seeds: str) -> tuple:
     """(rose, fell, skipped). Only the full run is a ratchet, and only over the seeds the baseline
     covers: two samples of the generator cannot be read as one trend, and a silent "held" over a
-    range the baseline does not cover is the reading that makes a ratchet useless."""
+    range the baseline does not cover is the reading that makes a ratchet useless. The seeds being
+    the same is necessary and not sufficient -- `population_break` is the other half, and a run it
+    refuses is reported as not comparable rather than as a number that stayed the same."""
     if not baseline:
         return {}, {}, "no baseline"
     if baseline.get("matrix") != matrix:
@@ -403,6 +468,9 @@ def compare_to_baseline(baseline, numbers: dict, matrix: str, seeds: str) -> tup
                         f"ratchet")
     if baseline.get("seeds") != seeds:
         return {}, {}, f"the baseline covers seeds {baseline.get('seeds')}, this run is {seeds}"
+    broke = population_break(baseline, numbers)
+    if broke:
+        return {}, {}, broke
     rose = {k: (baseline[k], numbers[k]) for k in RATCHET
             if k in numbers and numbers[k] > baseline.get(k, numbers[k])}
     fell = {k: (baseline[k], numbers[k]) for k in RATCHET
@@ -471,6 +539,16 @@ def cmd_run(a) -> int:
         print(f"[E9] beside the three numbers: {summary['other_findings']}")
     print(f"[E9] {seconds:.0f} s, {a.jobs} programs at a time, "
           f"{summary['cells_total'] / max(seconds, 1e-9):.1f} cells/s")
+    # The verdict is read against the baseline this run found, before anything is written: a
+    # re-record that reported only "held" -- because it then compared the file it had just written
+    # with itself -- would launder the very movement that made somebody re-record.
+    old_baseline = read_baseline()
+    rose, fell, skipped = compare_to_baseline(old_baseline, summary, matrix, seeds_text)
+    rows = []
+    if not skipped and old_baseline:
+        rows = class_verdicts(old_baseline, summary)
+        for line in format_class_rows(rows):
+            print(line)
     if a.update_baseline:
         if matrix != "full":
             print("[E9] the ratchet is the full run; --update-baseline refused", file=sys.stderr)
@@ -479,13 +557,26 @@ def cmd_run(a) -> int:
             numbers.update(
                 what="the E9 three numbers a merge is compared with (only down, never up)",
                 matrix=matrix, pin=summary["pin"], seeds=seeds_text,
+                recorded_on=datetime.date.today().isoformat(),
                 programs=summary["programs"], generator_rejects=summary["generator_rejects"],
                 programs_in_matrix=summary["programs_in_matrix"],
                 cell_outcomes=summary["cell_outcomes"])
+            if a.baseline_note:
+                numbers["note"] = a.baseline_note
             BASELINE.write_text(json.dumps(numbers, indent=1) + "\n",
                                 encoding="utf-8", newline="\n")
             print(f"[E9] baseline written: {BASELINE}")
-    rose, fell, skipped = compare_to_baseline(read_baseline(), summary, matrix, seeds_text)
+            if skipped:
+                print(f"[E9] recorded as the new zero; the baseline it replaced was not "
+                      f"comparable -- {skipped}")
+            else:
+                worse = [name for name, _old, _new, verdict in rows if verdict == "worse"]
+                print("[E9] recorded as the new zero"
+                      + (f"; against the baseline it replaced, {', '.join(worse)} was worse"
+                         if worse else "; against the baseline it replaced, nothing was worse")
+                      + " -- the new file is the point this ratchet moves from, not a judgement "
+                        "that the old numbers did not happen")
+            return 0
     if skipped:
         print(f"[E9] baseline {BASELINE.name}: not compared -- {skipped}")
         return 0
@@ -862,6 +953,9 @@ def main(argv=None) -> int:
     p.add_argument("--jobs", type=int, default=4, help="programs at a time")
     p.add_argument("--update-baseline", action="store_true",
                    help=f"record this run's three numbers in {BASELINE.name} (full matrix only)")
+    p.add_argument("--baseline-note", default="",
+                   help=f"a line written into {BASELINE.name} beside the numbers: why this zero was "
+                        f"taken, in the words of whoever took it")
     p.set_defaults(fn=cmd_run)
     p = sub.add_parser("analyze")
     p.add_argument("--out", required=True)
