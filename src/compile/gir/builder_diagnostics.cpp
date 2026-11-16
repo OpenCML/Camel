@@ -699,8 +699,107 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
     // nothing needs, and the region it is written in -- a fact about the value, not about how far
     // the statement reaches (design principles 3.1 and 3.3, the ruling of 2026-11-16: a write of a
     // handle is used by the region it is written into, by the same rule as an outside write).
+    //
+    // What makes such a write's value dead is that no read takes it, and the walk above does not
+    // answer that: it answers whether a read goes *through the write's own node*. There are two
+    // ways a read takes the value and leaves that node with no user of its own.
+    //
+    // The first is the fold (Builder::collapseNonEscapingVariableReads): a read of a `var` the
+    // builder could keep out of a cell takes the value the write stores and not the write -- the
+    // read is handed the write's second operand -- so the write's node ends up with no consumer
+    // while the value it stored is read by everything after it. Asking the walk alone reported
+    // exactly those writes (`t = t + 1` followed by a read of `t`, the ordinary way a counter is
+    // written), which made the warning contradict its own text and `-Werror` refuse a legal
+    // program.
+    //
+    // The second is a variable that kept its cell: there the read is a `:var/get` of the cell and
+    // the edge runs from the write to that read, because the store's result is the cell's new
+    // state. `needed` cannot answer this one either -- a `sync` body chains every statement into
+    // the next one's CTRL and SYNC inputs, so the walk holds a store whose result nobody reads.
+    //
+    // So the value is read when any of these holds: the node computing the stored value has a user
+    // other than the write; the write has a user that takes its result as a value; or the stored
+    // value is a root the walk started from (the result of a body is a node and not an edge to one
+    // -- `setGraphReturnFromResult` names `returnNode` as the value itself -- so a returned value
+    // has no user to be found). A compound assignment (`__assn_add__`, `__assn_sub__`, ...) computes
+    // the value it stores itself, so it has no operand to ask about and the walk is its whole
+    // answer.
+    const auto storedValueIsRead = [&](draft_node_ref_t writeId, const std::string &name) {
+        if (name != "__assn__" && name != "__assn_owned__") {
+            return false;
+        }
+        const auto operands = draft.normInputsOf(writeId);
+        if (operands.size() < 2) {
+            return false;
+        }
+        // The stored value itself, taken by anything that is not this write.
+        for (auto users : {draft.normUsersOf(operands[1]), draft.withUsersOf(operands[1])}) {
+            for (draft_node_ref_t user : users) {
+                if (user != writeId && draft.alive(user)) {
+                    return true;
+                }
+            }
+        }
+        // The write's result, taken as a value: the `:var/get` of a variable that kept its cell,
+        // and every read standing after it. Another store of the same variable is not a read --
+        // `t = 1; t = 2` hands the cell's state on and reads neither value -- so a store is skipped.
+        for (auto users : {draft.normUsersOf(writeId), draft.withUsersOf(writeId)}) {
+            for (draft_node_ref_t user : users) {
+                if (!draft.alive(user)) {
+                    continue;
+                }
+                node_handle_t userNode = draft.ref(user);
+                if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
+                    return true;
+                }
+                const auto userTarget = graph->operTarget(userNode);
+                if (userTarget == nullptr || !userTarget->name().starts_with("__assn")) {
+                    return true;
+                }
+            }
+        }
+        // The stored value as a root of the walk, asked only of a write the walk does not hold: a
+        // write it does hold hands its own operand into the set, and that says nothing about a read.
+        return !needed.contains(writeId) && needed.contains(operands[1]);
+    };
+    // Whether this graph is the whole story of the cell a write stores into: a cell of this graph,
+    // not a `var` parameter (a `Port`, whose value the caller reads after the call: `func swap(var
+    // x: int, v: int)` stores `v` for its caller and nothing in its own body reads it), and used by
+    // no one but the writes of this body. Any other user -- a read of the cell, a closure that
+    // captured it, a call it was handed to as a `var` argument -- is a way for the value to be read
+    // that this graph cannot see, and then nothing here can say the value is read by nobody.
+    const auto cellIsThisGraphsAlone = [&](draft_node_ref_t writeId) {
+        const auto operands = draft.normInputsOf(writeId);
+        if (operands.empty()) {
+            return false;
+        }
+        const draft_node_ref_t cell = operands[0];
+        if (!draft.isNamedBy(draft.ref(cell)) || !draft.alive(cell)) {
+            return false;
+        }
+        if (nodeKindOf(draft.ref(cell)) == runtime::GCNodeKind::Port) {
+            return false;
+        }
+        for (auto users :
+             {draft.normUsersOf(cell), draft.withUsersOf(cell), draft.ctrlUsersOf(cell)}) {
+            for (draft_node_ref_t user : users) {
+                if (!draft.alive(user)) {
+                    continue;
+                }
+                node_handle_t userNode = draft.ref(user);
+                if (nodeKindOf(userNode) != runtime::GCNodeKind::Oper) {
+                    return false;
+                }
+                const auto userTarget = graph->operTarget(userNode);
+                if (userTarget == nullptr || !userTarget->name().starts_with("__assn")) {
+                    return false;
+                }
+            }
+        }
+        return true;
+    };
     for (draft_node_ref_t id = 0; id < draft.nodeSlotCount(); ++id) {
-        if (!draft.alive(id) || needed.contains(id)) {
+        if (!draft.alive(id)) {
             continue;
         }
         if (graph == rootGraph_ && !(id < rootNodeOwners_.size() && rootNodeOwners_[id] == unit_)) {
@@ -712,6 +811,19 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         const auto target = graph->operTarget(node);
         if (target == nullptr || !target->name().starts_with("__assn")) {
+            continue;
+        }
+        if (storedValueIsRead(id, target->name())) {
+            continue;
+        }
+        // A write that does not run cannot have a reader: nothing it would store is ever there, so
+        // the report stands wherever the cell lives. A write that runs is another matter. Then,
+        // when its cell leaves this graph -- a `var` parameter a caller reads after the call, a
+        // module-level `var` another body reads -- some read this graph cannot see may take the
+        // value, and nothing here can say it is read by nobody. A `sync` block is where a write
+        // whose value nobody reads still runs, because it is a statement of the chain; that is why
+        // this is asked of the write that runs and not of the walk above, which holds it there.
+        if (needed.contains(id) && !cellIsThisGraphsAlone(id)) {
             continue;
         }
         camel::source::origin_id_t origin = nodeDraftOf(node)->nodeOrigin(nodeIdOf(node));
