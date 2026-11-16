@@ -4160,6 +4160,7 @@ efab554bc7d04c9f ok test/cases/tools/grammar/modules.cml
 3b974939468e927b ok test/cases/tools/lsp/fixtures/fstring.cml
 3f67a52cdb83d557 ok test/cases/tools/lsp/fixtures/main.cml
 04fef704f00dc031 ok test/cases/tools/lsp/fixtures/shapes.cml
+819f0f804565b00f ok test/cases/tools/lsp/fixtures/warned.cml
 11f616c41df7cf7f ok test/cases/trans/canon_order_run.cml
 43b6754390557202 ok test/cases/trans/canonical_opt_static_slot.cml
 a21779e66201c700 ok test/cases/trans/cml_canon_attr_a.cml
