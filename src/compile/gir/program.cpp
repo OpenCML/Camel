@@ -641,7 +641,6 @@ size_t Builder::sourceOffsetOf(camel::source::origin_id_t origin) const {
 void Builder::scanProgramWriters() {
     programWriters_.clear();
     programValueNames_.clear();
-    lastWriteOffset_.clear();
     handedOver_.clear();
     // A group whose name starts with `__assn` is an assignment: `__assn__` for `=`, a compound form
     // (`__assn_add__`) and `__assn_owned__` for a rebinding to an in-place operator (design
@@ -770,16 +769,6 @@ void Builder::scanProgramWriters() {
                     const std::set<std::string> &parameters = parametersIn(function);
                     if (parameters.find(variable->name()) == parameters.end()) {
                         programWriters_[variable->name()].insert(function);
-                        // Where the write is written, so that a capture can tell a variable no
-                        // write is written past from one a write is. The span of the assignment
-                        // is what says it: the write starts at the name it writes.
-                        const size_t at = sourceOffsetOf(node->origin());
-                        if (at != kNoSourceOffset) {
-                            size_t &last = lastWriteOffset_[variable->name()];
-                            if (last < at) {
-                                last = at;
-                            }
-                        }
                     }
                 }
             }
@@ -803,6 +792,10 @@ void Builder::scanProgramWriters() {
             const GCT::node_ptr_t child = node->at(i);
             if (child != nullptr && !(calleeFirst && i == 0) &&
                 (child->type() == GCT::NodeKind::DREF || child->type() == GCT::NodeKind::NREF)) {
+                // The callee of a `LINK`, a `WITH` and a `TAPP` is the first child and is skipped
+                // above: `f(1)` calls `f`, and a name read anywhere else is a value the program
+                // wants. An assignment's target is a name this scan already counted as a write of
+                // `programWriters_`, and being read as a value here changes nothing.
                 programValueNames_.insert(child->name());
                 // A name handed to a call is a name a call may write: an ordinary parameter is a
                 // copy, but a `var` one is the caller's cell, and this scan cannot tell which is
