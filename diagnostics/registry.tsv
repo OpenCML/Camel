@@ -32,6 +32,16 @@ syntax	WhenAfterBody	0x000010	error	A 'when' condition comes before what it guar
 # naming the parentheses is what keeps the program from being told only that a token did not fit.
 syntax	LambdaParametersNeedParentheses	0x000012	error	A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'.	A lambda's parameters are written in parentheses, and a parameter list destructured as a tuple is written '((a, b)) => e' (design principles 5.9). An unparenthesised 'x => e' is not a lambda: inside a rule body the '=>' is the rule's own arrow (rule r(x: int) {{ x => x }}), so the two readings would collide and no unparenthesised spelling is added. What is written here is an expression followed by an arrow that fits nothing; if a rewrite was meant, it is declared with 'rule'.	edit
 #
+# A range has only a bounded form (design principles 4.2; the author's ruling of 2026-11-16): there
+# is no open `a..` that counts on forever, counting until a condition holds is a counting `while`
+# loop, and no syntax is added for one. `..` is an operator, so `1..` makes the parser read the token
+# that follows as its missing right operand and stop on it -- usually the keyword that starts the
+# next line, which is the one token in the file that is not wrong. Naming the range is what keeps
+# the program from being told that a token on the following line did not fit. The readings of `..`
+# that have two operands are untouched: `a..b` is the interval, `f..g` is the composition, and `T..`
+# is the stream mark of a type.
+syntax	IntervalHasNoOpenForm	0x000015	error	An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side.	A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.	none: choice: the replacement is another construct the writer chooses -- an interval with both ends, a counting 'while' loop, or 'range(a, b, step)'
+#
 # Warnings (severity bits = Warn).
 syntax	ComparisonAcrossLines	0x100001	warn	This '>' is read as a comparison with the next line, which starts with {0}: two statements may have been joined into one.	A '>' after a space, at the end of a line, is the comparison operator, and the expression goes on with the next line. The '>' that closes '<...>' arguments touches the last argument; a chain of comparisons (a < b > c) is never what a program means.	none: choice: the text to write instead is the writer's
 # Errors
