@@ -117,19 +117,30 @@ void dumpStorageReuse(
             }
             const std::string_view uri                  = body->uri();
             const std::optional<std::string_view> plain = table.plainForm(uri);
-            // The three shapes an update node has. The in-place form of an operator: the plan
+            // The shapes an update node has. The in-place form of an operator: the plan
             // decided it, because its array comes from a cell's `:var/take`. The loop-state append:
             // no cell and no decision. And the *copying* form of an operator that has an in-place
             // form -- `v = v->append(x)` on an array the compiler did not hand over, or one it
             // could not prove unshared -- which allocates the new storage and hands it back. All
             // three are the update the program wrote; leaving the third one out would be the
             // silence this command exists to remove, and `copied` is the answer it must be able to
-            // give. An operator with neither form returns a new value and never had the option of
-            // reusing its input's storage; that is not an update.
+            // give. An operator that has neither form and declares nothing returns a new value and
+            // never had the option of reusing its input's storage; that is not an update.
             const bool loopStateAppend = uri == kAppendOwned;
             const bool copyingForm =
                 !plain.has_value() && !loopStateAppend && table.inPlaceForm(uri).has_value();
-            if (!plain.has_value() && !loopStateAppend && !copyingForm) {
+            // The fourth shape: an operator that declares it reuses an operand
+            // (`OperatorTable::declareReusesOperand`). `nn:sgd` is the one the direct-SSA plan's
+            // S3b names -- `sgd(params, g, lr)` answers a parameter tree whose storage is the one
+            // it was handed, and `nn:adam` answers the tree and the state it was handed the same
+            // way -- and no in-place form can say it: the value is a *tree* the operator walks
+            // leaf by leaf, not the one array `setInPlaceForm` names. The declaration is the
+            // operator's own promise that the write asks the array's count at the leaf (design
+            // principles 10.5), so the node is an update and its answer is `by-count`; without it
+            // the node was left out and a training step read `updates 0` -- silence about the one
+            // update such a program makes.
+            const bool declaredReuse = table.reusesOperand(uri);
+            if (!plain.has_value() && !loopStateAppend && !copyingForm && !declaredReuse) {
                 continue;
             }
             const StorageReuse decided = index < plan.storageReuseAt.size()
@@ -138,8 +149,10 @@ void dumpStorageReuse(
             // An in-place form the plan decided nothing about is one whose array did not come from
             // a cell's own `:var/take`. The back end still runs the in-place form the node names,
             // and that form asks the array at run time (Array::canWriteInPlace), which is the
-            // `by-count` reading. The loop-state append asks the array by construction. The copying
-            // form allocates by construction, which is `copied`.
+            // `by-count` reading. The loop-state append asks the array by construction, and so does
+            // an operator that declared it reuses an operand: the plan has no cell to read a
+            // decision for a tree it never sees as one value, so `decided` is `None` for both. The
+            // copying form allocates by construction, which is `copied`.
             const StorageReuse read = copyingForm
                                           ? StorageReuse::Copy
                                           : (!plain.has_value() || decided == StorageReuse::None

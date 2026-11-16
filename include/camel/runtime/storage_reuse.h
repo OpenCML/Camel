@@ -43,8 +43,14 @@ class Program;
  * for `array:sort_i`), the same name for the copying form of that operator, or the loop-state
  * append's own name (`append` for `:struct/append_arr_owned`). The three shapes are the three ways
  * `v = v->append(x)` reaches the graph, and all three are reported: a call that copies is an update
- * too, and the reading that says it allocates is the one it exists for. `<verdict>` is the plan's
- * answer:
+ * too, and the reading that says it allocates is the one it exists for. A fourth shape is an
+ * operator that declares it reuses an operand (`OperatorTable::declareReusesOperand`): `nn:sgd`'s
+ * `sgd(params, g, lr)` answers a parameter tree whose storage is the one it was handed, and no
+ * in-place form can say that, because the value is a tree the operator walks leaf by leaf rather
+ * than one array. It is reported the same way, by the name the program writes (`sgd`), and its
+ * answer is `by-count`: the plan has no cell to prove anything from, so the leaf's own count
+ * answers (design principles 10.5) -- which is why a program whose only update is a training
+ * step's `sgd` reads one row and not `updates 0`. `<verdict>` is the plan's answer:
  *
  *   in-place  the plan proved the old value has no other holder and hands its storage to the
  *             update (StorageReuse::Input);
@@ -55,7 +61,9 @@ class Program;
  *             nothing about is read the same way, because that is what the back end runs
  *             (ExecPlan::operatorUriFor names the in-place form, which asks the array); so is the
  *             loop-state append (`:struct/append_arr_owned`), which has no cell to read a decision
- *             from and asks Array::writableInPlace by construction;
+ *             from and asks Array::writableInPlace by construction; and so is an operator that
+ *             declared it reuses an operand (`nn:sgd`, `nn:adam`), which asks the same question at
+ *             each leaf of the tree it was handed;
  *   copied    the plan proved the old value has a holder the update must leave alone
  *             (StorageReuse::Copy), or the node is the copying form of an operator that has an
  *             in-place form -- `v = v->append(x)` on an array the compiler did not hand over, where
