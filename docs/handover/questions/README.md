@@ -5,11 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：2 页
+## 现在在等作者：4 页
 
 | 页 | 问什么 |
 | --- | --- |
+| [`2026-11-16-a-stream-values-type-does-not-mention-its-captures`](2026-11-16-a-stream-values-type-does-not-mention-its-captures.cn.md) | 流值的类型说「我不捕获」，它的端口说「我捕获了三个」 |
 | [`2026-11-16-casevm-does-not-compile-in-any-configuration`](2026-11-16-casevm-does-not-compile-in-any-configuration.cn.md) | `casevm.cpp` 在任何配置下都编不出来：删掉还是连 20 处一起修？ |
+| [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ |
 | [`2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad`](2026-11-16-what-pins-the-break-rate-edit-once-the-case-study-runs-on-the-librarys-grad.cn.md) | 案例一旦改用库的 `grad`，`break_rate` 那个重写该怎么钉？ |
 
 ## 生成器不会删的行：119 行（页已不在 `questions/` 里）
