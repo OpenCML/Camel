@@ -5,12 +5,13 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：2 页
+## 现在在等作者：3 页
 
 | 页 | 问什么 |
 | --- | --- |
 | [`2026-11-15-does-an-unused-external-read-report-effect-not-executed`](2026-11-15-does-an-unused-external-read-report-effect-not-executed.cn.md) | 没人用的外部读，还要报 `EffectNotExecuted` 吗？ |
 | [`2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var`](2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md) | 生成器体里的闭包捕获 `var`，为什么留格子？ |
+| [`2026-11-16-what-holds-a-generator-local-that-is-not-written-yet`](2026-11-16-what-holds-a-generator-local-that-is-not-written-yet.cn.md) | 生成器状态按值传递时，「还没写过的局部」用什么表示？ |
 
 ## 生成器不会删的行：115 行（页已不在 `questions/` 里）
 
