@@ -40,6 +40,47 @@ using sem::AccessMode;
 using sem::ResourceClass;
 using sem::ResultAlias;
 
+// ---- Which port of a graph an access came through -------------------------------------------------
+
+size_t declaredWithPorts(const GCGraph &graph) {
+    const auto with     = graph.withPorts();
+    const auto captured = graph.captureNames();
+    // A graph whose captures are closure ports holds none of them among its `with` ports, and a
+    // table longer than the list is not a graph the builder makes -- and must not underflow a
+    // count either. Both read as "every `with` port is declared".
+    if (!graph.closureNodes().empty() || captured.size() > with.size()) {
+        return with.size();
+    }
+    return with.size() - captured.size();
+}
+
+PortPlacement portPlacement(const GCGraph &graph, gc_node_ref_t ref) {
+    const auto closure = graph.closureNodes();
+    for (size_t i = 0; i < closure.size(); ++i) {
+        if (closure[i] == ref) {
+            return {PortGroup::Capture, i};
+        }
+    }
+    const auto with       = graph.withPorts();
+    const size_t declared = declaredWithPorts(graph);
+    for (size_t i = 0; i < with.size(); ++i) {
+        if (with[i] != ref) {
+            continue;
+        }
+        // Past the declared ones, a `with` port is a capture, and its number is its position in
+        // the capture table -- not its index among the `with` ports.
+        return i < declared ? PortPlacement{PortGroup::With, i}
+                            : PortPlacement{PortGroup::Capture, i - declared};
+    }
+    const auto norm = graph.normPorts();
+    for (size_t i = 0; i < norm.size(); ++i) {
+        if (norm[i] == ref) {
+            return {PortGroup::Norm, i};
+        }
+    }
+    return {};
+}
+
 namespace {
 
 // ---- Small helpers ----------------------------------------------------------------------------
@@ -53,10 +94,6 @@ gc_node_ref_t throughGates(const GCGraph &graph, gc_node_ref_t ref) {
         ref = graph.normInputsOf(ref).back();
     }
     return ref;
-}
-
-bool contains(std::span<const gc_node_ref_t> refs, gc_node_ref_t ref) {
-    return std::find(refs.begin(), refs.end(), ref) != refs.end();
 }
 
 /// The union of two modes of access to one resource.
@@ -276,17 +313,31 @@ GraphFootprint FootprintWalk::of(const GCGraph *graph) {
                 addAny(fp, access.resource.cls);
                 continue;
             }
-            // A port: which one.
-            const auto indexIn = [&](std::span<const gc_node_ref_t> ports) {
-                return static_cast<uint8_t>(std::find(ports.begin(), ports.end(), origin.node) - ports.begin());
-            };
+            // A port: which one, and how the graph's own numbering names it. `portPlacement` is the
+            // one reading of that question: a `with` port past the declared ones is a capture, and
+            // its number is the capture's position -- not the port's index among the `with` ports,
+            // which is what a declared clause never says (`Builder::numberBodyPorts`).
+            const camel::runtime::PortPlacement placement =
+                camel::runtime::portPlacement(*graph, origin.node);
             sem::ResourceBinding binding;
-            if (contains(graph->normPorts(), origin.node)) {
-                binding = {sem::ResourceBinding::Kind::Norm, indexIn(graph->normPorts())};
-            } else if (contains(graph->withPorts(), origin.node)) {
-                binding = {sem::ResourceBinding::Kind::With, indexIn(graph->withPorts())};
-            } else {
-                binding = {sem::ResourceBinding::Kind::Capture, indexIn(graph->closureNodes())};
+            switch (placement.group) {
+            case camel::runtime::PortGroup::Norm:
+                binding = {sem::ResourceBinding::Kind::Norm, static_cast<uint8_t>(placement.index)};
+                break;
+            case camel::runtime::PortGroup::With:
+                binding = {sem::ResourceBinding::Kind::With, static_cast<uint8_t>(placement.index)};
+                break;
+            case camel::runtime::PortGroup::Capture:
+                binding = {
+                    sem::ResourceBinding::Kind::Capture, static_cast<uint8_t>(placement.index)};
+                break;
+            case camel::runtime::PortGroup::None:
+                // A port of no group: the graph does not number it, so no clause can name it. That
+                // is an access of no nameable resource, not a capture whose number might match one
+                // a clause wrote, so it is read as unknown of its class -- the reading a declared
+                // clause can only cover through `any`.
+                addAny(fp, access.resource.cls);
+                continue;
             }
             addAccess(
                 fp,
@@ -377,17 +428,28 @@ NodeResources Resolver::accessesOf(const GCGraph &graph, gc_node_ref_t ref) cons
                 ref);
         }
         const auto with = graph.withInputsOf(ref);
+        // A direct call hands its callee's captures in as `with` inputs after the declared `with`
+        // arguments (`Builder::linkCaptureSites`), so a capture names a value this node does hold,
+        // at the position the callee's own port numbering puts it in. Reading it as unknown instead
+        // makes the caller carry an `any` of the capture's class -- a resource the call does not
+        // reach, held for a value the caller is holding (design principles 3.3, effect masking).
+        const size_t declared = callee != nullptr ? camel::runtime::declaredWithPorts(*callee) : 0;
         return fromFootprint(
             footprint_(callee),
             norm.size(),
             [&](const sem::ResourceBinding &b) -> gc_node_ref_t {
-                if (b.kind == sem::ResourceBinding::Kind::Norm && b.index < norm.size()) {
-                    return norm[b.index];
+                switch (b.kind) {
+                case sem::ResourceBinding::Kind::Norm:
+                    return b.index < norm.size() ? norm[b.index] : kInvalidNodeRef;
+                case sem::ResourceBinding::Kind::With:
+                    return b.index < with.size() ? with[b.index] : kInvalidNodeRef;
+                case sem::ResourceBinding::Kind::Capture: {
+                    const size_t at = declared + size_t(b.index);
+                    return at < with.size() ? with[at] : kInvalidNodeRef;
                 }
-                if (b.kind == sem::ResourceBinding::Kind::With && b.index < with.size()) {
-                    return with[b.index];
+                default:
+                    return kInvalidNodeRef;
                 }
-                return kInvalidNodeRef; // a capture of a directly called graph: not an input
             });
     }
     case GCNodeKind::Call:

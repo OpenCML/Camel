@@ -1909,6 +1909,21 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
     // statement too.
     const bool valueDropped = gct == unusedStatement_ || droppedBodies_.contains(gct);
     std::pair<GCT::node_ptr_t, node_handle_t> lastStatement{};
+    // A function declaration is a statement but not a value (below): it leaves the block's value
+    // where it was. A block whose value is a branch and which then declares a function is
+    // therefore not a block that drops the branch -- the branch stands at the value of the block.
+    const auto declarationAt = [&](size_t index) {
+        const auto &node = gct->at(index);
+        return node->type() == GCT::NodeKind::FUNC && !node->name().empty();
+    };
+    const auto hasValueAfter = [&](size_t index) {
+        for (size_t j = index + 1; j < gct->size(); ++j) {
+            if (!declarationAt(j)) {
+                return true;
+            }
+        }
+        return false;
+    };
     for (size_t i = 0; i < gct->size(); i++) {
         StatementState before(*this);
         try {
@@ -1927,7 +1942,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             // too when the block's value is dropped. The scopes the lowering introduced
             // (operands of a literal, the names of a declaration) have no statements; a sync
             // block inside a sync block continues the chain but has statements of its own.
-            const bool unused = !gct->operands() && (i + 1 < gct->size() || valueDropped);
+            const bool unused = !gct->operands() && (valueDropped || hasValueAfter(i));
             unusedStatement_  = unused ? child : nullptr;
             any result;
             // The body's value, in the position of the body (see visitBodyNode): the same
@@ -1935,7 +1950,7 @@ node_handle_t Builder::visitExecNode(const GCT::node_ptr_t &gct, Type *tailExpec
             // literal or empty array there (design principles 5.1).
             // A function declaration is a statement, not a value: it leaves the block's value
             // as it was (an empty-named FUNC is a lambda written in place, and is a value).
-            const bool declaration = child->type() == GCT::NodeKind::FUNC && !child->name().empty();
+            const bool declaration = declarationAt(i);
             const bool tailPosition =
                 tailExpected != nullptr && !gct->operands() && i + 1 == gct->size() && !declaration;
             if (tailPosition) {
