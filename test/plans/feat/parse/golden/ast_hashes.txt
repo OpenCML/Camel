@@ -4359,6 +4359,8 @@ ee049f220cbe84aa ok test/plans/feat/format/golden/when_clause.cml
 1cd6acaa4ddb89ba ok test/plans/feat/modules/golden/with_format.cml
 98da696befc2f9f3 ok test/plans/feat/parse/golden/numbers_format.cml
 dbfdb482f9059740 ok test/plans/feat/parse/golden/rules_format.cml
+4e5ac200a628c3e7 ok test/probe/refleak/call_box.cml
+58014c5bc874530e ok test/probe/refleak/fill_carries.cml
 57cb576b0ebc4428 ok test/tools/jitcov/workloads.cml
 c9fb9a1f4e7c57b9 ok test/tools/selftest/benchmark_failure.cml
 441b8418f7fdf15a ok test/tools/selftest/sweep/probe.cml
