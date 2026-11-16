@@ -1,48 +1,59 @@
 /**
- * The rebinding `acc = acc->append<v>` in loops: in a foreach over a captured variable, through
- * a `var` parameter, with reads of the variable between the appends (each read means the next
- * append copies, so what was read stays as it was), and with arrays of arrays and of structs as
- * elements. Run under collection stress with both collectors (std::gc::verify), the output must
- * be that of an undisturbed run.
+ * The rebinding `acc = acc->append<v>` in loops: in a loop whose body writes the outer `var`,
+ * through a `var` parameter, with reads of the variable between the appends (each read means the
+ * next append copies, so what was read stays as it was), and with arrays of arrays and of structs
+ * as elements. Run under collection stress with both collectors (std::gc::verify), the output
+ * must be that of an undisturbed run.
+ *
+ * Every loop here was a `foreach` whose element function wrote the name. A closure holds the value
+ * a name had when it was made and not the name (design principles 3.5, 197), so those writes are
+ * `ClosureAssignsCapturedName` (0x03000213) now. Nothing about the case needed the closure: the
+ * writes are written where the names live, and a loop body's assignment to an outer `var` makes
+ * that name the loop's carried state (3.5). The subject -- rebinding a name to a grown array, in
+ * place when nobody else holds the old one -- and the output are what they were.
+ *
+ * The `:var/*` vocabulary the graph and the C++ entry used to pin (`:var/peek`, `:op/assn_owned`,
+ * `.set(rt::append(`) named a rebound `var` cell; a loop state is carried another way, so those
+ * two entries went with this migration.
  */
 
 type Box = { label: string, values: int[] }
 
 func collect(n: int): int[] sync {
     var out: int[] = []
-    (0..n)->foreach<(i: int) => sync {
+    loop i = 0 while i < n do {
         out = out->append<i * i>
-        return null
-    }>
+        i + 1
+    }
     return out
 }
 
 func push_all(var xs: int[], n: int): int sync {
-    (0..n)->foreach<(i: int) => sync {
+    loop i = 0 while i < n do {
         xs = xs->append<i>
-        return null
-    }>
+        i + 1
+    }
     return len(xs)
 }
 
 func snapshots(n: int): int[][] sync {
     var acc: int[] = []
     var seen: int[][] = []
-    (0..n)->foreach<(i: int) => sync {
+    loop i = 0 while i < n do {
         acc = acc->append<i>
         // A read of acc: the array seen holds never changes afterwards.
         seen = (if i % 3 == 0 then seen->append<acc> else seen)
-        return null
-    }>
+        i + 1
+    }
     return seen
 }
 
 func boxes(n: int): Box[] sync {
     var out: Box[] = []
-    (0..n)->foreach<(i: int) => sync {
+    loop i = 0 while i < n do {
         out = out->append<{ label: 'b{}'->format<i>, values: [i, i + 1] }>
-        return null
-    }>
+        i + 1
+    }
     return out
 }
 

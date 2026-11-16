@@ -124,7 +124,7 @@ assert(capture.length === 0, "a captured value is not a cell: " + JSON.stringify
 
 [[tests]]
 name = "resources_effects"
-desc = "The resource plan's program, asked of both walks: a `var` parameter, a recursion through one, a closure writing a cell of its caller's body and an ambient set all come out the same. The one difference is pinned: `main` reads a cell it made itself, the runtime cannot place a value read from a variable and adds `rmw object (any)`, and the builder masks it."
+desc = "The resource plan's program, asked of both walks: a `var` parameter, a recursion through one, a closure writing a handle it captured and an ambient set all come out the same. The one difference is pinned: `main` reads a cell it made itself, the runtime cannot place a value read from a variable and adds `rmw object (any)`, and the builder masks it."
 kind = "behavior"
 case = "../../../cases/resources/effects.cml"
 args = ["${case}", "test::resource_transition"]
@@ -137,16 +137,26 @@ const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' 
 pinned('MASK bump builder=rmw variable norm 0 whole runtime=rmw variable norm 0 whole agree=yes')
 pinned('MASK countdown builder=rmw variable norm 0 whole runtime=rmw variable norm 0 whole agree=yes')
 pinned('MASK random::rand builder=external; rmw ambient rng runtime=external; rmw ambient rng agree=yes')
-// The closure `inc` writes `c`, a cell of `main`'s body: both walks reach it as one captured cell.
-const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole agree=yes$/.test(l))
-assert(capture.length === 1, "the closure's captured cell, asked of both sides: " + JSON.stringify(capture))
-// Exactly one disagreement, at `main`, and it is the runtime's reading of a value taken out of a
-// variable: the cell is `main`'s own, so the builder masks the access and the runtime answers "any
-// object" for it (see the plan header).
+// The closure `inc` writes the content of the handle `r` it captured. A closure captures a value
+// and not a name (design principles 3.5, 197), so the state it carries is a `Ref`. The two walks
+// read that capture differently and this plan pins what each says instead of making them agree:
+// the runtime names the handle and its type (`rmw handle state::Ref capture 0 whole`), the builder
+// still names its variable capture port (`rmw variable capture 0 whole`). It is the same
+// disagreement `module_var_read` and `module_var_write` record for a module cell, read at the
+// capture; R3 is the change that makes the two one, and the pinned line moves with whichever side
+// moves first.
+const handle = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw handle state::Ref capture 0 whole agree=no$/.test(l))
+assert(handle.length === 1, "the closure's handle, asked of both sides: " + JSON.stringify(handle))
+// No walk names a captured *variable* as a cell on both sides any more: a captured value is a
+// value, not a place, so a `variable capture` answer stands on one side only.
+const capture = lines.filter((l) => /^MASK \S+ builder=rmw variable capture 0 whole runtime=rmw variable capture 0 whole/.test(l))
+assert(capture.length === 0, "a captured value is not a cell on both sides: " + JSON.stringify(capture))
+// Exactly two answers differ here, and both are the same kind of reading: the closure's capture
+// above, and `main`'s own cell, which the runtime cannot place and answers `rmw object (any)` for.
 const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
-assert(disagree.length === 1, 'exactly one answer differs here: ' + disagree.join(' | '))
-const line = disagree[0]
-assert(line.startsWith('MASK main builder='), 'the difference is `main`\'s: ' + line)
+assert(disagree.length === 2, 'two answers differ here: ' + disagree.join(' | '))
+const line = disagree.find((l) => l.startsWith('MASK main builder='))
+assert(line !== undefined, 'the difference at `main`: ' + disagree.join(' | '))
 const [head, tail] = line.split(' runtime=')
 const builderText = head.replace(/^MASK \S+ builder=/, '')
 const runtimeText = tail.replace(/ agree=no$/, '')
