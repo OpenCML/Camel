@@ -981,6 +981,17 @@ try {
     # than a list that says nothing, so the widening to the whole layer has no branch left to take.
     # It is computed before the push: a base nobody can read must cost a push and a build nothing.
     $untracked = @(git -C $Path ls-files --others --exclude-standard)
+    # A file `-FetchFile` brought back last run is named here even when it is ignored, because the two
+    # halves of the two-run check need it to travel: the fetch writes it under a path `.gitignore`
+    # covers (so a record can never be committed by accident), and `--exclude-standard` then leaves
+    # it out of the tar -- the next run would compare against nothing. Naming it adds it to the tar
+    # and nothing else: it is never staged, and a run without `-FetchFile` does not mention it.
+    if ($FetchFile -ne '') {
+        $fetchLocal = Join-Path $Path $FetchFile
+        if (Test-Path -LiteralPath $fetchLocal) {
+            $untracked = @($untracked | Where-Object { $_ -ne $FetchFile }) + @($FetchFile)
+        }
+    }
     $changedListFile = Join-Path $scratch 'changed.txt'
     if ($Changed -and -not $UpdateGolden) {
         $changedList = @()
@@ -1669,7 +1680,22 @@ exit `$code
                 [void]$astCapture.Append($cleanLine)
                 return
             }
-            # -FetchFile sends one file back the same way the AST record travels: base64 between             # two markers, collected here and written after the run (so a truncated stream writes             # nothing rather than half a record).             if ($line -match '__CAMEL_REMOTE_FETCH_BEGIN__') {                 $fetchCapture = New-Object System.Text.StringBuilder                 return             }             if ($line -match '__CAMEL_REMOTE_FETCH_END__') {                 $fetchPayloadText = $fetchCapture.ToString()                 $fetchCapture = $null                 return             }             if ($null -ne $fetchCapture) {                 [void]$fetchCapture.Append($cleanLine)                 return             }
+            # -FetchFile sends one file back the same way the AST record travels: base64 between
+            # two markers, collected here and written after the run (so a truncated stream writes
+            # nothing rather than half a record).
+            if ($line -match '__CAMEL_REMOTE_FETCH_BEGIN__') {
+                $fetchCapture = New-Object System.Text.StringBuilder
+                return
+            }
+            if ($line -match '__CAMEL_REMOTE_FETCH_END__') {
+                $fetchPayloadText = $fetchCapture.ToString()
+                $fetchCapture = $null
+                return
+            }
+            if ($null -ne $fetchCapture) {
+                [void]$fetchCapture.Append($cleanLine)
+                return
+            }
             if ($line -match '^AST_UPDATE_EXIT=(\d+)\s*$') {
                 $astExit = [int]$Matches[1]
                 $run.lastLine = if ($astExit -eq 0) {
