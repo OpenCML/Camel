@@ -1397,12 +1397,18 @@ bool FunctionEmitter::lowerBranch(
     }
     const std::string selector = valueOf(frame, selectorInputs.front()).text;
 
-    // Where the arms put the value of the branch.
+    // Where the arms put the value of the branch. A join that is the sequence's result is used
+    // by the end of that sequence even when no node of the graph reads it (the same count as
+    // `bind`): the arms then have to leave it somewhere. Without that, a sequence whose last
+    // word is a branch but which still has a statement after it ends in `return ;` -- a body
+    // whose value nothing spelled -- because the join is neither the tail nor anybody's input.
     Tail armTail{Tail::Kind::Discard, {}};
+    const bool resultWanted =
+        tail.kind != Tail::Kind::Discard && frame.results.count(join) > 0;
     if (joinIsTail) {
         armTail            = tail;
         frame.values[join] = CppValue{"", false}; // the arms end the sequence themselves
-    } else if (!isVoid(joinNode->dataType()) && liveUses(g, join) > 0) {
+    } else if (!isVoid(joinNode->dataType()) && (liveUses(g, join) > 0 || resultWanted)) {
         const std::string type = cppType(g, join, joinNode->dataType());
         const std::string name = locals_.unique(std::format("v{}_branch", nextValue_++));
         out.push_back(Stmt::line(std::format("{} {};", type, name)));
