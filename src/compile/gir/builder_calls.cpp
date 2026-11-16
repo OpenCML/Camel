@@ -990,12 +990,21 @@ void Builder::requireMutableArgument(const Argument &arg, const std::string &cal
     // its cell and is never made SSA, wherever the callee is written.
     if (arg.expr != nullptr && arg.expr->type() == GCT::NodeKind::DREF) {
         if (const std::string name = moduleLevelName(arg.expr->name()); nodeAt(name).has_value()) {
-            if (node_handle_t node = resolveNodeByRef(name); isVariable(node)) {
+            node_handle_t node = resolveNodeByRef(name);
+            // The name a closure captured is a PORT and not a variable once the capture is by value
+            // (design principles 3.5, 197): the port is the value the name had where the closure
+            // was made, so there is nothing for the callee's write-back to write, and the rule that
+            // answers that write is the capture's. It is asked for a port and a cell alike
+            // (`requireCapturedNameWritable`); without this the general rule for a name that is not
+            // a variable answers, naming neither the rule nor the way out.
+            if (node != nullptr && (isVariable(node) || capturePortOfAVariable(node))) {
                 // A `var` parameter is the caller's cell, and the callee's write-back is the
                 // assignment written at the call (design principles 3.5, 192): where the name is one
                 // a closure of this body already holds the value of, the write-back is the write
                 // 3.5 (198) refuses.
                 requireCapturedNameWritable(node, name, true, arg.expr->origin());
+            }
+            if (isVariable(node)) {
                 escapingVariables_.insert(node);
             }
         }

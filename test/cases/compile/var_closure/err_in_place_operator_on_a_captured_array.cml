@@ -1,0 +1,22 @@
+/**
+ * `xs = xs->sort` inside a closure: the callee is an operator with an in-place form, and the
+ * compiler rewrites the statement into the three in-place operations. The last of them writes a
+ * name the closure holds the value of, so the program is refused by the capture rule (design
+ * principles 3.5, 197) and not by the rule that answers a call with no overload.
+ *
+ * The order matters: the rewrite is settled before the assignment is built, so a rewrite that
+ * declines to run leaves the call as written and the report becomes `NoMatchingFunction` -- a
+ * report about the operator, which names neither the write nor the way out.
+ */
+
+import { sort } from array
+
+func main(): int sync {
+    var xs = [3, 1, 2]
+    let f = () => sync {
+        xs = xs->sort
+        xs
+    }
+    println(f())
+    return 0
+}

@@ -2175,6 +2175,12 @@ node_handle_t Builder::visitConditionBrchNode(const GCT::node_ptr_t &gct) {
         const bool follows =
             test.direct && conjunct && (test.nonNullWhenTrue || conjuncts.size() == 1);
         const bool mutableName = isVariable(*bound);
+        // A name a closure captured is not a variable any more once the capture is by value
+        // (design principles 3.5, 197): the port is the value the name had where the closure was
+        // made, and every write of the name is refused from then on (197, 198), so nothing can
+        // rewrite it between the test and the use. Narrowing it is therefore sound -- BENIGN on
+        // purpose: the arm is kept, and the message below is the one a `var` that really can be
+        // rewritten still gets. `ok_narrowing_a_captured_nullable_var` pins it.
         if (follows && !mutableName) {
             if (std::ranges::find(arm.opened, test.name, &Opened::name) == arm.opened.end()) {
                 arm.opened.push_back({test.name, test.subject, {}});
