@@ -1,0 +1,64 @@
+/**
+ * `let n = loop ...` with a statement after it, in functions that are not `sync`.
+ *
+ * The loop's condition and body are regions; the values they read from outside them -- the `2` the
+ * condition compares against, the `1` the body adds, the state's first value -- belong to no region.
+ * The exit of a function that is not `sync` is the value it returns, so nothing the exit depends on
+ * leads to the loop: it stays in the execution through the write the statement after it makes
+ * (design principles 3.1, the region roots of camel/runtime/region_roots.h). The layout then has to
+ * lay the two regions out as one range anyway, which is what this case records: node order alone
+ * interleaves `[port, 2, lt]` and `[port, 1, add]`, and ExecPlan's loop tables refuse that order
+ * ("The nodes of a loop are not one range in the execution order", src/execute/exec_plan.cpp).
+ *
+ * The shapes beside the plain one are the ones that read the same corner: a `var` declared from the
+ * loop's value and read after it, a second loop after it, the loop as a statement only (nothing takes
+ * its value), the loop's value returned with no statement after it, and the same program inside a
+ * `sync` function. There is no `break` to test -- the language has none, and a loop ends early
+ * through the condition on its head (design principles 3.10).
+ */
+func after_statement(): int {
+    let n = loop k = 0 while k < 2 do { k + 1 }
+    println(n)
+    return 0
+}
+
+func after_var(): int {
+    let n = loop k = 0 while k < 2 do { k + 1 }
+    var t = n
+    println(t + 1)
+    return 0
+}
+
+func second_loop(): int {
+    let n = loop k = 0 while k < 2 do { k + 1 }
+    let m = loop k = 0 while k < 3 do { k + 1 }
+    println(n, m)
+    return 0
+}
+
+func as_statement(): int {
+    loop k = 0 while k < 2 do { k + 1 }
+    println('after')
+    return 0
+}
+
+func returned(): int {
+    let n = loop k = 0 while k < 2 do { k + 1 }
+    return n
+}
+
+func in_sync(): int sync {
+    let n = loop k = 0 while k < 2 do { k + 1 }
+    println(n)
+    return 0
+}
+
+func main(): int sync {
+    after_statement()
+    after_var()
+    second_loop()
+    as_statement()
+    println(returned())
+    in_sync()
+    return 0
+}
