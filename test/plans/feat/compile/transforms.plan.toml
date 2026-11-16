@@ -3291,3 +3291,34 @@ expect_exit = 1
 expect_output_contains = ["stdlib/vjp.cml", "transforms: jvp has no forward transform for this function", "name=RuntimeDiag::RuntimeError, code=0x04000000"]
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
 timeout_ms = 15000
+
+# The pair that asks the opposite question. Every other entry in this plan that pins a reading says
+# "when the run asks for the area, the line is there"; these two say "when it does not, the line is
+# not" -- and with the areas off by default, that is the sentence with no other keeper. 71 entries in
+# `test/plans/feat/compile` were red on 2026-11-16 for exactly the reason this pair exists: the switch
+# had been turned off and nothing could say so. A guard that only reddens when a default is flipped
+# back has no coverage of its own; what it has is the one question the other 96 cannot ask.
+[[tests]]
+name = "trace_off_prints_no_reading"
+desc = "The program below gets transposed for real -- `transpose_straight_line` is the case `transpose_runs_the_data_flow_backwards` pins the `TRANSPOSE` reading of -- and it is run with no `--trace` word at all. Nothing of the compiler's reading may appear in the output a person sees: not `TRANSPOSE`, not `REINTERP`, not the plan's site counts, not the vmap coverage counters. This is the whole of the default's keeper: `trace_transforms_reads_when_asked` below is its other half, and the two are one sentence -- the reading exists (so this is not a case that prints nothing) and it is not printed unasked (so the default is off)."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_straight_line.cml"
+args = ["${case}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_not_contains = ["TRANSPOSE ", "REINTERP ", "PLAN_REF_SITES ", "asked="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
+[[tests]]
+name = "trace_transforms_reads_when_asked"
+desc = "The same case, one word different: `--trace transforms` on the command line. The reading appears, on the same line `transpose_runs_the_data_flow_backwards` pins, so the pair says something: the silence above is the switch being off, not the case having nothing to say. Two entries rather than one because a single entry cannot assert both -- a runner that ran the case twice would be two entries wearing one name."
+kind = "behavior"
+case = "../../../cases/compile/transforms/transpose_straight_line.cml"
+args = ["--trace", "transforms", "${case}"]
+backends = ["nvm"]
+expect_exit = 0
+expect_output_contains = ["TRANSPOSE function=sum_of_scaled graph="]
+expect_stdout_not_contains = ["TRANSPOSE function="]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
