@@ -58,6 +58,7 @@
 | [60_cml_print_roundtrip_gap.md](60_cml_print_roundtrip_gap.md) | `std::cml` 往返缺口：`not_equivalent` 的十条类别与真实原因（打印文本比原程序少掉的顶点：类型拼写、字面值、编译期展开、捕获端口、函数值、`return`、被丢的臂、结构体循环状态、空臂区域、判据异常），以及 3688 个文件上的读数与接口作者「51 条」的来历 |
 | [61_capture_census.md](61_capture_census.md) | 捕获普查 `scripts/check-capture-census.mjs`：作者验收闭包捕获用的两个数（`:var/new` 节点、按引用捕获口）怎么从 `std::jgir` 数出来、`list_sha` 如何钉住分母、`test/cases` 与全仓两套读数、5912/410/621 为什么复现不出来 |
 | [62_generator_type_has_two_answers.md](62_generator_type_has_two_answers.md) | 生成器里一个闭包的两个类型：`typeof` 重建与语句处真建各算一次捕获、`captureByValueOf_` 把机器的答案粘住、五条 `stream.generator*` 今天的绿靠 gate5 按名字匹配的巧合（「绿在别处」） |
+| [63_what_the_348_units_are.md](63_what_the_348_units_are.md) | 剩下的 348 个 `:var/new` 按"为什么存在"分成 A/B/C/D/E 五类（A 0、B 117、C 81、D 79、E 71）：每一类的名单、判据（节点与图的形状，不看文件名）、以及**建图时直接构造 SSA 之后每个单元还在不在**——270 消失、78 留（64 机器状态 + 10 模块级共享 → `Ref` + 4 判不了）；含"两个口径差 64"与"54 是没有读者、不是可以删"两句 |
 | [ddpm-primitives.md](ddpm-primitives.md) | DDPM 实验暴露的运行时与 GPU 原语：`math:sqrt` 的 VJP、`fs.write_text` 的字节长度、Tiles 的 `numel` / `shape` / `permute_inverse` / 矩阵乘 lowering、BF16 cuBLAS 的选择，以及检查它们的计划 |
 | [gir-interchange.md](gir-interchange.md) | GIR 导出：`std::gir` / `rgir` / `jgir` / `agir` / `argir` 的格式与分工，以及供编辑器消费的 JSON 版本 1 |
 | [nn-autograd.md](nn-autograd.md) | `nn` 没有自己的自动求导：求导是 `modules/autodiff` 的图重写（`grad` / `with_grad`），见 26 与设计原则 9.9 |
