@@ -114,3 +114,54 @@ args = ["${case}"]
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::CapturedVarHandedToVarParameter"
 expect_diagnostic_code = "0x03000215"
+
+# ---- The four call sites a capture PORT turns into a value -------------------------------
+# The step that removed the by-reference capture port (`8b6f57c18`) left four places where a
+# captured name stops being a variable, so the general rule that answers "not a variable" fired
+# before the capture rule was asked. Three of them had no case at all: they do not turn red, they
+# only stop saying what they used to say. The four entries below are those places, one each, and
+# the author's ruling of 2026-11-16 makes fixing them the step before `gate5` goes.
+#
+# The fourth is the BENIGN direction (`mutableName`, builder_control.cpp): it answers the same
+# before and after the gate goes, so its entry pins the refusal that stands, and names the stale
+# reason the message gives as a thing reported apart.
+
+[[tests]]
+name = "err.a_captured_name_handed_to_a_var_parameter_inside_the_closure"
+desc = "builder_calls.cpp#Builder::requireMutableArgument, the `isVariable` threshold: a closure hands the name it captured to a `var` parameter, so the refusal that has to answer is the capture rule's (ClosureAssignsCapturedName, 197) and not the general 'the target must be a variable'."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_captured_name_handed_to_var_parameter_in_a_closure.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+
+[[tests]]
+name = "err.an_in_place_operator_on_a_captured_array"
+desc = "builder_operators.cpp#Builder::inPlaceRebindingOf, the `xs` holds an array threshold: `xs = xs->sort` inside a closure has to be refused by the capture rule, not turned into NoMatchingFunction by a rewrite that declines to run."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_in_place_operator_on_a_captured_array.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::ClosureAssignsCapturedName"
+expect_diagnostic_code = "0x03000213"
+
+[[tests]]
+name = "err.a_discarded_result_of_a_captured_name"
+desc = "builder_diagnostics.cpp#Builder::rejectUnusedPureResult, the 'bind it to the result' hint: a pure call dropped on a name a closure captured still says to bind that variable to the result, instead of falling back to the generic sentence."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_discarded_result_of_a_captured_name.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::UnusedPureResult"
+expect_output_contains = ["to change the variable 'xs', bind it to the result: 'xs = len(xs)'"]
+
+[[tests]]
+name = "err.a_captured_nullable_var_is_not_narrowed"
+desc = "builder_control.cpp#Builder::mutableName: the null test on a name a closure captured still does not narrow the arm. BENIGN for this change -- deleting the cell gate moves the capture to a value, and this site's answer is the same either way -- but the reason the diagnostic gives is stale: it still says a `var` may be rewritten between the test and the use, and a capture port cannot be rewritten at all. Pinned by name, code and place only; the wording is reported apart, so rewording it leaves this entry alone."
+kind = "negative"
+case = "../../../cases/compile/var_closure/err_a_captured_nullable_var_is_not_narrowed.cml"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::NoMatchingFunction"
+expect_diagnostic_code = "0x0300000F"
