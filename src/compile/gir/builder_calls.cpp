@@ -493,14 +493,56 @@ node_handle_t Builder::partialApplicationOf(
     if (calleeType == nullptr) {
         return nullptr;
     }
-    // A `with` parameter declared `var` is a variable the function writes, and binding one here
-    // is ordinary: the value the partial application captures is the cell, the body the new graph
-    // makes writes it through the call, and the graph's own signature says so -- the captured cell
-    // is one of its captures (graph model Q9, `partial-application-var`: "a `Forwarder` graph that
-    // captured the cell of `t`, its effect summary has the captured-variable bit set, its function
-    // type carries `sync`"). Design principles 3.5 writes the format of a right-hand side, not a
-    // restriction on what a context argument may be.
+    // A `with` parameter declared `var` is a variable the function writes: the call passes it in,
+    // the body writes it, and the call hands the new value back (design principles 3.5). The
+    // function value a partial application makes has no call of its own to write it back to, so
+    // binding one here is a compile error (design principles 3.5, the author's ruling of
+    // 2026-11-15: a partial application cannot bind a `var` context parameter).
     //
+    // It is refused here, at the binding, because the binding is what the rule is about. Until
+    // this check existed the rule had no report of its own and the closure rule refused the
+    // program second-hand, one graph later: the forwarder body hands the bound cell to a `var`
+    // parameter, so `Builder::requireCapturedNameWritable` met a captured name and reported
+    // `ClosureAssignsCapturedName` -- a rule about what a closure may assign, whose help names
+    // three repairs that all keep the partial application. The name in that report came from
+    // `Builder::originNames_`, which keeps the first name recorded for a value: a local cell keeps
+    // the name its `var` declaration gave it, while the value this body captured for a cell of an
+    // enclosing scope has only the synthetic `$taggedN` `Builder::bindTemporary` gave the bound
+    // argument, so a module cell was reported by a name the program never wrote.
+    //
+    // The report names the argument as the program wrote it: what can be found in the source at
+    // the binding, and the parameter it was handed to.
+    for (size_t i = 0; i < bound.size(); ++i) {
+        if (!calleeType->withIsVarAt(i)) {
+            continue;
+        }
+        // The argument as the program wrote it, not the name the graph made for it: the binding is
+        // what the reader has to find in the source (`let g = add<t>` names `t`).
+        std::string shown = bound[i].expr != nullptr ? sourceTextOf(bound[i].expr) : std::string{};
+        if (shown.empty() && bound[i].node != nullptr) {
+            const auto known = originNames_.find(bound[i].node);
+            if (known != originNames_.end()) {
+                shown = known->second;
+            }
+        }
+        if (shown.empty()) {
+            shown = "the argument";
+        }
+        // The parameter the function declared (`with <var total: int>`). A `var` parameter is
+        // named -- its body writes it -- so the guard is for the type alone, which may carry
+        // unnamed ones.
+        std::string declared;
+        if (i < calleeType->argNamesCount()) {
+            declared = calleeType->argNameAt(i);
+        }
+        if (declared.empty()) {
+            declared = std::format("__w{}", i);
+        }
+        diags_->of(SemanticDiag::VarContextParameterCannotBeBound)
+            .atOrigin(at)
+            .commit(shown, declared);
+        throw BuildAbortException();
+    }
     // A literal bound as a context argument takes the type of its `with` parameter here, now
     // that the callee is known, exactly as a literal argument does at a call (design principles
     // 5.1): the captured value is of the parameter's type, so the call the partial application

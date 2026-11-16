@@ -29,8 +29,9 @@ normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 # function value from a partial application has nowhere to write a `var` context parameter back
 # (design principles 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name
 # had when it was made, not the name (the ruling of 2026-11-16, items 197 and 198), so `add<t>` was
-# refused by `SemanticDiag::ClosureAssignsCapturedName` at the binding. A handle is a value, so the
-# same three calls, the same accumulator and the same chain are still exercised.
+# refused at the binding -- by `SemanticDiag::ClosureAssignsCapturedName` (0x03000213) until
+# `VarContextParameterCannotBeBound` (0x03000216) gave the rule its own report. A handle is a value,
+# so the same three calls, the same accumulator and the same chain are still exercised.
 
 [[tests]]
 name = "var_parameter.reference"
