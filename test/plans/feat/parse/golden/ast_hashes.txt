@@ -45,7 +45,7 @@ c52fec6465c58bb2 no test/cases/parse/rulings/loop_is_keyword.cml
 1fec33b3724d526a ok test/cases/parse/rulings/minus.cml
 228ab66c3e663b16 ok test/cases/parse/rulings/not_by_precedence.cml
 ed65b02ad206de6e ok test/cases/parse/rulings/null_compare.cml
-6f43ae0e5cae32a9 no test/cases/parse/rulings/open_range.cml
+adedd38f0006ee91 no test/cases/parse/rulings/open_range.cml
 d7988111a3f83049 no test/cases/parse/rulings/optional_comp_removed.cml
 1a9eb749dfab442c ok test/cases/parse/rulings/power.cml
 f7ca2778095d9642 ok test/cases/parse/rulings/reserved_and.cml
