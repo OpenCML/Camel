@@ -500,3 +500,45 @@ UnusedAssignedValue   →  只说「值没人读」
 被丢掉的写（写不执行） →  归 EffectNotExecuted 那一族
 ```
 已派 `lane-varwarn` 改判据。**这条归作者的第一优先级（`var` 化成 SSA），因为 `assn_l` 的存废正是那一步要动的东西。**
+
+## 23. 多笔交付不许 squash（2026-11-16，`ifarm` 的代价）
+
+`lane-ifarm` 把三笔拆得很清楚（①播种 → ③声明不计值 → ②标记还原），**每笔各自绿、正文互相指认**，并写明「② 绝不能排在 ③ 前面」。合并时被**压成一笔** `d5bb220e7`。
+
+内容我一逐条验过，**完整**（③ 的 `declarationAt`、② 的 `UnusedStatementScope` 都在 origin 的源码里，正文也列了原三 sha、顺序与依赖）。**但代价是真的**：
+> **丢掉了「单独回退 ②」的能力**，而 ②③ 是一对有硬依赖的提交 —— **bisect 到这三笔之间就再也分不开了。**
+
+**规矩**：**多笔交付按原笔数 `merge --no-ff` 合入，不做 squash。** 车道已经把三笔拆开、各自跑绿、写了互相指认的正文——**squash 把那份工作抹平**。
+只有两种情况可以 squash：① 派工时写明允许；② 车道自己建议并写了理由。
+**已 squash 的，正文必须列全原笔 sha、顺序与依赖**（`d5bb220e7` 做到了，所以留下）。
+
+## 24. 新增 `.cml` 必须登记 AST 快照 —— 一条今晚踩了两次的坑
+
+`test/plans/feat/parse/frontend.plan.toml#frontend.ast_snapshot` **记录全仓库每一个 `.cml`**，未登记的文件**直接判红**（工具的提示：`N files read as recorded, M not in the snapshot yet, of T in the corpus`）。
+
+**两次**：
+```
+lane-ifarm      加 5 条 .cml 未登记 ⇒ feat/parse 红，且它自己误判成「别人弄红的」
+lane-looplayout + lane-loopref  加 2 条未登记 ⇒ 同一处红
+```
+**修法**：`python3 test/tools/parsecheck/check.py snapshot --update`（在 Linux 侧跑，保证 hash 与测试侧一致）。
+
+**规矩（已加进派工模板）**：**任何派工只要新增 `.cml`，任务书里必须写这一条**，并且**登记要与被测改动分开归属**——登记是测量设施的变化，不是车道的主张。
+> **这一条之所以值得单独立规矩：它不产生新红，它把别人的红搬到你这笔上，然后让「是不是我弄红的」这个问题变得无法回答。**
+
+## 25. 基线：`61(12目标)` 在 `9997c789a`
+
+```
+[SUMMARY] 8851 / 8756 / 61 / skip 10 / known 24 / killed 0     red_more = 0
+61(12目标) 组成：opt 族 39、consistency.new_values 31、masking_transition 4、compile.transitional 3、
+                  modules.resources 3、trans 6、docs.links 1、mm 2、lsp 1、load_class 1、cli 1、runner 1
+已转绿：本轮 0（loopref 的判据都在本来绿的那两族里）   新红：0
+```
+**`declared` 这一栏：6598 / 386 文件**（`git grep -c '^\[\[tests\]\]'`），gate `total` 8851——**`declared < started` 正常**（一条 entry 可跑多个后端）。
+
+## 26. 「绿在没看」的又一处：通过的用例读不到余量
+
+`test/tools/run-tests.mjs` 的 `meta.json` 对**没有 `cpu_budget_ms`** 的用例记 `cpu_ms: null` ⇒ **通过的用例在 gate 记录里读不到「还剩多少余量」**。
+> **跑过了、没红、但没人能回答「离红线还有多远」—— 这是「绿在没看」的第三种形态**（前两种：空集通过、检查从不运行）。
+
+连带一条登记：`test/cases/tools/cli/stdout_matches.mjs` 与刚修的两条**同一形状、15 次嵌套启动**，只因 `timeout_ms = 180000`（线 45 s）才没红（本轮 1.43–1.52 s）。**它现在绿，绿的原因是线更高，不是成本更低。**
