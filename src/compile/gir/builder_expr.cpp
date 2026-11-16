@@ -491,13 +491,28 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     }
     // `var` x = e` binds x to a new variable holding the value of e; `let x = e` binds it to
     // that value. A cell that was made with only its type is already the variable.
-    node_handle_t bound = (isVar && !typedCell) ? newVariable(node) : node;
-    if (isVar) {
+    //
+    // A `var` whose every read and every write lies in the region that declares it is built as a
+    // value: the name is bound to the value, an assignment rebinds it, and no cell is made
+    // (the direct-SSA construction plan, stage S1: same-region local
+    // `var`s). The decision is the scan's, taken once, before this body was built, so it is the
+    // same for every build of the body and does not depend on how the body is built.
+    const bool ssaValue = isVar && !typedCell && ssaDeclarationIsEligible(gct, ident);
+    node_handle_t bound = (isVar && !typedCell && !ssaValue) ? newVariable(node) : node;
+    if (isVar && !ssaValue) {
         // The cell is created by its declaration: that is its place in the source.
         registerNodeOrigin(context_, bound, gct, "gir.var");
     }
     bool success = insertNode(ident, bound);
-    if (success && isVar) {
+    if (success && ssaValue) {
+        // The name stands for the value it was given: the binding a read takes, and the entry a
+        // write replaces. The type the entry keeps is the type the cell would have held, which is
+        // `:var/new`'s value type, so a later write enters it as a store into that cell did.
+        Type *held = bound != nullptr ? valueTypeOf(nodeTypeOf(bound)) : nullptr;
+        ssaValues_[nodeScope_][ident] =
+            SsaValue{bound, held != nullptr ? held->widened() : nullptr, gct};
+    }
+    if (success && isVar && !ssaValue) {
         originNames_.try_emplace(bound, ident);
     }
     if (!success) {
@@ -2786,6 +2801,278 @@ std::string Builder::bindTemporary(node_handle_t node) {
     std::string name = "$tagged" + std::to_string(tagTemporaries_++);
     insertNode(name, node);
     return name;
+}
+
+// ---------------------------------------------------------------------------------------------
+// The value environment of a `var` built as SSA (the direct-SSA construction plan, stage S1). A
+// `var` whose every read and every write lies in the region that
+// declares it is built as a value: the name is bound to the value in `nodeScope_`, and an
+// assignment rebinds it (`ssaAssignmentOf`). Nothing reads or writes a cell, so nothing counts
+// units and nothing has to be folded afterwards.
+// ---------------------------------------------------------------------------------------------
+
+namespace {
+/// Whether a node opens a region of the graph: an `if`/`match` arm, a loop's body, a closure's
+/// body, a block that carries tags, a static loop. A `var` read or written across one of them is
+/// carried into it -- a join's φ or a loop head's port -- which is what stages S2 and S3 add; until
+/// they do, such a name keeps its cell.
+bool opensRegion(GCT::NodeKind kind) {
+    switch (kind) {
+        case GCT::NodeKind::CASE:
+        case GCT::NodeKind::EXEC:
+        case GCT::NodeKind::LOOP:
+        case GCT::NodeKind::FUNC:
+        case GCT::NodeKind::TMTCH:
+        case GCT::NodeKind::TCASE:
+        case GCT::NodeKind::SFOR:
+        case GCT::NodeKind::SLOOP:
+        case GCT::NodeKind::SACC:
+        case GCT::NodeKind::SCOMP:
+            return true;
+        default:
+            return false;
+    }
+}
+} // namespace
+
+std::unordered_map<const GCT::Node *, bool> Builder::scanBodyForSsa(const GCT::Node *body) {
+    // One walk of the body, before any of it is built: every `var` declaration in it, and whether
+    // the declaration may be built as a value. The answer is about the declaration and nothing
+    // else, so two builds of the same body decide the same way. A name belongs to the declaration
+    // the innermost scope binds it to, and a use rules the declaration out when it stands in
+    // another region (the value would have to be carried into it) or at a `var` parameter (the
+    // callee writes the caller's cell back, and a value has nowhere to write).
+    std::unordered_map<const GCT::Node *, bool> eligible;
+    std::unordered_map<const GCT::Node *, size_t> declaredIn;
+    std::vector<std::unordered_map<std::string, const GCT::Node *>> scopes(1);
+    const auto lookup = [&](const std::string &name) -> const GCT::Node * {
+        for (size_t i = scopes.size(); i-- > 0;) {
+            const auto found = scopes[i].find(name);
+            if (found != scopes[i].end()) {
+                return found->second; // null for a `let`, a `catch` binding or a parameter
+            }
+        }
+        return nullptr;
+    };
+    const auto use = [&](const GCT::Node *decl, size_t depth, const GCT::Node *call, size_t index) {
+        bool &answer = eligible[decl];
+        if (declaredIn[decl] != depth) {
+            answer = false; // across a region: the value has to be carried into it
+        }
+        if (call != nullptr && argumentMayWriteBack(call, index, scopes)) {
+            answer = false; // written by the callee through its `var` parameter
+        }
+    };
+    std::function<void(const GCT::Node *, size_t, const GCT::Node *, size_t)> walk =
+        [&](const GCT::Node *node, size_t depth, const GCT::Node *call, size_t index) {
+            if (node == nullptr || node->type() == GCT::NodeKind::TYPE) {
+                return;
+            }
+            if (node->type() == GCT::NodeKind::DREF) {
+                if (const GCT::Node *decl = lookup(node->name())) {
+                    use(decl, depth, call, index);
+                }
+                return;
+            }
+            const bool declares = node->type() == GCT::NodeKind::VARI ||
+                                  node->type() == GCT::NodeKind::NREF;
+            // The declaration's own region is the one it is written in, so a `var` in an arm is at
+            // the arm's depth and a use of it in an enclosing block is across a region.
+            const bool region = node != body && opensRegion(node->type());
+            const size_t inner = declares ? depth : (region ? depth + 1 : depth);
+            if (region) {
+                scopes.emplace_back();
+            }
+            if (declares) {
+                // `var x = e` is a `VARI` over the one name it declares. Any other shape (the names
+                // of a destructuring declaration) is left to the declarations below, which bind
+                // each of those names as a name this scan does not build as a value.
+                const GCT::Node *nameNode = node;
+                const bool single =
+                    node->type() == GCT::NodeKind::NREF ||
+                    (node->size() == 1 && node->at(0) != nullptr &&
+                     node->at(0)->type() == GCT::NodeKind::NREF);
+                if (!single) {
+                    for (size_t i = 0; i < node->size(); ++i) {
+                        walk(node->at(i), inner, nullptr, 0);
+                    }
+                    if (region) {
+                        scopes.pop_back();
+                    }
+                    return;
+                }
+                if (node->type() == GCT::NodeKind::VARI) {
+                    nameNode = node->at(0);
+                }
+                // The initializer is read before the name stands for anything.
+                const GCT::Node *initializer =
+                    nameNode->size() > 0 ? nameNode->at(0) : nullptr;
+                // A `var` whose initializer is a type (`var x: T = ...`, or a cell whose value is
+                // written where it stands) is the cell itself, not a value over it.
+                const bool typed =
+                    initializer != nullptr && initializer->type() == GCT::NodeKind::TYPE;
+                if (!typed && initializer != nullptr) {
+                    walk(initializer, depth, nullptr, 0);
+                }
+                if (node->type() == GCT::NodeKind::VARI && !typed) {
+                    eligible[nameNode] = true;
+                    declaredIn[nameNode] = depth;
+                }
+                scopes.back()[nameNode->name()] =
+                    node->type() == GCT::NodeKind::VARI && !typed ? nameNode : nullptr;
+                if (region) {
+                    scopes.pop_back();
+                }
+                return;
+            }
+            const bool isCall = node->type() == GCT::NodeKind::LINK ||
+                                node->type() == GCT::NodeKind::WITH ||
+                                node->type() == GCT::NodeKind::TAPP;
+            for (size_t i = 0; i < node->size(); ++i) {
+                if (isCall) {
+                    walk(node->at(i), inner, node, i);
+                } else {
+                    walk(node->at(i), inner, nullptr, 0);
+                }
+            }
+            if (region) {
+                scopes.pop_back();
+            }
+        };
+    walk(body, 0, nullptr, 0);
+    return eligible;
+}
+
+bool Builder::argumentMayWriteBack(
+    const GCT::Node *call,
+    size_t index,
+    const std::vector<std::unordered_map<std::string, const GCT::Node *>> &scopes) const {
+    // A `var` parameter is two-way: the callee reads the argument and writes into it, so the
+    // argument cannot be a value. Only the callee's signature says which position that is.
+    if (call == nullptr || index == 0) {
+        return false; // the callee itself is named, not handed
+    }
+    if (call->type() != GCT::NodeKind::LINK && call->type() != GCT::NodeKind::WITH) {
+        return false;
+    }
+    const bool byWith = call->type() == GCT::NodeKind::WITH;
+    const GCT::Node *callee = call->at(0);
+    if (callee == nullptr) {
+        return true; // nothing to name the callee by: answered as one that may write
+    }
+    if (callee->type() == GCT::NodeKind::TAPP && callee->size() > 0) {
+        callee = callee->at(0); // `f::<T>(x)`: the function is still the first child
+    }
+    if (callee->type() == GCT::NodeKind::WITH && callee->size() > 0) {
+        callee = callee->at(0); // `f<w>(x)`: the callee is under the `with` bindings
+    }
+    if (callee == nullptr || callee->type() != GCT::NodeKind::DREF) {
+        return true; // a lambda written where the callee stands: its parameters are not read here
+    }
+    const std::string &name = callee->name();
+    if (name.rfind(kBuiltinPrefix, 0) == 0 || name.rfind("__", 0) == 0 ||
+        name.rfind(":", 0) == 0) {
+        // A name the compiler made for an operator or a built-in group (`__assn__`, `__add__`,
+        // `:op/assn_i`): no parameter of those is a `var`, and the assignment's write is the
+        // rebinding rather than a call.
+        return false;
+    }
+    for (size_t i = scopes.size(); i-- > 0;) {
+        if (scopes[i].contains(name)) {
+            return true; // a name this body binds: a function value whose parameters are unknown
+        }
+    }
+    // The name the program declares the function with, and the qualified spelling of it tallied
+    // under the same declaration (`m::f` and `f` are one function).
+    std::string plain = name;
+    if (const auto last = name.rfind("::"); last != std::string::npos) {
+        plain = name.substr(last + 2);
+    }
+    auto found = functionSignatures_.find(plain);
+    if (found == functionSignatures_.end()) {
+        found = functionSignatures_.find(name);
+    }
+    if (found == functionSignatures_.end()) {
+        // Nothing of this program is named so, and this scan cannot say what the callee reads and
+        // writes: answered as one that may write, because a write-back lost to a value is a wrong
+        // program while a cell costs one unit.
+        return true;
+    }
+    for (const FunctionType *signature : found->second) {
+        if (signature == nullptr) {
+            continue;
+        }
+        const size_t count = byWith ? signature->withTypesCount() : signature->normTypesCount();
+        const size_t at    = index - 1;
+        if (at < count && (byWith ? signature->withIsVarAt(at) : signature->normIsVarAt(at))) {
+            return true;
+        }
+    }
+    return false;
+}
+
+bool Builder::ssaDeclarationIsEligible(const GCT::node_ptr_t &decl, const std::string &name) {
+    // A module's top level is not a region of a body: its `var`s are cells every function of the
+    // module reaches, and they stay cells until stage S5. A declaration the scan never saw is not
+    // one of the body's own, and is answered as a cell.
+    if (regionBodies_.empty() || currGraph_ == rootGraph_ || decl == nullptr) {
+        return false;
+    }
+    const GCT::Node *body = regionBodies_.back();
+    auto scanned          = ssaScan_.find(body);
+    if (scanned == ssaScan_.end()) {
+        scanned = ssaScan_.emplace(body, scanBodyForSsa(body)).first;
+    }
+    const auto found = scanned->second.find(decl);
+    return found != scanned->second.end() && found->second;
+}
+
+const Builder::SsaValue *Builder::ssaBindingOf(const std::string &name) const {
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        if (!scope->has(name, false)) {
+            continue;
+        }
+        const auto table = ssaValues_.find(scope);
+        if (table == ssaValues_.end()) {
+            return nullptr;
+        }
+        const auto found = table->second.find(name);
+        return found == table->second.end() ? nullptr : &found->second;
+    }
+    return nullptr;
+}
+
+Builder::SsaValue *Builder::mutableSsaBindingOf(const std::string &name) {
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        if (!scope->has(name, false)) {
+            continue;
+        }
+        const auto table = ssaValues_.find(scope);
+        if (table == ssaValues_.end()) {
+            return nullptr;
+        }
+        const auto found = table->second.find(name);
+        return found == table->second.end() ? nullptr : &found->second;
+    }
+    return nullptr;
+}
+
+bool Builder::nameIsSsa(const std::string &name) const { return ssaBindingOf(name) != nullptr; }
+
+void Builder::rebindSsa(const std::string &name, node_handle_t value) {
+    SsaValue *binding = mutableSsaBindingOf(name);
+    GUARD(binding != nullptr, "An SSA `var` is written where its declaration is in scope.");
+    binding->value = value;
+    // The binding the reads take. A write inside a nested statement list rebinds the entry of the
+    // scope that declared the name, which is the one the reads of that region look up.
+    for (node_scope_ptr_t scope = nodeScope_; scope; scope = scope->outer()) {
+        if (!scope->has(name, false)) {
+            continue;
+        }
+        scope->map()[name] = value;
+        return;
+    }
+    GUARD(false, "An SSA `var` is written where its declaration is in scope.");
 }
 
 } // namespace camel::compile::gir

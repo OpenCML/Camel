@@ -992,7 +992,9 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         if (value->type() == GCT::NodeKind::DREF) {
             const auto bound = nodeAt(value->name());
             if (bound.has_value()) {
-                if (isVariable(*bound)) {
+                // A `var` may hold another array by the time the loop runs, and one built as a
+                // value is the same to the compiler's knowledge (stage S1 keeps this reading).
+                if (isVariable(*bound) || nameIsSsa(value->name())) {
                     return std::nullopt;
                 }
                 return ofArrayData(constantOfNode(*bound));
@@ -1036,7 +1038,7 @@ Builder::staticLoopSequenceOf(const GCT::node_ptr_t &subject) {
         data_ptr_t data  = nullptr;
         const auto bound = nodeAt(expr->name());
         if (bound.has_value()) {
-            if (isVariable(*bound)) {
+            if (isVariable(*bound) || nameIsSsa(expr->name())) {
                 return std::nullopt;
             }
             data = constantOfNode(*bound);
@@ -1638,10 +1640,11 @@ node_handle_t Builder::visitStaticAccessNode(const GCT::node_ptr_t &gct) {
         const auto bound = nodeAt(keyNode->name());
         if (!bound.has_value()) {
             key = staticValueNamed(keyNode->name());
-        } else if (!isVariable(*bound)) {
+        } else if (!isVariable(*bound) && !nameIsSsa(keyNode->name())) {
             // A `let` bound to a value the compiler knows is a constant too: the binding is
             // immutable, and `first_leaf` in the library names the first field once this way.
-            // A `var` is not: it can be assigned another key before the access.
+            // A `var` is not: it can be assigned another key before the access, and one built as
+            // a value reads the same way the cell did (stage S1 keeps this reading).
             if (data_ptr_t data = constantOfNode(*bound)) {
                 key = keyOfData(data);
             }

@@ -851,6 +851,34 @@ void Builder::reportDroppedEffects(const compile_graph_ptr_t &graph, bool report
         }
         diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
     }
+    // A write to a `var` built as a value (stage S1 of the direct-SSA plan) stores nothing: the
+    // name is rebound to the value, so the value nobody reads is a value node with no user, and
+    // that is the same fact the check above reads off a store that the graph no longer has. A
+    // value the region goes on to hand on -- the body's result, a statement of a sync chain -- is
+    // seeded into `needed` and is read; a value nothing takes at all is the dropped one. What is
+    // reported, and where, is what the store's own report said: the assignment as written.
+    for (const auto &[value, origin] : ssaWrites_) {
+        if (value == nullptr || nodeGraphOf(value) != graph.get() ||
+            needed.contains(nodeIdOf(value))) {
+            continue;
+        }
+        bool read = false;
+        for (auto users : {draft.normUsersOf(nodeIdOf(value)), draft.withUsersOf(nodeIdOf(value))}) {
+            for (draft_node_ref_t user : users) {
+                if (draft.alive(user)) {
+                    read = true;
+                    break;
+                }
+            }
+            if (read) {
+                break;
+            }
+        }
+        if (read) {
+            continue;
+        }
+        diags_->of(SemanticDiag::UnusedAssignedValue).atOrigin(origin).commit();
+    }
     // A `fail` written as a statement whose value nothing takes (design principles 3.9; the
     // author's ruling of 2026-10-26 on a `fail` on a line of its own). It gives no value and is no
     // effect of its own, so where its value is not wanted nothing runs it and the fault is never
@@ -1681,7 +1709,10 @@ void Builder::rejectUnusedPureResult(const GCT::node_ptr_t &stmt, node_handle_t 
         nodeAt(call->at(1)->name()).has_value()) {
         target = resolveNodeByRef(call->at(1)->name());
     }
-    if (target != nullptr && (isVariable(target) || capturePortOfAVariable(target))) {
+    // A name built as a value (stage S1) is assignable just as the cell was, so the advice to
+    // write the result to it still holds: the same reading, with the name standing for its value.
+    if (target != nullptr && (isVariable(target) || capturePortOfAVariable(target) ||
+                              nameIsSsa(call->at(1)->name()))) {
         const std::string variable = call->at(1)->name();
         fix = text.empty() ? std::format(
                                  "; to change the variable '{0}', bind it to the result: "

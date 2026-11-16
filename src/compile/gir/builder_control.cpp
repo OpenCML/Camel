@@ -4711,6 +4711,9 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     const bool outerSynced        = std::exchange(synced_, false);
     const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
+    // The body of the region being built: a `var` declared in it is a candidate for SSA exactly
+    // when every read and write of its name stays in this body (Builder::scanBodyForSsa).
+    regionBodies_.push_back(gct);
     // The last statement of a body is the value the body hands on: a branch there (`if c then
     // … else …` as a function's whole body) stands in the position of that value, and so do
     // the `return`s written in its arms (design principles 5.1: an arm's `return` takes the type of
@@ -4726,10 +4729,12 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     } catch (...) {
         synced_         = outerSynced;
         lastSyncedNode_ = outerLast;
+        regionBodies_.pop_back();
         throw;
     }
     synced_         = outerSynced;
     lastSyncedNode_ = outerLast;
+    regionBodies_.pop_back();
     return result;
 }
 
