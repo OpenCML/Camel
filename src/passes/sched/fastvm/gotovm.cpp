@@ -23,8 +23,6 @@ using namespace camel::core::rtdata;
 using namespace camel::jit;
 #endif
 
-#if ENABLE_FASTVM_COMPUTED_GOTO
-
 #if (defined(__x86_64__) || defined(_M_X64)) && defined(__clang__) && defined(_WIN32)
 /* Clang Win64: wrapper in trampoline.cpp. Use a fixed-size per-thread stack so nested direct JIT
  * calls do not overwrite the caller's saved pc/bc, while keeping the hot path allocation-free. */
@@ -34,14 +32,14 @@ static thread_local std::array<const Bytecode *, kJitSaveStackLimit> s_jit_bc_st
 static thread_local size_t s_jit_save_depth = 0;
 #define JIT_SAVE_PC_BC()                                                                           \
     do {                                                                                           \
-        GUARD(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");          \
+        GUARD(s_jit_save_depth < kJitSaveStackLimit, "Nested JIT save stack overflow.");           \
         s_jit_pc_stack[s_jit_save_depth] = pc;                                                     \
         s_jit_bc_stack[s_jit_save_depth] = bc;                                                     \
         ++s_jit_save_depth;                                                                        \
     } while (0)
 #define JIT_RESTORE_PC_BC()                                                                        \
     do {                                                                                           \
-        GUARD(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                          \
+        GUARD(s_jit_save_depth > 0, "Nested JIT save stack underflow.");                           \
         --s_jit_save_depth;                                                                        \
         pc = s_jit_pc_stack[s_jit_save_depth];                                                     \
         bc = s_jit_bc_stack[s_jit_save_depth];                                                     \
@@ -82,8 +80,8 @@ static thread_local size_t s_jit_save_depth = 0;
 #include "service/profiler/advanced/advanced_tracer.h"
 #include "service/profiler/core/trace.h"
 #endif
-#include <unordered_set>
 #include <stdexcept>
+#include <unordered_set>
 
 // This file is compiled a second time by inspectvm.cpp, which defines the two hooks below
 // before it includes this file: that is the loop a program runs on while an execution observer
@@ -389,7 +387,9 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
                 "Struct access index out of range in FastVM.");
             currFrame->set(bc->result, s->get<slot_t>(static_cast<size_t>(bc->fastop[1])));
         } else {
-            throw std::runtime_error("ACCS opcode unsupported source type in FastVM.: the dispatch reached a case no handler covers");
+            throw std::runtime_error(
+                "ACCS opcode unsupported source type in FastVM.: the dispatch reached a case no "
+                "handler covers");
         }
 
         NEXT();
@@ -678,7 +678,8 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             auto *entryTarget = getFuncExtraRuntimeGraph(entryBc);
             GUARD(
                 entryTarget != nullptr,
-                "FastVM direct TAIL target of the entry graph must have a materialized runtime graph.");
+                "FastVM direct TAIL target of the entry graph must have a materialized runtime "
+                "graph.");
             push(pc, currFrame);
             Frame *funcFrame = framePool_.acquire(entryTarget);
             populateDirectCallFrame(currFrame, funcFrame, srcArgs, dstSlots);
@@ -873,12 +874,10 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
             // (camel/execute/operator_call.h), so the count's rows at this instruction's position
             // are run here as they are at OPER's -- the missing place that made std::fvm keep a
             // counted box that std::nvm released.
-            camel::execute::callOperator(
-                camel::execute::siteOfSlot(*currFrame, bc->result),
-                [&] {
-                    evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
-                    return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
-                });
+            camel::execute::callOperator(camel::execute::siteOfSlot(*currFrame, bc->result), [&] {
+                evalMarkedOperator(mark, bc->result, nargs, wargs, *currFrame);
+                return bc->result == 0 ? NullSlot : currFrame->get<slot_t>(bc->result);
+            });
         } catch (const camel::core::mm::MemoryExhausted &e) {
             throw e.during(
                 std::string(),
@@ -1007,5 +1006,3 @@ FastVMSchedPass::CallResult FastVMSchedPass::callBorrowed(size_t pc, Frame *root
         throw;
     }
 }
-
-#endif // ENABLE_FASTVM_COMPUTED_GOTO

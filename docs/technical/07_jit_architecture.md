@@ -675,7 +675,7 @@ JIT 代码没有展开信息，C++ 异常穿不过它的栈帧。但编译出的
 
 解释器的上限是 `FastVMSchedPass::maxRecursionDepth_`（默认 1000），按 `push` 的次数计。为了让同一个递归无论由谁执行都在同一次调用上超限：
 
-- 解释器从字节码 `FUNC` 进入 JIT 代码时照常 `push` / `pop`（`gotovm.cpp` / `casevm.cpp`）。
+- 解释器从字节码 `FUNC` 进入 JIT 代码时照常 `push` / `pop`（`gotovm.cpp`）。
 - `invokeOwnedJitFrame` 进入前把 `maxRecursionDepth_ - stackDepth_` 写入 `JitContext::depthBudget`，包装器装入 r15。
 - 每次原生自调用 `sub r15, 1`，借位即故障；返回后 `inc r15`。尾调用不计数。
 
@@ -854,7 +854,7 @@ python3 test/tools/jitcov/jitcov.py --progen 1-300              # 随机程序
 | `LTST` | `jitHelperLoopTest` → `loopTest` | 返回 1：`JneRel32(getJumpTargetPc)`，跳到它的 `LEND`；否则落到循环体的第一条 |
 | `LEND` | `jitHelperLoopEnd` → `loopEnd` | 返回 1（还有一轮）：`JneRel32(getJumpTargetPc)`，跳回一轮的开头；否则落到循环之后 |
 
-与解释器（`gotovm.cpp`、`casevm.cpp`）里这三条字节码逐句相同。含循环的图因此是有帧代码（`collectRuntimeConstructs` 的 `LOOP`）。两个跳转都是一轮的边界：目标是 `blockStarts` 的一项（`slotCache` 在这里清空），事件之后也清空缓存，寄存器分配还不允许值跨过 `CallHelper`，所以每一轮都从帧重新读写状态。
+与解释器（`gotovm.cpp`）里这三条字节码逐句相同。含循环的图因此是有帧代码（`collectRuntimeConstructs` 的 `LOOP`）。两个跳转都是一轮的边界：目标是 `blockStarts` 的一项（`slotCache` 在这里清空），事件之后也清空缓存，寄存器分配还不允许值跨过 `CallHelper`，所以每一轮都从帧重新读写状态。
 
 `LEND` 在轮次边界上轮询 `fastVmCallBoundarySafepoint()`（`loopRoundSafepoint`），位置与 FastVM 相同：解释的轮次与编译的轮次到达同样多的安全点（在 `--gc-stress safepoint=1` 下两者给出相同的回收次数与移动对象数），会收集的循环的 `MemoryExhausted` 也仍报在循环的位置。17.4 的"机器栈上没有编译出的代码"在这一处是有意的例外：轮询发生在辅助函数里，`LEND` 已经进入 C++，寄存器里没有值（辅助函数调用是分配的屏障）。
 

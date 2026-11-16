@@ -505,7 +505,9 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
                 "Array access index out of range in JIT trampoline.");
             result = a->get<slot_t>(static_cast<size_t>(indexIdx));
         } else {
-            throw std::runtime_error("Unsupported source type for ACCS in JIT trampoline.: the dispatch reached a case no handler covers");
+            throw std::runtime_error(
+                "Unsupported source type for ACCS in JIT trampoline.: the dispatch reached a case "
+                "no handler covers");
         }
         if (bc.result != 0) {
             frame->set(bc.result, result);
@@ -561,14 +563,16 @@ slot_t trampolineBytecode(slot_t *slots, void *ctx, size_t pc) {
         return result;
     }
     default:
-        throw std::runtime_error("Unsupported opcode in trampolineBytecode.: the dispatch reached a case no handler covers");
+        throw std::runtime_error(
+            "Unsupported opcode in trampolineBytecode.: the dispatch reached a case no handler "
+            "covers");
         return NullSlot;
     }
 }
 
 // ---------------------------------------------------------------------------------------------
-// Helpers of framed code (trampoline.h). Each does for one bytecode what the interpreters do
-// (gotovm.cpp / casevm.cpp), on the pool frame of the activation.
+// Helpers of framed code (trampoline.h). Each does for one bytecode what the interpreter does
+// (gotovm.cpp), on the pool frame of the activation.
 
 extern "C++" {
 namespace {
@@ -671,7 +675,9 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                 } else if (srcCode == TypeCode::Struct) {
                     result = frame->get<Struct *>(bc.fastop[0])->get<slot_t>(index);
                 } else {
-                    throw std::runtime_error("ACCS opcode unsupported source type in JIT helper.: the dispatch reached a case no handler covers");
+                    throw std::runtime_error(
+                        "ACCS opcode unsupported source type in JIT helper.: the dispatch reached "
+                        "a case no handler covers");
                 }
                 break;
             }
@@ -722,7 +728,9 @@ slot_t jitHelperBytecode(slot_t *slots, void *ctx, size_t pc) {
                 break;
             }
             default:
-                throw std::runtime_error("Unsupported opcode in jitHelperBytecode.: the dispatch reached a case no handler covers");
+                throw std::runtime_error(
+                    "Unsupported opcode in jitHelperBytecode.: the dispatch reached a case no "
+                    "handler covers");
             }
         } catch (const RuntimeFault &fault) {
             throw reportRuntimeFault(
@@ -749,8 +757,8 @@ slot_t jitHelperBranchArm(slot_t *slots, void *ctx, size_t pc) {
 }
 
 // The three events of a loop of regions. The rules of a round are the interpreter's own
-// (camel/execute/loop_frame.h), so the compiled code runs exactly what gotovm.cpp and casevm.cpp
-// run at the same bytecode: the state, the ports and the round counter live in the frame.
+// (camel/execute/loop_frame.h), so the compiled code runs exactly what gotovm.cpp
+// runs at the same bytecode: the state, the ports and the round counter live in the frame.
 slot_t jitHelperLoopBegin(slot_t *slots, void *ctx, size_t pc) {
     return runJitHelper(ctx, [&]() -> slot_t {
         auto *jc     = static_cast<JitContext *>(ctx);
@@ -778,7 +786,7 @@ slot_t jitHelperLoopEnd(slot_t *slots, void *ctx, size_t pc) {
         Bytecode &bc = static_cast<Bytecode *>(const_cast<void *>(jc->base))[pc];
         Frame *frame = reinterpret_cast<Frame *>(slots[0]);
         GUARD(bc.extra()->loop != nullptr, "A loop bytecode has no ExecLoop.");
-        // The round safepoint of FastVM (gotovm.cpp, casevm.cpp): a collection may run here,
+        // The round safepoint of FastVM (gotovm.cpp): a collection may run here,
         // and a loop that collects reports a memory limit at the loop (loop_frame.h).
         const bool more = camel::execute::loopEnd(
             *frame,
