@@ -1,0 +1,154 @@
+id = "tools.inspect_copies"
+order = 919
+tier = "fast"
+tags = ["feat", "tools", "inspect", "copies", "storage_reuse"]
+desc = "`camel inspect --copies` reports, for every update node, whether the update reuses the storage of the value it is given -- the ruler the direct-SSA plan's S3b is read with (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md)"
+
+# The plan's storage-reuse table (camel/runtime/exec_plan.h, StorageReuse) decides, once, whether an
+# update -- `v = v->append(x)`, a path assignment, a sort rebinding -- reuses the storage of the
+# value it is given or allocates new storage. Nothing printed that decision per update, so the
+# author's S3b ("the SSA value hands its storage to the update at its last use; the criterion is
+# `camel inspect --copies` reporting in-place for the `v = v->append(x)` loop and for the case
+# study's training step") had no ruler. `camel inspect --copies` is that ruler
+# (camel/runtime/storage_reuse.h), and these entries are what make it a reading instead of an
+# intention.
+#
+# What is pinned here is that the tool reports, and that what it reports is readable and
+# self-consistent -- NOT which answer it gives. `in-place`, `by-count` and `copied` are all
+# readings, and the tool's job is to say which one the tree gives today: if `v = v->append(x)`
+# reports `copied`, that is exactly what S3b has to change, and a test that demanded `in-place`
+# today would be a test that makes the ruler lie. So every entry below reads the verdict out of
+# the line and checks it against the three the plan can give, and the readings themselves are the
+# summary counts. After an intended change of what the plan decides, the reading to re-record is
+# the `[SUMMARY]` line of this plan together with the `COPIES` lines the cases print.
+#
+# The entries live under `tools` and not under `compile` or `opt`: adding a test to those layers
+# would move their summaries, and what is claimed here is a new reading, not a change to a
+# program's behaviour.
+#
+# `COPIES`'s "in place" is two answers, not one: `in-place` (the plan decided at compile time that
+# the storage is reused) and `by-count` (the update asks the array's own count at run time and reuses
+# the storage when it is the only holder -- design principles 10.5, and it IS in place, only decided
+# later). S3b's criterion is "not `copied`"; `in-place` and `by-count` both pass it. Writing the
+# criterion as "only `in-place`" would fail every site in today's tree, including the ones that
+# already work in place, and it would fail them over a wording.
+
+[defaults]
+kind = "behavior"
+expect_exit = 0
+timeout_ms = 60000
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+
+[[tests]]
+name = "inspect.copies.append_in_a_loop"
+desc = "The `v = v->append(x)` loop of new_values/rebinding_loop.cml, read through `camel inspect --copies`: every append of the four functions is one line `COPIES <file>:<line>:<column> append <verdict>` at the call site, the verdict is one of the plan's three, and the graph's summary line counts exactly the rows printed -- so the tool cannot be silent about an update."
+case = "../../../cases/consistency/new_values/rebinding_loop.cml"
+args = ["inspect", "--copies", "${case}"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies exited 0: ' + input.exit_code + ' ' + said)
+  const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the tool printed a reading: ' + said)
+  const fields = lines.map(l => l.split(' '))
+  const updates = fields.filter(f => f.length === 4)
+  const summaries = fields.filter(f => f.length === 10 && f[2] === 'updates')
+  const noPlan = fields.filter(f => f.length === 3 && f[2] === 'no-plan')
+  assert(updates.length + summaries.length + noPlan.length === lines.length,
+    'every line is an update row, a graph summary or a no-plan: ' + lines.join(' | '))
+  assert(updates.length > 0,
+    'the loop has appends and the tool reports them: ' + said)
+  // The verdict is one of the three the plan can answer, and never blank.
+  const verdicts = ['in-place', 'by-count', 'copied']
+  const unknown = updates.filter(f => !verdicts.includes(f[3]))
+  assert(unknown.length === 0,
+    'every update says in-place, by-count or copied: ' + unknown.map(f => f.join(' ')).join(' | '))
+  // Every row names the source position of the update, in this file.
+  const placeless = updates.filter(f => !/^rebinding_loop\.cml:\d+:\d+$/.test(f[1]))
+  assert(placeless.length === 0,
+    'every update names its place in the source: ' + placeless.map(f => f.join(' ')).join(' | '))
+  // The shape the S3b criterion reads: the append of the loop, named the way the program writes it.
+  const appends = lines.filter(l => /^COPIES rebinding_loop\.cml:\d+:\d+ append (in-place|by-count|copied)$/.test(l))
+  assert(appends.length > 0,
+    'the append of the loop is one row named append: ' + lines.join(' | '))
+  // `collect` is the function whose `var out` the loop appends to: its graph is read.
+  const collect = summaries.find(f => f[1] === 'collect')
+  assert(collect !== undefined,
+    'the graph of the append loop is read: ' + summaries.map(f => f.join(' ')).join(' | '))
+  // The counts are the rows, read back: a summary that disagreed with its own output would be a
+  // number nobody can check.
+  const total = (index) => summaries.reduce((sum, f) => sum + Number(f[index]), 0)
+  assert(total(3) === updates.length,
+    'the summaries count the rows printed: ' + total(3) + ' vs ' + updates.length)
+  const byVerdict = (name) => updates.filter(f => f[3] === name).length
+  for (const [name, index] of [['in-place', 5], ['by-count', 7], ['copied', 9]]) {
+    assert(total(index) === byVerdict(name),
+      'the summaries count the ' + name + ' rows: ' + total(index) + ' vs ' + byVerdict(name))
+  }
+  for (const f of summaries) {
+    assert(Number(f[5]) + Number(f[7]) + Number(f[9]) === Number(f[3]),
+      'each summary adds up: ' + f.join(' '))
+  }
+}
+'''
+
+[[tests]]
+name = "inspect.copies.training_step"
+desc = "A training step whose loop appends the loss curve (cases/modules/optim/training.cml, the c2 training loop reduced to what proves the port), read through `camel inspect --copies`: the append of the loop state is one row with its source position and one of the three verdicts, and the graph's summary counts it. This is the criterion's second case: the tool answers for a training step and does not stay silent."
+case = "../../../cases/modules/optim/training.cml"
+args = ["inspect", "--copies", "${case}"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies exited 0: ' + input.exit_code + ' ' + said)
+  const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the tool printed a reading: ' + said)
+  const fields = lines.map(l => l.split(' '))
+  const updates = fields.filter(f => f.length === 4)
+  const summaries = fields.filter(f => f.length === 10 && f[2] === 'updates')
+  const verdicts = ['in-place', 'by-count', 'copied']
+  assert(updates.length > 0,
+    'the training loop appends its loss curve and the tool reports the append: ' + said)
+  assert(updates.every(f => verdicts.includes(f[3])),
+    'every update says in-place, by-count or copied: ' + updates.map(f => f.join(' ')).join(' | '))
+  const appends = lines.filter(l => /^COPIES training\.cml:\d+:\d+ append (in-place|by-count|copied)$/.test(l))
+  assert(appends.length > 0,
+    'the append of the loss curve is one row named append: ' + lines.join(' | '))
+  assert(summaries.length > 0, 'every graph has its summary: ' + said)
+  const total = (index) => summaries.reduce((sum, f) => sum + Number(f[index]), 0)
+  assert(total(3) === updates.length,
+    'the summaries count the rows printed: ' + total(3) + ' vs ' + updates.length)
+  for (const f of summaries) {
+    assert(Number(f[5]) + Number(f[7]) + Number(f[9]) === Number(f[3]),
+      'each summary adds up: ' + f.join(' '))
+  }
+}
+'''
+
+[[tests]]
+name = "inspect.copies.case_study_step_answers"
+desc = "The case study's own program (examples/case-study/train.cml), read through `camel inspect --copies`: the `main` graph is answered for -- with its summary line, and with `updates 0` when the program has no update node at all. Whatever the training step's update is in this tree, the tool names the graph and gives a count, which is what makes 'nothing to reuse' a reading instead of silence."
+case = "../../../../examples/case-study/train.cml"
+args = ["inspect", "--copies", "${case}"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies exited 0: ' + input.exit_code + ' ' + said)
+  const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('COPIES '))
+  assert(lines.length > 0, 'the tool printed a reading: ' + said)
+  const fields = lines.map(l => l.split(' '))
+  const updates = fields.filter(f => f.length === 4)
+  const summaries = fields.filter(f => f.length === 10 && f[2] === 'updates')
+  const noPlan = fields.filter(f => f.length === 3 && f[2] === 'no-plan')
+  assert(updates.length + summaries.length + noPlan.length === lines.length,
+    'every line is an update row, a graph summary or a no-plan: ' + lines.join(' | '))
+  // The graph the program runs in is answered for: a summary line (which carries `updates 0` when
+  // there is nothing to reuse) or, when there is no plan to read at all, the line that says so.
+  const main = lines.find(l => /^COPIES main updates \d+ in-place \d+ by-count \d+ copied \d+$/.test(l))
+  assert(main !== undefined || lines.includes('COPIES main no-plan'),
+    'the main graph is answered for, not skipped: ' + lines.join(' | '))
+  const total = (index) => summaries.reduce((sum, f) => sum + Number(f[index]), 0)
+  assert(total(3) === updates.length,
+    'the summaries count the rows printed: ' + total(3) + ' vs ' + updates.length)
+}
+'''
