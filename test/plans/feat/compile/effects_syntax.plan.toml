@@ -788,7 +788,7 @@ expect_output_contains = ["err_write_entry_reaches.cml:5:", "() => int uses var 
 
 [[tests]]
 name = "var_parameter.write_outside_sync"
-desc = "The write a body leaves in a `var` parameter is a result of the function like the returned value: the cell outlives the call, so the body's exit uses the last write, and it runs with a `sync` body and without one alike (design principles 3.1, no effect vanishing in silence). The lambda body that is not `sync` used to drop it -- `0 0` here -- and now prints what the `sync` body prints. Four back ends, one reading."
+desc = "The write a body leaves in a `var` parameter is a result of the function like the returned value: a `var` parameter is passed in by value and passed back by value (design principles 3.5), so the body's exit uses the last write and the caller's name is written when the call returns, with a `sync` body and without one alike (design principles 3.1, no effect vanishing in silence). The lambda body that is not `sync` used to drop the write -- `0 0` at the start -- and now runs it like the `sync` body. Four back ends, one reading. The first line is 0 and not 1: the closure reads the value `x` had where it was made (3.5, 197), and the write-back counts after the call."
 kind = "behavior"
 case = "../../../cases/effects/var_parameter_write_outside_sync.cml"
 args = ["${case}", "${backend}"]
@@ -799,7 +799,7 @@ expect_output_not_contains = ["Segmentation fault", "dumped core", "internal err
 verify_script = """
 ({ input, assert }) => {
 const out = input.normalized.stdout.trim()
-const want = ["1", "1", "2", "2", "3"].join('\n')
+const want = ["0", "1", "2", "2", "3"].join('\n')
 assert(out === want, `unexpected output: ${out}`)
 }
 """

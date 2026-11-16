@@ -387,7 +387,7 @@ bfeaff779ffa282d ok docs/tutorial/examples/06_sync_block.cml
 10db2d3f44945035 ok docs/tutorial/examples/06_sync_body.cml
 44d4456643383e2f ok docs/tutorial/examples/06_unused_effect.cml
 13ef001fd53886f7 ok docs/tutorial/examples/06_var_order.cml
-acc4155e2be0f3aa ok docs/tutorial/examples/07_closures.cml
+e266858064333883 ok docs/tutorial/examples/07_closures.cml
 f9a9a49a11b337a1 ok docs/tutorial/examples/07_errors.cml
 7ce357426e4a4f3d ok docs/tutorial/examples/07_exercise.cml
 af3d023ba4bceb42 ok docs/tutorial/examples/07_fault.cml
@@ -2419,9 +2419,9 @@ c6a70733d1d83ee6 ok test/cases/consistency/new_values/dropped_nested_block.cml
 b4b098fe9da2204d ok test/cases/consistency/new_values/dropped_void_body.cml
 1628919138ced61e ok test/cases/consistency/new_values/macro_append.cml
 ff89b857cfdca4c6 ok test/cases/consistency/new_values/peek.cml
-1275aead7e6df352 ok test/cases/consistency/new_values/peek_loop.cml
-c58529c6bcd925bc ok test/cases/consistency/new_values/rebinding_loop.cml
-638ec3de9c083547 ok test/cases/consistency/new_values/sort_rebinding.cml
+e7b1889f9dc9f225 ok test/cases/consistency/new_values/peek_loop.cml
+14de043d78d2cc59 ok test/cases/consistency/new_values/rebinding_loop.cml
+70e6af9d054009a3 ok test/cases/consistency/new_values/sort_rebinding.cml
 12bfa27ee5d13b4b ok test/cases/consistency/new_values/unused_in_lambda.cml
 ed04ebc79de351df ok test/cases/consistency/new_values/unused_operator.cml
 b4512ab896fc938d ok test/cases/consistency/new_values/unused_var.cml
@@ -2574,7 +2574,7 @@ e3a0179e2e4653b5 ok test/cases/effects/pure_parameter_takes_pure.cml
 fe1e03c7601a0566 ok test/cases/effects/two_references_write_one_object_unsynced.cml
 a5892bb3d5ebb981 ok test/cases/effects/uses_ambient_covers_body.cml
 93f2f5da8620a912 ok test/cases/effects/value_made_after_a_call_captures_its_version.cml
-27b1537029d41d6c ok test/cases/effects/var_parameter_write_outside_sync.cml
+5cd59e424f5522fe ok test/cases/effects/var_parameter_write_outside_sync.cml
 fff56c4cfac9c433 ok test/cases/effects/writer_table_through_callee.cml
 e88cbf676c43cf82 ok test/cases/effects/unreachable_pair/with/reading.cml
 022a0888a5490272 ok test/cases/effects/unreachable_pair/without/reading.cml
@@ -2707,7 +2707,7 @@ e84d2fc724034852 ok test/cases/linear/byref/var_capture_reference.cml
 3ef7e3177575e622 ok test/cases/linear/byref/var_function_as_value_function.cml
 67d2c3eb1b6d6c25 ok test/cases/linear/byref/var_function_to_operator.cml
 6459ea9ecca389d9 ok test/cases/linear/byref/var_param_jit.cml
-9a1f2c61f28415e2 ok test/cases/linear/byref/var_param_reference.cml
+c7da9492f10bc3c3 ok test/cases/linear/byref/var_param_reference.cml
 538274c380a796e5 ok test/cases/linear/byref/var_param_slot_array.cml
 6ca7267b281b582a ok test/cases/linear/byref/var_read_before_callee_write.cml
 f6004e8d888eca0c ok test/cases/linear/byref/var_rule_subpasses.cml
@@ -4125,7 +4125,7 @@ bec6cac502095424 ok test/cases/probe/dpack4_functype_ok.cml
 80e252c8464dfa2a no test/cases/probe/dpack_old_pack.cml
 8927fe1d274101df no test/cases/probe/dpack_old_rank.cml
 c8c822093e37ef6a ok test/cases/resources/conflict_per_resource.cml
-e4aacb3bd0d11025 ok test/cases/resources/effects.cml
+f757a0c455d36e73 ok test/cases/resources/effects.cml
 6c97327de4715b70 ok test/cases/resources/names.cml
 c75fdfd9be82e8ac ok test/cases/runtime/adopt_chain/grad_three_calls.cml
 cdd20b2a7df9feda ok test/cases/runtime/adopt_chain/jvp_three_calls.cml

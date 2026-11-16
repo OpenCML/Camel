@@ -1,7 +1,9 @@
 /**
- * A `var` parameter is a reference to the caller's variable (docs/design-principles.cn.md 3.5):
- * a write by the callee is a write to that variable, when it happens, on every scheduler and
- * after every pass. Expected output, one value per line:
+ * A `var` parameter is "passed in by value, passed back by value" (docs/design-principles.cn.md
+ * 3.5): the argument's value enters the callee's own name, a write in the callee rebinds that
+ * name, and the value is written back to the caller's name when the call returns. There is no
+ * alias, so nothing is visible in the caller before the callee returns. Expected output, one
+ * value per line:
  *   1        direct call
  *   8        indirect call through a function value
  *   10       recursion: 4 + 3 + 2 + 1 + 0, each level adds to the same variable
@@ -15,7 +17,15 @@
  *                    (`xs = xs->append<v>`, design principles 11.3), then replaced
  *   15       a tuple variable replaced by the callee
  *   2        a var with-parameter
- *   7        a write is visible before the callee returns (read through a second reference)
+ *   0        a closure written at the call's argument position reads the value the name had when
+ *            the closure was made, not the callee's write: `write_then_read(w, (): int => w)` is
+ *            `w = 7` inside the callee plus `w`'s write-back AFTER the call returns, so the closure
+ *            sees 0 (design principles 3.5: "a closure captures the value it was made with";
+ *            "a `var` parameter is passed in by value and passed back by value"). The closure's
+ *            last use is that very call, so 3.5 (198) has no stretch to report and the call is
+ *            legal -- the author's ruling of 2026-11-16, which also settles
+ *            `update(x, () => x + 1)` reading the old value by the same rule. Before the
+ *            by-reference capture was withdrawn, this line read 7.
  *   0 1      one variable passed to a parameter without `var` and to a `var` parameter: the
  *            first receives the value the variable holds at the call (the principles do not
  *            say whether it should alias; see the open questions), the second the variable
