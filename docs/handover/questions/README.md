@@ -9,7 +9,7 @@
 
 （目录为空：没有页在等回答。）
 
-## 生成器不会删的行：120 行（页已不在 `questions/` 里）
+## 生成器不会删的行：121 行（页已不在 `questions/` 里）
 
 > 这些行是从上一版的表里原样带过来的：**生成器只增不删**，页走了行也留着。
 > 页搬进了 `reviews/` 的行指到那一页；树里已经没有这一页的行只留名字，不编一个指不到的目标。
@@ -120,6 +120,7 @@
 | [`2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with`](../reviews/2026-11-15-who-gives-back-the-reference-a-counted-value-is-made-with.cn.md) | 产出处的那一个减一由谁发：编译器，还是运行时？ | 在 `reviews/` |
 | [`2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder`](../reviews/2026-11-15-who-takes-the-place-when-a-pass-removes-a-holder.cn.md) | 一个 pass 取走持位节点之后，位置由谁接？ | 在 `reviews/` |
 | [`2026-11-15-why-a-dead-write-is-refused-by-its-own-check`](../reviews/2026-11-15-why-a-dead-write-is-refused-by-its-own-check.cn.md) | 判据说死了，删除为什么不敢动 | 在 `reviews/` |
+| [`2026-11-16-casevm-does-not-compile-in-any-configuration`](../reviews/2026-11-16-casevm-does-not-compile-in-any-configuration.cn.md) | `casevm.cpp` 在任何配置下都编不出来：删掉还是连 20 处一起修？ | 在 `reviews/` |
 | [`2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference`](../reviews/2026-11-16-does-a-closure-handed-to-a-var-parameter-capture-by-reference.cn.md) | 实参位置上递出去的闭包，要不要按引用捕获？ | 在 `reviews/` |
 | [`2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write`](../reviews/2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write.cn.md) | 在调用的实参位置造出来的闭包，该读到写之前的值还是写之后的值？ | 在 `reviews/` |
 | [`2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var`](../reviews/2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md) | 生成器体里的闭包捕获 `var`，为什么留格子？ | 在 `reviews/` |

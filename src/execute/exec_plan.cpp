@@ -1309,6 +1309,29 @@ bool rowsOfValueAreExecuted(const ExecPlan &plan, gc_node_ref_t value) noexcept 
     return node != nullptr && node->kind == GCNodeKind::Oper;
 }
 
+/// The object the value of `position` is, when that value is one this count owns, and `nullptr` when
+/// it is not a counted handle. The node's output slot carries the type before a back end publishes
+/// the value into it -- the frame is laid out from the node's type -- so this reads the code the
+/// entry loop below reads for the value's own row.
+camel::core::rtdata::Object *objectOfTheOwnValue(const ExecPlan &plan,
+                                                 camel::core::context::Frame *frame,
+                                                 size_t position,
+                                                 slot_t produced) noexcept {
+    const gc_node_ref_t own = plan.topo[position];
+    if (own >= plan.dataIndexByRef.size()) {
+        return nullptr;
+    }
+    const gc_data_idx_t slot = plan.dataIndexByRef[own];
+    if (slot == 0) {
+        return nullptr;
+    }
+    const camel::core::type::TypeCode code = frame->codeAt(slot);
+    if (code != camel::core::type::TypeCode::Ref && code != countedHandleCode()) {
+        return nullptr;
+    }
+    return camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(produced);
+}
+
 /// The rows of one position of `topo`: the holds a value taken at that position and the references
 /// that come back there. `applyRefEntriesForNode` is the published entry point; this is the work, and
 /// it is one function so that a back end holding a slot and a back end holding a node cannot drift
@@ -1325,6 +1348,10 @@ void applyRefEntriesAtPosition(
     if (entries.empty()) {
         return;
     }
+    // The object the node's own value is, when that value is a counted handle: a node that hands
+    // back a value it was given makes its value *be* that value's object, and the reference the
+    // last use would give back below is then the one the node's value is born with.
+    camel::core::rtdata::Object *const ownObject = objectOfTheOwnValue(plan, frame, position, produced);
     for (const ExecPlan::RefEntry &entry : entries) {
         if (!rowsOfValueAreExecuted(plan, entry.value)) {
             continue;
@@ -1349,6 +1376,16 @@ void applyRefEntriesAtPosition(
         camel::core::rtdata::Object *object =
             camel::core::rtdata::fromSlot<camel::core::rtdata::Object *>(value);
         if (object == nullptr) {
+            continue;
+        }
+        if (entry.kind == ExecPlan::RefEntryKind::GiveBack && !ownValue && object == ownObject) {
+            // The node has just published this very object as its own value, so the reference that
+            // would come back here is the one its value is born with: the last use takes the
+            // producing reference over (exec_plan.h, "the references that come back") and a node
+            // that hands a value back hands that take-over on. `reduce` returns its accumulator, so
+            // a `state::Ref` as its `initial` makes its value the initial's box; giving the initial's
+            // reference back here took the count to zero while the node's value still named it. The
+            // value's own row, at its last use, is the one that brings the count home.
             continue;
         }
         for (uint32_t taken = 0; taken < entry.count; ++taken) {
