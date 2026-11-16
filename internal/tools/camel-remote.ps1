@@ -154,8 +154,8 @@
 # So the gate reads them, and decides only what is news. `gpu-plans` reuses the `reportOnly` shape of
 # the table below -- one machine-readable line, an exit code kept out of `checkfail` -- but it is a
 # plan run and not a checker, so it is emitted as a block of its own after the checkers instead of a
-# table row. `N run` in the closing summary is the static layer's count (16 under `-Check all`), and
-# a seventeenth row would have changed a number every lane compares. The number it prints is the
+# table row. `N run` in the closing summary is the static layer's count (19 under `-Check all`), and
+# a twentieth row would have changed a number every lane compares. The number it prints is the
 # runner's own [SUMMARY] reduced to one line, never a second count kept here, and it is `unknown` --
 # not zero -- when the runner printed no summary at all. It runs on the caller's -Jobs, after the
 # checkers, and under the host's plan lock: it *is* a plan run and not a reader of one, so a number
@@ -447,6 +447,22 @@ $checkers = [ordered]@{
     # nothing. 331 findings on 2026-11-14; the number coming down is the work item, and this entry
     # going red is what says it went up.
     'plan-fields'         = @{ script = 'test/tools/check-plan-fields.mjs'; args = @(); compiler = $false }
+    # The front end's AST snapshot against the tree, before the plan that is red on it: every `.cml`
+    # the tree holds, and the probes `probes.py` makes, hashed by `camel-parsecheck hashes` -- the
+    # tool `frontend.ast_snapshot` itself starts -- with the line
+    # `test/plans/feat/parse/golden/ast_hashes.txt` records for each compared with the reading the
+    # file gives now. A `.cml` whose reading moved, or a `.cml` nobody registered, is a red on the
+    # base branch that the merge position has to find and patch after the fact; that happened five
+    # times (`1dad3104f` is the fifth: `4363 lines, 3 added, 3 removed`), and each time the repair
+    # was right and the reader was late. This is the reader: one process, one line per stale file,
+    # from the lane's own worktree, before the push.
+    #
+    # `compiler = $true`: it starts the install's `camel-parsecheck`, beside the `camel` the
+    # `--camel` argument names, so it reads the install this run built and -NoBuild guarded. A
+    # `.cml` edit is in the build stamp's fingerprint (`scripts/common.js`, `sourceFingerprint`),
+    # so `-NoBuild` after one needs `-AllowStale` -- the parser's reading of a file does not depend
+    # on the tree its binary was built from, which is the one thing that stamp cannot know.
+    'ast-hashes'          = @{ script = 'scripts/check-ast-hashes.mjs'; args = @(); compiler = $true }
     # --- report only -----------------------------------------------------------
     # The checks the target architecture asks for before they are walls: they run on every gate and
     # publish their own reading, and their exit code does not decide the run's. `findings` is the
@@ -514,8 +530,8 @@ $planStageNames = @($checkers.Keys | Where-Object { $checkers[$_].planStage })
 $planStageSkipped = @($planStageNames | Where-Object { $checkNames -notcontains $_ })
 
 # The gpu observation, beside the table and deliberately not in it: it is a plan run, so it is no
-# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (16
-# under -Check all), which a seventeenth row would have changed for every lane that compares that
+# row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (19
+# under -Check all), which a twentieth row would have changed for every lane that compares that
 # number. It reuses the report-only shape instead (one machine-readable line, an exit code that never
 # reaches `checkfail`) and is emitted as a block of its own after the checkers; the header section
 # "the gpu layer is observed, and never gates a known red" states what it is, what it is not, and how
@@ -1835,8 +1851,8 @@ exit `$code
     #
     # The gpu observation's footer travels on the same regex as a checker's, so its reading arrives
     # in `$checkResults` too. It is taken out here rather than left in: `N run` below is the static
-    # layer's count (16 under -Check all), and the observation is a plan run that is not one of those
-    # checks -- a seventeenth name in that count would change a number every lane compares. It is
+    # layer's count (19 under -Check all), and the observation is a plan run that is not one of those
+    # checks -- a twentieth name in that count would change a number every lane compares. It is
     # listed on its own line instead, with the same "report only" tag and a word about the count, so
     # that a green check summary is not read over a gpu layer somebody forgot to look at.
     $gpuObserved = @($checkResults | Where-Object { $_.name -eq $gpuObservationName })

@@ -256,75 +256,92 @@ void Builder::noteMachinePortOrigin(node_handle_t port, node_handle_t origin) {
     machinePortOrigin_[port] = origin;
 }
 
+node_handle_t Builder::captureValueOf(const CapturedValue &captured) {
+    const node_handle_t here = captureInto(currGraph_, captured.origin, captured.name);
+    if (isVariable(captured.port)) {
+        // A cell the closure shares: what it is worth as of this call is the value its nearest write
+        // gave it, so a cell written before the call and again after it hands the first write on.
+        const node_handle_t version = valueVersionOf(here);
+        return version != nullptr ? version : here;
+    }
+    if (here != nullptr && isVariable(here)) {
+        // A capture of a value is handed the value the variable holds where the call stands, never
+        // the cell (design principles 3.5, 197). The read is the node the call takes as its input:
+        // it is a reader of the cell like any other, so the fold at the end of the body hands it the
+        // value the write wrote (collapseNonEscapingVariableReads) and the call is handed that value.
+        return readVariable(here);
+    }
+    return here;
+}
+
 void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee) {
     CaptureSite site;
     site.caller = currGraph_;
     site.call   = call;
     site.callee = callee;
-    // A copy: capturing into the caller may add to the table.
+    // The captures the callee has now are the call's `with` inputs from here on: the value a call is
+    // handed is an edge of the graph, so the fold and the erasure follow it and no node has to be
+    // kept alive beside the graph. A copy: capturing into the caller may add to the table.
     const std::vector<CapturedValue> captured = capturedValues_[callee.get()];
-    site.values.reserve(captured.size());
+    site.firstCapture = withInputsOf(call).size();
     for (const CapturedValue &value : captured) {
-        node_handle_t here = captureInto(currGraph_, value.origin, value.name);
-        if (!isVariable(value.port) && here != nullptr && isVariable(here)) {
-            // A callee whose capture port carries a value (a function the program also makes a
-            // value of, `captureByValue`) is handed the value the variable holds here, never the
-            // cell: the read is the node the capture table holds for this call, and the control
-            // edge keeps it alive to the link step (linkCaptureSites turns it into the With input,
-            // tryRemoveCtrlLink). A read nothing uses is erased when the body ends, and the call
-            // would be linked to a node that is gone -- which is where this port crashed.
-            node_handle_t read = readVariable(here);
-            linkNodes(LinkType::Ctrl, read, call);
-            here = read;
-        }
-        site.values.push_back(here);
-        // What the capture is worth as of this call: a capture of a variable already written here
-        // passes that write's version on, not the cell. The call is linked to it later
-        // (linkCaptureSites), when the caller may already have written again.
-        site.versions.push_back(isVariable(value.port) ? valueVersionOf(here) : nullptr);
+        linkNodes(LinkType::With, captureValueOf(value), call);
+        ++site.linked;
     }
     captureSites_.push_back(std::move(site));
 }
 
-bool Builder::heldByCaptureSite(node_handle_t value) const {
-    for (const CaptureSite &site : captureSites_) {
-        for (size_t k = site.linked; k < site.values.size(); ++k) {
-            if (site.values[k] == value) {
-                return true;
-            }
-        }
-    }
-    return false;
-}
-
 void Builder::linkCaptureSites() {
+    // The captures are already the call's `with` inputs (addCaptureSite). The one thing the call
+    // could not place by itself is the order: its declared `with` arguments are written by the call's
+    // own arguments, which are built after the callee is visited (visitLinkNode), so the captures
+    // were appended before them. The callee's with-ports are the declared arguments first and the
+    // captures after, and a call hands them over in that order (captureWriteMaskOf reads the written
+    // versions out of the same one). Placed once, before anything reads these inputs: the link step
+    // is the last thing the build does before the resource and linearity passes run.
+    for (CaptureSite &site : captureSites_) {
+        if (site.placed) {
+            continue;
+        }
+        site.placed = true;
+        const auto current = withInputsOf(site.call);
+        const std::vector<draft_node_ref_t> inputs(current.begin(), current.end());
+        const size_t total = inputs.size();
+        if (site.linked == 0 || site.firstCapture + site.linked >= total) {
+            // Nothing declared after the captures: they are the last inputs already.
+            continue;
+        }
+        const auto first = inputs.begin() + static_cast<std::ptrdiff_t>(site.firstCapture);
+        const auto last  = first + static_cast<std::ptrdiff_t>(site.linked);
+        std::vector<draft_node_ref_t> ordered;
+        ordered.reserve(total);
+        ordered.insert(ordered.end(), inputs.begin(), first);
+        ordered.insert(ordered.end(), last, inputs.end());
+        ordered.insert(ordered.end(), first, last);
+        nodeGraphOf(site.call)->edit().setWithInputs(nodeIdOf(site.call), ordered);
+    }
     // Least fixpoint: passing a capture the callee made late may give the caller a capture
     // port of its own, which the calls of the caller then pass in turn.
     for (bool changed = true; changed;) {
         changed = false;
-        for (size_t i = 0; i < captureSites_.size(); ++i) {
-            const std::vector<CapturedValue> captured =
-                capturedValues_[captureSites_[i].callee.get()];
-            for (size_t k = captureSites_[i].linked; k < captured.size(); ++k) {
-                CaptureSite &site = captureSites_[i];
-                node_handle_t value = nullptr;
-                if (k < site.values.size()) {
-                    value = site.versions[k] != nullptr ? site.versions[k] : site.values[k];
-                } else {
-                    const size_t before = capturedValues_[site.caller.get()].size();
-                    value = captureInto(site.caller, captured[k].origin, captured[k].name);
-                    if (capturedValues_[site.caller.get()].size() != before) {
-                        changed = true;
-                    }
+        for (CaptureSite &site : captureSites_) {
+            const std::vector<CapturedValue> captured = capturedValues_[site.callee.get()];
+            for (size_t k = site.linked; k < captured.size(); ++k) {
+                const size_t before = capturedValues_[site.caller.get()].size();
+                const node_handle_t value =
+                    captureInto(site.caller, captured[k].origin, captured[k].name);
+                if (capturedValues_[site.caller.get()].size() != before) {
+                    changed = true;
                 }
                 // The With inputs of a FUNC node are its callee's with-ports in order: the
-                // declared `with` arguments, linked where the call was built, then the
-                // captures, linked here. A capture of a variable this caller wrote is that
-                // write's version, which is also what the call's value carries it as
-                // (callValueTypeOf, Builder::valueVersionOf).
-                tryRemoveCtrlLink(value, site.call);
+                // declared `with` arguments, then the captures. This one is a capture the callee
+                // made after the call was built, so it is the call's last input. It is linked here
+                // and not kept for later: the node exists for the length of this statement and is
+                // an edge of the graph from the moment it does. A capture of a variable cannot
+                // arrive this late -- captureInto refuses it (CaptureAfterRecursiveCall) -- so there
+                // is no read to freeze where the program wrote the call.
                 linkNodes(LinkType::With, value, site.call);
-                site.linked = k + 1;
+                ++site.linked;
             }
         }
     }

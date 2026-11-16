@@ -314,11 +314,11 @@ bool Builder::placeCalleeCapture(
     BodyReach &walk, DraftGraphBuilder *graph, const runtime::GraphTransaction &transaction,
     const compile_graph_ptr_t &callee, size_t position, draft_node_ref_t value) const {
     // One capture of a callee, as this body sees it. A direct call hands its callee's captures in
-    // after the declared `with` arguments (linkCaptureSites), so the caller's node is known; a call
-    // through a value does not list them among its inputs, and the value was made in the graph that
-    // captured them, so the origin is read from there. The origin then answers the same question a
-    // direct use of a capture answers (placeCapturedUse), except that a cell of an enclosing graph
-    // is this body's capture of it.
+    // after the declared `with` arguments (addCaptureSite links them, linkCaptureSites places them
+    // there), so the caller's node is known; a call through a value does not list them among its
+    // inputs, and the value was made in the graph that captured them, so the origin is read from
+    // there. The origin then answers the same question a direct use of a capture answers
+    // (placeCapturedUse), except that a cell of an enclosing graph is this body's capture of it.
     const auto classify = [&](node_handle_t at) -> bool {
         if (at == nullptr) {
             return false;
