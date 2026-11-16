@@ -845,6 +845,21 @@ void planStorageReuse(const GCGraph &graph, ExecPlan &plan) {
 /// plan released the value where it was read and again where the enum died -- one release too many
 /// for a handle read out of a variant and used afterwards (a `Ref` a defunctionalized closure
 /// carried, read after the call through the value).
+///
+/// `:op/idx_arr`'s element read is on it for the same reason and by the same measurement: an
+/// element of `xs` is the slot the array holds (`Array::getSlot`,
+/// src/builtin/operators/struct.cpp#__index_arr__), and no reference is taken for it -- the array
+/// is what holds it. Read as a producer, `xs[0]` looked like a value born with a reference of its
+/// own, and the plan gave that reference back at the element's last use: the box was released while
+/// the array still held it (and while the box was still read later), so `state::set(xs[0], 5)`
+/// wrote through a released handle and `state::get` on either name answered "the value is not a
+/// reference". With the element read forwarding, the value at the index is the array's, so its
+/// reference comes back where the array dies -- and the reference of a handle packed into the array
+/// comes back with it, after the last read of any element.
+///
+/// A row of a higher-rank array is NOT one of these: `xs[i]` on a value with more than one
+/// dimension makes a value of its own (a view that shares the block, or a copy for an array of
+/// references), so the plan counts it as a producer's, as it counts any operator's output.
 bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
     const GCNode *node = graph.node(at);
     if (node == nullptr) {
@@ -858,7 +873,18 @@ bool forwardsItsValue(const GCGraph &graph, gc_node_ref_t at) {
         return false;
     }
     const auto *body = graph.nodeBodyAs<GCOperBody>(at);
-    return body != nullptr && body->uri() == ":enum/field";
+    if (body == nullptr) {
+        return false;
+    }
+    const std::string_view uri = body->uri();
+    if (uri == ":enum/field") {
+        return true;
+    }
+    if (uri != ":op/idx_arr") {
+        return false;
+    }
+    const camel::core::type::Type *type = node->dataType();
+    return type != nullptr && type->code() != camel::core::type::TypeCode::Array;
 }
 
 /// A node that packs the values it is given into the value it makes: a FILL builds a closure tuple
@@ -980,6 +1006,31 @@ void planValueUses(const GCGraph &graph, ExecPlan &plan, ValueUses &uses) {
                                  packersOf[value].end()) {
                     packersOf[value].push_back(at);
                 }
+            }
+        }
+    }
+
+    // A value packed into a value the program keeps is kept too. The packing value carries the
+    // reference out of the graph -- a closure the program holds, the aggregate the result is
+    // returned in -- so it does not come back here, and a give-back placed at the packing value's
+    // in-graph end would release a reference that value still holds. What that costs a reader: a
+    // box packed into an array, and the array packed into a closure the graph returns, was given
+    // back at the array's last read in the graph (a `state::set` on an element), so the box was
+    // released while the closure still held it and the call's `state::get` answered "the value is
+    // not a reference". Read in reverse topo order, because a packing node comes later in the order
+    // than the values it packs, so a chain of packings settles in one pass.
+    for (size_t idx = count; idx-- > 0;) {
+        const gc_node_ref_t value = plan.topo[idx];
+        if (value >= nodeCount || keptByProgram[value] != 0) {
+            continue;
+        }
+        for (const gc_node_ref_t packer : packersOf[value]) {
+            if (packer >= nodeCount) {
+                continue;
+            }
+            if (keptByProgram[packer] != 0) {
+                keptByProgram[value] = 1;
+                break;
             }
         }
     }
