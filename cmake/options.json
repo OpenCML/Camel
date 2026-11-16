@@ -8,12 +8,6 @@
             "type": "platform"
         },
         {
-            "name": "ENABLE_FASTVM_COMPUTED_GOTO",
-            "description": "Use computed goto in interpreter",
-            "default": "ON",
-            "type": "bool"
-        },
-        {
             "name": "CAMEL_ENABLE_PYTHON",
             "description": "Build python.cmo, pyplot.cmo, and py_bridge* (requires Python dev layout)",
             "default": "ON",

@@ -297,10 +297,12 @@ class ExecPlan {
     // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
     //
     // What this table does not decide: a value a callee keeps, or one a later graph reads, is a
-    // holder no edge of this graph shows. Counting those is the rest of the way to route 4 -- and
-    // until they are counted, the rows of a value whose holders cannot all be seen are simply not
-    // executed (`applyRefEntriesForNode` only runs the rows of a value an operator node makes), so
-    // a count no edge explains stays above zero instead of reaching it early.
+    // holder no edge of this graph shows. Counting those is the rest of the way to route 4. Until
+    // they are counted, the rows are laid out where the graph's own holds can see them, and the
+    // rows of a value a CALL or a FILL makes are written where an operator's site runs them
+    // (`planRefRows`): the leak of 2026-11-16 was that those rows were laid out at the CALL or the
+    // FILL, no back end ran them (`applyRefEntriesForNode` is reached at operator sites), and a
+    // count no edge explains stayed above zero while the plan read balanced.
     struct RefGiveBack {
         gc_node_ref_t value = kInvalidNodeRef; // the value node the reference belongs to
         gc_node_ref_t at    = kInvalidNodeRef; // the node that has run when it comes back
@@ -312,8 +314,16 @@ class ExecPlan {
     /// By topo index: the node makes the value the plan counts (it is neither a port, nor a
     /// constant, nor a node that only forwards).
     std::vector<uint8_t> refProducedAt;
-    /// By topo index: how many references the node's output takes beyond the producing one.
-    std::vector<uint32_t> refCopiesAt;
+    /// By topo index: how many holds a back end takes when this node has run -- keyed the way an
+    /// instruction is, as `refGiveBackAt` is for the references that come back, so that these two
+    /// columns are the whole schedule a back end reads. It is also the only column of the holds
+    /// (author review 2026-11-16, item 7): a value's copies were never a position of their own, and
+    /// the second column that said otherwise -- `refCopiesAt`, which kept the same numbers at the
+    /// value's own position -- disagreed with this one exactly where the leak was, at a value a
+    /// CALL or a FILL makes, whose node writes no rows and whose hold is taken at the first
+    /// operator position that writes one of its rows (exec_plan.cpp, `planRefRows`). A reader that
+    /// wants one value's holds sums the `Retain` entries that name it (`refEntries`).
+    std::vector<uint32_t> refHoldsAt;
     /// By topo index: how many references come back when this node has run. The same schedule as
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
     /// reads this, and the sum over the plan is `refGiveBacksTotal()`.
@@ -323,7 +333,7 @@ class ExecPlan {
     /// graph's result), a value the program keeps packs it (a closure that holds it leaves the
     /// graph with it), or a loop reads it again after the round that read it, so the round's
     /// give-back cannot be placed at that use (exec_plan.cpp, `repeatsWithoutMakingIt`). Either way
-    /// the graph is still one of the value's holders when the plan ends, and `refCopiesAt` takes one
+    /// the graph is still one of the value's holders when the plan ends, and `refHoldsAt` takes one
     /// hold per reference the plan does give back, so the balance is meant to end here.
     std::vector<uint8_t> refKeptAt;
     /// By topo index: refGiveBacks[refGiveBackOffsets[i] ..< refGiveBackOffsets[i + 1]] come back
@@ -370,7 +380,7 @@ class ExecPlan {
 
     /// ---- The entries: the holds and the give-backs, as one list per position -----------------
     //
-    // `refCopiesAt` and `refGiveBackAt` are the same schedule counted; this is the schedule as the
+    // `refHoldsAt` and `refGiveBackAt` are the same schedule counted; this is the schedule as the
     // entries a back end reads, one row per thing to do, so that "what the plan says" and "what the
     // count does" can be compared row by row rather than by two totals that happen to agree. A
     // `Retain` at a position is the node's output taking the holds beyond its own; a `GiveBack` is
@@ -390,14 +400,14 @@ class ExecPlan {
     std::span<const RefEntry> refEntriesAt(size_t topoIndex) const;
     /// By data slot: the operator node that makes the slot's value, and `kInvalidNodeRef` for a
     /// slot no operator makes. A back end that runs bytecode has the instruction's destination slot
-    /// where the node-form back ends have the node, and the rows are keyed by the node; this is that
-    /// translation, filled once with the rows, so that all four back ends reach the count through the
-    /// same one function. Only an operator claims a slot: a port, a GATE and a JOIN carry another
-    /// node's slot and make no value, so a lookup that landed on one of them would apply a row at
-    /// the wrong place.
+    /// where the node-form back ends have the node, and the rows are keyed by the node; this is
+    /// that translation, filled once with the rows, so that all four back ends reach the count
+    /// through the same one function. Only an operator claims a slot: a port, a GATE and a JOIN
+    /// carry another node's slot and make no value, so a lookup that landed on one of them would
+    /// apply a row at the wrong place.
     std::vector<uint32_t> refOperNodeBySlot;
-    /// The operator node that makes the value in `slot`; `kInvalidNodeRef` when no operator makes it
-    /// (including every static slot, which the negative index says is a constant).
+    /// The operator node that makes the value in `slot`; `kInvalidNodeRef` when no operator makes
+    /// it (including every static slot, which the negative index says is a constant).
     gc_node_ref_t refNodeOfSlot(gc_data_idx_t slot) const {
         if (slot <= 0 || static_cast<size_t>(slot) >= refOperNodeBySlot.size()) {
             return kInvalidNodeRef;
@@ -539,19 +549,11 @@ void noteCountedCreationAt(const void *graph, size_t pc, uint64_t boxes) noexcep
 // slot and not a node asks the plan which operator makes that slot's value (`refNodeOfSlot`), and
 // that lookup is the plan's table and not a second reading of the program. Its only caller is
 // `camel::execute::callOperator` (include/camel/execute/operator_call.h): every back end calls an
-// operator through that, so a place that calls an operator has no way to skip the rows and no way to
-// run them twice.
+// operator through that, so a place that calls an operator has no way to skip the rows and no way
+// to run them twice.
 void applyRefEntriesForNode(
-    const ExecPlan &plan,
-    camel::core::context::Frame *frame,
-    gc_node_ref_t node,
+    const ExecPlan &plan, camel::core::context::Frame *frame, gc_node_ref_t node,
     slot_t produced) noexcept;
-
-/// The measurement switch for the wiring above: one build with it `false` is the control for "the
-/// count is what releases a box" -- with the rows not executed, the same program's `released` must
-/// move, and a reading that does not move says the count took no part in it. It is `true` here and
-/// a run never writes it; a measurement flips it by hand, rebuilds, reads, and puts it back.
-inline constexpr bool kRefEntriesWired = true;
 
 /// How many boxes the node being run made: the sites bracket the operator call with it, and hand
 /// the answer to the call above.

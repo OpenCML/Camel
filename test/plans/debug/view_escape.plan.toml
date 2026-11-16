@@ -35,7 +35,14 @@ desc = "The view reaches the accumulator store and the process aborts with the g
 kind = "behavior"
 case = "../../cases/feat/mm/blocks.cml"
 args = ["${case}", "std::gc::views_escape", "std::nvm"]
-expect_stderr_contains = ["Camel Debug Assertion Failed:", "A compact element view escaped into the reduce accumulator"]
+# The report's *header* is not pinned, in either test of this plan: it is wording, and a plan that
+# pins wording is red for a rename. This one was red for exactly that -- waiting for `Camel Debug
+# Assertion Failed:` while the guard that fires (`assertStoredValueIsNotView`) reports through the
+# invariant path, whose header is `Camel Invariant Violation:` (src/utils/assert.cpp;
+# include/camel/utils/assert.h says the report was renamed on purpose). What this case is about is
+# the abort, and that is asserted where no rename can drift it: from the runner's payload, below.
+# The guard's own sentence stays pinned, because it names the defect and not the reporter.
+expect_stderr_contains = ["A compact element view escaped into the reduce accumulator"]
 expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
 # No `expect_exit`: the guard's behaviour is `std::abort()`, and no plan field can say so -- the
 # schema has no `expect_signal`, and `expect_exit` compares `result.exitCode`, which a signal
@@ -60,7 +67,7 @@ desc = "The same escape through the short alias of the pass."
 kind = "behavior"
 case = "../../cases/feat/mm/blocks.cml"
 args = ["${case}", "std::gcviews_escape", "std::nvm"]
-expect_stderr_contains = ["Camel Debug Assertion Failed:", "A compact element view escaped into the reduce accumulator"]
+expect_stderr_contains = ["A compact element view escaped into the reduce accumulator"]
 expect_output_not_contains = ["VIEW_ESCAPE not-caught"]
 # No `expect_exit`: the guard's behaviour is `std::abort()`, and no plan field can say so -- the
 # schema has no `expect_signal`, and `expect_exit` compares `result.exitCode`, which a signal

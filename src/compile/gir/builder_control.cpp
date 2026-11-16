@@ -2733,6 +2733,12 @@ node_handle_t Builder::buildBranch(
         }
     };
     const size_t armEnd = arms != nullptr ? arms->size() + 1 : gct->size();
+    // The pre-branch values are taken while the arms are built (Builder::rebindSsa).
+    const bool outerGathering = gatheringBranchValues_;
+    if (!outerGathering) {
+        branchBeforeValues_.clear();
+        gatheringBranchValues_ = true;
+    }
     for (size_t i = 1; i < armEnd; i++) {
         arm_ptr_t subGraph;
         if (arms != nullptr) {
@@ -2799,6 +2805,53 @@ node_handle_t Builder::buildBranch(
             subGraph = buildArm(caseExecNode);
         }
         addArm(subGraph);
+    }
+    if (!outerGathering) {
+        gatheringBranchValues_ = false;
+    }
+    // A `var` an arm writes as a value is carried by the branch's JOIN (stage S2). The join has one
+    // value slot, so the scan lets a branch write one such name and no more; an arm that writes
+    // nothing hands out the value the name had before the branch, which is why the pre-branch value
+    // is taken while the arms are built (Builder::rebindSsa).
+    std::string ssaCarried;
+    {
+        std::set<std::string> writtenNames;
+        for (const arm_ptr_t &arm : armList) {
+            for (const std::string &name : arm->ssaWriteOrder) {
+                writtenNames.insert(name);
+            }
+        }
+        // A name declared inside an arm dies with it and is not carried; only a name that already
+        // had a value before the branch has one to hand to the arm that writes nothing.
+        if (writtenNames.size() == 1) {
+            const std::string &name = *writtenNames.begin();
+            const auto before       = branchBeforeValues_.find(name);
+            if (before != branchBeforeValues_.end()) {
+                Type *carriedType = valueTypeOf(nodeTypeOf(before->second));
+                bool carried      = carriedType != nullptr;
+                for (const arm_ptr_t &arm : armList) {
+                    const auto wrote = arm->ssaWrites.find(name);
+                    const node_handle_t value =
+                        wrote != arm->ssaWrites.end() ? wrote->second : before->second;
+                    if (!carried || value == nullptr ||
+                        valueTypeOf(nodeTypeOf(value)) != carriedType) {
+                        carried = false;
+                        break;
+                    }
+                }
+                if (carried) {
+                    auto &carryDraft = currGraph_->transaction().edit();
+                    for (const arm_ptr_t &arm : armList) {
+                        const auto wrote = arm->ssaWrites.find(name);
+                        const node_handle_t value =
+                            wrote != arm->ssaWrites.end() ? wrote->second : before->second;
+                        carryDraft.setRegionResult(arm->region, nodeIdOf(value));
+                    }
+                    joinType   = carriedType;
+                    ssaCarried = name;
+                }
+            }
+        }
     }
     if (joinType != nullptr && !absentElse && !joinsNoValue) {
         for (const arm_ptr_t &arm : armList) {
@@ -3022,6 +3075,11 @@ node_handle_t Builder::buildBranch(
             .ctrlInputs   = joinCtrlInputs});
 
     linkNodes(LinkType::Norm, brchNode, joinNode);
+    if (!ssaCarried.empty()) {
+        // The join is the name's value from here on: an arm that wrote it hands that value out, and
+        // the arm that wrote nothing hands out the value the name had before the branch.
+        rebindSsa(ssaCarried, joinNode);
+    }
     linkArmEntries(armList, brchNode);
     // The arms of this branch exclude each other (design principles 5.4): the check on the built
     // graph reads which arm a read stands in from the region of the BRCH node, so nothing is
@@ -4752,6 +4810,9 @@ node_handle_t Builder::visitExitNode(const GCT::node_ptr_t &gct) {
 node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     const bool outerSynced        = std::exchange(synced_, false);
     const node_handle_t outerLast = std::exchange(lastSyncedNode_, {});
+    // The body of the region being built: a `var` declared in it is a candidate for SSA exactly
+    // when every read and write of its name stays in this body (Builder::scanBodyForSsa).
+    regionBodies_.push_back(gct);
     // The last statement of a body is the value the body hands on: a branch there (`if c then
     // … else …` as a function's whole body) stands in the position of that value, and so do
     // the `return`s written in its arms (design principles 5.1: an arm's `return` takes the type of
@@ -4767,10 +4828,12 @@ node_handle_t Builder::visitBodyNode(const GCT::node_ptr_t &gct) {
     } catch (...) {
         synced_         = outerSynced;
         lastSyncedNode_ = outerLast;
+        regionBodies_.pop_back();
         throw;
     }
     synced_         = outerSynced;
     lastSyncedNode_ = outerLast;
+    regionBodies_.pop_back();
     return result;
 }
 

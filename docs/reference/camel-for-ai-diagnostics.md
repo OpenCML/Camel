@@ -31,7 +31,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `UnterminatedComment` | Unterminated comment: {0}. |
 | `InvalidEscapeSequence` | Invalid escape sequence in string: {0}. |
 
-**Syntax — errors** (`SyntaxDiag`) — 19
+**Syntax — errors** (`SyntaxDiag`) — 20
 
 | `MissingClosingDelimiter` | Expected '{0}' before {2}, to close the '{1}'. |
 | `UnmatchedClosingDelimiter` | Unexpected '{0}': no '{1}' is open here. |
@@ -52,6 +52,7 @@ Source: `diagnostics/registry.tsv`, the one place a diagnostic is declared. Rege
 | `FuncTypeNeedsNames` | A function type names its parameters: write '(x: float, y: float) => float', not a list of types. |
 | `WhenAfterBody` | A 'when' condition comes before what it guards, so {0} cannot follow it. |
 | `LambdaParametersNeedParentheses` | A lambda's parameters need their parentheses: write '(x) => e', not 'x => e'. |
+| `IntervalHasNoOpenForm` | An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side. |
 
 **Syntax — warnings** (`SyntaxDiag`) — 1
 

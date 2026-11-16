@@ -1265,6 +1265,14 @@ node_handle_t Builder::compoundAssignmentByRebinding(
     // the assignment to `a` would not take is not this assignment's meaning, so the rebinding
     // does not apply and the compound assignment is reported as undefined, exactly as for a
     // type that has no plain operator at all.
+    // A write of this shape reads the name it writes: what it stores is not a value nobody could
+    // read, and the report of a dropped value stays off every link it rebuilds (ssaAssignmentOf).
+    struct CompoundGuard {
+        bool &flag;
+        bool outer;
+        explicit CompoundGuard(bool &f) : flag(f), outer(f) { flag = true; }
+        ~CompoundGuard() { flag = outer; }
+    } compoundGuard(inCompoundAssignment_);
     const node_handle_t plain = visitLinkNode(value);
     Type *result              = valueTypeOf(nodeTypeOf(plain));
     if (result == nullptr || !target->assignableFrom(result)) {
@@ -1497,10 +1505,15 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
         return nullptr;
     }
     const node_handle_t variable = resolveNodeByRef(name);
-    if (!isVariable(variable)) {
+    // The path starts at a `var` built as a value as well: `x.f = e` rebuilds the whole value
+    // and rebinds the name (`ssaAssignmentOf`), and the array is copied rather than taken, since
+    // there is no cell whose ownership could be kept.
+    const SsaValue *ssaTarget = isVariable(variable) ? nullptr : ssaBindingOf(name);
+    if (!isVariable(variable) && ssaTarget == nullptr) {
         return nullptr;
     }
-    Type *rootType = valueTypeOf(nodeTypeOf(variable));
+    Type *rootType =
+        ssaTarget != nullptr ? ssaTarget->type : valueTypeOf(nodeTypeOf(variable));
     if (rootType == nullptr) {
         return nullptr;
     }
@@ -1546,8 +1559,10 @@ node_handle_t Builder::pathAssignmentOf(const GCT::node_ptr_t &gct) {
     // `:op/assn` clear it, `:var/peek` leaves it). A control edge only orders two nodes and
     // reads no value (design principles 3.3, 3.4), so adding one cannot make this statement
     // copy; see for the measurement that shows both.
-    const bool inPlace     = synced_ && rootType->code() == TypeCode::Array;
-    node_handle_t rootRead = inPlace ? peekVariable(variable) : readVariable(variable);
+    const bool inPlace     = ssaTarget == nullptr && synced_ && rootType->code() == TypeCode::Array;
+    node_handle_t rootRead = ssaTarget != nullptr ? ssaTarget->value
+                              : inPlace         ? peekVariable(variable)
+                                                : readVariable(variable);
     const auto make        = [&](GCT::node_ptr_t node, const GCT::node_ptr_t &at) {
         node->setOrigin(at->origin());
         return node;
@@ -1969,6 +1984,76 @@ void Builder::yieldToPipe(const GCT::node_ptr_t &call) {
     }
 }
 
+node_handle_t Builder::ssaAssignmentOf(const GCT::node_ptr_t &gct) {
+    // `x = e` where `x` is a `var` built as a value (stage S1 of the direct-SSA plan). The name
+    // stands for a value, so the write is the value: `e` is built where the store would have put
+    // it -- in the type the cell would have held, so a value of another type is refused as it was
+    // -- and the name is rebound to it. Nothing is stored, and no cell is read or written, which
+    // is the whole of the difference: what the cell did by being overwritten, the binding does by
+    // being replaced.
+    // The assignment as written, and the one a path rebuilds: that one names the built-in group
+    // itself (`$builtin::__assn__`) and is the same write (pathAssignmentOf).
+    std::string calleeName;
+    if (gct->size() == 3 && gct->at(0) != nullptr &&
+        gct->at(0)->type() == GCT::NodeKind::DREF) {
+        calleeName = gct->at(0)->name();
+        if (calleeName.rfind(kBuiltinPrefix, 0) == 0) {
+            calleeName = calleeName.substr(kBuiltinPrefix.size());
+        }
+    }
+    if (gct->size() != 3 || calleeName != "__assn__") {
+        return nullptr;
+    }
+    const GCT::node_ptr_t &target = gct->at(1);
+    if (target == nullptr || target->type() != GCT::NodeKind::DREF) {
+        // `x.f = e` and `x[i] = e`: pathAssignmentOf rebuilds the whole value and writes the
+        // variable, which comes back here as a plain assignment of the name.
+        return nullptr;
+    }
+    const std::string name    = moduleLevelName(target->name());
+    const SsaValue *binding   = ssaBindingOf(name);
+    if (binding == nullptr) {
+        return nullptr;
+    }
+    const GCT::node_ptr_t &written = gct->at(2);
+    Type *held                     = binding->type;
+    node_handle_t value{};
+    {
+        ExpectedValueScope writeScope(expectedValueType_, held);
+        value = argumentNodeOf(visit(written), written);
+    }
+    GUARD(value != nullptr, "An assignment always gives a value.");
+    Type *have = valueTypeOf(nodeTypeOf(value));
+    if (held != nullptr && have != nullptr && !held->equals(have)) {
+        node_handle_t entered = checkValue(value, held, written);
+        if (entered == nullptr) {
+            // What the store refused: a value the variable cannot hold is not a value of the
+            // variable, and the assignment is refused where it is written.
+            diags_->of(SemanticDiag::NoMatchingFunction)
+                .atOrigin(gct->origin())
+                .commit(
+                    have != nullptr ? have->toString() : std::string("void"),
+                    "'=' takes a value of the variable's own type: " + held->toString());
+            throw BuildAbortException();
+        }
+        value = entered;
+    }
+    // A write that came from `a op= b` is not reported: the compound assignment reads the name it
+    // writes, so the report of a dropped value never stood on it (storedValueIsRead answered for the
+    // cell), and it does not stand on it here. A write a path rebuilds (`x.f = e`) names the
+    // built-in group itself and is skipped for the same reason: that rebuild reads `x`.
+    const bool reportable = !inCompoundAssignment_ && gct->at(0)->name() == "__assn__";
+    if (value != nullptr && reportable) {
+        // The write is reported where the assignment operator stands, which is where the call the
+        // store used to be took its origin from; the value's own origin is where the value begins.
+        const camel::source::origin_id_t at = gct->at(0) != nullptr ? gct->at(0)->origin()
+                                                                    : camel::source::kInvalidOriginId;
+        ssaWrites_[value] = at != camel::source::kInvalidOriginId ? at : gct->origin();
+    }
+    rebindSsa(name, value);
+    return value;
+}
+
 node_handle_t Builder::loopStateAssignmentOf(const GCT::node_ptr_t &gct) {
     // `x = e` where `x` is a `var` the loop around this body carries as a state (visitLoopNode).
     // The body's `x` is a port of its region, and the value `e` gives is the next state of the
@@ -2080,6 +2165,18 @@ node_handle_t Builder::visitLinkNode(const GCT::node_ptr_t &gct) {
     if (node_handle_t rebound = pathAssignmentOf(gct)) {
         LEAVE("LINK");
         return rebound;
+    }
+    // A write to a `var` built as a value (stage S1 of the direct-SSA plan): the name is rebound,
+    // and nothing is stored. The statement is worth the value the write gave, which is what the
+    // read of the name after it takes.
+    if (node_handle_t written = ssaAssignmentOf(gct)) {
+        // A dropped assignment is a dropped value, and it is reported as one (UnusedAssignedValue)
+        // rather than as a pure call whose result nobody takes: the write of a name is not a call
+        // that changes nothing, and the same report stands whether the statement is a `=`, a `+=`
+        // or a path the write rebuilds.
+        discardedValues_.insert(written);
+        LEAVE("LINK");
+        return written;
     }
     // A write to a `var` the loop this body belongs to carries as its own state (visitLoopNode;
     // design principles 3.5, the third of the three places a write is lowered): `x = e` in the body

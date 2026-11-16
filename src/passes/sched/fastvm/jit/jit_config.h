@@ -5,8 +5,8 @@
 
 #include <cstddef>
 
-// ENABLE_FASTVM_JIT, ENABLE_FASTVM_COMPUTED_GOTO, and JIT_TARGET_X64 are set centrally by CMake.
-// Example: cmake -DENABLE_FASTVM_JIT=OFF -DENABLE_FASTVM_COMPUTED_GOTO=OFF
+// ENABLE_FASTVM_JIT and JIT_TARGET_X64 are set centrally by CMake.
+// Example: cmake -DENABLE_FASTVM_JIT=OFF
 
 namespace camel::jit {
 
