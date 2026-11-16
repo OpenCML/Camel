@@ -128,11 +128,29 @@ const BUILD_TREES = new Set([
 /** Whether a repository-relative path (with `/` separators) is a tree the runner or a build owns. */
 export function isIgnoredByWatch(relative) {
     if (relative === '' || relative === '.') return true
-    const first = relative.split('/')[0]
+    const segments = relative.split('/')
+    const first = segments[0]
     if (BUILD_TREES.has(first)) return true
     // `out_lr*` is gitignored as a pattern, and a run of the profiler build makes one.
     if (/^out_lr/.test(first)) return true
-    if (relative.split('/').includes('__pycache__')) return true
+    /**
+     * A `node_modules` at any depth, not only at the top of the checkout.
+     *
+     * `.gitignore` ignores `node_modules/` at every level and no file under one is tracked (checked
+     * over the whole tree: 0 of 7,921), so `git status` can never name a path in one -- and the
+     * criterion this function implements is "which paths can carry a finding". The gate checkout
+     * carries 1,579 directories of an installed `editors/vscode/node_modules`, and the first-segment
+     * rule above walked and watched every one of them for a path the verdict could not name.
+     * Measured on 2026-11-16, nine samples per shape, on that checkout: 2,392 directories watched
+     * and a walk of 88.0 ms before this line, 818 and 29.4 ms after it, which moved the pre-test
+     * pair from 119.5 ms to 54.2 ms and one launch's fixed cost from 267.0 ms to 201.5 ms (twelve
+     * paired rounds on one commit). **The criterion is unchanged**; the set of paths that can carry
+     * a finding shrinks to the set `git status` could ever mention. Checked both ways on the changed
+     * tree: a file planted in `editors/vscode/node_modules` stays green, the same file planted in
+     * `src` still fails the run and is still named with the test that wrote it.
+     */
+    if (segments.includes('node_modules')) return true
+    if (segments.includes('__pycache__')) return true
     return isRunnerOutput(relative)
 }
 
