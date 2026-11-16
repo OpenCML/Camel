@@ -1,5 +1,7 @@
 // Push diagnostics, incremental synchronisation, hover, definition, references, highlights
-// and symbols, on a program of two files (fixtures/main.cml imports fixtures/shapes.cml).
+// and symbols, on a program of two files (fixtures/main.cml imports fixtures/shapes.cml). The
+// warning the push-diagnostics check needs lives in a third, independent document
+// (fixtures/warned.cml): the navigation program itself compiles without one (see the check).
 
 import fs from 'node:fs'
 import path from 'node:path'
@@ -11,6 +13,7 @@ const FIXTURES = path.join(path.dirname(fileURLToPath(import.meta.url)), 'fixtur
 const fixture = (name) => fs.readFileSync(path.join(FIXTURES, name), 'utf8').replace(/\r\n/g, '\n')
 const MAIN = fixture('main.cml')
 const SHAPES = fixture('shapes.cml')
+const WARNED = fixture('warned.cml')
 
 await withServer(async (ls) => {
     const caps = ls.initializeResult.capabilities
@@ -29,12 +32,32 @@ await withServer(async (ls) => {
     })
 
     // ---- push diagnostics ----
-    let pushed = await ls.diagnosticsFor(uri)
+    // A warning is pushed, carries its version, and is a value report rather than an effect: a write
+    // whose value nobody reads drops a value, so it is `UnusedAssignedValue` (design principles 3.1,
+    // the ruling of 2026-11-15 that assigning to a `var` is not an effect). `x` is read before the
+    // write, so the variable is used; the value this write stores is not.
+    const warnedUri = ls.open('warned.cml', WARNED)
+    let pushed = await ls.diagnosticsFor(warnedUri)
     check(pushed !== null, 'diagnostics are published after didOpen')
     checkEq(pushed.version, 1, 'the published diagnostics carry the document version')
-    checkEq(pushed.diagnostics.length, 1, 'one warning in the fixture', pushed.diagnostics)
-    checkEq(pushed.diagnostics[0].severity, 2, 'it is a warning')
-    checkEq(fmtRange(pushed.diagnostics[0].range), '20:4-20:17', 'at the unwaited assignment')
+    checkEq(pushed.diagnostics.length, 1, 'one warning in the warning fixture', pushed.diagnostics)
+    const warned = pushed.diagnostics[0]
+    checkEq(warned?.severity, 2, 'it is a warning')
+    checkEq(warned && fmtRange(warned.range), '6:6-6:7', 'at the assignment operator')
+    checkEq(warned?.code, '0x031001C3', 'the dropped value is named as a value, not as an effect')
+
+    // The navigation program itself has no diagnostic at all, and that is the ruling rather than a
+    // loss: `counter += by` in `bump` used to be this test's one warning, `IgnoredSideEffect` ("the
+    // call of '<__assn__>' is not in a sync block, and it takes a var argument"). A write to a `var`
+    // is not an effect, and the final value of a `var` parameter is handed back at the call, so this
+    // write is read by `return counter` (design principles 3.1 and 3.5, the ruling of 2026-11-15).
+    // Commit 8b541bdba deleted both `var` branches of `IgnoredSideEffect` and says so in docs/cli.md
+    // ("a `var` argument is not reported this way"); `warned.cml` above keeps the coverage the old
+    // expectation had, on the report the ruling left.
+    pushed = await ls.diagnosticsFor(uri)
+    check(pushed !== null, 'diagnostics are published after didOpen')
+    checkEq(pushed.version, 1, 'the published diagnostics carry the document version')
+    checkEq(pushed.diagnostics, [], 'the navigation fixture compiles without a warning', pushed.diagnostics)
 
     // ---- hover ----
     const hover = async (needle, nth, delta) => {
@@ -87,10 +110,15 @@ await withServer(async (ls) => {
     check(h.includes('type int'), 'a built-in type name', h)
     h = await hover('func main', 1, 0)
     checkEq(h, null, 'a keyword has no hover')
-    // On the range of a diagnostic: the explanation of its code.
-    h = await hover('counter += by', 1, 9)
-    check(h.includes('SemanticDiag::IgnoredSideEffect') && h.includes('--explain'),
-        'the code of a diagnostic is explained', h)
+    // On the range of a diagnostic: the explanation of its code. The diagnostic is the warning of
+    // `warned.cml`; the navigation program has none any more (see the push-diagnostics block).
+    const wh = await ls.request('textDocument/hover', {
+        textDocument: { uri: warnedUri },
+        position: warned?.range?.start ?? { line: 6, character: 6 },
+    })
+    const wtext = wh?.contents?.value ?? ''
+    check(wtext.includes('SemanticDiag::UnusedAssignedValue') && wtext.includes('--explain'),
+        'the code of a diagnostic is explained', wtext)
 
     // ---- definition ----
     const def = async (needle, nth, delta) =>
@@ -168,7 +196,7 @@ await withServer(async (ls) => {
         ],
     })
     pushed = await ls.diagnosticsFor(uri, 2)
-    checkEq(pushed.diagnostics.length, 1, 'the edited text compiles as before', pushed.diagnostics)
+    checkEq(pushed.diagnostics, [], 'the edited text compiles as before, without a warning', pushed.diagnostics)
     h = await ls.request('textDocument/hover', { textDocument: { uri }, position: n1.start })
     check(h.contents.value.includes('let count: int'), 'the edits were applied', h.contents.value)
     // An edit that breaks the program is reported, and undoing it clears the report.
