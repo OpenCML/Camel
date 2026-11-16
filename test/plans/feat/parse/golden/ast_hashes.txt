@@ -1505,6 +1505,7 @@ d25fac2d6357568d ok test/cases/compile/ref/err_holds_ref_closure_depth.cml
 233d5aa2f4bea8da ok test/cases/compile/ref/err_holds_ref_closure_in_struct.cml
 91ef977693cbe4b8 ok test/cases/compile/ref/err_holds_ref_closure_in_struct_unread.cml
 ec6c1dec0f711e6c ok test/cases/compile/ref/err_holds_ref_closure_unread.cml
+2b7748d8b7a04ae4 ok test/cases/compile/ref/ref_array_element.cml
 a603f90011a7fd12 ok test/cases/compile/ref/ref_boxes_are_counted.cml
 c87e262c61f310e1 ok test/cases/compile/ref/ref_boxes_loop_ten.cml
 d64b00470881684f ok test/cases/compile/ref/ref_boxes_loop_thousand.cml
