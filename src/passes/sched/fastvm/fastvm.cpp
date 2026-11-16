@@ -8,6 +8,7 @@
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/loop_driver.h"
 #include "camel/execute/observer.h"
+#include "camel/execute/operator_call.h"
 #include "camel/profile/profile.h"
 #include "camel/runtime/graph.h"
 #include "camel/core/rtdata/aggregate.h"
@@ -1075,7 +1076,17 @@ slot_t FastVMSchedPass::runFramedJit(JitEntryFn fn, Frame *frame, void *jitCtx) 
                     const data_arr_t nargs = bc->nargs();
                     const data_arr_t wargs = bc->wargs();
                     if (bc->opcode == OpCode::SCHD) {
-                        evalMarkedOperator(bc->extra()->mark, bc->result, nargs, wargs, *cur);
+                        // A marked operator reached from compiled code: the count's rows at its
+                        // position are the hook's (camel/execute/operator_call.h), the same way the
+                        // interpreters run them at gotovm.cpp's `label_SCHD` and casevm.cpp's
+                        // `OpCode::SCHD`.
+                        camel::execute::callOperator(
+                            camel::execute::siteOfSlot(*cur, bc->result),
+                            [&] {
+                                evalMarkedOperator(
+                                    bc->extra()->mark, bc->result, nargs, wargs, *cur);
+                                return bc->result == 0 ? NullSlot : cur->get<slot_t>(bc->result);
+                            });
                     } else {
                         GUARD(bc->opcode == OpCode::CALL, "Unexpected bytecode at a JIT exit.");
                         // A call through a function value, as the interpreters make it: nested

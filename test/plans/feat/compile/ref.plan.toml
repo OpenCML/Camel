@@ -666,3 +666,164 @@ verify_script = '''
     ' edges=' + JSON.stringify(fresh.order))
 }
 '''
+# ---- a marked operator's position: the references that come back there ----
+
+# A marked operator calls its element function once per element, so a reference that function
+# captures is used *at the operator's own position*: the plan lays that reference's give-back row
+# there, and the element function's end (`foreach`) or the node's own value (`reduce`) is where the
+# row runs. The two programs are the two shapes -- a closure that packs the handle into itself, and
+# an accumulator that *is* the handle.
+#
+# Each entry reads the two sides in one pipeline and holds them to each other: `test::plan_refs`
+# prints the table while the graph is compiled, then the back end runs it. The pairing asserted is
+# "as many give rows at the marked position as the table says come back there", and the reading of
+# the run is taken **without `--gc-stress`**: under stress the collector settles the account after
+# the program stops and a back end that ran no row at all reads the same numbers, which is how a
+# missing count survived the `live <= 3` assertion
+# (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md). The two entries
+# are what std::fvm's and std::jit's bytecode SCHD instruction was short by, and what the plan's own
+# give-back skipped as the node's take-over.
+
+[[tests]]
+name = "ref.foreach_gives_back"
+desc = "A `foreach` whose element function captures a reference: `r`'s last use is the operator's position, so the plan lays its give-back row there (`PLAN_REF_MARKED main at 6 node 5 gives 3` and three `PLAN_REF_ENTRIES main at 6 give` rows, the captured handle among them packed). Read without `--gc-stress`, all four back ends release the one box the program made while it ran (`created=1 counted=1 released=1 live=0 disposed=0`); std::fvm and std::jit read `released=0 live=1 disposed=1` before the operator call site was one function."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_foreach_gives_back.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "test::plan_refs", "${backend}"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  const lines = out.split('\n')
+  // The program: `state::get(r)` reads 1 for every element, so the three elements print 2, 3, 4.
+  const first = lines.indexOf('2')
+  assert(first >= 0 && lines.slice(first, first + 3).join('\n') === '2\n3\n4',
+    'the program ran: ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  // The plan: the marked operator's position, and the rows laid there, name the same count.
+  const marked = lines.filter(l => /^PLAN_REF_MARKED \S+ at \d+ node \d+ gives \d+$/.test(l))
+  const carrying = marked.filter(l => !l.endsWith(' gives 0'))
+  assert(carrying.length === 1,
+    'one marked operator has a reference coming back at its position: ' + (marked.join(' | ') || 'none'))
+  const position = Number(carrying[0].match(/ at (\d+) /)[1])
+  const gives = Number(carrying[0].match(/ gives (\d+)$/)[1])
+  assert(gives === 3,
+    'the table gives back three references at the operator: ' + carrying[0])
+  const rows = lines.filter(l => l.startsWith('PLAN_REF_ENTRIES ') && l.includes(' at ' + position + ' give '))
+  assert(rows.length === gives,
+    'the rows at the operator are the ones the table counts: gives=' + gives + ' rows=' + rows.length +
+    ' ' + rows.join(' | '))
+  assert(rows.some(l => / give value \d+ x1 packed$/.test(l)),
+    'the captured handle comes back packed, when the closure that packed it dies: ' + rows.join(' | '))
+  // The run: the one box the program made was released while it ran, with no stress to settle it.
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created === 1 && counts.counted === 1,
+    'the one box the program made was counted: ' + line)
+  assert(counts.released === 1 && counts.live === 0,
+    'it was released while the program ran, without --gc-stress: ' + line)
+  assert(counts.disposed === 0,
+    'so the exit had nothing left to dispose: ' + line)
+}
+'''
+
+[[tests]]
+name = "ref.reduce_takes_its_initial"
+desc = "A `reduce` whose `initial` is a reference and whose element function returns its accumulator unchanged: the value the node makes *is* the box, so the plan's give-back row at the operator's position (`PLAN_REF_MARKED main at 5 node 4 gives 1`, one `PLAN_REF_ENTRIES main at 5 give` row) must not release what the node's own value took over. Read without `--gc-stress`, all four back ends print the box's content and release it while they run (`released=1 live=0`); std::nvm and std::prl answered `state.get: the value is not a reference` when the row was run as well."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_reduce_takes_its_initial.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "test::plan_refs", "${backend}"]
+backends_agree = ["exit_code"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  const lines = out.split('\n')
+  // The program prints the accumulator's content, which is the box `r` holds.
+  const first = lines.indexOf('1')
+  assert(first >= 0 && lines[first] === '1',
+    'the program ran and printed the box: ' + JSON.stringify(out) + ' exit=' + input.exit_code +
+    ' output=' + said)
+  const marked = lines.filter(l => /^PLAN_REF_MARKED \S+ at \d+ node \d+ gives \d+$/.test(l))
+  const carrying = marked.filter(l => !l.endsWith(' gives 0'))
+  assert(carrying.length === 1,
+    'one marked operator has a reference coming back at its position: ' + (marked.join(' | ') || 'none'))
+  const position = Number(carrying[0].match(/ at (\d+) /)[1])
+  const gives = Number(carrying[0].match(/ gives (\d+)$/)[1])
+  assert(gives === 1,
+    'the table gives back one reference at the operator, the accumulator: ' + carrying[0])
+  const rows = lines.filter(l => l.startsWith('PLAN_REF_ENTRIES ') && l.includes(' at ' + position + ' give '))
+  assert(rows.length === gives,
+    'the row at the operator is the one the table counts: gives=' + gives + ' rows=' + rows.length +
+    ' ' + rows.join(' | '))
+  const line = lines.find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(line !== undefined, 'the counted blocks are read at exit: ' + said)
+  const counts = Object.fromEntries(
+    line.trim().split(' ').slice(1).map(w => w.split('=')).map(([k, v]) => [k, Number(v)]))
+  assert(counts.created === 1 && counts.counted === 1,
+    'the one box the program made was counted: ' + line)
+  assert(counts.released === 1 && counts.live === 0,
+    'it was released while the program ran, without --gc-stress: ' + line)
+  assert(counts.disposed === 0,
+    'so the exit had nothing left to dispose: ' + line)
+}
+'''
+# ---- a box an array holds, read through an element ----
+#
+# The reference plan counts an operator's output as a value born with a reference of its own and
+# gives that reference back where the value is last read (camel/runtime/exec_plan.h, "The
+# references that come back"). An element read makes no such value: `Array::getSlot` answers the
+# slot the array holds (src/builtin/operators/struct.cpp#__index_arr__) and takes no reference for
+# it, so the array is what holds the box. Read as a producer, `xs[0]` looked like a value born at
+# the index, and the plan gave back a reference nobody had taken: the box was released while the
+# array still held it, a write through it ran on a released handle, and `state::get` answered "the
+# value is not a reference". `src/execute/exec_plan.cpp#forwardsItsValue` now says the element read
+# forwards, as it already said for `:enum/field` -- the same defect, the same shape of answer. A row
+# of a higher-rank array stays a producer's value: the operator makes that one (a view or a copy).
+
+[[tests]]
+name = "ref.array_element"
+desc = "A `Ref` held by an array, reached through `xs[i]`: a write and two reads in one body (72 and 2, so both the write and the second element are the right box), a write through the element read through the box's own name (5), and `r7`'s shape -- the box escapes into a closure through an element and a later call reads it (2). All four back ends print the same bytes."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_array_element.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["${case}", "${backend}"]
+backends_agree = ["exit_code", "stdout_normalized"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  const want = 'a=72 b=5 r7=2\n'
+  assert(out === want,
+    'a box an array holds survives the reads through its elements: want ' + JSON.stringify(want) +
+    ' got ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+  assert(input.diagnostics.length === 0,
+    'nothing is reported: ' + input.diagnostics.map(d => d.name).join(', ') +
+    ' ' + input.normalized.stderr)
+}
+'''
+
+[[tests]]
+name = "ref.array_element.default"
+desc = "The same program through the default pipeline (the interpreter), answering what `ref.array_element` pins, so the reading is not one back end's."
+kind = "behavior"
+case = "../../../cases/compile/ref/ref_array_element.cml"
+args = ["-E", "short", "${case}"]
+expect_exit = 0
+verify_script = '''
+({ input, assert }) => {
+  const out = input.normalized.stdout
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  const want = 'a=72 b=5 r7=2\n'
+  assert(out === want,
+    'the default pipeline answers the same: want ' + JSON.stringify(want) +
+    ' got ' + JSON.stringify(out) + ' exit=' + input.exit_code + ' output=' + said)
+}
+'''

@@ -1,0 +1,36 @@
+/**
+ * Keeping the array a loop's state held, then growing that state again: the value kept is the
+ * array as it was, not the array as it ends up (design principles 10.5 and 11.3). A loop state
+ * that the round hands to another value -- `seen = seen->append<acc>` stores it in a slot,
+ * `seen[i] = acc` writes it into a slot -- has a second holder, so the round's append copies.
+ * A state nothing else holds (`seen` itself) still appends in place: the decision is a condition
+ * on the state, not a switch for the loop.
+ */
+
+func snapshots(n: int): int[][] sync {
+    var acc: int[] = []
+    var seen: int[][] = []
+    loop i = 0 while i < n do {
+        acc = acc->append<i>
+        seen = seen->append<acc>
+        i + 1
+    }
+    return seen
+}
+
+func slot_writes(n: int): int[][] sync {
+    var acc: int[] = []
+    var seen: int[][] = [[], [], []]
+    loop i = 0 while i < n do {
+        acc = acc->append<i>
+        seen[i] = acc
+        i + 1
+    }
+    return seen
+}
+
+func main(): int sync {
+    println(snapshots(3))
+    println(slot_writes(3))
+    return 0
+}
