@@ -1,10 +1,12 @@
 // Copyright (c) the OpenCML Organization
 // SPDX-License-Identifier: MIT
 
-// A probe: `h` is the only closure that captured `c`, and it reaches nothing the program keeps --
-// `p.0` reads the tuple's first member alone. `w * 0` is the only reader of the write `c = 41`, so
-// the rewrite that folds it leaves a write that is no root of the graph and that no port reads: a
-// dead write, which may go (design principles 9.7).
+// Refused since 2026-11-16 (design principles 3.5, 198, the author's ruling of that day): `h` is put
+// into the tuple `(1, h)` and `c` is written after it, so the stretch of the captured name runs to
+// the rest of the scope and the write is `CapturedVarWrittenAfterTheClosure`. The shape it used to
+// read is the dead write -- `p.0` reads the tuple's first member alone, `w * 0` is the write's only
+// reader, so folding it left a write no root held and no port read (design principles 9.7) -- and the
+// plan reads that judgement on `dead_write_held_by_program.cml` now.
 
 func probe(): int {
     var c = 0

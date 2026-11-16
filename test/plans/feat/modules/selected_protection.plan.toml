@@ -393,8 +393,10 @@ expect_output_contains = [":op/assn_l"]
 # from, asked on the draft -- so admission and the check cannot disagree (design principles 9.7).
 #
 #   dead_write       the cell is a local `var` that no root names, and the fold took the write's only
-#                    reader: the node is not in the graph the rewrite returns, and the program still
-#                    prints 1
+#                    reader: the node is not in the graph the rewrite returns. Refused since
+#                    2026-11-16 (design principles 3.5, 198: the closure is put into a tuple and the
+#                    name is written after it), so the entries read that refusal and the judgement's
+#                    reading lives on `dead_write_held`
 #   dead_write_held  the cell belongs to the module, so a root holds it: the write stays and the
 #                    program still prints the 41 it wrote -- the wall against relaxing this too far
 
@@ -405,24 +407,30 @@ expect_output_contains = [":op/assn_l"]
 # cannot disagree (design principles 9.7).
 #
 #   dead_write       the cell is a local `var` that no root names, and the fold took the write's only
-#                    reader: no write is left in `probe`, and the program still prints 1
+#                    reader: no write is left in `probe`. Refused since 2026-11-16 for the reason
+#                    above, so `probe` is never built; the reading this entry had is the one
+#                    `dead_write_held` keeps
 #   dead_write_held  the cell belongs to the module, so a root holds it: `bump` keeps its write and
 #                    the program still prints the 41 it wrote -- the wall against relaxing too far
 [[tests]]
 name = "dead_write.direct.answer"
-desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see docs/handover/reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md."
+desc = "On the graph the rewrite returns the judgement says the write may go. The engine still leaves it, and for a reason this change does not touch: see docs/handover/reviews/2026-11-14-where-do-the-engines-still-keep-a-dead-write.cn.md. The shape this entry reads is refused since 2026-11-16 -- `h` is put into the tuple `(1, h)` and `c` is written after it, which design principles 3.5 (198) runs to the rest of the scope (the author's ruling of 2026-11-16, item 3) -- so the entry is a negative one and the judgement's reading lives on `dead_write_held.direct.kept`."
+kind = "negative"
 case = "../../../cases/modules/selected_protection/dead_write.cml"
-args = ["${case}", "policy::direct", "order=false", "faults=false", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["DEADWRITE graph=probe", "oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write.direct.same_output"
-desc = "Dropping the dead write leaves the program's output unchanged."
+desc = "Dropping the dead write leaves the program's output unchanged. The program it reads is refused since 2026-11-16 for the reason `dead_write.direct.answer` gives, so this entry reads the same refusal: `1` is the output the shape would have printed, and it no longer runs."
+kind = "negative"
 case = "../../../cases/modules/selected_protection/dead_write.cml"
-args = ["${case}", "policy::direct", "order=false", "faults=false", "std::nvm"]
-expect_exit = 0
-expect_stdout_exact = "1\n"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write_held.direct.kept"
