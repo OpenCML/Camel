@@ -234,8 +234,9 @@ node_handle_t Builder::createFuncDataNode(
     if (allowParameterization && (graph->parameterized() || !hasClosure || !valueMade)) {
         // A direct call: a FUNC node. At the first one the callee's capture ports become
         // with-ports after its declared ones (it is "parameterized"); every direct call then
-        // passes its captures as With inputs after the declared `with` arguments, linked by
-        // the link step (addCaptureSite, linkCaptureSites).
+        // passes its captures as With inputs after the declared `with` arguments: linked as edges
+        // where the call is built (addCaptureSite) and placed there by the link step
+        // (linkCaptureSites).
         if (!graph->parameterized()) {
             const std::vector<draft_node_ref_t> closureNodes(
                 graph->view().closureNodes().begin(),
@@ -866,7 +867,8 @@ compile_graph_ptr_t Builder::forwardingGraphOf(const compile_graph_ptr_t &target
         bodyStates_[graph.get()] = BodyState::Open;
         graph->addDependencyGraph(target);
         // The call the target's direct callers make: the arguments, then the target's
-        // captures, which become captures of this graph (passed by the link step).
+        // captures, which become captures of this graph: linked here as the call's `with` inputs
+        // (addCaptureSite), after the ports above.
         node_handle_t call = addCallNodeOf(target);
         if (isMacroGraph(target)) {
             setNodeMacro(call, true);
