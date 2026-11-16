@@ -2206,16 +2206,22 @@ void Builder::dropCarriedVariableUnits() {
         }
     }
     for (const node_handle_t cell : cells) {
+        // A cell this graph no longer holds has no unit left to drop, and asking it for its kind
+        // is a read of a header the erasure took away: `carriedVersions_` and the capture table
+        // are tables of handles the builder keeps across bodies, and a rewrite that dissolves the
+        // place a cell was written in -- the branch or the loop body it was carried out of -- takes
+        // the cell's node with it and leaves the handle. So the liveness question comes first, as
+        // it does for every node the stores below walk.
+        const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
+        if (draft.header(cellId) == nullptr || !draft.alive(cellId)) {
+            continue;
+        }
         // The cell is a cell of this graph that is not a resource any more. A captured cell, a
         // `var` parameter and one handed to a call as a `var` argument are `escapingVariables_`;
         // a read still recorded for it is the fold's business and is not folded here, so such a
         // cell keeps its unit.
         if (nodeKindOf(cell) != camel::runtime::GCNodeKind::Oper ||
             escapingVariables_.contains(cell) || captureOriginOf_.contains(cell)) {
-            continue;
-        }
-        const camel::runtime::gc_node_ref_t cellId = nodeIdOf(cell);
-        if (draft.header(cellId) == nullptr || !draft.alive(cellId)) {
             continue;
         }
         // Its stores are the only users it has: a read, a capture, a `var` argument or anything
