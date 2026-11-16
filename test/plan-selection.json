@@ -86,6 +86,11 @@
             "plans": ["probe/dpack.plan.toml", "probe/dpack5.plan.toml", "probe/dpack5ok.plan.toml"]
         },
         {
+            "comment": "The counted-box probes of test/probe/refleak (call_box.cml, fill_carries.cml; ad44fca33). They are named as a file rule for the reason the test/cases/probe rule above gives -- a directory rule cannot reach a plan under test/plans/probe from a case path -- and theirs is the one directory in the tree that no rule named at all, which the self-test reports as a tracked file `--changed` can never run. The plan is `tier = \"debug\"`, so it is exempt from the reachability check and is never run by `--changed`; what the rule buys is that the two programs are not an unowned file.",
+            "paths": ["test/probe/refleak/"],
+            "plans": ["probe/refleak.plan.toml"]
+        },
+        {
             "comment": "The `std::cml` round-trip comparator: its case is the tool itself, so a change there selects the plan that runs it. The plan is fast, so the rule carries no layer.",
             "paths": ["test/tools/roundtrip-compare.mjs"],
             "plans": ["feat/trans/cml.plan.toml"]
