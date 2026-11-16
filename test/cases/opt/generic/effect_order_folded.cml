@@ -8,6 +8,15 @@
 
 import { reshape, concat, zeros, show } from tensor
 
+// The accumulator the nested `visit` writes is a module `var`, a cell a closure may still write: a
+// closure holds the value a name had when it was made, not the name (design
+// principles 3.5, the author's ruling of 2026-11-16, items 197 and 198), so a closure that writes a
+// `var` of the body around it is refused (`SemanticDiag::ClosureAssignsCapturedName`, 0x03000213).
+// This case's subject is the order of the effects around folded code, not the way the accumulator
+// is held, so the accumulator moved to the top level rather than the case keeping a shape the rule
+// retired; `test/cases/effects/callback_write_through_parameter.cml#counter` holds one the same way.
+var seen: int[] = []
+
 func count_down(i: int, acc: int): int sync {
     return if i <= 0 then acc else step(i, acc)
 }
@@ -32,7 +41,6 @@ func main(): int sync {
     let y = one_hot(0, zeros::<f32>([1, 10]))
     show(y)
     let items: int[] = [7, 8, 9]
-    var seen: int[] = []
     func visit(i: int): void {
         return if i >= len(items) then null else sync {
             seen = seen->append<items[i]>

@@ -255,14 +255,14 @@ assert(input.normalized.stdout === 'operator\nnoisy\n4\narm\nkept 1\n0 5\n', 'pr
 const diags = JSON.parse(input.stderr)
 assert(diags.every(d => d.severity === 'Warn'), 'warnings only')
 const dropped = diags.filter(d => d.data.name === 'SemanticDiag::EffectNotExecuted')
-const got = dropped.map(d => (d.range.start.line + 1) + ' ' + d.message.replace(/ reaches outside.*/, ''))
+const got = dropped.map(d => (d.range.start.line + 1) + ' ' + d.message.replace(/ is never executed.*/, ''))
 const want = [
     "32 The call of 'noisy'",
     "33 The call of 'noisy'",
     "34 The call of 'modify'",
 ]
 assert(JSON.stringify(got) === JSON.stringify(want), 'dropped effects: ' + got.join(' | '))
-assert(dropped.every(d => d.message.endsWith('reaches outside the program and is never executed: nothing needs what it gives, so nothing runs it.')), 'message text')
+assert(dropped.every(d => d.message.endsWith('is never executed: nothing needs what it gives, so nothing runs it.')), 'message text')
 assert(dropped.every(d => d.code === '0x03100004'), 'code 0x03100004')
 // The assignment at 35 is not one of these any more: assigning to a `var` is not an effect (design
 // principles 3.1 and 3.5, the ruling of 2026-11-15), so what it drops is a value and it is reported

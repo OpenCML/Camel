@@ -290,3 +290,153 @@ git -C <repo> log -1 --format=%s origin/fsh-dev  # 最新一笔标题里可能�
 ### 同轮并入第一档的两件
 1. **非 `sync` 函数体里值没人要的 `if` 语句整支不运行，连臂里的 `println` 也不执行**——违反 3.1。已派 `lane-ifarm`（见第 12 节 C1）。
 2. **循环体里读外层 `Ref` 在基线上就崩**——作者确认顺序：**先修捕获口（`lane-portbind`），再放宽（`lane-refwrite`）**。
+
+## 14. 三条流程事实（都来自今晚某条车道的实测或事故）
+
+### 14.1 `git stash` 是**仓库级共享**的，不是工作树级的
+`lane-refwrite` 收尾时 `git stash push -- src include` 报 `No local changes to save`，紧接着无条件的 `git stash pop` **弹出了 `lane-portbind` 的 stash**（五条车道共用一个仓库）。它用 `git stash store -m ...` 原样放回并清理了落进来的文件，三条栈一条不少、顺序一致。
+
+**规矩**：
+- **量基线不要用 `stash`**——用 `git checkout <sha> -- src include` 或建一个只读 `worktree`，两者都不碰共享栈；
+- 万一必须 `stash`：`push -m "<车道名> <用途>"`，`pop` 前**先 `git stash list` 确认 `stash@{0}` 的 message 是自己**，否则按 index 弹；
+- **`pop` 永不无条件跟在 `push` 后面**——`push` 失败时 `pop` 就是地雷。
+
+### 14.2 「不是我弄红的」要靠**测量**，不靠声明
+今晚两条车道各自给出了可复算的证明方式，两种都值得学：
+- **`Compare-Object` 名字集合**（`lane-refwrite`）：两棵树的红名单逐一比对，报「无差异」，而不是报「我没碰那些文件」；
+- **回到裁定落地的父提交两侧量**（`lane-optred`）：在 `81fa0bac9^` 上跑同一批，报「那边也红、消息相同」或「那边绿、这边红」。
+
+### 14.3 作者点名的调试器用例：**动作对、理由不对**
+作者说「调试器『从不执行的行不是停点』那条按新规则改期望（**句柄写的那一行现在会执行**）」。`lane-refwrite` 实测：
+- 那一行是 `println(a)`，**不是句柄写**；`test/cases/tools/debugger/` 整个目录**没有一处 `state::`**；
+- `dap_stepping` **18/170**、`dap_session` **1/101**，**基线逐字相同** ⇒ 修前就有；
+- 主因像是 2026-11-15 那次「区域根」裁定让 `println(a)` 真的执行了 ⇒ **用例的前提（「这一行从不执行」）已经过期**。
+
+**所以该改的是期望，但让它过期的不是句柄放宽，是 11-15 的区域根裁定。** 照原话去改会**改错理由**。**顺序**：等「值没人要的分支语句是否运行」定了（`lane-ifarm`）再一起重排，因为那之后「哪些行会执行」还要变一次。
+
+## 15. 闸门名单定死成 12 个目标（2026-11-16）
+
+今晚同一个洞出现了**五次**，每次的形状都一样：**某族计划没被选中 ⇒ 它的红既不算新红、也不算已修，根本不在任何判断里。**
+
+```
+① slow 层从不在 --changed 里跑
+② feat/mm 两行「等 byref 合完再量」，延期后没人回头
+③ feat/opt 不在名单里（32 条红从未计入）
+④ 我的「基线 49」建立在这上面
+⑤ feat/modules、feat/tools、feat/effects 不在基线里（10 条红无法定责）
+```
+
+**从这一笔起，闸门名单写死成这 12 个目标，不再临时挑**：
+
+```
+smoke  feat/compile  feat/linear  feat/opt  feat/parse  feat/mm
+feat/modules  feat/tools  feat/consistency  feat/trans  feat/effects  docs_links
+```
+
+另加两条固定动作：
+- **每批轮转 2–3 个 `slow` 计划，并写明哪几个跑了、哪几个没跑**；
+- **`新红 vs 基线` 必须写成三张表**：基线内仍红（逐条）／基线内已转绿（逐条）／**不在基线里（逐条，并注明「基线从没量过这一族」或已做 A/B 定责）**。**给不出就写「未对账」，不许写「0」。**
+
+**理由**：一个子集跑出来的 `fail` 数，和一张覆盖全部计划的基线表，**不是同一种东西**。今晚已经有人（包括我）两次差点拿子集数去减基线数。
+
+## 16. 基线 174 → 54，且 12 目标里「新红 = 0」（2026-11-16，`0f32ded47`）
+
+### 兑现账（谁付的）
+```
+compile 27   closurerule（删一条已撤回的规则 + 22 条 + 4 条同因 + 5 条 state_escape）
+linear  98   byref（按引用捕获改按值；33 条收成 1 条）
+opt     32   optred（24 D1 + 8 D2，全部换载体，断言一字未改）
+opt      4   within_call（1948bf82b，换载体让内联读数回来）
+opt      2   screens
+mm       2   poison:linear.captured_writes / poison:linear.var_reference
+modules  1   nn 的 lr
+```
+
+### 仍红（54，全部已被 A/B 或双侧证明为老账）
+```
+consistency 36（new_values 28 + partial_application.var_parameter_effect 4）
+trans 6（cml 3 + cpp 2 + print_determinism 1）
+mm 2（capacity.perm_query_types + poison:compile.nullable_assign）
+compile 3（transitional.*，乙类，第 4 步删）
+docs 1（plan.cn.md:51，`resources.cpp#FunctionType`）
+opt 6（camel_passes.cse ×6，已用 `0b336ce51` 双侧证明是老账）
+```
+
+### 两条**不稳定**用例（新类别，必须单独记）
+```
+cli.plan_arg_domain_refused
+load_class.shared_place
+```
+- 在 `320895383` 上**绿**；
+- 在 `portbind` 那一轮闸门里**红**；
+- 现在**又绿**。
+
+**判定：不稳定，不是新红。** 而这个判定有三层后果：
+1. **它会让「新红 = 0」这句话偶尔变假**——下次看到它红，不要先去归因给最近的改动；
+2. **不稳定的红一旦进了基线，基线就不可复算了**（同一棵树两次跑出不同数）；
+3. **它本身是一个缺陷**：要么用例对时序/并行/环境有依赖，要么被测行为真的不确定。**待派人查，目前只知道「不属于任何一笔改动」。**
+
+**注意报告里的措辞**：不能写成「这两条红是 portbind 造成的」，也不能写成「这两条是绿的」——**只能写成「它在两次测量里给了不同答案」**。
+
+### 慢层轮转第 3 批（记下来，因为「跑了哪几个」和「没跑哪几个」一样重要）
+```
+跑了：mm/gc_pacing、mm/gc_soak、modules/random      50/50/0
+未跑：var_reference、tools/lsp、autodiff、frontend、trans/cml_sweep、tools/debugger
+      （前两批已跑过）
+```
+
+## 17. 一条保留的空合并（2026-11-16，`42bbc4ba1`）
+
+```
+42bbc4ba1  parents: 2de547387, 64f281e31
+tree(42bbc4ba1) = cf18ed5b…   tree(64f281e31) = cf18ed5b…   ← 逐字节相同
+2de547387 是 64f281e31 的祖先                              ← 合并了自己的祖先
+```
+
+**它是空合并：没有带进任何内容，而且三笔提交（车道原始提交、真正的合并、这条空合并）共用一个标题。**
+
+**保留，不重写。** 理由：`origin` 上已经推送，内容零差异；而 `develop` 永不被重写——
+**用一个可读的瑕疵换一次不可回退的重写，是错的交换。**
+
+**成因**：先「把车道分支合进 `develop`」，车道又自己合了一次 `develop`，再把它的合并提交合回来 ⇒ 第二层多余。
+
+**正确顺序（写死，从这一条起）**：
+```
+① 在车道分支里 git merge origin/develop  → 解冲突、跑通
+② 在 develop 上 git merge --no-ff <车道分支> 一次
+③ 推一次
+```
+
+**这一条被记录下来的用意**：**被记录的瑕疵不会复现，被悄悄抹掉的会。**
+
+## 18. 「不稳定用例」是我判错了：判定稳定，越线的是成本（2026-11-16）
+
+`cli.plan_arg_domain_refused` 与 `load_class.shared_place` 两条我记成「在两次测量里给了不同答案」。**查清了，它们没有给不同答案。**
+
+### 真相
+```
+主机上留着五条真实红记录（三个 gate，jobs=8，8699–8734 用例，400–426 s）：
+  每条用例自己的判定都是 PASS、exit 0、内部检查全 ok
+  红的注记全是运行器 test/tools/run-tests.mjs#timeoutMarginVerdict 的 4 倍余量：
+  CPU 30.04 / 30.20 / 30.37 / 30.75 / 31.25 s  对线 timeout 120 s / 4 = 30.000 s
+  越线 0.1%–4.2%
+```
+- **单独跑**：`cli` 2.3–3.3 s CPU、`load_class` 9.3–9.9 s；在满负荷 gate 里同一份工作被 charge 到 30.0–31.3 s。
+- **135 次运行**（`-Jobs 1/8/16`、单跑、成对跑）**0 红**，无抖动。
+- **成本来源**：这两条用例内部分别起 **9 次 / 6 次嵌套 runner**（`#TEST_SCRATCH_RUN`）。
+- **放大器**（另一件事）：`test/results` 里「有失败的 run 目录」永久保留，主检出已积 **1984 个 run 目录 / 2.9 M 个文件**，每次嵌套 runner 启动都要扫它。
+
+### 判定：**A（环境/负载依赖）**，不是 B（共享状态），不是 C（行为不确定）
+决定性证据是「判定从未改变 + 只越 0.1%–4.2% + 单独跑 3–13 倍余量」。`-Jobs` 宽度复现不了；只有「多条车道同时压满主机」时出现。
+
+### 我错在哪
+我把「红的出现与消失」当成「行为不确定」，于是**给它起名叫不稳定，并去查 B/C**。而真正的读法是：**它的判定恒定，变的是主机的负载**。
+> **「同一用例两次不同答案」有两种可能：判定变了（行为），还是判定没变、只是被判红的门槛变了（成本）。先看五条红记录里用例自己的判定，再看越线幅度——两者都是「没变」。**
+
+### 连带后果
+1. **这两条不是基线里的红**，也不该进基线——它们是**负载敏感**，要写进「读数可信性」那一栏；
+2. **`lsp.navigation` 是真的稳定红**：`-Jobs 1` 连红 3/3（`expected 1 warning, actual 0` + `TypeError`，248–258 ms）。**它不在那 54 族里 ⇒ 基线 54 → 55。**
+3. **一次 gate 会在仓库根留下 14 个未跟踪产物**（`*.onnx`、含空格的 `子 目录/`、`数据 文件 🐫.txt`），来源如 `test/cases/modules/onnx/*.cml` 的 `export_model<out: 'affine.onnx'>`。后果有三：`[provenance]` 变 `dirty: N files`；camel-remote 的 untracked tar 会把它带到主机；`-Changed` 的文件集被污染。**这是缺陷，待修。**
+
+### 修法（方向已定，未做）
+**把 9 次 / 6 次嵌套调用各并成一次**（治因）；**不提高 `timeout_ms`**（那是挪线）。已派 `lane-runnertax`。

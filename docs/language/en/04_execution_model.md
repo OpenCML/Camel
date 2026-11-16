@@ -229,12 +229,12 @@ func main(): int sync {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call reaches outside the program and is never executed: nothing needs what it gives, so nothing runs it.
+warning[SemanticDiag::EffectNotExecuted]: The call is never executed: nothing needs what it gives, so nothing runs it.
   --> drop.cml:8:5
    |
  8 |     f()                 // nothing reads `c` afterwards: the call does not run
    |     ^^^
-help: This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
+help: This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
 
 0
 ```

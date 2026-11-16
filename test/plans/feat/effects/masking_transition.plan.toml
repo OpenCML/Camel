@@ -54,8 +54,13 @@ tags = ["feat", "effects", "resources", "runtime", "compile"]
 #                      builder knows the cell is the body's own and masks it.
 #   module_var_read    `peek` reads the module's `counter`: the builder names the cell as the ambient
 #                      resource `module_var_read:counter`, the runtime names the port it arrives on
-#                      (`variable with 0`). Both agree it is not masked; only the vocabulary differs,
-#                      because the runtime's walk has no notion of a module-level cell.
+#                      (`rmw variable capture 0` -- the cell is a capture of `peek`, named by its
+#                      capture position, as the closure's own cell is in `capture_local_var`; the `rmw`
+#                      is this printer's word for a capture, since a capture states a position and no
+#                      mode, not `peek`'s reading. It named the `with` port carrying that capture,
+#                      `variable with 0`, until 2026-11-16). Both agree it is not masked; only the
+#                      vocabulary differs, because the runtime's walk has no notion of a module-level
+#                      cell.
 #   module_var_write   the same for `bump`'s write of that cell.
 #
 # None of the three is made to agree here: this plan reads what the two implementations say, and R3
@@ -146,7 +151,7 @@ assert(runtimeText.includes('rmw object (any)'), 'the runtime answers any object
 
 [[tests]]
 name = "module_var_read"
-desc = "Reading a module's top-level `var` is not masked: both sides record a read of that cell. They name it differently -- the builder as the ambient resource `module_var_read:counter`, the runtime as the port it arrives on -- and the line is pinned with that difference, which the plan header explains."
+desc = "Reading a module's top-level `var` is not masked: both sides record a read of that cell. They name it differently -- the builder as the ambient resource `module_var_read:counter`, the runtime as the port it arrives on -- and the line is pinned with that difference, which the plan header explains. The port is the capture the top-level `var` is to a function that did not make it, so the runtime names it by its capture position (`capture 0`), as it already does for a closure's capture in the test above; it named the `with` port carrying it until 2026-11-16. The `rmw` on the runtime half is not `peek`'s mode -- it reads -- but the transition printer's word for a capture, which states a position and no mode on either side (`src/passes/test/resource_transition.cpp#runtimeAnswer`)."
 kind = "behavior"
 case = "../../../cases/effects/module_var_read.cml"
 args = ["${case}", "test::resource_transition"]
@@ -158,7 +163,7 @@ assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdo
 const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
 // The cell reaches the function as a port, and both sides say the read is the function's: the builder
 // names the module's cell, the runtime the port it comes in on (the plan header explains why).
-pinned('MASK peek builder=read ambient module_var_read:counter runtime=read variable with 0 whole agree=no')
+pinned('MASK peek builder=read ambient module_var_read:counter runtime=rmw variable capture 0 whole agree=no')
 // `main` is the same program one level up, and there both sides name the cell the same way.
 pinned('MASK main builder=external; read ambient module_var_read:counter; write ambient stdout runtime=external; read ambient module_var_read:counter; write ambient stdout agree=yes')
 const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
@@ -168,7 +173,7 @@ assert(disagree.length === 1, 'only `peek` differs here: ' + disagree.join(' | '
 
 [[tests]]
 name = "module_var_write"
-desc = "Writing a module's top-level `var` is not masked either: both sides record the write. The builder names the cell as the ambient resource `module_var_write:counter`, the runtime names the port it arrives on -- pinned, with the plan header's explanation."
+desc = "Writing a module's top-level `var` is not masked either: both sides record the write. The builder names the cell as the ambient resource `module_var_write:counter`, the runtime names the port it arrives on -- pinned, with the plan header's explanation. That port is a capture, named by its capture position (`capture 0`), the same name the closure case above gets; it named the `with` port carrying it until 2026-11-16."
 kind = "behavior"
 case = "../../../cases/effects/module_var_write.cml"
 args = ["${case}", "test::resource_transition"]
@@ -178,7 +183,7 @@ verify_script = """
 const lines = input.normalized.stdout.split('\n').filter((l) => l.startsWith('MASK '))
 assert(lines.length > 0, 'the pass printed no reading: ' + input.normalized.stdout)
 const pinned = (want) => assert(lines.includes(want), 'missing: ' + want + '\n' + lines.join('\n'))
-pinned('MASK bump builder=rmw ambient module_var_write:counter runtime=rmw variable with 0 whole agree=no')
+pinned('MASK bump builder=rmw ambient module_var_write:counter runtime=rmw variable capture 0 whole agree=no')
 pinned('MASK main builder=external; rmw ambient module_var_write:counter; write ambient stdout runtime=external; rmw ambient module_var_write:counter; write ambient stdout agree=yes')
 const disagree = lines.filter((l) => !l.endsWith(' agree=yes'))
 assert(disagree.length === 1, 'only `bump` differs here: ' + disagree.join(' | '))
