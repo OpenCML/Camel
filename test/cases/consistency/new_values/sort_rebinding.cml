@@ -2,8 +2,22 @@
  * `xs = xs->sort` binds the variable to a new, sorted array (design principles 11.3).
  * When nothing but the variable refers to the old array it is sorted in place; when something
  * else does (here `before`, `kept`, the caller's array), that keeps its value. The forms: a
- * local variable, the call written `sort(xs)`, a `var` parameter, a
- * captured variable, and an array of floats.
+ * local variable, the call written `sort(xs)`, a `var` parameter, a name read from inside a
+ * closure, and an array of floats.
+ *
+ * The closure form used to *write* `fs` and read the length back from it. A closure holds the
+ * value a name had when it was made and not the name (design principles 3.5, 197), so it can no
+ * longer be written that way -- `ClosureAssignsCapturedName` (0x03000213) refuses the write.
+ * Binding the sorted array back to `fs` is refused too, by the next rule (198): a name a closure
+ * mentions may not be assigned from the closure's creation to its last use
+ * (`CapturedVarWrittenAfterTheClosure`, 0x03000214). So the closure returns the sorted array and
+ * the caller binds it to a name of its own, which is the first way out the diagnostic names; the
+ * closure still captures `fs` by value, and what is printed for the rebindings is unchanged.
+ *
+ * The captured form's sort is a copying one now, and the case says so: `fs` still holds the array
+ * it had, so the sorted array the closure returns is a new one, and the line prints both. The
+ * in-place float form the case used to get through that name is written as a plain rebinding
+ * (`gs = gs->sort`), which is where in-place sorting is still reachable.
  */
 
 import { sort } from array
@@ -33,10 +47,14 @@ func main(): int sync {
     println(n, zs)
 
     var fs = [2.5, -1.0, 0.5]
-    let resort = (): int => sync {
-        fs = fs->sort
-        return len(fs)
+    let resort = (): float[] => sync {
+        return fs->sort
     }
-    println(resort(), fs)
+    let sorted_fs = resort()
+    println(len(sorted_fs), sorted_fs, fs)
+
+    var gs = [2.5, -1.0, 0.5]
+    gs = gs->sort
+    println(len(gs), gs)
     return 0
 }

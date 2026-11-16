@@ -209,14 +209,13 @@ expect_stdout = "200010000\n"
 # was 3.2-3.6x -- under the 4x the margin rule asks for. 45 s is 4.8-5.4x those figures.
 timeout_ms = 45000
 
-[[tests]]
-name = "new_values.peek_loop.graph"
-desc = "The graph of the loop reads `out` with `:var/peek`, and the rebinding appends through the in-place form of `append`."
-kind = "behavior"
-case = "../../../cases/consistency/new_values/peek_loop.cml"
-args = ["${case}", "std::rgir"]
-expect_exit = 0
-expect_stdout_contains = [":var/peek", ":struct/append_arr_in_place", ":op/assn_owned"]
+# Removed with the capture ruling (design principles 3.5, 197): `new_values.peek_loop.graph` pinned
+# the `:var/*` vocabulary of a rebound `var` cell (`:var/peek`, `:op/assn_owned`,
+# `:struct/append_arr_in_place`). A closure may not assign the name it captured, so the rebinding
+# lives in a loop body now and the name is the loop's carried state, which the graph renders another
+# way; measured on 3773eed5c, none of the three names appears in the migrated program (the loop is
+# still linear, which is the reading `new_values.peek_loop` keeps). The entry had no object left and
+# was removed rather than re-aimed at a shape nobody asked for.
 
 [[tests]]
 name = "new_values.macro_append"
@@ -246,14 +245,10 @@ args = ["${case}", "std::macro", "std::opt", "std::jit"]
 expect_exit = 0
 expect_stdout = "200 0 39601\n51 51 100 49\n[[0], [0, 1, 2, 3], [0, 1, 2, 3, 4, 5, 6], [0, 1, 2, 3, 4, 5, 6, 7, 8, 9]]\n120 b119 [119, 120] [0, 1]\n"
 
-[[tests]]
-name = "new_values.rebinding_loop.cpp"
-desc = "std::cpp writes the rebinding as rt::append on the variable, which gives its array up for the call (grown in place when nothing else holds it): a captured variable through its cell, a var parameter likewise. That the compiled program prints what std::fvm prints is checked by feat/trans/cpp.agree_with_fvm (test/tools/cppexec/expect.txt)."
-kind = "behavior"
-case = "../../../cases/consistency/new_values/rebinding_loop.cml"
-args = ["${case}", "std::cpp"]
-expect_exit = 0
-expect_stdout_contains = [".set(rt::append(", ".take(), "]
+# Removed with the same ruling: `new_values.rebinding_loop.cpp` pinned what std::cpp writes for a
+# rebound `var` (`.set(rt::append(`, `.take(), `), and a loop state is written another way -- the
+# measured migration has neither. The C++/fvm agreement the entry pointed at is its own entry
+# (feat/trans/cpp.agree_with_fvm, test/tools/cppexec/expect.txt), which is unaffected.
 
 [[tests]]
 name = "new_values.value_used"
@@ -314,19 +309,19 @@ expect_output_contains = ["'out = out->append<7>'"]
 
 [[tests]]
 name = "new_values.sort_rebinding"
-desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 11.3): a local, `sort(xs)`, merge_sort, a var parameter, a captured variable, floats. Alike on the four back ends."
+desc = "`xs = xs->sort` binds the variable to a sorted array and leaves every other holder of the old one as it was (design principles 11.3): a local, `sort(xs)`, merge_sort, a var parameter, a name a closure captures, floats. Alike on the four back ends."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "${backend}"]
 backends = ["nvm", "fvm", "jit", "prl"]
 backends_agree = ["exit_code", "stdout_normalized"]
 expect_exit = 0
-expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 expect_output_not_contains = ["[Warn]"]
 
 [[tests]]
 name = "new_values.sort_rebinding.graph"
-desc = "The rebinding is written with the in-place form of the operator between `:var/take` and `:op/assn_owned`, for each of the four rebindings."
+desc = "The rebinding is written with the in-place form of the operator between `:var/take` and `:op/assn_owned`, for each of the five rebindings that bind a name to a sorted array: `xs` three times, the `var` parameter, and the float `gs`. The closure's form is not one of them: it reads `fs` and returns the sorted array without binding it back, so `fs` still holds the unsorted array and the sort copies -- which the case prints beside the sorted one."
 kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "std::rgir"]
@@ -340,7 +335,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 expect_exit = 0
-expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 
 [[tests]]
 name = "new_values.sort_rebinding.gc_mark_sweep"
@@ -349,7 +344,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "mark-sweep", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000
 
 [[tests]]
@@ -359,7 +354,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["--gc-stress", "alloc=3,safepoint=1,kind=both", "--gc-check", "verify=both", "--gc", "generational", "${case}", "std::gc::verify", "${run_fvm}"]
 expect_exit = 0
-expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]"]
+expect_stdout_contains = ["{\"ok\":true,\"kind\":\"gc.verify\"}", "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]"]
 timeout_ms = 60000
 
 [[tests]]
@@ -369,7 +364,7 @@ kind = "behavior"
 case = "../../../cases/consistency/new_values/sort_rebinding.cml"
 args = ["${case}", "${run_prl_segments}"]
 expect_exit = 0
-expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5]\n"
+expect_stdout = "[3, 1, 2] [1, 2, 3]\n[0, 1, 2, 3] [-1, 0, 1, 2, 3]\n3 [7, 8, 9]\n3 [-1.0, 0.5, 2.5] [2.5, -1.0, 0.5]\n3 [-1.0, 0.5, 2.5]\n"
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 verify_script = """
 ({ input, assert }) => {

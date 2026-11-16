@@ -289,6 +289,9 @@ class ExecPlan {
     // aggregate out of the values it is given -- does not end when the FILL has run: the packing
     // value holds that reference until it dies itself. So the reference comes back where the
     // packing value's last reference dies, not at the FILL's position (`packed` marks those rows).
+    // A packing value the program keeps does not die in this graph at all, so what it packs is kept
+    // with it (`refKeptAt` below): the closure holds the array that holds the box, and the box's
+    // give-back cannot be placed at the array's last read.
     // This is the class that made the half count of 2026-11-15 release live boxes: a closure
     // captured a handle, the slot that made it was cleared, and the count reached zero while the
     // closure still held it (docs/handover/reports/2026-11-15-the-refs-that-come-back.cn.md 3).
@@ -315,9 +318,10 @@ class ExecPlan {
     /// `refGiveBacks`, keyed the way an instruction is: a back end that emits a count at a position
     /// reads this, and the sum over the plan is `refGiveBacksTotal()`.
     std::vector<uint32_t> refGiveBackAt;
-    /// By topo index: the node's producing reference does not come back inside this graph. Two
+    /// By topo index: the node's producing reference does not come back inside this graph. Three
     /// reasons, and they are the same fact about the count: the program keeps the value (it is the
-    /// graph's result), or a loop reads it again after the round that read it, so the round's
+    /// graph's result), a value the program keeps packs it (a closure that holds it leaves the
+    /// graph with it), or a loop reads it again after the round that read it, so the round's
     /// give-back cannot be placed at that use (exec_plan.cpp, `repeatsWithoutMakingIt`). Either way
     /// the graph is still one of the value's holders when the plan ends, and `refCopiesAt` takes one
     /// hold per reference the plan does give back, so the balance is meant to end here.
