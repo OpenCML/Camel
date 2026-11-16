@@ -19,7 +19,7 @@ import {
 } from './cuda-visibility.mjs'
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
-import { judgeTree, readTreeState, startTreeWatch } from './tree-guard.mjs'
+import { judgeTree, markChildrenNested, readTreeState, readTreeStateAsync, startTreeWatch, treeGuardRole } from './tree-guard.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
@@ -34,6 +34,10 @@ const VARS_PATH = path.join(TEST_ROOT, 'vars.toml')
 // reports the CPU time the kernel charged it on file descriptor 3 (its header has the why; the
 // rule it implements is quoted where the reading is judged, in runOneTest).
 const CHILD_CPU_TOOL = path.join(TOOLS_ROOT, 'child-cpu.mjs')
+// Which run owns the `[TREE]` verdict, read once at load so that marking the children below cannot
+// be mistaken for this run's own role (test/tools/tree-guard.mjs#treeGuardRole): the outermost run
+// judges, and a run started inside it defers.
+const TREE_ROLE = treeGuardRole(process.env)
 // Whether this host's kernel can report the CPU time of a process tree at all: the reading
 // test/tools/child-cpu.mjs makes is `cutime` + `cstime` of /proc/self/stat, which no other platform
 // has. Where it exists the wrapper runs for every test and the margin rule is judged on CPU time;
@@ -1445,6 +1449,16 @@ function printProvenance(options) {
  * to catch. Everything the verdict rests on is in test/tools/tree-guard.mjs.
  */
 function printTreeVerdict(verdict) {
+    if (verdict.deferred) {
+        // A nested run that printed nothing here would look like a run whose check had been removed;
+        // it prints where the verdict went instead, because the reader of a nested run's output is
+        // usually looking for the line and not finding it is how a deferral turns into a suspicion.
+        console.log(
+            `${COLORS.cyan}[TREE]${COLORS.reset} ${verdict.reason} (this run's window is inside ` +
+                `that run's, so it is not a second reading of the same tree)`
+        )
+        return
+    }
     if (!verdict.judged) {
         // `not judged` is said out loud for the one run that cannot answer (`--update-golden`
         // rewrites tracked files on purpose), because a check that quietly turns itself off is the
@@ -4235,32 +4249,55 @@ async function main() {
     // What the tree was before the first test, and a watcher that records when a path appears
     // beside the tests that were running at that moment. Both are read here and judged after the
     // last test: the question is what *this run* left, so the reading has to bracket it
-    // (test/tools/tree-guard.mjs).
-    const treeBefore = readTreeState(REPO_ROOT)
+    // (test/tools/tree-guard.mjs). **One phenomenon, one verdict**: a nested run's window lies
+    // inside this one's, so a nested run reads no tree and starts no watcher -- a file a sibling
+    // test wrote inside that window and removed again is an annotation here and was a leak there.
+    // Everything this run starts is inside its window, so every child inherits `nested` and any
+    // runner among them defers; marking the environment once is what keeps a fourth spawn site from
+    // quietly becoming a second judge.
+    const treeNested = TREE_ROLE === 'nested'
+    markChildrenNested(process.env)
+    // The pre-test window is two readings that do not depend on one another: the tree's `git status`
+    // and the watcher over it. Both are taken before the first test -- the walk is the coverage and
+    // cannot be skipped or deferred (test/tools/tree-guard.mjs#readTreeStateAsync records what was
+    // measured and rejected) -- but they are started together, so the run pays the longer of the two
+    // instead of their sum. `treeSeenAt` is the window's start for the same reason: the timestamps
+    // the attribution prints are measured from before both readings, not from between them.
     const treeSeenAt = performance.now()
+    const treeBeforeReading = treeNested ? null : readTreeStateAsync(REPO_ROOT)
     const treeSeen = new Map()
-    const treeWatch = startTreeWatch(REPO_ROOT, {
-        onPath: (relative) => {
-            // The first moment it appeared: a file written in one burst would otherwise move its own
-            // timestamp on every event, and the answer is which tests were running when it was made.
-            if (treeSeen.has(relative)) return
-            treeSeen.set(relative, { at: performance.now() - treeSeenAt, running: [...inFlight.values()] })
-        }
-    })
+    let treeWatch = null
+    if (!treeNested) {
+        treeWatch = startTreeWatch(REPO_ROOT, {
+            onPath: (relative) => {
+                // The first moment it appeared: a file written in one burst would otherwise move its own
+                // timestamp on every event, and the answer is which tests were running when it was made.
+                if (treeSeen.has(relative)) return
+                treeSeen.set(relative, { at: performance.now() - treeSeenAt, running: [...inFlight.values()] })
+            }
+        })
+    }
+    const treeBefore = treeNested ? null : await treeBeforeReading
     const outcome = await executePlans(plans, options, sharedVars, logDir)
     // Both readings before `stop()`: it closes the watchers and forgets how many there were, and
     // the number is what says the walk found the tree instead of watching nothing.
-    const treeWatched = treeWatch.watched()
-    const treeWatchFailure = treeWatch.failure()
-    treeWatch.stop()
-    const treeVerdict = judgeTree({
-        before: treeBefore,
-        after: readTreeState(REPO_ROOT),
-        firstSeen: treeSeen,
-        updateGolden: options.updateGolden,
-        failure: treeWatchFailure,
-        watched: treeWatched
-    })
+    const treeWatched = treeWatch ? treeWatch.watched() : 0
+    const treeWatchFailure = treeWatch ? treeWatch.failure() : null
+    if (treeWatch) treeWatch.stop()
+    let treeVerdict
+    if (treeNested) {
+        treeVerdict = judgeTree({ role: TREE_ROLE })
+    } else {
+        treeVerdict = judgeTree({
+            before: treeBefore,
+            after: readTreeState(REPO_ROOT),
+            firstSeen: treeSeen,
+            updateGolden: options.updateGolden,
+            failure: treeWatchFailure,
+            watched: treeWatched,
+            role: TREE_ROLE
+        })
+    }
     const testRootKept = outcome.summary.fail > 0
     if (testRootKept) {
         // The per-test directories are gone, but what a program wrote outside them (and the

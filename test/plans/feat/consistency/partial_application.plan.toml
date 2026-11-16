@@ -6,6 +6,17 @@ desc = "f<w> used as a value is a partial application: a function that already h
 
 # On the graph it is a function value carrying the captured arguments, the shape a closure
 # has. The four back ends must agree, and the pipelines must not change the result.
+#
+# One row of back ends, no `backends_agree`. Fifteen entries below run on `nvm` alone -- one pass
+# pipeline each, or a refusal that precedes every pass -- and every one of them used to write
+# `backends_agree = []` beside `backends = ["nvm"]`. The runner reads that field only for a back end
+# after the first (`run-tests.mjs#expandBackends` leaves `__backendReference` null at index 0), so on
+# a one-row entry it is never read: the `[]` and the `["exit_code", "stdout_normalized"]` that
+# `[defaults]` carries assert exactly as much, which is nothing. The lines are gone because
+# `test/tools/check-plan-fields.mjs` counts such a write as `empty-value` -- an entry that looks like
+# it compares and compares nothing -- and because a ratchet only asks about growth: thirteen of them
+# sat in the accepted baseline as findings nobody had to answer for, which is how a count comes to
+# overstate what the tree really carries.
 
 [defaults]
 kind = "snapshot"
@@ -31,7 +42,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/partial_application/values.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
@@ -40,7 +50,6 @@ desc = "The same program through std::opt::inline, std::fvm."
 case = "../../../cases/consistency/partial_application/values.cml"
 args = ["${case}", "std::opt::inline", "std::fvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
@@ -49,7 +58,6 @@ desc = "The same program through std::opt, std::nvm."
 case = "../../../cases/consistency/partial_application/values.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
@@ -58,7 +66,6 @@ desc = "The same program through std::opt::inline, std::opt, std::jit."
 case = "../../../cases/consistency/partial_application/values.cml"
 args = ["${case}", "std::opt::inline", "std::opt", "std::jit"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
@@ -67,7 +74,6 @@ desc = "The same program through std::macro, std::opt, std::prl."
 case = "../../../cases/consistency/partial_application/values.cml"
 args = ["${case}", "std::macro", "std::opt", "std::prl"]
 backends = ["nvm"]
-backends_agree = []
 golden = "golden/partial_application_values.txt"
 
 [[tests]]
@@ -76,7 +82,6 @@ desc = "The graph of `let g = inc<1>`: a subgraph of its own that calls inc, wit
 case = "../../../cases/consistency/partial_application/graph.cml"
 args = ["${case}", "std::gir"]
 backends = ["nvm"]
-backends_agree = []
 snapshot_compare = "gir_dot_isomorphic"
 golden = "golden/partial_application_graph.dot"
 
@@ -87,7 +92,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_argument_type.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_argument_type.cml:4:"]
@@ -99,7 +103,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_configured_twice.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_configured_twice.cml:5:"]
@@ -115,6 +118,9 @@ expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_c
 # row would pin nothing the first did not (the same reading feat/linear/var_reference.plan.toml
 # records for the refusals it replaced).
 #
+# For that reason they write no `backends_agree`: see the note under `[defaults]` for why no entry
+# of this file writes the field, on one row or on many.
+#
 # `var_parameter.cml`, the third entry this section used to have, is no longer a refusal source: its
 # context argument is a `state::Ref<int>` handle, so the program no longer has a `var` context
 # parameter to bind at all, and `feat/opt/splice_place` reads it for what a partial application over
@@ -128,7 +134,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/var_parameter_effect.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::VarContextParameterCannotBeBound"
 expect_diagnostic_code = "0x03000216"
@@ -144,7 +149,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_var_context_parameter.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::VarContextParameterCannotBeBound"
 expect_diagnostic_code = "0x03000216"
@@ -160,7 +164,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_ambiguous.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_ambiguous.cml:12:13:", "<k: int> (x: int) => int", "<k: int> (x: float) => float", "annotate the literal with its type"]
@@ -172,7 +175,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_entering_ambiguous.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::AmbiguousCall", "err_entering_ambiguous.cml:10:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float", "annotate the literal with its type"]
@@ -222,7 +224,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_overload_choice_name.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_overload_choice_name.cml:17:13:", "<k: f32> (x: f32) => f32", "<k: float> (x: float) => float"]
@@ -234,7 +235,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_context_argument_name.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_output_not_contains = ["Segmentation fault", "dumped core", "internal error"]
 expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_context_argument_name.cml:12:"]
@@ -246,7 +246,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_context_argument_out_of_range.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::LiteralNotRepresentable"
 expect_diagnostic_line = 11

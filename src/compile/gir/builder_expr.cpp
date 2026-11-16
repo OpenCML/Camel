@@ -680,9 +680,9 @@ uint32_t Builder::captureWriteMaskOf(const compile_graph_ptr_t &callee) const {
         return 0;
     }
     // In the mask, bit k is the callee's k-th capture, in the order its ports were made: that is
-    // the order linkCaptureSites passes them in, after the declared `with` arguments, and what
-    // the run time reads the versions from (GCFuncRef::reserved). Only a variable is written, so
-    // a capture of anything else never has its bit set.
+    // the order a call passes them in, after the declared `with` arguments (linkCaptureSites), and
+    // what the run time reads the versions from (GCFuncRef::reserved). Only a variable is written,
+    // so a capture of anything else never has its bit set.
     const std::set<node_handle_t> written = capturedWritesOf(callee.get());
     uint32_t mask                         = 0;
     for (size_t k = 0; k < table->second.size(); ++k) {
@@ -1941,6 +1941,10 @@ void Builder::collapseNonEscapingVariableReads() {
             if (draft.header(readId) == nullptr) {
                 continue;
             }
+            // A read a capture site handed to a direct call -- the call's `with` input -- is a read
+            // like any other: it is an edge of the graph from the moment the call was built
+            // (addCaptureSite), so the fold below rewrites the call's input with the rest of the
+            // read's users and the cell's unit goes with it (dropCarriedVariableUnits).
             // A read of a value that can be *kept* stays a read. `markNonRetainingReads` turns a
             // read nobody keeps into `:var/peek` and lets the next append change the array in
             // place; a read that can be kept stays `:var/get` and the memory plan copies instead.
