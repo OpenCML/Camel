@@ -43,7 +43,10 @@ const RECORD_NOTE = 'recorded 2026-11-16, after RUN_ERROR appeared as a class (1
     + '500 seeds are now rejected and 227 reach the matrix, where the 10/17/3 baseline had 180 and '
     + '320. The crash class rose from 3 programs / 3 cells to 10 / 56 before this file was written. '
     + 'This is a new zero, not a statement that the old numbers did not happen: do not subtract '
-    + 'these numbers from 10/17/3, the two are not the same measurement.'
+    + 'these numbers from 10/17/3, the two are not the same measurement. `crashed 10` is the zero '
+    + 'recorded after it rose to 10: it is not a fixed 10 and it is not an acceptable 10 -- those '
+    + 'two look identical in a file, and only this sentence tells them apart. '
+    + 'crashed 10 是「涨到 10 之后才录的」零点；它不是「修好的 10」，也不是「可接受的 10」。'
 
 function parseArgs(argv) {
     const opts = { matrix: 'full', camel: '', jobs: '4', n: '', record: false, note: '' }

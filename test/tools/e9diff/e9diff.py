@@ -563,7 +563,10 @@ def cmd_run(a) -> int:
                 cell_outcomes=summary["cell_outcomes"])
             if a.baseline_note:
                 numbers["note"] = a.baseline_note
-            BASELINE.write_text(json.dumps(numbers, indent=1) + "\n",
+            # `ensure_ascii=False`: the note is written in whatever language whoever records it
+            # thinks in, and a note that reads `\u4e2d\u6587` is a note nobody reads before
+            # subtracting one baseline from another.
+            BASELINE.write_text(json.dumps(numbers, indent=1, ensure_ascii=False) + "\n",
                                 encoding="utf-8", newline="\n")
             print(f"[E9] baseline written: {BASELINE}")
             if skipped:
