@@ -1,0 +1,34 @@
+/**
+ * Route three, handed to a function that keeps it, with a closure that only reads (design
+ * principles 3.5, 197): `keep` takes a function value and returns a pair that holds it, so `make`
+ * hands it a closure over `acc`, a `var` of its own call that it bound to `base * 3` first. A call
+ * that keeps what it is given keeps a value; a closure holds a value, so nothing is carried out of
+ * the call that has to be owned (the author's ruling of 2026-11-16).
+ *
+ * `acc` is bound twice -- 0 at its declaration, 21 before the closure is made -- and the closure
+ * answers 21 + 0 after travelling through `keep`, so the value that survives the call is the value
+ * the name had at creation. Nothing is reported. This is the one route where that shape separates
+ * a value from a cell today: the call that keeps the closure is the closure's last use, and the
+ * version it is handed is the write's, so the two bindings are told apart. Its four siblings bind
+ * the name once for the opposite reason (see `ok_read_escape_return` and the plan's header).
+ *
+ * The refusing counterpart of this shape is `err_escape_stored_by_callee`, whose closure assigns
+ * `acc`.
+ */
+
+func keep(f: (x: int) => int): ((x: int) => int, int) {
+    return (f, 0)
+}
+
+func make(base: int): int sync {
+    var acc = 0
+    acc = base * 3
+    let add = (x: int): int => acc + x
+    let (kept, n) = keep(add)
+    return kept(n)
+}
+
+func main(): int sync {
+    println(make(7))
+    return 0
+}
