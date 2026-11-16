@@ -27,7 +27,7 @@ name = "remat.identity"
 desc = "`remat(f)` is `f`: for `f(x, y) = x * x * y` at x = 3, y = 2 both paths print 18.0, df/dx = 12.0 and df/dy = 9.0, the gradient read through `grad` on the two `with`-parameter orders. The value has to be identical digit for digit -- a transform that moved a number would not be a recomputation of the same graph. The two `REINTERP remat` lines the transform prints are the mark being set twice (`in_recompute=0 out_recompute=1`), and the ids in them are the run's, so the values are matched as lines and the reading as a fragment."
 kind = "behavior"
 case = "../../../cases/modules/autodiff/remat_identity.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
@@ -41,7 +41,7 @@ name = "remat.attribute"
 desc = "The graph property, read twice in one run: `h` as written carries none, the value `remat(h)` gives carries it -- the kernel prints `in_recompute=0 out_recompute=1` -- and the three calls print 18.0, 18.0, 18.0. Marking a marked function is marking it once: the second call prints no second `REINTERP remat` line and gives the same value."
 kind = "behavior"
 case = "../../../cases/transforms/remat/remat_mark.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
@@ -55,7 +55,7 @@ name = "remat.split"
 desc = "The mark read where it matters, the cut: `split(jvp(h))` for `h(x, y) = x * x * y` carries three residuals (x, y, and the product x*x the backward half's rule reads), and `split(remat(jvp(h)))` carries two -- the parameters -- and says `recompute=1`: the backward half makes x*x again from x. The four numbers are the same either way, digit for digit. The two counts are 3 and 2 and not the 5 and 4 this entry pinned before 2026-11-04: the list used to hold each parameter's **tangent** port as well -- copied in as if a port were a computed value -- and the parameters' value ports are `x` and `y` themselves, already members, so nothing is carried twice (modules/transforms/split.cpp#residualsOf)."
 kind = "behavior"
 case = "../../../cases/transforms/remat/remat_split.cml"
-args = ["${case}", "${backend}"]
+args = ["--trace", "transforms", "${case}", "${backend}"]
 backends = ["nvm", "fvm"]
 backends_agree = ["stdout_normalized"]
 expect_exit = 0
