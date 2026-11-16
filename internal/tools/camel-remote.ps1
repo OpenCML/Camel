@@ -443,7 +443,7 @@ $checkers = [ordered]@{
     # for its own reason: it is slow, and it is a reading somebody asks for, not a static layer. The
     # script adds no judgement of its own; the tool decides against its baseline and its exit code
     # is this entry's (`scripts/check-e9-full.mjs`).
-    'e9-full'             = @{ script = 'scripts/check-e9-full.mjs'; args = @('--matrix', 'full'); compiler = $true; namedOnly = $true }
+    'e9-full'             = @{ script = 'scripts/check-e9-full.mjs'; args = @('--matrix', 'full', '--record'); compiler = $true; namedOnly = $true }
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
