@@ -162,6 +162,24 @@ assert(input.normalized.stderr.includes('The branch reaches outside the program'
 timeout_ms = 20000
 
 [[tests]]
+name = "region_roots.branch_statement_condition"
+desc = "The condition of a branch statement does not decide whether the branch is one (design principles 3.1, 3.7): a branch written as a statement is one whatever its condition holds -- a literal, a parameter, an operator or a call -- and the arm it takes runs. The mark that says `the value of this statement nobody takes` used to be cleared while the condition's own operators were built and never put back, so a branch behind `x > 0` or `positive(x)` was lowered as a branch that joins a value (its JOIN carried `string`, not `void`) and dropped from the graph again, while `if true then ...` in the same body ran. Which of the two a program got was a property of how its condition was written, and no property of the program."
+kind = "behavior"
+case = "../../../cases/compile/region_roots/branch_statement_condition.cml"
+args = ["-E", "short", "${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "stdout_normalized", "diagnostics"]
+expect_exit = 0
+expect_stdout_exact = "pos\nneg\npositive\nnot\n"
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+assert(input.diagnostics.length === 0, `expected no diagnostic, got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+}
+"""
+timeout_ms = 20000
+
+[[tests]]
 name = "region_roots.read_only"
 desc = "The boundary of the rule, and why the predicate is a write and not an effect: a read of an outside resource is a dependency like a read of a variable, so `get_env` with nobody needing its value does not run and is still reported."
 kind = "negative"
