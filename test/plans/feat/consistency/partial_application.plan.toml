@@ -115,6 +115,13 @@ expect_output_contains = ["name=SemanticDiag::PartialApplicationRefused", "err_c
 # row would pin nothing the first did not (the same reading feat/linear/var_reference.plan.toml
 # records for the refusals it replaced).
 #
+# For that reason they write no `backends_agree`: the runner reads it only for a back end after the
+# first (`run-tests.mjs#expandBackends` leaves `__backendReference` null at index 0), so on a
+# one-row entry both the list `[defaults]` carries and the `[]` that used to cancel it assert
+# nothing. `test/tools/check-plan-fields.mjs` counted the `[]` as `empty-value` -- an entry
+# pretending to compare -- which is why the two lines are gone rather than kept for symmetry with
+# the older entries of this file.
+#
 # `var_parameter.cml`, the third entry this section used to have, is no longer a refusal source: its
 # context argument is a `state::Ref<int>` handle, so the program no longer has a `var` context
 # parameter to bind at all, and `feat/opt/splice_place` reads it for what a partial application over
@@ -128,7 +135,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/var_parameter_effect.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::VarContextParameterCannotBeBound"
 expect_diagnostic_code = "0x03000216"
@@ -144,7 +150,6 @@ kind = "negative"
 case = "../../../cases/consistency/partial_application/err_var_context_parameter.cml"
 args = ["-E", "short", "${case}"]
 backends = ["nvm"]
-backends_agree = []
 expect_exit = 1
 expect_diagnostic_name = "SemanticDiag::VarContextParameterCannotBeBound"
 expect_diagnostic_code = "0x03000216"
