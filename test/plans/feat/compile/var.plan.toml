@@ -313,6 +313,37 @@ assert(input.diagnostics[0].line === 15 && input.diagnostics[0].column === 7, `r
 """
 timeout_ms = 30000
 
+# --- The guard is on the link, not on the name ---------------------------------------------------
+#
+# `x += 1` is `x = x + 1`, and it reads the name it writes, so the report of a dropped value has
+# never stood on it (that read is what `storedValueIsRead` answered for a cell). S1 keeps the report
+# off the link a compound assignment rebuilds, and the question that guard has to answer is whether
+# it is scoped to that link or to that name: if it leaked past the statement, the `x = 5` below it
+# would be swallowed with it, which is a missed report rather than a fixed one. So the case writes
+# both in one body, and one is reported while the other is not.
+[[tests]]
+name = "var.compound_write_is_not_a_dropped_value"
+desc = "A compound assignment's dropped value is not reported and the plain store after it is: `x += 1` reads the name it writes (it is `x = x + 1`), which is why the report never stood on it, and the guard that keeps it off is on the rebuilt link. `x = 5` in the same body stores a value nobody reads and is reported at its `=` (14:7); exactly one diagnostic, and the program prints `0`, the value read before both writes. One reported and one not, in one scope, is what tells the two apart from a guard that pins the name."
+kind = "behavior"
+case = "../../../cases/compile/var/compound_write_then_store.cml"
+args = ["${case}", "${run_nvm}"]
+expect_exit = 0
+# The one report, pinned by name and by the line and column it stands at.
+expect_diagnostic_name = "SemanticDiag::UnusedAssignedValue"
+expect_diagnostic_line = 14
+expect_diagnostic_column = 7
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+verify_script = """
+({ input, assert }) => {
+const out = input.normalized.stdout.trim()
+assert(out === '0', `the value read before the writes is what the program prints: ${JSON.stringify(out)}`)
+assert(input.diagnostics.length === 1, `one report: the store, not the compound write before it -- got ${input.diagnostics.length}: ${input.normalized.stderr}`)
+assert(input.diagnostics[0].name === 'SemanticDiag::UnusedAssignedValue', `the dropped value is named as a value: ${input.diagnostics[0].name}`)
+assert(input.diagnostics[0].line === 14 && input.diagnostics[0].column === 7, `reported at the store's '=', not at the compound write and not at the declaration: ${input.diagnostics[0].line}:${input.diagnostics[0].column}`)
+}
+"""
+timeout_ms = 30000
+
 # --- The same write, in a `sync` body and outside one -------------------------------------------
 #
 # The report is about the value, not about the body. A `sync` body is where a write whose value

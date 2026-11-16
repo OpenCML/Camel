@@ -1107,10 +1107,11 @@ class Builder {
     // (`let`, a parameter without `var`).
     std::unordered_set<node_handle_t> variables_;
 
-    /// A `var` whose declaration is built as a value and not as a cell (the direct-SSA
-    /// construction plan, stage S1): the name is bound to the value in
-    /// `nodeScope_`, an assignment rebinds it (`ssaAssignmentOf`), and no cell is made, so nothing
-    /// reads or writes one. One entry per declaration, in the scope that declared it; the scope is
+    /// A `var` whose declaration is built as a value and not as a cell
+    /// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1): the name is
+    /// bound to the value in `nodeScope_`, an assignment rebinds it (`ssaAssignmentOf`), and no cell
+    /// is made, so nothing reads or writes one. One entry per declaration, in the scope that
+    /// declared it; the scope is
     /// the region, so within it a name has one declaration and the entry *is* that declaration. The
     /// value in the entry is the name's current one: a read takes the map, and a write replaces it.
     struct SsaValue {

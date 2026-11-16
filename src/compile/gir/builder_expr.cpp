@@ -494,7 +494,7 @@ node_handle_t Builder::visitNRefNode(const GCT::node_ptr_t &gct) {
     //
     // A `var` whose every read and every write lies in the region that declares it is built as a
     // value: the name is bound to the value, an assignment rebinds it, and no cell is made
-    // (the direct-SSA construction plan, stage S1: same-region local
+    // (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1: same-region local
     // `var`s). The decision is the scan's, taken once, before this body was built, so it is the
     // same for every build of the body and does not depend on how the body is built.
     const bool ssaValue = isVar && !typedCell && ssaDeclarationIsEligible(gct, ident);
@@ -2804,8 +2804,9 @@ std::string Builder::bindTemporary(node_handle_t node) {
 }
 
 // ---------------------------------------------------------------------------------------------
-// The value environment of a `var` built as SSA (the direct-SSA construction plan, stage S1). A
-// `var` whose every read and every write lies in the region that
+// The value environment of a `var` built as SSA
+// (docs/handover/plans/2026-11-16-direct-ssa-construction.cn.md, stage S1). A `var` whose every
+// read and every write lies in the region that
 // declares it is built as a value: the name is bound to the value in `nodeScope_`, and an
 // assignment rebinds it (`ssaAssignmentOf`). Nothing reads or writes a cell, so nothing counts
 // units and nothing has to be folded afterwards.
