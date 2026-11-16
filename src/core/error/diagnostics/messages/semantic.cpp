@@ -1861,6 +1861,14 @@ const std::unordered_map<SemanticDiag, DiagInfo> &getSemanticDiagInfoMap() {
             },
         },
         {
+            SemanticDiag::VarContextParameterCannotBeBound,
+            {
+                "VarContextParameterCannotBeBound",
+                "'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.",
+                "A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.",
+            },
+        },
+        {
             SemanticDiag::IgnoredSideEffect,
             {
                 "IgnoredSideEffect",

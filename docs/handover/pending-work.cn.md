@@ -313,3 +313,98 @@ git -C <repo> log -1 --format=%s origin/fsh-dev  # 最新一笔标题里可能�
 - 主因像是 2026-11-15 那次「区域根」裁定让 `println(a)` 真的执行了 ⇒ **用例的前提（「这一行从不执行」）已经过期**。
 
 **所以该改的是期望，但让它过期的不是句柄放宽，是 11-15 的区域根裁定。** 照原话去改会**改错理由**。**顺序**：等「值没人要的分支语句是否运行」定了（`lane-ifarm`）再一起重排，因为那之后「哪些行会执行」还要变一次。
+
+## 15. 闸门名单定死成 12 个目标（2026-11-16）
+
+今晚同一个洞出现了**五次**，每次的形状都一样：**某族计划没被选中 ⇒ 它的红既不算新红、也不算已修，根本不在任何判断里。**
+
+```
+① slow 层从不在 --changed 里跑
+② feat/mm 两行「等 byref 合完再量」，延期后没人回头
+③ feat/opt 不在名单里（32 条红从未计入）
+④ 我的「基线 49」建立在这上面
+⑤ feat/modules、feat/tools、feat/effects 不在基线里（10 条红无法定责）
+```
+
+**从这一笔起，闸门名单写死成这 12 个目标，不再临时挑**：
+
+```
+smoke  feat/compile  feat/linear  feat/opt  feat/parse  feat/mm
+feat/modules  feat/tools  feat/consistency  feat/trans  feat/effects  docs_links
+```
+
+另加两条固定动作：
+- **每批轮转 2–3 个 `slow` 计划，并写明哪几个跑了、哪几个没跑**；
+- **`新红 vs 基线` 必须写成三张表**：基线内仍红（逐条）／基线内已转绿（逐条）／**不在基线里（逐条，并注明「基线从没量过这一族」或已做 A/B 定责）**。**给不出就写「未对账」，不许写「0」。**
+
+**理由**：一个子集跑出来的 `fail` 数，和一张覆盖全部计划的基线表，**不是同一种东西**。今晚已经有人（包括我）两次差点拿子集数去减基线数。
+
+## 16. 基线 174 → 54，且 12 目标里「新红 = 0」（2026-11-16，`0f32ded47`）
+
+### 兑现账（谁付的）
+```
+compile 27   closurerule（删一条已撤回的规则 + 22 条 + 4 条同因 + 5 条 state_escape）
+linear  98   byref（按引用捕获改按值；33 条收成 1 条）
+opt     32   optred（24 D1 + 8 D2，全部换载体，断言一字未改）
+opt      4   within_call（1948bf82b，换载体让内联读数回来）
+opt      2   screens
+mm       2   poison:linear.captured_writes / poison:linear.var_reference
+modules  1   nn 的 lr
+```
+
+### 仍红（54，全部已被 A/B 或双侧证明为老账）
+```
+consistency 36（new_values 28 + partial_application.var_parameter_effect 4）
+trans 6（cml 3 + cpp 2 + print_determinism 1）
+mm 2（capacity.perm_query_types + poison:compile.nullable_assign）
+compile 3（transitional.*，乙类，第 4 步删）
+docs 1（plan.cn.md:51，`resources.cpp#FunctionType`）
+opt 6（camel_passes.cse ×6，已用 `0b336ce51` 双侧证明是老账）
+```
+
+### 两条**不稳定**用例（新类别，必须单独记）
+```
+cli.plan_arg_domain_refused
+load_class.shared_place
+```
+- 在 `320895383` 上**绿**；
+- 在 `portbind` 那一轮闸门里**红**；
+- 现在**又绿**。
+
+**判定：不稳定，不是新红。** 而这个判定有三层后果：
+1. **它会让「新红 = 0」这句话偶尔变假**——下次看到它红，不要先去归因给最近的改动；
+2. **不稳定的红一旦进了基线，基线就不可复算了**（同一棵树两次跑出不同数）；
+3. **它本身是一个缺陷**：要么用例对时序/并行/环境有依赖，要么被测行为真的不确定。**待派人查，目前只知道「不属于任何一笔改动」。**
+
+**注意报告里的措辞**：不能写成「这两条红是 portbind 造成的」，也不能写成「这两条是绿的」——**只能写成「它在两次测量里给了不同答案」**。
+
+### 慢层轮转第 3 批（记下来，因为「跑了哪几个」和「没跑哪几个」一样重要）
+```
+跑了：mm/gc_pacing、mm/gc_soak、modules/random      50/50/0
+未跑：var_reference、tools/lsp、autodiff、frontend、trans/cml_sweep、tools/debugger
+      （前两批已跑过）
+```
+
+## 17. 一条保留的空合并（2026-11-16，`42bbc4ba1`）
+
+```
+42bbc4ba1  parents: 2de547387, 64f281e31
+tree(42bbc4ba1) = cf18ed5b…   tree(64f281e31) = cf18ed5b…   ← 逐字节相同
+2de547387 是 64f281e31 的祖先                              ← 合并了自己的祖先
+```
+
+**它是空合并：没有带进任何内容，而且三笔提交（车道原始提交、真正的合并、这条空合并）共用一个标题。**
+
+**保留，不重写。** 理由：`origin` 上已经推送，内容零差异；而 `develop` 永不被重写——
+**用一个可读的瑕疵换一次不可回退的重写，是错的交换。**
+
+**成因**：先「把车道分支合进 `develop`」，车道又自己合了一次 `develop`，再把它的合并提交合回来 ⇒ 第二层多余。
+
+**正确顺序（写死，从这一条起）**：
+```
+① 在车道分支里 git merge origin/develop  → 解冲突、跑通
+② 在 develop 上 git merge --no-ff <车道分支> 一次
+③ 推一次
+```
+
+**这一条被记录下来的用意**：**被记录的瑕疵不会复现，被悄悄抹掉的会。**

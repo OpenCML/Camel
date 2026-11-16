@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-320 diagnostics: 297 errors, 23 warnings. 15 carry a machine-applicable edit, 305 say why they carry none.
+321 diagnostics: 298 errors, 23 warnings. 15 carry a machine-applicable edit, 306 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -276,6 +276,7 @@ prints one entry.
 | `0x03000213` | [SemanticDiag::ClosureAssignsCapturedName](#closureassignscapturedname) | Error | no |
 | `0x03000214` | [SemanticDiag::CapturedVarWrittenAfterTheClosure](#capturedvarwrittenaftertheclosure) | Error | no |
 | `0x03000215` | [SemanticDiag::CapturedVarHandedToVarParameter](#capturedvarhandedtovarparameter) | Error | no |
+| `0x03000216` | [SemanticDiag::VarContextParameterCannotBeBound](#varcontextparametercannotbebound) | Error | no |
 | `0x03100002` | [SemanticDiag::IgnoredSideEffect](#ignoredsideeffect) | Warn | no |
 | `0x03100004` | [SemanticDiag::EffectNotExecuted](#effectnotexecuted) | Warn | no |
 | `0x03100090` | [SemanticDiag::ExitInUnusedBranch](#exitinunusedbranch) | Warn | no |
@@ -9146,6 +9147,44 @@ func main(): int sync {
     let g = () => x
     bump(x)
     println(g())
+    return 0
+}
+```
+
+### VarContextParameterCannotBeBound
+
+`0x03000216` · Error · `SemanticDiag::VarContextParameterCannotBeBound`
+
+**Fix**
+
+None: choice: the two ways out are the writer's to choose
+
+**Message**
+
+```text
+'{0}' cannot be bound to '{1}', a `var` context parameter: a function value made by a partial application has no call of its own to write the value back to.
+```
+
+**Help**
+
+```text
+A `var` context parameter ('with <var total: int>') is passed in and written back by the call, the same as a `var` parameter (design principles 3.5), so the cell it names belongs to the call. A function value made by a partial application has no call of its own to write it back to, so 'f<w>' cannot bind one: the write would have nowhere to go, and the cell the value captured would never see it. Two ways out: call the function where the name lives ('f<name>(x)'), so the write-back is the assignment written at the call; or hold the state in a `Ref` ('let r = ref(0)', 'get(r)', 'set(r, v)'), which a partial application can bind because a handle is a value, and every call writes the box.
+```
+
+**Example** (`test/cases/consistency/partial_application/err_var_context_parameter.cml`, run as `camel -E short test/cases/consistency/partial_application/err_var_context_parameter.cml`)
+
+```camel
+var total: int = 0
+
+with <var acc: int>
+func add(x: int): int sync {
+    acc = acc + x
+    return acc
+}
+
+func main(): int sync {
+    let g = add<total>
+    println(g(1), total)
     return 0
 }
 ```

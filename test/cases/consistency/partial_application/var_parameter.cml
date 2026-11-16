@@ -1,21 +1,32 @@
 /**
- * A `with` parameter declared `var` is a variable the function writes, and binding one with
- * `f<w>` is an ordinary partial application (graph model Q9, `partial-application-var`): the
- * function value captures the cell, and every call of it writes through the capture, so the
- * accumulator after three calls is what the three calls added.
+ * Three arguments of one `println` are calls of a function value that takes its context argument
+ * from the call that made it. The value is a partial application (`graph model Q9,
+ * partial-application-var`), and the context argument is a `Ref` handle: a handle is a value, so the
+ * value may hold it and every call writes the box through it, which is what the three calls add up.
+ *
+ * The context argument used to be `with <var total: int>`. That shape is retired: a function value
+ * from a partial application has nowhere to write a `var` context parameter back (design principles
+ * 3.5, the author's ruling of 2026-11-15), and a closure holds the value a name had when it was made,
+ * not the name, so the write is refused where the value is made (`SemanticDiag::
+ * ClosureAssignsCapturedName`, 0x03000213, at `add<t>`; the author's ruling of 2026-11-16, items 197
+ * and 198). What stays is what this case reads: two partial applications of one function, three calls
+ * of the first, and the accumulator each of them leaves.
  */
 
-with <var total: int>
+import state
+
+with <total: state::Ref<int>>
 func add(x: int): int sync {
-    total = total + x
-    return total
+    let next = state::get(total) + x
+    state::set(total, next)
+    return next
 }
 
 func main(): int sync {
-    var t = 0
+    let t = state::ref(0)
     let g = add<t>
-    println(g(1), g(2), g(3), t)
+    println(g(1), g(2), g(3), state::get(t))
     let direct = add<t>
-    println(direct(10), t)
+    println(direct(10), state::get(t))
     return 0
 }
