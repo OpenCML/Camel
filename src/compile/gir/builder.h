@@ -901,9 +901,13 @@ class Builder {
     node_handle_t
     captureInto(const compile_graph_ptr_t &graph, node_handle_t origin, const std::string &name);
     /// Whether a capture `graph` makes of `origin` is a capture of its value rather than of its
-    /// cell (design principles 3.5, 197): a cell of a body the closure stands in, or a value of the
-    /// top level of a module that the program is making a value of the function for. Decided once
-    /// per cell (`captureByValueOf_`): every capture of one cell has to answer the same.
+    /// cell (design principles 3.5, 197): the value everywhere the rule governs the write. A cell
+    /// stays a cell in these shapes only: a `var` parameter (the caller's cell), a module-level `var`
+    /// the program is not making a value of the function for, a name handed to a call (198 does not
+    /// report the shape where the closure is made at that call's argument position), the generator
+    /// machine's step function and a decorated block (there the write has to land in the cell).
+    /// Decided once per cell (`captureByValueOf_`): every capture of one cell has to answer the
+    /// same.
     bool captureByValue(const compile_graph_ptr_t &graph, node_handle_t origin);
     /// The answer `captureByValue` records for a cell, worked out once: whether a capture of it is
     /// a capture of the value it holds rather than of its cell (design principles 3.5, 197).
@@ -2602,12 +2606,12 @@ class Builder {
     // read where a value is wanted (`let k = f`) and not where a call is made (`f(1)`). A value
     // holds the values its captures had when it was made; a direct call is handed the cells.
     std::unordered_set<std::string> programValueNames_;
-    // The last source offset of the writes of each name `programWriters_` records.
-    std::unordered_map<std::string, size_t> lastWriteOffset_;
     // The names the program hands to a call as an argument, which that call may write: a `var`
     // parameter and a `var` `with` parameter bound by `f<t>` are the caller's cell. A name here
     // keeps its cell (captureByValue): the write reaches it through the call, which a value port
-    // cannot carry.
+    // cannot carry, and the rule that would refuse it (3.5, 198) does not report the shape where the
+    // closure is made AT the argument position of the very call that hands the name over -- see
+    // `test/cases/linear/byref/var_param_reference.cml`'s `write_then_read`, whose reading is 7.
     std::unordered_set<std::string> handedOver_;
     // Whether a call may write the variable `name` is written with.
     bool programMayWriteThroughCall(const std::string &name) const {
@@ -2622,16 +2626,6 @@ class Builder {
     }
     // Whether some function of the program writes a variable that `name` is written with.
     bool programWrites(const std::string &name) const { return programWriters_.contains(name); }
-    // The last source offset at which the program writes a variable that `name` is written with,
-    // or `kNoSourceOffset` when nothing writes it. A capture is by value only where this is not
-    // past the place the capture is written: design principles 3.5 (197) makes a variable a
-    // closure captured unassignable from the closure's creation to its last use, and until that
-    // rule is reported the cell is kept wherever a later write exists, so that no program's
-    // behaviour changes underneath it.
-    size_t lastWriteOffsetOf(const std::string &name) const {
-        const auto it = lastWriteOffset_.find(name);
-        return it == lastWriteOffset_.end() ? kNoSourceOffset : it->second;
-    }
     static constexpr size_t kNoSourceOffset = static_cast<size_t>(-1);
     // The byte offset `origin`'s source span starts at, or `kNoSourceOffset` when it has none.
     size_t sourceOffsetOf(camel::source::origin_id_t origin) const;
