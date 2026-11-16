@@ -193,6 +193,32 @@ Immediately before `[SUMMARY]`, every run states the artifact its numbers belong
   `unknown` rather than an empty field. `out/latest/build-info.json` carries the build's own stamp for
   anyone who needs to know which tree produced the binary -- the two answer different questions.
 
+The line after `[SUMMARY]` says whether the run left anything in the tree it tested:
+
+```
+[TREE] clean: nothing appeared under the checkout during this run (git status --porcelain -u normal: 0 before, 0 after, 2392 directories watched)
+```
+
+- **The verdict is `git status --porcelain --untracked-files=normal` read twice**, once before the
+  first test and once after the last, and the failure is the difference: a path that appeared during
+  the run and is not ignored. Ignored is decided by `.gitignore`, not by this check, so
+  `test/results` and `tmp/test` -- the two trees a run owns -- need no exception, and there is no
+  list of paths that are allowed to be dirty.
+- **A path the run left behind fails the run.** It is not advice: a red gate whose only defect is a
+  file in the checkout is a red gate, because a tree the run made dirty is what makes the next
+  `[provenance]` read `(dirty: N files)` and stop naming a commit. `camel-remote.ps1` also carries
+  the untracked files to the host on every run, and `--changed` counts them as changed files.
+- **Each path is printed with the tests that were running when it appeared**, which is the only part
+  of the line a watcher supplies: a path the watcher did not see still fails (the attribution is a
+  diagnosis, never the verdict). `--update-golden` rewrites tracked files on purpose and prints
+  `[TREE] not judged: ...` rather than a green line; a `git status` that cannot be read is a failure,
+  not a clean tree.
+- **Paths already uncommitted when the run started are printed and are not this run's.** A lane that
+  edits and then runs `--changed` before committing would otherwise red every run it makes; the line
+  is printed anyway, because a file left by the run before this one has to be visible somewhere.
+- Where a test may write, and the fourteen files that made this line exist:
+  [Test Scratch](#test-scratch).
+
 Rules for a new test:
 
 - It is fast by default: do not mark a test slow to make the default set look fast.

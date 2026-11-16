@@ -19,6 +19,7 @@ import {
 } from './cuda-visibility.mjs'
 import { CUDA_DEVICE_ORDER, PCI_BUS_ID, chooseFreeDevice } from './free-device.mjs'
 import { RUN_DIRS_KEPT, SCRATCH_DIR, formatRetention, pruneRunnerOutput, runnerOutputPath } from './runner-output.mjs'
+import { judgeTree, readTreeState, startTreeWatch } from './tree-guard.mjs'
 import { argProblems } from './cli-arg-domains.mjs'
 import { tierAccountingLine, tierAccountingProblems } from './tier-accounting.mjs'
 import { formatIsoTime, provenanceLine, staleAllowedMark } from './provenance.mjs'
@@ -1395,6 +1396,95 @@ function printProvenance(options) {
     console.log(`${COLORS.cyan}[provenance]${COLORS.reset} ${readProvenance(options)}${staleAllowedMark()}`)
 }
 
+/**
+ * What the run left in the checkout, on the line after `[SUMMARY]` and for the same reason the line
+ * above it exists: a reading belongs to a tree, and a tree that this run just made dirty is the one
+ * thing that makes the next `[provenance]` untrue. The heading is the whole check -- a run that
+ * leaves a path behind fails, and the exit code says so -- and the detail under it names the path
+ * and the test.
+ *
+ * Three lines and no fourth: `clean`, `FAIL`, and what was already there before the run started.
+ * `not judged` is said out loud for the one run that cannot answer (`--update-golden` rewrites
+ * tracked files on purpose), because a check that quietly turns itself off is the defect it exists
+ * to catch. Everything the verdict rests on is in test/tools/tree-guard.mjs.
+ */
+function printTreeVerdict(verdict) {
+    if (!verdict.judged) {
+        // `not judged` is said out loud for the one run that cannot answer (`--update-golden`
+        // rewrites tracked files on purpose), because a check that quietly turns itself off is the
+        // defect it exists to catch. A reading that failed -- `git` not there, a status that
+        // returned non-zero -- is that defect, and it is red.
+        const line = `[TREE] not judged: ${verdict.reason}`
+        if (verdict.failed) console.error(`${COLORS.red}[FAIL]${COLORS.reset} ${line}`)
+        else console.log(`${COLORS.yellow}[TREE]${COLORS.reset} ${line}`)
+        return
+    }
+    const plural = (count, word) => `${count} ${word}${count === 1 ? '' : 's'}`
+    const who = (item) => {
+        if (item.at === null) return 'the watcher did not see it appear (attribution unavailable)'
+        const at = `first seen ${(item.at / 1000).toFixed(1)} s into the run`
+        if (item.running.length === 0) return `${at}, while no test was running`
+        // Five names and a count: at `-Jobs 8` a handful is a reading, and the first version of this
+        // line printed all of them -- one path written while 7,270 entries were "running" made a
+        // 65 KB line that the terminal cut in half, so the diagnosis was unreadable exactly when it
+        // was needed.
+        const names = item.running.slice(0, 5).map(
+            (run) => `${run.plan ? `${run.plan}/` : ''}${run.name}${run.case ? ` (${run.case})` : ''}`
+        )
+        const more = item.running.length > names.length ? `, and ${item.running.length - names.length} more` : ''
+        return `${at}, while ${item.running.length === 1 ? 'this test was' : `${item.running.length} tests were`} running: ${names.join(', ')}${more}`
+    }
+    const listed = (item) => `${item.status.padEnd(2)} ${item.path}`
+    // A path that appeared and went again has no status to print: `git status` does not list it, and
+    // the only thing known about it is what it was when the watcher saw it.
+    const goneAgain = (item) => `${item.path} -- ${who(item)}`
+    if (verdict.failed) {
+        console.error(
+            `${COLORS.red}[FAIL]${COLORS.reset} [TREE] ${plural(verdict.appeared.length, 'path')} appeared under the ` +
+                'checkout during this run: the run wrote outside test/results and tmp/test'
+        )
+        for (const item of verdict.appeared) {
+            console.error(`    ${COLORS.red}[TREE]${COLORS.reset} ${listed(item)} -- ${who(item)}`)
+        }
+    } else {
+        // "left nothing" and not "nothing appeared": a path that appeared and went again is said on
+        // its own line below, and a green line that contradicted it would be the wrong reading.
+        console.log(
+            `${COLORS.cyan}[TREE]${COLORS.reset} clean: the run left nothing under the checkout ` +
+                `(git status --porcelain -u normal: ${verdict.beforeCount} before, ${verdict.afterCount} after, ` +
+                `${verdict.watched} director${verdict.watched === 1 ? 'y' : 'ies'} watched)`
+        )
+    }
+    if (verdict.preexisting.length > 0) {
+        // Printed whatever the verdict: the paths a run before this one left are not this run's, but
+        // they are somebody's, and dropping them from the report is how they become permanent.
+        const shown = verdict.preexisting.slice(0, 12).join(', ')
+        const more = verdict.preexisting.length > 12 ? `, and ${verdict.preexisting.length - 12} more` : ''
+        console.log(
+            `${COLORS.cyan}[TREE]${COLORS.reset} ${plural(verdict.preexisting.length, 'path')} were already ` +
+                `uncommitted when this run started, not this run's: ${shown}${more}`
+        )
+    }
+    if (verdict.transient.length > 0) {
+        // Gone by the end of the run, so it is not a failure -- but a test that writes into the
+        // checkout and removes it again is one cleanup call away from leaving it.
+        const shown = verdict.transient.slice(0, 12).map(goneAgain).join(', ')
+        const more = verdict.transient.length > 12 ? `, and ${verdict.transient.length - 12} more` : ''
+        console.log(
+            `${COLORS.yellow}[TREE]${COLORS.reset} ${plural(verdict.transient.length, 'path')} appeared in the ` +
+                `checkout and were gone again by the end of the run: ${shown}${more}`
+        )
+    }
+    if (verdict.failure || verdict.watched === 0) {
+        // The watcher is the attribution and never the verdict, so a broken watcher costs the names
+        // above and nothing else. Said out loud so that a report with no name in it says why --
+        // `0 directories watched` is not a tree with nothing in it, it is a watcher that did not
+        // start, and a line that printed it without comment would read as a clean run.
+        const why = verdict.failure || 'the walk watched no directory at all'
+        console.log(`${COLORS.yellow}[TREE]${COLORS.reset} the path watcher is incomplete (${why})`)
+    }
+}
+
 function printRunSummary(summary) {
     const total = summary.pass + summary.fail + summary.skip + summary.xfail
     const skipped = summary.skip > 0 ? `, skip: ${summary.skip}` : ''
@@ -2290,6 +2380,19 @@ async function runOneTest(test, sharedVars, logContext, scratch, scratchRelative
         ? { command: process.execPath, args: [CHILD_CPU_TOOL, '--', toolExe, ...args] }
         : { command: toolExe, args }
     const proc = await runProcess(launch.command, launch.args, {
+        // The checkout root, and not the test's scratch directory, because `${test_tmp}` is a
+        // *repository-relative* path (docs/test-plans.md, "Test Scratch"): a plan writes
+        // `ONNX_OUT=${test_tmp}/m.onnx`, and a program started anywhere but here resolves that one
+        // level deeper, under its own cwd. Measured on 2026-11-16 with `cwd: scratch` here: 98
+        // failures in `feat/modules` against 3 on the base and every one of the 95 new ones
+        // `ENOENT ... /tmp/test/run-<pid>/<plan>/<test>/<file>`, because the model had been written
+        // to `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
+        // A program that writes a *bare* relative path therefore still writes into the checkout, and
+        // the thing that answers for it is the `[TREE]` line at the end of the run
+        // (test/tools/tree-guard.mjs): it names the path and the test that was running when it
+        // appeared. The one test that did this -- the sweep that runs a compiler over every case in
+        // the tree -- starts each of those programs in its own directory instead
+        // (scripts/check-plan-refs.mjs).
         cwd: REPO_ROOT,
         env,
         timeoutMs,
@@ -3510,7 +3613,35 @@ function summarizeSlotTimings(records, planWallMs, jobs, stalls, logWindows, run
 }
 
 /**
- * Run every selected test, at most `options.jobs` at a time, and print the results in plan and
+ * The tests whose own work is in progress right now -- from before their precondition to after
+ * their verification script -- by the name a reader knows them by.
+ *
+ * One consumer: the tree watcher (`[TREE]`, test/tools/tree-guard.mjs). When a path appears under
+ * the checkout while a test is running, the set is what it was while it appeared, so the line that
+ * reports a file the run left behind names the tests that could have written it instead of asking
+ * the next person to bisect a 9,465-test layer. It is a diagnosis only: the verdict is `git status`
+ * read before and after the run, and a path nobody was running when it appeared is still a failure.
+ */
+const inFlight = new Map()
+let inFlightNext = 1
+
+function enterInFlight(test) {
+    const id = inFlightNext++
+    // The case as the plan writes it is relative to the plan file (`../../../cases/...`), which is
+    // not a path a reader can open: the absolute one, made relative to the checkout, is.
+    const fromRoot = test.case && test.__planPath
+        ? path.relative(REPO_ROOT, path.resolve(path.dirname(test.__planPath), test.case)).split(path.sep).join('/')
+        : test.case || ''
+    inFlight.set(id, { plan: test.__planId || '', name: test.name, case: fromRoot })
+    return id
+}
+
+function leaveInFlight(id) {
+    inFlight.delete(id)
+}
+
+/**
+ * Run every selected test, at most `options.jobs` a time, and print the results in plan and
  * test order: a status line, its failure details and its log files are the same as a serial run's,
  * in the same place, whichever test finishes first. A test that compares against an earlier one
  * waits for it; a test marked serial (`isSerial`) holds every slot while it runs.
@@ -3652,6 +3783,12 @@ async function executePlans(plans, options, sharedVars, logDir) {
             let probeHeld = false
             let slotAcquired = false
             let slotReleased = false
+            // The test's own work starts when it holds a slot: before that it is a promise waiting
+            // in the queue, and every entry in the run has one of those from the moment the plan is
+            // expanded -- `enterInFlight` at the top of this function put 7,270 of them on the
+            // `[TREE]` line at once. `runOneTest` releases the slot the moment the test's own
+            // process is gone, which is the other end of the same window.
+            let flight = null
             // Idempotent: `runOneTest` releases the slot the moment the test's own process is gone,
             // and the finally block releases it for a test that never got that far (a skip, a
             // runner error).
@@ -3696,6 +3833,11 @@ async function executePlans(plans, options, sharedVars, logDir) {
                 await slots.acquire(tokens, priority)
                 slotAcquired = true
                 clock.acquiredAt = performance.now()
+                // Here, and not at the top: from this line to the `finally` below, anything that
+                // appears under the checkout is this test's doing (the `[TREE]` line says so by
+                // name). A `skip_unless` probe runs before this point and is not covered -- it asks
+                // the host a question, and the two things it may start answer on stdout.
+                flight = enterInFlight(entry.test)
                 if (!wantsProbe || serial) {
                     scratch = createTestScratchDir(entry.test)
                     clock.scratchAt = performance.now()
@@ -3777,6 +3919,7 @@ async function executePlans(plans, options, sharedVars, logDir) {
                     failures: result.failures,
                 }
             } finally {
+                if (flight !== null) leaveInFlight(flight)
                 if (probeHeld) probes.release(1)
                 // The test's own directory is not this run's evidence: it goes whether the
                 // test passed or failed. The run root stays on failure (main prints it).
@@ -4025,7 +4168,35 @@ async function main() {
     // The run owns tmp/test/run-<pid>: a root left by an earlier process with this pid (the pid
     // was reused) must not be read as this run's files.
     fs.rmSync(TEST_SCRATCH_RUN, { recursive: true, force: true })
+    // What the tree was before the first test, and a watcher that records when a path appears
+    // beside the tests that were running at that moment. Both are read here and judged after the
+    // last test: the question is what *this run* left, so the reading has to bracket it
+    // (test/tools/tree-guard.mjs).
+    const treeBefore = readTreeState(REPO_ROOT)
+    const treeSeenAt = performance.now()
+    const treeSeen = new Map()
+    const treeWatch = startTreeWatch(REPO_ROOT, {
+        onPath: (relative) => {
+            // The first moment it appeared: a file written in one burst would otherwise move its own
+            // timestamp on every event, and the answer is which tests were running when it was made.
+            if (treeSeen.has(relative)) return
+            treeSeen.set(relative, { at: performance.now() - treeSeenAt, running: [...inFlight.values()] })
+        }
+    })
     const outcome = await executePlans(plans, options, sharedVars, logDir)
+    // Both readings before `stop()`: it closes the watchers and forgets how many there were, and
+    // the number is what says the walk found the tree instead of watching nothing.
+    const treeWatched = treeWatch.watched()
+    const treeWatchFailure = treeWatch.failure()
+    treeWatch.stop()
+    const treeVerdict = judgeTree({
+        before: treeBefore,
+        after: readTreeState(REPO_ROOT),
+        firstSeen: treeSeen,
+        updateGolden: options.updateGolden,
+        failure: treeWatchFailure,
+        watched: treeWatched
+    })
     const testRootKept = outcome.summary.fail > 0
     if (testRootKept) {
         // The per-test directories are gone, but what a program wrote outside them (and the
@@ -4065,6 +4236,10 @@ async function main() {
                 // after it was gone, plus the aggregates and the tests that own most of it.
                 slot_timing: slotTiming,
                 test_timings: outcome.timings,
+                // What the run left in the checkout, in the same record as everything else it
+                // measured: the paths, the tests that were running when each appeared, and the two
+                // readings the verdict is the difference of (test/tools/tree-guard.mjs).
+                tree: treeVerdict,
             },
             null,
             2
@@ -4073,6 +4248,11 @@ async function main() {
 
     printProvenance(options)
     printRunSummary(outcome.summary)
+    // After the numbers, and not between them and the line that states what they belong to: a
+    // `[provenance]` line sits immediately before `[SUMMARY]` by its own rule
+    // (test/cases/tools/provenance.mjs pins it), and this is the one line that says whether the
+    // tree that line named is still the tree that ran.
+    printTreeVerdict(treeVerdict)
     if (marginSkippedTests > 0) {
         // The rule's own reading, so a run on a host without a CPU figure says what it did not judge
         // and how often, instead of leaving 105 bounds looking judged.
@@ -4116,7 +4296,12 @@ async function main() {
     )
     console.log(formatGateSplit(split))
 
-    const exitCode = outcome.summary.fail > 0 ? 1 : 0
+    // Two ways to fail, and both are red: a test that failed, and a run that left a path behind in
+    // the checkout it was measuring. The second is not cosmetic -- it is what makes the next
+    // `[provenance]` line unable to name the tree the reading belongs to, and what the wrapper
+    // carries to the host on the next run. A tree that could not be read at all counts as the
+    // second: `could not ask` is not `there is nothing` (test/tools/tree-guard.mjs#judgeTree).
+    const exitCode = outcome.summary.fail > 0 || treeVerdict.failed === true ? 1 : 0
     process.exit(exitCode)
 }
 
