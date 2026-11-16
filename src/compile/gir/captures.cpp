@@ -106,9 +106,10 @@ node_handle_t Builder::captureInto(
     // capture would make is not that path's one read. It is refused here, at the one place a
     // capture is made, and not by the pass that counts reads: inside the closure the capture port
     // and what it captured are one value, so counting edges would see one read where the program
-    // wrote two names. A cell is not the value -- a captured `var` is a resource the closure
-    // shares, and the reads of it are judged where they stand (the standard library's `tee` holds
-    // its source that way). What the rule refuses is the read the capture would make, so what the
+    // wrote two names. A cell is not the value -- `var` is a name that may be bound again and a
+    // capture is a capture of the value the name holds there (design principles 3.5), so the reads
+    // of the name are judged where they stand, and the standard library's `tee` hands its source on
+    // that way to key its report. What the rule refuses is the read the capture would make, so what the
     // closure makes of the port is settled with the pass, once its body is built: a closure that
     // only hands the value on -- into a cell, into a report, into the captures of a call -- reads
     // nothing, and the standard library's `tee` holds its source that way to key its report.
@@ -242,28 +243,6 @@ bool Builder::decideCaptureByValue(const compile_graph_ptr_t &graph, node_handle
     if (compilerMadeClosure(graph->name()) || decoratedBlockGraph(graph)) {
         return false;
     }
-    // A closure written inside the body of a function that hands out a stream: `yield` splits the
-    // body into arms, the arm after a `yield` writes the cell, and a closure the earlier arm made is
-    // called by a later pull -- the machine writes the cell between the two (gct/builder.cpp
-    // visitGeneratorBody: the locals are cells of the function's own body, and "a closure the body
-    // made before a `yield` reads what a later pull wrote"). The capture is therefore a capture of
-    // the cell, and `test/cases/compile/stream/generators.cml` pins that reading (`read()` is 5, not
-    // 0). This is the generator's own rule and not a conservative gate: a value capture would freeze
-    // the cell at the pull that made the closure, which is not the model the machine runs
-    // (docs/handover/questions/2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md).
-    //
-    // It also keeps the cell's type and the closure's type the same. A cell of a generator body is
-    // typed by `typeof <the value written into it>`, and the inference that answers a `typeof`
-    // builds the expression again in a graph of its own: the two builds agree only because both
-    // keep the cell. A value capture made the inference's answer "no capture at all" and the real
-    // build's answer "capture 0", and the cell's declaration and its write then named two function
-    // types, which `:op/assn` -- `(var self: T, other: T)` -- has no answer for.
-    for (compile_graph_ptr_t outer = graph->outerGraph(); outer != nullptr;
-         outer = outer->outerGraph()) {
-        if (compilerMadeClosure(outer->name()) || generatorBodyGraph(outer)) {
-            return false;
-        }
-    }
     // Where neither shape holds, the cell's value cannot change after the capture -- a write of
     // the name is now refused, in the closure and in the body around it alike (3.5, 197 and 198) --
     // and the capture is the value the name holds there.
@@ -350,14 +329,6 @@ bool Builder::compilerMadeClosure(const std::string &graphName) {
 bool Builder::decoratedBlockGraph(const compile_graph_ptr_t &graph) const {
     const auto found = graph == nullptr ? graphGctOf_.end() : graphGctOf_.find(graph.get());
     return found != graphGctOf_.end() && found->second != nullptr && found->second->decoratedBlock();
-}
-
-bool Builder::generatorBodyGraph(const compile_graph_ptr_t &graph) const {
-    // The function a generator's body is (gct/builder.cpp: a body that writes `yield`). Its graph is
-    // the one the machine's arms run in (`visitGeneratorBody`), and the cells it declares are the
-    // ones the machine writes between two pulls.
-    const auto found = graph == nullptr ? graphGctOf_.end() : graphGctOf_.find(graph.get());
-    return found != graphGctOf_.end() && found->second != nullptr && found->second->generatorBody();
 }
 
 void Builder::requireCapturedNameWritable(
