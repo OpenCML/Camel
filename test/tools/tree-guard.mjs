@@ -64,7 +64,7 @@
  */
 import fs from 'node:fs'
 import path from 'node:path'
-import { spawnSync } from 'node:child_process'
+import { spawn, spawnSync } from 'node:child_process'
 import { RUNNER_OUTPUT_DIRS, isRunnerOutput } from './runner-output.mjs'
 
 /**
@@ -128,11 +128,29 @@ const BUILD_TREES = new Set([
 /** Whether a repository-relative path (with `/` separators) is a tree the runner or a build owns. */
 export function isIgnoredByWatch(relative) {
     if (relative === '' || relative === '.') return true
-    const first = relative.split('/')[0]
+    const segments = relative.split('/')
+    const first = segments[0]
     if (BUILD_TREES.has(first)) return true
     // `out_lr*` is gitignored as a pattern, and a run of the profiler build makes one.
     if (/^out_lr/.test(first)) return true
-    if (relative.split('/').includes('__pycache__')) return true
+    /**
+     * A `node_modules` at any depth, not only at the top of the checkout.
+     *
+     * `.gitignore` ignores `node_modules/` at every level and no file under one is tracked (checked
+     * over the whole tree: 0 of 7,921), so `git status` can never name a path in one -- and the
+     * criterion this function implements is "which paths can carry a finding". The gate checkout
+     * carries 1,579 directories of an installed `editors/vscode/node_modules`, and the first-segment
+     * rule above walked and watched every one of them for a path the verdict could not name.
+     * Measured on 2026-11-16, nine samples per shape, on that checkout: 2,392 directories watched
+     * and a walk of 88.0 ms before this line, 818 and 29.4 ms after it, which moved the pre-test
+     * pair from 119.5 ms to 54.2 ms and one launch's fixed cost from 267.0 ms to 201.5 ms (twelve
+     * paired rounds on one commit). **The criterion is unchanged**; the set of paths that can carry
+     * a finding shrinks to the set `git status` could ever mention. Checked both ways on the changed
+     * tree: a file planted in `editors/vscode/node_modules` stays green, the same file planted in
+     * `src` still fails the run and is still named with the test that wrote it.
+     */
+    if (segments.includes('node_modules')) return true
+    if (segments.includes('__pycache__')) return true
     return isRunnerOutput(relative)
 }
 
@@ -164,6 +182,24 @@ export function parseStatus(stdout) {
     return entries
 }
 
+const STATUS_ARGS = ['-c', 'core.quotepath=false', 'status', '--porcelain', '--untracked-files=normal']
+const STATUS_TIMEOUT_MS = 120000
+
+/** One finished `git status`, as this module's reading. Shared so both readings interpret alike. */
+function interpretStatus({ error, status, stdout, stderr }) {
+    if (error) {
+        // `spawnSync git ENOENT` and `spawn git ENOENT` are the same state; the API's name in the
+        // message is the only difference between the two shapes, and a reason is a reading too.
+        const message = `${error.message}`.replace(/^spawn(Sync)?\s+/, '')
+        return { ok: false, reason: `git could not be started: ${message}` }
+    }
+    if (status !== 0) {
+        const detail = `${stderr || ''}`.trim().split('\n')[0] || `exit ${status}`
+        return { ok: false, reason: `git status failed: ${detail}` }
+    }
+    return { ok: true, entries: parseStatus(stdout) }
+}
+
 /**
  * One `git status`, as the map of the paths it lists.
  *
@@ -172,20 +208,89 @@ export function parseStatus(stdout) {
  * only; the set of paths and the verdict are the same either way.
  */
 export function readTreeState(root) {
-    const proc = spawnSync('git', ['-c', 'core.quotepath=false', 'status', '--porcelain', '--untracked-files=normal'], {
+    const proc = spawnSync('git', STATUS_ARGS, {
         cwd: root,
         encoding: 'utf8',
         windowsHide: true,
-        timeout: 120000
+        timeout: STATUS_TIMEOUT_MS
     })
-    if (proc.error) {
-        return { ok: false, reason: `git could not be started: ${proc.error.message}` }
-    }
-    if (proc.status !== 0) {
-        const detail = `${proc.stderr || ''}`.trim().split('\n')[0] || `exit ${proc.status}`
-        return { ok: false, reason: `git status failed: ${detail}` }
-    }
-    return { ok: true, entries: parseStatus(proc.stdout) }
+    return interpretStatus(proc)
+}
+
+/**
+ * The same reading, without blocking this process while git runs.
+ *
+ * Why the second shape exists: the run's pre-test window is two readings that do not depend on one
+ * another -- this `git status` and the watcher's walk over the checkout (startTreeWatch) -- and the
+ * runner used to take them one after the other, paying their sum before its first test could start.
+ * Started together they cost the longer of the two instead. Measured 2026-11-16, nine samples of
+ * each shape, on the two trees a run is made on:
+ *
+ *   the gate checkout (Linux, Node 20.20.2, 2,392 directories): `git status` 25.8 ms, the walk and
+ *   its watches 88.0 ms, the pair 119.5 ms in sequence and 93.3 ms together -- 26.2 ms recovered,
+ *   which is the whole 25.8 ms the reading costs on its own, because the walk is the longer side;
+ *   this workstation (Windows, Node 24.21.0, 816 directories): 135.2 ms and 276.1 ms, the pair
+ *   408.9 ms in sequence and 342.8 ms together, 66.1 ms of the 135.2 recovered.
+ *
+ * Why "recovered" is short of the reading's own cost on Windows: the walk and `git status` read the
+ * same filesystem, so the pair runs slower than either alone. What it buys is measured on the launch
+ * itself (`--selection-empty`, which reads the tree and starts no test, paired rounds on one commit
+ * and one tree): 280.5 ms before the change and 254.0 ms after it on the gate host, 1,012 ms and
+ * 934 ms on this workstation. A run's first test no longer waits for the reading.
+ *
+ * What is *not* done, and why -- the walk itself is the coverage and stays:
+ *
+ *   * `fs.watch(root, { recursive: true })` instead of the walk. On Windows the OS has a native
+ *     subtree watcher, but it also delivers every event under the two trees this run writes into
+ *     (`tmp/test`, `test/results`), and those bursts overflow the notification buffer: a measured
+ *     8,000-write burst under `tmp/test` produced 5 events, and a file written beside it was never
+ *     reported. Losing the moment a path appears is losing the attribution, which is the whole
+ *     reason the watcher exists. On Linux the recursive option is a JavaScript shim that installs a
+ *     watch per directory anyway: measured 263.7 ms for 818 directories against 33.2 ms for this
+ *     walk, and 1,518.6 ms against 123.9 ms for a 2,416-directory checkout. Not on either platform.
+ *   * Watching fewer directories. `isIgnoredByWatch` is the one list of what a run may write, and
+ *     narrowing the coverage to make the number smaller would be a guard that no longer sees the
+ *     path it exists to name. (For the reader who wonders why the gate checkout walks 2,392: 1,579
+ *     of them are the gitignored `editors/vscode/node_modules`, which the list keeps because it
+ *     drops `node_modules` by a tree's first path segment only. Dropping it is a change to the list,
+ *     not to this function.)
+ *
+ * So the walk is still taken before the first test; only its cost stopped being added to the git
+ * reading's cost. A reading taken this way is byte-for-byte the reading readTreeState returns.
+ */
+export function readTreeStateAsync(root) {
+    return new Promise((resolve) => {
+        let proc
+        try {
+            proc = spawn('git', STATUS_ARGS, { cwd: root, windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] })
+        } catch (error) {
+            resolve(interpretStatus({ error, status: null, stdout: '', stderr: '' }))
+            return
+        }
+        let stdout = ''
+        let stderr = ''
+        let settled = false
+        const done = (reading) => {
+            if (settled) return
+            settled = true
+            clearTimeout(timer)
+            resolve(reading)
+        }
+        const timer = setTimeout(() => {
+            try {
+                proc.kill()
+            } catch {
+                // Already gone: the reading below is the one that counts either way.
+            }
+            done({ ok: false, reason: `git status did not finish within ${STATUS_TIMEOUT_MS} ms` })
+        }, STATUS_TIMEOUT_MS)
+        proc.stdout.setEncoding('utf8')
+        proc.stderr.setEncoding('utf8')
+        proc.stdout.on('data', (chunk) => (stdout += chunk))
+        proc.stderr.on('data', (chunk) => (stderr += chunk))
+        proc.on('error', (error) => done(interpretStatus({ error, status: null, stdout, stderr })))
+        proc.on('close', (status) => done(interpretStatus({ error: null, status, stdout, stderr })))
+    })
 }
 
 /**

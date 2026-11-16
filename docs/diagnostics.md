@@ -15,7 +15,7 @@ prints one entry.
 - **Message, help.** The templates; `{0}`, `{1}`, ... are filled in by the report.
 - **Example.** A program of the test suite that raises the diagnostic, where one is small enough to show.
 
-321 diagnostics: 298 errors, 23 warnings. 15 carry a machine-applicable edit, 306 say why they carry none.
+322 diagnostics: 299 errors, 23 warnings. 15 carry a machine-applicable edit, 307 say why they carry none.
 
 | Code | Name | Severity | Edit |
 |------|------|----------|------|
@@ -44,6 +44,7 @@ prints one entry.
 | `0x02000011` | [SyntaxDiag::AsRightSideIsType](#asrightsideistype) | Error | no |
 | `0x02000012` | [SyntaxDiag::LambdaParametersNeedParentheses](#lambdaparametersneedparentheses) | Error | yes |
 | `0x02000014` | [SyntaxDiag::FuncTypeNeedsNames](#functypeneedsnames) | Error | no |
+| `0x02000015` | [SyntaxDiag::IntervalHasNoOpenForm](#intervalhasnoopenform) | Error | no |
 | `0x02100001` | [SyntaxDiag::ComparisonAcrossLines](#comparisonacrosslines) | Warn | no |
 | `0x03000000` | [SemanticDiag::StaticHeadNameCount](#staticheadnamecount) | Error | no |
 | `0x03000001` | [SemanticDiag::Redeclaration](#redeclaration) | Error | no |
@@ -1149,6 +1150,40 @@ func g(x: float, y: float): float sync { return x + y }
 func main(): int sync {
     let f: (float, float) => float = g
     return 0
+}
+```
+
+### IntervalHasNoOpenForm
+
+`0x02000015` · Error · `SyntaxDiag::IntervalHasNoOpenForm`
+
+**Fix**
+
+None: choice: the replacement is another construct the writer chooses -- an interval with both ends, a counting 'while' loop, or 'range(a, b, step)'
+
+**Message**
+
+```text
+An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side.
+```
+
+**Help**
+
+```text
+A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.
+```
+
+**Example** (`test/cases/parse/rulings/open_range.cml`, run as `camel test/cases/parse/rulings/open_range.cml`)
+
+```camel
+func inc(x: int): int { return x + 1 }
+func dbl(x: int): int { return x * 2 }
+
+func main(): int {
+    let bounded = 1..4
+    let composed = inc..dbl
+    let open = 1..
+    return len(open)
 }
 ```
 
