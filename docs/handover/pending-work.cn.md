@@ -530,8 +530,10 @@ lane-looplayout + lane-loopref  加 2 条未登记 ⇒ 同一处红
 
 ```
 [SUMMARY] 8851 / 8756 / 61 / skip 10 / known 24 / killed 0     red_more = 0
-61(12目标) 组成：opt 族 39、consistency.new_values 31、masking_transition 4、compile.transitional 3、
-                  modules.resources 3、trans 6、docs.links 1、mm 2、lsp 1、load_class 1、cli 1、runner 1
+61(12目标) 组成：**这一串是陈旧的、加不起来的数字，已作废**（原写「opt 族 39、consistency.new_values 31、
+                  masking 4、transitional 3、modules 3、trans 6、docs 1、mm 2、lsp 1、load_class 1、cli 1、
+                  runner 1」，求和 92 ≠ 61）。
+                  **`opt` 族从来没有 39 条**——那是更早的树上的族名被逐轮照抄的结果。真实分区见下（`56` 那次实测）。
 已转绿：本轮 0（loopref 的判据都在本来绿的那两族里）   新红：0
 ```
 **`declared` 这一栏：6598 / 386 文件**（`git grep -c '^\[\[tests\]\]'`），gate `total` 8851——**`declared < started` 正常**（一条 entry 可跑多个后端）。
@@ -673,3 +675,18 @@ load_class.shared_place       cpu 8800 ms 线 30 s  ⇒ 3.409×     手量 6.05�
 每次 -Check 都会报，因此每次都要有人重新判定一次「是不是我」
 ```
 **登记为独立一项。** 它正是「一条红没有主人」的形状——而只要它没有主人，每次对账都要花时间重新排除它。
+### 基线分区必须按当次日志重新分组，不许搬上一轮的族名
+
+`56(12目标)` 的分区（实测，逐条按 `[PLAN]` 归属，求和 **56**）：
+```
+feat.consistency.new_values    31      feat.opt.camel_passes           6
+feat.effects.masking_transition 4      feat.compile.var_closure        3
+feat.modules.resources          3      feat.trans.cml                  3
+feat.trans.cpp                  2      feat.consistency.runner         1
+feat.mm.capacity                1      feat.mm.gc_poison_sweep         1
+feat.trans.print_determinism    1
+```
+**`opt` 族只有 `camel_passes` 6 条**；`new_values` 31 条属于 `feat.consistency`，**不在 `feat.opt` 下**。
+
+> **族名不重算，就是分区表在撒谎。** 我在这页上照抄「opt 族 39」照抄了好几轮，它求和从不等于总数——**而没人去加它，因为它是「已知的」**。
+> **规矩：三张表的分区一律由当次日志按 `[PLAN]` 重新分组得出；加不起来就不许进报告。**
