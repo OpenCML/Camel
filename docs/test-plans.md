@@ -1779,6 +1779,28 @@ instances run at the same time without seeing each other's files. A case run out
 `get_env('CAMEL_TEST_TMPDIR') ?? ''`, and the one ONNX refusal case that writes a model gets an
 `onnx::export out="${test_tmp}/..."` path.
 
+**A test's own program runs from the checkout root, and a program that starts other programs must
+give them a directory of their own.** That is the rule this section is about, stated twice because
+the two halves are what a defect of 2026-11-16 got wrong. `${test_tmp}` is a *repository-relative*
+path, so a program the runner starts anywhere but here resolves it one level too deep: measured with
+the child's cwd set to its scratch directory, `feat/modules` went from 3 failures to 98, and every
+one of the 95 new ones was `ENOENT .../tmp/test/run-<pid>/<plan>/<test>/<file>` -- the file had been
+written under `<scratch>/tmp/test/...` while the verification script looked for the absolute path.
+So the runner keeps `cwd: REPO_ROOT` (`runOneTest`), and the second half carries the weight: one gate
+of the whole `feat` tree left fourteen files in the repository root -- twelve models from
+`test/cases/modules/onnx/ort_*.cml` (`export_model<out: 'affine.onnx'>`) and `子 目录/嵌套 文件.txt`
+and `数据 文件 🐫.txt` from `env_paths.cml`, which writes beside `get_cwd()` -- because
+`test/plans/feat/tools/plan_refs_sweep.plan.toml` starts one `camel` per case in the tree
+(`scripts/check-plan-refs.mjs`) and those 3,844 case programs were executed from the checkout root.
+That script now runs each case in a directory of its own under `CAMEL_TEST_TMPDIR`, removed with the
+case: what a case writes lands where the test's other output goes and goes with it. Any other harness
+that runs case programs owes the same.
+
+What a *user* sees is unchanged: `camel x.cml` with `onnx::export out=model.onnx` still writes to
+the directory the user ran it in. Nothing here changes how the exporter resolves a path, only where a
+test's programs are started. A `skip_unless` precondition also runs from the repository root -- it is
+a command a plan writes against the checkout, not a test's own program.
+
 ## Field Constraints And Style
 
 - A field must be one this document defines. The runner rejects an unknown key (and a known key
