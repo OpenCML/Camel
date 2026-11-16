@@ -384,3 +384,27 @@ load_class.shared_place
 未跑：var_reference、tools/lsp、autodiff、frontend、trans/cml_sweep、tools/debugger
       （前两批已跑过）
 ```
+
+## 17. 一条保留的空合并（2026-11-16，`42bbc4ba1`）
+
+```
+42bbc4ba1  parents: 2de547387, 64f281e31
+tree(42bbc4ba1) = cf18ed5b…   tree(64f281e31) = cf18ed5b…   ← 逐字节相同
+2de547387 是 64f281e31 的祖先                              ← 合并了自己的祖先
+```
+
+**它是空合并：没有带进任何内容，而且三笔提交（车道原始提交、真正的合并、这条空合并）共用一个标题。**
+
+**保留，不重写。** 理由：`origin` 上已经推送，内容零差异；而 `develop` 永不被重写——
+**用一个可读的瑕疵换一次不可回退的重写，是错的交换。**
+
+**成因**：先「把车道分支合进 `develop`」，车道又自己合了一次 `develop`，再把它的合并提交合回来 ⇒ 第二层多余。
+
+**正确顺序（写死，从这一条起）**：
+```
+① 在车道分支里 git merge origin/develop  → 解冲突、跑通
+② 在 develop 上 git merge --no-ff <车道分支> 一次
+③ 推一次
+```
+
+**这一条被记录下来的用意**：**被记录的瑕疵不会复现，被悄悄抹掉的会。**
