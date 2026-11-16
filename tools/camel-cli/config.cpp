@@ -415,6 +415,7 @@ bool dumpFacts     = false; // Whether to compute and dump the graph facts of th
 bool dumpTags      = false; // Whether to dump the tags the program declares
 bool dumpAttrs     = false; // Whether to dump the attribute-fate table and check its coverage
 bool dumpTies      = false; // Whether to dump the canonical numbering's tie groups
+bool dumpCopies    = false; // Whether to dump what the plan decided about every update node
 bool geneCode      = false; // Whether to generate code from GIR
 int passUntil      = -1;    // Pass until the given pass
 } // namespace Inspect
@@ -856,6 +857,10 @@ bool parseArgs(int argc, char *argv[]) {
              "print the tie groups the canonical numbering met -- how wide each is, how much of "
              "it the node key left equal, and which parts were too wide to enumerate -- so that a "
              "known limitation is reported and not silently arranged in the creation order",
+         option("--copies").set(dumpCopies) %
+             "print what the execution plan decided about every update node (an append, a path "
+             "assignment, a sort rebinding): one line per update saying whether it reuses the "
+             "storage of the value it is given (in-place) or allocates new storage (copied)",
          option("--gen", "--gene-code").set(geneCode) % "generate code from AST",
          (option("-p", "-P", "--pass-until") & integer("pass until", passUntil)) %
              "pass until the given pass",

@@ -5,7 +5,7 @@
 > 这一页由 `node scripts/check-doc-links.mjs --questions-index --write` 从目录生成，不要手改：
 > 规矩在 `docs/handover/reviews/` 的裁定里，落没落地看代码和提交，不看这张表。
 
-## 现在在等作者：4 页
+## 现在在等作者：5 页
 
 | 页 | 问什么 |
 | --- | --- |
@@ -13,6 +13,7 @@
 | [`2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write`](2026-11-16-does-a-closure-made-at-a-call-argument-see-the-write.cn.md) | 在调用的实参位置造出来的闭包，该读到写之前的值还是写之后的值？ |
 | [`2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var`](2026-11-16-generators-keep-the-cell-when-the-closure-captures-a-var.cn.md) | 生成器体里的闭包捕获 `var`，为什么留格子？ |
 | [`2026-11-16-how-many-units-does-a-direct-ssa-build-remove`](2026-11-16-how-many-units-does-a-direct-ssa-build-remove.cn.md) | 直接构造 SSA 之后，348 个单元里消失的是 270 个吗？ |
+| [`2026-11-16-what-counts-as-an-update-for-a-training-step`](2026-11-16-what-counts-as-an-update-for-a-training-step.cn.md) | 案例训练步里，什么算一次更新？ |
 
 ## 生成器不会删的行：115 行（页已不在 `questions/` 里）
 

@@ -23,6 +23,7 @@
 #include "camel/runtime/canonical.h"
 #include "camel/runtime/facts.h"
 #include "camel/runtime/operator_instance.h"
+#include "camel/runtime/storage_reuse.h"
 #include "camel/utils/command_line.h"
 #include "camel/utils/install_layout.h"
 #include "camel/utils/log.h"
@@ -402,7 +403,7 @@ int runCommand(int argc, char *argv[]) {
             }
             if (!Inspect::dumpGCT && !Inspect::dumpGIR && !Inspect::dumpTNS && !Inspect::dumpOps &&
                 !Inspect::dumpInstances && !Inspect::dumpFacts && !Inspect::dumpTags &&
-                !Inspect::dumpAttrs && !Inspect::dumpTies) {
+                !Inspect::dumpAttrs && !Inspect::dumpTies && !Inspect::dumpCopies) {
                 // Inspect Command ends here if only
                 // tokens, CST or AST is requested
                 return 0;
@@ -419,7 +420,7 @@ int runCommand(int argc, char *argv[]) {
             }
             if (Inspect::dumpGIR || Inspect::dumpTNS || Inspect::dumpOps ||
                 Inspect::dumpInstances || Inspect::dumpFacts || Inspect::dumpTags ||
-                Inspect::dumpAttrs || Inspect::dumpTies) {
+                Inspect::dumpAttrs || Inspect::dumpTies || Inspect::dumpCopies) {
                 camel::core::module::compileForLoad(mainModule, CompileStage::Done);
             }
             // Every dump below reads something the compile produced, so the question is asked
@@ -495,6 +496,16 @@ int runCommand(int argc, char *argv[]) {
                         *ctx->runtimeProgram()->root());
                     os << numbering.tiesText();
                 }
+            }
+            if (Inspect::dumpCopies) {
+                // What the plan decided about every update node (design principles 10.5): whether
+                // an append, a path assignment or a sort rebinding reuses the storage of the value
+                // it is given or allocates new storage. The decision is the plan's, made once
+                // (camel/runtime/exec_plan.h, StorageReuse); this only prints it. Read with
+                // `camel/runtime/storage_reuse.h`, which is the ruler the direct-SSA plan's S3b
+                // names: the tool reports, it does not make an update in-place.
+                camel::runtime::dumpStorageReuse(
+                    *ctx->runtimeProgram(), os, ctx->sourceContext().get());
             }
             if (Inspect::dumpAttrs) {
                 // The imports are loaded first, as for --ops: a module registers its attribute
