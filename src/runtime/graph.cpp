@@ -311,6 +311,50 @@ bool nodeMayFault(const GCGraph &graph, gc_node_ref_t ref) {
     }
 }
 
+gc_node_ref_t branchJoinOf(const GCGraph &graph, gc_node_ref_t brch) {
+    if (brch == kInvalidNodeRef || !graph.containsNodeRef(brch)) {
+        return kInvalidNodeRef;
+    }
+    const GCNode *node = graph.node(brch);
+    if (node == nullptr || node->kind != GCNodeKind::Brch) {
+        return kInvalidNodeRef;
+    }
+    const auto *body = graph.nodeBodyAs<GCBrchBody>(brch);
+    return body != nullptr && graph.containsNodeRef(body->join) ? body->join : kInvalidNodeRef;
+}
+
+gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch) {
+    const DraftNodeHeader *header = draft.header(brch);
+    if (header == nullptr || !draft.alive(brch) || header->kind != GCNodeKind::Brch) {
+        return kInvalidNodeRef;
+    }
+    const std::span<const std::byte> payload = draft.payloadOf(brch);
+    if (payload.size() < sizeof(DraftBrchPayload)) {
+        return kInvalidNodeRef;
+    }
+    return reinterpret_cast<const DraftBrchPayload *>(payload.data())->join;
+}
+
+bool branchJoinsNoValue(const GCGraph &graph, gc_node_ref_t brch) {
+    const gc_node_ref_t join = branchJoinOf(graph, brch);
+    if (join == kInvalidNodeRef) {
+        return false;
+    }
+    const GCNode *joinNode = graph.node(join);
+    const auto *joinType   = joinNode != nullptr ? joinNode->dataType() : nullptr;
+    return joinType != nullptr && joinType->code() == camel::core::type::TypeCode::Void;
+}
+
+bool branchJoinsNoValue(const GraphDraft &draft, gc_node_ref_t brch) {
+    const gc_node_ref_t join = branchJoinOf(draft, brch);
+    if (join == kInvalidNodeRef) {
+        return false;
+    }
+    const auto *joinNode = draft.header(join);
+    const auto *joinType = joinNode != nullptr ? joinNode->dataType : nullptr;
+    return joinType != nullptr && joinType->code() == camel::core::type::TypeCode::Void;
+}
+
 using camel::core::rtdata::fromSlot;
 using camel::core::rtdata::Object;
 using camel::core::rtdata::toSlot;
@@ -1973,6 +2017,24 @@ struct DraftLiveFace {
     std::vector<RegionRootCandidate> regionRoots() const {
         return regionRootCandidatesOfDraft(draft);
     }
+    /// The branches of the graph whose value nobody joins (design principles 3.1, 3.7): a branch
+    /// written as a statement has no value of its own that could make anything run it, so it is a
+    /// statement of the region it is written in and runs with that region. It is seeded like a
+    /// region root -- with the region whose running decides it, so a branch inside an arm nothing
+    /// takes waits for that arm's owner as a write in the arm does.
+    void statementBranchRoots(std::vector<RegionRootCandidate> &into) const {
+        for (gc_node_ref_t ref = 0; ref < draft.nodeSlotCount(); ++ref) {
+            if (!branchJoinsNoValue(draft, ref)) {
+                continue;
+            }
+            // The branch and the JOIN that closes it go in together: the walks reach one from the
+            // other through the payload, and a walk that reads only data, control and sync edges
+            // (the warning's) would keep one half and drop the other.
+            for (gc_node_ref_t half : {ref, branchJoinOf(draft, ref)}) {
+                into.push_back({half, decidingRegionOfDraft(draft, half)});
+            }
+        }
+    }
     gc_node_ref_t decidingOwnerOf(uint32_t region) const {
         return camel::runtime::decidingOwnerOfDraft(draft, region);
     }
@@ -2039,6 +2101,18 @@ struct FrozenLiveFace {
     }
     std::vector<RegionRootCandidate> regionRoots() const {
         return regionRootCandidatesOf(graph);
+    }
+    /// The frozen graph's answer to `DraftLiveFace::statementBranchRoots`: the same rule, one per
+    /// branch that joins no value (see `branchJoinsNoValue`).
+    void statementBranchRoots(std::vector<RegionRootCandidate> &into) const {
+        for (gc_node_ref_t ref = 0; ref < graph.nodeCount(); ++ref) {
+            if (!branchJoinsNoValue(graph, ref)) {
+                continue;
+            }
+            for (gc_node_ref_t half : {ref, branchJoinOf(graph, ref)}) {
+                into.push_back({half, camel::runtime::decidingRegionOf(graph, half)});
+            }
+        }
     }
     gc_node_ref_t decidingOwnerOf(uint32_t region) const {
         return camel::runtime::decidingOwnerOf(graph, region);
@@ -2134,7 +2208,17 @@ template <typename Face> std::vector<gc_node_ref_t> liveNodesWith(const Face &fa
     // owner (the BRCH or the LOOP) is itself live: a write in an arm nothing takes, or in a loop
     // nothing needs, is not part of the execution, and the warning for it belongs to the branch or
     // the loop (`SemanticDiag::EffectNotExecuted`).
-    const std::vector<RegionRootCandidate> regionRoots = face.regionRoots();
+    //
+    // A branch that joins no value is a seed of the same kind (design principles 3.1, 3.7): an `if`
+    // written as a statement has no value of its own, so nothing can need it into the execution and
+    // nothing can leave it out of one -- it is a statement of the region it is written in, and that
+    // region running is its running. Without this seed the branch of a body that is not a `sync`
+    // block is reached by no edge at all (a sync edge is what carries "used" between statements),
+    // and its arms -- the arm that is taken included, and the external writes written in it -- were
+    // dropped from the graph. A loop is not this case: its value is the state it leaves, and a loop
+    // whose value nobody takes is a computation nobody wants, which `region_roots.dead_loop` pins.
+    std::vector<RegionRootCandidate> regionRoots = face.regionRoots();
+    face.statementBranchRoots(regionRoots);
     for (const RegionRootCandidate &candidate : regionRoots) {
         if (candidate.region == 0) {
             pushRoot(candidate.node); // the body runs whenever the graph does

@@ -1,0 +1,36 @@
+/**
+ * The condition of a branch statement is a value like any other and does not decide whether the
+ * branch is a statement (design principles 3.1, 3.7). Whether the value of the branch is wanted is
+ * decided by the position the branch is written in, not by what it is being asked: a condition that
+ * holds an operator or a call is still only the arm the branch picks.
+ *
+ * This is the shape the builder used to lose. The mark that says "the value of this statement nobody
+ * takes" was cleared when the condition's own operators were built and never put back, so a branch
+ * behind `x > 0` or `positive(x)` was lowered as a branch that *joins a value* -- its JOIN carried
+ * `string` rather than `void` -- and was dropped from the graph again, while `if true then ...` in
+ * the same body ran. Neither is a property of the program.
+ *
+ * Output: `pos`, `neg`, `positive`, `not`.
+ */
+
+func positive(x: int): bool {
+    return x > 0
+}
+
+func compared(x: int): int {
+    if x > 0 then { println("pos") } else { println("neg") }
+    return 0
+}
+
+func called(x: int): int {
+    if positive(x) then { println("positive") } else { println("not") }
+    return 0
+}
+
+func main(): int sync {
+    compared(1)
+    compared(-1)
+    called(1)
+    called(-1)
+    return 0
+}

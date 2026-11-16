@@ -1216,6 +1216,17 @@ bool isUnreadClosure(const GraphDraft &draft, gc_node_ref_t node);
 /// that needs the set asks it here rather than walking the graph again.
 std::vector<gc_node_ref_t> liveNodesOf(const GraphDraft &draft);
 
+/// The JOIN that closes the branch `brch`, read from the draft (`kInvalidNodeRef` for a node that
+/// is not a branch). The frozen graph's answer is `branchJoinOf(const GCGraph &, gc_node_ref_t)`.
+gc_node_ref_t branchJoinOf(const GraphDraft &draft, gc_node_ref_t brch);
+
+/// Whether `brch` is a branch that joins no value, read from the draft: the JOIN it closes carries
+/// `void` -- the type the build gives a branch written as a statement whose value nobody takes, and
+/// one at a position that takes no value at all (design principles 3.1, 3.7). The frozen graph's
+/// answer is `branchJoinsNoValue(const GCGraph &, gc_node_ref_t)`, and the two are one rule read
+/// from two spellings of the same payload.
+bool branchJoinsNoValue(const GraphDraft &draft, gc_node_ref_t brch);
+
 /// How many members an aggregate has (0 for a node that is not one): the `slotCount` of its
 /// payload. The members themselves are the frame slots the payload names, not the aggregate's
 /// inputs, so this number and the input count are two different things -- which is why the verdict

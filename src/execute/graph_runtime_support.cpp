@@ -235,8 +235,23 @@ std::vector<gc_node_ref_t> computeExecutionOrder(const camel::runtime::GCGraph *
         // The nodes are laid out by the walk at the end of this function, which visits every node
         // `live` holds, and the members of a control region are laid out as that region's piece
         // whatever brought them in, so seeding here is all a write needs.
-        const std::vector<camel::runtime::RegionRootCandidate> regionRoots =
+        std::vector<camel::runtime::RegionRootCandidate> regionRoots =
             camel::runtime::regionRootCandidatesOf(*graph);
+        // A branch that joins no value is a root of the same kind (design principles 3.1, 3.7): it
+        // is a statement of the region it is written in, and that region running is its running.
+        // Seeded under the same owner-live condition below, so a branch inside an arm nothing takes
+        // still waits for that arm. A loop is not this case (its value is the state it leaves).
+        for (gc_node_ref_t ref = 0; ref < graph->nodeCount(); ++ref) {
+            if (!camel::runtime::branchJoinsNoValue(*graph, ref)) {
+                continue;
+            }
+            // The branch and the JOIN that closes it go in together: the arm's value reaches the
+            // JOIN by a `with` edge, and the plan wants both ends of the piece whenever it has one.
+            for (gc_node_ref_t half :
+                 {ref, camel::runtime::branchJoinOf(*graph, ref)}) {
+                regionRoots.push_back({half, camel::runtime::decidingRegionOf(*graph, half)});
+            }
+        }
         for (const camel::runtime::RegionRootCandidate &candidate : regionRoots) {
             if (candidate.region != 0) {
                 continue;

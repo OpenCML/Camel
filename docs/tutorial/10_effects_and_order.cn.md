@@ -35,7 +35,7 @@ hello from greet
 1
 ```
 
-两行都打印了。`greet` 的返回值 `1` 仍然没人依赖那个 `println` 的结果，但 `println` 是**写**：对外部资源的写由它所在的区域用到，`greet` 的函数体就是一个区域，所以它执行，也不需要 `sync`。那什么才"没人要就不执行"？**读**——一个外部读的结果没人要，它就不执行，编译器还会报 `EffectNotExecuted`（[语言参考 4.2](../language/04_execution_model.md#42-按依赖求值)）。
+两行都打印了。`greet` 的返回值 `1` 仍然没人依赖那个 `println` 的结果，但 `println` 是**写**：对外部资源的写由它所在的区域用到，`greet` 的函数体就是一个区域，所以它执行，也不需要 `sync`。那什么才"没人要就不执行"？**读**——一个外部读的结果没人要，它就不执行，编译器还会报 `EffectNotExecuted`（[语言参考 4.2](../language/04_execution_model.md#42-按依赖求值)）。句柄（`Ref` 与其他 `#resource` 类型）的写自 2026-11-16 裁定起也走这同一条规则（[设计原则 3.1](../design-principles.cn.md#31-按依赖求值)、[3.3](../design-principles.cn.md#33-资源uses-与-pure)），理由与外部写相同：它的读者可能在调用方、在之后被调用的闭包里、在同一个盒子的另一个名字后面，本图看不全。
 
 规则与理由：程序能观察到的先后只有两种——**值的传递**与**写出来的顺序**。除此之外一切都可以并行、可以重排、可以删掉，所以编译器不必假设任何顺序。要顺序，就写 `sync`。而"是否执行"由另一条规则决定：读看有没有人要结果，写看它所在的区域运行不运行。
 
@@ -216,7 +216,8 @@ help: An assignment stores a value for whatever reads the variable afterwards, a
 写着的语句随块运行），所以它不报；不在同步块里的那次写，值没人要，于是整条写不执行，编译器报
 `SemanticDiag::UnusedAssignedValue`。这句话说的是**值没人用**：删掉这次赋值，或者之后读一下这个变量，都由你决定。
 
-真正的效应——写到程序外面去的那种——没人要时才走另一条路：它不执行，报 `SemanticDiag::EffectNotExecuted`。
+没人要就不执行的那一档是**读**：一个外部读的结果没人要，它就不运行，编译器报 `SemanticDiag::EffectNotExecuted`。
+这条警告的文案**曾经**说这条语句"伸到了程序外面"，那只在"对外部资源的写是区域唯一欠的执行"的时候说得通：那时读与句柄写都得靠"之后有没有人要"来判。2026-11-16 的裁定把**句柄的写**与外部写并到同一条规则上——写由它所在的区域用到（设计原则 3.1、3.3）——所以"没人要"不再是"到程序外"的同义词，文案现在只说哪件事没发生、为什么不运行，不再替读者猜语句伸到哪里。
 下面这个读没人要，所以不运行；`println` 是**写**标准输出，由写它的那块区域用到，所以照常执行：
 
 ```cml
@@ -230,12 +231,12 @@ func main(): int {
 ```
 
 ```text
-warning[SemanticDiag::EffectNotExecuted]: The call of 'get_env' reaches outside the program and is never executed: nothing needs what it gives, so nothing runs it.
+warning[SemanticDiag::EffectNotExecuted]: The call of 'get_env' is never executed: nothing needs what it gives, so nothing runs it.
   --> <file>:4:5
    |
  4 |     get_env("CAMEL_TUTORIAL_NOBODY_READS_THIS")
    |     ^^^^^^^
-help: This diagnostic is about the region a statement that reaches outside the program is written in, and it has that one meaning. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
+help: This diagnostic is about the region the statement named is written in, and it has that one meaning: nothing needs what it gives, so nothing runs it. Such a statement runs only where something needs it: the ones written directly in a function body run with the body, a loop body runs with its loop, and an arm of an 'if' runs when that arm is taken. A region nothing needs does not run, so what is written inside it does not run either, and a read of something outside the program whose value nobody uses does not run either -- both are legal, because evaluation is driven by dependencies. What is reported is a fact about the value, not about how far the statement reaches: a write of something outside the program and a write of a handle are one rule, the region they are written into uses them (design principles 3.1 and 3.3, the ruling of 2026-11-16), so 'nothing needs it' is not another way of saying 'it reaches outside', and an assignment to a 'var' is not an effect at all -- it is reported as a dropped value instead (SemanticDiag::UnusedAssignedValue). It is reported so that a forgotten sink is seen: use the value, make the body a sync block ('func f(): T sync { ... }', 'do sync { ... }', 'then sync { ... }'), or write the statement on the path the data takes.
 
 7
 ```
