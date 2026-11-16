@@ -257,15 +257,61 @@ function readPlan(abs) {
 // output instead of being a silent pass. A plan file under `test/cases` is not a case: it must be
 // recorded too, or the check asks for it to move under `test/plans`.
 //
-// The list is empty, and the one entry it held is recorded here instead of being forgotten: the
-// trap fixture `test/cases/compile/module_imports/import_order/roots_trap/pkg/lib.cml` stays in the
-// tree on purpose -- its whole function is to be there, so a regression that searches a directory it
-// must not search finds it and prints its value, which the pins above never allow -- and the entry
-// said nothing opens it in a correct run. That stopped being true when the AST snapshot began to
-// cover every `.cml` file of the repository: `test/tools/parsecheck/check.py` reads that file now,
-// which is what the `reached` map reports, so the file is reached by code and the exception it
-// needed is gone. The trap itself is unchanged, and a regression that loads it still fails the pins.
-export const CASE_EXCEPTIONS = []
+// The list holds the reduced programs of the E9 crash campaign whose shape is not fixed: each one
+// reproduces a crash the 2026-11-17 full run reported, and no plan entry can name one without
+// either stating the crash as the expected answer (`known_fail` over a process that ends in a
+// guarantee) or going red until its shape is fixed -- and the campaign's rule is that a program
+// the compiler is expected to run is not a program it is expected to crash on. They stay in
+// `test/cases/opt/e9/` because a crash written only in a report is one the next person cannot
+// reproduce; the command that fires it by hand is in the plan's own comment, and each entry here
+// goes away with its fix (the first shape's did: see the plan's `rc12_seed165` entries).
+//
+// The list was empty before those six, and the one entry it held earlier is recorded here instead
+// of being forgotten: the trap fixture `test/cases/compile/module_imports/import_order/roots_trap/
+// pkg/lib.cml` stays in the tree on purpose -- its whole function is to be there, so a regression
+// that searches a directory it must not search finds it and prints its value, which the pins above
+// never allow -- and the entry said nothing opens it in a correct run. That stopped being true when
+// the AST snapshot began to cover every `.cml` file of the repository: `test/tools/parsecheck/
+// check.py` reads that file now, which is what the `reached` map reports, so the file is reached by
+// code and the exception it needed is gone. The trap itself is unchanged, and a regression that
+// loads it still fails the pins.
+export const CASE_EXCEPTIONS = [
+    {
+        file: 'test/cases/opt/e9/rc14_seed176.cml',
+        reason:
+            'reproduces `component != nullptr` in `Builder::visitLoopNode` (E9 seed 176); the entry ' +
+            'is added with that shape\'s fix',
+    },
+    {
+        file: 'test/cases/opt/e9/rc15_seed52.cml',
+        reason:
+            'reproduces `index < fieldCount_` in `Variant::get` under `std::opt` (E9 seed 52); the ' +
+            'entry is added with that shape\'s fix',
+    },
+    {
+        file: 'test/cases/opt/e9/rc16_seed153.cml',
+        reason:
+            'does not finish under `std::jit` (E9 seed 153); the entry is added with that shape\'s fix',
+    },
+    {
+        file: 'test/cases/opt/e9/rc17_seed193.cml',
+        reason:
+            'the C++ writer emits a bare `return` in a non-void lambda (E9 seed 193); the entry is ' +
+            'added with that shape\'s fix',
+    },
+    {
+        file: 'test/cases/opt/e9/rc18_seed429.cml',
+        reason:
+            'the C++ writer emits an empty expression (E9 seed 429); the entry is added with that ' +
+            'shape\'s fix',
+    },
+    {
+        file: 'test/cases/opt/e9/rc19_seed70.cml',
+        reason:
+            'the C++ writer emits a call the compiler cannot match (E9 seed 70); the entry is added ' +
+            'with that shape\'s fix',
+    },
+]
 
 const CASE_ROOT = 'test/cases'
 // A case is a file of the repository, and a bytecode cache is not: the interpreter writes
