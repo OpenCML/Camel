@@ -32,3 +32,38 @@ class FoldFunctionTypeTestPass : public RuntimeGraphRewritePass {
     const camel::runtime::Program *
     apply(const camel::runtime::Program *program, std::ostream &os) override;
 };
+
+/**
+ * Reads the same defect through the exemption every pass written in Camel has, in one run:
+ * the program the fold above makes is handed to a pass written in Camel (`opt::cse`) with the
+ * commit checks asked of such a pass exactly as this build asks them, and -- when that answer was
+ * "not asked" -- once more with them asked regardless
+ * (`camel::execute::setCamelPassCommitChecksEnabled`, declared in camel/execute/pass/base.h).
+ *
+ * The two readings are one pair and neither stands alone. A shipped build prints
+ * `CAMEL_CHECKS build asks=0`, then `CAMEL_CHECKS accepted, asked=0`, then `CAMEL_CHECKS released:
+ * ...` (the run went on past the pass, so nothing was checked), then `CAMEL_CHECKS asked=1 -> the
+ * same program, the same pass`, and then the containment diagnostic and no third line: at once
+ * that the check is skipped where it is not paid for, that it is not vacuous where it is asked,
+ * and that the only difference between the two is the request. The debug build asks by itself, so
+ * its first line is `CAMEL_CHECKS build asks=1` and the first run is refused, which is the whole
+ * reading there; `test/plans/debug/camel_pass_commit_checks.plan.toml` is the plan that reads it
+ * there.
+ *
+ * A refusal records its diagnostic and returns; it does not throw. The run ends at it one step
+ * later, where the pipeline reads the recorded errors after this pass (`applyPassesDetailed`), so
+ * the second answer is announced before the second run and not confirmed after it: the third line
+ * is printed only when the second run came back with a program. A check that has stopped refusing
+ * therefore leaves `CAMEL_CHECKS asked=1 -> accepted` as its trace, which is red on purpose.
+ *
+ * This pass returns the program it was given, not the one the fold made: an uncontained program is
+ * what the fixture puts in front of the pass under test, and handing it on would have the boundary
+ * check refuse the fixture before the pass under test is read at all.
+ */
+inline constexpr const char *kCamelCommitChecksTestPass = "test::camel_commit_checks";
+class CamelCommitChecksTestPass : public RuntimeGraphRewritePass {
+  public:
+    using RuntimeGraphRewritePass::RuntimeGraphRewritePass;
+    const camel::runtime::Program *
+    apply(const camel::runtime::Program *program, std::ostream &os) override;
+};

@@ -53,6 +53,14 @@ struct ForeignResourceDescriptor {
     bool finalizable             = true;
     bool movable                 = true;
     bool pinned                  = false;
+    /// The module that owns the type declares that a count reclaims its resources:
+    /// `retainCountNow`/`giveBackCountNow` (below) apply to a block only when its descriptor says
+    /// so, and the anchor counts only these blocks. Declared by the type's owner and by nothing
+    /// else -- the kind string is a name for diagnostics and is not an identity the count reads
+    /// (author review 2026-11-16, item 7: the count recognized `"state.ref"` by comparing `kind`,
+    /// which made the module's own name a fact of the runtime and would have counted any other
+    /// module's handle the day it was wrapped the same way).
+    bool counted = false;
 };
 
 class ForeignResourceControlBlock final {
@@ -168,18 +176,20 @@ class ForeignResourceObject final : public Object {
 // A `Ref` handle is an ordinary traced wrapper whose control block is the box, and the slot's type
 // is what says a slot holds one (`camel::core::type::RefType`, whose code is the `state::Ref` other
 // type -- not `TypeCode::Ref`, which is the compile-time reference a `RefData` carries and which no
-// value of a graph has), so the filter in front of the two calls below is a slot-type comparison and
-// not a cast per value. `retainCountNow` takes one reference for a new holder and answers false for
-// a value that is not a counted block (every other foreign resource keeps its present lifetime:
+// value of a graph has), so the filter in front of the two calls below is a slot-type comparison
+// and not a cast per value. `retainCountNow` takes one reference for a new holder and answers false
+// for a value that is not a counted block (every other foreign resource keeps its present lifetime:
 // released by its wrapper's finalizer). `giveBackCountNow` gives one back and answers true when the
 // count reached zero, so the caller is the one that knows the box was released at that moment --
-// which is the point of the count, and the reason the answer is returned rather than inferred from a
-// collection later.
+// which is the point of the count, and the reason the answer is returned rather than inferred from
+// a collection later.
 //
 // Who calls them: one entry point shared by all four back ends,
 // `camel::runtime::applyRefEntriesForNode`, which reads the plan's rows for the position the node
-// has just run at (`camel/runtime/exec_plan.h`). Nothing else calls them: a count that is applied
-// in more than one place is a count whose balance no single table can be read against.
+// has just run at (`camel/runtime/exec_plan.h`); its own only caller is
+// `camel::execute::callOperator` (`camel/execute/operator_call.h`), the one place a back end calls
+// an operator. Nothing else calls them: a count that is applied in more than one place is a count
+// whose balance no single table can be read against.
 bool retainCountNow(Object *value) noexcept;
 bool giveBackCountNow(Object *value) noexcept;
 

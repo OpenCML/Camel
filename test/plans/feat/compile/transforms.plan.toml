@@ -759,6 +759,19 @@ expect_stdout_contains = ["f(3, 2) = 18.0", "library  y = 18.0", "library  df/dx
 normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
 timeout_ms = 20000
 
+[[tests]]
+name = "vjp_api.library_grad_carries_the_second_with_value"
+desc = "The library's `grad` (`stdlib/vjp.cml#grad`) and the engine's (`autodiff`) on a function with two `with` values -- `loss(data) = (w * data) * scale` with `with <w: float, scale: float>` -- which is the shape that changed and the only one that can show the difference: a one-value `with` list has nothing left to carry. `w` is the weight, `scale` is the value the body reads and nothing differentiates (the same pair the case study's loss has), and `data` is an ordinary parameter. d/dw = data * scale = 12 at w = 2, data = 4, scale = 3; the program prints the engine's 12, the library's 12 and their subtraction, so the two are compared as the same number and not as two neighbouring ones. Run on `nvm`, `fvm`, `jit` and `prl`, which must agree on the exit code and on the whole output."
+kind = "behavior"
+case = "../../../cases/compile/transforms/library_grad_carries_the_second_with_value.cml"
+args = ["${case}", "${backend}"]
+backends = ["nvm", "fvm", "jit", "prl"]
+backends_agree = ["exit_code", "output_normalized"]
+expect_exit = 0
+expect_stdout_contains = ["engine   d/dw = 12.0", "library  d/dw = 12.0", "analytic d/dw = 12.0", "engine - library = 0.0"]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space"]
+timeout_ms = 20000
+
 # The single-parameter reading, beside the two-parameter main line: `f(x) = x*x*x`, so
 # `vjp(f)(3.0)` is `(27.0, pullback)` and `pullback(1.0)` is `27.0`, and `grad(f)(3.0)` is the same
 # number through the wrapper. The three-step composition is checked against the derivative written by

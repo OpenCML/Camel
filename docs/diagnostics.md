@@ -11393,7 +11393,7 @@ Pass '{0}' returned a program whose call site reaches past the type it declares:
 A call site carries the type of the function value it calls, and a pass can leave a body under a type that no longer covers it -- a printing body under 'pure', which is what an inline that copies nodes with accesses, or a fold that merges two functions, leaves behind. The message names the call and the accesses the type does not cover: the type is the promise a caller relies on.
 ```
 
-**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::fold_function_type std::nvm`)
+**Example** (`test/cases/opt/commit_checks/fold_function_type.cml`, run as `camel test/cases/opt/commit_checks/fold_function_type.cml test::camel_commit_checks std::nvm`)
 
 ```camel
 // Two functions of the same shape -- same argument type, same result type, same value -- that differ

@@ -121,6 +121,14 @@
 #     entries that leaves out instead of leaving it to the reader: the line after "N run" names every
 #     `planStage` entry this run skipped, and a run that named one prints that it is not part of
 #     `all`. Both read the table as it stands, so a new `planStage` entry appears there by itself;
+#   * there is a second marking that keeps an entry out of `all`, for the other reason a check can be
+#     asked for by name rather than started by every gate: `namedOnly`. `e9-full` is that entry -- the
+#     E9 differential at the tier its ratchet is defined at, 500 seeds and 31,680 cells, half an hour
+#     on this host -- and it is out of `all` because a stage that every `all` started is a stage
+#     people learn to skip, which is the same reason `test/tools/e9diff/README.md` gives for the tool
+#     having no plan of the two slower tiers. Its reason is its cost, not a missing reading, so the
+#     closing summary names it on a line of its own (`named-only check(s) not run by -Check all`)
+#     rather than under the plan-stage line;
 #   * an entry marked `reportOnly` is not a wall yet: it runs on every gate and prints one line a
 #     lane can paste, `check=<name> findings=<n> mode=report`, where the number is the checker's own
 #     count and never a second count kept here. Its exit code does not decide the run's, so `-Check
@@ -424,6 +432,18 @@ $checkers = [ordered]@{
     # plan-debt` -- and it is left out of `all`: with no plan selected it has no reading to judge
     # against, and it says so (exit 2) rather than passing over nothing.
     'plan-debt'           = @{ script = 'scripts/check-plan-debt.mjs'; args = @(); compiler = $false; planStage = $true }
+    # The E9 differential at the tier its ratchet is defined at: 500 seeds, 99 cells each, 31,680
+    # cells, and the three numbers a merge is judged by, compared with
+    # `test/tools/e9diff/baseline.json`. Until this row existed that run was reachable only from a
+    # hand-written shell on the host, which on the books is the same as not being reachable -- while
+    # `test/tools/e9diff/README.md` says why it has no plan of the two slower tiers: "a full run is
+    # 25 minutes on this host, and a gate that starts one by itself is a gate people learn to skip".
+    # Both halves of that reason survive here: there is still no plan, and `all` still does not
+    # start it. It is `namedOnly` -- asked for by name, like the plan-stage checks, and out of `all`
+    # for its own reason: it is slow, and it is a reading somebody asks for, not a static layer. The
+    # script adds no judgement of its own; the tool decides against its baseline and its exit code
+    # is this entry's (`scripts/check-e9-full.mjs`).
+    'e9-full'             = @{ script = 'scripts/check-e9-full.mjs'; args = @('--matrix', 'full'); compiler = $true; namedOnly = $true }
     # The whole static layer of the release gate, in the gate's own order and with the gate's own
     # criterion: this entry exists because the layer had never actually been run on the mainline.
     # The merges only ever ran plans, and the gate's static phase -- thirteen checks, four of which
@@ -504,8 +524,12 @@ foreach ($requested in $Check) {
         # A `planStage` entry reads the plan stage's own record, so it is not part of the static
         # layer `all` means: it would refuse (exit 2) on every call that selects no plan, which is
         # what `-Check all` is for. It is asked for by name, beside the plan it reads.
+        # A `namedOnly` entry is out of `all` for the other reason a check can be: it is a deliberate
+        # reading -- `e9-full` is a 25-minute differential -- and a stage that every `all` started
+        # would be a stage people learn to skip. Both marks mean "named by the caller", so both are
+        # skipped here, and the closing summary names which ones and why.
         foreach ($known in $checkers.Keys) {
-            if ($checkers[$known].planStage) { continue }
+            if ($checkers[$known].planStage -or $checkers[$known].namedOnly) { continue }
             if ($checkNames -notcontains $known) { $checkNames += $known }
         }
     } elseif ($checkers.Contains($requested)) {
@@ -528,6 +552,11 @@ $checkList = $checkNames -join ' '
 $checkHasAll = $Check -contains 'all'
 $planStageNames = @($checkers.Keys | Where-Object { $checkers[$_].planStage })
 $planStageSkipped = @($planStageNames | Where-Object { $checkNames -notcontains $_ })
+# The same reading for the entries `all` leaves out because they are asked for, not because they
+# have nothing to read: a run that printed one count over both reasons would say "named-stage" about
+# a check whose reason is its cost.
+$namedOnlyNames = @($checkers.Keys | Where-Object { $checkers[$_].namedOnly })
+$namedOnlySkipped = @($namedOnlyNames | Where-Object { $checkNames -notcontains $_ })
 
 # The gpu observation, beside the table and deliberately not in it: it is a plan run, so it is no
 # row of `$checkers` -- and `N run` in the closing summary must stay the static layer's count (19
@@ -1879,10 +1908,20 @@ exit `$code
             Write-Host ("[camel-remote] checks: {0} named-stage check(s) not run by -Check all: {1} (use -Check <name>)" -f `
                 $planStageSkipped.Count, ($planStageSkipped -join ', '))
         }
+        # The other reason `all` leaves an entry out: the check is a deliberate reading and costs
+        # minutes, so it is asked for by name. Named here, or a run that says "N run" would be read
+        # as "everything ran" while the slowest reading in the table never started.
+        if ($checkHasAll -and $namedOnlySkipped.Count -gt 0) {
+            Write-Host ("[camel-remote] checks: {0} named-only check(s) not run by -Check all: {1} (use -Check <name>; each is a reading somebody asks for, not a stage of the static layer)" -f `
+                $namedOnlySkipped.Count, ($namedOnlySkipped -join ', '))
+        }
         # The other direction, for a run that named one: it did run, and it is still not part of
         # `all`. Without this line the same "all green" sentence is read over a check `all` never runs.
         foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].planStage })) {
             Write-Host ("[camel-remote] checks: {0} is a named-stage check, not part of -Check all; it ran because it was named" -f $result.name)
+        }
+        foreach ($result in @($checkResults | Where-Object { $checkers[$_.name].namedOnly })) {
+            Write-Host ("[camel-remote] checks: {0} is a named-only check, not part of -Check all; it ran because it was named" -f $result.name)
         }
     }
     # The gpu reading, named as what it is: one line, and the two things a reader could otherwise get
