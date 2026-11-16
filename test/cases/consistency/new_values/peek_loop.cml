@@ -1,16 +1,30 @@
 /**
  * `out = out->append<i>` with `len(out)` read between the appends: the read cannot keep the
- * array, so every append is in place and the loop is linear (the graph has `:var/peek`).
+ * array, so every append is in place and the loop is linear.
+ *
+ * The loop was a `foreach` whose element function wrote `out` and `total`. A closure holds the
+ * value a name had when it was made, not the name (design principles 3.5, 197), so a closure
+ * cannot make that write at all -- `ClosureAssignsCapturedName` (0x03000213) refuses it. The
+ * rebinding is written where the names live instead: the loop body assigns the two `var`s and
+ * they become the loop's carried state (3.5, the rule on a loop body that assigns an outer
+ * `var`). What the case reads is the same -- the `len` read does not keep the array, the appends
+ * stay in place (the 20,000 rounds are linear, as their timing shows) and the program prints the
+ * same number.
+ *
+ * What the shape no longer has is the `:var/*` vocabulary the graph entry used to pin
+ * (`:var/peek`, `:op/assn_owned`, `:struct/append_arr_in_place`): those nodes name a rebound
+ * `var` cell, and a loop body's assignment is carried as the loop's state instead, so that
+ * entry had nothing left to pin and went with this migration.
  */
 
 func build(n: int): int sync {
     var out: int[] = []
     var total = 0
-    (0..n)->foreach<(i: int) => sync {
+    loop i = 0 while i < n do {
         out = out->append<i>
         total += len(out)
-        return null
-    }>
+        i + 1
+    }
     return total
 }
 

@@ -16,8 +16,9 @@
  *    buildTopLevelValue). So the top level of a module does not depend on the order it is
  *    written in, and a function's return type and captures are known where it is used. A
  *    value needed while it is being built depends on itself: ModuleValueCycle.
- * 3. Link: the captures of every direct call (linkCaptureSites, a least fixpoint), the call of
- *    the entry module's `main`, the summaries of effects (another fixpoint) and the warnings
+ * 3. Link: the captures a call is still owed (linkCaptureSites, a least fixpoint; the ones the
+ *    call was built with are already its `with` inputs), the call of the entry module's `main`,
+ *    the summaries of effects (another fixpoint) and the warnings
  *    that need them, per module.
  *
  * A library (buildLibrary) is built the same way by a builder of its own, from the library

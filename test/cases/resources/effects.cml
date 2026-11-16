@@ -1,10 +1,18 @@
 // The resources the nodes of a program touch (docs/design/op-semantics, section 8): variable
-// cells through assignments, var parameters, captures and a recursion; an array sorted in
-// place; the generator, the file system and the console.
+// cells through assignments, var parameters, a handle a closure captures and writes, a recursion;
+// an array sorted in place; the generator, the file system and the console.
+//
+// `inc` used to assign `c`, a `var` of the body that made it. A closure holds the value a name had
+// when it was made and not the name (design principles 3.5, 197), so that write is refused now
+// (`ClosureAssignsCapturedName`, 0x03000213). The state a closure may carry is a `Ref` (3.5, 202;
+// the first of the three ways the diagnostic names): a handle is a value, so the closure captures
+// it and writes the content it points at, which is a resource of the caller -- the reading this
+// case is about. The body that owns `c` binds it back from the handle.
 import { exists } from fs
 import io
 import { seed, rand } from random
 import { sort } from array
+import state
 
 /// Writes the cell it is given.
 func bump(var t: int): int sync {
@@ -24,8 +32,10 @@ func main(): int sync {
     c = c + 2
     bump(c)
     countdown(d, 3)
-    let inc = () => sync { c += 1 }
+    let r = state::ref(c)
+    let inc = (): void => sync { state::set(r, state::get(r) + 1) }
     inc()
+    c = state::get(r)
     var xs = [3, 1, 2]
     xs = xs->sort
     seed(4)

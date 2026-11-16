@@ -192,14 +192,14 @@ void Builder::settleStreamLinearity() {
 
     // A graph is judged once, whatever registered it and however many units name it: a reader
     // counted twice would make one read look like two, and a loop asked about twice the same.
-    // The captures a call passes its callee (captures.cpp, addCaptureSite) are remembered as the
-    // edges they are: they hand the value on, and the capture they feed is refused where it is
-    // made, so counting them here would count one read twice.
-    std::unordered_map<node_handle_t, std::unordered_set<node_handle_t>> captureEdges;
+    // The captures a call passes its callee (captures.cpp, addCaptureSite) are the call's own `with`
+    // inputs -- edges, not a table -- so what is remembered here is only how many of a call's inputs
+    // are captures: the last that many, which is where linkCaptureSites puts them, after the declared
+    // `with` arguments. A capture hands the value on, and the capture it feeds is refused where it is
+    // made, so counting it here would count one read twice.
+    std::unordered_map<node_handle_t, size_t> captureInputs;
     for (const CaptureSite &site : captureSites_) {
-        for (node_handle_t value : site.values) {
-            captureEdges[site.call].insert(value);
-        }
+        captureInputs[site.call] = site.linked;
     }
     std::unordered_set<DraftGraphBuilder *> judged;
     for (const ModuleUnit *unit : unitOrder_) {
@@ -252,11 +252,11 @@ void Builder::settleStreamLinearity() {
                     note(value, operand);
                 }
                 if (!closure) {
-                    const auto sites = captureEdges.find(self);
-                    for (draft_node_ref_t value : draft.withInputsOf(id)) {
-                        const bool handed =
-                            sites != captureEdges.end() && sites->second.contains(draft.ref(value));
-                        note(value, handed);
+                    const auto known    = captureInputs.find(self);
+                    const auto withs    = draft.withInputsOf(id);
+                    const size_t handed = known != captureInputs.end() ? known->second : 0;
+                    for (size_t at = 0; at < withs.size(); ++at) {
+                        note(withs[at], at + handed >= withs.size());
                     }
                 }
             }
