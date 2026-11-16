@@ -32,6 +32,19 @@ desc = "`camel inspect --copies` reports, for every update node, whether the upd
 # later). S3b's criterion is "not `copied`"; `in-place` and `by-count` both pass it. Writing the
 # criterion as "only `in-place`" would fail every site in today's tree, including the ones that
 # already work in place, and it would fail them over a wording.
+#
+# One entry pins a verdict, and says why: `inspect.copies.sgd_declares_reuse` pins the word
+# `declared` for `nn:sgd`. What it exists for is the declaration -- take the declaration away
+# (`declareReusesOperand` in modules/nn/module.cpp) and the row is gone, the `step` summary reads
+# `updates 0 ... declared 0`, and the entry goes red. It pins a claim, not a decision of the plan:
+# if a later change makes the leaf write through its count (the row becoming `by-count` or
+# `in-place`), the word changes and this entry is re-read with the change. Pinning it is how a
+# change to the claim is made visible instead of passing as a re-recording.
+#
+# The three entries above it do NOT go red when the declaration goes away, which is why the fourth
+# exists: they check that every row has one of the four verdicts, that the rows and the summary
+# counts agree, and that each graph is answered for -- with `updates 0` for a graph whose update
+# disappeared. That is the silence they are written against, not this claim.
 
 [defaults]
 kind = "behavior"
@@ -151,5 +164,27 @@ verify_script = '''
   const total = (index) => summaries.reduce((sum, f) => sum + Number(f[index]), 0)
   assert(total(3) === updates.length,
     'the summaries count the rows printed: ' + total(3) + ' vs ' + updates.length)
+}
+'''
+
+[[tests]]
+name = "inspect.copies.sgd_declares_reuse"
+desc = "The case study's training step, `nn:sgd`, read through `camel inspect --copies`: the step's `sgd(params, g, lr)` is one row named `sgd` at its call site, its verdict is `declared` (the operator declares it reuses the parameter tree; the plan decides nothing about a tree, and what this run allocated is not what the tool measured), the `step` graph's summary counts exactly one declared update and no copy, and no row says `copied`. This is the one entry here that pins a verdict, and it exists for the declaration: with `declareReusesOperand` gone from modules/nn/module.cpp the row disappears and the summary reads `updates 0`, which turns this entry red."
+case = "../../../../examples/case-study/train.cml"
+args = ["inspect", "--copies", "${case}"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.output.replace(/\n/g, ' | ')
+  assert(input.exit_code === 0, 'inspect --copies exited 0: ' + input.exit_code + ' ' + said)
+  const lines = input.normalized.stdout.split('\n').filter(l => l.startsWith('COPIES '))
+  // The row the declaration makes: named the way the program writes the call, at its own place.
+  const rows = lines.filter(l => /^COPIES train\.cml:\d+:\d+ sgd (in-place|by-count|declared|copied)$/.test(l))
+  assert(rows.length === 1, "the training step's sgd is one row named sgd: " + lines.join(' | '))
+  assert(rows[0].endsWith(' declared'), 'the sgd row records the declaration: ' + rows[0])
+  assert(!lines.some(l => / sgd copied$/.test(l)), 'the parameter tree is not copied: ' + rows[0])
+  // The counts move with the declaration: one declared update, nothing copied. A row the summary
+  // did not count would be a reading and a number that disagree.
+  const step = 'COPIES step updates 1 in-place 0 by-count 0 declared 1 copied 0'
+  assert(lines.includes(step), 'the step graph counts the declared update: ' + lines.join(' | '))
 }
 '''
