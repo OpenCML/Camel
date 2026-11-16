@@ -1,0 +1,33 @@
+/**
+ * The reference `r` is the `initial` argument of `reduce` and the element function returns its
+ * accumulator unchanged, so the value the operator's node makes *is* `r`'s box. The plan lays the
+ * reference's give-back row at the operator's position all the same, and the node's own value takes
+ * that reference over instead of giving it back (src/execute/exec_plan.cpp,
+ * `applyRefEntriesAtPosition`: a give row whose object is the one the node's own value holds).
+ *
+ * Read through `test::plan_refs` and `--gc-check foreign` in one pipeline:
+ *
+ *   PLAN_REF_ENTRIES main at 5 give value 1 x1    the accumulator's one row, at the operator
+ *   PLAN_REF_MARKED main at 5 node 4 gives 1      the operator's position, one row there
+ *   FOREIGN_RESOURCES created=1 counted=1 released=1 live=0 disposed=0
+ *
+ * The row runs and is skipped for the value the node took over. Giving it back as well released the
+ * box while the program still held it: std::nvm and std::prl answered
+ * `error[RuntimeDiag::InvalidArgument]: Invalid argument of 'state.get': the value is not a
+ * reference.`, and std::fvm and std::jit printed the right number only because they ran no row at
+ * the operator's position at all -- two defects cancelling
+ * (docs/handover/reports/2026-11-16-what-the-missing-count-was-and-was-not.cn.md). Both readings are
+ * taken **without `--gc-stress`**, which would settle the account after the program stopped.
+ *
+ * `ref_foreach_gives_back.cml` is the same reading for the other shape: a closure that packs the
+ * handle into itself.
+ */
+
+import state
+
+func main(): int {
+    let r = state::ref(1)
+    let total = [1, 2, 3]->reduce<(a: state::Ref<int>, x: int): state::Ref<int> => a, r>
+    println(state::get(total))
+    return 0
+}
