@@ -1,0 +1,65 @@
+# The smallest programs that show a counted box whose producer is a CALL or a FILL never giving its
+# count back, and the reading that says it does now (author review 2026-11-16, item 5).
+#
+# They are probes and not cases under test/cases: the parse plan's golden lists every `.cml` there by
+# path and hash, so a new case there is a golden update as well, and this lane's change is the count,
+# not the parser. `tier = "debug"` keeps them out of the fast and all layers so that a plan added
+# beside them cannot slow a gate down; naming this file runs it in any build.
+#
+# Each entry asserts the four numbers the count is read from -- `created`, `released`, `live` and the
+# anchor's `missing` -- and not `balanced`: the plan's own balance is built from the rows it wrote, so
+# a run that wrote a row no back end executes reads balanced too, and that is exactly the defect
+# (3961aa2bf). `released` is the number that moved when the rows started to run.
+
+id = "probe.refleak"
+order = 9990
+tier = "debug"
+tags = ["probe"]
+
+[defaults]
+normalizers = ["strip_ansi", "normalize_newlines", "trim_trailing_space", "normalize_paths"]
+timeout_ms = 30000
+
+[[tests]]
+name = "probe.call_box.released"
+desc = "`escaped_box(i)` returns a `state::Ref<int>` the loop then reads once, ten times over. The box is made by the callee's FUNC node, which is not an operator site: before item 5 its give-back row was laid out and never run, so `released` stayed 0 and `live` 10 while the plan read balanced. Now: `created` 10, `released` 10, `live` 0, `missing` 0, and the program still prints 10."
+kind = "behavior"
+case = "../../probe/refleak/call_box.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.includes('10'), 'the program kept ten boxes and prints how many it read: ' + said.join(' | '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=10 /.test(line), 'ten boxes were made: ' + line)
+  assert(/ released=10 /.test(line), 'and every one of them gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims every box the anchor saw: ' + line)
+}
+'''
+
+[[tests]]
+name = "probe.fill_carries.released"
+desc = "A `Ref` is carried by a closure a FILL builds (`let f = (): int => state::get(r)`) and read at the call: the box is made by an operator and packed into the closure by the FILL, and the row that gives its producing reference back lands where the closure's last use is. Before item 5 that row was written at a position no back end applies rows at, so the box stayed counted (`live` 1) for the life of the program. Now: `created` 1, `released` 1, `live` 0, and the program still prints `5 5`."
+kind = "behavior"
+case = "../../probe/refleak/fill_carries.cml"
+backends = ["nvm", "fvm", "jit", "prl"]
+args = ["--gc-check", "foreign", "${case}", "${backend}"]
+expect_exit = 0
+backends_agree = ["stdout", "exit_code"]
+verify_script = '''
+({ input, assert }) => {
+  const said = input.normalized.stdout.split('\n').map(l => l.trim()).filter(Boolean)
+  const line = input.normalized.output.split('\n').find(l => l.startsWith('FOREIGN_RESOURCES '))
+  assert(said.includes('5 5'), 'the closure reads the box twice: ' + said.join(' | '))
+  assert(line !== undefined, 'the run asked for the counted resources and reported none')
+  assert(/ created=1 /.test(line), 'one box was made: ' + line)
+  assert(/ released=1 /.test(line), 'and it gave its count back: ' + line)
+  assert(/ live=0 /.test(line), 'nothing is still counted when the program ends: ' + line)
+  assert(/ missing=0 /.test(line), 'the plan claims the box the anchor saw: ' + line)
+}
+'''

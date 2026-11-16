@@ -2,20 +2,20 @@
 // SPDX-License-Identifier: MIT
 
 #include "compile.h"
-#include "camel/core/mm.h"
-#include <iostream>
-#include <algorithm>
-#include "camel/runtime/exec_plan.h"
 #include "camel/compile/gir/types.h"
 #include "camel/core/error/diagnostics.h"
 #include "camel/core/error/runtime.h"
+#include "camel/core/mm.h"
 #include "camel/core/rtdata/func.h"
 #include "camel/execute/executor.h"
 #include "camel/execute/fault_isolation.h"
 #include "camel/execute/graph_runtime_support.h"
 #include "camel/profile/operators.h"
+#include "camel/runtime/exec_plan.h"
 #include "camel/runtime/reachable.h"
 #include "runtime/graph_build.h"
+#include <algorithm>
+#include <iostream>
 
 #include <algorithm>
 #include <cstddef>
@@ -128,7 +128,7 @@ static bytecode_vec_t compileRuntimeGraph(
         graph->hasNodePayload(),
         std::format("Runtime graph '{}' has no node payload.", graph->name()));
 
-    const auto &plan              = graph->execPlan();
+    const auto &plan = graph->execPlan();
     // The position-to-node side table: while --gc-check asks for the counted blocks, one row per
     // instruction that belongs to a node is written here, with what the plan says that node does to
     // the count, and the table is kept with the plan it describes -- the run reads it after this
@@ -271,10 +271,9 @@ static bytecode_vec_t compileRuntimeGraph(
         // instructions come before the node's own, in the order of the plan.
         if (!plan.loops.empty()) {
             for (const uint32_t code : plan.loopEventsAt(i)) {
-                const auto &loop = plan.loops[code / 3];
-                const auto loopOrigin =
-                    graph->nodeOrigin(plan.topo[loop.position]);
-                const size_t eventPc = bytecodes.size();
+                const auto &loop      = plan.loops[code / 3];
+                const auto loopOrigin = graph->nodeOrigin(plan.topo[loop.position]);
+                const size_t eventPc  = bytecodes.size();
                 switch (static_cast<camel::runtime::ExecLoopEvent>(code % 3)) {
                 case camel::runtime::ExecLoopEvent::Begin:
                     appendBytecode(bytecodes, OpCode::LBEG, 0, {}, {}, {}, true, {.loop = &loop});
@@ -400,7 +399,9 @@ static bytecode_vec_t compileRuntimeGraph(
                 break;
             }
             default:
-                throw std::runtime_error("Unsupported ACCS source node type.: the dispatch reached a case no handler covers");
+                throw std::runtime_error(
+                    "Unsupported ACCS source node type.: the dispatch reached a case no handler "
+                    "covers");
             }
 
             appendBytecode(
@@ -470,7 +471,7 @@ static bytecode_vec_t compileRuntimeGraph(
             break;
 
         case camel::runtime::GCNodeKind::Func: {
-            bool isTail            = plan.directCallTailEligible[i] != 0;
+            bool isTail              = plan.directCallTailEligible[i] != 0;
             auto *targetRuntimeGraph = program.calleeOf(*graph, runtimeNodeIndex);
             GUARD(
                 targetRuntimeGraph != nullptr,
@@ -504,7 +505,8 @@ static bytecode_vec_t compileRuntimeGraph(
             // version of beside the return value (GCFuncRef::reserved); 0 when none, and then the
             // call's value is the result alone.
             setFuncExtraWriteMask(
-                callBc, camel::runtime::funcWriteMaskOf(*graph, runtimeNodeIndex));
+                callBc,
+                camel::runtime::funcWriteMaskOf(*graph, runtimeNodeIndex));
             break;
         }
 
@@ -673,13 +675,17 @@ static bytecode_vec_t compileRuntimeGraph(
         // Read back out of the table the run will read: what is printed here and what the anchor
         // asks about later are one table, not a copy of one.
         std::vector<std::pair<size_t, camel::runtime::gc_node_ref_t>> sites(
-            plan.countedSites.nodeAtPc.begin(), plan.countedSites.nodeAtPc.end());
+            plan.countedSites.nodeAtPc.begin(),
+            plan.countedSites.nodeAtPc.end());
         std::sort(sites.begin(), sites.end());
         for (const auto &[pc, ref] : sites) {
             const size_t position =
                 ref < plan.topoIndexByRef.size() ? plan.topoIndexByRef[ref] : plan.topo.size();
+            // The holds are refHoldsAt, the plan's only column of them: the second column,
+            // refCopiesAt, kept the same numbers at the value's own position and disagreed for a
+            // value a CALL or a FILL makes, so it is gone (author review 2026-11-16, item 7).
             const uint32_t taken =
-                position < plan.refCopiesAt.size() ? plan.refCopiesAt[position] : 0;
+                position < plan.refHoldsAt.size() ? plan.refHoldsAt[position] : 0;
             const uint32_t given =
                 position < plan.refGiveBackAt.size() ? plan.refGiveBackAt[position] : 0;
             const bool produces =
@@ -687,11 +693,21 @@ static bytecode_vec_t compileRuntimeGraph(
             if (taken == 0 && given == 0 && !produces) {
                 continue;
             }
-            std::cout << "PLAN_REF_SITES " << graph->name() << " at " << pc << " node " << ref
-                      << " +" << taken << " -" << given << (produces ? " produces" : " no-row")
-                      << "\n";
+            // A diagnostic and not the program's output: the log's RefSites scope, written to
+            // stderr with every other log line and off unless a threshold or --log-include asks
+            // for it, so a program's stdout is the program's own (author review 2026-11-16,
+            // item 7). It was std::cout here until then, which put the compiler's dump among the
+            // program's lines and made every plan that reads a program's output skip it.
+            CAMEL_LOG_INFO_S(
+                "RefSites",
+                "PLAN_REF_SITES {} at {} node {} +{} -{} {}",
+                graph->name(),
+                pc,
+                ref,
+                taken,
+                given,
+                produces ? "produces" : "no-row");
         }
-        std::cout.flush();
     }
 
     return bytecodes;
