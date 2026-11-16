@@ -25,6 +25,7 @@ baa3930e27b73d91 no test/cases/parse/rules/no_context.cml
 d542042c9ffdf82b ok test/cases/parse/rules/parameters.cml
 fff780ff68187f93 ok test/cases/parse/rules/values.cml
 bed54dbb47861601 no test/cases/parse/rules/when_after_body.cml
+10aed221f795b18e ok test/cases/parse/rulings/count_until.cml
 e067b6e6bd567e4e ok test/cases/parse/rulings/doc_comment.cml
 c114c7ec0fbe2a39 ok test/cases/parse/rulings/doc_comment_blank_line.cml
 e684c7ad2f2d0a07 ok test/cases/parse/rulings/dotdot_after_cast.cml
@@ -44,6 +45,7 @@ c52fec6465c58bb2 no test/cases/parse/rulings/loop_is_keyword.cml
 1fec33b3724d526a ok test/cases/parse/rulings/minus.cml
 228ab66c3e663b16 ok test/cases/parse/rulings/not_by_precedence.cml
 ed65b02ad206de6e ok test/cases/parse/rulings/null_compare.cml
+adedd38f0006ee91 no test/cases/parse/rulings/open_range.cml
 d7988111a3f83049 no test/cases/parse/rulings/optional_comp_removed.cml
 1a9eb749dfab442c ok test/cases/parse/rulings/power.cml
 f7ca2778095d9642 ok test/cases/parse/rulings/reserved_and.cml
@@ -1603,6 +1605,11 @@ f3ee7fc7143321cb ok test/cases/compile/semantic/type_contains_itself.cml
 801a605477c50cd1 ok test/cases/compile/state_escape/err_escape_return.cml
 3a4b6e07a9bbb856 ok test/cases/compile/state_escape/err_escape_stored_by_callee.cml
 00184aa542adefc8 ok test/cases/compile/state_escape/ok_capture_within.cml
+b6e312af20589e29 ok test/cases/compile/state_escape/ok_read_escape_array.cml
+c74cdf8dbb6f554d ok test/cases/compile/state_escape/ok_read_escape_field.cml
+f2b90ac2125fc9b6 ok test/cases/compile/state_escape/ok_read_escape_into_closure.cml
+8fde422b9e322d0b ok test/cases/compile/state_escape/ok_read_escape_return.cml
+18c9cfa9c8be3ed7 ok test/cases/compile/state_escape/ok_read_escape_stored_by_callee.cml
 794e40cb47b22c73 ok test/cases/compile/state_escape/ok_top_level_value.cml
 fa56acf80774ec26 ok test/cases/compile/static_expansion/comprehension_field_order.cml
 a8d417a3bae14fb1 ok test/cases/compile/static_expansion/comprehension_value_type.cml
@@ -3438,7 +3445,7 @@ e04815f4dc392d59 ok test/cases/modules/rules/with_generic_target.cml
 232877d0700bd9f2 ok test/cases/modules/selected_protection/capture.cml
 666de6322e468533 ok test/cases/modules/selected_protection/cli-last.cml
 2470761d763213f8 ok test/cases/modules/selected_protection/cli-retained.cml
-a73bb0eb7a077828 ok test/cases/modules/selected_protection/dead_write.cml
+60c040fe862b1e68 ok test/cases/modules/selected_protection/dead_write.cml
 e453d5ae2e167ff4 ok test/cases/modules/selected_protection/dead_write_held.cml
 b184c6e048e0e743 ok test/cases/modules/selected_protection/effect.cml
 182cf29f8d58e7f0 ok test/cases/modules/selected_protection/fault.cml
@@ -3911,8 +3918,8 @@ d11b14bff2076906 ok test/cases/opt/e9/rc09_seed15.cml
 4db7324adb9e28e6 ok test/cases/opt/e9/x2_no_lambda_seed27.cml
 0194253d9846363c ok test/cases/opt/effects/branch_keeps_outer_effect.cml
 073b5c163963d73e ok test/cases/opt/effects/dce_effect_under_pure_arithmetic.cml
-1ab961c9714024c3 ok test/cases/opt/effects/dead_write_aggregate_two_members.cml
-1972dab797ade24c ok test/cases/opt/effects/dead_write_dropped_closure.cml
+e80796b31ed591b4 ok test/cases/opt/effects/dead_write_aggregate_two_members.cml
+fd9fed56fd37682b ok test/cases/opt/effects/dead_write_dropped_closure.cml
 3f5c8d5f2d756ced ok test/cases/opt/effects/dead_write_held_by_program.cml
 6812e0df2f41e5dc ok test/cases/opt/effects/dead_write_rooted_closure.cml
 a4d7f13da29104db ok test/cases/opt/effects/fold_keeps_arm_effect.cml

@@ -797,16 +797,22 @@ class Builder {
         // the end would refuse a program the design allows (3.5, 198 -- the rule runs from the
         // making of the closure to its last use, and not one byte further).
         size_t lastUse = 0;
+        // The one end the design names without an offset: a closure the program put into another
+        // value -- a tuple, a struct, an array, a `Ref`, a return -- runs to the rest of the scope
+        // (design principles 3.5, 198, third case). Every write that stands after the making is then
+        // inside the stretch.
+        bool stretchToEnd = false;
         std::string closure;
     };
     std::unordered_map<node_handle_t, CapturedVar> capturedVarOf_;
     // The last use of a closure the program binds to a name, by the FUNC node the closure is written
-    // as, with the name it is bound to. Only that shape has a last use this scan can prove: a closure
-    // written at a call's argument position is used by that call (3.5, 198), and one the program puts
-    // into another value is used to the end of the scope, which no offset here stands for. Both are
-    // left unreported rather than reported wide.
+    // as, with the name it is bound to. A closure written at a call's argument position is used by
+    // that call (3.5, 198) and is not a binding, so it is not here; one the program puts into
+    // another value is used to the end of the scope, which no offset here stands for, and is carried
+    // as `stretchToEnd` instead.
     struct ClosureUse {
         size_t lastUse = 0;
+        bool stretchToEnd = false;
         // The name the program binds the closure to (`let g = () => ...` gives `g`), which is how a
         // report shows it: the graph's own name of an anonymous function is one the compiler made.
         std::string boundName;
@@ -948,6 +954,10 @@ class Builder {
     /// Registers the direct call `call` of `callee` in the current graph: its captures, as
     /// the current graph sees them now, to be linked by linkCaptureSites.
     void addCaptureSite(node_handle_t call, const compile_graph_ptr_t &callee);
+    /// Whether a capture site that is not linked yet names `value`: a site keeps the value it hands
+    /// a direct call in a table rather than as an edge (`addCaptureSite`, `linkCaptureSites`), so a
+    /// node it names must not be erased or folded away under it.
+    bool heldByCaptureSite(node_handle_t value) const;
     /// The link step for captures: passes to every direct call the captures of its callee,
     /// including the ones the callee made after the call was built, until nothing changes.
     void linkCaptureSites();

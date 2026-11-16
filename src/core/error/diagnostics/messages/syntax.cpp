@@ -165,6 +165,14 @@ const std::unordered_map<SyntaxDiag, DiagInfo> &getSyntaxDiagInfoMap() {
             },
         },
         {
+            SyntaxDiag::IntervalHasNoOpenForm,
+            {
+                "IntervalHasNoOpenForm",
+                "An interval has two ends: 'a..' has no open form, and this '..' has no right-hand side.",
+                "A range has only a bounded form (design principles 4.2): an interval is written 'a..b', it is half-open like the slice 't[a:b]', and its result is an array. There is no 'a..' that counts on forever, and no syntax is added for one. Counting until a condition holds is written as a counting 'while' loop -- loop i = 0, … while condition do (i + 1, …) -- and a step is written 'range(a, b, step)'. 'f..g' is the composition of two functions, and it names both of them the same way.",
+            },
+        },
+        {
             SyntaxDiag::ComparisonAcrossLines,
             {
                 "ComparisonAcrossLines",

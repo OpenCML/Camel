@@ -14,12 +14,17 @@
  * case pins both: an artificial difference must fail **and name the path**, an identical pair must
  * pass, and the two readings that cannot be taken must not read as clean.
  *
+ * The other half of the same rule is pinned here too: a run started inside another run's window
+ * defers instead of judging, so one phenomenon gets one verdict. That is a rule about which run
+ * judges, and it is measured at the two ends that could silence the gate -- a nested run must not
+ * fail, and a run nobody marked must still judge.
+ *
  * Nothing here starts a process or writes a file, so it cannot leave anything behind itself.
  *
  * Run: node tree_guard.mjs
  */
 
-import { judgeTree, parseStatus } from '../../tools/tree-guard.mjs'
+import { TREE_GUARD_ROLE_ENV, judgeTree, parseStatus, treeGuardRole } from '../../tools/tree-guard.mjs'
 
 let failed = false
 function check(label, ok, detail) {
@@ -68,6 +73,35 @@ const unreadable = (reason) => ({ ok: false, reason })
     const verdict = judgeTree({ before: clean, after: clean, firstSeen: seen })
     check('a path gone by the end does not fail the run', verdict.failed === false, JSON.stringify(verdict))
     check('it is still reported, with the test that had it', verdict.transient.length === 1 && verdict.transient[0].path === 'planted-page.md', JSON.stringify(verdict.transient))
+}
+
+// ---- one phenomenon, one verdict: a nested run defers to the outer one --------------------------
+{
+    // The reading that failed a gate twice: a sibling test wrote `test/.provenance-probe-*.tmp` and
+    // removed it again, so the nested run's window closed with it there and the outer run's closed
+    // after it was gone. The nested run must not answer, and the outer run must still fail on a file
+    // that stayed -- the deferral moves the verdict, it does not remove it.
+    const nested = judgeTree({ before: clean, after: withFile('test/.provenance-probe-1.tmp'), role: 'nested' })
+    check('a nested run does not judge the tree', nested.judged === false && nested.failed === false, JSON.stringify(nested))
+    check('and says the verdict went to the outer run', nested.deferred === 'nested' && /deferred to the outer run/.test(nested.reason || ''), `${nested.reason}`)
+
+    const outer = judgeTree({ before: clean, after: withFile('test/.provenance-probe-1.tmp') })
+    check('the same readings are still a failure for the outer run', outer.judged === true && outer.failed === true, JSON.stringify(outer))
+
+    // Ordering: a nested run that rewrote goldens is a nested writer like any other, and what it
+    // left is the outer run's reading -- `not judged` here would be a second exception on the same
+    // phenomenon.
+    const rewriting = judgeTree({ before: clean, after: clean, updateGolden: true, role: 'nested' })
+    check('a nested --update-golden run defers rather than excusing itself', rewriting.deferred === 'nested' && rewriting.judged === false, JSON.stringify(rewriting))
+}
+
+// ---- which run judges, read from the environment ------------------------------------------------
+{
+    check('a run nobody marked is the outer run', treeGuardRole({}) === 'outer', treeGuardRole({}))
+    check('a child of a run is the nested one', treeGuardRole({ [TREE_GUARD_ROLE_ENV]: 'nested' }) === 'nested', treeGuardRole({ [TREE_GUARD_ROLE_ENV]: 'nested' }))
+    // The wrong default here would be a gate that is off and still prints: an unrecognised value
+    // must resolve to the judging role, never to the silence.
+    check('an unrecognised value judges rather than silencing the gate', treeGuardRole({ [TREE_GUARD_ROLE_ENV]: 'unknown' }) === 'outer', treeGuardRole({ [TREE_GUARD_ROLE_ENV]: 'unknown' }))
 }
 
 // ---- "could not ask" is never "there is nothing" ------------------------------------------------

@@ -1,0 +1,25 @@
+/**
+ * Route three read through a second closure, with a closure that only reads (design principles
+ * 3.5, 197): `inner` reads `acc`, a `var` of `make`'s call that `make` bound to `base * 3` first,
+ * and `outer` captures `inner`. Returning `outer` hands the value out inside a value whose type
+ * cannot show what it holds; the capture travels one level down as a value (the author's ruling of
+ * 2026-11-16), so what leaves is a value nobody has to own. Nothing is reported, and `outer(1)`
+ * answers 21 + 1 + 1 = 23.
+ *
+ * As in `ok_read_escape_return`, the single binding means the reading cannot separate a value port
+ * from a shared cell: the two-binding shape is legal too and prints 2 on this tree (the capture
+ * port takes `acc`'s first binding, 0). The refusing counterpart of this shape is
+ * `err_escape_into_closure`, whose `inner` assigns `acc`.
+ */
+
+func make(base: int): (y: int) => int {
+    var acc = base * 3
+    let inner = (x: int): int => acc + x
+    return (y: int): int => inner(y) + 1
+}
+
+func main(): int sync {
+    let g = make(7)
+    println(g(1))
+    return 0
+}

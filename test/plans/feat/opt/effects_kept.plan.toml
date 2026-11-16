@@ -315,7 +315,11 @@ expect_stdout_exact = ""
 #
 #   dead_write_dropped_closure  the closure that captured the cell reaches nothing the program keeps
 #                               (`p.0` reads the tuple's first member alone), and `x * 0 => 0` folds
-#                               away the write's only reader: the write may go
+#                               away the write's only reader. Refused since 2026-11-16: the closure is
+#                               bound to a name and put into a tuple, and design principles 3.5 (198)
+#                               runs the stretch of a value put into another value to the rest of the
+#                               scope, so the write after it is inside the stretch. The entries that
+#                               read this case are negative ones now.
 #   dead_write_rooted_closure   the same write, with the closure called in the same `sync` block: the
 #                               value is still read, so it must run, and the program prints the 41
 #                               it wrote
@@ -323,28 +327,36 @@ expect_stdout_exact = ""
 # The write of `dead_write_rooted_closure` is written **before** the closure is made. It used to be
 # written after it, and that program is refused now: a closure holds the value the name had when it
 # was made (design principles 3.5, the author's ruling of 2026-11-16, item 198), so a write written
-# after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). Its sibling
-# `dead_write_dropped_closure` keeps the write after the closure and stays legal, because the rule
-# runs to the closure's last use and that closure is never used -- so a reader who asks why the two
-# probes are ordered differently has the answer here rather than in a missing case.
+# after the closure is `SemanticDiag::CapturedVarWrittenAfterTheClosure` (0x03000214). The dropped
+# sibling keeps its write after the closure and was read as legal until 2026-11-16, because the rule
+# was read as running to the closure's last use and that closure is never called; the ruling's third
+# item reads the same shape as the design's third case instead -- the closure's value is put into
+# another value, so the stretch is the scope's rest -- and the case is refused.
+#
+# What the dead-write judgement still reads is the program the graph keeps a root for
+# (`dead_write_held_by_program`), which is not refused: its write reaches a cell the module names.
 #
 # The judgement itself has its own reading below (`test::deadwrite`), which prints the answer for
 # each write without a pipeline around it.
 [[tests]]
 name = "dead_write_dropped_closure.reference"
-desc = "No pass: `h` is never called, so the program prints the 1 that `p.0` gives."
+desc = "No pass: the write stands after the closure `h` was made, and `h` is put into the tuple `(1, h)`, which design principles 3.5 (198) runs to the end of the scope, so the program is refused (the author's ruling of 2026-11-16, item 3). It printed the 1 that `p.0` gives while the rule stopped at the closure's last use."
+kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
-args = ["${case}", "${backend}"]
-expect_exit = 0
-expect_stdout_exact = "1\n"
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write_dropped_closure.opt"
-desc = "`std::opt` folds `w * 0` and leaves the write with no reader and no root: the graph it returns is one a pass may hand back."
+desc = "The same program through `std::opt`: refused before the fold runs, because the write of `c` after the closure `h` is made is `CapturedVarWrittenAfterTheClosure` (design principles 3.5, 198). What this entry used to read -- `std::opt` folding `w * 0` and leaving a write with no reader and no root -- is read on `dead_write_held_by_program` and `dead_write.opt.still_there` now."
+kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
-args = ["${case}", "std::opt", "${backend}"]
-expect_exit = 0
-expect_stdout_exact = "1\n"
+args = ["${case}", "std::opt"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write_rooted_closure.reference"
@@ -364,12 +376,13 @@ expect_stdout_exact = "41\n41\n"
 
 [[tests]]
 name = "dead_write.judgement_dropped"
-desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own: after the fold, the write nothing reads and no root holds is a dead write."
-kind = "behavior"
+desc = "`test::deadwrite` prints what `camel::runtime::deadWrite` answers for each write, so the judgement is read on its own. The program it reads is refused since 2026-11-16: `h` is bound to a name and put into the tuple `(1, h)`, and the write `c = 41` stands after it, which design principles 3.5 (198) runs to the rest of the scope (the author's ruling of 2026-11-16, item 3). The judgement's own readings are the two entries that follow and `dead_write.opt.still_there`."
+kind = "negative"
 case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
-args = ["${case}", "std::opt", "test::deadwrite"]
-expect_exit = 0
-expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+args = ["${case}"]
+expect_exit = 1
+expect_diagnostic_name = "SemanticDiag::CapturedVarWrittenAfterTheClosure"
+expect_diagnostic_code = "0x03000214"
 
 [[tests]]
 name = "dead_write.judgement_rooted"
@@ -527,12 +540,12 @@ expect_stdout_exact = "stmt_name\nstmt_bound_name\n3\ndone\n"
 # judgement's own: after the fold no graph carries a write it calls dead.
 [[tests]]
 name = "dead_write.opt.still_there"
-desc = "The general engine still keeps the write the judgement calls dead: its sweep does not ask the write question yet, which is what the author`s third decision covers. The reading is the judgement`s own, after the whole pipeline."
+desc = "The general engine still keeps the write the judgement calls dead: its sweep does not ask the write question yet, which is what the author's third decision covers. Its program is read on `dead_write_held_by_program` since 2026-11-16 -- the dropped shape this entry used is refused (design principles 3.5, 198, the write after the tuple that holds the closure) -- and the reading is the judgement's own, after the whole pipeline."
 kind = "behavior"
-case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
 args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
-expect_stdout_contains = ["oper=:op/assn_l", "rooted=0 read=0 dead=1"]
+expect_stdout_contains = ["oper=:op/assn_l", "rooted=1 read=0 dead=0"]
 [[tests]]
 name = "dead_write.aggregate_two_members_reading"
 desc = "The shape that reaches the judgement: arity 2 with one input, which says the members are not the aggregate's inputs but the frame slots it names -- the reading this rule was built on is wrong."
@@ -544,17 +557,17 @@ expect_stdout_contains = ["AGGREGATE graph=probe"]
 
 [[tests]]
 name = "dead_write.aggregate_reading"
-desc = "The aggregate reading: the arity, the member nodes and the verdict for every aggregate left after opt, so a refusal names its guard."
+desc = "The aggregate reading: the arity, the member nodes and the verdict for every aggregate left after opt, so a refusal names its guard. Read on the two-member aggregate case, whose write stands before the closure since 2026-11-16 (written after it the program is refused: design principles 3.5, 198)."
 kind = "behavior"
-case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+case = "../../../cases/opt/effects/dead_write_aggregate_two_members.cml"
 args = ["${case}", "std::opt", "test::deadwrite"]
 expect_exit = 0
 expect_stdout_contains = ["AGGREGATE graph=probe"]
 [[tests]]
 name = "dead_write.opt.same_output"
-desc = "And the program still prints the 1 that never depended on the write."
+desc = "And the program still prints the 1 that never depended on the write -- on `dead_write_held_by_program`, whose 41 is the reading since 2026-11-16: the dropped shape is refused (design principles 3.5, 198)."
 kind = "behavior"
-case = "../../../cases/opt/effects/dead_write_dropped_closure.cml"
+case = "../../../cases/opt/effects/dead_write_held_by_program.cml"
 args = ["${case}", "std::opt", "std::nvm"]
 expect_exit = 0
-expect_stdout_exact = "1\n"
+expect_stdout_exact = "41\n41\n"

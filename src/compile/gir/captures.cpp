@@ -106,9 +106,10 @@ node_handle_t Builder::captureInto(
     // capture would make is not that path's one read. It is refused here, at the one place a
     // capture is made, and not by the pass that counts reads: inside the closure the capture port
     // and what it captured are one value, so counting edges would see one read where the program
-    // wrote two names. A cell is not the value -- a captured `var` is a resource the closure
-    // shares, and the reads of it are judged where they stand (the standard library's `tee` holds
-    // its source that way). What the rule refuses is the read the capture would make, so what the
+    // wrote two names. A cell is not the value -- `var` is a name that may be bound again and a
+    // capture is a capture of the value the name holds there (design principles 3.5), so the reads
+    // of the name are judged where they stand, and the standard library's `tee` hands its source on
+    // that way to key its report. What the rule refuses is the read the capture would make, so what the
     // closure makes of the port is settled with the pass, once its body is built: a closure that
     // only hands the value on -- into a cell, into a report, into the captures of a call -- reads
     // nothing, and the standard library's `tee` holds its source that way to key its report.
@@ -160,6 +161,8 @@ node_handle_t Builder::captureInto(
                                     : graph->name();
                 known.lastUse =
                     knownUse != closureUseOf_.end() ? knownUse->second.lastUse : kNoSourceOffset;
+                known.stretchToEnd =
+                    knownUse != closureUseOf_.end() && knownUse->second.stretchToEnd;
             }
         }
     }
@@ -284,6 +287,17 @@ void Builder::addCaptureSite(node_handle_t call, const compile_graph_ptr_t &call
     captureSites_.push_back(std::move(site));
 }
 
+bool Builder::heldByCaptureSite(node_handle_t value) const {
+    for (const CaptureSite &site : captureSites_) {
+        for (size_t k = site.linked; k < site.values.size(); ++k) {
+            if (site.values[k] == value) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
 void Builder::linkCaptureSites() {
     // Least fixpoint: passing a capture the callee made late may give the caller a capture
     // port of its own, which the calls of the caller then pass in turn.
@@ -370,8 +384,11 @@ void Builder::requireCapturedNameWritable(
     }
     // The rule runs to the closure's last use and not one byte further: a name assigned after the
     // closure is done with is a name nothing holds any more, and the design keeps that legal. Where
-    // the end of the stretch is not known the report stays off -- see `CapturedVar::lastUse`.
-    if (known.lastUse == kNoSourceOffset || writtenAt >= known.lastUse) {
+    // the end of the stretch is not known the report stays off -- see `CapturedVar::lastUse`. The one
+    // end design principles 3.5 (198) names without an offset is a closure the program put into
+    // another value: it runs to the rest of the scope, so a write anywhere after the making is
+    // inside it (`CapturedVar::stretchToEnd`).
+    if (!known.stretchToEnd && (known.lastUse == kNoSourceOffset || writtenAt >= known.lastUse)) {
         return;
     }
     const std::string shown = known.closure;
