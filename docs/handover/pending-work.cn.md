@@ -440,3 +440,63 @@ tree(42bbc4ba1) = cf18ed5b…   tree(64f281e31) = cf18ed5b…   ← 逐字节相
 
 ### 修法（方向已定，未做）
 **把 9 次 / 6 次嵌套调用各并成一次**（治因）；**不提高 `timeout_ms`**（那是挪线）。已派 `lane-runnertax`。
+
+## 19. 我删掉了一棵正在被使用的工作树（2026-11-16，08:04）
+
+**事实**：清理时我删了 `D:\Projects\Camel-wt\ifarm` 并 `branch -d lane-ifarm-parsepoint`。那一刻 `lane-ifarm` 正在用那棵树做 `feat/parse` 两点测量。它三笔都已提交，**一笔没丢**，它用 `git worktree add` 原地恢复后做完了测量。
+
+**判据错在哪**：我把 `dirty=0 且 ahead=0` 当成「空闲树」。
+> **`dirty=0 且 ahead=0` 只证明「没有未提交的工作」，不证明「没人在用」。**
+> 恰恰因为那条车道把工作全部提交干净了，它才被我的清理扫到。
+
+**闸门（不是判断；判断会被跳过）**：`worktree remove` 之前必须
+```
+① list_agents 确认没有正在跑的 agent 在那棵树上工作；
+② 树名必须属于「我派出去、且已收到收工报告」的车道；
+③ *-base-*、*point*、*tmp* 这类测量用树一律不碰 —— 那是车道自己的临时树。
+```
+
+## 20. 「两栏相等」可能是「两栏都被同一批未跟踪文件污染」
+
+`lane-ifarm` 查出自己那次「基线 47 红」是假的：`git stash`（**不带 `-u`**）留下了未跟踪的 `.cml` 用例，于是「基线」那一栏也红了，**而 `git diff` 两栏相等反而把错误掩盖住**。
+
+> **`git diff` 看不见未跟踪文件，所以它给出的是假相等。**
+> 「基线栏与改后栏相同」只有在**两栏用的是同一份文件集**时才是证据。
+
+真基线 **46 红**（改后仍 46，逐条同名）。
+
+## 21. 三个「基线」数字不是同一种东西，**不许相减**
+
+```
+46(五套)     feat/compile + feat/linear + feat/opt + feat/parse + smoke
+55(12目标)   固定闸门名单（§16 的 54，加 lsp.navigation 一条稳定红）
+174(1115)    2026-11-15 那张最全的一次
+```
+今晚已因混用快照出过三次错（`2553/2507/30` 取自 `28d47f148`、`feat/opt` 4 vs 39、`feat/compile` 30 vs 3）。**每个数字必须带它的选中集**，写成 `46(五套)` / `55(12目标)` / `174(1115全量)`。**不带选中集的数字禁止出现在对账里。**
+
+## 22. 一条诊断的判据与它的文本恰好反相关（`UnusedAssignedValue`）
+
+文本：`The value this assignment stores is never read.`
+产生处：`src/compile/gir/builder_diagnostics.cpp#Builder::reportDroppedEffects`。
+
+**实测判据**：从函数 output/exit/return 加区域根出发、只沿 NORM/WITH/CTRL/SYNC **输入**反向可达的节点收进 `needed`，凡活着的 `:op/assn_l` 节点不在其中就报 —— 即「**store 节点没有后继消费者**」，**不是**「存的值没人读」。
+
+**实测：判据与文本反相关**（同一形状，只差体是不是 `sync`）：
+| 形状 | 非 `sync` 体 | `sync` 体 | 文本为真？ |
+|---|---|---|---|
+| `t = 1`（无读者） | 报 ✅ | **不报** ❌ | 真 |
+| `t = t+1; println(t)` | **报**，stdout `1` ❌ | 不报 | **假** |
+| `t = t+1; return t` | **报**，stdout `1` ❌ | — | **假**（唯一读者就是返回值） |
+
+**机理**：`sync` 体里 `:op/assn_l` → `println` 有 CTRL+SYNC 边，所以没人读值也不报；非 `sync` 体里 `:op/assn_l` **整个消失**、`:op/add_l` 直接 NORM 喂给 `:io/println`，于是**值被读了照样报**。
+
+**后果**：`camel -Werror` 下**任何写在非 `sync` 函数体里、值之后被读的语句级 `var` 重赋值（计数器的通常写法）直接被拒**。
+
+**并且期望已经把这条误报锁住了**：`test/plans/feat/linear/var_read_before_write.plan.toml` 基线 6/6 全绿，它钉的三条正是「值被读了」的写，而 `desc` 称其为 `the three writes whose value nobody reads`。**一条错诊断 + 一条照着它写的期望 = 两处都要改。**
+
+**分界（不许揉在一起）**：
+```
+UnusedAssignedValue   →  只说「值没人读」
+被丢掉的写（写不执行） →  归 EffectNotExecuted 那一族
+```
+已派 `lane-varwarn` 改判据。**这条归作者的第一优先级（`var` 化成 SSA），因为 `assn_l` 的存废正是那一步要动的东西。**
