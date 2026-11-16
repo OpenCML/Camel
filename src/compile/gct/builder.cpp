@@ -5966,6 +5966,9 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
 
     const std::string pcName   = "__gen_pc__";
     const std::string haltName = "__gen_halt__";
+    // The step's state parameter. It is named, so the port `src/compile/gir/builder_helpers.h`
+    // makes for it carries the same name and the step's body can read it.
+    const std::string stateParamName = "__gen_state__";
     const std::string outName  = "__gen_out__";
     const std::string stepName = "__gen_step__";
 
@@ -6862,16 +6865,41 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
             }
             popScope();
         };
-    fill(first, bodyStmts, 0, -1, std::string());
-
-    // `step`: one round of the loop runs the arm `pc` names, until one of them answers.
+    // `step`: one round of the loop runs the arm `pc` names, until one of them answers. The
+    // state arrives as its argument, and every slot it carries becomes the step's own local here,
+    // *before* any arm is built: a name resolves where it is written, so a local declared after the
+    // arms would leave them reading the enclosing body's cells.
     node_ptr_t stepBody = makeExec(synced);
+    const auto unpackSlot = [&](const std::string &name, size_t index) {
+        // One reference per accessor: this tree gives a node one parent, so one `DRef` cannot hang
+        // under two `:accs` nodes.
+        node_ptr_t accs = tree_->makeAccs(index);
+        *accs << tree_->makeDRef(stateParamName);
+        node_ptr_t vari = tree_->makeVari();
+        node_ptr_t ref  = tree_->makeNRef(name);
+        *ref << accs;
+        *vari << ref;
+        mark(vari, at, "gct.generator.state");
+        *stepBody << vari;
+    };
+    unpackSlot(pcName, 0);
+    unpackSlot(haltName, 1);
+    for (size_t i = 0; i < slotNames.size(); ++i) {
+        unpackSlot(slotNames[i], 2 + i);
+    }
     *stepBody << writeCell(haltName, intLiteral(0));
-    // Every cell is read here, before any arm names `step` again: a closure holds the captures
-    // its function had when it was made, so a capture made later could not be passed on.
+    fill(first, bodyStmts, 0, -1, std::string());
+    // Every cell that is still a cell is read here, before any arm names `step` again: a closure
+    // holds the captures its function had when it was made, so a capture made later could not be
+    // passed on. A name the state carries is the step's own local and needs no touch.
     for (size_t i = 0; i < cellNames.size(); ++i) {
+        const std::string &name = cellNames[i];
+        if (name == pcName || name == haltName ||
+            std::find(slotNames.begin(), slotNames.end(), name) != slotNames.end()) {
+            continue;
+        }
         node_ptr_t touch = tree_->makeNRef("__gen_touch__" + std::to_string(i));
-        *touch << readCell(cellNames[i]);
+        *touch << readCell(name);
         *stepBody << touch;
     }
     node_ptr_t loopNode = tree_->makeLoop(camel::core::LoopKind::While, {outName}, std::string());
@@ -6907,10 +6935,13 @@ Builder::visitGeneratorBody(const AST::node_ptr_t &funcAst, const FunctionType *
     node_ptr_t stepFunc = tree_->makeFunc(stepName);
     mark(stepFunc, funcAst, "gct.generator.step");
     // The step takes the state as a normal parameter: a call's positional argument is matched
-    // against `normTypes`, never `withTypes` (which is `with <..ws>`). The port node comes from the
-    // signature itself (`src/compile/gir/builder_helpers.h`).
-    FunctionType *stepTypeWithState =
-        FunctionType::create({}, {{stateType, false}}, stepType->exitType());
+    // against `normTypes`, never `withTypes` (which is `with <..ws>`). It is named, so the port
+    // `src/compile/gir/builder_helpers.h` makes carries that name; an unnamed parameter would be
+    // port `__w0` with no name in scope.
+    FunctionTypeFactory stepSignature;
+    stepSignature.addNormArg(stateParamName, stateType, false);
+    stepSignature.setExitType(stepType->exitType());
+    FunctionType *stepTypeWithState = stepSignature.build();
     *stepFunc << tree_->makeType(stepTypeWithState) << stepBody;
     *outer << stepFunc;
     node_ptr_t ret = tree_->makeExit(ExitType::Return);
